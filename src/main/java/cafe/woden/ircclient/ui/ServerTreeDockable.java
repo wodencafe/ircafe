@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +22,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
   private final DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode("main");
+  private final DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private Messages");
   private final DefaultTreeModel model = new DefaultTreeModel(root);
   private final JTree tree = new JTree(model);
 
@@ -33,7 +35,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final JButton connectBtn;
   private final JButton disconnectBtn;
   private final JLabel status = new JLabel("Disconnected");
-
 
   private final FlowableProcessor<Object> disconnectClicks =
       PublishProcessor.create().toSerialized();
@@ -58,23 +59,25 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
     disconnectBtn.addActionListener(e -> disconnectClicks.onNext(new Object()));
 
-    // Tree setup (same as before)
+    // Tree setup
     root.add(serverNode);
-    model.reload();
     ensureNode("status");
+    serverNode.add(pmNode);
+    model.reload();
 
     tree.setRootVisible(false);
     tree.setShowsRootHandles(true);
 
     tree.addTreeSelectionListener(e -> {
       Object obj = tree.getLastSelectedPathComponent();
-      if (obj instanceof DefaultMutableTreeNode node) {
-        Object uo = node.getUserObject();
-        if (uo instanceof String target) {
-          if (target.equals("status") || target.startsWith("#")) {
-            selections.onNext(stripUnread(target));
-          }
-        }
+      if (!(obj instanceof DefaultMutableTreeNode node)) return;
+      Object uo = node.getUserObject();
+      if (!(uo instanceof String label)) return;
+
+      String target = stripUnread(label);
+      // Only leaf targets (status, #channels, and PM nicks) are in targetNodes
+      if (targetNodes.containsKey(target)) {
+        selections.onNext(target);
       }
     });
 
@@ -83,6 +86,21 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   public Flowable<String> selectionStream() {
     return selections.onBackpressureLatest();
+  }
+
+  public void selectTarget(String target) {
+    if (target == null || target.isBlank()) return;
+    ensureNode(target);
+    DefaultMutableTreeNode node = targetNodes.get(target);
+    if (node == null) return;
+
+    TreePath path = new TreePath(node.getPath());
+    if (path.getParentPath() != null) tree.expandPath(path.getParentPath());
+
+    tree.setSelectionPath(path);
+    tree.scrollPathToVisible(path);
+
+    selections.onNext(target);
   }
 
   // Call these from UiController based on connection events
@@ -97,12 +115,23 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   }
 
   public void ensureNode(String target) {
+    if (target == null || target.isBlank()) return;
     if (targetNodes.containsKey(target)) return;
+
     DefaultMutableTreeNode node = new DefaultMutableTreeNode(target);
     targetNodes.put(target, node);
     unreadCounts.putIfAbsent(target, 0);
-    serverNode.add(node);
-    model.reload(serverNode);
+
+    if ("status".equals(target) || (target.startsWith("#") || target.startsWith("&"))) {
+      // Keep channels/status before the PM group node
+      int pmIndex = serverNode.getIndex(pmNode);
+      if (pmIndex < 0) pmIndex = serverNode.getChildCount();
+      serverNode.insert(node, pmIndex);
+      model.reload(serverNode);
+    } else {
+      pmNode.add(node);
+      model.reload(pmNode);
+    }
   }
 
   public void markUnread(String target) {

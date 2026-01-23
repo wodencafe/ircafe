@@ -15,4 +15,6 @@ public interface IrcClientService {
   Completable requestNames(String channel);
   Completable joinChannel(String channel);
   Completable sendToChannel(String channel, String message);
+
+  Completable sendPrivateMessage(String nick, String message);
 }

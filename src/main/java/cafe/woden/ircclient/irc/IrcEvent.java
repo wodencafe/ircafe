@@ -8,6 +8,7 @@ public sealed interface IrcEvent permits
     IrcEvent.Disconnected,
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
+    IrcEvent.PrivateMessage,
     IrcEvent.Notice,
     IrcEvent.JoinedChannel,
     IrcEvent.NickListUpdated,
@@ -19,6 +20,8 @@ public sealed interface IrcEvent permits
   record NickChanged(Instant at, String oldNick, String newNick) implements IrcEvent {}
 
   record ChannelMessage(Instant at, String channel, String from, String text) implements IrcEvent {}
+
+  record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
