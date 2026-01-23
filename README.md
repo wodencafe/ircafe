@@ -1,0 +1,85 @@
+# IRCafe
+
+IRCafe is a Java 21 desktop IRC client with a Swing UI and a Spring Boot backend.
+
+## Requirements
+
+- Java 21
+
+## Run from source
+
+From the project root:
+
+```bash
+./gradlew bootRun
+```
+
+This launches the Swing UI.
+
+## Build a runnable jar
+
+```bash
+./gradlew bootJar
+java -jar build/libs/*.jar
+```
+
+## Configuration
+
+Edit:
+
+`src/main/resources/application.yml`
+
+The IRC settings use the prefix `irc.server`.
+
+Example:
+
+```yaml
+irc:
+  server:
+    host: "irc.libera.chat"
+    port: 6697
+    tls: true
+
+    nick: "${IRCAFE_NICK:IRCafeUser}"
+    login: "${IRCAFE_IDENT:ircafe}"
+    realName: "${IRCAFE_REALNAME:IRCafe User}"
+
+    sasl:
+      enabled: false
+      username: "${IRCAFE_SASL_USERNAME:}"
+      password: "${IRCAFE_SASL_PASSWORD:}"
+      mechanism: "PLAIN"
+
+    autoJoin:
+      - "#test"
+```
+
+### Environment variables
+
+The default `application.yml` uses these environment variables:
+
+- `IRCAFE_NICK` (defaults to `IRCafeUser`)
+- `IRCAFE_IDENT` (defaults to `ircafe`)
+- `IRCAFE_REALNAME` (defaults to `IRCafe User`)
+- `IRCAFE_SASL_USERNAME` (no default)
+- `IRCAFE_SASL_PASSWORD` (no default)
+
+You can set them for a single run:
+
+```bash
+IRCAFE_NICK=myNick ./gradlew bootRun
+```
+
+Or export them in your shell:
+
+```bash
+export IRCAFE_NICK=myNick
+export IRCAFE_IDENT=myIdent
+export IRCAFE_REALNAME="My IRC Client"
+```
+
+To enable SASL, set `irc.server.sasl.enabled: true` in `application.yml` and set `IRCAFE_SASL_USERNAME` and `IRCAFE_SASL_PASSWORD`.
+
+## License
+
+GPL-3.0. See `LICENSE`.
