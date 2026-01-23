@@ -152,6 +152,12 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable sendPrivateMessage(String nick, String message) {
+    return Completable.fromAction(() -> requireBot().sendIRC().message(sanitizeNick(nick), message))
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
   public Completable requestNames(String channel) {
     return Completable.fromAction(() -> {
           String chan = sanitizeChannel(channel);
@@ -219,6 +225,13 @@ public class PircbotxIrcClientService implements IrcClientService {
       bus.onNext(new IrcEvent.ChannelMessage(
           Instant.now(), channel, event.getUser().getNick(), event.getMessage()
       ));
+    }
+
+
+    @Override
+    public void onPrivateMessage(PrivateMessageEvent event) {
+      String from = event.getUser().getNick();
+      bus.onNext(new IrcEvent.PrivateMessage(Instant.now(), from, event.getMessage()));
     }
 
     @Override

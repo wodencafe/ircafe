@@ -20,7 +20,7 @@ public class UiController {
   private final ConnectButton connectBtn;
   private final DisconnectButton disconnectBtn;
   private final CompositeDisposable disposables = new CompositeDisposable();
-  private final IrcClientService ircClientService;
+
   private String activeTarget = "status";
 
   public UiController(
@@ -32,8 +32,8 @@ public class UiController {
       UserListStore userListStore,
       StatusBar statusBar,
       ConnectButton connectBtn,
-      DisconnectButton disconnectBtn,
-      IrcClientService ircClientService) {
+      DisconnectButton disconnectBtn
+  ) {
     this.irc = irc;
     this.serverTree = serverTree;
     this.chat = chat;
@@ -43,7 +43,6 @@ public class UiController {
     this.statusBar = statusBar;
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
-    this.ircClientService = ircClientService;
   }
 
   public void start() {
@@ -54,6 +53,13 @@ public class UiController {
         serverTree.selectionStream()
             .observeOn(SwingEdt.scheduler())
             .subscribe(this::onTargetSelected,
+                err -> chat.appendError("status", "(ui-error)", err.toString()))
+    );
+
+    disposables.add(
+        users.privateMessageRequests()
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(this::openPrivateConversation,
                 err -> chat.appendError("status", "(ui-error)", err.toString()))
     );
 
@@ -113,6 +119,14 @@ public class UiController {
     disposables.dispose();
   }
 
+  private void openPrivateConversation(String nick) {
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) return;
+
+    ensureTargetExists(n);
+    serverTree.selectTarget(n);
+  }
+
   private void onTargetSelected(String target) {
     if (target == null || target.isBlank()) return;
 
@@ -122,7 +136,7 @@ public class UiController {
     users.setChannel(activeTarget);
 
     statusBar.setChannel(activeTarget);
-    if (activeTarget.startsWith("#")) {
+    if (isChannel(activeTarget)) {
       int total = userListStore.userCount(activeTarget);
       int ops = userListStore.opCount(activeTarget);
       statusBar.setCounts(total, ops);
@@ -133,7 +147,7 @@ public class UiController {
     }
 
     // No cache? Request names on first view.
-    if (activeTarget.startsWith("#") && !userListStore.has(activeTarget)) {
+    if (isChannel(activeTarget) && !userListStore.has(activeTarget)) {
       irc.requestNames(activeTarget).subscribe(
           () -> {},
           err -> chat.appendError("status", "(names-error)", String.valueOf(err))
@@ -170,18 +184,67 @@ public class UiController {
       return;
     }
 
+    if (msg.startsWith("/query ")) {
+      String nick = msg.substring("/query ".length()).trim();
+      if (nick.isEmpty()) {
+        chat.appendStatus("status", "(query)", "Usage: /query <nick>");
+        return;
+      }
+      openPrivateConversation(nick);
+      return;
+    }
 
-    if (activeTarget.startsWith("#")) {
+    if (msg.startsWith("/msg ")) {
+      String rest = msg.substring("/msg ".length()).trim();
+      int sp = rest.indexOf(' ');
+      if (sp <= 0) {
+        chat.appendStatus("status", "(msg)", "Usage: /msg <nick> <message>");
+        return;
+      }
+      String nick = rest.substring(0, sp).trim();
+      String body = rest.substring(sp + 1).trim();
+      if (nick.isEmpty() || body.isEmpty()) {
+        chat.appendStatus("status", "(msg)", "Usage: /msg <nick> <message>");
+        return;
+      }
+      openPrivateConversation(nick);
+      sendPrivate(nick, body);
+      return;
+    }
+
+    if (isChannel(activeTarget)) {
       irc.sendToChannel(activeTarget, msg).subscribe(
           () -> {},
           err -> chat.appendError("status", "(send-error)", String.valueOf(err))
       );
 
-      String me = ircClientService.currentNick().orElse("me");
+      String me = irc.currentNick().orElse("me");
       chat.append(activeTarget, "(" + me + ")", msg);
-    } else {
-      chat.appendStatus("status", "(system)", "Select a channel (or /join #channel).");
+      return;
     }
+
+    if (!"status".equals(activeTarget)) {
+      sendPrivate(activeTarget, msg);
+      return;
+    }
+
+    chat.appendStatus("status", "(system)", "Select a channel, or double-click a nick to PM them.");
+  }
+
+  private void sendPrivate(String nick, String message) {
+    String n = nick == null ? "" : nick.trim();
+    String m = message == null ? "" : message.trim();
+    if (n.isEmpty() || m.isEmpty()) return;
+
+    ensureTargetExists(n);
+
+    irc.sendPrivateMessage(n, m).subscribe(
+        () -> {},
+        err -> chat.appendError("status", "(pm-send-error)", String.valueOf(err))
+    );
+
+    String me = irc.currentNick().orElse("me");
+    chat.append(n, "(" + me + ")", m);
   }
 
   private void onIrcEvent(IrcEvent e) {
@@ -204,19 +267,14 @@ public class UiController {
       }
 
       case IrcEvent.NickChanged ev -> {
-        if (ircClientService.currentNick().isPresent()) {
-          String currentNick = ircClientService.currentNick().get();
+        irc.currentNick().ifPresent(currentNick -> {
           if (!Objects.equals(currentNick, ev.oldNick()) && !Objects.equals(currentNick, ev.newNick())) {
-
             chat.appendNotice("status", "(nick)", ev.oldNick() + " is now known as " + ev.newNick());
-          }
-          else {
+          } else {
             chat.appendStatus("status", "(nick)", "Now known as " + ev.newNick());
-
             chat.setCurrentNick(ev.newNick());
           }
-        }
-
+        });
       }
 
       case IrcEvent.ChannelMessage ev -> {
@@ -225,13 +283,19 @@ public class UiController {
         if (!ev.channel().equals(activeTarget)) serverTree.markUnread(ev.channel());
       }
 
+      case IrcEvent.PrivateMessage ev -> {
+        ensureTargetExists(ev.from());
+        chat.append(ev.from(), ev.from(), ev.text());
+        if (!ev.from().equals(activeTarget)) serverTree.markUnread(ev.from());
+      }
+
       case IrcEvent.Notice ev ->
           chat.appendNotice("status", "(notice) " + ev.from(), ev.text());
 
       case IrcEvent.JoinedChannel ev -> {
         ensureTargetExists(ev.channel());
         chat.appendStatus(ev.channel(), "(join)", "Joined " + ev.channel());
-        setActiveTarget(ev.channel());
+        serverTree.selectTarget(ev.channel());
       }
 
       case IrcEvent.NickListUpdated ev -> {
@@ -258,5 +322,10 @@ public class UiController {
   private void setActiveTarget(String target) {
     this.activeTarget = target;
     chat.setActiveTarget(target);
+  }
+
+  private boolean isChannel(String target) {
+    return target != null && (target.startsWith("#"));
+    // TODO: Targets that start with ampersand &?
   }
 }
