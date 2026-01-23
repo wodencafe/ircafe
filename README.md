@@ -2,7 +2,7 @@
 
 IRCafe is a Java 21 desktop IRC client with a Swing UI and a Spring Boot backend.
 
-<img width="974" height="619" alt="Screenshot_20260123_141509" src="https://github.com/user-attachments/assets/1c34e624-f6e9-4e30-a264-e8f067d4053a" />
+<img width="60%" height="60%" alt="Screenshot_20260123_141509" src="https://github.com/user-attachments/assets/1c34e624-f6e9-4e30-a264-e8f067d4053a" />
 
 ## Requirements
 
