@@ -32,7 +32,7 @@ public class MainFrame extends JFrame {
       MessageInputDockable input,
       StatusBar statusBar
   ) {
-    super("WodenCafe IRC");
+    super("IRCafe");
     this.controller = controller;
     this.serverTree = serverTree;
     this.chat = chat;
