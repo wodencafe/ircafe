@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: "ircafe"
+  main:
+    headless: false
+
+irc:
+  server:
+    host: "irc.libera.chat"
+    port: 6697
+    tls: true
+
+    nick: "${IRCAFE_NICK:IRCafeUser}"
+    login: "${IRCAFE_IDENT:ircafe}"
+    realName: "${IRCAFE_REALNAME:IRCafe User}"
+
+    sasl:
+      enabled: false
+      username: "${IRCAFE_SASL_USERNAME:}"
+      password: "${IRCAFE_SASL_PASSWORD:}"
+      mechanism: "PLAIN"
+
+    autoJoin:
+      - "#test"
