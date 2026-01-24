@@ -22,3 +22,13 @@ irc:
 
     autoJoin:
       - "#test"
+
+  embeds:
+    enabled: true
+    images-enabled: true
+    videos-enabled: true
+    link-previews-enabled: true
+    max-thumbnail-width: 400
+    max-thumbnail-height: 300
+    cache-size-bytes: 52428800  # 50MB
+    fetch-timeout-ms: 10000
