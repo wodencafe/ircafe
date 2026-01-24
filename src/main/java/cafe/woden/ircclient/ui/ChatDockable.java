@@ -1,7 +1,10 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.ui.WrapTextPane;
+import cafe.woden.ircclient.embed.*;
 import io.github.andrewauclair.moderndocking.Dockable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -11,12 +14,12 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Rectangle2D;
 import java.net.URI;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,8 +74,29 @@ public class ChatDockable extends JPanel implements Dockable {
   private Cursor normalCursor;
   private Cursor handCursor;
 
-  public ChatDockable() {
+  // Embed support
+  private final EmbedFetcher embedFetcher;
+  private final EmbedRenderer embedRenderer;
+  private final EmbedSettings embedSettings;
+  private final CompositeDisposable embedDisposables = new CompositeDisposable();
+
+  // Track embeds by URL for click handling: url -> EmbedResult
+  private final Map<String, EmbedResult> embedResults = new HashMap<>();
+
+  // Custom attribute for embed URLs
+  private static final String ATTR_EMBED_URL = "chat.embed.url";
+
+  @Autowired
+  public ChatDockable(
+      @Autowired(required = false) EmbedFetcher embedFetcher,
+      @Autowired(required = false) EmbedRenderer embedRenderer,
+      @Autowired(required = false) EmbedSettings embedSettings
+  ) {
     super(new BorderLayout());
+
+    this.embedFetcher = embedFetcher;
+    this.embedRenderer = embedRenderer;
+    this.embedSettings = embedSettings != null ? embedSettings : EmbedSettings.defaults();
 
     chat.setEditable(false);
     chat.setOpaque(true);
@@ -117,12 +141,13 @@ public class ChatDockable extends JPanel implements Dockable {
       updateFollowTailFromScrollbar();
     });
 
-    // Clickable links
+    // Clickable links and embeds
     chat.addMouseMotionListener(new MouseAdapter() {
       @Override
       public void mouseMoved(MouseEvent e) {
         String url = urlAt(e.getPoint());
-        chat.setCursor(url != null ? handCursor : normalCursor);
+        String embedUrl = embedUrlAt(e.getPoint());
+        chat.setCursor((url != null || embedUrl != null) ? handCursor : normalCursor);
       }
     });
 
@@ -130,6 +155,15 @@ public class ChatDockable extends JPanel implements Dockable {
       @Override
       public void mouseClicked(MouseEvent e) {
         if (!SwingUtilities.isLeftMouseButton(e)) return;
+
+        // Check for embed click first
+        String embedUrl = embedUrlAt(e.getPoint());
+        if (embedUrl != null) {
+          handleEmbedClick(embedUrl);
+          return;
+        }
+
+        // Check for regular URL click
         String url = urlAt(e.getPoint());
         if (url == null) return;
         openUrl(url);
@@ -218,14 +252,15 @@ public class ChatDockable extends JPanel implements Dockable {
         doc.insertString(doc.getLength(), ": ", textAttr);
       }
 
-      insertRichText(doc, text, textAttr);
+      insertRichText(doc, text, textAttr, target);
       doc.insertString(doc.getLength(), "\n", textAttr);
     } catch (BadLocationException ignored) {
     }
 
     if (target.equals(activeTarget)) {
       if (followTailByTarget.getOrDefault(target, true)) {
-        scrollToBottom();
+        // Defer scroll to after layout recalculates the new maximum
+        SwingUtilities.invokeLater(this::scrollToBottom);
       } else {
         // Keep the current scroll position cached
         saveScrollState(target);
@@ -233,9 +268,10 @@ public class ChatDockable extends JPanel implements Dockable {
     }
   }
 
-  private void insertRichText(StyledDocument doc, String text, AttributeSet base) throws BadLocationException {
+  private void insertRichText(StyledDocument doc, String text, AttributeSet base, String target) throws BadLocationException {
     if (text == null || text.isEmpty()) return;
 
+    List<String> urlsToEmbed = new ArrayList<>();
     Matcher m = URL_PATTERN.matcher(text);
     int idx = 0;
 
@@ -255,6 +291,11 @@ public class ChatDockable extends JPanel implements Dockable {
       a.addAttribute(ATTR_URL, open);
       doc.insertString(doc.getLength(), display, a);
 
+      // Check if URL should be embedded
+      if (shouldEmbed(open)) {
+        urlsToEmbed.add(open);
+      }
+
       if (!parts.trailing.isEmpty()) {
         insertWithMentions(doc, parts.trailing, base);
       }
@@ -264,6 +305,11 @@ public class ChatDockable extends JPanel implements Dockable {
 
     if (idx < text.length()) {
       insertWithMentions(doc, text.substring(idx), base);
+    }
+
+    // Process embeds for detected URLs
+    for (String url : urlsToEmbed) {
+      processEmbed(doc, url, target);
     }
   }
 
@@ -294,6 +340,407 @@ public class ChatDockable extends JPanel implements Dockable {
     }
   }
 
+  // ==================== Embed Support ====================
+
+  private boolean shouldEmbed(String url) {
+    if (embedFetcher == null || embedSettings == null || !embedSettings.enabled()) {
+      return false;
+    }
+    EmbedType type = embedFetcher.classifyUrl(url);
+    return type != EmbedType.NONE;
+  }
+
+  private void processEmbed(StyledDocument doc, String url, String target) {
+    if (embedFetcher == null) return;
+
+    // Fetch embed asynchronously
+    Disposable disposable = embedFetcher.fetch(url)
+        .observeOn(SwingEdt.scheduler())
+        .subscribe(
+            result -> insertEmbedImage(doc, url, target, result),
+            error -> { /* Silently ignore embed errors */ }
+        );
+
+    embedDisposables.add(disposable);
+  }
+
+  private void insertEmbedImage(StyledDocument doc, String url, String target, EmbedResult result) {
+    // Store result for click handling
+    embedResults.put(url, result);
+
+    try {
+      // Get the image to display
+      ImageIcon icon = createEmbedIcon(result);
+      if (icon == null) return;
+
+      // Insert newline, indent, image, and trailing newline
+      doc.insertString(doc.getLength(), "\n    ", msgStyle);
+
+      // Create style with the icon and embed URL attribute
+      SimpleAttributeSet attrs = new SimpleAttributeSet();
+      StyleConstants.setIcon(attrs, icon);
+      attrs.addAttribute(ATTR_EMBED_URL, url);
+      doc.insertString(doc.getLength(), " ", attrs);
+
+      // Add newline after embed so next message starts on new line
+      doc.insertString(doc.getLength(), "\n", msgStyle);
+
+    } catch (BadLocationException e) {
+      // Ignore
+    }
+
+    // Scroll if following tail
+    if (target.equals(activeTarget) && followTailByTarget.getOrDefault(target, true)) {
+      SwingUtilities.invokeLater(this::scrollToBottom);
+    }
+  }
+
+  private ImageIcon createEmbedIcon(EmbedResult result) {
+    return switch (result) {
+      case EmbedResult.ImageEmbed img -> new ImageIcon(img.thumbnail());
+      case EmbedResult.VideoEmbed vid -> {
+        if (vid.thumbnail() != null) {
+          yield createVideoThumbnailIcon(vid.thumbnail());
+        }
+        // Create placeholder for direct video files
+        yield createVideoPlaceholderIcon(vid.url());
+      }
+      case EmbedResult.LinkPreview link -> createLinkPreviewIcon(link);
+      default -> null;
+    };
+  }
+
+  private ImageIcon createLinkPreviewIcon(EmbedResult.LinkPreview link) {
+    // Half the size of normal embeds
+    int w = embedSettings.maxThumbnailWidth() / 2;
+    int h = embedSettings.maxThumbnailHeight() / 2;
+
+    java.awt.image.BufferedImage preview = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    java.awt.Graphics2D g2 = preview.createGraphics();
+    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+    // Draw background image if available, otherwise dark background
+    if (link.ogImage() != null) {
+      // Center image at original size, crop sides
+      java.awt.image.BufferedImage img = link.ogImage();
+      int drawX = (w - img.getWidth()) / 2;
+      int drawY = (h - img.getHeight()) / 2;
+      g2.drawImage(img, drawX, drawY, null);
+    } else {
+      // Dark background
+      g2.setColor(new Color(30, 30, 35));
+      g2.fillRect(0, 0, w, h);
+    }
+
+    // Dark overlay for text readability
+    g2.setColor(new Color(0, 0, 0, 180));
+    g2.fillRect(0, 0, w, h);
+
+    // Border
+    g2.setColor(new Color(60, 60, 65));
+    g2.drawRect(0, 0, w - 1, h - 1);
+
+    int padding = 6;
+    int maxTextWidth = w - padding * 2;
+    int textY = padding;
+
+    // Draw site name at top with favicon
+    if (link.siteName() != null && !link.siteName().isBlank()) {
+      g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 9f));
+      g2.setColor(new Color(150, 150, 150));
+
+      int siteX = padding;
+      if (link.favicon() != null) {
+        int faviconSize = 12;
+        g2.drawImage(link.favicon(), siteX, textY, faviconSize, faviconSize, null);
+        siteX += faviconSize + 3;
+      }
+      g2.drawString(link.siteName(), siteX, textY + g2.getFontMetrics().getAscent());
+      textY += g2.getFontMetrics().getHeight() + 4;
+    } else {
+      textY += 2;
+    }
+
+    // Draw title - bold, with word wrap
+    if (link.title() != null && !link.title().isBlank()) {
+      g2.setFont(g2.getFont().deriveFont(Font.BOLD, 11f));
+      g2.setColor(Color.WHITE);
+      textY = drawWrappedText(g2, link.title(), padding, textY, maxTextWidth, 2);
+      textY += 3;
+    }
+
+    // Draw description - with word wrap, fill remaining space
+    if (link.description() != null && !link.description().isBlank()) {
+      g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 10f));
+      g2.setColor(new Color(200, 200, 200));
+      int remainingLines = (h - textY - padding) / g2.getFontMetrics().getHeight();
+      drawWrappedText(g2, link.description(), padding, textY, maxTextWidth, Math.max(1, remainingLines));
+    }
+
+    g2.dispose();
+    return new ImageIcon(preview);
+  }
+
+  private int drawWrappedText(java.awt.Graphics2D g2, String text, int x, int y, int maxWidth, int maxLines) {
+    if (text == null || text.isBlank()) return y;
+
+    java.awt.FontMetrics fm = g2.getFontMetrics();
+    int lineHeight = fm.getHeight();
+    text = text.replace('\n', ' ').replace('\r', ' ').trim();
+
+    String[] words = text.split("\\s+");
+    StringBuilder line = new StringBuilder();
+    int linesDrawn = 0;
+
+    for (int i = 0; i < words.length; i++) {
+      String word = words[i];
+      String testLine = line.isEmpty() ? word : line + " " + word;
+
+      if (fm.stringWidth(testLine) <= maxWidth) {
+        if (!line.isEmpty()) line.append(" ");
+        line.append(word);
+      } else {
+        // Draw current line
+        if (!line.isEmpty()) {
+          if (linesDrawn >= maxLines - 1 && i < words.length) {
+            // Last allowed line - add ellipsis
+            String finalLine = line.toString();
+            while (fm.stringWidth(finalLine + "...") > maxWidth && finalLine.length() > 0) {
+              finalLine = finalLine.substring(0, finalLine.length() - 1);
+            }
+            g2.drawString(finalLine + "...", x, y + fm.getAscent());
+            return y + lineHeight;
+          }
+          g2.drawString(line.toString(), x, y + fm.getAscent());
+          y += lineHeight;
+          linesDrawn++;
+        }
+        line = new StringBuilder(word);
+      }
+    }
+
+    // Draw remaining text
+    if (!line.isEmpty() && linesDrawn < maxLines) {
+      g2.drawString(line.toString(), x, y + fm.getAscent());
+      y += lineHeight;
+    }
+
+    return y;
+  }
+
+  private ImageIcon createVideoPlaceholderIcon(String url) {
+    int w = embedSettings.maxThumbnailWidth();
+    int h = (int) (w * 9.0 / 16.0); // 16:9 aspect ratio
+
+    java.awt.image.BufferedImage placeholder = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    java.awt.Graphics2D g2 = placeholder.createGraphics();
+    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
+    // Dark background
+    g2.setColor(new Color(40, 40, 40));
+    g2.fillRect(0, 0, w, h);
+
+    // Border
+    g2.setColor(new Color(80, 80, 80));
+    g2.drawRect(0, 0, w - 1, h - 1);
+
+    // Play button
+    int centerX = w / 2;
+    int centerY = h / 2;
+    int radius = 30;
+
+    g2.setColor(new Color(0, 0, 0, 180));
+    g2.fillOval(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    g2.setColor(Color.WHITE);
+    g2.setStroke(new java.awt.BasicStroke(2));
+    g2.drawOval(centerX - radius, centerY - radius, radius * 2, radius * 2);
+
+    // Play triangle
+    int triSize = 15;
+    int[] xPoints = {centerX - triSize/2, centerX - triSize/2, centerX + triSize};
+    int[] yPoints = {centerY - triSize, centerY + triSize, centerY};
+    g2.fillPolygon(xPoints, yPoints, 3);
+
+    // Filename at bottom
+    String filename = url;
+    int lastSlash = url.lastIndexOf('/');
+    if (lastSlash >= 0 && lastSlash < url.length() - 1) {
+      filename = url.substring(lastSlash + 1);
+    }
+    if (filename.length() > 40) {
+      filename = filename.substring(0, 37) + "...";
+    }
+
+    g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
+    java.awt.FontMetrics fm = g2.getFontMetrics();
+    int textX = (w - fm.stringWidth(filename)) / 2;
+    g2.setColor(new Color(180, 180, 180));
+    g2.drawString(filename, textX, h - 10);
+
+    g2.dispose();
+    return new ImageIcon(placeholder);
+  }
+
+  private ImageIcon createVideoThumbnailIcon(java.awt.image.BufferedImage thumbnail) {
+    // Draw play button overlay on video thumbnail
+    int w = thumbnail.getWidth();
+    int h = thumbnail.getHeight();
+    java.awt.image.BufferedImage withOverlay = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    java.awt.Graphics2D g2 = withOverlay.createGraphics();
+    g2.drawImage(thumbnail, 0, 0, null);
+
+    // Draw play button circle
+    int centerX = w / 2;
+    int centerY = h / 2;
+    int radius = Math.min(w, h) / 8;
+    g2.setColor(new Color(0, 0, 0, 180));
+    g2.fillOval(centerX - radius, centerY - radius, radius * 2, radius * 2);
+    g2.setColor(Color.WHITE);
+    g2.setStroke(new java.awt.BasicStroke(2));
+    g2.drawOval(centerX - radius, centerY - radius, radius * 2, radius * 2);
+
+    // Draw play triangle
+    int triSize = radius / 2;
+    int[] xPoints = {centerX - triSize/2, centerX - triSize/2, centerX + triSize};
+    int[] yPoints = {centerY - triSize, centerY + triSize, centerY};
+    g2.fillPolygon(xPoints, yPoints, 3);
+
+    g2.dispose();
+    return new ImageIcon(withOverlay);
+  }
+
+  private String embedUrlAt(Point p) {
+    int pos = chat.viewToModel2D(p);
+    if (pos < 0) return null;
+
+    Document d = chat.getDocument();
+    if (!(d instanceof StyledDocument sd)) return null;
+
+    // Check positions around the click - icons are single chars but span many pixels
+    // We need to find if we're clicking within the visual bounds of an icon
+    for (int offset = 0; offset >= -5; offset--) {
+      int checkPos = pos + offset;
+      if (checkPos < 0) continue;
+
+      Element el = sd.getCharacterElement(checkPos);
+      if (el == null) continue;
+
+      Object v = el.getAttributes().getAttribute(ATTR_EMBED_URL);
+      if (v instanceof String s) {
+        // Verify the click is within this element's visual bounds
+        try {
+          Rectangle2D rect = chat.modelToView2D(checkPos);
+          if (rect != null) {
+            // Get icon width from the element
+            Icon icon = StyleConstants.getIcon(el.getAttributes());
+            if (icon != null) {
+              Rectangle2D iconBounds = new Rectangle2D.Double(
+                  rect.getX(), rect.getY(), icon.getIconWidth(), icon.getIconHeight());
+              if (iconBounds.contains(p)) {
+                return s;
+              }
+            }
+          }
+        } catch (BadLocationException ignored) {}
+      }
+    }
+
+    return null;
+  }
+
+  private void handleEmbedClick(String embedUrl) {
+    EmbedResult result = embedResults.get(embedUrl);
+    if (result == null) return;
+
+    switch (result) {
+      case EmbedResult.ImageEmbed img -> openImageViewer(img);
+      case EmbedResult.VideoEmbed vid -> openVideoPlayer(embedUrl, result);
+      case EmbedResult.LinkPreview link -> VideoPlayerDialog.openUrlInBrowser(link.url());
+      default -> {}
+    }
+  }
+
+  private void openImageViewer(EmbedResult.ImageEmbed img) {
+    java.awt.image.BufferedImage viewImage = img.original();
+    if (viewImage == null) viewImage = img.thumbnail();
+    if (viewImage == null) return;
+
+    JDialog dialog = new JDialog(
+        (Frame) SwingUtilities.getWindowAncestor(this),
+        "Image Viewer",
+        true
+    );
+
+    // Create scalable image panel
+    final java.awt.image.BufferedImage finalImage = viewImage;
+    JPanel imagePanel = new JPanel() {
+      @Override
+      protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+
+        double imgRatio = (double) finalImage.getWidth() / finalImage.getHeight();
+        double panelRatio = (double) getWidth() / getHeight();
+
+        int drawW, drawH;
+        if (panelRatio > imgRatio) {
+          drawH = getHeight();
+          drawW = (int) (drawH * imgRatio);
+        } else {
+          drawW = getWidth();
+          drawH = (int) (drawW / imgRatio);
+        }
+
+        int x = (getWidth() - drawW) / 2;
+        int y = (getHeight() - drawH) / 2;
+        g2.drawImage(finalImage, x, y, drawW, drawH, null);
+      }
+    };
+    imagePanel.setBackground(Color.BLACK);
+    dialog.add(imagePanel);
+
+    Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+    int maxW = (int) (screen.width * 0.9);
+    int maxH = (int) (screen.height * 0.9);
+    int w = Math.min(viewImage.getWidth() + 50, maxW);
+    int h = Math.min(viewImage.getHeight() + 50, maxH);
+
+    dialog.setSize(w, h);
+    dialog.setLocationRelativeTo(this);
+    dialog.setVisible(true);
+  }
+
+  private void openVideoPlayer(String url, EmbedResult result) {
+    // For YouTube/Vimeo, just open in browser directly (VLCJ can't play them)
+    if (VideoPlayerDialog.isStreamingServiceUrl(url)) {
+      VideoPlayerDialog.openUrlInBrowser(url);
+      return;
+    }
+
+    // For direct video files, use the VLCJ player
+    String title = null;
+    if (result instanceof EmbedResult.VideoEmbed vid) {
+      title = vid.title();
+    }
+
+    Window parentWindow = SwingUtilities.getWindowAncestor(this);
+    VideoPlayerDialog dialog = new VideoPlayerDialog(parentWindow, url, title);
+    dialog.setVisible(true);
+    dialog.play();
+  }
+
+  /**
+   * Clean up embed resources. Should be called when the component is disposed.
+   */
+  public void disposeEmbeds() {
+    embedDisposables.clear();
+    embedResults.clear();
+  }
+
+  // ==================== End Embed Support ====================
+
   private String urlAt(Point p) {
     int pos = chat.viewToModel2D(p);
     if (pos < 0) return null;
@@ -310,8 +757,12 @@ public class ChatDockable extends JPanel implements Dockable {
 
   private void openUrl(String url) {
     try {
-      if (!Desktop.isDesktopSupported()) throw new UnsupportedOperationException("Desktop not supported");
-      Desktop.getDesktop().browse(new URI(url));
+      if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+        Desktop.getDesktop().browse(new URI(url));
+      } else {
+        // Fallback for Linux - try xdg-open
+        Runtime.getRuntime().exec(new String[]{"xdg-open", url});
+      }
     } catch (Exception ex) {
       // Fallback: copy to clipboard and notify
       try {

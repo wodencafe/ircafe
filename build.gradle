@@ -34,6 +34,12 @@ dependencies {
 	implementation "io.github.andrewauclair:modern-docking-ui:1.4.1"
 	implementation "com.formdev:flatlaf:3.7"
 	implementation "com.formdev:flatlaf-extras:3.7"
+
+	// HTML parsing for link previews
+	implementation 'org.jsoup:jsoup:1.18.3'
+
+	// VLCJ for video playback
+	implementation 'uk.co.caprica:vlcj:4.8.3'
 }
 
 tasks.named('test') {
