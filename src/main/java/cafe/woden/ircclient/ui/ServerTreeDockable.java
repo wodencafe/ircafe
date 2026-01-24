@@ -8,29 +8,35 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Point;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import javax.swing.JMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeSelectionListener;
+import javax.swing.event.TreeWillExpandListener;
+import javax.swing.tree.ExpandVetoException;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
  * Server/channel tree.
  *
- * <p>Multi-server support: each configured server has its own node, with a per-server
- * status leaf plus channels and private message leaves.
  */
 @Component
 @Lazy
@@ -39,6 +45,11 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private final FlowableProcessor<TargetRef> selections =
       PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<String> connectServerRequests =
+      PublishProcessor.<String>create().toSerialized();
+  private final FlowableProcessor<String> disconnectServerRequests =
+      PublishProcessor.<String>create().toSerialized();
 
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
   private final DefaultTreeModel model = new DefaultTreeModel(root);
@@ -51,6 +62,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private final Map<String, ServerNodes> servers = new HashMap<>();
   private final Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+
+  /** Per-server connection state for context menu enabling/disabling. */
+  private final Map<String, Boolean> serverConnected = new HashMap<>();
 
   public ServerTreeDockable(IrcProperties props, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
     super(new BorderLayout());
@@ -102,6 +116,39 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     };
     tree.addTreeSelectionListener(tsl);
 
+    // Right-click context menu (connect/disconnect per server)
+    // TODO: Need to add support for right-clicking channels.
+    MouseAdapter popupListener = new MouseAdapter() {
+      @Override
+      public void mousePressed(MouseEvent e) {
+        maybeShowPopup(e);
+      }
+
+      @Override
+      public void mouseReleased(MouseEvent e) {
+        maybeShowPopup(e);
+      }
+
+      private void maybeShowPopup(MouseEvent e) {
+        if (!e.isPopupTrigger()) return;
+
+        int x = e.getX();
+        int y = e.getY();
+        TreePath path = tree.getPathForLocation(x, y);
+        if (path == null) {
+          return;
+        }
+
+        tree.setSelectionPath(path);
+
+        String serverId = serverIdFromPath(path);
+        JPopupMenu menu = buildPopupMenu(serverId, path);
+        if (menu == null || menu.getComponentCount() == 0) return;
+        menu.show(tree, x, y);
+      }
+    };
+    tree.addMouseListener(popupListener);
+
     // Default selection: first server's status, otherwise root.
     SwingUtilities.invokeLater(() -> {
       TargetRef first = servers.values().stream()
@@ -116,6 +163,53 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     });
   }
 
+  private JPopupMenu buildPopupMenu(String serverId, TreePath path) {
+    JPopupMenu menu = new JPopupMenu();
+
+    // Right-clicking the root gives global actions.
+    if (serverId == null) {
+      JMenuItem connectAll = new JMenuItem("Connect all");
+      connectAll.addActionListener(ev -> connectBtn.doClick());
+      menu.add(connectAll);
+
+      JMenuItem disconnectAll = new JMenuItem("Disconnect all");
+      disconnectAll.addActionListener(ev -> disconnectBtn.doClick());
+      // Enabled only if the global Disconnect button is enabled.
+      disconnectAll.setEnabled(disconnectBtn.isEnabled());
+      menu.add(disconnectAll);
+      return menu;
+    }
+
+    boolean connected = Boolean.TRUE.equals(serverConnected.get(serverId));
+
+    JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
+    connectOne.setEnabled(!connected);
+    connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
+    menu.add(connectOne);
+
+    JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
+    disconnectOne.setEnabled(connected);
+    disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
+    menu.add(disconnectOne);
+
+    return menu;
+  }
+
+  /**
+   * The server node is always the first child under the root.
+   * Root path length is 1, server subtree paths are >= 2.
+   */
+  private String serverIdFromPath(TreePath path) {
+    if (path == null) return null;
+    Object[] comps = path.getPath();
+    if (comps.length < 2) return null;
+    Object serverNodeObj = comps[1];
+    if (!(serverNodeObj instanceof DefaultMutableTreeNode serverNode)) return null;
+    Object uo = serverNode.getUserObject();
+    String id = Objects.toString(uo, "").trim();
+    return id.isEmpty() ? null : id;
+  }
+
   @Override
   public String getPersistentID() {
     return ID;
@@ -128,6 +222,19 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   public Flowable<TargetRef> selectionStream() {
     return selections.onBackpressureLatest();
+  }
+
+  public Flowable<String> connectServerRequests() {
+    return connectServerRequests.onBackpressureLatest();
+  }
+
+  public Flowable<String> disconnectServerRequests() {
+    return disconnectServerRequests.onBackpressureLatest();
+  }
+
+  public void setServerConnected(String serverId, boolean connected) {
+    if (serverId == null) return;
+    serverConnected.put(serverId, connected);
   }
 
   public void setStatusText(String text) {
@@ -209,6 +316,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     String id = Objects.requireNonNull(serverId, "serverId").trim();
     if (id.isEmpty()) id = "(server)";
     if (servers.containsKey(id)) return servers.get(id);
+
+    // Default per-server connection state.
+    serverConnected.putIfAbsent(id, false);
 
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");

@@ -50,6 +50,7 @@ public class RuntimeConfigStore {
     ensureFileExistsWithServers();
   }
 
+  /** Ensure the file exists and contains the full irc.servers list so Spring doesn't drop servers. */
   public synchronized void ensureFileExistsWithServers() {
     try {
       if (file.toString().isBlank()) return;
@@ -78,7 +79,7 @@ public class RuntimeConfigStore {
       irc.put("servers", new ArrayList<>(byId.values()));
       writeFile(doc);
     } catch (Exception e) {
-      // TODO: Better logging (slf4j or something)
+      // Non-fatal: we can still run without persistence.
       System.err.println("[ircafe] Could not ensure runtime config file: " + e);
     }
   }

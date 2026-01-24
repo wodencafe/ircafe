@@ -68,6 +68,16 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<String> connectServerRequests() {
+    return serverTree.connectServerRequests();
+  }
+
+  @Override
+  public Flowable<String> disconnectServerRequests() {
+    return serverTree.disconnectServerRequests();
+  }
+
+  @Override
   public void ensureTargetExists(TargetRef target) {
     chat.ensureBuffer(target);
     serverTree.ensureNode(target);
@@ -131,6 +141,11 @@ public class SwingUiPort implements UiPort {
   @Override
   public void setConnectionStatusText(String text) {
     serverTree.setStatusText(text);
+  }
+
+  @Override
+  public void setServerConnected(String serverId, boolean connected) {
+    serverTree.setServerConnected(serverId, connected);
   }
 
   @Override

@@ -20,6 +20,8 @@ import org.springframework.stereotype.Component;
 /**
  * Mediator.
  *
+ * <p>Multi-server support:
+ * targets are scoped to a server id via {@link TargetRef}.
  */
 @Component
 @Lazy
@@ -109,6 +111,20 @@ public class IrcMediator {
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(ignored -> disconnectAll())
     );
+
+    disposables.add(
+        ui.connectServerRequests()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(this::connectOne,
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", String.valueOf(err)))
+    );
+
+    disposables.add(
+        ui.disconnectServerRequests()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(this::disconnectOne,
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", String.valueOf(err)))
+    );
   }
 
   public void stop() {
@@ -146,6 +162,31 @@ public class IrcMediator {
     }
   }
 
+  private void connectOne(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    if (!props.byId().containsKey(sid)) {
+      ui.appendError(safeStatusTarget(), "(conn)", "Unknown server: " + sid);
+      return;
+    }
+
+    TargetRef status = new TargetRef(sid, "status");
+    ensureTargetExists(status);
+    ui.appendStatus(status, "(conn)", "Connecting…");
+    ui.setConnectionStatusText("Connecting…");
+
+    disposables.add(
+        irc.connect(sid).subscribe(
+            () -> {},
+            err -> {
+              ui.appendError(status, "(conn-error)", String.valueOf(err));
+              ui.appendStatus(status, "(conn)", "Connect failed");
+            }
+        )
+    );
+  }
+
   private void disconnectAll() {
     Set<String> serverIds = props.byId().keySet();
     ui.setConnectionStatusText("Disconnecting…");
@@ -162,6 +203,26 @@ public class IrcMediator {
           )
       );
     }
+  }
+
+  private void disconnectOne(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!props.byId().containsKey(sid)) {
+      ui.appendError(safeStatusTarget(), "(disc)", "Unknown server: " + sid);
+      return;
+    }
+
+    TargetRef status = new TargetRef(sid, "status");
+    ui.appendStatus(status, "(conn)", "Disconnecting…");
+    ui.setConnectionStatusText("Disconnecting…");
+
+    disposables.add(
+        irc.disconnect(sid).subscribe(
+            () -> {},
+            err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
+        )
+    );
   }
 
   private void openPrivateConversation(PrivateMessageRequest req) {
@@ -395,6 +456,7 @@ public class IrcMediator {
     switch (e) {
       case IrcEvent.Connected ev -> {
         connectedServers.add(sid);
+        ui.setServerConnected(sid, true);
         ensureTargetExists(status);
         ui.appendStatus(status, "(conn)", "Connected as " + ev.nick());
         ui.setChatCurrentNick(sid, ev.nick());
@@ -404,6 +466,7 @@ public class IrcMediator {
 
       case IrcEvent.Disconnected ev -> {
         connectedServers.remove(sid);
+        ui.setServerConnected(sid, false);
         ui.appendStatus(status, "(conn)", "Disconnected: " + ev.reason());
         ui.setChatCurrentNick(sid, "");
         updateConnectionUi();
