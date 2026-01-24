@@ -1,14 +1,17 @@
-package cafe.woden.ircclient.ui;
+package cafe.woden.ircclient.model;
 
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
+/**
+ * In-memory cache of nick lists per channel.
+ *
+ */
 @Component
 @Lazy
 public class UserListStore {

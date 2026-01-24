@@ -67,13 +67,11 @@ public class UserListDockable extends JPanel implements Dockable {
     // TODO: Show N/A when not on a channel
   }
 
-  /** Replace the nick list contents. */
   public void setNicks(List<NickInfo> nicks) {
     model.clear();
     for (String n : nicks.stream().map(x -> x.prefix() + x.nick()).toList()) model.addElement(n);
   }
 
-  /** Convenience: quick placeholder list (useful while wiring). */
   public void setPlaceholder(String... nicks) {
     model.clear();
     for (String n : nicks) model.addElement(n);
