@@ -27,9 +27,19 @@ java -jar build/libs/*.jar
 
 ## Configuration
 
-Edit:
+### Runtime configuration (preferred)
 
-`src/main/resources/application.yml`
+When running IRCafe as a packaged jar, edit the runtime config file (loaded on startup and overrides the defaults in `application.yml`):
+
+- Default path: `~/.config/ircafe/ircafe.yml` (i.e. `${user.home}/.config/ircafe/ircafe.yml`)
+
+To use a different location, set `ircafe.runtime-config` (environment variable: `IRCAFE_RUNTIME_CONFIG`) or pass it on the command line:
+
+```bash
+IRCAFE_RUNTIME_CONFIG=/path/to/ircafe.yml java -jar build/libs/ircafe-*.jar
+# or:
+java -jar build/libs/ircafe-*.jar --ircafe.runtime-config=/path/to/ircafe.yml
+```
 
 The IRC settings use the prefix `irc.server`.
 
