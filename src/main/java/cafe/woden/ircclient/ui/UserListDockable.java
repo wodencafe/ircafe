@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.app.PrivateMessageRequest;
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -23,10 +25,10 @@ public class UserListDockable extends JPanel implements Dockable {
   private final DefaultListModel<String> model = new DefaultListModel<>();
   private final JList<String> list = new JList<>(model);
 
-  private final FlowableProcessor<String> openPrivate =
-      PublishProcessor.<String>create().toSerialized();
+  private final FlowableProcessor<PrivateMessageRequest> openPrivate =
+      PublishProcessor.<PrivateMessageRequest>create().toSerialized();
 
-  private String channel = "status";
+  private TargetRef active = new TargetRef("default", "status");
 
   public UserListDockable() {
     super(new BorderLayout());
@@ -47,24 +49,23 @@ public class UserListDockable extends JPanel implements Dockable {
         if (r == null || !r.contains(e.getPoint())) return;
 
         // Only meaningful when we're viewing a channel user list.
-        if (!(channel.startsWith("#"))) return;
+        if (active == null || !active.isChannel()) return;
 
         String raw = model.getElementAt(index);
         String nick = stripNickPrefix(raw);
         if (nick.isBlank()) return;
 
-        openPrivate.onNext(nick);
+        openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
       }
     });
   }
 
-  public Flowable<String> privateMessageRequests() {
+  public Flowable<PrivateMessageRequest> privateMessageRequests() {
     return openPrivate.onBackpressureBuffer();
   }
 
-  public void setChannel(String channel) {
-    this.channel = channel == null ? "status" : channel;
-    // TODO: Show N/A when not on a channel
+  public void setChannel(TargetRef target) {
+    this.active = target;
   }
 
   public void setNicks(List<NickInfo> nicks) {
@@ -77,8 +78,8 @@ public class UserListDockable extends JPanel implements Dockable {
     for (String n : nicks) model.addElement(n);
   }
 
-  public String getChannel() {
-    return channel;
+  public TargetRef getChannel() {
+    return active;
   }
 
   public List<String> getNicksSnapshot() {

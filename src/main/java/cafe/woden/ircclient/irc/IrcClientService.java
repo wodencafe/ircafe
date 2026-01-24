@@ -2,19 +2,40 @@ package cafe.woden.ircclient.irc;
 
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
+import java.util.Optional;
 
+/**
+ * Multi-server IRC client API.
+ *
+ * <p>All operations are explicitly scoped to a server id.
+ */
 public interface IrcClientService {
-  Flowable<IrcEvent> events();
-  java.util.Optional<String> currentNick();
+  Flowable<ServerIrcEvent> events();
 
-  Completable connect();
-  Completable disconnect();
+  Optional<String> currentNick(String serverId);
 
-  Completable changeNick(String newNick);
+  Completable connect(String serverId);
+  Completable disconnect(String serverId);
 
-  Completable requestNames(String channel);
-  Completable joinChannel(String channel);
-  Completable sendToChannel(String channel, String message);
+  Completable changeNick(String serverId, String newNick);
 
-  Completable sendPrivateMessage(String nick, String message);
+  Completable requestNames(String serverId, String channel);
+  Completable joinChannel(String serverId, String channel);
+  Completable sendToChannel(String serverId, String channel, String message);
+
+  Completable sendPrivateMessage(String serverId, String nick, String message);
+
+  /**
+   * Convenience method used by the app layer.
+   *
+   * <p>If {@code target} looks like a channel (# or &), we send to the channel.
+   * Otherwise we treat it as a nick and send a private message.
+   */
+  default Completable sendMessage(String serverId, String target, String message) {
+    String t = target == null ? "" : target.trim();
+    if (t.startsWith("#") || t.startsWith("&")) {
+      return sendToChannel(serverId, t, message);
+    }
+    return sendPrivateMessage(serverId, t, message);
+  }
 }

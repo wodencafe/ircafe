@@ -3,22 +3,27 @@ spring:
     name: "ircafe"
   main:
     headless: false
+  config:
+    # Load runtime state/config after application.yml so it can override defaults.
+    # This file is also where we persist changes like auto-join channels and nick.
+    import: "optional:file:${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}"
 
 irc:
-  server:
-    host: "irc.libera.chat"
-    port: 6697
-    tls: true
+  servers:
+    - id: "libera"
+      host: "irc.libera.chat"
+      port: 6697
+      tls: true
 
-    nick: "${IRCAFE_NICK:IRCafeUser}"
-    login: "${IRCAFE_IDENT:ircafe}"
-    realName: "${IRCAFE_REALNAME:IRCafe User}"
+      nick: "${IRCAFE_NICK:IRCafeUser}"
+      login: "${IRCAFE_IDENT:ircafe}"
+      realName: "${IRCAFE_REALNAME:IRCafe User}"
 
-    sasl:
-      enabled: false
-      username: "${IRCAFE_SASL_USERNAME:}"
-      password: "${IRCAFE_SASL_PASSWORD:}"
-      mechanism: "PLAIN"
+      sasl:
+        enabled: false
+        username: "${IRCAFE_SASL_USERNAME:}"
+        password: "${IRCAFE_SASL_PASSWORD:}"
+        mechanism: "PLAIN"
 
-    autoJoin:
-      - "#test"
+      autoJoin:
+        - "#test"

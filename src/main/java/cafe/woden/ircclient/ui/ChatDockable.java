@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.WrapTextPane;
 import io.github.andrewauclair.moderndocking.Dockable;
 import org.springframework.context.annotation.Lazy;
@@ -16,6 +17,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,14 +49,13 @@ public class ChatDockable extends JPanel implements Dockable {
   private final WrapTextPane chat = new WrapTextPane();
   private final JScrollPane scroll = new JScrollPane(chat);
 
-  private final Map<String, StyledDocument> buffers = new HashMap<>();
-  private final Map<String, Boolean> followTailByTarget = new HashMap<>();
-  private final Map<String, Integer> scrollValueByTarget = new HashMap<>();
+  private final Map<TargetRef, StyledDocument> buffers = new HashMap<>();
+  private final Map<TargetRef, Boolean> followTailByTarget = new HashMap<>();
+  private final Map<TargetRef, Integer> scrollValueByTarget = new HashMap<>();
 
-  private String activeTarget = "status";
+  private TargetRef activeTarget = new TargetRef("default", "status");
 
-  private volatile String currentNick = "";
-  private volatile Pattern mentionPattern = null;
+  private final Map<String, Pattern> mentionPatternByServer = new ConcurrentHashMap<>();
 
   // Styles
   private final SimpleAttributeSet tsStyle;
@@ -136,32 +137,34 @@ public class ChatDockable extends JPanel implements Dockable {
       }
     });
 
-    ensureBuffer("status");
-    setActiveTarget("status");
+    ensureBuffer(activeTarget);
+    setActiveTarget(activeTarget);
   }
 
-  public void setCurrentNick(String nick) {
+  public void setCurrentNick(String serverId, String nick) {
+    String id = Objects.toString(serverId, "").trim();
+    if (id.isEmpty()) return;
+
     String n = nick == null ? "" : nick.trim();
-    currentNick = n;
     if (n.isEmpty()) {
-      mentionPattern = null;
+      mentionPatternByServer.remove(id);
       return;
     }
 
     // Avoid highlighting inside words: (?<!nickChars)NICK(?!nickChars)
     String quoted = Pattern.quote(n);
     String regex = "(?i)(?<!" + NICK_CHARS + ")" + quoted + "(?!" + NICK_CHARS + ")";
-    mentionPattern = Pattern.compile(regex);
+    mentionPatternByServer.put(id, Pattern.compile(regex));
   }
 
-  public void ensureBuffer(String target) {
+  public void ensureBuffer(TargetRef target) {
     buffers.computeIfAbsent(target, k -> new DefaultStyledDocument());
     followTailByTarget.putIfAbsent(target, true);
     scrollValueByTarget.putIfAbsent(target, 0);
   }
 
-  public void setActiveTarget(String target) {
-    if (target == null || target.isBlank()) return;
+  public void setActiveTarget(TargetRef target) {
+    if (target == null) return;
 
     // Save old scroll state
     if (activeTarget != null) saveScrollState(activeTarget);
@@ -174,32 +177,32 @@ public class ChatDockable extends JPanel implements Dockable {
     SwingUtilities.invokeLater(() -> restoreScrollState(target));
   }
 
-  public String getActiveTarget() {
+  public TargetRef getActiveTarget() {
     return activeTarget;
   }
 
   /** Regular chat message (styled, URLs clickable, mentions highlighted). */
-  public void append(String target, String from, String text) {
+  public void append(TargetRef target, String from, String text) {
     appendLine(target, Objects.toString(from, ""), Objects.toString(text, ""), fromStyle, msgStyle);
   }
 
   /** Server notice (styled distinctively). */
-  public void appendNotice(String target, String from, String text) {
+  public void appendNotice(TargetRef target, String from, String text) {
     appendLine(target, Objects.toString(from, ""), Objects.toString(text, ""), noticeFromStyle, noticeMsgStyle);
   }
 
   /** Status/info line (eg connect/join). */
-  public void appendStatus(String target, String from, String text) {
+  public void appendStatus(TargetRef target, String from, String text) {
     appendLine(target, Objects.toString(from, ""), Objects.toString(text, ""), statusStyle, statusStyle);
   }
 
   /** Error line. */
-  public void appendError(String target, String from, String text) {
+  public void appendError(TargetRef target, String from, String text) {
     appendLine(target, Objects.toString(from, ""), Objects.toString(text, ""), errorStyle, errorStyle);
   }
 
   private void appendLine(
-      String target,
+      TargetRef target,
       String from,
       String text,
       AttributeSet fromAttr,
@@ -270,8 +273,9 @@ public class ChatDockable extends JPanel implements Dockable {
   private void insertWithMentions(StyledDocument doc, String text, AttributeSet base) throws BadLocationException {
     if (text == null || text.isEmpty()) return;
 
-    Pattern p = mentionPattern;
-    if (p == null || currentNick.isBlank()) {
+    TargetRef at = activeTarget;
+    Pattern p = (at == null) ? null : mentionPatternByServer.get(at.serverId());
+    if (p == null) {
       doc.insertString(doc.getLength(), text, base);
       return;
     }
@@ -317,7 +321,7 @@ public class ChatDockable extends JPanel implements Dockable {
       try {
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
       } catch (Exception ignored) {}
-      appendStatus("status", "(link)", "Could not open link; copied to clipboard: " + url);
+      appendStatus(activeTarget, "(link)", "Could not open link; copied to clipboard: " + url);
     }
   }
 
@@ -334,7 +338,7 @@ public class ChatDockable extends JPanel implements Dockable {
     scrollValueByTarget.put(activeTarget, value);
   }
 
-  private void saveScrollState(String target) {
+  private void saveScrollState(TargetRef target) {
     if (target == null) return;
     var model = scroll.getVerticalScrollBar().getModel();
     scrollValueByTarget.put(target, model.getValue());
@@ -346,7 +350,7 @@ public class ChatDockable extends JPanel implements Dockable {
     followTailByTarget.put(target, atBottom);
   }
 
-  private void restoreScrollState(String target) {
+  private void restoreScrollState(TargetRef target) {
     boolean follow = followTailByTarget.getOrDefault(target, true);
     if (follow) {
       scrollToBottom();

@@ -17,7 +17,6 @@ import java.awt.event.WindowEvent;
 @Component
 @Lazy
 public class MainFrame extends JFrame {
-  private final IrcMediator controller;
   private final StatusBar statusBar;
 
   // Dockables (Spring beans)
@@ -35,7 +34,6 @@ public class MainFrame extends JFrame {
       StatusBar statusBar
   ) {
     super("IRCafe");
-    this.controller = controller;
     this.serverTree = serverTree;
     this.chat = chat;
     this.users = users;
@@ -66,16 +64,6 @@ public class MainFrame extends JFrame {
     Docking.dock(users, chat, DockingRegion.EAST, 0.18);
     Docking.dock(input, chat, DockingRegion.SOUTH, 0.10);
 
-
-    addWindowListener(new WindowAdapter() {
-      @Override public void windowOpened(WindowEvent e) {
-        // Controller must use event dispatch thread.
-        controller.start();
-      }
-
-      @Override public void windowClosed(WindowEvent e) {
-        controller.stop();
-      }
-    });
+    // Note: the mediator self-starts via @PostConstruct when the UI beans are created.
   }
 }

@@ -1,53 +1,51 @@
 package cafe.woden.ircclient.model;
 
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * In-memory cache of nick lists per channel.
- *
- */
+/** In-memory cache of channel userlists, keyed by server + channel. */
 @Component
-@Lazy
 public class UserListStore {
 
-  public record Entry(List<NickInfo> nicks, Instant updatedAt) {}
+  private final Map<String, Map<String, List<NickInfo>>> usersByServerAndChannel = new ConcurrentHashMap<>();
 
-  private final Map<String, Entry> byChannel = new ConcurrentHashMap<>();
+  public List<NickInfo> get(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return Collections.emptyList();
 
-  public void put(String channel, List<NickInfo> nicks) {
-    byChannel.put(channel, new Entry(List.copyOf(nicks), Instant.now()));
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel == null) return Collections.emptyList();
+    return byChannel.getOrDefault(ch, Collections.emptyList());
   }
 
-  public List<NickInfo> get(String channel) {
-    Entry e = byChannel.get(channel);
-    return e == null ? List.of() : e.nicks();
+  public void put(String serverId, String channel, List<NickInfo> nicks) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    usersByServerAndChannel
+        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+        .put(ch, nicks == null ? List.of() : List.copyOf(nicks));
   }
 
-  public int userCount(String channel) {
-    return get(channel).size();
+  public void clear(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel != null) byChannel.remove(ch);
   }
 
-  public int opCount(String channel) {
-    return (int) get(channel).stream()
-        .filter(n -> isOpLike(n.prefix()))
-        .count();
-  }
-
-  public boolean has(String channel) {
-    return byChannel.containsKey(channel);
-  }
-
-  private static boolean isOpLike(String prefix) {
-    if (prefix == null || prefix.isBlank()) return false;
-    return prefix.indexOf('@') >= 0
-        || prefix.indexOf('&') >= 0
-        || prefix.indexOf('~') >= 0
-        || prefix.indexOf('%') >= 0;
+  public void clearServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    usersByServerAndChannel.remove(sid);
   }
 }

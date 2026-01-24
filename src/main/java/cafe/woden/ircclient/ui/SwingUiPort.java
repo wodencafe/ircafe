@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.List;
@@ -41,12 +43,12 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public Flowable<String> targetSelections() {
+  public Flowable<TargetRef> targetSelections() {
     return serverTree.selectionStream();
   }
 
   @Override
-  public Flowable<String> privateMessageRequests() {
+  public Flowable<PrivateMessageRequest> privateMessageRequests() {
     return users.privateMessageRequests();
   }
 
@@ -66,39 +68,39 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void ensureTargetExists(String target) {
+  public void ensureTargetExists(TargetRef target) {
     chat.ensureBuffer(target);
     serverTree.ensureNode(target);
   }
 
   @Override
-  public void selectTarget(String target) {
+  public void selectTarget(TargetRef target) {
     serverTree.selectTarget(target);
   }
 
   @Override
-  public void markUnread(String target) {
+  public void markUnread(TargetRef target) {
     serverTree.markUnread(target);
   }
 
   @Override
-  public void clearUnread(String target) {
+  public void clearUnread(TargetRef target) {
     serverTree.clearUnread(target);
   }
 
   @Override
-  public void setChatActiveTarget(String target) {
+  public void setChatActiveTarget(TargetRef target) {
     chat.setActiveTarget(target);
   }
 
   @Override
-  public void setChatCurrentNick(String nick) {
-    chat.setCurrentNick(nick);
+  public void setChatCurrentNick(String serverId, String nick) {
+    chat.setCurrentNick(serverId, nick);
   }
 
   @Override
-  public void setUsersChannel(String channel) {
-    users.setChannel(channel);
+  public void setUsersChannel(TargetRef target) {
+    users.setChannel(target);
   }
 
   @Override
@@ -132,22 +134,22 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void appendChat(String target, String from, String text) {
+  public void appendChat(TargetRef target, String from, String text) {
     chat.append(target, from, text);
   }
 
   @Override
-  public void appendNotice(String target, String from, String text) {
+  public void appendNotice(TargetRef target, String from, String text) {
     chat.appendNotice(target, from, text);
   }
 
   @Override
-  public void appendStatus(String target, String from, String text) {
+  public void appendStatus(TargetRef target, String from, String text) {
     chat.appendStatus(target, from, text);
   }
 
   @Override
-  public void appendError(String target, String from, String text) {
+  public void appendError(TargetRef target, String from, String text) {
     chat.appendError(target, from, text);
   }
 }
