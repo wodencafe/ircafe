@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.app.IrcMediator;
+
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.RootDockingPanel;
@@ -15,7 +17,7 @@ import java.awt.event.WindowEvent;
 @Component
 @Lazy
 public class MainFrame extends JFrame {
-  private final UiController controller;
+  private final IrcMediator controller;
   private final StatusBar statusBar;
 
   // Dockables (Spring beans)
@@ -25,7 +27,7 @@ public class MainFrame extends JFrame {
   private final MessageInputDockable input;
 
   public MainFrame(
-      UiController controller,
+      IrcMediator controller,
       ServerTreeDockable serverTree,
       ChatDockable chat,
       UserListDockable users,
