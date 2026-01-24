@@ -24,6 +24,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+	implementation 'org.yaml:snakeyaml'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	implementation 'io.reactivex.rxjava3:rxjava:3.1.12'
