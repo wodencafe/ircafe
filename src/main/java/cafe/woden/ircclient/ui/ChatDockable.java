@@ -86,10 +86,6 @@ public class ChatDockable extends JPanel implements Dockable {
   // Custom attribute for embed URLs
   private static final String ATTR_EMBED_URL = "chat.embed.url";
 
-  // Inline video player panel
-  private JPanel videoPlayerContainer;
-  private VideoPlayerPanel activeVideoPlayer;
-
   @Autowired
   public ChatDockable(
       @Autowired(required = false) EmbedFetcher embedFetcher,
@@ -106,17 +102,7 @@ public class ChatDockable extends JPanel implements Dockable {
     chat.setOpaque(true);
 
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    // Create main content panel with chat scroll and optional video player
-    JPanel contentPanel = new JPanel(new BorderLayout());
-    contentPanel.add(scroll, BorderLayout.CENTER);
-
-    // Video player container (hidden by default)
-    videoPlayerContainer = new JPanel(new BorderLayout());
-    videoPlayerContainer.setVisible(false);
-    contentPanel.add(videoPlayerContainer, BorderLayout.SOUTH);
-
-    add(contentPanel, BorderLayout.CENTER);
+    add(scroll, BorderLayout.CENTER);
 
     normalCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
     handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
@@ -670,7 +656,7 @@ public class ChatDockable extends JPanel implements Dockable {
     switch (result) {
       case EmbedResult.ImageEmbed img -> openImageViewer(img);
       case EmbedResult.VideoEmbed vid -> openVideoPlayer(embedUrl, result);
-      case EmbedResult.LinkPreview link -> openUrl(link.url());
+      case EmbedResult.LinkPreview link -> VideoPlayerDialog.openUrlInBrowser(link.url());
       default -> {}
     }
   }
@@ -727,41 +713,28 @@ public class ChatDockable extends JPanel implements Dockable {
   }
 
   private void openVideoPlayer(String url, EmbedResult result) {
-    // Close any existing video player
-    closeVideoPlayer();
+    // For YouTube/Vimeo, just open in browser directly (VLCJ can't play them)
+    if (VideoPlayerDialog.isStreamingServiceUrl(url)) {
+      VideoPlayerDialog.openUrlInBrowser(url);
+      return;
+    }
 
+    // For direct video files, use the VLCJ player
     String title = null;
     if (result instanceof EmbedResult.VideoEmbed vid) {
       title = vid.title();
     }
 
-    // Initialize JavaFX if needed
-    VideoPlayerPanel.ensureFxInitialized();
-
-    // Create inline video player
-    activeVideoPlayer = new VideoPlayerPanel(url, title);
-    videoPlayerContainer.add(activeVideoPlayer, BorderLayout.CENTER);
-    videoPlayerContainer.setVisible(true);
-    revalidate();
-    repaint();
-  }
-
-  private void closeVideoPlayer() {
-    if (activeVideoPlayer != null) {
-      activeVideoPlayer.dispose();
-      videoPlayerContainer.remove(activeVideoPlayer);
-      activeVideoPlayer = null;
-    }
-    videoPlayerContainer.setVisible(false);
-    revalidate();
-    repaint();
+    Window parentWindow = SwingUtilities.getWindowAncestor(this);
+    VideoPlayerDialog dialog = new VideoPlayerDialog(parentWindow, url, title);
+    dialog.setVisible(true);
+    dialog.play();
   }
 
   /**
    * Clean up embed resources. Should be called when the component is disposed.
    */
   public void disposeEmbeds() {
-    closeVideoPlayer();
     embedDisposables.clear();
     embedResults.clear();
   }
