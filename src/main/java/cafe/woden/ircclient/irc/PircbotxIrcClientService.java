@@ -75,6 +75,10 @@ public class PircbotxIrcClientService implements IrcClientService {
               .setAutoReconnect(true)
               .addListener(new BridgeListener(serverId));
 
+           if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
+            builder.setServerPassword(s.serverPassword());
+          }
+
           // Auto-join channels from config
           for (String chan : s.autoJoin()) {
             String ch = chan == null ? "" : chan.trim();
