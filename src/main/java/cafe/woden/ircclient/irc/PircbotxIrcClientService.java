@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.irc;
 
-import cafe.woden.ircclient.config.IrcServerProperties;
+import cafe.woden.ircclient.config.IrcProperties;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -9,8 +9,10 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -28,77 +30,82 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PircbotxIrcClientService implements IrcClientService {
-  private final FlowableProcessor<IrcEvent> bus =
-      PublishProcessor.<IrcEvent>create().toSerialized();
 
-  private final AtomicReference<PircBotX> botRef = new AtomicReference<>();
+  private final FlowableProcessor<ServerIrcEvent> bus =
+      PublishProcessor.<ServerIrcEvent>create().toSerialized();
 
-  private final IrcServerProperties props;
+  private final Map<String, Connection> connections = new ConcurrentHashMap<>();
+  private final Map<String, IrcProperties.Server> serversById;
 
-  public PircbotxIrcClientService(IrcServerProperties props) {
-    this.props = props;
+  public PircbotxIrcClientService(IrcProperties props) {
+    this.serversById = props.byId();
   }
 
   @Override
-  public Flowable<IrcEvent> events() {
+  public Flowable<ServerIrcEvent> events() {
     return bus.onBackpressureBuffer();
   }
 
   @Override
-  public Completable connect() {
-    return Completable.fromAction(() -> {
-          if (botRef.get() != null) return;
+  public Optional<String> currentNick(String serverId) {
+    PircBotX bot = conn(serverId).botRef.get();
+    return bot == null ? Optional.empty() : Optional.ofNullable(bot.getNick());
+  }
 
-          SocketFactory socketFactory = props.tls()
+  @Override
+  public Completable connect(String serverId) {
+    return Completable.fromAction(() -> {
+          Connection c = conn(serverId);
+          if (c.botRef.get() != null) return;
+
+          IrcProperties.Server s = c.server;
+
+          SocketFactory socketFactory = s.tls()
               ? SSLSocketFactory.getDefault()
               : SocketFactory.getDefault();
 
           Configuration.Builder builder = new Configuration.Builder()
-              .setName(props.nick())
-              .setLogin(props.login())
-              .setRealName(props.realName())
-              .addServer(props.host(), props.port())
+              .setName(s.nick())
+              .setLogin(s.login())
+              .setRealName(s.realName())
+              .addServer(s.host(), s.port())
               .setSocketFactory(socketFactory)
               .setCapEnabled(false) // we may enable below
               .setAutoNickChange(true)
               .setAutoReconnect(true)
-              // TODO: Put BridgeListener into its own class / Spring component.
-              .addListener(new BridgeListener());
+              .addListener(new BridgeListener(serverId));
 
           // Auto-join channels from config
-          for (String chan : props.autoJoin()) {
-            String c = chan == null ? "" : chan.trim();
-            if (!c.isEmpty()) builder.addAutoJoinChannel(c);
+          for (String chan : s.autoJoin()) {
+            String ch = chan == null ? "" : chan.trim();
+            if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
           }
 
           // SASL (PLAIN)
-          if (props.sasl() != null && props.sasl().enabled()) {
-            if (!"PLAIN".equalsIgnoreCase(props.sasl().mechanism())) {
+          if (s.sasl() != null && s.sasl().enabled()) {
+            if (!"PLAIN".equalsIgnoreCase(s.sasl().mechanism())) {
               throw new IllegalStateException(
-                  "Only SASL mechanism PLAIN is supported for now (got: " + props.sasl().mechanism() + ")"
+                  "Only SASL mechanism PLAIN is supported for now (got: " + s.sasl().mechanism() + ")"
               );
             }
-            if (props.sasl().username().isBlank() || props.sasl().password().isBlank()) {
+            if (s.sasl().username().isBlank() || s.sasl().password().isBlank()) {
               throw new IllegalStateException("SASL enabled but username/password not set");
             }
             builder.setCapEnabled(true);
-            builder.addCapHandler(new SASLCapHandler(props.sasl().username(), props.sasl().password()));
+            builder.addCapHandler(new SASLCapHandler(s.sasl().username(), s.sasl().password()));
           }
 
-          // IDEA: Should we persist the PircBotX instance
-          // and re-use it instead of instantiating a new one
-          // upon every connect?
           PircBotX bot = new PircBotX(builder.buildConfiguration());
-          botRef.set(bot);
+          c.botRef.set(bot);
 
           // Run bot on IO thread; connect() completes immediately
           Schedulers.io().scheduleDirect(() -> {
             try {
               bot.startBot();
             } catch (Exception e) {
-              bus.onNext(new IrcEvent.Error(Instant.now(), "Bot crashed", e));
+              bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
             } finally {
-              botRef.set(null);
+              c.botRef.set(null);
             }
           });
         })
@@ -106,76 +113,86 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
-  public Completable disconnect() {
+  public Completable disconnect(String serverId) {
     return Completable.fromAction(() -> {
-          PircBotX bot = botRef.getAndSet(null);
+          Connection c = conn(serverId);
+          PircBotX bot = c.botRef.getAndSet(null);
           if (bot == null) return;
 
           try {
-            // Prevent reconnect loop
             bot.stopBotReconnect();
-            // Attempt to disconnect gracefully
             try {
-              // TODO: Customize quit message
               bot.sendIRC().quitServer("Client disconnect");
             } catch (Exception ignored) {}
-            // Hard stop if needed
             try {
               bot.close();
             } catch (Exception ignored) {}
           } finally {
-            bus.onNext(new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect"));
+            bus.onNext(new ServerIrcEvent(serverId,
+                new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
           }
         })
         .subscribeOn(Schedulers.io());
   }
 
   @Override
-  public Completable changeNick(String newNick) {
+  public Completable changeNick(String serverId, String newNick) {
     return Completable.fromAction(() -> {
           String nick = sanitizeNick(newNick);
-          requireBot().sendIRC().changeNick(nick);
+          requireBot(serverId).sendIRC().changeNick(nick);
         })
         .subscribeOn(Schedulers.io());
   }
 
   @Override
-  public Completable joinChannel(String channel) {
-    return Completable.fromAction(() -> requireBot().sendIRC().joinChannel(channel))
+  public Completable joinChannel(String serverId, String channel) {
+    return Completable.fromAction(() -> requireBot(serverId).sendIRC().joinChannel(channel))
         .subscribeOn(Schedulers.io());
   }
 
   @Override
-  public Completable sendToChannel(String channel, String message) {
-    return Completable.fromAction(() -> requireBot().sendIRC().message(channel, message))
+  public Completable sendToChannel(String serverId, String channel, String message) {
+    return Completable.fromAction(() -> requireBot(serverId).sendIRC().message(channel, message))
         .subscribeOn(Schedulers.io());
   }
 
   @Override
-  public Completable sendPrivateMessage(String nick, String message) {
-    return Completable.fromAction(() -> requireBot().sendIRC().message(sanitizeNick(nick), message))
+  public Completable sendPrivateMessage(String serverId, String nick, String message) {
+    return Completable.fromAction(() -> requireBot(serverId).sendIRC().message(sanitizeNick(nick), message))
         .subscribeOn(Schedulers.io());
   }
 
   @Override
-  public Completable requestNames(String channel) {
+  public Completable requestNames(String serverId, String channel) {
     return Completable.fromAction(() -> {
           String chan = sanitizeChannel(channel);
-          requireBot().sendRaw().rawLine("NAMES " + chan);
+          requireBot(serverId).sendRaw().rawLine("NAMES " + chan);
         })
         .subscribeOn(Schedulers.io());
   }
 
-  @Override
-  public Optional<String> currentNick() {
-    PircBotX bot = botRef.get();
-    return bot == null ? Optional.empty() : Optional.ofNullable(bot.getNick());
+  private Connection conn(String serverId) {
+    String id = Objects.requireNonNull(serverId, "serverId").trim();
+    IrcProperties.Server server = serversById.get(id);
+    if (server == null) {
+      throw new IllegalArgumentException("Unknown server id: " + id);
+    }
+    return connections.computeIfAbsent(id, k -> new Connection(server));
   }
 
-  private PircBotX requireBot() {
-    PircBotX bot = botRef.get();
-    if (bot == null) throw new IllegalStateException("Not connected");
+  private PircBotX requireBot(String serverId) {
+    PircBotX bot = conn(serverId).botRef.get();
+    if (bot == null) throw new IllegalStateException("Not connected: " + serverId);
     return bot;
+  }
+
+  private static final class Connection {
+    private final IrcProperties.Server server;
+    private final AtomicReference<PircBotX> botRef = new AtomicReference<>();
+
+    private Connection(IrcProperties.Server server) {
+      this.server = server;
+    }
   }
 
   private static String sanitizeNick(String nick) {
@@ -200,44 +217,47 @@ public class PircbotxIrcClientService implements IrcClientService {
     return c;
   }
 
-  // TODO: Move this to its own class.
   private final class BridgeListener extends ListenerAdapter {
+    private final String serverId;
+
+    private BridgeListener(String serverId) {
+      this.serverId = serverId;
+    }
 
     @Override
     public void onConnect(ConnectEvent event) {
       PircBotX bot = event.getBot();
-      bus.onNext(new IrcEvent.Connected(
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Connected(
           Instant.now(),
           bot.getServerHostname(),
           bot.getServerPort(),
           bot.getNick()
-      ));
+      )));
     }
 
     @Override
     public void onDisconnect(DisconnectEvent event) {
-      bus.onNext(new IrcEvent.Disconnected(Instant.now(), "Disconnected"));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), "Disconnected")));
     }
 
     @Override
     public void onMessage(MessageEvent event) {
       String channel = event.getChannel().getName();
-      bus.onNext(new IrcEvent.ChannelMessage(
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelMessage(
           Instant.now(), channel, event.getUser().getNick(), event.getMessage()
-      ));
+      )));
     }
-
 
     @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       String from = event.getUser().getNick();
-      bus.onNext(new IrcEvent.PrivateMessage(Instant.now(), from, event.getMessage()));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, event.getMessage())));
     }
 
     @Override
     public void onNotice(NoticeEvent event) {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
-      bus.onNext(new IrcEvent.Notice(Instant.now(), from, event.getNotice()));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, event.getNotice())));
     }
 
     @Override
@@ -250,7 +270,7 @@ public class PircbotxIrcClientService implements IrcClientService {
       Channel channel = event.getChannel();
 
       if (isSelf(event.getBot(), event.getUser().getNick())) {
-        bus.onNext(new IrcEvent.JoinedChannel(Instant.now(), channel.getName()));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.JoinedChannel(Instant.now(), channel.getName())));
       }
 
       emitRoster(channel);
@@ -281,7 +301,6 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
 
       if (!refreshedSome) {
-        // Fallback: refresh everything we’re currently tracking
         try {
           for (Channel ch : bot.getUserChannelDao().getAllChannels()) {
             emitRoster(ch);
@@ -290,26 +309,19 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
     }
 
-    /**
-     * Someone got kicked (or we got kicked). KickEvent provides Channel.
-     */
     @Override
     public void onKick(KickEvent event) {
       emitRoster(event.getChannel());
     }
 
-    /**
-     * Nick changed. Update status + rosters for channels user is in.
-     */
     @Override
     public void onNickChange(NickChangeEvent event) {
-      bus.onNext(new IrcEvent.NickChanged(
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickChanged(
           Instant.now(),
           event.getOldNick(),
           event.getNewNick()
-      ));
+      )));
 
-      // Update rosters for channels this user is in (no NAMES)
       try {
         for (Channel ch : event.getBot().getUserChannelDao().getChannels(event.getUser())) {
           emitRoster(ch);
@@ -317,9 +329,6 @@ public class PircbotxIrcClientService implements IrcClientService {
       } catch (Exception ignored) {}
     }
 
-    /**
-     * Mode changes can grant/revoke ops. Refresh roster for that channel.
-     */
     @Override
     public void onMode(ModeEvent event) {
       if (event.getChannel() != null) emitRoster(event.getChannel());
@@ -330,7 +339,6 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override public void onHalfOp(HalfOpEvent event) { emitRoster(event.getChannel()); }
     @Override public void onOwner(OwnerEvent event) { emitRoster(event.getChannel()); }
     @Override public void onSuperOp(SuperOpEvent event) { emitRoster(event.getChannel()); }
-
 
     private boolean isSelf(PircBotX bot, String nick) {
       return nick != null && nick.equalsIgnoreCase(bot.getNick());
@@ -349,14 +357,13 @@ public class PircbotxIrcClientService implements IrcClientService {
       if (channel == null) return;
 
       String channelName = channel.getName();
-      var opsSet = channel.getOps(); // '@' users
+      var opsSet = channel.getOps();
 
       List<IrcEvent.NickInfo> nicks = channel.getUsers().stream()
           .map(u -> new IrcEvent.NickInfo(
               u.getNick(),
               opsSet.contains(u) ? "@" : ""
           ))
-          // optional: show ops first, then alpha
           .sorted(Comparator
               .comparing((IrcEvent.NickInfo n) -> n.prefix().equals("@") ? 0 : 1)
               .thenComparing(IrcEvent.NickInfo::nick, String.CASE_INSENSITIVE_ORDER))
@@ -365,13 +372,13 @@ public class PircbotxIrcClientService implements IrcClientService {
       int totalUsers = channel.getUsers().size();
       int operatorCount = opsSet.size();
 
-      bus.onNext(new IrcEvent.NickListUpdated(
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickListUpdated(
           Instant.now(),
           channelName,
           nicks,
           totalUsers,
           operatorCount
-      ));
+      )));
     }
   }
 }

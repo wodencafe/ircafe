@@ -2,11 +2,18 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.model.UserListStore;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -21,130 +28,197 @@ public class IrcMediator {
   private final UiPort ui;
   private final UserListStore userListStore;
   private final CommandParser commandParser;
+  private final IrcProperties props;
+  private final RuntimeConfigStore runtimeConfig;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
-  private String activeTarget = "status";
+  private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+  // Track which servers are currently connected so the UI controls behave sensibly in multi-server mode.
+  private final Set<String> connectedServers = new java.util.HashSet<>();
+
+  private TargetRef activeTarget;
+
+  @PostConstruct
+  void init() {
+    start();
+  }
+
+  @PreDestroy
+  void shutdown() {
+    stop();
+  }
 
   public IrcMediator(
       IrcClientService irc,
       UiPort ui,
       UserListStore userListStore,
-      CommandParser commandParser
+      CommandParser commandParser,
+      IrcProperties props,
+      RuntimeConfigStore runtimeConfig
   ) {
     this.irc = irc;
     this.ui = ui;
     this.userListStore = userListStore;
     this.commandParser = commandParser;
+    this.props = props;
+    this.runtimeConfig = runtimeConfig;
   }
 
   public void start() {
-    ensureTargetExists("status");
-    setActiveTarget("status");
+    if (!started.compareAndSet(false, true)) {
+      return;
+    }
 
     disposables.add(
         ui.targetSelections()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(this::onTargetSelected,
-                err -> ui.appendError("status", "(ui-error)", err.toString()))
+                err -> ui.appendError(new TargetRef("default", "status"), "(ui-error)", err.toString()))
     );
 
     disposables.add(
         ui.privateMessageRequests()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(this::openPrivateConversation,
-                err -> ui.appendError("status", "(ui-error)", err.toString()))
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", err.toString()))
     );
 
     disposables.add(
         ui.outboundLines()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(this::handleOutgoingLine,
-                err -> ui.appendError("status", "(ui-error)", err.toString()))
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", err.toString()))
     );
 
     disposables.add(
         irc.events()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(this::onIrcEvent,
-                err -> ui.appendError("status", "(irc-error)", err.toString()))
+            .subscribe(this::onServerIrcEvent,
+                err -> ui.appendError(safeStatusTarget(), "(irc-error)", err.toString()))
     );
 
     disposables.add(
         ui.connectClicks()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(ignored -> {
-              ui.setConnectionStatusText("Connecting…");
-              ui.setConnectedUi(false);
-
-              disposables.add(
-                  irc.connect().subscribe(
-                      () -> {},
-                      err -> {
-                        ui.appendError("status", "(conn-error)", String.valueOf(err));
-                        ui.setConnectionStatusText("Connect failed");
-                        ui.setConnectedUi(false);
-                      }
-                  )
-              );
-            })
+            .subscribe(ignored -> connectAll())
     );
 
     disposables.add(
         ui.disconnectClicks()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(ignored -> {
-              ui.setConnectionStatusText("Disconnecting…");
-
-              disposables.add(
-                  irc.disconnect().subscribe(
-                      () -> {},
-                      err -> ui.appendError("status", "(disc-error)", String.valueOf(err))
-                  )
-              );
-            })
+            .subscribe(ignored -> disconnectAll())
     );
   }
 
   public void stop() {
+    if (!started.compareAndSet(true, false)) {
+      return;
+    }
     disposables.dispose();
   }
 
-  private void openPrivateConversation(String nick) {
-    String n = nick == null ? "" : nick.trim();
-    if (n.isEmpty()) return;
+  private void connectAll() {
+    Set<String> serverIds = props.byId().keySet();
+    if (serverIds.isEmpty()) {
+      ui.setConnectionStatusText("No servers configured");
+      return;
+    }
 
-    ensureTargetExists(n);
-    ui.selectTarget(n);
+    ui.setConnectionStatusText("Connecting…");
+    // Disable Connect while we're attempting connections; allow Disconnect.
+    ui.setConnectedUi(true);
+
+    for (String sid : serverIds) {
+      TargetRef status = new TargetRef(sid, "status");
+      ensureTargetExists(status);
+      ui.appendStatus(status, "(conn)", "Connecting…");
+
+      disposables.add(
+          irc.connect(sid).subscribe(
+              () -> {},
+              err -> {
+                ui.appendError(status, "(conn-error)", String.valueOf(err));
+                ui.appendStatus(status, "(conn)", "Connect failed");
+              }
+          )
+      );
+    }
   }
 
-  private void onTargetSelected(String target) {
-    if (target == null || target.isBlank()) return;
+  private void disconnectAll() {
+    Set<String> serverIds = props.byId().keySet();
+    ui.setConnectionStatusText("Disconnecting…");
+
+    // While disconnecting, keep Connect disabled to avoid racing actions.
+    ui.setConnectedUi(true);
+
+    for (String sid : serverIds) {
+      TargetRef status = new TargetRef(sid, "status");
+      disposables.add(
+          irc.disconnect(sid).subscribe(
+              () -> {},
+              err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
+          )
+      );
+    }
+  }
+
+  private void openPrivateConversation(PrivateMessageRequest req) {
+    if (req == null) return;
+    String sid = Objects.toString(req.serverId(), "").trim();
+    String nick = Objects.toString(req.nick(), "").trim();
+    if (sid.isEmpty() || nick.isEmpty()) return;
+
+    TargetRef pm = new TargetRef(sid, nick);
+    ensureTargetExists(pm);
+    ui.selectTarget(pm);
+  }
+
+  private void onTargetSelected(TargetRef target) {
+    if (target == null) return;
 
     ensureTargetExists(target);
     setActiveTarget(target);
 
-    ui.setUsersChannel(activeTarget);
-    ui.setStatusBarChannel(activeTarget);
+    // Status bar
+    ui.setStatusBarChannel(target.target());
+    ui.setStatusBarServer(serverDisplay(target.serverId()));
 
-    if (isChannel(activeTarget)) {
-      int total = userListStore.userCount(activeTarget);
-      int ops = userListStore.opCount(activeTarget);
-      ui.setStatusBarCounts(total, ops);
-      ui.setUsersNicks(userListStore.get(activeTarget));
+    // Users panel
+    ui.setUsersChannel(target);
+    if (target.isChannel()) {
+      List<IrcEvent.NickInfo> cached = userListStore.get(target.serverId(), target.target());
+      ui.setUsersNicks(cached);
+      ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(IrcMediator::isOperatorLike).count());
+
+      // Request names if cache is empty.
+      if (cached.isEmpty()) {
+        irc.requestNames(target.serverId(), target.target()).subscribe(
+            () -> {},
+            err -> ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))
+        );
+      }
     } else {
       ui.setStatusBarCounts(0, 0);
-      ui.setUsersNicks(java.util.List.of());
+      ui.setUsersNicks(List.of());
     }
 
-    // No cache? Request names on first view.
-    if (isChannel(activeTarget) && !userListStore.has(activeTarget)) {
-      irc.requestNames(activeTarget).subscribe(
-          () -> {},
-          err -> ui.appendError("status", "(names-error)", String.valueOf(err))
-      );
-    }
+    // Mention highlighting uses server-scoped nick.
+    irc.currentNick(target.serverId()).ifPresent(nick -> ui.setChatCurrentNick(target.serverId(), nick));
 
-    ui.clearUnread(activeTarget);
+    ui.clearUnread(target);
+  }
+
+  /**
+   * pircbotx exposes channel privilege via a prefix (e.g. "@" op, "+" voice).
+   * We treat ops as @ (op), & (admin), ~ (owner).
+   */
+  private static boolean isOperatorLike(IrcEvent.NickInfo n) {
+    if (n == null) return false;
+    String p = n.prefix();
+    if (p == null || p.isBlank()) return false;
+    return p.contains("@") || p.contains("&") || p.contains("~");
   }
 
   private void handleOutgoingLine(String raw) {
@@ -157,202 +231,281 @@ public class IrcMediator {
       case ParsedInput.Me cmd -> handleMe(cmd.action());
       case ParsedInput.Say cmd -> handleSay(cmd.text());
       case ParsedInput.Unknown cmd ->
-          ui.appendStatus("status", "(system)", "Unknown command: " + cmd.raw());
+          ui.appendStatus(safeStatusTarget(), "(system)", "Unknown command: " + cmd.raw());
     }
   }
 
   private void handleJoin(String channel) {
-    String chan = channel == null ? "" : channel.trim();
-    if (chan.isEmpty()) {
-      ui.appendStatus("status", "(join)", "Usage: /join <#channel>");
+    TargetRef at = activeTarget;
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(join)", "Select a server first.");
       return;
     }
 
-    irc.joinChannel(chan).subscribe(
-        () -> {},
-        err -> ui.appendError("status", "(join-error)", String.valueOf(err))
+    String chan = channel == null ? "" : channel.trim();
+    if (chan.isEmpty()) {
+      ui.appendStatus(safeStatusTarget(), "(join)", "Usage: /join <#channel>");
+      return;
+    }
+
+    // Persist for auto-join next time.
+    runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+
+    disposables.add(
+        irc.joinChannel(at.serverId(), chan).subscribe(
+            () -> {},
+            err -> ui.appendError(safeStatusTarget(), "(join-error)", String.valueOf(err))
+        )
     );
   }
 
   private void handleNick(String newNick) {
-    String nick = newNick == null ? "" : newNick.trim();
-    if (nick.isEmpty()) {
-      ui.appendStatus("status", "(nick)", "Usage: /nick <newNick>");
+    TargetRef at = activeTarget;
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(nick)", "Select a server first.");
       return;
     }
 
-    irc.changeNick(nick).subscribe(
-        () -> ui.appendStatus("status", "(nick)", "Requested nick change to " + nick),
-        err -> ui.appendError("status", "(nick-error)", String.valueOf(err))
+    String nick = newNick == null ? "" : newNick.trim();
+    if (nick.isEmpty()) {
+      ui.appendStatus(safeStatusTarget(), "(nick)", "Usage: /nick <newNick>");
+      return;
+    }
+
+    // Persist the preferred nick for next time.
+    runtimeConfig.rememberNick(at.serverId(), nick);
+
+    disposables.add(
+        irc.changeNick(at.serverId(), nick).subscribe(
+            () -> ui.appendStatus(new TargetRef(at.serverId(), "status"), "(nick)", "Requested nick change to " + nick),
+            err -> ui.appendError(safeStatusTarget(), "(nick-error)", String.valueOf(err))
+        )
     );
   }
 
   private void handleQuery(String nick) {
-    String n = nick == null ? "" : nick.trim();
-    if (n.isEmpty()) {
-      ui.appendStatus("status", "(query)", "Usage: /query <nick>");
+    TargetRef at = activeTarget;
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(query)", "Select a server first.");
       return;
     }
-    openPrivateConversation(n);
+
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) {
+      ui.appendStatus(safeStatusTarget(), "(query)", "Usage: /query <nick>");
+      return;
+    }
+
+    TargetRef pm = new TargetRef(at.serverId(), n);
+    ensureTargetExists(pm);
+    ui.selectTarget(pm);
   }
 
   private void handleMsg(String nick, String body) {
+    TargetRef at = activeTarget;
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(msg)", "Select a server first.");
+      return;
+    }
+
     String n = nick == null ? "" : nick.trim();
     String m = body == null ? "" : body.trim();
     if (n.isEmpty() || m.isEmpty()) {
-      ui.appendStatus("status", "(msg)", "Usage: /msg <nick> <message>");
+      ui.appendStatus(safeStatusTarget(), "(msg)", "Usage: /msg <nick> <message>");
       return;
     }
-    openPrivateConversation(n);
-    sendPrivate(n, m);
+
+    TargetRef pm = new TargetRef(at.serverId(), n);
+    ensureTargetExists(pm);
+    ui.selectTarget(pm);
+    sendMessage(pm, m);
   }
 
   private void handleMe(String action) {
+    TargetRef at = activeTarget;
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(me)", "Select a server first.");
+      return;
+    }
+
     String a = action == null ? "" : action.trim();
     if (a.isEmpty()) {
-      ui.appendStatus("status", "(me)", "Usage: /me <action>");
+      ui.appendStatus(safeStatusTarget(), "(me)", "Usage: /me <action>");
       return;
     }
 
-    if ("status".equals(activeTarget)) {
-      ui.appendStatus("status", "(me)", "Select a channel or PM first.");
+    if (at.isStatus()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(me)", "Select a channel or PM first.");
       return;
     }
 
-    // TODO: Wire CTCP ACTION.
-    String me = irc.currentNick().orElse("me");
-    ui.appendChat(activeTarget, "* " + me, a);
+    String me = irc.currentNick(at.serverId()).orElse("me");
+    ui.appendChat(at, "* " + me, a);
 
-    if (isChannel(activeTarget)) {
-      irc.sendToChannel(activeTarget, a).subscribe(
-          () -> {},
-          err -> ui.appendError("status", "(send-error)", String.valueOf(err))
-      );
-    } else {
-      irc.sendPrivateMessage(activeTarget, a).subscribe(
-          () -> {},
-          err -> ui.appendError("status", "(pm-send-error)", String.valueOf(err))
-      );
-    }
+    disposables.add(
+        irc.sendMessage(at.serverId(), at.target(), "\u0001ACTION " + a + "\u0001").subscribe(
+            () -> {},
+            err -> ui.appendError(safeStatusTarget(), "(send-error)", String.valueOf(err))
+        )
+    );
   }
 
   private void handleSay(String msg) {
+    TargetRef at = activeTarget;
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(system)", "Select a server first.");
+      return;
+    }
+
     String m = msg == null ? "" : msg.trim();
     if (m.isEmpty()) return;
 
-    if (isChannel(activeTarget)) {
-      irc.sendToChannel(activeTarget, m).subscribe(
-          () -> {},
-          err -> ui.appendError("status", "(send-error)", String.valueOf(err))
-      );
-
-      String me = irc.currentNick().orElse("me");
-      ui.appendChat(activeTarget, "(" + me + ")", m);
+    if (at.isStatus()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(system)", "Select a channel, or double-click a nick to PM them.");
       return;
     }
 
-    if (!"status".equals(activeTarget)) {
-      sendPrivate(activeTarget, m);
-      return;
-    }
-
-    ui.appendStatus("status", "(system)", "Select a channel, or double-click a nick to PM them.");
+    sendMessage(at, m);
   }
 
-  private void sendPrivate(String nick, String message) {
-    String n = nick == null ? "" : nick.trim();
+  private void sendMessage(TargetRef target, String message) {
+    if (target == null) return;
     String m = message == null ? "" : message.trim();
-    if (n.isEmpty() || m.isEmpty()) return;
+    if (m.isEmpty()) return;
 
-    ensureTargetExists(n);
-
-    irc.sendPrivateMessage(n, m).subscribe(
-        () -> {},
-        err -> ui.appendError("status", "(pm-send-error)", String.valueOf(err))
+    disposables.add(
+        irc.sendMessage(target.serverId(), target.target(), m).subscribe(
+            () -> {},
+            err -> ui.appendError(safeStatusTarget(), "(send-error)", String.valueOf(err))
+        )
     );
 
-    String me = irc.currentNick().orElse("me");
-    ui.appendChat(n, "(" + me + ")", m);
+    String me = irc.currentNick(target.serverId()).orElse("me");
+    ui.appendChat(target, "(" + me + ")", m);
   }
 
-  private void onIrcEvent(IrcEvent e) {
+  private void onServerIrcEvent(ServerIrcEvent se) {
+    if (se == null) return;
+
+    String sid = se.serverId();
+    IrcEvent e = se.event();
+
+    TargetRef status = new TargetRef(sid, "status");
+
     switch (e) {
       case IrcEvent.Connected ev -> {
-        ui.appendStatus("status", "(conn)", "Connected as " + ev.nick());
-        ui.setChatCurrentNick(ev.nick());
-        ui.setStatusBarServer(ev.serverHost() + ":" + ev.serverPort());
-        ui.setConnectedUi(true);
-        ui.setConnectionStatusText("Connected");
+        connectedServers.add(sid);
+        ensureTargetExists(status);
+        ui.appendStatus(status, "(conn)", "Connected as " + ev.nick());
+        ui.setChatCurrentNick(sid, ev.nick());
+        runtimeConfig.rememberNick(sid, ev.nick());
+        updateConnectionUi();
       }
 
       case IrcEvent.Disconnected ev -> {
-        ui.appendStatus("status", "(conn)", "Disconnected: " + ev.reason());
-        ui.setChatCurrentNick("");
-        ui.setStatusBarServer("(disconnected)");
-        ui.setConnectedUi(false);
-        ui.setConnectionStatusText("Disconnected");
-        ui.setStatusBarCounts(0, 0);
+        connectedServers.remove(sid);
+        ui.appendStatus(status, "(conn)", "Disconnected: " + ev.reason());
+        ui.setChatCurrentNick(sid, "");
+        updateConnectionUi();
+        userListStore.clearServer(sid);
+        if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
+          ui.setStatusBarCounts(0, 0);
+          ui.setUsersNicks(List.of());
+        }
       }
 
       case IrcEvent.NickChanged ev -> {
-        irc.currentNick().ifPresent(currentNick -> {
+        irc.currentNick(sid).ifPresent(currentNick -> {
           if (!Objects.equals(currentNick, ev.oldNick()) && !Objects.equals(currentNick, ev.newNick())) {
-            ui.appendNotice("status", "(nick)", ev.oldNick() + " is now known as " + ev.newNick());
+            ui.appendNotice(status, "(nick)", ev.oldNick() + " is now known as " + ev.newNick());
           } else {
-            ui.appendStatus("status", "(nick)", "Now known as " + ev.newNick());
-            ui.setChatCurrentNick(ev.newNick());
+            ui.appendStatus(status, "(nick)", "Now known as " + ev.newNick());
+            ui.setChatCurrentNick(sid, ev.newNick());
           }
         });
       }
 
       case IrcEvent.ChannelMessage ev -> {
-        ensureTargetExists(ev.channel());
-        ui.appendChat(ev.channel(), ev.from(), ev.text());
-        if (!ev.channel().equals(activeTarget)) ui.markUnread(ev.channel());
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendChat(chan, ev.from(), ev.text());
+        if (!chan.equals(activeTarget)) ui.markUnread(chan);
       }
 
       case IrcEvent.PrivateMessage ev -> {
-        ensureTargetExists(ev.from());
-        ui.appendChat(ev.from(), ev.from(), ev.text());
-        if (!ev.from().equals(activeTarget)) ui.markUnread(ev.from());
+        TargetRef pm = new TargetRef(sid, ev.from());
+        ensureTargetExists(pm);
+        ui.appendChat(pm, ev.from(), ev.text());
+        if (!pm.equals(activeTarget)) ui.markUnread(pm);
       }
 
       case IrcEvent.Notice ev ->
-          ui.appendNotice("status", "(notice) " + ev.from(), ev.text());
+          ui.appendNotice(status, "(notice) " + ev.from(), ev.text());
 
       case IrcEvent.JoinedChannel ev -> {
-        ensureTargetExists(ev.channel());
-        ui.appendStatus(ev.channel(), "(join)", "Joined " + ev.channel());
-        ui.selectTarget(ev.channel());
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        runtimeConfig.rememberJoinedChannel(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
+        ui.selectTarget(chan);
       }
 
       case IrcEvent.NickListUpdated ev -> {
-        userListStore.put(ev.channel(), ev.nicks());
-        if (ev.channel().equals(activeTarget)) {
+        userListStore.put(sid, ev.channel(), ev.nicks());
+        if (activeTarget != null
+            && Objects.equals(activeTarget.serverId(), sid)
+            && Objects.equals(activeTarget.target(), ev.channel())) {
           ui.setUsersNicks(ev.nicks());
           ui.setStatusBarCounts(ev.totalUsers(), ev.operatorCount());
         }
       }
 
       case IrcEvent.Error ev ->
-          ui.appendError("status", "(error)", ev.message());
+          ui.appendError(status, "(error)", ev.message());
 
       default -> {
       }
     }
   }
 
-  private void ensureTargetExists(String target) {
+  private void updateConnectionUi() {
+    int total = props.byId().size();
+    int connected = connectedServers.size();
+
+    // Enable/disable Connect/Disconnect buttons.
+    ui.setConnectedUi(connected > 0);
+
+    if (connected <= 0) {
+      ui.setConnectionStatusText("Disconnected");
+      return;
+    }
+
+    if (total <= 1) {
+      ui.setConnectionStatusText("Connected");
+    } else {
+      ui.setConnectionStatusText("Connected (" + connected + "/" + total + ")");
+    }
+  }
+
+  private void ensureTargetExists(TargetRef target) {
     ui.ensureTargetExists(target);
   }
 
-  private void setActiveTarget(String target) {
+  private void setActiveTarget(TargetRef target) {
     this.activeTarget = target;
     ui.setChatActiveTarget(target);
   }
 
-  private boolean isChannel(String target) {
-    return target != null && (target.startsWith("#"));
-    // TODO: Targets that start with ampersand &?
+  private TargetRef safeStatusTarget() {
+    if (activeTarget != null) return new TargetRef(activeTarget.serverId(), "status");
+    // Fallback if nothing is selected yet.
+    String sid = props.byId().keySet().stream().findFirst().orElse("default");
+    return new TargetRef(sid, "status");
+  }
+
+  private String serverDisplay(String serverId) {
+    IrcProperties.Server s = props.byId().get(serverId);
+    if (s == null) return serverId;
+    return serverId + "  (" + s.host() + ":" + s.port() + ")";
   }
 }

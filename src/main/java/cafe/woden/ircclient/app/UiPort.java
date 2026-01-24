@@ -10,22 +10,22 @@ import java.util.List;
  */
 public interface UiPort {
   // User-initiated stuff.
-  Flowable<String> targetSelections();
-  Flowable<String> privateMessageRequests();
+  Flowable<TargetRef> targetSelections();
+  Flowable<PrivateMessageRequest> privateMessageRequests();
   Flowable<String> outboundLines();
   Flowable<Object> connectClicks();
   Flowable<Object> disconnectClicks();
 
   // Rendering and view updates.
-  void ensureTargetExists(String target);
-  void selectTarget(String target);
-  void markUnread(String target);
-  void clearUnread(String target);
+  void ensureTargetExists(TargetRef target);
+  void selectTarget(TargetRef target);
+  void markUnread(TargetRef target);
+  void clearUnread(TargetRef target);
 
-  void setChatActiveTarget(String target);
-  void setChatCurrentNick(String nick);
+  void setChatActiveTarget(TargetRef target);
+  void setChatCurrentNick(String serverId, String nick);
 
-  void setUsersChannel(String channel);
+  void setUsersChannel(TargetRef target);
   void setUsersNicks(List<NickInfo> nicks);
 
   void setStatusBarChannel(String channel);
@@ -35,8 +35,8 @@ public interface UiPort {
   void setConnectedUi(boolean connected);
   void setConnectionStatusText(String text);
 
-  void appendChat(String target, String from, String text);
-  void appendNotice(String target, String from, String text);
-  void appendStatus(String target, String from, String text);
-  void appendError(String target, String from, String text);
+  void appendChat(TargetRef target, String from, String text);
+  void appendNotice(TargetRef target, String from, String text);
+  void appendStatus(TargetRef target, String from, String text);
+  void appendError(TargetRef target, String from, String text);
 }
