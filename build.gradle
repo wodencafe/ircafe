@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.1'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 group = 'cafe.woden'
@@ -37,9 +38,12 @@ dependencies {
 
 	// HTML parsing for link previews
 	implementation 'org.jsoup:jsoup:1.18.3'
+}
 
-	// VLCJ for video playback
-	implementation 'uk.co.caprica:vlcj:4.8.3'
+// JavaFX for inline video playback via WebView
+javafx {
+	version = '21.0.5'
+	modules = ['javafx.controls', 'javafx.web', 'javafx.swing']
 }
 
 tasks.named('test') {
