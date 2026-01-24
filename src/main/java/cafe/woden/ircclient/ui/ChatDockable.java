@@ -404,14 +404,128 @@ public class ChatDockable extends JPanel implements Dockable {
         // Create placeholder for direct video files
         yield createVideoPlaceholderIcon(vid.url());
       }
-      case EmbedResult.LinkPreview link -> {
-        if (link.ogImage() != null) {
-          yield new ImageIcon(link.ogImage());
-        }
-        yield null;
-      }
+      case EmbedResult.LinkPreview link -> createLinkPreviewIcon(link);
       default -> null;
     };
+  }
+
+  private ImageIcon createLinkPreviewIcon(EmbedResult.LinkPreview link) {
+    // Half the size of normal embeds
+    int w = embedSettings.maxThumbnailWidth() / 2;
+    int h = embedSettings.maxThumbnailHeight() / 2;
+
+    java.awt.image.BufferedImage preview = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    java.awt.Graphics2D g2 = preview.createGraphics();
+    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+    // Draw background image if available, otherwise dark background
+    if (link.ogImage() != null) {
+      // Center image at original size, crop sides
+      java.awt.image.BufferedImage img = link.ogImage();
+      int drawX = (w - img.getWidth()) / 2;
+      int drawY = (h - img.getHeight()) / 2;
+      g2.drawImage(img, drawX, drawY, null);
+    } else {
+      // Dark background
+      g2.setColor(new Color(30, 30, 35));
+      g2.fillRect(0, 0, w, h);
+    }
+
+    // Dark overlay for text readability
+    g2.setColor(new Color(0, 0, 0, 180));
+    g2.fillRect(0, 0, w, h);
+
+    // Border
+    g2.setColor(new Color(60, 60, 65));
+    g2.drawRect(0, 0, w - 1, h - 1);
+
+    int padding = 6;
+    int maxTextWidth = w - padding * 2;
+    int textY = padding;
+
+    // Draw site name at top with favicon
+    if (link.siteName() != null && !link.siteName().isBlank()) {
+      g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 9f));
+      g2.setColor(new Color(150, 150, 150));
+
+      int siteX = padding;
+      if (link.favicon() != null) {
+        int faviconSize = 12;
+        g2.drawImage(link.favicon(), siteX, textY, faviconSize, faviconSize, null);
+        siteX += faviconSize + 3;
+      }
+      g2.drawString(link.siteName(), siteX, textY + g2.getFontMetrics().getAscent());
+      textY += g2.getFontMetrics().getHeight() + 4;
+    } else {
+      textY += 2;
+    }
+
+    // Draw title - bold, with word wrap
+    if (link.title() != null && !link.title().isBlank()) {
+      g2.setFont(g2.getFont().deriveFont(Font.BOLD, 11f));
+      g2.setColor(Color.WHITE);
+      textY = drawWrappedText(g2, link.title(), padding, textY, maxTextWidth, 2);
+      textY += 3;
+    }
+
+    // Draw description - with word wrap, fill remaining space
+    if (link.description() != null && !link.description().isBlank()) {
+      g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 10f));
+      g2.setColor(new Color(200, 200, 200));
+      int remainingLines = (h - textY - padding) / g2.getFontMetrics().getHeight();
+      drawWrappedText(g2, link.description(), padding, textY, maxTextWidth, Math.max(1, remainingLines));
+    }
+
+    g2.dispose();
+    return new ImageIcon(preview);
+  }
+
+  private int drawWrappedText(java.awt.Graphics2D g2, String text, int x, int y, int maxWidth, int maxLines) {
+    if (text == null || text.isBlank()) return y;
+
+    java.awt.FontMetrics fm = g2.getFontMetrics();
+    int lineHeight = fm.getHeight();
+    text = text.replace('\n', ' ').replace('\r', ' ').trim();
+
+    String[] words = text.split("\\s+");
+    StringBuilder line = new StringBuilder();
+    int linesDrawn = 0;
+
+    for (int i = 0; i < words.length; i++) {
+      String word = words[i];
+      String testLine = line.isEmpty() ? word : line + " " + word;
+
+      if (fm.stringWidth(testLine) <= maxWidth) {
+        if (!line.isEmpty()) line.append(" ");
+        line.append(word);
+      } else {
+        // Draw current line
+        if (!line.isEmpty()) {
+          if (linesDrawn >= maxLines - 1 && i < words.length) {
+            // Last allowed line - add ellipsis
+            String finalLine = line.toString();
+            while (fm.stringWidth(finalLine + "...") > maxWidth && finalLine.length() > 0) {
+              finalLine = finalLine.substring(0, finalLine.length() - 1);
+            }
+            g2.drawString(finalLine + "...", x, y + fm.getAscent());
+            return y + lineHeight;
+          }
+          g2.drawString(line.toString(), x, y + fm.getAscent());
+          y += lineHeight;
+          linesDrawn++;
+        }
+        line = new StringBuilder(word);
+      }
+    }
+
+    // Draw remaining text
+    if (!line.isEmpty() && linesDrawn < maxLines) {
+      g2.drawString(line.toString(), x, y + fm.getAscent());
+      y += lineHeight;
+    }
+
+    return y;
   }
 
   private ImageIcon createVideoPlaceholderIcon(String url) {
