@@ -259,7 +259,8 @@ public class ChatDockable extends JPanel implements Dockable {
 
     if (target.equals(activeTarget)) {
       if (followTailByTarget.getOrDefault(target, true)) {
-        scrollToBottom();
+        // Defer scroll to after layout recalculates the new maximum
+        SwingUtilities.invokeLater(this::scrollToBottom);
       } else {
         // Keep the current scroll position cached
         saveScrollState(target);

@@ -146,10 +146,98 @@ public class VideoFetcher {
     }
 
     private EmbedResult fetchDirect(String url) {
-        // For direct video files, we can't easily get a thumbnail without
-        // actually decoding frames. Return without thumbnail.
-        return new EmbedResult.VideoEmbed(url, null, null,
-            EmbedResult.VideoProvider.DIRECT, null);
+        // Try to grab a frame from the video using VLCJ
+        BufferedImage thumbnail = grabVideoFrame(url);
+        if (thumbnail != null) {
+            thumbnail = imageFetcher.scaleImage(thumbnail,
+                settings.maxThumbnailWidth(), settings.maxThumbnailHeight());
+        }
+
+        // Extract filename as title
+        String title = null;
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < url.length() - 1) {
+            title = url.substring(lastSlash + 1);
+            // Remove query string if present
+            int queryIdx = title.indexOf('?');
+            if (queryIdx > 0) {
+                title = title.substring(0, queryIdx);
+            }
+        }
+
+        return new EmbedResult.VideoEmbed(url, thumbnail, null,
+            EmbedResult.VideoProvider.DIRECT, title);
+    }
+
+    private BufferedImage grabVideoFrame(String url) {
+        try {
+            uk.co.caprica.vlcj.factory.MediaPlayerFactory factory = new uk.co.caprica.vlcj.factory.MediaPlayerFactory();
+            uk.co.caprica.vlcj.player.base.MediaPlayer player = factory.mediaPlayers().newMediaPlayer();
+
+            try {
+                // Set up snapshot callback
+                final BufferedImage[] frameHolder = new BufferedImage[1];
+                final Object lock = new Object();
+
+                player.events().addMediaPlayerEventListener(new uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter() {
+                    @Override
+                    public void playing(uk.co.caprica.vlcj.player.base.MediaPlayer mediaPlayer) {
+                        // Wait a moment for video to stabilize, then grab frame
+                        try {
+                            Thread.sleep(500);
+                            // Seek to 2 seconds in (or 10% of duration)
+                            long length = player.status().length();
+                            if (length > 0) {
+                                player.controls().setTime(Math.min(2000, length / 10));
+                            }
+                            Thread.sleep(200);
+
+                            // Grab snapshot
+                            java.awt.Dimension size = player.video().videoDimension();
+                            if (size != null && size.width > 0 && size.height > 0) {
+                                // Save snapshot to temp file and read it back
+                                java.io.File tempFile = java.io.File.createTempFile("vlc_snapshot", ".png");
+                                tempFile.deleteOnExit();
+                                boolean saved = player.snapshots().save(tempFile, size.width, size.height);
+                                if (saved && tempFile.exists()) {
+                                    frameHolder[0] = javax.imageio.ImageIO.read(tempFile);
+                                    tempFile.delete();
+                                }
+                            }
+                        } catch (Exception ignored) {
+                        } finally {
+                            synchronized (lock) {
+                                lock.notifyAll();
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void error(uk.co.caprica.vlcj.player.base.MediaPlayer mediaPlayer) {
+                        synchronized (lock) {
+                            lock.notifyAll();
+                        }
+                    }
+                });
+
+                // Start playing
+                player.media().play(url);
+
+                // Wait for frame capture (max 10 seconds)
+                synchronized (lock) {
+                    lock.wait(10000);
+                }
+
+                return frameHolder[0];
+            } finally {
+                player.controls().stop();
+                player.release();
+                factory.release();
+            }
+        } catch (Exception | UnsatisfiedLinkError e) {
+            // VLC not available or error grabbing frame
+            return null;
+        }
     }
 
     private String fetchYouTubeTitle(String videoId) {
