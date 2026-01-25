@@ -148,7 +148,12 @@ public class IrcMediator {
     disposables.dispose();
   }
 
-  private void connectAll() {
+  /**
+   * Connect to all configured servers.
+   *
+   * <p>Safe to call multiple times; connection attempts are idempotent per server.
+   */
+  public void connectAll() {
     Set<String> serverIds = props.byId().keySet();
     if (serverIds.isEmpty()) {
       ui.setConnectionStatusText("No servers configured");
@@ -201,7 +206,8 @@ public class IrcMediator {
     );
   }
 
-  private void disconnectAll() {
+  /** Disconnect from all configured servers. */
+  public void disconnectAll() {
     Set<String> serverIds = props.byId().keySet();
     ui.setConnectionStatusText("Disconnecting…");
 

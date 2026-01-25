@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -22,8 +23,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable {
 
   public PinnedChatDockable(TargetRef target,
                            ChatTranscriptStore transcripts,
+                           UiSettingsBus settingsBus,
                            Consumer<TargetRef> activate) {
-    super();
+    super(settingsBus);
     this.target = target;
     this.activate = activate;
     this.persistentId = "chat-pinned:" + b64(target.serverId()) + ":" + b64(target.target());

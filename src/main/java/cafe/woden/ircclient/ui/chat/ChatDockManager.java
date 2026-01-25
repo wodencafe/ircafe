@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.ServerTreeDockable;
 import cafe.woden.ircclient.ui.TargetActivationBus;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -26,6 +27,7 @@ public class ChatDockManager {
   private final ChatDockable mainChat;
   private final ChatTranscriptStore transcripts;
   private final TargetActivationBus activationBus;
+  private final UiSettingsBus settingsBus;
 
   private final Map<TargetRef, PinnedChatDockable> openPinned = new ConcurrentHashMap<>();
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -33,11 +35,13 @@ public class ChatDockManager {
   public ChatDockManager(ServerTreeDockable serverTree,
                          ChatDockable mainChat,
                          ChatTranscriptStore transcripts,
-                         TargetActivationBus activationBus) {
+                         TargetActivationBus activationBus,
+                         UiSettingsBus settingsBus) {
     this.serverTree = serverTree;
     this.mainChat = mainChat;
     this.transcripts = transcripts;
     this.activationBus = activationBus;
+    this.settingsBus = settingsBus;
   }
 
   @PostConstruct
@@ -61,7 +65,7 @@ public class ChatDockManager {
 
     // Clicking inside a pinned dock should switch the *input*/status/users context,
     // but should NOT force the main Chat dock to change its displayed transcript.
-    PinnedChatDockable dock = new PinnedChatDockable(target, transcripts, activationBus::activate);
+    PinnedChatDockable dock = new PinnedChatDockable(target, transcripts, settingsBus, activationBus::activate);
     openPinned.put(target, dock);
 
     Docking.registerDockable(dock);
