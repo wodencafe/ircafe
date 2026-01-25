@@ -79,7 +79,7 @@ public class RuntimeConfigStore {
       irc.put("servers", new ArrayList<>(byId.values()));
       writeFile(doc);
     } catch (Exception e) {
-      // Non-fatal: we can still run without persistence.
+      // TODO: Better logging (slf4j or something)
       System.err.println("[ircafe] Could not ensure runtime config file: " + e);
     }
   }

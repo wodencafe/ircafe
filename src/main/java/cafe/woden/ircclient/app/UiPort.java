@@ -16,18 +16,15 @@ public interface UiPort {
   Flowable<Object> connectClicks();
   Flowable<Object> disconnectClicks();
 
-  /** Per-server connect/disconnect requests initiated from the server tree context menu. */
   Flowable<String> connectServerRequests();
   Flowable<String> disconnectServerRequests();
 
-  /** Close/leave requests from the server tree context menu (channels + private messages). */
   Flowable<TargetRef> closeTargetRequests();
 
   // Rendering and view updates.
   void ensureTargetExists(TargetRef target);
   void selectTarget(TargetRef target);
 
-  /** Remove a target from the UI (tree + chat buffer). Status targets are ignored. */
   void closeTarget(TargetRef target);
   void markUnread(TargetRef target);
   void clearUnread(TargetRef target);
@@ -45,7 +42,6 @@ public interface UiPort {
   void setConnectedUi(boolean connected);
   void setConnectionStatusText(String text);
 
-  /** Update per-server connection state (used to enable/disable context menu items). */
   void setServerConnected(String serverId, boolean connected);
 
   void appendChat(TargetRef target, String from, String text);
