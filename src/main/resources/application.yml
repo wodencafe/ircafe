@@ -14,9 +14,7 @@ irc:
       host: "irc.libera.chat"
       port: 6697
       tls: true
-
-     serverPassword: "${IRCAFE_SERVER_PASSWORD:}"
-
+      serverPassword: "${IRCAFE_SERVER_PASSWORD:}"
       nick: "${IRCAFE_NICK:IRCafeUser}"
       login: "${IRCAFE_IDENT:ircafe}"
       realName: "${IRCAFE_REALNAME:IRCafe User}"
