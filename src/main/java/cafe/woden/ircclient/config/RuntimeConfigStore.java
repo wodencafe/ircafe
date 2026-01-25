@@ -50,6 +50,7 @@ public class RuntimeConfigStore {
     ensureFileExistsWithServers();
   }
 
+  /** Ensure the file exists and contains the full irc.servers list so Spring doesn't drop servers. */
   public synchronized void ensureFileExistsWithServers() {
     try {
       if (file.toString().isBlank()) return;
@@ -92,6 +93,19 @@ public class RuntimeConfigStore {
       if (autoJoin.stream().noneMatch(c -> c.equalsIgnoreCase(chan))) {
         autoJoin.add(chan);
       }
+    });
+  }
+
+  public synchronized void forgetJoinedChannel(String serverId, String channel) {
+    updateServer(serverId, server -> {
+      String chan = Objects.toString(channel, "").trim();
+      if (chan.isEmpty()) return;
+
+      Object o = server.get("autoJoin");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> autoJoin = (List<String>) list;
+      autoJoin.removeIf(c -> c != null && c.equalsIgnoreCase(chan));
     });
   }
 

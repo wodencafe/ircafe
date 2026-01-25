@@ -16,9 +16,16 @@ public interface UiPort {
   Flowable<Object> connectClicks();
   Flowable<Object> disconnectClicks();
 
+  Flowable<String> connectServerRequests();
+  Flowable<String> disconnectServerRequests();
+
+  Flowable<TargetRef> closeTargetRequests();
+
   // Rendering and view updates.
   void ensureTargetExists(TargetRef target);
   void selectTarget(TargetRef target);
+
+  void closeTarget(TargetRef target);
   void markUnread(TargetRef target);
   void clearUnread(TargetRef target);
 
@@ -34,6 +41,8 @@ public interface UiPort {
 
   void setConnectedUi(boolean connected);
   void setConnectionStatusText(String text);
+
+  void setServerConnected(String serverId, boolean connected);
 
   void appendChat(TargetRef target, String from, String text);
   void appendNotice(TargetRef target, String from, String text);
