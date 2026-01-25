@@ -21,6 +21,15 @@ public interface IrcClientService {
 
   Completable requestNames(String serverId, String channel);
   Completable joinChannel(String serverId, String channel);
+
+
+  /** Leave a channel (PART). */
+  default Completable partChannel(String serverId, String channel) {
+    return partChannel(serverId, channel, null);
+  }
+
+  /** Leave a channel (PART) with an optional reason. */
+  Completable partChannel(String serverId, String channel, String reason);
   Completable sendToChannel(String serverId, String channel, String message);
 
   Completable sendPrivateMessage(String serverId, String nick, String message);

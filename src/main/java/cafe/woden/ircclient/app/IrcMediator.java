@@ -125,6 +125,13 @@ public class IrcMediator {
             .subscribe(this::disconnectOne,
                 err -> ui.appendError(safeStatusTarget(), "(ui-error)", String.valueOf(err)))
     );
+
+    disposables.add(
+        ui.closeTargetRequests()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(this::handleCloseTarget,
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", String.valueOf(err)))
+    );
   }
 
   public void stop() {
@@ -318,6 +325,43 @@ public class IrcMediator {
             err -> ui.appendError(safeStatusTarget(), "(join-error)", String.valueOf(err))
         )
     );
+  }
+
+  private void handleCloseTarget(TargetRef target) {
+    if (target == null || target.isStatus()) return;
+
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    ensureTargetExists(status);
+
+    // If we're closing the currently active target, switch back to status first.
+    if (Objects.equals(activeTarget, target)) {
+      ui.selectTarget(status);
+    }
+
+    if (target.isChannel()) {
+      // Remove from auto-join for next startup.
+      runtimeConfig.forgetJoinedChannel(sid, target.target());
+      userListStore.clear(sid, target.target());
+
+      if (connectedServers.contains(sid)) {
+        disposables.add(
+            irc.partChannel(sid, target.target()).subscribe(
+                () -> ui.appendStatus(status, "(part)", "Left " + target.target()),
+                err -> ui.appendError(status, "(part-error)", String.valueOf(err))
+            )
+        );
+      } else {
+        ui.appendStatus(status, "(ui)", "Closed " + target.target());
+      }
+    } else {
+      // Private message buffer: local UI-only close.
+      ui.appendStatus(status, "(ui)", "Closed " + target.target());
+    }
+
+    ui.closeTarget(target);
   }
 
   private void handleNick(String newNick) {

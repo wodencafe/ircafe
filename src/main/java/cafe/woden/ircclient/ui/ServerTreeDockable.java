@@ -51,6 +51,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final FlowableProcessor<String> disconnectServerRequests =
       PublishProcessor.<String>create().toSerialized();
 
+  private final FlowableProcessor<TargetRef> closeTargetRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
   private final DefaultTreeModel model = new DefaultTreeModel(root);
   private final JTree tree = new JTree(model);
@@ -140,9 +143,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
         }
 
         tree.setSelectionPath(path);
-
-        String serverId = serverIdFromPath(path);
-        JPopupMenu menu = buildPopupMenu(serverId, path);
+        JPopupMenu menu = buildPopupMenu(path);
         if (menu == null || menu.getComponentCount() == 0) return;
         menu.show(tree, x, y);
       }
@@ -162,52 +163,60 @@ public class ServerTreeDockable extends JPanel implements Dockable {
       }
     });
   }
+  private JPopupMenu buildPopupMenu(TreePath path) {
+    if (path == null) return null;
 
-  private JPopupMenu buildPopupMenu(String serverId, TreePath path) {
-    JPopupMenu menu = new JPopupMenu();
+    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+    if (node == null) return null;
 
-    // Right-clicking the root gives global actions.
-    if (serverId == null) {
-      JMenuItem connectAll = new JMenuItem("Connect all");
-      connectAll.addActionListener(ev -> connectBtn.doClick());
-      menu.add(connectAll);
+    // Only show connect/disconnect on the server nodes (not status/channel/PM/group nodes).
+    if (isServerNode(node)) {
+      String serverId = Objects.toString(node.getUserObject(), "").trim();
+      if (serverId.isEmpty()) return null;
 
-      JMenuItem disconnectAll = new JMenuItem("Disconnect all");
-      disconnectAll.addActionListener(ev -> disconnectBtn.doClick());
-      // Enabled only if the global Disconnect button is enabled.
-      disconnectAll.setEnabled(disconnectBtn.isEnabled());
-      menu.add(disconnectAll);
+      boolean connected = Boolean.TRUE.equals(serverConnected.get(serverId));
+      JPopupMenu menu = new JPopupMenu();
+
+      JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
+      connectOne.setEnabled(!connected);
+      connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
+      menu.add(connectOne);
+
+      JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
+      disconnectOne.setEnabled(connected);
+      disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
+      menu.add(disconnectOne);
+
       return menu;
     }
 
-    boolean connected = Boolean.TRUE.equals(serverConnected.get(serverId));
+    Object uo = node.getUserObject();
+    if (uo instanceof NodeData nd) {
+      if (nd.ref != null && !nd.ref.isStatus()) {
+        JPopupMenu menu = new JPopupMenu();
+        if (nd.ref.isChannel()) {
+          JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
+          leave.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
+          menu.add(leave);
+        } else {
+          JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
+          close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
+          menu.add(close);
+        }
+        return menu;
+      }
+    }
 
-    JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
-    connectOne.setEnabled(!connected);
-    connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
-    menu.add(connectOne);
-
-    JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
-    disconnectOne.setEnabled(connected);
-    disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
-    menu.add(disconnectOne);
-
-    return menu;
+    return null;
   }
 
-  /**
-   * The server node is always the first child under the root.
-   * Root path length is 1, server subtree paths are >= 2.
-   */
-  private String serverIdFromPath(TreePath path) {
-    if (path == null) return null;
-    Object[] comps = path.getPath();
-    if (comps.length < 2) return null;
-    Object serverNodeObj = comps[1];
-    if (!(serverNodeObj instanceof DefaultMutableTreeNode serverNode)) return null;
-    Object uo = serverNode.getUserObject();
-    String id = Objects.toString(uo, "").trim();
-    return id.isEmpty() ? null : id;
+  private boolean isServerNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    if (node.getParent() != root) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String id)) return false;
+    ServerNodes sn = servers.get(id);
+    return sn != null && sn.serverNode == node;
   }
 
   @Override
@@ -230,6 +239,10 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   public Flowable<String> disconnectServerRequests() {
     return disconnectServerRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> closeTargetRequests() {
+    return closeTargetRequests.onBackpressureLatest();
   }
 
   public void setServerConnected(String serverId, boolean connected) {
@@ -293,6 +306,20 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     TreePath path = new TreePath(node.getPath());
     tree.setSelectionPath(path);
     tree.scrollPathToVisible(path);
+  }
+
+  public void removeTarget(TargetRef ref) {
+    if (ref == null || ref.isStatus()) return;
+    DefaultMutableTreeNode node = leaves.remove(ref);
+    if (node == null) return;
+
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+    if (parent != null) {
+      parent.remove(node);
+      model.reload(parent);
+    } else {
+      model.reload(root);
+    }
   }
 
   public void markUnread(TargetRef ref) {

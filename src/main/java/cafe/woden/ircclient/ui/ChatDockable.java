@@ -181,6 +181,28 @@ public class ChatDockable extends JPanel implements Dockable {
     return activeTarget;
   }
 
+  public void closeBuffer(TargetRef target) {
+    if (target == null || target.isStatus()) return;
+
+    TargetRef fallback = null;
+    if (Objects.equals(activeTarget, target)) {
+      TargetRef status = new TargetRef(target.serverId(), "status");
+      if (buffers.containsKey(status)) {
+        fallback = status;
+      } else {
+        fallback = buffers.keySet().stream().filter(t -> !t.equals(target)).findFirst().orElse(status);
+      }
+    }
+
+    buffers.remove(target);
+    followTailByTarget.remove(target);
+    scrollValueByTarget.remove(target);
+
+    if (fallback != null) {
+      setActiveTarget(fallback);
+    }
+  }
+
   /** Regular chat message (styled, URLs clickable, mentions highlighted). */
   public void append(TargetRef target, String from, String text) {
     appendLine(target, Objects.toString(from, ""), Objects.toString(text, ""), fromStyle, msgStyle);

@@ -96,6 +96,19 @@ public class RuntimeConfigStore {
     });
   }
 
+  public synchronized void forgetJoinedChannel(String serverId, String channel) {
+    updateServer(serverId, server -> {
+      String chan = Objects.toString(channel, "").trim();
+      if (chan.isEmpty()) return;
+
+      Object o = server.get("autoJoin");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> autoJoin = (List<String>) list;
+      autoJoin.removeIf(c -> c != null && c.equalsIgnoreCase(chan));
+    });
+  }
+
   public synchronized void rememberNick(String serverId, String nick) {
     updateServer(serverId, server -> {
       String n = Objects.toString(nick, "").trim();

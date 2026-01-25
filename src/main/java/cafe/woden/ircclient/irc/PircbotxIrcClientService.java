@@ -150,6 +150,20 @@ public class PircbotxIrcClientService implements IrcClientService {
         .subscribeOn(Schedulers.io());
   }
 
+@Override
+  public Completable partChannel(String serverId, String channel, String reason) {
+    return Completable.fromAction(() -> {
+          String chan = sanitizeChannel(channel);
+          String msg = reason == null ? "" : reason.trim();
+          if (msg.isEmpty()) {
+            requireBot(serverId).sendRaw().rawLine("PART " + chan);
+          } else {
+            requireBot(serverId).sendRaw().rawLine("PART " + chan + " :" + msg);
+          }
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
   @Override
   public Completable sendToChannel(String serverId, String channel, String message) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().message(channel, message))

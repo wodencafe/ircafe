@@ -20,9 +20,15 @@ public interface UiPort {
   Flowable<String> connectServerRequests();
   Flowable<String> disconnectServerRequests();
 
+  /** Close/leave requests from the server tree context menu (channels + private messages). */
+  Flowable<TargetRef> closeTargetRequests();
+
   // Rendering and view updates.
   void ensureTargetExists(TargetRef target);
   void selectTarget(TargetRef target);
+
+  /** Remove a target from the UI (tree + chat buffer). Status targets are ignored. */
+  void closeTarget(TargetRef target);
   void markUnread(TargetRef target);
   void clearUnread(TargetRef target);
 
