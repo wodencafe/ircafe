@@ -54,6 +54,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final FlowableProcessor<TargetRef> closeTargetRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
+  private final FlowableProcessor<TargetRef> openPinnedChatRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
   private final DefaultTreeModel model = new DefaultTreeModel(root);
   private final JTree tree = new JTree(model);
@@ -142,7 +145,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
           return;
         }
 
-        tree.setSelectionPath(path);
+        // Do not change selection on right-click; that would also switch the main Chat dock.
         JPopupMenu menu = buildPopupMenu(path);
         if (menu == null || menu.getComponentCount() == 0) return;
         menu.show(tree, x, y);
@@ -192,17 +195,26 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd) {
-      if (nd.ref != null && !nd.ref.isStatus()) {
+      if (nd.ref != null) {
         JPopupMenu menu = new JPopupMenu();
-        if (nd.ref.isChannel()) {
-          JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
-          leave.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
-          menu.add(leave);
-        } else {
-          JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
-          close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
-          menu.add(close);
+
+        JMenuItem openDock = new JMenuItem("Open chat dock");
+        openDock.addActionListener(ev -> openPinnedChatRequests.onNext(nd.ref));
+        menu.add(openDock);
+
+        if (!nd.ref.isStatus()) {
+          menu.addSeparator();
+          if (nd.ref.isChannel()) {
+            JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
+            leave.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
+            menu.add(leave);
+          } else {
+            JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
+            close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
+            menu.add(close);
+          }
         }
+
         return menu;
       }
     }
@@ -243,6 +255,10 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   public Flowable<TargetRef> closeTargetRequests() {
     return closeTargetRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> openPinnedChatRequests() {
+    return openPinnedChatRequests.onBackpressureLatest();
   }
 
   public void setServerConnected(String serverId, boolean connected) {

@@ -80,6 +80,13 @@ public class IrcMediator {
     );
 
     disposables.add(
+        ui.targetActivations()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(this::onTargetActivated,
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", err.toString()))
+    );
+
+    disposables.add(
         ui.privateMessageRequests()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(this::openPrivateConversation,
@@ -243,11 +250,32 @@ public class IrcMediator {
     ui.selectTarget(pm);
   }
 
+  private void onTargetActivated(TargetRef target) {
+    if (target == null) return;
+
+    ensureTargetExists(target);
+    // Do NOT change the main Chat dock's displayed transcript.
+    // Only update the active target for input + status/users panels.
+    applyTargetContext(target, false);
+  }
+
   private void onTargetSelected(TargetRef target) {
     if (target == null) return;
 
     ensureTargetExists(target);
-    setActiveTarget(target);
+
+    // Selection in the server tree drives what the main Chat dock is displaying.
+    ui.setChatActiveTarget(target);
+
+    // And it also sets the active target used by input + status/users panels.
+    applyTargetContext(target, true);
+  }
+
+
+  private void applyTargetContext(TargetRef target, boolean fromSelection) {
+    if (target == null) return;
+
+    this.activeTarget = target;
 
     // Status bar
     ui.setStatusBarChannel(target.target());
@@ -600,7 +628,6 @@ public class IrcMediator {
 
   private void setActiveTarget(TargetRef target) {
     this.activeTarget = target;
-    ui.setChatActiveTarget(target);
   }
 
   private TargetRef safeStatusTarget() {
