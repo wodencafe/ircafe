@@ -12,7 +12,26 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>Supports multiple servers via {@code irc.servers}.
  */
 @ConfigurationProperties(prefix = "irc")
-public record IrcProperties(List<Server> servers) {
+public record IrcProperties(Client client, List<Server> servers) {
+
+
+  /**
+   * Global IRC client identity/settings.
+   *
+   * <p>Example YAML:
+   * <pre>
+   * irc:
+   *   client:
+   *     version: "IRCafe 1.2.3"
+   * </pre>
+   */
+  public record Client(String version) {
+    public Client {
+      if (version == null || version.isBlank()) {
+        version = "IRCafe";
+      }
+    }
+  }
 
   public record Server(
       String id,
@@ -50,6 +69,9 @@ public record IrcProperties(List<Server> servers) {
   }
 
   public IrcProperties {
+    if (client == null) {
+      client = new Client("IRCafe");
+    }
     if (servers == null) {
       servers = List.of();
     }
