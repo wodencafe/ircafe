@@ -19,6 +19,7 @@ public record IrcProperties(List<Server> servers) {
       String host,
       int port,
       boolean tls,
+      String serverPassword,
       String nick,
       String login,
       String realName,
@@ -35,6 +36,9 @@ public record IrcProperties(List<Server> servers) {
     public Server {
       if (id == null || id.isBlank()) {
         throw new IllegalArgumentException("irc.servers[].id is required");
+      }
+      if (serverPassword == null) {
+        serverPassword = "";
       }
       if (sasl == null) {
         sasl = new Sasl(false, "", "", "PLAIN");
