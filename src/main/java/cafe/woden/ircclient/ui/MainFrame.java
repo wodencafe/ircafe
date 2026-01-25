@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.IrcMediator;
+import cafe.woden.ircclient.ui.chat.ChatDockManager;
 
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -31,6 +32,7 @@ public class MainFrame extends JFrame {
       ChatDockable chat,
       UserListDockable users,
       MessageInputDockable input,
+      ChatDockManager chatDockManager,
       StatusBar statusBar
   ) {
     super("IRCafe");

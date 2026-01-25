@@ -13,6 +13,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -73,7 +79,7 @@ public class PircbotxIrcClientService implements IrcClientService {
               .setCapEnabled(false) // we may enable below
               .setAutoNickChange(true)
               .setAutoReconnect(true)
-              .addListener(new BridgeListener(serverId));
+              .addListener(new BridgeListener(serverId, c));
 
            if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
             builder.setServerPassword(s.serverPassword());
@@ -102,6 +108,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           PircBotX bot = new PircBotX(builder.buildConfiguration());
           c.botRef.set(bot);
 
+          startHeartbeat(c);
           // Run bot on IO thread; connect() completes immediately
           Schedulers.io().scheduleDirect(() -> {
             try {
@@ -110,6 +117,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
             } finally {
               c.botRef.set(null);
+              ScheduledFuture<?> f = c.heartbeatFuture.getAndSet(null);
+              if (f != null) f.cancel(false);
             }
           });
         })
@@ -208,10 +217,23 @@ public class PircbotxIrcClientService implements IrcClientService {
     private final IrcProperties.Server server;
     private final AtomicReference<PircBotX> botRef = new AtomicReference<>();
 
+    final AtomicLong lastInboundMs = new AtomicLong(0);
+    final AtomicBoolean localTimeoutEmitted = new AtomicBoolean(false);
+    final AtomicReference<ScheduledFuture<?>> heartbeatFuture = new AtomicReference<>();
+
     private Connection(IrcProperties.Server server) {
       this.server = server;
     }
   }
+  private final ScheduledExecutorService heartbeatExec =
+      Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "ircafe-heartbeat");
+        t.setDaemon(true);
+        return t;
+      });
+
+  private static final long HEARTBEAT_CHECK_PERIOD_MS = 15_000;   // 15s
+  private static final long HEARTBEAT_TIMEOUT_MS      = 360_000;  // 6 min (tune)
 
   private static String sanitizeNick(String nick) {
     String n = Objects.requireNonNull(nick, "nick").trim();
@@ -234,16 +256,44 @@ public class PircbotxIrcClientService implements IrcClientService {
       throw new IllegalArgumentException("channel must start with # or & (got: " + c + ")");
     return c;
   }
+  private void startHeartbeat(Connection c) {
+    c.lastInboundMs.set(System.currentTimeMillis());
+    c.localTimeoutEmitted.set(false);
+
+    ScheduledFuture<?> prev = c.heartbeatFuture.getAndSet(
+        heartbeatExec.scheduleAtFixedRate(() -> checkHeartbeat(c),
+            HEARTBEAT_CHECK_PERIOD_MS,
+            HEARTBEAT_CHECK_PERIOD_MS,
+            TimeUnit.MILLISECONDS)
+    );
+    if (prev != null) prev.cancel(false);
+  }
+
+  private void checkHeartbeat(Connection c) {
+    PircBotX bot = c.botRef.get();
+    if (bot == null) return;
+
+    long idleMs = System.currentTimeMillis() - c.lastInboundMs.get();
+    if (idleMs > HEARTBEAT_TIMEOUT_MS && c.localTimeoutEmitted.compareAndSet(false, true)) {
+
+      bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Disconnected(Instant.now(), "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)")));
+
+      try { bot.stopBotReconnect(); } catch (Exception ignored) {}
+      try { bot.close(); } catch (Exception ignored) {}
+    }
+  }
 
   private final class BridgeListener extends ListenerAdapter {
     private final String serverId;
-
-    private BridgeListener(String serverId) {
+    private final Connection conn;
+    private BridgeListener(String serverId, Connection conn) {
       this.serverId = serverId;
+      this.conn = conn;
     }
 
     @Override
     public void onConnect(ConnectEvent event) {
+      touchInbound();
       PircBotX bot = event.getBot();
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Connected(
           Instant.now(),
@@ -255,7 +305,10 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onDisconnect(DisconnectEvent event) {
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), "Disconnected")));
+      Exception ex = event.getDisconnectException();
+      String reason = (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Disconnected";
+
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
     }
 
     @Override
@@ -281,6 +334,11 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onUserList(UserListEvent event) {
       emitRoster(event.getChannel());
+    }
+
+    @Override
+    public void onUnknown(UnknownEvent event) {
+      touchInbound();
     }
 
     @Override
@@ -326,6 +384,18 @@ public class PircbotxIrcClientService implements IrcClientService {
         } catch (Exception ignored) {}
       }
     }
+
+    private void touchInbound() {
+      conn.lastInboundMs.set(System.currentTimeMillis());
+      conn.localTimeoutEmitted.set(false);
+    }
+
+
+    @Override
+    public void onServerPing(ServerPingEvent event) {
+      touchInbound();
+    }
+
 
     @Override
     public void onKick(KickEvent event) {

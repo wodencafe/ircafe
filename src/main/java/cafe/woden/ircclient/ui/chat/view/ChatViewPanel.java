@@ -1,0 +1,172 @@
+package cafe.woden.ircclient.ui.chat.view;
+
+import cafe.woden.ircclient.ui.WrapTextPane;
+import cafe.woden.ircclient.ui.chat.ChatStyles;
+
+import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.StyledDocument;
+import javax.swing.text.Utilities;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.net.URI;
+
+/**
+ * Reusable chat transcript view: shows a StyledDocument, clickable links,
+ * and smart "follow tail" scrolling.
+ */
+public abstract class ChatViewPanel extends JPanel {
+
+  protected final WrapTextPane chat = new WrapTextPane();
+  protected final JScrollPane scroll = new JScrollPane(chat);
+
+  private boolean programmaticScroll = false;
+  private StyledDocument currentDocument;
+
+  private final Cursor textCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
+  private final Cursor handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
+
+  private final DocumentListener docListener = new DocumentListener() {
+    @Override public void insertUpdate(DocumentEvent e) { maybeAutoScroll(); }
+    @Override public void removeUpdate(DocumentEvent e) { maybeAutoScroll(); }
+    @Override public void changedUpdate(DocumentEvent e) { maybeAutoScroll(); }
+  };
+
+  protected ChatViewPanel() {
+    super(new BorderLayout());
+
+    chat.setEditable(false);
+    chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+    add(scroll, BorderLayout.CENTER);
+
+    // Follow tail detection per view.
+    scroll.getVerticalScrollBar().addAdjustmentListener(e -> {
+      if (programmaticScroll) return;
+      updateScrollStateFromBar();
+    });
+
+    chat.addMouseMotionListener(new MouseAdapter() {
+      @Override
+      public void mouseMoved(MouseEvent e) {
+        setCursor(urlAt(e.getPoint()) != null ? handCursor : textCursor);
+      }
+    });
+
+    chat.addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        if (e.getButton() != MouseEvent.BUTTON1) return;
+        String url = urlAt(e.getPoint());
+        if (url != null) {
+          openUrl(url);
+          return;
+        }
+        onTranscriptClicked();
+      }
+    });
+  }
+
+  /**
+   * Called on non-link clicks. Subclasses can use this to "activate" a target.
+   */
+  protected void onTranscriptClicked() {
+    // default: no-op
+  }
+
+  protected void setDocument(StyledDocument doc) {
+    if (currentDocument == doc) return;
+
+    if (currentDocument != null) {
+      currentDocument.removeDocumentListener(docListener);
+    }
+
+    currentDocument = doc;
+    chat.setDocument(doc);
+
+    if (currentDocument != null) {
+      currentDocument.addDocumentListener(docListener);
+    }
+
+    restoreScrollState();
+  }
+
+  private void maybeAutoScroll() {
+    if (!isFollowTail()) return;
+    SwingUtilities.invokeLater(this::scrollToBottom);
+  }
+
+  protected void scrollToBottom() {
+    JScrollBar bar = scroll.getVerticalScrollBar();
+    try {
+      programmaticScroll = true;
+      bar.setValue(bar.getMaximum());
+    } finally {
+      programmaticScroll = false;
+    }
+  }
+
+  protected void updateScrollStateFromBar() {
+    JScrollBar bar = scroll.getVerticalScrollBar();
+    int max = bar.getMaximum();
+    int extent = bar.getModel().getExtent();
+    int val = bar.getValue();
+
+    boolean atBottom = (val + extent) >= (max - 2);
+    setFollowTail(atBottom);
+
+    setSavedScrollValue(val);
+  }
+
+  protected void restoreScrollState() {
+    if (isFollowTail()) {
+      SwingUtilities.invokeLater(this::scrollToBottom);
+      return;
+    }
+
+    int saved = getSavedScrollValue();
+    SwingUtilities.invokeLater(() -> {
+      JScrollBar bar = scroll.getVerticalScrollBar();
+      try {
+        programmaticScroll = true;
+        bar.setValue(Math.min(saved, Math.max(0, bar.getMaximum())));
+      } finally {
+        programmaticScroll = false;
+      }
+    });
+  }
+
+  protected abstract boolean isFollowTail();
+  protected abstract void setFollowTail(boolean followTail);
+  protected abstract int getSavedScrollValue();
+  protected abstract void setSavedScrollValue(int value);
+
+  private String urlAt(Point p) {
+    try {
+      int pos = chat.viewToModel2D(p);
+      if (pos < 0) return null;
+
+      StyledDocument doc = (StyledDocument) chat.getDocument();
+      int start = Utilities.getWordStart(chat, pos);
+      int end = Utilities.getWordEnd(chat, pos);
+      if (start < 0 || end <= start) return null;
+
+      AttributeSet attrs = doc.getCharacterElement(start).getAttributes();
+      Object url = attrs.getAttribute(ChatStyles.ATTR_URL);
+      return url != null ? String.valueOf(url) : null;
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private void openUrl(String url) {
+    try {
+      Desktop.getDesktop().browse(new URI(url));
+    } catch (Exception ignored) {
+      // Best-effort.
+    }
+  }
+}

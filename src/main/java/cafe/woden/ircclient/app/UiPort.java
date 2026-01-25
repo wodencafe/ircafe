@@ -11,6 +11,14 @@ import java.util.List;
 public interface UiPort {
   // User-initiated stuff.
   Flowable<TargetRef> targetSelections();
+  /**
+   * Requests to activate a target for input/status/user list updates without changing
+   * the main Chat dock's displayed transcript.
+   *
+   * <p>Used by pinned chat docks so you can read multiple channels at once.
+   */
+  Flowable<TargetRef> targetActivations();
+
   Flowable<PrivateMessageRequest> privateMessageRequests();
   Flowable<String> outboundLines();
   Flowable<Object> connectClicks();
