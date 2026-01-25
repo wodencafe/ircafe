@@ -52,6 +52,10 @@ irc:
     port: 6697
     tls: true
 
+    # Optional: IRC PASS / server password (commonly needed for bouncers like ZNC)
+    # ZNC examples: "username:password" or "username/network:password"
+    serverPassword: "${IRCAFE_SERVER_PASSWORD:}"
+
     nick: "${IRCAFE_NICK:IRCafeUser}"
     login: "${IRCAFE_IDENT:ircafe}"
     realName: "${IRCAFE_REALNAME:IRCafe User}"
@@ -73,6 +77,7 @@ The default `application.yml` uses these environment variables:
 - `IRCAFE_NICK` (defaults to `IRCafeUser`)
 - `IRCAFE_IDENT` (defaults to `ircafe`)
 - `IRCAFE_REALNAME` (defaults to `IRCafe User`)
+- `IRCAFE_SERVER_PASSWORD` (no default) — IRC `PASS` / server password (useful for ZNC: `username:password` or `username/network:password`)
 - `IRCAFE_SASL_USERNAME` (no default)
 - `IRCAFE_SASL_PASSWORD` (no default)
 
