@@ -12,8 +12,6 @@ import org.springframework.stereotype.Component;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 
 @Component
 @Lazy
@@ -28,6 +26,7 @@ public class MainFrame extends JFrame {
 
   public MainFrame(
       IrcMediator controller,
+      AppMenuBar menuBar,
       ServerTreeDockable serverTree,
       ChatDockable chat,
       UserListDockable users,
@@ -46,6 +45,8 @@ public class MainFrame extends JFrame {
     setSize(1100, 700);
     setLocationRelativeTo(null);
     setLayout(new BorderLayout());
+
+    setJMenuBar(menuBar);
 
     Docking.initialize(this);
     // DockingUI.initialize(); // TODO: Investigate this.

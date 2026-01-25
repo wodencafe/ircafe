@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -34,8 +35,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private TargetRef activeTarget;
 
-  public ChatDockable(ChatTranscriptStore transcripts, TargetActivationBus activationBus) {
-    super();
+  public ChatDockable(ChatTranscriptStore transcripts,
+                     TargetActivationBus activationBus,
+                     UiSettingsBus settingsBus) {
+    super(settingsBus);
     this.transcripts = transcripts;
     this.activationBus = activationBus;
 
@@ -59,8 +62,6 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     transcripts.ensureTargetExists(target);
     setDocument(transcripts.document(target));
   }
-
-
 
   @Override
   protected void onTranscriptClicked() {

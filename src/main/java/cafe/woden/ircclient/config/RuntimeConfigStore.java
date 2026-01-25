@@ -116,6 +116,24 @@ public class RuntimeConfigStore {
     });
   }
 
+  public synchronized void rememberUiSettings(String theme, String chatFontFamily, int chatFontSize) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (theme != null && !theme.isBlank()) ui.put("theme", theme);
+      if (chatFontFamily != null && !chatFontFamily.isBlank()) ui.put("chatFontFamily", chatFontFamily);
+      if (chatFontSize > 0) ui.put("chatFontSize", chatFontSize);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      System.err.println("[ircafe] Could not persist UI config: " + e);
+    }
+  }
+
   // ---------------- internals ----------------
 
   private interface ServerUpdater {

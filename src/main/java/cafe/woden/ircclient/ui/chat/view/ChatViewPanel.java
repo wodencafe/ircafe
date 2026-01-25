@@ -2,17 +2,27 @@ package cafe.woden.ircclient.ui.chat.view;
 
 import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
-
-import javax.swing.*;
+import cafe.woden.ircclient.ui.settings.UiSettings;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Cursor;
+import java.awt.Desktop;
+import java.awt.Font;
+import java.awt.Point;
+import java.awt.BorderLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.net.URI;
+import javax.swing.JPanel;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
-import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.net.URI;
 
 /**
  * Reusable chat transcript view: shows a StyledDocument, clickable links,
@@ -22,6 +32,8 @@ public abstract class ChatViewPanel extends JPanel {
 
   protected final WrapTextPane chat = new WrapTextPane();
   protected final JScrollPane scroll = new JScrollPane(chat);
+
+  private final UiSettingsBus settingsBus;
 
   private boolean programmaticScroll = false;
   private StyledDocument currentDocument;
@@ -35,11 +47,20 @@ public abstract class ChatViewPanel extends JPanel {
     @Override public void changedUpdate(DocumentEvent e) { maybeAutoScroll(); }
   };
 
-  protected ChatViewPanel() {
+  private final PropertyChangeListener settingsListener = this::onSettingsChanged;
+
+  protected ChatViewPanel(UiSettingsBus settingsBus) {
     super(new BorderLayout());
+    this.settingsBus = settingsBus;
 
     chat.setEditable(false);
-    chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+    // Apply initial font if settings bus is present.
+    if (this.settingsBus != null) {
+      applySettings(this.settingsBus.get());
+    } else {
+      chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+    }
 
     add(scroll, BorderLayout.CENTER);
 
@@ -68,6 +89,41 @@ public abstract class ChatViewPanel extends JPanel {
         onTranscriptClicked();
       }
     });
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    if (settingsBus != null) {
+      settingsBus.addListener(settingsListener);
+    }
+  }
+
+  @Override
+  public void removeNotify() {
+    if (settingsBus != null) {
+      settingsBus.removeListener(settingsListener);
+    }
+    super.removeNotify();
+  }
+
+  private void onSettingsChanged(PropertyChangeEvent evt) {
+    if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+    Object o = evt.getNewValue();
+    if (o instanceof UiSettings s) {
+      applySettings(s);
+    }
+  }
+
+  private void applySettings(UiSettings s) {
+    if (s == null) return;
+    try {
+      chat.setFont(new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize()));
+    } catch (Exception ignored) {
+      chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+    }
+    chat.revalidate();
+    chat.repaint();
   }
 
   /**

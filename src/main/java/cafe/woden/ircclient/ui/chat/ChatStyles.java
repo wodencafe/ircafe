@@ -1,105 +1,132 @@
 package cafe.woden.ircclient.ui.chat;
 
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
-import javax.swing.*;
+import java.awt.Color;
+import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
-import java.awt.*;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
-/**
- * Centralized chat styling.
- *
- * <p>Kept as a {@code @Lazy} bean so it is created on the EDT after the Look & Feel
- * is installed (see {@code IrcSwingApp}).
- */
 @Component
 @Lazy
 public class ChatStyles {
 
   public static final String ATTR_URL = "chat.url";
+  public static final String ATTR_STYLE = "chat.style";
 
-  private final SimpleAttributeSet tsStyle;
-  private final SimpleAttributeSet fromStyle;
-  private final SimpleAttributeSet msgStyle;
-  private final SimpleAttributeSet noticeFromStyle;
-  private final SimpleAttributeSet noticeMsgStyle;
-  private final SimpleAttributeSet statusStyle;
-  private final SimpleAttributeSet errorStyle;
-  private final SimpleAttributeSet linkStyle;
-  private final SimpleAttributeSet mentionStyle;
+  public static final String STYLE_TIMESTAMP = "timestamp";
+  public static final String STYLE_FROM = "from";
+  public static final String STYLE_MESSAGE = "message";
+  public static final String STYLE_NOTICE_FROM = "noticeFrom";
+  public static final String STYLE_NOTICE_MESSAGE = "noticeMessage";
+  public static final String STYLE_STATUS = "status";
+  public static final String STYLE_ERROR = "error";
+  public static final String STYLE_LINK = "link";
+  public static final String STYLE_MENTION = "mention";
+
+  private SimpleAttributeSet tsStyle;
+  private SimpleAttributeSet fromStyle;
+  private SimpleAttributeSet msgStyle;
+  private SimpleAttributeSet noticeFromStyle;
+  private SimpleAttributeSet noticeMsgStyle;
+  private SimpleAttributeSet statusStyle;
+  private SimpleAttributeSet errorStyle;
+  private SimpleAttributeSet linkStyle;
+  private SimpleAttributeSet mentionStyle;
 
   public ChatStyles() {
-    // Styles based on current Look & Feel colors
-    Color fg = uiColor("TextPane.foreground", Color.BLACK);
-    Color bg = uiColor("TextPane.background", Color.WHITE);
-    Color dim = uiColor("Label.disabledForeground", new Color(128, 128, 128));
-    Color link = uiColor("Component.linkColor", uiColor("Link.foreground", new Color(0, 102, 204)));
-    Color selBg = uiColor(
-        "TextPane.selectionBackground",
-        uiColor("TextArea.selectionBackground", new Color(60, 120, 200))
-    );
+    reload();
+  }
 
-    Color noticeFg = blend(fg, dim, 0.60f);
-    Color statusFg = blend(fg, dim, 0.35f);
-    Color errFg = uiColor("Component.errorForeground", new Color(220, 80, 80));
+  /**
+   * Recompute styles from the current Look & Feel defaults.
+   */
+  public synchronized void reload() {
+    Color fg = UIManager.getColor("TextPane.foreground");
+    Color dim = UIManager.getColor("Label.disabledForeground");
+    Color bg = UIManager.getColor("TextPane.background");
 
-    // Mention highlight: soften selection background against the chat bg.
-    Color mentionBg = blend(selBg, bg, 0.45f);
+    Color link = UIManager.getColor("Component.linkColor");
+    if (link == null) link = UIManager.getColor("Label.foreground");
 
-    tsStyle = attrs(dim, false, false, false, null);
-    fromStyle = attrs(fg, true, false, false, null);
-    msgStyle = attrs(fg, false, false, false, null);
+    Color warn = UIManager.getColor("Component.warningColor");
+    Color err = UIManager.getColor("Component.errorColor");
+    if (warn == null) warn = new Color(0xF0B000);
+    if (err == null) err = new Color(0xD05050);
 
-    noticeFromStyle = attrs(noticeFg, true, false, false, null);
-    noticeMsgStyle = attrs(noticeFg, false, true, false, null);
+    // Mention highlight: a subtle background based on selection.
+    Color selBg = UIManager.getColor("TextPane.selectionBackground");
+    Color mentionBg = selBg != null ? mix(selBg, bg, 0.35) : mix(new Color(0x6AA2FF), bg, 0.20);
 
-    statusStyle = attrs(statusFg, false, true, false, null);
-    errorStyle = attrs(errFg, true, false, false, null);
+    tsStyle = attrs(STYLE_TIMESTAMP, dim, bg, false, false);
+    fromStyle = attrs(STYLE_FROM, fg, bg, true, false);
+    msgStyle = attrs(STYLE_MESSAGE, fg, bg, false, false);
+    noticeFromStyle = attrs(STYLE_NOTICE_FROM, warn, bg, true, false);
+    noticeMsgStyle = attrs(STYLE_NOTICE_MESSAGE, warn, bg, false, false);
+    statusStyle = attrs(STYLE_STATUS, dim, bg, false, true);
+    errorStyle = attrs(STYLE_ERROR, err, bg, true, false);
 
-    linkStyle = attrs(link, false, false, true, null);
-    mentionStyle = attrs(fg, true, false, false, mentionBg);
+    linkStyle = attrs(STYLE_LINK, link, bg, false, false);
+    StyleConstants.setUnderline(linkStyle, true);
+
+    mentionStyle = attrs(STYLE_MENTION, fg, mentionBg, false, false);
   }
 
   public AttributeSet timestamp() { return tsStyle; }
   public AttributeSet from() { return fromStyle; }
   public AttributeSet message() { return msgStyle; }
-
   public AttributeSet noticeFrom() { return noticeFromStyle; }
   public AttributeSet noticeMessage() { return noticeMsgStyle; }
-
   public AttributeSet status() { return statusStyle; }
   public AttributeSet error() { return errorStyle; }
-
   public AttributeSet link() { return linkStyle; }
   public AttributeSet mention() { return mentionStyle; }
 
-  private static Color uiColor(String key, Color fallback) {
-    Color c = UIManager.getColor(key);
-    return c != null ? c : fallback;
+  public AttributeSet byStyleId(String id) {
+    if (id == null) return msgStyle;
+    return switch (id) {
+      case STYLE_TIMESTAMP -> tsStyle;
+      case STYLE_FROM -> fromStyle;
+      case STYLE_MESSAGE -> msgStyle;
+      case STYLE_NOTICE_FROM -> noticeFromStyle;
+      case STYLE_NOTICE_MESSAGE -> noticeMsgStyle;
+      case STYLE_STATUS -> statusStyle;
+      case STYLE_ERROR -> errorStyle;
+      case STYLE_LINK -> linkStyle;
+      case STYLE_MENTION -> mentionStyle;
+      default -> msgStyle;
+    };
   }
 
-  private static SimpleAttributeSet attrs(Color fg, boolean bold, boolean italic, boolean underline, Color bg) {
+  private static SimpleAttributeSet attrs(String styleId, Color fg, Color bg, boolean bold, boolean italic) {
     SimpleAttributeSet a = new SimpleAttributeSet();
-    if (fg != null) StyleConstants.setForeground(a, fg);
-    if (bg != null) StyleConstants.setBackground(a, bg);
+    a.addAttribute(ATTR_STYLE, styleId);
+
+    if (fg != null) {
+      StyleConstants.setForeground(a, fg);
+    }
+    if (bg != null) {
+      StyleConstants.setBackground(a, bg);
+    }
+
     StyleConstants.setBold(a, bold);
     StyleConstants.setItalic(a, italic);
-    StyleConstants.setUnderline(a, underline);
     return a;
   }
 
-  /** Linear blend of colors (t=0 -> a, t=1 -> b). */
-  private static Color blend(Color a, Color b, float t) {
+  private static Color mix(Color a, Color b, double aWeight) {
     if (a == null) return b;
     if (b == null) return a;
-    t = Math.max(0f, Math.min(1f, t));
-    int r = Math.round(a.getRed() + (b.getRed() - a.getRed()) * t);
-    int g = Math.round(a.getGreen() + (b.getGreen() - a.getGreen()) * t);
-    int bl = Math.round(a.getBlue() + (b.getBlue() - a.getBlue()) * t);
-    int al = Math.round(a.getAlpha() + (b.getAlpha() - a.getAlpha()) * t);
-    return new Color(r, g, bl, al);
+
+    double bw = 1.0 - aWeight;
+    int r = clamp((int) Math.round(a.getRed() * aWeight + b.getRed() * bw));
+    int g = clamp((int) Math.round(a.getGreen() * aWeight + b.getGreen() * bw));
+    int bl = clamp((int) Math.round(a.getBlue() * aWeight + b.getBlue() * bw));
+    return new Color(r, g, bl);
+  }
+
+  private static int clamp(int v) {
+    return Math.max(0, Math.min(255, v));
   }
 }

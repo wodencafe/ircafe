@@ -1,43 +1,42 @@
 package cafe.woden.ircclient;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.app.IrcMediator;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.MainFrame;
-import com.formdev.flatlaf.FlatDarkLaf;
-import javax.swing.UIManager;
+import cafe.woden.ircclient.ui.settings.ThemeManager;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import javax.swing.SwingUtilities;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
-import javax.swing.SwingUtilities;
-
 @SpringBootApplication
-@ConfigurationPropertiesScan
+@EnableConfigurationProperties({IrcProperties.class, UiProperties.class})
 public class IrcSwingApp {
-	public static void main(String[] args) {
-		// TODO: Interactive console window, someday.
-		new SpringApplicationBuilder(IrcSwingApp.class)
-				.headless(false)
-				.run(args);
-	}
+  public static void main(String[] args) {
+    new SpringApplicationBuilder(IrcSwingApp.class)
+        .headless(false)
+        .run(args);
+  }
 
-	@ConditionalOnProperty(name = "ircafe.ui.enabled", havingValue = "true", matchIfMissing = true)
-	@Bean
-	ApplicationRunner run(ObjectProvider<MainFrame> frames, IrcClientService irc) {
-		return args -> SwingUtilities.invokeLater(() -> {
+  @Bean
+  public ApplicationRunner run(ObjectProvider<MainFrame> frames,
+                               ObjectProvider<IrcMediator> mediatorProvider,
+                               ThemeManager themeManager,
+                               UiSettingsBus settingsBus) {
+    return args -> SwingUtilities.invokeLater(() -> {
+      // Install the desired theme BEFORE creating any UI beans.
+      themeManager.installLookAndFeel(settingsBus.get().theme());
 
-			// TODO: Dynamic theme changes.
-			FlatDarkLaf.setup(); // or new FlatDarculaLaf()
-			UIManager.put("Component.arc", 10);
-			UIManager.put("Button.arc", 10);
-			UIManager.put("TextComponent.arc", 10);
+      frames.getObject().setVisible(true);
 
-			// UI beans get created on EDT
-			MainFrame frame = frames.getObject();
-			frame.setVisible(true);
-		});
-	}
+      IrcMediator mediator = mediatorProvider.getObject();
+      mediator.connectAll();
+    });
+  }
 }
