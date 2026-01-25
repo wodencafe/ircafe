@@ -27,3 +27,9 @@ irc:
 
       autoJoin:
         - "#test"
+
+ircafe:
+  ui:
+    theme: "dark"
+    chatFontFamily: "Monospaced"
+    chatFontSize: 12
