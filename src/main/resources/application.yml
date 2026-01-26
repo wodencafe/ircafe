@@ -9,6 +9,9 @@ spring:
     import: "optional:file:${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}"
 
 irc:
+  client:
+    version: "${IRCAFE_CTCP_VERSION:IRCafe}"
+
   servers:
     - id: "libera"
       host: "irc.libera.chat"
@@ -27,9 +30,3 @@ irc:
 
       autoJoin:
         - "#test"
-
-ircafe:
-  ui:
-    theme: "dark"
-    chatFontFamily: "Monospaced"
-    chatFontSize: 12

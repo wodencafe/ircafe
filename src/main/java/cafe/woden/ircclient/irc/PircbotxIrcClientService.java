@@ -9,6 +9,7 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -42,9 +43,11 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private final Map<String, Connection> connections = new ConcurrentHashMap<>();
   private final Map<String, IrcProperties.Server> serversById;
+  private final String clientVersion;
 
   public PircbotxIrcClientService(IrcProperties props) {
     this.serversById = props.byId();
+    this.clientVersion = props.client().version();
   }
 
   @Override
@@ -256,6 +259,31 @@ public class PircbotxIrcClientService implements IrcClientService {
       throw new IllegalArgumentException("channel must start with # or & (got: " + c + ")");
     return c;
   }
+
+  private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
+    if (message == null || message.length() < 2) return false;
+    if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return false;
+
+    String inner = message.substring(1, message.length() - 1).trim();
+    if (inner.isEmpty()) return false;
+
+    String cmd = inner;
+    int sp = inner.indexOf(' ');
+    if (sp >= 0) cmd = inner.substring(0, sp);
+
+    cmd = cmd.trim().toUpperCase(Locale.ROOT);
+
+    if ("VERSION".equals(cmd)) {
+      String v = (clientVersion == null) ? "" : clientVersion.trim();
+      if (v.isEmpty()) v = "IRCafe";
+      bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
+      return true;
+    }
+
+    return false;
+  }
+
+
   private void startHeartbeat(Connection c) {
     c.lastInboundMs.set(System.currentTimeMillis());
     c.localTimeoutEmitted.set(false);
@@ -321,8 +349,11 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
+      touchInbound();
       String from = event.getUser().getNick();
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, event.getMessage())));
+      String msg = event.getMessage();
+      if (handleCtcpIfPresent(event.getBot(), from, msg)) return;
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
     }
 
     @Override
