@@ -25,11 +25,34 @@ public record IrcProperties(Client client, List<Server> servers) {
    *     version: "IRCafe 1.2.3"
    * </pre>
    */
-  public record Client(String version) {
+  public record Client(String version, Reconnect reconnect) {
     public Client {
       if (version == null || version.isBlank()) {
         version = "IRCafe";
       }
+      if (reconnect == null) {
+        reconnect = new Reconnect(true, 1_000, 120_000, 2.0, 0.20, 0);
+      }
+    }
+  }
+
+  public record Reconnect(
+      boolean enabled,
+      long initialDelayMs,
+      long maxDelayMs,
+      double multiplier,
+      double jitterPct,
+      int maxAttempts
+  ) {
+    public Reconnect {
+      if (initialDelayMs <= 0) initialDelayMs = 1_000;
+      if (maxDelayMs <= 0) maxDelayMs = 120_000;
+      if (maxDelayMs < initialDelayMs) maxDelayMs = initialDelayMs;
+      if (multiplier < 1.1) multiplier = 2.0;
+      if (jitterPct < 0) jitterPct = 0;
+      if (jitterPct > 0.75) jitterPct = 0.75;
+      // maxAttempts == 0 means "infinite".
+      if (maxAttempts < 0) maxAttempts = 0;
     }
   }
 
@@ -70,7 +93,7 @@ public record IrcProperties(Client client, List<Server> servers) {
 
   public IrcProperties {
     if (client == null) {
-      client = new Client("IRCafe");
+      client = new Client("IRCafe", null);
     }
     if (servers == null) {
       servers = List.of();

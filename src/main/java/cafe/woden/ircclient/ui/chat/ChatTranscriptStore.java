@@ -21,12 +21,14 @@ public class ChatTranscriptStore {
 
   private final ChatStyles styles;
   private final ChatRichTextRenderer renderer;
+  private final ChatTimestampFormatter ts;
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
 
-  public ChatTranscriptStore(ChatStyles styles, ChatRichTextRenderer renderer) {
+  public ChatTranscriptStore(ChatStyles styles, ChatRichTextRenderer renderer, ChatTimestampFormatter ts) {
     this.styles = styles;
     this.renderer = renderer;
+    this.ts = ts;
   }
 
   public synchronized void ensureTargetExists(TargetRef ref) {
@@ -60,6 +62,17 @@ public class ChatTranscriptStore {
     StyledDocument doc = docs.get(ref);
 
     try {
+      AttributeSet baseForId = msgStyle != null ? msgStyle : styles.message();
+      Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
+      String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
+
+      if (ts != null && ts.enabled()
+          && (ChatStyles.STYLE_STATUS.equals(styleId)
+ || ChatStyles.STYLE_ERROR.equals(styleId)
+ || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId))) {
+        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+      }
+
       if (from != null && !from.isBlank()) {
         doc.insertString(doc.getLength(), from + ": ", fromStyle != null ? fromStyle : styles.from());
       }

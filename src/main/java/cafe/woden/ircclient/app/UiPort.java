@@ -52,6 +52,9 @@ public interface UiPort {
 
   void setServerConnected(String serverId, boolean connected);
 
+  /** Enable/disable the global input bar. */
+  void setInputEnabled(boolean enabled);
+
   void appendChat(TargetRef target, String from, String text);
   void appendNotice(TargetRef target, String from, String text);
   void appendStatus(TargetRef target, String from, String text);

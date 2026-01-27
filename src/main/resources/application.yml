@@ -8,9 +8,31 @@ spring:
     # This file is also where we persist changes like auto-join channels and nick.
     import: "optional:file:${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}"
 
+ircafe:
+  ui:
+    # Timestamp prefix shown for status/error lines in the chat transcript.
+    # Format uses Java time patterns (ex: "HH:mm:ss", "HH:mm", "h:mm a").
+    timestamps:
+      enabled: true
+      format: "HH:mm:ss"
+
 irc:
   client:
     version: "${IRCAFE_CTCP_VERSION:IRCafe}"
+
+    # Auto-reconnect policy (client-side). These defaults are safe for most setups.
+    reconnect:
+      enabled: true
+      # First retry delay.
+      initialDelayMs: 1000
+      # Maximum delay between retries.
+      maxDelayMs: 120000
+      # Exponential backoff multiplier.
+      multiplier: 2.0
+      # Random +/- jitter (0.0 - 0.75) applied to the computed delay.
+      jitterPct: 0.20
+      # 0 = infinite attempts.
+      maxAttempts: 0
 
   servers:
     - id: "libera"

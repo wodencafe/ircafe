@@ -13,8 +13,23 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record UiProperties(
     String theme,
     String chatFontFamily,
-    int chatFontSize
+    int chatFontSize,
+    Timestamps timestamps
 ) {
+
+  /**
+   * Chat/status timestamp settings.
+   *
+   * <p>{@code format} uses Java time patterns (same general style as
+   * {@link java.text.SimpleDateFormat}, but powered by {@link java.time.format.DateTimeFormatter}).
+   */
+  public record Timestamps(boolean enabled, String format) {
+    public Timestamps {
+      if (format == null || format.isBlank()) {
+        format = "HH:mm:ss";
+      }
+    }
+  }
 
   public UiProperties {
     if (theme == null || theme.isBlank()) {
@@ -25,6 +40,9 @@ public record UiProperties(
     }
     if (chatFontSize <= 0) {
       chatFontSize = 12;
+    }
+    if (timestamps == null) {
+      timestamps = new Timestamps(true, "HH:mm:ss");
     }
   }
 }

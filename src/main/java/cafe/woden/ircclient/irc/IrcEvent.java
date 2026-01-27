@@ -6,6 +6,7 @@ import java.util.List;
 public sealed interface IrcEvent permits
     IrcEvent.Connected,
     IrcEvent.Disconnected,
+    IrcEvent.Reconnecting,
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
     IrcEvent.PrivateMessage,
@@ -16,6 +17,8 @@ public sealed interface IrcEvent permits
 
   record Connected(Instant at, String serverHost, int serverPort, String nick) implements IrcEvent {}
   record Disconnected(Instant at, String reason) implements IrcEvent {}
+
+  record Reconnecting(Instant at, long attempt, long delayMs, String reason) implements IrcEvent {}
 
   record NickChanged(Instant at, String oldNick, String newNick) implements IrcEvent {}
 
