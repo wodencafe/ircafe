@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.config;
 
 import java.awt.Font;
+import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -14,7 +16,19 @@ public record UiProperties(
     String theme,
     String chatFontFamily,
     int chatFontSize,
-    Timestamps timestamps
+    Timestamps timestamps,
+
+    /** Enable per-nick coloring in chat + user list. */
+    Boolean nickColoringEnabled,
+
+    /** Minimum contrast ratio against the current background (WCAG-style). */
+    double nickColorMinContrast,
+
+    /** Palette used for deterministic nick colors (hex strings like "#RRGGBB"). */
+    List<String> nickColors,
+
+    /** Optional per-nick color overrides (case-insensitive keys, hex color values). */
+    Map<String, String> nickColorOverrides
 ) {
 
   /**
@@ -43,6 +57,21 @@ public record UiProperties(
     }
     if (timestamps == null) {
       timestamps = new Timestamps(true, "HH:mm:ss");
+    }
+
+    // Nick coloring defaults.
+    if (nickColorMinContrast <= 0) {
+      nickColorMinContrast = 3.0;
+    }
+    // Default: enabled.
+    if (nickColoringEnabled == null) {
+      nickColoringEnabled = true;
+    }
+    if (nickColors == null) {
+      nickColors = List.of();
+    }
+    if (nickColorOverrides == null) {
+      nickColorOverrides = Map.of();
     }
   }
 }

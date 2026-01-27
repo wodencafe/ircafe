@@ -16,6 +16,20 @@ ircafe:
       enabled: true
       format: "HH:mm:ss"
 
+    # Nick color section
+    nickColoringEnabled: true
+    nickColorMinContrast: 4.5   # 4.5 is a solid default
+    # Optional: custom palette (hex strings). If omitted, uses built-in 32-color palette.
+    # nickColors:
+    #   - "#E57373"
+    #   - "#64B5F6"
+    #   ...
+
+    # Optional: per-nick overrides (case-insensitive keys)
+    nickColorOverrides:
+        "NickServ": "#FFB300"
+        "ChanServ": "#26A69A"
+
 irc:
   client:
     version: "${IRCAFE_CTCP_VERSION:IRCafe}"

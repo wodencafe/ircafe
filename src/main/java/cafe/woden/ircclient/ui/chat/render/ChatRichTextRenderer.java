@@ -1,16 +1,21 @@
 package cafe.woden.ircclient.ui.chat.render;
 
+import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
+import cafe.woden.ircclient.ui.chat.NickColorService;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 /**
  * Inserts styled chat text into a {@link StyledDocument}:
@@ -27,27 +32,41 @@ public class ChatRichTextRenderer {
   private static final Pattern URL_PATTERN = Pattern.compile("(https?://\\S+|www\\.\\S+)");
 
   private final MentionPatternRegistry mentions;
+  private final UserListStore userLists;
   private final ChatStyles styles;
+  private final NickColorService nickColors;
 
-  public ChatRichTextRenderer(MentionPatternRegistry mentions, ChatStyles styles) {
+  public ChatRichTextRenderer(
+      MentionPatternRegistry mentions,
+      UserListStore userLists,
+      ChatStyles styles,
+      NickColorService nickColors
+  ) {
     this.mentions = mentions;
+    this.userLists = userLists;
     this.styles = styles;
+    this.nickColors = nickColors;
   }
 
   /**
    * Inserts text that may contain URLs and mentions.
    */
-  public void insertRichText(StyledDocument doc, String serverId, String text, AttributeSet baseStyle)
+  public void insertRichText(StyledDocument doc, TargetRef ref, String text, AttributeSet baseStyle)
       throws BadLocationException {
     if (text == null || text.isEmpty()) {
       return;
     }
 
+    AttributeSet base = baseStyle != null ? baseStyle : styles.message();
+
+    // serverId is used for self-mention highlighting.
+    String serverId = ref != null ? ref.serverId() : "";
+
     Matcher m = URL_PATTERN.matcher(text);
     int last = 0;
     while (m.find()) {
       if (m.start() > last) {
-        insertWithMentions(doc, serverId, text.substring(last, m.start()), baseStyle);
+        insertWithMentions(doc, ref, serverId, text.substring(last, m.start()), base);
       }
 
       String raw = m.group(1);
@@ -58,43 +77,78 @@ public class ChatRichTextRenderer {
       doc.insertString(doc.getLength(), parts.url, linkAttr);
 
       if (!parts.trailing.isEmpty()) {
-        insertWithMentions(doc, serverId, parts.trailing, baseStyle);
+        insertWithMentions(doc, ref, serverId, parts.trailing, base);
       }
 
       last = m.end();
     }
 
     if (last < text.length()) {
-      insertWithMentions(doc, serverId, text.substring(last), baseStyle);
+      insertWithMentions(doc, ref, serverId, text.substring(last), base);
     }
   }
 
-  private void insertWithMentions(StyledDocument doc, String serverId, String text, AttributeSet baseStyle)
+  private void insertWithMentions(StyledDocument doc, TargetRef ref, String serverId, String text, AttributeSet baseStyle)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
 
-    Pattern p = mentions.get(serverId);
-    if (p == null) {
-      doc.insertString(doc.getLength(), text, baseStyle);
-      return;
+    // Only color nick mentions if the nick exists in the channel user list.
+    Set<String> channelNicks = Set.of();
+    if (ref != null && ref.isChannel() && userLists != null) {
+      channelNicks = userLists.getLowerNickSet(ref.serverId(), ref.target());
     }
 
-    Matcher mm = p.matcher(text);
-    int last = 0;
-    while (mm.find()) {
-      if (mm.start() > last) {
-        doc.insertString(doc.getLength(), text.substring(last, mm.start()), baseStyle);
+    String selfLower = mentions != null ? mentions.currentNickLower(serverId) : null;
+
+    int i = 0;
+    int len = text.length();
+    while (i < len) {
+      int start = i;
+      while (start < len && !isNickChar(text.charAt(start))) start++;
+      if (start > i) {
+        doc.insertString(doc.getLength(), text.substring(i, start), baseStyle);
+      }
+      if (start >= len) break;
+
+      int end = start;
+      while (end < len && isNickChar(text.charAt(end))) end++;
+
+      String token = text.substring(start, end);
+      String tokenLower = token.toLowerCase(Locale.ROOT);
+
+      boolean isSelf = selfLower != null && tokenLower.equals(selfLower);
+      boolean inChannel = channelNicks.contains(tokenLower);
+
+      if (isSelf) {
+        // Mention background is always allowed; per-nick foreground only if it's a channel nick.
+        SimpleAttributeSet mention = new SimpleAttributeSet(styles.mention());
+        // Preserve the base emphasis (e.g. status italic).
+        StyleConstants.setBold(mention, StyleConstants.isBold(baseStyle));
+        StyleConstants.setItalic(mention, StyleConstants.isItalic(baseStyle));
+
+        if (inChannel && nickColors != null && nickColors.enabled()) {
+          mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
+          nickColors.applyColor(mention, tokenLower);
+        }
+
+        doc.insertString(doc.getLength(), token, mention);
+      } else if (inChannel && nickColors != null && nickColors.enabled()) {
+        // Channel nick mention: apply the deterministic nick color on top of the base style.
+        SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
+        doc.insertString(doc.getLength(), token, nickStyle);
+      } else {
+        doc.insertString(doc.getLength(), token, baseStyle);
       }
 
-      String hit = mm.group();
-      doc.insertString(doc.getLength(), hit, styles.mention());
-
-      last = mm.end();
+      i = end;
     }
+  }
 
-    if (last < text.length()) {
-      doc.insertString(doc.getLength(), text.substring(last), baseStyle);
-    }
+  private static boolean isNickChar(char c) {
+    return Character.isLetterOrDigit(c)
+        || c == '[' || c == ']' || c == '\\' || c == '`'
+        || c == '_' || c == '^' || c == '{' || c == '|' || c == '}'
+        || c == '-';
   }
 
   public static String normalizeUrl(String url) {
