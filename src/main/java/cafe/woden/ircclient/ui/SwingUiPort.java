@@ -65,7 +65,11 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public Flowable<PrivateMessageRequest> privateMessageRequests() {
-    return users.privateMessageRequests();
+    // Users can request PMs from multiple UI surfaces (user list, transcript nick clicks, etc.)
+    return Flowable.merge(
+        users.privateMessageRequests(),
+        chat.privateMessageRequests()
+    );
   }
 
   @Override
