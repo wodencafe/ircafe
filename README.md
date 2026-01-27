@@ -47,27 +47,28 @@ Example:
 
 ```yaml
 irc:
-  servers:
-    host: "irc.libera.chat"
-    port: 6697
-    tls: true
+    servers:
+    - id "libera"
+      host: "irc.libera.chat"
+      port: 6697
+      tls: true
 
-    # Optional: IRC PASS / server password (commonly needed for bouncers like ZNC)
-    # ZNC examples: "username:password" or "username/network:password"
-    serverPassword: "${IRCAFE_SERVER_PASSWORD:}"
+      # Optional: IRC PASS / server password (commonly needed for bouncers like ZNC)
+      # ZNC examples: "username:password" or "username/network:password"
+      serverPassword: "${IRCAFE_SERVER_PASSWORD:}"
 
-    nick: "${IRCAFE_NICK:IRCafeUser}"
-    login: "${IRCAFE_IDENT:ircafe}"
-    realName: "${IRCAFE_REALNAME:IRCafe User}"
+      nick: "${IRCAFE_NICK:IRCafeUser}"
+      login: "${IRCAFE_IDENT:ircafe}"
+      realName: "${IRCAFE_REALNAME:IRCafe User}"
 
-    sasl:
-      enabled: false
-      username: "${IRCAFE_SASL_USERNAME:}"
-      password: "${IRCAFE_SASL_PASSWORD:}"
-      mechanism: "PLAIN"
+      sasl:
+        enabled: false
+        username: "${IRCAFE_SASL_USERNAME:}"
+        password: "${IRCAFE_SASL_PASSWORD:}"
+        mechanism: "PLAIN"
 
-    autoJoin:
-      - "#test"
+      autoJoin:
+        - "#irclient"
 ```
 
 ### Environment variables
