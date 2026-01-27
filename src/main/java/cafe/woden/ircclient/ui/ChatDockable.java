@@ -1,10 +1,14 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +33,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final ChatTranscriptStore transcripts;
   private final TargetActivationBus activationBus;
+
+  private final FlowableProcessor<PrivateMessageRequest> openPrivate =
+      PublishProcessor.<PrivateMessageRequest>create().toSerialized();
 
   private final Map<TargetRef, ViewState> stateByTarget = new HashMap<>();
   private final ViewState fallbackState = new ViewState();
@@ -63,11 +70,24 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     setDocument(transcripts.document(target));
   }
 
+  public Flowable<PrivateMessageRequest> privateMessageRequests() {
+    return openPrivate.onBackpressureBuffer();
+  }
+
   @Override
   protected void onTranscriptClicked() {
     // Clicking the main transcript should make it the active target for input/status.
     // This does NOT change what the main chat is already displaying.
     activationBus.activate(activeTarget);
+  }
+
+  @Override
+  protected boolean onNickClicked(String nick) {
+    if (activeTarget == null || !activeTarget.isChannel()) return false;
+    if (nick == null || nick.isBlank()) return false;
+
+    openPrivate.onNext(new PrivateMessageRequest(activeTarget.serverId(), nick));
+    return true;
   }
 
   @Override

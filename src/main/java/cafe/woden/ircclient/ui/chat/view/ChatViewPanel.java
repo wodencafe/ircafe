@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat.view;
 
 import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.awt.Cursor;
@@ -29,6 +30,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
+import javax.swing.text.Element;
 
 /**
  * Reusable chat transcript view: shows a StyledDocument, clickable links,
@@ -92,7 +94,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     chat.addMouseMotionListener(new MouseAdapter() {
       @Override
       public void mouseMoved(MouseEvent e) {
-        setCursor(urlAt(e.getPoint()) != null ? handCursor : textCursor);
+        // Prefer link cursor, otherwise use nick cursor if it's a colored nick token.
+        setCursor((urlAt(e.getPoint()) != null || nickAt(e.getPoint()) != null) ? handCursor : textCursor);
       }
     });
 
@@ -105,6 +108,12 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
           openUrl(url);
           return;
         }
+
+        String nick = nickAt(e.getPoint());
+        if (nick != null && onNickClicked(nick)) {
+          return;
+        }
+
         onTranscriptClicked();
       }
     });
@@ -150,6 +159,15 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    */
   protected void onTranscriptClicked() {
     // default: no-op
+  }
+
+  /**
+   * Called when the user clicks a nick token in the transcript.
+   *
+   * @return true if the click was handled/consumed
+   */
+  protected boolean onNickClicked(String nick) {
+    return false;
   }
 
   protected void setDocument(StyledDocument doc) {
@@ -235,6 +253,49 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  private String nickAt(Point p) {
+    try {
+      int pos = chat.viewToModel2D(p);
+      if (pos < 0) return null;
+
+      StyledDocument doc = (StyledDocument) chat.getDocument();
+      Element el = doc.getCharacterElement(pos);
+      if (el == null) return null;
+
+      AttributeSet attrs = el.getAttributes();
+      Object marker = attrs.getAttribute(NickColorService.ATTR_NICK);
+      if (marker == null) return null;
+
+      int start = el.getStartOffset();
+      int end = el.getEndOffset();
+      if (end <= start) return null;
+
+      String token = doc.getText(start, end - start);
+      if (token == null) return null;
+      token = token.trim();
+      if (token.isEmpty()) return null;
+
+      // Safety: strip any surrounding punctuation that might have been included in the element.
+      int a = 0;
+      int b = token.length();
+      while (a < b && !isNickChar(token.charAt(a))) a++;
+      while (b > a && !isNickChar(token.charAt(b - 1))) b--;
+      if (b <= a) return null;
+
+      return token.substring(a, b);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  // Keep in sync with ChatRichTextRenderer#isNickChar.
+  private static boolean isNickChar(char c) {
+    return Character.isLetterOrDigit(c)
+        || c == '[' || c == ']' || c == '\\' || c == '`'
+        || c == '_' || c == '^' || c == '{' || c == '|' || c == '}'
+        || c == '-';
   }
 
   private void openUrl(String url) {
