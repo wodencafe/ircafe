@@ -47,7 +47,7 @@ Example:
 
 ```yaml
 irc:
-  server:
+  servers:
     host: "irc.libera.chat"
     port: 6697
     tls: true
