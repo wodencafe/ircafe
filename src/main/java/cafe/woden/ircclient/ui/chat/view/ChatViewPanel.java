@@ -14,6 +14,12 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.Rectangle;
+import java.awt.Dimension;
 import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
@@ -28,7 +34,7 @@ import javax.swing.text.Utilities;
  * Reusable chat transcript view: shows a StyledDocument, clickable links,
  * and smart "follow tail" scrolling.
  */
-public abstract class ChatViewPanel extends JPanel {
+public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   protected final WrapTextPane chat = new WrapTextPane();
   protected final JScrollPane scroll = new JScrollPane(chat);
@@ -54,6 +60,19 @@ public abstract class ChatViewPanel extends JPanel {
     this.settingsBus = settingsBus;
 
     chat.setEditable(false);
+
+
+    // We always want wrapping; never show a horizontal scrollbar in the transcript view.
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    // Force a re-layout on resize so wrapping recalculates immediately when the window shrinks/grows.
+    scroll.getViewport().addComponentListener(new ComponentAdapter() {
+      @Override
+      public void componentResized(ComponentEvent e) {
+        chat.revalidate();
+        chat.repaint();
+      }
+    });
 
     // Apply initial font if settings bus is present.
     if (this.settingsBus != null) {
@@ -225,4 +244,33 @@ public abstract class ChatViewPanel extends JPanel {
       // Best-effort.
     }
   }
+
+  // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of scrollbars.
+  // This panel contains its own internal JScrollPane (the transcript), so always track any outer viewport.
+  @Override
+  public Dimension getPreferredScrollableViewportSize() {
+    // Reasonable default to avoid "infinite preferred height" from the transcript content.
+    return new Dimension(640, 480);
+  }
+
+  @Override
+  public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+    return 16;
+  }
+
+  @Override
+  public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+    return Math.max(visibleRect.height - 16, 16);
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportWidth() {
+    return true;
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportHeight() {
+    return true;
+  }
+
 }

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
+import cafe.woden.ircclient.ui.docking.DockingTuner;
 
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -66,6 +67,10 @@ public class MainFrame extends JFrame {
     Docking.dock(serverTree, chat, DockingRegion.WEST, 0.22);
     Docking.dock(users, chat, DockingRegion.EAST, 0.18);
     Docking.dock(input, chat, DockingRegion.SOUTH, 0.10);
+
+    // Make the SOUTH "Input" dock keep its original height when the window grows.
+    // (ModernDocking relies on split panes; by default, vertical growth is shared.)
+    SwingUtilities.invokeLater(() -> DockingTuner.lockSouthDockHeight(this, input));
 
     // Note: the mediator self-starts via @PostConstruct when the UI beans are created.
   }
