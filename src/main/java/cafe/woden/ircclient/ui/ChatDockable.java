@@ -12,7 +12,9 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
+import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -40,6 +42,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final Map<TargetRef, ViewState> stateByTarget = new HashMap<>();
   private final ViewState fallbackState = new ViewState();
 
+  private final Map<TargetRef, String> topicByTarget = new HashMap<>();
+
+  private final TopicPanel topicPanel = new TopicPanel();
+  private final JSplitPane topicSplit;
+
+  private static final int TOPIC_DIVIDER_SIZE = 6;
+  private int lastTopicHeightPx = 58;
+  private boolean topicVisible = false;
+
   private TargetRef activeTarget;
 
   public ChatDockable(ChatTranscriptStore transcripts,
@@ -51,6 +62,29 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     // Show something harmless on startup; first selection will swap it.
     setDocument(new DefaultStyledDocument());
+
+    // Insert an optional topic panel above the transcript.
+    // We use a vertical split so the user can shrink/expand the topic area.
+    remove(scroll);
+    topicSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topicPanel, scroll);
+    topicSplit.setResizeWeight(0.0);
+    topicSplit.setBorder(null);
+    topicSplit.setOneTouchExpandable(true);
+    topicPanel.setMinimumSize(new Dimension(0, 0));
+    topicPanel.setPreferredSize(new Dimension(10, lastTopicHeightPx));
+
+    // Track the user's preferred topic height when the panel is visible.
+    topicSplit.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+      if (!topicVisible) return;
+      Object v = evt.getNewValue();
+      if (v instanceof Integer i) {
+        // Divider location == height of the top component for VERTICAL_SPLIT.
+        lastTopicHeightPx = Math.max(0, i);
+      }
+    });
+
+    add(topicSplit, BorderLayout.CENTER);
+    hideTopicPanel();
 
     // Keep an initial view state so the first auto-scroll behaves.
     this.activeTarget = new TargetRef("default", "status");
@@ -68,6 +102,32 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     activeTarget = target;
     transcripts.ensureTargetExists(target);
     setDocument(transcripts.document(target));
+
+    updateTopicPanelForActiveTarget();
+  }
+
+  public void setTopic(TargetRef target, String topic) {
+    if (target == null) return;
+    if (!target.isChannel()) return;
+
+    String sanitized = sanitizeTopic(topic);
+    if (sanitized.isBlank()) {
+      topicByTarget.remove(target);
+    } else {
+      topicByTarget.put(target, sanitized);
+    }
+
+    if (target.equals(activeTarget)) {
+      updateTopicPanelForActiveTarget();
+    }
+  }
+
+  public void clearTopic(TargetRef target) {
+    if (target == null) return;
+    topicByTarget.remove(target);
+    if (target.equals(activeTarget)) {
+      updateTopicPanelForActiveTarget();
+    }
   }
 
   public Flowable<PrivateMessageRequest> privateMessageRequests() {
@@ -125,8 +185,89 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     return stateByTarget.computeIfAbsent(activeTarget, t -> new ViewState());
   }
 
+  private void updateTopicPanelForActiveTarget() {
+    if (activeTarget == null || !activeTarget.isChannel()) {
+      topicPanel.setTopic("", "");
+      hideTopicPanel();
+      return;
+    }
+
+    String topic = topicByTarget.getOrDefault(activeTarget, "");
+    if (topic == null) topic = "";
+    topic = topic.trim();
+
+    if (topic.isEmpty()) {
+      topicPanel.setTopic(activeTarget.target(), "");
+      hideTopicPanel();
+      return;
+    }
+
+    topicPanel.setTopic(activeTarget.target(), topic);
+    showTopicPanel();
+  }
+
+  private void showTopicPanel() {
+    topicVisible = true;
+    topicPanel.setVisible(true);
+    topicSplit.setDividerSize(TOPIC_DIVIDER_SIZE);
+    int targetHeight = Math.max(28, Math.min(lastTopicHeightPx, 200));
+    topicSplit.setDividerLocation(targetHeight);
+    revalidate();
+    repaint();
+  }
+
+  private void hideTopicPanel() {
+    topicVisible = false;
+    topicPanel.setVisible(false);
+    topicSplit.setDividerSize(0);
+    topicSplit.setDividerLocation(0);
+    revalidate();
+    repaint();
+  }
+
+  private static String sanitizeTopic(String topic) {
+    if (topic == null) return "";
+    // Strip IRC formatting control chars and other low ASCII controls.
+    // (Color codes, bold, reset, etc.)
+    return topic.replaceAll("[\\x00-\\x1F\\x7F]", "");
+  }
+
   private static class ViewState {
     boolean followTail = true;
     int scrollValue = 0;
+  }
+
+  private static final class TopicPanel extends JPanel {
+    private final JLabel header = new JLabel();
+    private final JTextArea text = new JTextArea();
+
+    private TopicPanel() {
+      super(new BorderLayout(8, 6));
+
+      header.setFont(header.getFont().deriveFont(Font.BOLD));
+
+      text.setEditable(false);
+      text.setLineWrap(true);
+      text.setWrapStyleWord(true);
+      text.setOpaque(false);
+      text.setBorder(null);
+
+      JPanel top = new JPanel(new BorderLayout());
+      top.setOpaque(false);
+      top.add(header, BorderLayout.WEST);
+
+      setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+      setOpaque(true);
+
+      add(top, BorderLayout.NORTH);
+      add(text, BorderLayout.CENTER);
+    }
+
+    void setTopic(String channelName, String topic) {
+      String ch = (channelName == null) ? "" : channelName.trim();
+      header.setText(ch.isEmpty() ? "Topic" : "Topic — " + ch);
+      text.setText(topic == null ? "" : topic);
+      text.setCaretPosition(0);
+    }
   }
 }
