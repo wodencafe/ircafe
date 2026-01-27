@@ -16,8 +16,6 @@ import org.springframework.stereotype.Component;
  * <p>This is intended to be the source-of-truth at runtime for the currently configured
  * {@code irc.servers} list. UI can add/edit/remove servers and the rest of the application
  * (server tree, mediator, IRC service) can react.
- *
- * <p>NOTE: Dialog UI is not implemented yet in this "incomplete patch".
  */
 @Component
 public class ServerRegistry {

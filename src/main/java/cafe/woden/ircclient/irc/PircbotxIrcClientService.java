@@ -227,9 +227,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private Connection conn(String serverId) {
     String id = Objects.requireNonNull(serverId, "serverId").trim();
-    // NOTE: Do not require the id to exist in ServerRegistry here.
-    // Servers can be removed while still connected (or while a disconnect/reconnect is in flight).
-    // Connection objects are cheap; connect() will validate presence, while disconnect() must remain safe.
+
     return connections.computeIfAbsent(id, k -> new Connection(id));
   }
 

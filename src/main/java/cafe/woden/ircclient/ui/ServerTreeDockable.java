@@ -133,7 +133,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
         addServerRoot(s.id());
       }
 
-      // Incomplete patch: live updates. This is where the future "Add/Edit Servers" dialogs will publish.
       serverRegistry.updates()
           .observeOn(SwingEdt.scheduler())
           .subscribe(this::syncServers,
@@ -151,7 +150,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     };
     tree.addTreeSelectionListener(tsl);
 
-    // Right-click context menu (connect/disconnect per server, plus channel/PM close actions)
+    // Right-click context menu
     MouseAdapter popupListener = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
@@ -484,12 +483,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     model.nodeChanged(node);
   }
 
-  /**
-   * Sync server roots to the latest configured server list.
-   *
-   * <p>This is part of the "incomplete patched" work: once the Add/Edit Servers dialogs exist,
-   * they will update {@link ServerRegistry}, and this tree will reflect those changes live.
-   */
   private void syncServers(List<IrcProperties.Server> latest) {
     Set<String> newIds = new HashSet<>();
     if (latest != null) {
