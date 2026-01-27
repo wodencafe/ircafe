@@ -227,7 +227,7 @@ public class ServerEditorDialog extends JDialog {
     JPanel p = new JPanel(new BorderLayout(8, 8));
     p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     JLabel hint = new JLabel("One channel per line (e.g. #java)");
-    hint.setEnabled(false);
+    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:disabled");
     p.add(hint, BorderLayout.NORTH);
     autoJoinArea.setLineWrap(true);
     autoJoinArea.setWrapStyleWord(true);

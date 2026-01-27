@@ -7,6 +7,8 @@ import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.subjects.PublishSubject;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.util.HashSet;
@@ -15,6 +17,8 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.awt.event.HierarchyEvent;
 import javax.swing.JMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -22,6 +26,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
@@ -31,6 +36,7 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -42,6 +48,15 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable {
   public static final String ID = "server-tree";
+
+  private double wheelDeltaAccumulator = 0.0d;
+
+  private long lastWheelEventNanos = 0L;
+
+  private static final long WHEEL_MICROBURST_WINDOW_MS = 12L;
+  private final PublishSubject<Integer> wheelStepRequests = PublishSubject.create();
+  private Disposable wheelStepSubscription;
+  private boolean wheelDebounceInstalled = false;
 
   private final FlowableProcessor<TargetRef> selections =
       PublishProcessor.<TargetRef>create().toSerialized();
@@ -106,6 +121,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
     JScrollPane scroll = new JScrollPane(tree);
     scroll.setPreferredSize(new Dimension(260, 400));
+    // Some docking layouts (and some Linux/WM combos) can intercept the wheel events.
+    // Make sure the tree always scrolls when the pointer is over it.
+    installMouseWheelSelectionScrolling(scroll);
     add(scroll, BorderLayout.CENTER);
 
     // Build server roots + status nodes
@@ -133,8 +151,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     };
     tree.addTreeSelectionListener(tsl);
 
-    // Right-click context menu (connect/disconnect per server)
-    // TODO: Need to add support for right-clicking channels.
+    // Right-click context menu (connect/disconnect per server, plus channel/PM close actions)
     MouseAdapter popupListener = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
@@ -177,6 +194,102 @@ public class ServerTreeDockable extends JPanel implements Dockable {
       }
     });
   }
+
+  private void installMouseWheelSelectionScrolling(JScrollPane scroll) {
+    if (scroll == null) return;
+
+    scroll.setWheelScrollingEnabled(false);
+
+    if (!wheelDebounceInstalled) {
+      wheelDebounceInstalled = true;
+
+      wheelStepSubscription = wheelStepRequests
+          .throttleFirst(WHEEL_MICROBURST_WINDOW_MS, TimeUnit.MILLISECONDS)
+          .subscribe(
+              dir -> SwingUtilities.invokeLater(() -> moveSelectionBy(dir)),
+              err -> {
+                // no-op
+              });
+
+      tree.addHierarchyListener(he -> {
+        if ((he.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0 && !tree.isDisplayable()) {
+          if (wheelStepSubscription != null && !wheelStepSubscription.isDisposed()) {
+            wheelStepSubscription.dispose();
+          }
+        }
+      });
+    }
+
+    tree.addMouseWheelListener(e -> {
+      if (!tree.isShowing() || !tree.isEnabled()) return;
+
+      int rowCount = tree.getRowCount();
+      if (rowCount <= 0) return;
+
+      // Fancy logic for avoiding bursts
+      long now = System.nanoTime();
+      if (lastWheelEventNanos != 0L) {
+        long dt = now - lastWheelEventNanos;
+        if (dt > 250_000_000L) { // 250ms
+          wheelDeltaAccumulator = 0.0d;
+        }
+      }
+      lastWheelEventNanos = now;
+
+      int wheelRotation = e.getWheelRotation();
+
+      // Don't skip nodes.
+      if (wheelRotation != 0) {
+        int dir = wheelRotation > 0 ? 1 : -1;
+        wheelStepRequests.onNext(dir);
+        e.consume();
+        return;
+      }
+
+      // Get precise deltas.
+      double precise = e.getPreciseWheelRotation();
+      if (precise == 0.0d) {
+        e.consume();
+        return;
+      }
+
+      wheelDeltaAccumulator += precise;
+
+      // Advance at most ONE node per event.
+      if (wheelDeltaAccumulator >= 1.0d) {
+        moveSelectionBy(1);
+        wheelDeltaAccumulator -= 1.0d;
+      } else if (wheelDeltaAccumulator <= -1.0d) {
+        moveSelectionBy(-1);
+        wheelDeltaAccumulator += 1.0d;
+      }
+
+      e.consume();
+    });
+  }
+
+  private void moveSelectionBy(int deltaRows) {
+    if (deltaRows == 0) return;
+
+    int rowCount = tree.getRowCount();
+    if (rowCount <= 0) return;
+
+    int dir = deltaRows > 0 ? 1 : -1;
+    int current = tree.getLeadSelectionRow();
+    if (current < 0) {
+      current = (dir > 0) ? 0 : (rowCount - 1);
+    }
+
+    int next = current + deltaRows;
+    next = Math.max(0, Math.min(rowCount - 1, next));
+
+    if (next != current) {
+      tree.setSelectionRow(next);
+      tree.scrollRowToVisible(next);
+    }
+  }
+
+
   private JPopupMenu buildPopupMenu(TreePath path) {
     if (path == null) return null;
 
