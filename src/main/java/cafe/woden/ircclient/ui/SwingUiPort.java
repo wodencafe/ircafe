@@ -116,6 +116,7 @@ public class SwingUiPort implements UiPort {
   @Override
   public void closeTarget(TargetRef target) {
     serverTree.removeTarget(target);
+    chat.clearTopic(target);
     transcripts.closeTarget(target);
   }
 
@@ -137,6 +138,11 @@ public class SwingUiPort implements UiPort {
   @Override
   public void setChatCurrentNick(String serverId, String nick) {
     mentions.setCurrentNick(serverId, nick);
+  }
+
+  @Override
+  public void setChannelTopic(TargetRef target, String topic) {
+    chat.setTopic(target, topic);
   }
 
   @Override

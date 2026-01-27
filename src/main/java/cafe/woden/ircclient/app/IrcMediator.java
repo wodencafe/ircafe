@@ -707,6 +707,12 @@ public class IrcMediator {
         if (!chan.equals(activeTarget)) ui.markUnread(chan);
       }
 
+      case IrcEvent.ChannelTopicUpdated ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.setChannelTopic(chan, ev.topic());
+      }
+
       case IrcEvent.PrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
         ensureTargetExists(pm);

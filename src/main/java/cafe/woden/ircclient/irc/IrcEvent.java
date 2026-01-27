@@ -9,6 +9,7 @@ public sealed interface IrcEvent permits
     IrcEvent.Reconnecting,
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
+    IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
     IrcEvent.Notice,
     IrcEvent.JoinedChannel,
@@ -23,6 +24,13 @@ public sealed interface IrcEvent permits
   record NickChanged(Instant at, String oldNick, String newNick) implements IrcEvent {}
 
   record ChannelMessage(Instant at, String channel, String from, String text) implements IrcEvent {}
+
+  /**
+   * Channel topic update.
+   *
+   * <p>Emitted when we learn a channel's topic (including on join) or when it changes.
+   */
+  record ChannelTopicUpdated(Instant at, String channel, String topic) implements IrcEvent {}
 
   record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}

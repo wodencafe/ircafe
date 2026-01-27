@@ -40,6 +40,9 @@ public interface UiPort {
   void setChatActiveTarget(TargetRef target);
   void setChatCurrentNick(String serverId, String nick);
 
+  /** Update the known topic for a channel target (shown in the main chat view when selected). */
+  void setChannelTopic(TargetRef target, String topic);
+
   void setUsersChannel(TargetRef target);
   void setUsersNicks(List<NickInfo> nicks);
 

@@ -477,6 +477,18 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
 
     @Override
+    public void onTopic(TopicEvent event) {
+      touchInbound();
+      if (event == null || event.getChannel() == null) return;
+      String channel = event.getChannel().getName();
+      String topic = event.getTopic();
+      if (channel == null || channel.isBlank()) return;
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelTopicUpdated(
+          Instant.now(), channel, topic
+      )));
+    }
+
+    @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       touchInbound();
       String from = event.getUser().getNick();
