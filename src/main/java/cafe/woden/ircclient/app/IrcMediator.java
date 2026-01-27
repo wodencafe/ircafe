@@ -2,8 +2,8 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -30,7 +30,7 @@ public class IrcMediator {
   private final UiPort ui;
   private final UserListStore userListStore;
   private final CommandParser commandParser;
-  private final IrcProperties props;
+  private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -38,6 +38,9 @@ public class IrcMediator {
 
   // Track which servers are currently connected so the UI controls behave sensibly in multi-server mode.
   private final Set<String> connectedServers = new java.util.HashSet<>();
+
+  // Track which servers are configured so we can react to runtime add/edit/remove.
+  private final Set<String> configuredServers = new java.util.HashSet<>();
 
   private TargetRef activeTarget;
 
@@ -56,14 +59,14 @@ public class IrcMediator {
       UiPort ui,
       UserListStore userListStore,
       CommandParser commandParser,
-      IrcProperties props,
+      ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig
   ) {
     this.irc = irc;
     this.ui = ui;
     this.userListStore = userListStore;
     this.commandParser = commandParser;
-    this.props = props;
+    this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
   }
 
@@ -139,6 +142,78 @@ public class IrcMediator {
             .subscribe(this::handleCloseTarget,
                 err -> ui.appendError(safeStatusTarget(), "(ui-error)", String.valueOf(err)))
     );
+
+    // React to runtime server list edits.
+    configuredServers.clear();
+    configuredServers.addAll(serverRegistry.serverIds());
+    disposables.add(
+        serverRegistry.updates()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(this::onServersUpdated,
+                err -> ui.appendError(safeStatusTarget(), "(ui-error)", "Server list update failed: " + err))
+    );
+  }
+
+  private void onServersUpdated(List<cafe.woden.ircclient.config.IrcProperties.Server> latest) {
+    // Compute current ids
+    Set<String> current = new java.util.HashSet<>();
+    if (latest != null) {
+      for (var s : latest) {
+        if (s == null) continue;
+        String id = Objects.toString(s.id(), "").trim();
+        if (!id.isEmpty()) current.add(id);
+      }
+    }
+
+    // Removed
+    Set<String> removed = new java.util.HashSet<>(configuredServers);
+    removed.removeAll(current);
+
+    // Added
+    Set<String> added = new java.util.HashSet<>(current);
+    added.removeAll(configuredServers);
+
+    configuredServers.clear();
+    configuredServers.addAll(current);
+
+    // If servers were removed, disconnect them (if connected) and tidy UI state.
+    for (String sid : removed) {
+      if (sid == null || sid.isBlank()) continue;
+
+      // Disable input if we were on that server.
+      if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
+        // Switch to a safe target.
+        String fallback = current.stream().findFirst().orElse("default");
+        TargetRef status = new TargetRef(fallback, "status");
+        ensureTargetExists(status);
+        ui.selectTarget(status);
+      }
+
+      // If we think it's connected, request a disconnect.
+      if (connectedServers.contains(sid)) {
+        TargetRef status = new TargetRef(sid, "status");
+        ui.appendStatus(status, "(servers)", "Server removed from configuration; disconnecting…");
+        disposables.add(
+            irc.disconnect(sid).subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
+            )
+        );
+      }
+
+      connectedServers.remove(sid);
+      ui.setServerConnected(sid, false);
+    }
+
+    // For newly added servers, create their status buffers so the UI has a landing place.
+    for (String sid : added) {
+      if (sid == null || sid.isBlank()) continue;
+      ensureTargetExists(new TargetRef(sid, "status"));
+    }
+
+    // Update global connection UI text/counts.
+    updateConnectionUi();
+    updateInputEnabledForActiveTarget();
   }
 
   public void stop() {
@@ -154,7 +229,7 @@ public class IrcMediator {
    * <p>Safe to call multiple times; connection attempts are idempotent per server.
    */
   public void connectAll() {
-    Set<String> serverIds = props.byId().keySet();
+    Set<String> serverIds = serverRegistry.serverIds();
     if (serverIds.isEmpty()) {
       ui.setConnectionStatusText("No servers configured");
       return;
@@ -185,7 +260,7 @@ public class IrcMediator {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    if (!props.byId().containsKey(sid)) {
+    if (!serverRegistry.containsId(sid)) {
       ui.appendError(safeStatusTarget(), "(conn)", "Unknown server: " + sid);
       return;
     }
@@ -208,7 +283,7 @@ public class IrcMediator {
 
   /** Disconnect from all configured servers. */
   public void disconnectAll() {
-    Set<String> serverIds = props.byId().keySet();
+    Set<String> serverIds = serverRegistry.serverIds();
     ui.setConnectionStatusText("Disconnecting…");
 
     // While disconnecting, keep Connect disabled to avoid racing actions.
@@ -228,7 +303,7 @@ public class IrcMediator {
   private void disconnectOne(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
-    if (!props.byId().containsKey(sid)) {
+    if (!serverRegistry.containsId(sid)) {
       ui.appendError(safeStatusTarget(), "(disc)", "Unknown server: " + sid);
       return;
     }
@@ -669,7 +744,7 @@ public class IrcMediator {
   }
 
   private void updateConnectionUi() {
-    int total = props.byId().size();
+    int total = serverRegistry.serverIds().size();
     int connected = connectedServers.size();
 
     // Enable/disable Connect/Disconnect buttons.
@@ -698,13 +773,13 @@ public class IrcMediator {
   private TargetRef safeStatusTarget() {
     if (activeTarget != null) return new TargetRef(activeTarget.serverId(), "status");
     // Fallback if nothing is selected yet.
-    String sid = props.byId().keySet().stream().findFirst().orElse("default");
+    String sid = serverRegistry.serverIds().stream().findFirst().orElse("default");
     return new TargetRef(sid, "status");
   }
 
   private String serverDisplay(String serverId) {
-    IrcProperties.Server s = props.byId().get(serverId);
-    if (s == null) return serverId;
-    return serverId + "  (" + s.host() + ":" + s.port() + ")";
+    return serverRegistry.find(serverId)
+        .map(s -> serverId + "  (" + s.host() + ":" + s.port() + ")")
+        .orElse(serverId);
   }
 }

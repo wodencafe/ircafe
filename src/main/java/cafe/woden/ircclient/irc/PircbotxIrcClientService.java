@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.ServerRegistry;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -43,12 +44,12 @@ public class PircbotxIrcClientService implements IrcClientService {
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
 
   private final Map<String, Connection> connections = new ConcurrentHashMap<>();
-  private final Map<String, IrcProperties.Server> serversById;
+  private final ServerRegistry serverRegistry;
   private final String clientVersion;
   private final IrcProperties.Reconnect reconnectPolicy;
 
-  public PircbotxIrcClientService(IrcProperties props) {
-    this.serversById = props.byId();
+  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry) {
+    this.serverRegistry = serverRegistry;
     this.clientVersion = props.client().version();
     this.reconnectPolicy = props.client().reconnect();
   }
@@ -75,7 +76,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           c.manualDisconnect.set(false);
           c.reconnectAttempts.set(0);
 
-          IrcProperties.Server s = c.server;
+          IrcProperties.Server s = serverRegistry.require(serverId);
 
           SocketFactory socketFactory = s.tls()
               ? SSLSocketFactory.getDefault()
@@ -226,11 +227,10 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private Connection conn(String serverId) {
     String id = Objects.requireNonNull(serverId, "serverId").trim();
-    IrcProperties.Server server = serversById.get(id);
-    if (server == null) {
-      throw new IllegalArgumentException("Unknown server id: " + id);
-    }
-    return connections.computeIfAbsent(id, k -> new Connection(server));
+    // NOTE: Do not require the id to exist in ServerRegistry here.
+    // Servers can be removed while still connected (or while a disconnect/reconnect is in flight).
+    // Connection objects are cheap; connect() will validate presence, while disconnect() must remain safe.
+    return connections.computeIfAbsent(id, k -> new Connection(id));
   }
 
   private PircBotX requireBot(String serverId) {
@@ -240,7 +240,7 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   private static final class Connection {
-    private final IrcProperties.Server server;
+    private final String serverId;
     private final AtomicReference<PircBotX> botRef = new AtomicReference<>();
 
     final AtomicLong lastInboundMs = new AtomicLong(0);
@@ -252,8 +252,8 @@ public class PircbotxIrcClientService implements IrcClientService {
     final AtomicReference<ScheduledFuture<?>> reconnectFuture = new AtomicReference<>();
     final AtomicReference<String> disconnectReasonOverride = new AtomicReference<>();
 
-    private Connection(IrcProperties.Server server) {
-      this.server = server;
+    private Connection(String serverId) {
+      this.serverId = serverId;
     }
   }
   private final ScheduledExecutorService heartbeatExec =
@@ -360,7 +360,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     long attempt = c.reconnectAttempts.incrementAndGet();
     if (p.maxAttempts() > 0 && attempt > p.maxAttempts()) {
-      bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Error(
+      bus.onNext(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
           Instant.now(),
           "Reconnect aborted (max attempts reached)",
           null
@@ -369,7 +369,7 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
 
     long delayMs = computeBackoffDelayMs(p, attempt);
-    bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Reconnecting(
+    bus.onNext(new ServerIrcEvent(c.serverId, new IrcEvent.Reconnecting(
         Instant.now(),
         attempt,
         delayMs,
@@ -379,11 +379,20 @@ public class PircbotxIrcClientService implements IrcClientService {
     ScheduledFuture<?> prev = c.reconnectFuture.getAndSet(
         reconnectExec.schedule(() -> {
               if (c.manualDisconnect.get()) return;
+              // If the server was removed while waiting to reconnect, abort.
+              if (!serverRegistry.containsId(c.serverId)) {
+                bus.onNext(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
+                    Instant.now(),
+                    "Reconnect cancelled (server removed)",
+                    null
+                )));
+                return;
+              }
               // Connect is idempotent per-server; it will no-op if already connected.
-              connect(c.server.id()).subscribe(
+              connect(c.serverId).subscribe(
                   () -> {},
                   err -> {
-                    bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Error(
+                    bus.onNext(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
                         Instant.now(),
                         "Reconnect attempt failed",
                         err

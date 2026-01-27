@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -25,7 +26,8 @@ public class AppMenuBar extends JMenuBar {
   public AppMenuBar(PreferencesDialog preferencesDialog,
                     UiSettingsBus settingsBus,
                     ThemeManager themeManager,
-                    RuntimeConfigStore runtimeConfig) {
+                    RuntimeConfigStore runtimeConfig,
+                    ServerDialogs serverDialogs) {
 
     // File
     JMenu file = new JMenu("File");
@@ -78,6 +80,21 @@ public class AppMenuBar extends JMenuBar {
     // Window (placeholder for future docking helpers)
     JMenu window = new JMenu("Window");
 
+    // Servers
+    JMenu servers = new JMenu("Servers");
+    JMenuItem addServer = new JMenuItem("Add Server...");
+    addServer.addActionListener(e -> {
+      Window w = SwingUtilities.getWindowAncestor(this);
+      serverDialogs.openAddServer(w);
+    });
+    JMenuItem editServers = new JMenuItem("Edit Servers...");
+    editServers.addActionListener(e -> {
+      Window w = SwingUtilities.getWindowAncestor(this);
+      serverDialogs.openManageServers(w);
+    });
+    servers.add(addServer);
+    servers.add(editServers);
+
     // Help
     JMenu help = new JMenu("Help");
     JMenuItem about = new JMenuItem("About");
@@ -89,6 +106,7 @@ public class AppMenuBar extends JMenuBar {
     help.add(about);
 
     add(file);
+    add(servers);
     add(edit);
     add(insert);
     add(settings);

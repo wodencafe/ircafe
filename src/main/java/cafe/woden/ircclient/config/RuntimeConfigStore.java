@@ -19,7 +19,7 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 /**
- * Persists runtime state (nick + auto-join channels) to a YAML file.
+ * Persists runtime state (nick + auto-join channels + server list edits) to a YAML file.
  *
  * <p>This file is also imported via spring.config.import (optional) so it overrides defaults on the next run.
  */
@@ -50,7 +50,15 @@ public class RuntimeConfigStore {
     ensureFileExistsWithServers();
   }
 
-  /** Ensure the file exists and contains the full irc.servers list so Spring doesn't drop servers. */
+  /**
+   * Ensure the file exists.
+   *
+   * <p>Important behavior:
+   * <ul>
+   *   <li>If {@code irc.servers} is missing, we seed it from defaults.</li>
+   *   <li>If {@code irc.servers} exists (even empty), we treat it as authoritative and do NOT re-add defaults.</li>
+   * </ul>
+   */
   public synchronized void ensureFileExistsWithServers() {
     try {
       if (file.toString().isBlank()) return;
@@ -62,25 +70,46 @@ public class RuntimeConfigStore {
 
       Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
 
-      // Ensure `irc.servers` exists and is populated. We always write the full list so it can override cleanly.
       Map<String, Object> irc = getOrCreateMap(doc, "irc");
-      List<Map<String, Object>> servers = readServerList(irc).orElseGet(ArrayList::new);
 
-      Map<String, Map<String, Object>> byId = new LinkedHashMap<>();
-      for (Map<String, Object> s : servers) {
-        String id = Objects.toString(s.get("id"), "").trim();
-        if (!id.isEmpty()) byId.put(id, s);
+      // If the key exists, don't overwrite it. This is what makes removals stick.
+      if (!irc.containsKey("servers")) {
+        List<Map<String, Object>> seeded = new ArrayList<>();
+        if (defaults != null && defaults.servers() != null) {
+          for (IrcProperties.Server s : defaults.servers()) {
+            if (s == null) continue;
+            seeded.add(toServerMap(s));
+          }
+        }
+        irc.put("servers", seeded);
+        writeFile(doc);
       }
-
-      for (IrcProperties.Server s : defaults.servers()) {
-        byId.computeIfAbsent(s.id(), id -> toServerMap(s));
-      }
-
-      irc.put("servers", new ArrayList<>(byId.values()));
-      writeFile(doc);
     } catch (Exception e) {
       // TODO: Better logging (slf4j or something)
       System.err.println("[ircafe] Could not ensure runtime config file: " + e);
+    }
+  }
+
+  /** Overwrite the full {@code irc.servers} list (used by the servers UI / registry). */
+  public synchronized void writeServers(List<IrcProperties.Server> servers) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+
+      List<Map<String, Object>> out = new ArrayList<>();
+      if (servers != null) {
+        for (IrcProperties.Server s : servers) {
+          if (s == null) continue;
+          out.add(toServerMap(s));
+        }
+      }
+
+      irc.put("servers", out);
+      writeFile(doc);
+    } catch (Exception e) {
+      System.err.println("[ircafe] Could not persist servers list: " + e);
     }
   }
 
@@ -158,11 +187,11 @@ public class RuntimeConfigStore {
         }
       }
 
+      // IMPORTANT: Do not auto-create missing servers here.
+      // If a user removed a server at runtime, we must not "resurrect" it
+      // just because some runtime state (e.g. /join) tries to persist.
       if (found == null) {
-        IrcProperties.Server def = defaults.byId().get(sid);
-        found = def != null ? toServerMap(def) : new LinkedHashMap<>();
-        found.putIfAbsent("id", sid);
-        servers.add(found);
+        return;
       }
 
       updater.update(found);
@@ -220,6 +249,9 @@ public class RuntimeConfigStore {
     m.put("host", s.host());
     m.put("port", s.port());
     m.put("tls", s.tls());
+    if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
+      m.put("serverPassword", s.serverPassword());
+    }
     if (s.nick() != null) m.put("nick", s.nick());
     if (s.login() != null && !s.login().isBlank()) m.put("login", s.login());
     if (s.realName() != null && !s.realName().isBlank()) m.put("realName", s.realName());
@@ -229,6 +261,9 @@ public class RuntimeConfigStore {
       sasl.put("enabled", true);
       sasl.put("username", s.sasl().username());
       sasl.put("password", s.sasl().password());
+      if (s.sasl().mechanism() != null && !s.sasl().mechanism().isBlank()) {
+        sasl.put("mechanism", s.sasl().mechanism());
+      }
       m.put("sasl", sasl);
     }
     return m;

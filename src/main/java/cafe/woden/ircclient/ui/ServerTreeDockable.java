@@ -2,13 +2,16 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.ServerRegistry;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Point;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -22,10 +25,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
-import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeSelectionListener;
-import javax.swing.event.TreeWillExpandListener;
-import javax.swing.tree.ExpandVetoException;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -72,8 +72,12 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   /** Per-server connection state for context menu enabling/disabling. */
   private final Map<String, Boolean> serverConnected = new HashMap<>();
 
-  public ServerTreeDockable(IrcProperties props, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
+  private final ServerRegistry serverRegistry;
+
+  public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
     super(new BorderLayout());
+
+    this.serverRegistry = serverRegistry;
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -105,10 +109,17 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     add(scroll, BorderLayout.CENTER);
 
     // Build server roots + status nodes
-    if (props != null && props.servers() != null) {
-      for (IrcProperties.Server s : props.servers()) {
+    if (serverRegistry != null) {
+      for (IrcProperties.Server s : serverRegistry.servers()) {
+        if (s == null) continue;
         addServerRoot(s.id());
       }
+
+      // Incomplete patch: live updates. This is where the future "Add/Edit Servers" dialogs will publish.
+      serverRegistry.updates()
+          .observeOn(SwingEdt.scheduler())
+          .subscribe(this::syncServers,
+              err -> System.err.println("[ircafe] server registry stream error: " + err));
     }
 
     // Selection stream
@@ -285,8 +296,13 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
     ServerNodes sn = servers.get(ref.serverId());
     if (sn == null) {
-      // If a server is unknown (runtime config changed without restart), create it.
-      sn = addServerRoot(ref.serverId());
+      // If a server is unknown (e.g., it was removed), don't resurrect it.
+      // The mediator already attempts to switch away from removed servers.
+      if (serverRegistry == null || serverRegistry.containsId(ref.serverId()) || servers.isEmpty()) {
+        sn = addServerRoot(ref.serverId());
+      } else {
+        return;
+      }
     }
 
     DefaultMutableTreeNode parent;
@@ -353,6 +369,76 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     if (nd.unread == 0) return;
     nd.unread = 0;
     model.nodeChanged(node);
+  }
+
+  /**
+   * Sync server roots to the latest configured server list.
+   *
+   * <p>This is part of the "incomplete patched" work: once the Add/Edit Servers dialogs exist,
+   * they will update {@link ServerRegistry}, and this tree will reflect those changes live.
+   */
+  private void syncServers(List<IrcProperties.Server> latest) {
+    Set<String> newIds = new HashSet<>();
+    if (latest != null) {
+      for (IrcProperties.Server s : latest) {
+        if (s == null) continue;
+        String id = Objects.toString(s.id(), "").trim();
+        if (!id.isEmpty()) newIds.add(id);
+      }
+    }
+
+    // Add missing
+    for (String id : newIds) {
+      if (!servers.containsKey(id)) {
+        addServerRoot(id);
+      }
+    }
+
+    // Remove no-longer-present
+    for (String existing : List.copyOf(servers.keySet())) {
+      if (!newIds.contains(existing)) {
+        removeServerRoot(existing);
+      }
+    }
+
+    model.reload(root);
+
+    // If the selected path became invalid (e.g., server removed), pick a sensible default.
+    SwingUtilities.invokeLater(() -> {
+      TreePath sel = tree.getSelectionPath();
+      if (sel != null) {
+        Object last = sel.getLastPathComponent();
+        if (last instanceof DefaultMutableTreeNode n) {
+          if (n.getPath() != null && n.getRoot() == root) {
+            // still valid enough
+            return;
+          }
+        }
+      }
+
+      TargetRef first = servers.values().stream()
+          .findFirst()
+          .map(sn -> sn.statusRef)
+          .orElse(null);
+      if (first != null) {
+        selectTarget(first);
+      } else {
+        tree.setSelectionPath(new TreePath(root.getPath()));
+      }
+    });
+  }
+
+  private void removeServerRoot(String serverId) {
+    ServerNodes sn = servers.remove(serverId);
+    if (sn == null) return;
+
+    serverConnected.remove(serverId);
+
+    // Remove all leaves for this server.
+    leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
+
+    // Remove the root node.
+    root.remove(sn.serverNode);
   }
 
   private ServerNodes addServerRoot(String serverId) {
