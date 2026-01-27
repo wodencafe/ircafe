@@ -22,13 +22,20 @@ public class ChatTranscriptStore {
   private final ChatStyles styles;
   private final ChatRichTextRenderer renderer;
   private final ChatTimestampFormatter ts;
+  private final NickColorService nickColors;
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
 
-  public ChatTranscriptStore(ChatStyles styles, ChatRichTextRenderer renderer, ChatTimestampFormatter ts) {
+  public ChatTranscriptStore(
+      ChatStyles styles,
+      ChatRichTextRenderer renderer,
+      ChatTimestampFormatter ts,
+      NickColorService nickColors
+  ) {
     this.styles = styles;
     this.renderer = renderer;
     this.ts = ts;
+    this.nickColors = nickColors;
   }
 
   public synchronized void ensureTargetExists(TargetRef ref) {
@@ -78,7 +85,7 @@ public class ChatTranscriptStore {
       }
 
       AttributeSet base = msgStyle != null ? msgStyle : styles.message();
-      renderer.insertRichText(doc, ref.serverId(), text, base);
+      renderer.insertRichText(doc, ref, text, base);
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
     } catch (Exception ignored) {
@@ -86,7 +93,11 @@ public class ChatTranscriptStore {
   }
 
   public void appendChat(TargetRef ref, String from, String text) {
-    appendLine(ref, from, text, styles.from(), styles.message());
+    AttributeSet fromStyle = styles.from();
+    if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+    appendLine(ref, from, text, fromStyle, styles.message());
   }
 
   public void appendNotice(TargetRef ref, String from, String text) {
@@ -140,6 +151,16 @@ public class ChatTranscriptStore {
       Object url = old.getAttribute(ChatStyles.ATTR_URL);
       if (url != null) {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);
+      }
+
+      // Preserve per-nick marker and re-apply a theme-correct nick color.
+      Object nickLower = old.getAttribute(NickColorService.ATTR_NICK);
+      if (nickLower != null) {
+        String n = String.valueOf(nickLower);
+        fresh.addAttribute(NickColorService.ATTR_NICK, n);
+        if (nickColors != null) {
+          nickColors.applyColor(fresh, n);
+        }
       }
 
       // Ensure the style marker survives replacements.

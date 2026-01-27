@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.ui.chat.NickColorService;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -28,12 +29,29 @@ public class UserListDockable extends JPanel implements Dockable {
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
 
+  private final NickColorService nickColors;
+
   private TargetRef active = new TargetRef("default", "status");
 
-  public UserListDockable() {
+  public UserListDockable(NickColorService nickColors) {
     super(new BorderLayout());
 
+    this.nickColors = nickColors;
+
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+    // Deterministic, global per-nick coloring in the user list.
+    final ListCellRenderer<? super String> baseRenderer = list.getCellRenderer();
+    list.setCellRenderer((JList<? extends String> l, String value, int index, boolean isSelected, boolean cellHasFocus) -> {
+      java.awt.Component c = baseRenderer.getListCellRendererComponent(l, value, index, isSelected, cellHasFocus);
+      if (c instanceof JLabel lbl && value != null && !value.isBlank()
+          && nickColors != null && nickColors.enabled()) {
+        String nick = stripNickPrefix(value);
+        Color fg = nickColors.colorForNick(nick, lbl.getBackground(), lbl.getForeground());
+        lbl.setForeground(fg);
+      }
+      return c;
+    });
     add(new JScrollPane(list), BorderLayout.CENTER);
 
     // Double-click a nick to open a PM
