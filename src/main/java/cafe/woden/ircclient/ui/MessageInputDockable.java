@@ -84,6 +84,16 @@ public class MessageInputDockable extends JPanel implements Dockable {
     outbound.onNext(msg);
   }
 
+  public void setInputEnabled(boolean enabled) {
+    input.setEditable(enabled);
+    input.setEnabled(enabled);
+    send.setEnabled(enabled);
+
+    if (!enabled) {
+      input.setText("");
+    }
+  }
+
   @Override public String getPersistentID() { return ID; }
   @Override public String getTabText() { return "Input"; }
 }

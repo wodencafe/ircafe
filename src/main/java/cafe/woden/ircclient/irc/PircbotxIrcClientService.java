@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -44,10 +45,12 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final Map<String, Connection> connections = new ConcurrentHashMap<>();
   private final Map<String, IrcProperties.Server> serversById;
   private final String clientVersion;
+  private final IrcProperties.Reconnect reconnectPolicy;
 
   public PircbotxIrcClientService(IrcProperties props) {
     this.serversById = props.byId();
     this.clientVersion = props.client().version();
+    this.reconnectPolicy = props.client().reconnect();
   }
 
   @Override
@@ -67,6 +70,11 @@ public class PircbotxIrcClientService implements IrcClientService {
           Connection c = conn(serverId);
           if (c.botRef.get() != null) return;
 
+          // Any explicit connect cancels pending reconnect work and resets attempts.
+          cancelReconnect(c);
+          c.manualDisconnect.set(false);
+          c.reconnectAttempts.set(0);
+
           IrcProperties.Server s = c.server;
 
           SocketFactory socketFactory = s.tls()
@@ -81,7 +89,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               .setSocketFactory(socketFactory)
               .setCapEnabled(false) // we may enable below
               .setAutoNickChange(true)
-              .setAutoReconnect(true)
+              // We manage reconnects ourselves so we can surface status + use backoff.
+              .setAutoReconnect(false)
               .addListener(new BridgeListener(serverId, c));
 
            if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
@@ -114,14 +123,23 @@ public class PircbotxIrcClientService implements IrcClientService {
           startHeartbeat(c);
           // Run bot on IO thread; connect() completes immediately
           Schedulers.io().scheduleDirect(() -> {
+            boolean crashed = false;
             try {
               bot.startBot();
             } catch (Exception e) {
+              crashed = true;
               bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
             } finally {
-              c.botRef.set(null);
-              ScheduledFuture<?> f = c.heartbeatFuture.getAndSet(null);
-              if (f != null) f.cancel(false);
+              // Only clear state if this is still the current bot (avoid racing a reconnect).
+              if (c.botRef.compareAndSet(bot, null)) {
+                ScheduledFuture<?> f = c.heartbeatFuture.getAndSet(null);
+                if (f != null) f.cancel(false);
+              }
+
+              // If the bot thread died unexpectedly, attempt reconnect (if enabled).
+              if (crashed && !c.manualDisconnect.get()) {
+                scheduleReconnect(c, "Bot crashed");
+              }
             }
           });
         })
@@ -132,6 +150,11 @@ public class PircbotxIrcClientService implements IrcClientService {
   public Completable disconnect(String serverId) {
     return Completable.fromAction(() -> {
           Connection c = conn(serverId);
+
+          // Mark as intentional and cancel any reconnect.
+          c.manualDisconnect.set(true);
+          cancelReconnect(c);
+
           PircBotX bot = c.botRef.getAndSet(null);
           if (bot == null) return;
 
@@ -224,6 +247,11 @@ public class PircbotxIrcClientService implements IrcClientService {
     final AtomicBoolean localTimeoutEmitted = new AtomicBoolean(false);
     final AtomicReference<ScheduledFuture<?>> heartbeatFuture = new AtomicReference<>();
 
+    final AtomicBoolean manualDisconnect = new AtomicBoolean(false);
+    final AtomicLong reconnectAttempts = new AtomicLong(0);
+    final AtomicReference<ScheduledFuture<?>> reconnectFuture = new AtomicReference<>();
+    final AtomicReference<String> disconnectReasonOverride = new AtomicReference<>();
+
     private Connection(IrcProperties.Server server) {
       this.server = server;
     }
@@ -231,6 +259,13 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final ScheduledExecutorService heartbeatExec =
       Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "ircafe-heartbeat");
+        t.setDaemon(true);
+        return t;
+      });
+
+  private final ScheduledExecutorService reconnectExec =
+      Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "ircafe-reconnect");
         t.setDaemon(true);
         return t;
       });
@@ -303,12 +338,78 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     long idleMs = System.currentTimeMillis() - c.lastInboundMs.get();
     if (idleMs > HEARTBEAT_TIMEOUT_MS && c.localTimeoutEmitted.compareAndSet(false, true)) {
-
-      bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Disconnected(Instant.now(), "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)")));
-
-      try { bot.stopBotReconnect(); } catch (Exception ignored) {}
+      // Don't emit Disconnected here (DisconnectEvent will fire). Instead, stash a reason override.
+      c.disconnectReasonOverride.set(
+          "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)"
+      );
       try { bot.close(); } catch (Exception ignored) {}
     }
+  }
+
+  private void cancelReconnect(Connection c) {
+    if (c == null) return;
+    ScheduledFuture<?> f = c.reconnectFuture.getAndSet(null);
+    if (f != null) f.cancel(false);
+  }
+
+  private void scheduleReconnect(Connection c, String reason) {
+    if (c == null) return;
+    IrcProperties.Reconnect p = reconnectPolicy;
+    if (p == null || !p.enabled()) return;
+    if (c.manualDisconnect.get()) return;
+
+    long attempt = c.reconnectAttempts.incrementAndGet();
+    if (p.maxAttempts() > 0 && attempt > p.maxAttempts()) {
+      bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Error(
+          Instant.now(),
+          "Reconnect aborted (max attempts reached)",
+          null
+      )));
+      return;
+    }
+
+    long delayMs = computeBackoffDelayMs(p, attempt);
+    bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Reconnecting(
+        Instant.now(),
+        attempt,
+        delayMs,
+        Objects.toString(reason, "Disconnected")
+    )));
+
+    ScheduledFuture<?> prev = c.reconnectFuture.getAndSet(
+        reconnectExec.schedule(() -> {
+              if (c.manualDisconnect.get()) return;
+              // Connect is idempotent per-server; it will no-op if already connected.
+              connect(c.server.id()).subscribe(
+                  () -> {},
+                  err -> {
+                    bus.onNext(new ServerIrcEvent(c.server.id(), new IrcEvent.Error(
+                        Instant.now(),
+                        "Reconnect attempt failed",
+                        err
+                    )));
+                    scheduleReconnect(c, "Reconnect attempt failed");
+                  }
+              );
+            },
+            delayMs,
+            TimeUnit.MILLISECONDS)
+    );
+    if (prev != null) prev.cancel(false);
+  }
+
+  private static long computeBackoffDelayMs(IrcProperties.Reconnect p, long attempt) {
+    long base = p.initialDelayMs();
+    double mult = Math.pow(p.multiplier(), Math.max(0, attempt - 1));
+    double raw = base * mult;
+    long capped = (long) Math.min(raw, (double) p.maxDelayMs());
+
+    double jitter = p.jitterPct();
+    if (jitter <= 0) return capped;
+
+    double factor = 1.0 + ThreadLocalRandom.current().nextDouble(-jitter, jitter);
+    long withJitter = (long) Math.max(0, capped * factor);
+    return Math.max(250, withJitter); // don't go crazy-small
   }
 
   private final class BridgeListener extends ListenerAdapter {
@@ -323,6 +424,11 @@ public class PircbotxIrcClientService implements IrcClientService {
     public void onConnect(ConnectEvent event) {
       touchInbound();
       PircBotX bot = event.getBot();
+
+      // Successful reconnect resets counters.
+      conn.reconnectAttempts.set(0);
+      conn.manualDisconnect.set(false);
+
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Connected(
           Instant.now(),
           bot.getServerHostname(),
@@ -333,14 +439,30 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onDisconnect(DisconnectEvent event) {
+      // Prefer any locally-detected reason (e.g., heartbeat timeout).
+      String override = conn.disconnectReasonOverride.getAndSet(null);
       Exception ex = event.getDisconnectException();
-      String reason = (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Disconnected";
+      String reason = (override != null && !override.isBlank())
+          ? override
+          : (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Disconnected";
+
+      // Clear the bot reference if this disconnect belongs to the current bot.
+      if (conn.botRef.compareAndSet(event.getBot(), null)) {
+        ScheduledFuture<?> f = conn.heartbeatFuture.getAndSet(null);
+        if (f != null) f.cancel(false);
+      }
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
+
+      // Only auto-reconnect on non-manual disconnects.
+      if (!conn.manualDisconnect.get()) {
+        scheduleReconnect(conn, reason);
+      }
     }
 
     @Override
     public void onMessage(MessageEvent event) {
+      touchInbound();
       String channel = event.getChannel().getName();
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelMessage(
           Instant.now(), channel, event.getUser().getNick(), event.getMessage()
@@ -358,6 +480,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onNotice(NoticeEvent event) {
+      touchInbound();
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, event.getNotice())));
     }
@@ -374,6 +497,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onJoin(JoinEvent event) {
+      touchInbound();
       Channel channel = event.getChannel();
 
       if (isSelf(event.getBot(), event.getUser().getNick())) {
@@ -385,11 +509,13 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onPart(PartEvent event) {
+      touchInbound();
       refreshRosterByName(event.getBot(), event.getChannelName());
     }
 
     @Override
     public void onQuit(QuitEvent event) {
+      touchInbound();
       PircBotX bot = event.getBot();
 
       boolean refreshedSome = false;
@@ -430,11 +556,13 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onKick(KickEvent event) {
+      touchInbound();
       emitRoster(event.getChannel());
     }
 
     @Override
     public void onNickChange(NickChangeEvent event) {
+      touchInbound();
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickChanged(
           Instant.now(),
           event.getOldNick(),
@@ -450,6 +578,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     @Override
     public void onMode(ModeEvent event) {
+      touchInbound();
       if (event.getChannel() != null) emitRoster(event.getChannel());
     }
 

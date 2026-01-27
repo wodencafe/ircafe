@@ -176,6 +176,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void setInputEnabled(boolean enabled) {
+    input.setInputEnabled(enabled);
+  }
+
+  @Override
   public void appendChat(TargetRef target, String from, String text) {
     transcripts.appendChat(target, from, text);
   }

@@ -296,10 +296,12 @@ public class IrcMediator {
 
       // Request names if cache is empty.
       if (cached.isEmpty()) {
-        irc.requestNames(target.serverId(), target.target()).subscribe(
-            () -> {},
-            err -> ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))
-        );
+        if (connectedServers.contains(target.serverId())) {
+          irc.requestNames(target.serverId(), target.target()).subscribe(
+              () -> {},
+              err -> ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))
+          );
+        }
       }
     } else {
       ui.setStatusBarCounts(0, 0);
@@ -310,6 +312,17 @@ public class IrcMediator {
     irc.currentNick(target.serverId()).ifPresent(nick -> ui.setChatCurrentNick(target.serverId(), nick));
 
     ui.clearUnread(target);
+
+    // Disable input when the selected server isn't connected
+    updateInputEnabledForActiveTarget();
+  }
+
+  private void updateInputEnabledForActiveTarget() {
+    if (activeTarget == null) {
+      ui.setInputEnabled(false);
+      return;
+    }
+    ui.setInputEnabled(connectedServers.contains(activeTarget.serverId()));
   }
 
   /**
@@ -352,6 +365,11 @@ public class IrcMediator {
 
     // Persist for auto-join next time.
     runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+
+    if (!connectedServers.contains(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected (join queued in config only)");
+      return;
+    }
 
     disposables.add(
         irc.joinChannel(at.serverId(), chan).subscribe(
@@ -413,6 +431,11 @@ public class IrcMediator {
 
     // Persist the preferred nick for next time.
     runtimeConfig.rememberNick(at.serverId(), nick);
+
+    if (!connectedServers.contains(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
 
     disposables.add(
         irc.changeNick(at.serverId(), nick).subscribe(
@@ -478,6 +501,11 @@ public class IrcMediator {
       return;
     }
 
+    if (!connectedServers.contains(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
     String me = irc.currentNick(at.serverId()).orElse("me");
     ui.appendChat(at, "* " + me, a);
 
@@ -512,6 +540,15 @@ public class IrcMediator {
     String m = message == null ? "" : message.trim();
     if (m.isEmpty()) return;
 
+    if (!connectedServers.contains(target.serverId())) {
+      TargetRef status = new TargetRef(target.serverId(), "status");
+      ui.appendStatus(status, "(conn)", "Not connected");
+      if (!target.isStatus()) {
+        ui.appendStatus(target, "(conn)", "Not connected");
+      }
+      return;
+    }
+
     disposables.add(
         irc.sendMessage(target.serverId(), target.target(), m).subscribe(
             () -> {},
@@ -540,14 +577,36 @@ public class IrcMediator {
         ui.setChatCurrentNick(sid, ev.nick());
         runtimeConfig.rememberNick(sid, ev.nick());
         updateConnectionUi();
+        updateInputEnabledForActiveTarget();
+      }
+
+      case IrcEvent.Reconnecting ev -> {
+        // Surface reconnect attempts in the status buffer and (if applicable) the active chat.
+        ensureTargetExists(status);
+        long sec = Math.max(0, ev.delayMs() / 1000);
+        String msg = "Reconnecting in " + sec + "s (attempt " + ev.attempt() + ")";
+        if (ev.reason() != null && !ev.reason().isBlank()) {
+          msg += " — " + ev.reason();
+        }
+        ui.appendStatus(status, "(conn)", msg);
+        if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
+          ui.appendStatus(activeTarget, "(conn)", msg);
+        }
+        ui.setConnectionStatusText("Reconnecting…");
+        updateInputEnabledForActiveTarget();
       }
 
       case IrcEvent.Disconnected ev -> {
         connectedServers.remove(sid);
         ui.setServerConnected(sid, false);
-        ui.appendStatus(status, "(conn)", "Disconnected: " + ev.reason());
+        String msg = "Disconnected: " + ev.reason();
+        ui.appendStatus(status, "(conn)", msg);
+        if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
+          ui.appendStatus(activeTarget, "(conn)", msg);
+        }
         ui.setChatCurrentNick(sid, "");
         updateConnectionUi();
+        updateInputEnabledForActiveTarget();
         userListStore.clearServer(sid);
         if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
           ui.setStatusBarCounts(0, 0);
