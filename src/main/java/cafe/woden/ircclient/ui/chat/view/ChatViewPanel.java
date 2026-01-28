@@ -46,6 +46,13 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private boolean programmaticScroll = false;
   private StyledDocument currentDocument;
 
+  // Track prior scrollbar state so we can keep "follow tail" enabled when the transcript grows.
+  // Without this, growing content can emit scrollbar adjustment events that look like the
+  // user scrolled away from the bottom, which disables auto-scroll.
+  private int lastBarMax = -1;
+  private int lastBarExtent = 0;
+  private int lastBarValue = 0;
+
   private final Cursor textCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
   private final Cursor handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
 
@@ -187,6 +194,13 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     restoreScrollState();
   }
 
+  private void captureBarState() {
+    JScrollBar bar = scroll.getVerticalScrollBar();
+    lastBarMax = bar.getMaximum();
+    lastBarExtent = bar.getModel().getExtent();
+    lastBarValue = bar.getValue();
+  }
+
   private void maybeAutoScroll() {
     if (!isFollowTail()) return;
     SwingUtilities.invokeLater(this::scrollToBottom);
@@ -196,7 +210,9 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     JScrollBar bar = scroll.getVerticalScrollBar();
     try {
       programmaticScroll = true;
+      // Clamp-to-bottom: setting to maximum will be constrained by the model to (max - extent).
       bar.setValue(bar.getMaximum());
+      captureBarState();
     } finally {
       programmaticScroll = false;
     }
@@ -208,10 +224,26 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     int extent = bar.getModel().getExtent();
     int val = bar.getValue();
 
-    boolean atBottom = (val + extent) >= (max - 2);
-    setFollowTail(atBottom);
+    boolean atBottomNow = (val + extent) >= (max - 2);
+
+    if (atBottomNow) {
+      // If the user reaches the bottom, we (re)enable follow-tail.
+      setFollowTail(true);
+    } else if (isFollowTail()) {
+      // IMPORTANT: Do NOT disable follow-tail just because the transcript grew.
+      // Only disable it when the user actively scrolls upward.
+      if (val < lastBarValue) {
+        setFollowTail(false);
+      }
+      // If the doc grows and the scrollbar's maximum changes, 'val' may stay the same;
+      // in that case we keep follow-tail enabled.
+    }
 
     setSavedScrollValue(val);
+
+    lastBarMax = max;
+    lastBarExtent = extent;
+    lastBarValue = val;
   }
 
   protected void restoreScrollState() {
@@ -226,6 +258,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       try {
         programmaticScroll = true;
         bar.setValue(Math.min(saved, Math.max(0, bar.getMaximum())));
+        captureBarState();
       } finally {
         programmaticScroll = false;
       }
