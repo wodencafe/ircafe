@@ -23,6 +23,7 @@ public class ThemeManager {
   public record ThemeOption(String id, String label) {}
 
   private static final ThemeOption[] THEMES = new ThemeOption[] {
+      new ThemeOption("system", "Native (System)"),
       new ThemeOption("dark", "Flat Dark"),
       new ThemeOption("darcula", "Flat Darcula"),
       new ThemeOption("light", "Flat Light")
@@ -89,14 +90,14 @@ public class ThemeManager {
 
   private void setLookAndFeel(String themeId) {
     String id = normalize(themeId);
-    LookAndFeel laf = switch (id) {
-      case "light" -> new FlatLightLaf();
-      case "darcula" -> new FlatDarculaLaf();
-      default -> new FlatDarkLaf();
-    };
 
     try {
-      UIManager.setLookAndFeel(laf);
+      switch (id) {
+        case "system" -> UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        case "light" -> UIManager.setLookAndFeel(new FlatLightLaf());
+        case "darcula" -> UIManager.setLookAndFeel(new FlatDarculaLaf());
+        default -> UIManager.setLookAndFeel(new FlatDarkLaf());
+      }
     } catch (Exception e) {
       // Fail soft; keep existing LAF.
       System.err.println("[ircafe] Could not set Look & Feel '" + id + "': " + e);
