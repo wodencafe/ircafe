@@ -58,7 +58,7 @@ public class ServersDialog extends JDialog {
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     list.setCellRenderer(new ServerCellRenderer());
-    list.putClientProperty(FlatClientProperties.STYLE, "arc:12;" );
+    list.putClientProperty(FlatClientProperties.STYLE, "selectionArc:12;" );
 
     JScrollPane scroll = new JScrollPane(list);
     scroll.setPreferredSize(new Dimension(520, 320));
