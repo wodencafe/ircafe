@@ -8,7 +8,6 @@ import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.List;
-import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -29,15 +28,6 @@ public class SwingUiPort implements UiPort {
   private final ConnectButton connectBtn;
   private final DisconnectButton disconnectBtn;
   private final TargetActivationBus activationBus;
-
-
-  private void onEdt(Runnable r) {
-    if (SwingUtilities.isEventDispatchThread()) {
-      r.run();
-    } else {
-      SwingUtilities.invokeLater(r);
-    }
-  }
 
   public SwingUiPort(
       ServerTreeDockable serverTree,
@@ -114,113 +104,109 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void ensureTargetExists(TargetRef target) {
-    onEdt(() -> {
-      transcripts.ensureTargetExists(target);
-      serverTree.ensureNode(target);
-    });
+    transcripts.ensureTargetExists(target);
+    serverTree.ensureNode(target);
   }
 
   @Override
   public void selectTarget(TargetRef target) {
-    onEdt(() -> serverTree.selectTarget(target));
+    serverTree.selectTarget(target);
   }
 
   @Override
   public void closeTarget(TargetRef target) {
-    onEdt(() -> {
-      serverTree.removeTarget(target);
-      chat.clearTopic(target);
-      transcripts.closeTarget(target);
-    });
+    serverTree.removeTarget(target);
+    chat.clearTopic(target);
+    transcripts.closeTarget(target);
   }
 
   @Override
   public void markUnread(TargetRef target) {
-    onEdt(() -> serverTree.markUnread(target));
+    serverTree.markUnread(target);
   }
 
   @Override
   public void clearUnread(TargetRef target) {
-    onEdt(() -> serverTree.clearUnread(target));
+    serverTree.clearUnread(target);
   }
 
   @Override
   public void setChatActiveTarget(TargetRef target) {
-    onEdt(() -> chat.setActiveTarget(target));
+    chat.setActiveTarget(target);
   }
 
   @Override
   public void setChatCurrentNick(String serverId, String nick) {
-    onEdt(() -> mentions.setCurrentNick(serverId, nick));
+    mentions.setCurrentNick(serverId, nick);
   }
 
   @Override
   public void setChannelTopic(TargetRef target, String topic) {
-    onEdt(() -> chat.setTopic(target, topic));
+    chat.setTopic(target, topic);
   }
 
   @Override
   public void setUsersChannel(TargetRef target) {
-    onEdt(() -> users.setChannel(target));
+    users.setChannel(target);
   }
 
   @Override
   public void setUsersNicks(List<NickInfo> nicks) {
-    onEdt(() -> users.setNicks(nicks));
+    users.setNicks(nicks);
   }
 
   @Override
   public void setStatusBarChannel(String channel) {
-    onEdt(() -> statusBar.setChannel(channel));
+    statusBar.setChannel(channel);
   }
 
   @Override
   public void setStatusBarCounts(int users, int ops) {
-    onEdt(() -> statusBar.setCounts(users, ops));
+    statusBar.setCounts(users, ops);
   }
 
   @Override
   public void setStatusBarServer(String serverText) {
-    onEdt(() -> statusBar.setServer(serverText));
+    statusBar.setServer(serverText);
   }
 
   @Override
   public void setConnectedUi(boolean connected) {
-    onEdt(() -> serverTree.setConnectedUi(connected));
+    serverTree.setConnectedUi(connected);
   }
 
   @Override
   public void setConnectionStatusText(String text) {
-    onEdt(() -> serverTree.setStatusText(text));
+    serverTree.setStatusText(text);
   }
 
   @Override
   public void setServerConnected(String serverId, boolean connected) {
-    onEdt(() -> serverTree.setServerConnected(serverId, connected));
+    serverTree.setServerConnected(serverId, connected);
   }
 
   @Override
   public void setInputEnabled(boolean enabled) {
-    onEdt(() -> input.setInputEnabled(enabled));
+    input.setInputEnabled(enabled);
   }
 
   @Override
   public void appendChat(TargetRef target, String from, String text) {
-    onEdt(() -> transcripts.appendChat(target, from, text));
+    transcripts.appendChat(target, from, text);
   }
 
   @Override
   public void appendNotice(TargetRef target, String from, String text) {
-    onEdt(() -> transcripts.appendNotice(target, from, text));
+    transcripts.appendNotice(target, from, text);
   }
 
   @Override
   public void appendStatus(TargetRef target, String from, String text) {
-    onEdt(() -> transcripts.appendStatus(target, from, text));
+    transcripts.appendStatus(target, from, text);
   }
 
   @Override
   public void appendError(TargetRef target, String from, String text) {
-    onEdt(() -> transcripts.appendError(target, from, text));
+    transcripts.appendError(target, from, text);
   }
 }
