@@ -396,6 +396,159 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     return openPinnedChatRequests.onBackpressureLatest();
   }
 
+  /**
+   * Menu helpers (JMenuBar -> Window menu).
+   *
+   * These operate on the currently selected node in the tree.
+   * Only channel nodes and private-message leaf nodes are movable/closeable.
+   * Status and the "Private messages" group node are protected.
+   */
+  public boolean canMoveSelectedNodeUp() {
+    DefaultMutableTreeNode n = selectedNode();
+    return n != null && canMoveNode(n, -1);
+  }
+
+  public boolean canMoveSelectedNodeDown() {
+    DefaultMutableTreeNode n = selectedNode();
+    return n != null && canMoveNode(n, +1);
+  }
+
+  public boolean canCloseSelectedNode() {
+    DefaultMutableTreeNode n = selectedNode();
+    if (n == null) return false;
+    Object uo = n.getUserObject();
+    if (!(uo instanceof NodeData nd)) return false;
+    if (nd.ref == null) return false;
+    return !nd.ref.isStatus();
+  }
+
+  public void moveSelectedNodeUp() {
+    moveSelectedNode(-1);
+  }
+
+  public void moveSelectedNodeDown() {
+    moveSelectedNode(+1);
+  }
+
+  public void closeSelectedNode() {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::closeSelectedNode);
+      return;
+    }
+
+    DefaultMutableTreeNode n = selectedNode();
+    if (n == null) return;
+    Object uo = n.getUserObject();
+    if (!(uo instanceof NodeData nd)) return;
+    if (nd.ref == null || nd.ref.isStatus()) return;
+
+    // Delegate to the same stream the right-click menu uses.
+    closeTargetRequests.onNext(nd.ref);
+  }
+
+  private void moveSelectedNode(int dir) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(() -> moveSelectedNode(dir));
+      return;
+    }
+    if (dir == 0) return;
+
+    DefaultMutableTreeNode n = selectedNode();
+    if (n == null) return;
+    if (!canMoveNode(n, dir)) return;
+
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) n.getParent();
+    if (parent == null) return;
+
+    int idx = parent.getIndex(n);
+    int min = minMovableIndex(parent);
+    int max = maxMovableIndex(parent);
+
+    int next = idx + (dir > 0 ? 1 : -1);
+    next = Math.max(min, Math.min(max, next));
+    if (next == idx) return;
+
+    // Preserve the node instance so our TargetRef -> node map stays valid.
+    model.removeNodeFromParent(n);
+    model.insertNodeInto(n, parent, next);
+
+    TreePath path = new TreePath(n.getPath());
+    tree.setSelectionPath(path);
+    tree.scrollPathToVisible(path);
+  }
+
+  private DefaultMutableTreeNode selectedNode() {
+    Object last = tree.getLastSelectedPathComponent();
+    if (last instanceof DefaultMutableTreeNode n) return n;
+    return null;
+  }
+
+  private boolean canMoveNode(DefaultMutableTreeNode node, int dir) {
+    if (node == null) return false;
+    if (dir == 0) return false;
+
+    // Only allow moving leaf nodes (channels / PMs). Never move root/server/group/status.
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd)) return false;
+    if (nd.ref == null || nd.ref.isStatus()) return false;
+
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+    if (parent == null) return false;
+
+    // Must be either:
+    //   - channel leaf under a server node
+    //   - PM leaf under the "Private messages" group node
+    boolean parentIsServer = isServerNode(parent);
+    boolean parentIsPmGroup = isPrivateMessagesGroupNode(parent);
+    if (!parentIsServer && !parentIsPmGroup) return false;
+
+    int idx = parent.getIndex(node);
+    int min = minMovableIndex(parent);
+    int max = maxMovableIndex(parent);
+    if (idx < min || idx > max) return false;
+
+    if (dir < 0) return idx > min;
+    return idx < max;
+  }
+
+  private int minMovableIndex(DefaultMutableTreeNode parent) {
+    if (parent == null) return 0;
+    if (isServerNode(parent)) {
+      // Keep status (index 0) fixed, if present.
+      if (parent.getChildCount() > 0) {
+        Object first = ((DefaultMutableTreeNode) parent.getChildAt(0)).getUserObject();
+        if (first instanceof NodeData nd && nd.ref != null && nd.ref.isStatus()) {
+          return 1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  private int maxMovableIndex(DefaultMutableTreeNode parent) {
+    if (parent == null) return -1;
+    int count = parent.getChildCount();
+    if (count == 0) return -1;
+
+    int max = count - 1;
+    if (isServerNode(parent)) {
+      // Keep the "Private messages" group as the last child, if present.
+      DefaultMutableTreeNode last = (DefaultMutableTreeNode) parent.getChildAt(count - 1);
+      if (isPrivateMessagesGroupNode(last)) {
+        max = count - 2;
+      }
+    }
+    return max;
+  }
+
+  private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String s)) return false;
+    String label = s.trim();
+    return label.equalsIgnoreCase("Private messages") || label.equalsIgnoreCase("Private Messages");
+  }
+
   public void setServerConnected(String serverId, boolean connected) {
     if (serverId == null) return;
     serverConnected.put(serverId, connected);
