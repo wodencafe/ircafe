@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.text.AttributeSet;
@@ -26,6 +27,7 @@ public class ChatTranscriptStore {
   private final ChatTimestampFormatter ts;
   private final NickColorService nickColors;
   private final ChatImageEmbedder imageEmbeds;
+  private final UiSettingsBus uiSettings;
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
 
@@ -34,13 +36,15 @@ public class ChatTranscriptStore {
       ChatRichTextRenderer renderer,
       ChatTimestampFormatter ts,
       NickColorService nickColors,
-      ChatImageEmbedder imageEmbeds
+      ChatImageEmbedder imageEmbeds,
+      UiSettingsBus uiSettings
   ) {
     this.styles = styles;
     this.renderer = renderer;
     this.ts = ts;
     this.nickColors = nickColors;
     this.imageEmbeds = imageEmbeds;
+    this.uiSettings = uiSettings;
   }
 
   public synchronized void ensureTargetExists(TargetRef ref) {
@@ -96,7 +100,7 @@ public class ChatTranscriptStore {
 
       // After the line, optionally embed any image URLs found in the message.
       // This keeps the raw URL text visible but also shows a thumbnail block.
-      if (imageEmbeds != null) {
+      if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
         imageEmbeds.appendEmbeds(doc, text);
       }
     } catch (Exception ignored) {

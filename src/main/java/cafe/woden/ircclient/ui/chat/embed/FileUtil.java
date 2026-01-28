@@ -43,6 +43,7 @@ final class FileUtil {
       if (p.endsWith(".jpg")) return ".jpg";
       if (p.endsWith(".jpeg")) return ".jpeg";
       if (p.endsWith(".gif")) return ".gif";
+      if (p.endsWith(".webp")) return ".webp";
     } catch (Exception ignored) {
     }
     return ".img";

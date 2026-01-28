@@ -53,11 +53,12 @@ final class ImageUrlExtractor {
       if (path == null) return false;
       String p = path.toLowerCase(Locale.ROOT);
 
-      // Direct image extensions. (No webp support in stock Swing/ImageIO by default.)
+      // Direct image extensions.
       return p.endsWith(".png")
           || p.endsWith(".jpg")
           || p.endsWith(".jpeg")
-          || p.endsWith(".gif");
+          || p.endsWith(".gif")
+          || p.endsWith(".webp");
     } catch (Exception ignored) {
       return false;
     }

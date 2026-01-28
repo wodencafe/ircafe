@@ -10,27 +10,52 @@ import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
 import java.net.URI;
-import java.util.Locale;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JMenuItem;
+import javax.swing.JScrollPane;
+import javax.swing.JTextPane;
+import javax.swing.SwingUtilities;
 
 /**
  * Inline image preview component inserted into the chat transcript StyledDocument.
+ *
+ * <p>Supports:
+ * <ul>
+ *   <li>Static images via ImageIO (PNG/JPG/WebP via plugin)</li>
+ *   <li>Animated GIFs via frame decoding + Swing Timer animation</li>
+ *   <li>Auto-scaling down so the preview never exceeds the chat pane width</li>
+ * </ul>
  */
 final class ChatImageComponent extends JPanel {
 
-  private static final int THUMB_MAX_W = 360;
-  private static final int THUMB_MAX_H = 280;
+  // Fallback width if we can't determine the transcript viewport width yet.
+  private static final int FALLBACK_MAX_W = 360;
+  // Subtract some breathing room so we don't force horizontal scrolling.
+  private static final int WIDTH_MARGIN_PX = 32;
 
   private final String url;
   private final ImageFetchService fetch;
 
   private final JLabel label = new JLabel("Loading image…");
   private volatile byte[] bytes;
+  private volatile DecodedImage decoded;
+  private volatile int lastMaxW = -1;
+
   private Disposable sub;
+
+  private java.awt.Component resizeListeningOn;
+  private final java.awt.event.ComponentListener resizeListener = new java.awt.event.ComponentAdapter() {
+    @Override
+    public void componentResized(java.awt.event.ComponentEvent e) {
+      // Debounce-ish: schedule one repaint on EDT.
+      SwingUtilities.invokeLater(ChatImageComponent.this::renderForCurrentWidth);
+    }
+  };
+
+  private AnimatedGifPlayer gifPlayer;
 
   ChatImageComponent(String url, ImageFetchService fetch) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -51,7 +76,7 @@ final class ChatImageComponent extends JPanel {
     label.addMouseListener(new java.awt.event.MouseAdapter() {
       @Override
       public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (javax.swing.SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
           openViewer();
         }
       }
@@ -70,9 +95,18 @@ final class ChatImageComponent extends JPanel {
         .subscribe(
             b -> {
               bytes = b;
-              setIconFromBytes(b);
+              try {
+                decoded = ImageDecodeUtil.decode(url, b);
+                label.setText("");
+                renderForCurrentWidth();
+              } catch (Exception ex) {
+                decoded = null;
+                label.setText("(image decode failed)");
+                label.setToolTipText(url + "\n" + ex);
+              }
             },
             err -> {
+              decoded = null;
               label.setText("(image failed to load)");
               label.setToolTipText(url + "\n" + err);
             }
@@ -82,58 +116,141 @@ final class ChatImageComponent extends JPanel {
   @Override
   public void addNotify() {
     super.addNotify();
-    // IMPORTANT:
-    // When Swing lays out/rebuilds JTextPane views, it can temporarily remove and
-    // re-add embedded components. If we cancel the fetch on removeNotify(), the
-    // component can get "stuck" in the loading state forever.
-    //
-    // So: if we get re-added and we haven't loaded yet, (re)start the fetch.
+
+    hookResizeListener();
+
+    // If Swing re-adds this component during view rebuilds and we haven't loaded yet,
+    // (re)start the fetch. (Do NOT cancel on removeNotify; see removeNotify below.)
     if (bytes == null || bytes.length == 0) {
       if (sub == null || sub.isDisposed()) {
         beginLoad();
       }
     }
+
+    if (gifPlayer != null) {
+      gifPlayer.start();
+    }
   }
 
   @Override
   public void removeNotify() {
-    // DO NOT dispose the subscription here.
+    // DO NOT dispose the fetch subscription here.
     // JTextPane/StyledDocument may call removeNotify() during view rebuilds and scrolling,
     // which would prevent the image from ever completing and updating the UI.
+
+    if (gifPlayer != null) {
+      gifPlayer.stop();
+    }
+    unhookResizeListener();
     super.removeNotify();
   }
 
-  private void setIconFromBytes(byte[] b) {
-    javax.swing.ImageIcon icon = new javax.swing.ImageIcon(b);
-    if (!isGif(url)) {
-      icon = scaleToThumb(icon);
-    }
-    label.setText("");
-    label.setIcon(icon);
+  private void renderForCurrentWidth() {
+    DecodedImage d = decoded;
+    if (d == null) return;
 
+    int maxW = computeMaxInlineWidth();
+    if (maxW <= 0) maxW = FALLBACK_MAX_W;
+
+    // Avoid re-scaling on every tiny jitter.
+    if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0) {
+      return;
+    }
+    lastMaxW = maxW;
+
+    if (d instanceof AnimatedGifDecoded gif) {
+      // Build scaled frame icons.
+      java.util.List<javax.swing.ImageIcon> icons = new java.util.ArrayList<>(gif.frames().size());
+      for (java.awt.image.BufferedImage frame : gif.frames()) {
+        java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(frame, maxW);
+        icons.add(new javax.swing.ImageIcon(scaled));
+      }
+
+      if (gifPlayer == null) {
+        gifPlayer = new AnimatedGifPlayer(label);
+      }
+      gifPlayer.setFrames(icons, gif.delaysMs());
+      gifPlayer.start();
+
+      // Set sizing based on the first frame.
+      if (!icons.isEmpty()) {
+        setLabelPreferredSize(icons.get(0));
+      }
+      revalidate();
+      repaint();
+      return;
+    }
+
+    if (gifPlayer != null) {
+      gifPlayer.stop();
+      gifPlayer = null;
+    }
+
+    if (d instanceof StaticImageDecoded st) {
+      java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(st.image(), maxW);
+      javax.swing.ImageIcon icon = new javax.swing.ImageIcon(scaled);
+      label.setIcon(icon);
+      label.setText("");
+      setLabelPreferredSize(icon);
+      revalidate();
+      repaint();
+    }
+  }
+
+  private void setLabelPreferredSize(javax.swing.ImageIcon icon) {
     int w = icon.getIconWidth();
     int h = icon.getIconHeight();
     if (w > 0 && h > 0) {
       label.setPreferredSize(new Dimension(w, h));
     }
-    revalidate();
-    repaint();
   }
 
-  private javax.swing.ImageIcon scaleToThumb(javax.swing.ImageIcon icon) {
-    int w = icon.getIconWidth();
-    int h = icon.getIconHeight();
-    if (w <= 0 || h <= 0) return icon;
-    if (w <= THUMB_MAX_W && h <= THUMB_MAX_H) return icon;
+  private int computeMaxInlineWidth() {
+    // Try to find the transcript viewport width (JScrollPane -> JViewport -> JTextPane).
+    JTextPane pane = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
+    if (pane != null) {
+      int w = pane.getVisibleRect().width;
+      if (w <= 0) {
+        w = pane.getWidth();
+      }
+      if (w > 0) {
+        return Math.max(96, w - WIDTH_MARGIN_PX);
+      }
+    }
 
-    double sx = (double) THUMB_MAX_W / (double) w;
-    double sy = (double) THUMB_MAX_H / (double) h;
-    double s = Math.min(sx, sy);
-    int nw = Math.max(1, (int) Math.round(w * s));
-    int nh = Math.max(1, (int) Math.round(h * s));
+    JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
+    if (scroller != null) {
+      int w = scroller.getViewport().getExtentSize().width;
+      if (w > 0) {
+        return Math.max(96, w - WIDTH_MARGIN_PX);
+      }
+    }
 
-    java.awt.Image scaled = icon.getImage().getScaledInstance(nw, nh, java.awt.Image.SCALE_SMOOTH);
-    return new javax.swing.ImageIcon(scaled);
+    return FALLBACK_MAX_W;
+  }
+
+  private void hookResizeListener() {
+    // Listen on the ancestor text pane (or scroll pane) so we can rescale on resize.
+    java.awt.Component target = (java.awt.Component) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
+    if (target == null) {
+      target = (java.awt.Component) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
+    }
+    if (target == null) return;
+
+    if (resizeListeningOn == target) return;
+    unhookResizeListener();
+    resizeListeningOn = target;
+    target.addComponentListener(resizeListener);
+  }
+
+  private void unhookResizeListener() {
+    if (resizeListeningOn != null) {
+      try {
+        resizeListeningOn.removeComponentListener(resizeListener);
+      } catch (Exception ignored) {
+      }
+      resizeListeningOn = null;
+    }
   }
 
   private void openViewer() {
@@ -191,16 +308,5 @@ final class ChatImageComponent extends JPanel {
     menu.add(copy);
 
     target.setComponentPopupMenu(menu);
-  }
-
-  private static boolean isGif(String url) {
-    if (url == null) return false;
-    try {
-      String p = URI.create(url).getPath();
-      if (p == null) return false;
-      return p.toLowerCase(Locale.ROOT).endsWith(".gif");
-    } catch (Exception ignored) {
-      return url.toLowerCase(Locale.ROOT).contains(".gif");
-    }
   }
 }

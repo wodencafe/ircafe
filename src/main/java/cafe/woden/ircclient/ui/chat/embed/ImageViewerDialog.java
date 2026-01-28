@@ -42,7 +42,23 @@ final class ImageViewerDialog {
     JDialog dlg = new JDialog(parent, "Image", JDialog.ModalityType.APPLICATION_MODAL);
     dlg.setLayout(new BorderLayout(8, 8));
 
-    JLabel img = new JLabel(new javax.swing.ImageIcon(bytes));
+    JLabel img = new JLabel();
+    try {
+      // Keep GIFs animated by using ImageIcon directly on the bytes.
+      if (ImageDecodeUtil.looksLikeGif(url, bytes)) {
+        img.setIcon(new javax.swing.ImageIcon(bytes));
+      } else {
+        java.awt.image.BufferedImage bi = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+        if (bi != null) {
+          img.setIcon(new javax.swing.ImageIcon(bi));
+        } else {
+          // Fallback.
+          img.setIcon(new javax.swing.ImageIcon(bytes));
+        }
+      }
+    } catch (Exception ex) {
+      img.setIcon(new javax.swing.ImageIcon(bytes));
+    }
     img.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
     JScrollPane scroller = new JScrollPane(img);
@@ -107,6 +123,7 @@ final class ImageViewerDialog {
       if (p.endsWith(".jpg")) return ".jpg";
       if (p.endsWith(".jpeg")) return ".jpeg";
       if (p.endsWith(".gif")) return ".gif";
+      if (p.endsWith(".webp")) return ".webp";
     } catch (Exception ignored) {
     }
     return ".img";
