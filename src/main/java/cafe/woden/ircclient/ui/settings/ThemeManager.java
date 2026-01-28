@@ -7,7 +7,8 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import java.awt.Window;
-import javax.swing.LookAndFeel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import org.springframework.context.annotation.Lazy;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class ThemeManager {
+
+  private static final Logger log = LoggerFactory.getLogger(ThemeManager.class);
 
   public record ThemeOption(String id, String label) {}
 
@@ -100,7 +103,7 @@ public class ThemeManager {
       }
     } catch (Exception e) {
       // Fail soft; keep existing LAF.
-      System.err.println("[ircafe] Could not set Look & Feel '" + id + "': " + e);
+      log.warn("[ircafe] Could not set Look & Feel \'{}\'", id, e);
     }
   }
 

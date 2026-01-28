@@ -372,9 +372,11 @@ public class IrcMediator {
       // Request names if cache is empty.
       if (cached.isEmpty()) {
         if (connectedServers.contains(target.serverId())) {
-          irc.requestNames(target.serverId(), target.target()).subscribe(
-              () -> {},
-              err -> ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))
+          disposables.add(
+              irc.requestNames(target.serverId(), target.target()).subscribe(
+                  () -> {},
+                  err -> ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))
+              )
           );
         }
       }

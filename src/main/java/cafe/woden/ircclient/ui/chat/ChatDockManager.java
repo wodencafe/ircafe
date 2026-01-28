@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.ServerTreeDockable;
 import cafe.woden.ircclient.ui.TargetActivationBus;
+import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -11,7 +12,11 @@ import io.github.andrewauclair.moderndocking.DockingRegion;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import javax.swing.SwingUtilities;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 @Lazy
 public class ChatDockManager {
+
+  private static final Logger log = LoggerFactory.getLogger(ChatDockManager.class);
 
   private final ServerTreeDockable serverTree;
   private final ChatDockable mainChat;
@@ -48,8 +55,15 @@ public class ChatDockManager {
   void wire() {
     disposables.add(
         serverTree.openPinnedChatRequests()
-            .subscribe(ref -> SwingUtilities.invokeLater(() -> openPinned(ref)))
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(this::openPinned,
+                err -> log.error("[ircafe] pinned chat stream error", err))
     );
+  }
+
+  @PreDestroy
+  void shutdown() {
+    disposables.dispose();
   }
 
   public void openPinned(TargetRef target) {
