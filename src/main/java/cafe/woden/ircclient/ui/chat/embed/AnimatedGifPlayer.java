@@ -8,8 +8,6 @@ import javax.swing.Timer;
 /**
  * Lightweight Swing Timer-based player for pre-decoded GIF frames.
  *
- * <p>We keep this dumb-on-purpose: always loops, and the owner is responsible for
- * swapping frames on resize.
  */
 final class AnimatedGifPlayer {
 
