@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Component;
 public class AppMenuBar extends JMenuBar {
 
   public AppMenuBar(PreferencesDialog preferencesDialog,
+                    NickColorOverridesDialog nickColorOverridesDialog,
                     UiSettingsBus settingsBus,
                     ThemeManager themeManager,
                     RuntimeConfigStore runtimeConfig,
@@ -72,12 +74,19 @@ public class AppMenuBar extends JMenuBar {
     }
     settings.add(theme);
 
+    JMenuItem nickColors = new JMenuItem("Nick Colors...");
+    nickColors.addActionListener(e -> {
+      Window w = SwingUtilities.getWindowAncestor(this);
+      nickColorOverridesDialog.open(w);
+    });
+
     JMenuItem prefs = new JMenuItem("Preferences...");
     prefs.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       preferencesDialog.open(w);
     });
     settings.addSeparator();
+    settings.add(nickColors);
     settings.add(prefs);
 
     // Window (placeholder for future docking helpers)

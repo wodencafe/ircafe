@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.config.UiProperties;
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>We also enforce a minimum contrast ratio against the current theme background,
  * nudging colors lighter/darker if needed.
+ *
+ * <p>Nick color overrides are mutable at runtime via {@link #setOverrides(Map)}.
  */
 @Component
 @Lazy
@@ -41,7 +44,11 @@ public class NickColorService {
   private final boolean enabled;
   private final double minContrast;
   private final List<Color> palette;
-  private final Map<String, Color> overrides;
+
+  /** Case-insensitive keying: all keys are stored lowercased. */
+  private volatile Map<String, Color> overrides = Map.of();
+  /** Original hex string values (e.g. "#RRGGBB"), keys are lowercased. */
+  private volatile Map<String, String> overridesHex = Map.of();
 
   public NickColorService(UiProperties props) {
     Boolean en = props != null ? props.nickColoringEnabled() : null;
@@ -55,7 +62,7 @@ public class NickColorService {
     this.palette = parsePalette(src);
 
     Map<String, String> rawOverrides = props != null ? props.nickColorOverrides() : null;
-    this.overrides = parseOverrides(rawOverrides);
+    setOverrides(rawOverrides);
   }
 
   public boolean enabled() {
@@ -64,6 +71,23 @@ public class NickColorService {
 
   public double minContrast() {
     return minContrast;
+  }
+
+  /** Current per-nick overrides as hex strings (case-insensitive keys stored lowercased). */
+  public Map<String, String> overridesHex() {
+    return overridesHex;
+  }
+
+  /**
+   * Replace the current per-nick overrides.
+   *
+   * <p>Keys are treated case-insensitively and stored as lowercased.
+   * Values are expected to be hex colors like "#RRGGBB" (also accepts "RRGGBB" and "0xRRGGBB").
+   */
+  public synchronized void setOverrides(Map<String, String> rawOverrides) {
+    Map<String, String> norm = normalizeRawOverrides(rawOverrides);
+    this.overridesHex = Map.copyOf(norm);
+    this.overrides = parseOverrides(this.overridesHex);
   }
 
   /** Create an attribute set based on {@code base}, storing the nick marker and (optionally) applying a color. */
@@ -156,6 +180,20 @@ public class NickColorService {
     return Map.copyOf(out);
   }
 
+  private static Map<String, String> normalizeRawOverrides(Map<String, String> raw) {
+    if (raw == null || raw.isEmpty()) return Map.of();
+    LinkedHashMap<String, String> out = new LinkedHashMap<>();
+    for (Map.Entry<String, String> e : raw.entrySet()) {
+      String nick = Objects.toString(e.getKey(), "").trim().toLowerCase(Locale.ROOT);
+      if (nick.isEmpty()) continue;
+      String val = Objects.toString(e.getValue(), "").trim();
+      if (val.isEmpty()) continue;
+      // Keep last-write-wins for duplicate keys after normalization.
+      out.put(nick, val);
+    }
+    return out;
+  }
+
   private static Color parseColor(String raw) {
     if (raw == null) return null;
     String s = raw.trim();
@@ -222,18 +260,18 @@ public class NickColorService {
   }
 
   private static double relLum(Color c) {
-    double r = srgb(c.getRed() / 255.0);
-    double g = srgb(c.getGreen() / 255.0);
-    double bl = srgb(c.getBlue() / 255.0);
-    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    double r = srgbToLinear(c.getRed() / 255.0);
+    double g = srgbToLinear(c.getGreen() / 255.0);
+    double b = srgbToLinear(c.getBlue() / 255.0);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
-  private static double srgb(double v) {
-    return v <= 0.04045 ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  private static double srgbToLinear(double c) {
+    if (c <= 0.04045) return c / 12.92;
+    return Math.pow((c + 0.055) / 1.055, 2.4);
   }
 
-  // --- RGB <-> HSL helpers (minimal, no alpha) ---
-
+  // HSL conversion helpers.
   private static float[] rgbToHsl(Color c) {
     float r = c.getRed() / 255f;
     float g = c.getGreen() / 255f;
@@ -241,15 +279,14 @@ public class NickColorService {
 
     float max = Math.max(r, Math.max(g, b));
     float min = Math.min(r, Math.min(g, b));
-    float h, s, l;
-    l = (max + min) / 2f;
+    float h, s, l = (max + min) / 2f;
 
     if (max == min) {
-      h = 0f;
-      s = 0f;
+      h = s = 0f;
     } else {
       float d = max - min;
       s = l > 0.5f ? d / (2f - max - min) : d / (max + min);
+
       if (max == r) {
         h = (g - b) / d + (g < b ? 6f : 0f);
       } else if (max == g) {
@@ -259,24 +296,26 @@ public class NickColorService {
       }
       h /= 6f;
     }
-    return new float[] {h, s, l};
+    return new float[]{h, s, l};
   }
 
   private static Color hslToRgb(float h, float s, float l) {
     float r, g, b;
+
     if (s == 0f) {
       r = g = b = l;
     } else {
-      float q = l < 0.5f ? l * (1f + s) : (l + s - l * s);
+      float q = l < 0.5f ? l * (1f + s) : l + s - l * s;
       float p = 2f * l - q;
-      r = hue2rgb(p, q, h + 1f / 3f);
-      g = hue2rgb(p, q, h);
-      b = hue2rgb(p, q, h - 1f / 3f);
+      r = hueToRgb(p, q, h + 1f / 3f);
+      g = hueToRgb(p, q, h);
+      b = hueToRgb(p, q, h - 1f / 3f);
     }
-    return new Color(clamp01(r), clamp01(g), clamp01(b));
+
+    return new Color(clamp(r), clamp(g), clamp(b));
   }
 
-  private static float hue2rgb(float p, float q, float t) {
+  private static float hueToRgb(float p, float q, float t) {
     if (t < 0f) t += 1f;
     if (t > 1f) t -= 1f;
     if (t < 1f / 6f) return p + (q - p) * 6f * t;
@@ -285,7 +324,9 @@ public class NickColorService {
     return p;
   }
 
-  private static float clamp01(float v) {
-    return Math.max(0f, Math.min(1f, v));
+  private static float clamp(float v) {
+    if (v < 0f) return 0f;
+    if (v > 1f) return 1f;
+    return v;
   }
 }

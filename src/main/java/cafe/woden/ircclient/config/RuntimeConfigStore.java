@@ -185,6 +185,41 @@ public class RuntimeConfigStore {
     }
   }
 
+
+
+  /**
+   * Persist per-nick color overrides (stored under {@code ircafe.ui.nickColorOverrides}).
+   *
+   * <p>Keys are treated case-insensitively at runtime; we store the keys exactly as provided.
+   * Values should be hex colors like {@code "#RRGGBB"}.
+   */
+  public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (overrides == null || overrides.isEmpty()) {
+        ui.remove("nickColorOverrides");
+      } else {
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : overrides.entrySet()) {
+          String nick = Objects.toString(e.getKey(), "").trim();
+          String color = Objects.toString(e.getValue(), "").trim();
+          if (nick.isEmpty() || color.isEmpty()) continue;
+          out.put(nick, color);
+        }
+        ui.put("nickColorOverrides", out);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist nick color overrides to '{}'", file, e);
+    }
+  }
+
   // ---------------- internals ----------------
 
   private interface ServerUpdater {
