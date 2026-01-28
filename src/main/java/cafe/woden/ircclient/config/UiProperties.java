@@ -18,6 +18,9 @@ public record UiProperties(
     int chatFontSize,
     Timestamps timestamps,
 
+    /** Enable embedding inline image previews from direct image links. Default: false. */
+    Boolean imageEmbedsEnabled,
+
     /** Enable per-nick coloring in chat + user list. */
     Boolean nickColoringEnabled,
 
@@ -59,6 +62,11 @@ public record UiProperties(
       timestamps = new Timestamps(true, "HH:mm:ss");
     }
 
+
+    // Image embeds default: disabled.
+    if (imageEmbedsEnabled == null) {
+      imageEmbedsEnabled = false;
+    }
     // Nick coloring defaults.
     if (nickColorMinContrast <= 0) {
       nickColorMinContrast = 3.0;

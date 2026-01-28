@@ -35,6 +35,9 @@ dependencies {
 	implementation "io.github.andrewauclair:modern-docking-ui:1.4.1"
 	implementation "com.formdev:flatlaf:3.7"
 	implementation "com.formdev:flatlaf-extras:3.7"
+
+	implementation "org.sejda.imageio:webp-imageio:0.1.6"
+	implementation "com.madgag:animated-gif-lib:1.4"
 }
 
 tasks.named('test') {

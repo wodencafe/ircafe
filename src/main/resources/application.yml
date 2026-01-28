@@ -16,6 +16,10 @@ ircafe:
       enabled: true
       format: "HH:mm:ss"
 
+
+    # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
+    imageEmbedsEnabled: false
+
     # Nick color section
     nickColoringEnabled: true
     nickColorMinContrast: 4.5   # 4.5 is a solid default

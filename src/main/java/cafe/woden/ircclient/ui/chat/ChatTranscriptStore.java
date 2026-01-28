@@ -2,6 +2,8 @@ package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
+import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.text.AttributeSet;
@@ -9,6 +11,7 @@ import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Element;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
+import javax.swing.text.StyleConstants;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +26,8 @@ public class ChatTranscriptStore {
   private final ChatRichTextRenderer renderer;
   private final ChatTimestampFormatter ts;
   private final NickColorService nickColors;
+  private final ChatImageEmbedder imageEmbeds;
+  private final UiSettingsBus uiSettings;
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
 
@@ -30,12 +35,16 @@ public class ChatTranscriptStore {
       ChatStyles styles,
       ChatRichTextRenderer renderer,
       ChatTimestampFormatter ts,
-      NickColorService nickColors
+      NickColorService nickColors,
+      ChatImageEmbedder imageEmbeds,
+      UiSettingsBus uiSettings
   ) {
     this.styles = styles;
     this.renderer = renderer;
     this.ts = ts;
     this.nickColors = nickColors;
+    this.imageEmbeds = imageEmbeds;
+    this.uiSettings = uiSettings;
   }
 
   public synchronized void ensureTargetExists(TargetRef ref) {
@@ -88,6 +97,12 @@ public class ChatTranscriptStore {
       renderer.insertRichText(doc, ref, text, base);
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
+
+      // After the line, optionally embed any image URLs found in the message.
+      // This keeps the raw URL text visible but also shows a thumbnail block.
+      if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
+        imageEmbeds.appendEmbeds(doc, text);
+      }
     } catch (Exception ignored) {
     }
   }
@@ -151,6 +166,12 @@ public class ChatTranscriptStore {
       Object url = old.getAttribute(ChatStyles.ATTR_URL);
       if (url != null) {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);
+      }
+
+      // Preserve embedded Swing components (e.g., inline image previews).
+      java.awt.Component comp = StyleConstants.getComponent(old);
+      if (comp != null) {
+        StyleConstants.setComponent(fresh, comp);
       }
 
       // Preserve per-nick marker and re-apply a theme-correct nick color.

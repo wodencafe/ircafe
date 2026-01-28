@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -89,6 +90,11 @@ public class PreferencesDialog {
 
     JSpinner fontSize = new JSpinner(new SpinnerNumberModel(current.chatFontSize(), 8, 48, 1));
 
+
+    JCheckBox imageEmbeds = new JCheckBox("Enable inline image embeds (direct links)");
+    imageEmbeds.setSelected(current.imageEmbedsEnabled());
+    imageEmbeds.setToolTipText("If enabled, IRCafe will download and render images from direct image URLs in chat.");
+
     // Layout
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints c = new GridBagConstraints();
@@ -118,6 +124,13 @@ public class PreferencesDialog {
     c.gridx = 1;
     form.add(fontSize, c);
 
+    c.gridx = 0;
+    c.gridy++;
+    form.add(new JLabel("Inline images"), c);
+
+    c.gridx = 1;
+    form.add(imageEmbeds, c);
+
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
@@ -128,12 +141,13 @@ public class PreferencesDialog {
       int size = ((Number) fontSize.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
-      UiSettings next = new UiSettings(t, fam, size);
+      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected());
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
       settingsBus.set(next);
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
+      runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
 
       if (themeChanged) {
         themeManager.applyTheme(next.theme());

@@ -19,7 +19,7 @@ public class UiSettingsBus {
   private volatile UiSettings current;
 
   public UiSettingsBus(UiProperties props) {
-    this.current = new UiSettings(props.theme(), props.chatFontFamily(), props.chatFontSize());
+    this.current = new UiSettings(props.theme(), props.chatFontFamily(), props.chatFontSize(), props.imageEmbedsEnabled());
   }
 
   public UiSettings get() {

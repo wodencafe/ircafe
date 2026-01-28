@@ -84,6 +84,18 @@ irc:
         - "#irclient"
 ```
 
+You can also override UI behavior under the `ircafe.ui` prefix. For inline image previews (direct image links in chat),
+this is **disabled by default**:
+
+```yaml
+ircafe:
+  ui:
+    imageEmbedsEnabled: false
+```
+
+You can toggle this at runtime from the GUI: **Settings -> Preferences… -> Inline images**.
+
+
 ### Environment variables
 
 The default `application.yml` uses these environment variables:

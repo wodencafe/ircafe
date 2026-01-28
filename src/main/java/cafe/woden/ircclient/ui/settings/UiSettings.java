@@ -6,7 +6,8 @@ package cafe.woden.ircclient.ui.settings;
 public record UiSettings(
     String theme,
     String chatFontFamily,
-    int chatFontSize
+    int chatFontSize,
+    boolean imageEmbedsEnabled
 ) {
 
   public UiSettings {
@@ -16,14 +17,19 @@ public record UiSettings(
   }
 
   public UiSettings withTheme(String nextTheme) {
-    return new UiSettings(nextTheme, chatFontFamily, chatFontSize);
+    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled);
   }
 
   public UiSettings withChatFontFamily(String family) {
-    return new UiSettings(theme, family, chatFontSize);
+    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled);
   }
 
   public UiSettings withChatFontSize(int size) {
-    return new UiSettings(theme, chatFontFamily, size);
+    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled);
+  }
+
+
+  public UiSettings withImageEmbedsEnabled(boolean enabled) {
+    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled);
   }
 }

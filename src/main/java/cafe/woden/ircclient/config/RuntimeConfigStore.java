@@ -163,6 +163,24 @@ public class RuntimeConfigStore {
     }
   }
 
+
+  /** Persist whether inline image embeds are enabled (stored under ircafe.ui.imageEmbedsEnabled). */
+  public synchronized void rememberImageEmbedsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("imageEmbedsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      System.err.println("[ircafe] Could not persist image embed setting: " + e);
+    }
+  }
+
   // ---------------- internals ----------------
 
   private interface ServerUpdater {
