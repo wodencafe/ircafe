@@ -8,6 +8,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.subjects.PublishSubject;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -37,8 +38,12 @@ import javax.swing.tree.TreePath;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PreDestroy;
 
 /**
  * Server/channel tree.
@@ -47,6 +52,9 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable {
+  private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
+
+  private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
 
   private double wheelDeltaAccumulator = 0.0d;
@@ -133,10 +141,12 @@ public class ServerTreeDockable extends JPanel implements Dockable {
         addServerRoot(s.id());
       }
 
-      serverRegistry.updates()
-          .observeOn(SwingEdt.scheduler())
-          .subscribe(this::syncServers,
-              err -> System.err.println("[ircafe] server registry stream error: " + err));
+      disposables.add(
+          serverRegistry.updates()
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(this::syncServers,
+                  err -> log.error("[ircafe] server registry stream error", err))
+      );
     }
 
     // Selection stream
@@ -209,6 +219,8 @@ public class ServerTreeDockable extends JPanel implements Dockable {
               err -> {
                 // no-op
               });
+
+      disposables.add(wheelStepSubscription);
 
       tree.addHierarchyListener(he -> {
         if ((he.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0 && !tree.isDisplayable()) {
@@ -600,5 +612,10 @@ public class ServerTreeDockable extends JPanel implements Dockable {
       if (unread > 0) return label + " (" + unread + ")";
       return label;
     }
+  }
+
+  @PreDestroy
+  void shutdown() {
+    disposables.dispose();
   }
 }

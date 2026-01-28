@@ -26,6 +26,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
+import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.pircbotx.Channel;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
@@ -39,6 +43,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PircbotxIrcClientService implements IrcClientService {
+
+  private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -648,4 +654,37 @@ public class PircbotxIrcClientService implements IrcClientService {
       )));
     }
   }
+
+  
+  @PreDestroy
+  void shutdown() {
+    // Stop reconnection/heartbeat timers and shut down executors.
+    for (Connection c : connections.values()) {
+      if (c == null) continue;
+      try {
+        c.manualDisconnect.set(true);
+        cancelReconnect(c);
+        ScheduledFuture<?> h = c.heartbeatFuture.getAndSet(null);
+        if (h != null) h.cancel(false);
+
+        PircBotX bot = c.botRef.getAndSet(null);
+        if (bot != null) {
+          try {
+            if (bot.isConnected()) {
+              try { bot.sendIRC().quitServer("Client shutdown"); } catch (Exception ignored) {}
+            }
+          } catch (Exception ignored) {}
+
+          try { bot.stopBotReconnect(); } catch (Exception ignored) {}
+          try { bot.close(); } catch (Exception ignored) {}
+        }
+      } catch (Exception e) {
+        log.debug("[ircafe] Error during shutdown for {}", c.serverId, e);
+      }
+    }
+
+    reconnectExec.shutdownNow();
+    heartbeatExec.shutdownNow();
+  }
+
 }

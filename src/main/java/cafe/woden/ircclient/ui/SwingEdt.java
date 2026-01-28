@@ -4,12 +4,16 @@ import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
 import javax.swing.SwingUtilities;
-import java.util.concurrent.Executor;
 
+/**
+ * RxJava scheduler that runs work on the Swing Event Dispatch Thread (EDT).
+ */
 public final class SwingEdt {
   private SwingEdt() {}
+
+  private static final Scheduler EDT = Schedulers.from(SwingUtilities::invokeLater);
+
   public static Scheduler scheduler() {
-    Executor edt = SwingUtilities::invokeLater;
-    return Schedulers.from(edt);
+    return EDT;
   }
 }

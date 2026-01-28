@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.DumperOptions;
@@ -25,6 +27,8 @@ import org.yaml.snakeyaml.Yaml;
  */
 @Component
 public class RuntimeConfigStore {
+
+  private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
 
   private final Path file;
   private final IrcProperties defaults;
@@ -85,8 +89,8 @@ public class RuntimeConfigStore {
         writeFile(doc);
       }
     } catch (Exception e) {
-      // TODO: Better logging (slf4j or something)
-      System.err.println("[ircafe] Could not ensure runtime config file: " + e);
+
+      log.warn("[ircafe] Could not ensure runtime config file '{}'", file, e);
     }
   }
 
@@ -109,7 +113,7 @@ public class RuntimeConfigStore {
       irc.put("servers", out);
       writeFile(doc);
     } catch (Exception e) {
-      System.err.println("[ircafe] Could not persist servers list: " + e);
+      log.warn("[ircafe] Could not persist servers list to '{}'", file, e);
     }
   }
 
@@ -159,7 +163,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      System.err.println("[ircafe] Could not persist UI config: " + e);
+      log.warn("[ircafe] Could not persist UI config to '{}'", file, e);
     }
   }
 
@@ -177,7 +181,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      System.err.println("[ircafe] Could not persist image embed setting: " + e);
+      log.warn("[ircafe] Could not persist image embed setting to '{}'", file, e);
     }
   }
 
@@ -217,7 +221,7 @@ public class RuntimeConfigStore {
       irc.put("servers", servers);
       writeFile(doc);
     } catch (Exception e) {
-      System.err.println("[ircafe] Could not persist runtime config: " + e);
+      log.warn("[ircafe] Could not persist runtime config to '{}'", file, e);
     }
   }
 

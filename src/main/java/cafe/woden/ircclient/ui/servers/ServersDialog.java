@@ -23,11 +23,15 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * List/manage servers: add, edit, remove.
  */
 public class ServersDialog extends JDialog {
+
+  private static final Logger log = LoggerFactory.getLogger(ServersDialog.class);
 
   private final ServerRegistry serverRegistry;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -97,7 +101,7 @@ public class ServersDialog extends JDialog {
               String selectedId = Optional.ofNullable(list.getSelectedValue()).map(IrcProperties.Server::id).orElse(null);
               reload(latest, selectedId);
             }, err -> {
-              System.err.println("[ircafe] Servers dialog updates stream error: " + err);
+              log.error("[ircafe] Servers dialog updates stream error", err);
             })
     );
 
