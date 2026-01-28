@@ -21,12 +21,6 @@ import org.springframework.stereotype.Component;
 /**
  * Fetches remote image bytes for inline transcript embeds.
  *
- * <p>Design goals:
- * <ul>
- *   <li>Never block the Swing EDT</li>
- *   <li>Deduplicate in-flight downloads for the same URL</li>
- *   <li>Soft-cache successful downloads (best-effort)</li>
- * </ul>
  */
 @Component
 @Lazy
