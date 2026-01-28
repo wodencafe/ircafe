@@ -22,12 +22,6 @@ import javax.swing.SwingUtilities;
 /**
  * Inline image preview component inserted into the chat transcript StyledDocument.
  *
- * <p>Supports:
- * <ul>
- *   <li>Static images via ImageIO (PNG/JPG/WebP via plugin)</li>
- *   <li>Animated GIFs via frame decoding + Swing Timer animation</li>
- *   <li>Auto-scaling down so the preview never exceeds the chat pane width</li>
- * </ul>
  */
 final class ChatImageComponent extends JPanel {
 
