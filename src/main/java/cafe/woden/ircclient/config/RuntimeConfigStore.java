@@ -190,8 +190,6 @@ public class RuntimeConfigStore {
   /**
    * Persist per-nick color overrides (stored under {@code ircafe.ui.nickColorOverrides}).
    *
-   * <p>Keys are treated case-insensitively at runtime; we store the keys exactly as provided.
-   * Values should be hex colors like {@code "#RRGGBB"}.
    */
   public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {
     try {
