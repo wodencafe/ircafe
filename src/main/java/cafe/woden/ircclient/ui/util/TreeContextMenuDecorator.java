@@ -12,6 +12,8 @@ import javax.swing.tree.TreePath;
 /**
  * Decorates a {@link JTree} with a right-click context menu.
  *
+ * <p>Cross-platform note: popup triggers may fire on mouse-pressed or mouse-released,
+ * so this decorator checks both.
  */
 public final class TreeContextMenuDecorator implements AutoCloseable {
 
