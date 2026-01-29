@@ -135,6 +135,23 @@ public class ChatTranscriptStore {
     }
   }
 
+  private void appendPresenceAsStatusLine(StyledDocument doc, TargetRef ref, PresenceEvent event) {
+    if (doc == null || event == null) return;
+
+    // Keep this consistent with other transcript entries.
+    ensureAtLineStart(doc);
+    try {
+      if (ts != null && ts.enabled()) {
+        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+      }
+      AttributeSet base = styles.status();
+      renderer.insertRichText(doc, ref, event.displayText(), base);
+      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
   public synchronized void appendLine(TargetRef ref,
                                       String from,
                                       String text,

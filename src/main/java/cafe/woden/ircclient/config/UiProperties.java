@@ -24,6 +24,9 @@ public record UiProperties(
     /** Enable per-nick coloring in chat + user list. */
     Boolean nickColoringEnabled,
 
+    /** Enable folding/collapsing of presence noise in channel transcripts (join/part/quit/nick). */
+    Boolean presenceFoldsEnabled,
+
     /** Minimum contrast ratio against the current background (WCAG-style). */
     double nickColorMinContrast,
 
@@ -74,6 +77,11 @@ public record UiProperties(
     // Default: enabled.
     if (nickColoringEnabled == null) {
       nickColoringEnabled = true;
+    }
+
+    // Presence fold default: enabled.
+    if (presenceFoldsEnabled == null) {
+      presenceFoldsEnabled = true;
     }
     if (nickColors == null) {
       nickColors = List.of();

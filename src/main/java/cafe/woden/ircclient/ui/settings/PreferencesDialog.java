@@ -141,7 +141,7 @@ public class PreferencesDialog {
       int size = ((Number) fontSize.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
-      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected());
+      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected(), prev.presenceFoldsEnabled());
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 

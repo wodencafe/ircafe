@@ -17,19 +17,23 @@ public record UiSettings(
   }
 
   public UiSettings withTheme(String nextTheme) {
-    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled);
+    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled);
   }
 
   public UiSettings withChatFontFamily(String family) {
-    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled);
+    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled);
   }
 
   public UiSettings withChatFontSize(int size) {
-    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled);
+    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled, presenceFoldsEnabled);
   }
 
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled);
+    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled, presenceFoldsEnabled);
+  }
+
+  public UiSettings withPresenceFoldsEnabled(boolean enabled) {
+    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, enabled);
   }
 }

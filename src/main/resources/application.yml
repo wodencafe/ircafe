@@ -20,6 +20,10 @@ ircafe:
     # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
     imageEmbedsEnabled: false
 
+    # Collapse presence noise in channel logs (join/part/quit/nick) into Lounge-style fold blocks.
+    # Default: true.
+    presenceFoldsEnabled: true
+
     # Nick color section
     nickColoringEnabled: true
     nickColorMinContrast: 4.5   # 4.5 is a solid default
