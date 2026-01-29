@@ -35,6 +35,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final ChatTranscriptStore transcripts;
   private final TargetActivationBus activationBus;
+  private final OutboundLineBus outboundBus;
 
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
@@ -55,10 +56,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public ChatDockable(ChatTranscriptStore transcripts,
                      TargetActivationBus activationBus,
+                     OutboundLineBus outboundBus,
                      UiSettingsBus settingsBus) {
     super(settingsBus);
     this.transcripts = transcripts;
     this.activationBus = activationBus;
+    this.outboundBus = outboundBus;
 
     // Show something harmless on startup; first selection will swap it.
     setDocument(new DefaultStyledDocument());
@@ -147,6 +150,19 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (nick == null || nick.isBlank()) return false;
 
     openPrivate.onNext(new PrivateMessageRequest(activeTarget.serverId(), nick));
+    return true;
+  }
+
+  @Override
+  protected boolean onChannelClicked(String channel) {
+    if (activeTarget == null) return false;
+    if (channel == null || channel.isBlank()) return false;
+
+    // Ensure the app's "active target" (server context) matches the transcript we clicked in.
+    activationBus.activate(activeTarget);
+
+    // Delegate join to the normal command pipeline so config/auto-join behavior stays consistent.
+    outboundBus.emit("/join " + channel.trim());
     return true;
   }
 

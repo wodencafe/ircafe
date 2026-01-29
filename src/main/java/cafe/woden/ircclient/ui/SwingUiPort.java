@@ -30,6 +30,7 @@ public class SwingUiPort implements UiPort {
   private final ConnectButton connectBtn;
   private final DisconnectButton disconnectBtn;
   private final TargetActivationBus activationBus;
+  private final OutboundLineBus outboundBus;
 
 
   private void onEdt(Runnable r) {
@@ -50,7 +51,8 @@ public class SwingUiPort implements UiPort {
       StatusBar statusBar,
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
-      TargetActivationBus activationBus
+      TargetActivationBus activationBus,
+      OutboundLineBus outboundBus
   ) {
     this.serverTree = serverTree;
     this.chat = chat;
@@ -62,6 +64,7 @@ public class SwingUiPort implements UiPort {
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
     this.activationBus = activationBus;
+    this.outboundBus = outboundBus;
   }
 
   @Override
@@ -91,7 +94,11 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public Flowable<String> outboundLines() {
-    return input.outboundMessages();
+    // Merge the normal input stream with other UI-originated command sources.
+    return Flowable.merge(
+        input.outboundMessages(),
+        outboundBus.stream()
+    );
   }
 
   @Override
