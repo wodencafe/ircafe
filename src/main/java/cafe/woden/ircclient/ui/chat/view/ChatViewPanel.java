@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat.view;
 import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.awt.Cursor;
@@ -66,22 +67,13 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   private final UiSettingsBus settingsBus;
 
-  private boolean programmaticScroll = false;
   private StyledDocument currentDocument;
 
-  // Track prior scrollbar state so we can keep "follow tail" enabled when the transcript grows.
-  private int lastBarMax = -1;
-  private int lastBarExtent = 0;
-  private int lastBarValue = 0;
+  private final FollowTailScrollDecorator followTailScroll;
 
   private final Cursor textCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
   private final Cursor handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
 
-  private final DocumentListener docListener = new DocumentListener() {
-    @Override public void insertUpdate(DocumentEvent e) { maybeAutoScroll(); }
-    @Override public void removeUpdate(DocumentEvent e) { maybeAutoScroll(); }
-    @Override public void changedUpdate(DocumentEvent e) { maybeAutoScroll(); }
-  };
 
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
 
@@ -115,13 +107,17 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
     }
 
+    // Follow-tail scroll behavior is implemented as a decorator so the view stays lean.
+    this.followTailScroll = new FollowTailScrollDecorator(
+        scroll,
+        this::isFollowTail,
+        this::setFollowTail,
+        this::getSavedScrollValue,
+        this::setSavedScrollValue
+    );
+
     add(scroll, BorderLayout.CENTER);
 
-    // Follow tail detection per view.
-    scroll.getVerticalScrollBar().addAdjustmentListener(e -> {
-      if (programmaticScroll) return;
-      updateScrollStateFromBar();
-    });
 
     chat.addMouseMotionListener(new MouseAdapter() {
       @Override
@@ -240,87 +236,39 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   protected void setDocument(StyledDocument doc) {
     if (currentDocument == doc) return;
 
-    if (currentDocument != null) {
-      currentDocument.removeDocumentListener(docListener);
-    }
-
     currentDocument = doc;
     chat.setDocument(doc);
 
-    if (currentDocument != null) {
-      currentDocument.addDocumentListener(docListener);
-    }
-
-    restoreScrollState();
+    // Let the decorator swap document listeners + restore scroll position.
+    followTailScroll.onDocumentSwapped(doc);
 
     findBar.onDocumentSwapped();
   }
 
-  private void captureBarState() {
-    JScrollBar bar = scroll.getVerticalScrollBar();
-    lastBarMax = bar.getMaximum();
-    lastBarExtent = bar.getModel().getExtent();
-    lastBarValue = bar.getValue();
-  }
 
-  private void maybeAutoScroll() {
-    if (!isFollowTail()) return;
-    SwingUtilities.invokeLater(this::scrollToBottom);
-  }
 
   protected void scrollToBottom() {
-    JScrollBar bar = scroll.getVerticalScrollBar();
-    try {
-      programmaticScroll = true;
-      // Clamp-to-bottom: setting to maximum will be constrained by the model to (max - extent).
-      bar.setValue(bar.getMaximum());
-      captureBarState();
-    } finally {
-      programmaticScroll = false;
-    }
+    followTailScroll.scrollToBottom();
   }
 
   protected void updateScrollStateFromBar() {
-    JScrollBar bar = scroll.getVerticalScrollBar();
-    int max = bar.getMaximum();
-    int extent = bar.getModel().getExtent();
-    int val = bar.getValue();
-
-    boolean atBottomNow = (val + extent) >= (max - 2);
-
-    if (atBottomNow) {
-      // Enable follow tail
-      setFollowTail(true);
-    } else if (isFollowTail()) {
-      if (val < lastBarValue) {
-        setFollowTail(false);
-      }
-    }
-
-    setSavedScrollValue(val);
-
-    lastBarMax = max;
-    lastBarExtent = extent;
-    lastBarValue = val;
+    followTailScroll.updateScrollStateFromBar();
   }
 
   protected void restoreScrollState() {
-    if (isFollowTail()) {
-      SwingUtilities.invokeLater(this::scrollToBottom);
-      return;
-    }
+    followTailScroll.restoreScrollState();
+  }
 
-    int saved = getSavedScrollValue();
-    SwingUtilities.invokeLater(() -> {
-      JScrollBar bar = scroll.getVerticalScrollBar();
-      try {
-        programmaticScroll = true;
-        bar.setValue(Math.min(saved, Math.max(0, bar.getMaximum())));
-        captureBarState();
-      } finally {
-        programmaticScroll = false;
-      }
-    });
+
+  /**
+   * Close any installed decorators/listeners owned by this view.
+   * Subclasses should call this from their lifecycle shutdown (@PreDestroy).
+   */
+  protected void closeDecorators() {
+    try {
+      followTailScroll.close();
+    } catch (Exception ignored) {
+    }
   }
 
   protected abstract boolean isFollowTail();
