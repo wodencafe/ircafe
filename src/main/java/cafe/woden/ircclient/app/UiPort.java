@@ -59,6 +59,10 @@ public interface UiPort {
   void setInputEnabled(boolean enabled);
 
   void appendChat(TargetRef target, String from, String text);
+  /**
+   * Append a foldable presence/system event (join/part/quit/nick) in a channel transcript.
+   */
+  void appendPresence(TargetRef target, PresenceEvent event);
   void appendNotice(TargetRef target, String from, String text);
   void appendStatus(TargetRef target, String from, String text);
   void appendError(TargetRef target, String from, String text);
