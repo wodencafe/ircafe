@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 
 @Component
 @Lazy
@@ -48,6 +51,16 @@ public class MainFrame extends JFrame {
     setLayout(new BorderLayout());
 
     setJMenuBar(menuBar);
+
+    // Global find shortcut: Ctrl+F opens the chat transcript find bar.
+    KeyStroke ctrlF = KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK);
+    getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(ctrlF, "chatFind");
+    getRootPane().getActionMap().put("chatFind", new AbstractAction() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        chat.toggleFindBar();
+      }
+    });
 
     Docking.initialize(this);
     // DockingUI.initialize(); // TODO: Investigate this.
