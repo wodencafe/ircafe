@@ -12,6 +12,10 @@ public sealed interface IrcEvent permits
     IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
     IrcEvent.Notice,
+    IrcEvent.UserJoinedChannel,
+    IrcEvent.UserPartedChannel,
+    IrcEvent.UserQuitChannel,
+    IrcEvent.UserNickChangedChannel,
     IrcEvent.JoinedChannel,
     IrcEvent.NickListUpdated,
     IrcEvent.Error {
@@ -34,6 +38,19 @@ public sealed interface IrcEvent permits
 
   record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}
+
+  /** Another user joined a channel we're in. */
+  record UserJoinedChannel(Instant at, String channel, String nick) implements IrcEvent {}
+
+  /** Another user left (PART) a channel we're in. */
+  record UserPartedChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}
+
+  /** A user QUIT and we emit one event per channel where they were present. */
+  record UserQuitChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}
+
+  /** A user changed nick and we emit one event per channel where they were present. */
+  record UserNickChangedChannel(Instant at, String channel, String oldNick, String newNick) implements IrcEvent {}
+
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
 

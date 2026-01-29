@@ -412,6 +412,30 @@ public class IrcMediator {
       case IrcEvent.Notice ev ->
           ui.appendNotice(status, "(notice) " + ev.from(), ev.text());
 
+      case IrcEvent.UserJoinedChannel ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendPresence(chan, PresenceEvent.join(ev.nick()));
+      }
+
+      case IrcEvent.UserPartedChannel ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendPresence(chan, PresenceEvent.part(ev.nick(), ev.reason()));
+      }
+
+      case IrcEvent.UserQuitChannel ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendPresence(chan, PresenceEvent.quit(ev.nick(), ev.reason()));
+      }
+
+      case IrcEvent.UserNickChangedChannel ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendPresence(chan, PresenceEvent.nick(ev.oldNick(), ev.newNick()));
+      }
+
       case IrcEvent.JoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());

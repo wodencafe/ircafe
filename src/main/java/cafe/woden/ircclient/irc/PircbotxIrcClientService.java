@@ -525,8 +525,17 @@ public class PircbotxIrcClientService implements IrcClientService {
       touchInbound();
       Channel channel = event.getChannel();
 
-      if (isSelf(event.getBot(), event.getUser().getNick())) {
+      String nick = event.getUser() == null ? null : event.getUser().getNick();
+
+      if (isSelf(event.getBot(), nick)) {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.JoinedChannel(Instant.now(), channel.getName())));
+      } else {
+        // Show other users joining inline in the channel transcript.
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserJoinedChannel(
+            Instant.now(),
+            channel.getName(),
+            nick
+        )));
       }
 
       emitRoster(channel);
@@ -535,6 +544,17 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onPart(PartEvent event) {
       touchInbound();
+      try {
+        String nick = event.getUser() == null ? null : event.getUser().getNick();
+        if (!isSelf(event.getBot(), nick)) {
+          bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserPartedChannel(
+              Instant.now(),
+              event.getChannelName(),
+              nick,
+              event.getReason()
+          )));
+        }
+      } catch (Exception ignored) {}
       refreshRosterByName(event.getBot(), event.getChannelName());
     }
 
@@ -543,6 +563,15 @@ public class PircbotxIrcClientService implements IrcClientService {
       touchInbound();
       PircBotX bot = event.getBot();
 
+      String nick = null;
+      try {
+        nick = event.getUser() == null ? null : event.getUser().getNick();
+      } catch (Exception ignored) {}
+      String reason = null;
+      try {
+        reason = event.getReason();
+      } catch (Exception ignored) {}
+
       boolean refreshedSome = false;
       try {
         UserChannelDaoSnapshot daoSnap = event.getUserChannelDaoSnapshot();
@@ -550,6 +579,14 @@ public class PircbotxIrcClientService implements IrcClientService {
 
         if (daoSnap != null && userSnap != null) {
           for (ChannelSnapshot cs : daoSnap.getChannels(userSnap)) {
+            try {
+              bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserQuitChannel(
+                  Instant.now(),
+                  cs.getName(),
+                  nick,
+                  reason
+              )));
+            } catch (Exception ignored) {}
             refreshRosterByName(bot, cs.getName());
             refreshedSome = true;
           }
@@ -560,6 +597,20 @@ public class PircbotxIrcClientService implements IrcClientService {
 
       if (!refreshedSome) {
         try {
+          // Best-effort: if we can still see the user's channels in the DAO, emit per-channel quit events.
+          try {
+            if (event.getUser() != null) {
+              for (Channel ch : bot.getUserChannelDao().getChannels(event.getUser())) {
+                bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserQuitChannel(
+                    Instant.now(),
+                    ch.getName(),
+                    nick,
+                    reason
+                )));
+              }
+            }
+          } catch (Exception ignored) {}
+
           for (Channel ch : bot.getUserChannelDao().getAllChannels()) {
             emitRoster(ch);
           }
@@ -596,6 +647,15 @@ public class PircbotxIrcClientService implements IrcClientService {
 
       try {
         for (Channel ch : event.getBot().getUserChannelDao().getChannels(event.getUser())) {
+          // Emit per-channel nick-change lines so the transcript can fold them.
+          try {
+            bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserNickChangedChannel(
+                Instant.now(),
+                ch.getName(),
+                event.getOldNick(),
+                event.getNewNick()
+            )));
+          } catch (Exception ignored) {}
           emitRoster(ch);
         }
       } catch (Exception ignored) {}

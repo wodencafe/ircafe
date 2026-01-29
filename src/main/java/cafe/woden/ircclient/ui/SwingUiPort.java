@@ -216,6 +216,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendPresence(TargetRef target, cafe.woden.ircclient.app.PresenceEvent event) {
+    onEdt(() -> transcripts.appendPresence(target, event));
+  }
+
+  @Override
   public void appendNotice(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendNotice(target, from, text));
   }
