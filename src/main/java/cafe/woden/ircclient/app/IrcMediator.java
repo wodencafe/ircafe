@@ -8,8 +8,12 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -31,6 +35,10 @@ public class IrcMediator {
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final CompositeDisposable disposables = new CompositeDisposable();
+
+  // Pending action routing: ensure WHOIS/CTCP responses print into the chat where the request originated.
+  private final ConcurrentHashMap<WhoisKey, TargetRef> pendingWhoisTargets = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<CtcpKey, PendingCtcp> pendingCtcp = new ConcurrentHashMap<>();
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -91,6 +99,13 @@ public class IrcMediator {
     );
 
     disposables.add(
+        ui.userActionRequests()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(this::handleUserActionRequest,
+                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))
+    );
+
+    disposables.add(
         ui.outboundLines()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(this::handleOutgoingLine,
@@ -147,6 +162,80 @@ public class IrcMediator {
                 },
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", "Server list update failed: " + err))
     );
+  }
+
+  private void handleUserActionRequest(UserActionRequest req) {
+    if (req == null) return;
+    TargetRef ctx = req.contextTarget() != null ? req.contextTarget() : targetCoordinator.getActiveTarget();
+    if (ctx == null) ctx = targetCoordinator.safeStatusTarget();
+    final var fCtx = ctx;
+    String sid = ctx.serverId();
+    String nick = req.nick() == null ? "" : req.nick().trim();
+    if (sid == null || sid.isBlank() || nick.isBlank()) return;
+
+    switch (req.action()) {
+      case OPEN_QUERY -> targetCoordinator.openPrivateConversation(new PrivateMessageRequest(sid, nick));
+
+      case WHOIS -> {
+        pendingWhoisTargets.put(new WhoisKey(sid, nick), ctx);
+        ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + nick + "...");
+        Disposable d = irc.whois(sid, nick)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(fCtx, "(whois)", err.toString())
+            );
+        disposables.add(d);
+      }
+
+      case CTCP_VERSION -> {
+        pendingCtcp.put(new CtcpKey(sid, nick, "VERSION", null), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " VERSION");
+        disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001VERSION\u0001")
+            .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
+      }
+
+      case CTCP_PING -> {
+        String token = Long.toString(System.currentTimeMillis());
+        pendingCtcp.put(new CtcpKey(sid, nick, "PING", token), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " PING");
+        disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
+            .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
+      }
+    }
+  }
+
+  private record WhoisKey(String serverId, String nickLower) {
+    // Compact canonical constructor: normalize inputs before field assignment.
+    WhoisKey {
+      serverId = (serverId == null) ? "" : serverId.trim();
+      nickLower = (nickLower == null) ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
+    }
+  }
+
+  private record CtcpKey(String serverId, String nickLower, String commandUpper, String token) {
+    // Compact canonical constructor: normalize inputs before field assignment.
+    CtcpKey {
+      serverId = (serverId == null) ? "" : serverId.trim();
+      nickLower = (nickLower == null) ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
+      commandUpper = (commandUpper == null) ? "" : commandUpper.trim().toUpperCase(Locale.ROOT);
+      token = (token == null) ? null : token.trim();
+    }
+  }
+
+  private record PendingCtcp(TargetRef target, long startedMs) {}
+
+  private record ParsedCtcp(String commandUpper, String arg) {}
+
+  private ParsedCtcp parseCtcp(String text) {
+    if (text == null || text.length() < 2) return null;
+    if (text.charAt(0) != 0x01 || text.charAt(text.length() - 1) != 0x01) return null;
+    String inner = text.substring(1, text.length() - 1).trim();
+    if (inner.isEmpty()) return null;
+    int sp = inner.indexOf(' ');
+    String cmd = (sp >= 0) ? inner.substring(0, sp) : inner;
+    String arg = (sp >= 0) ? inner.substring(sp + 1).trim() : "";
+    cmd = cmd.trim().toUpperCase(Locale.ROOT);
+    return new ParsedCtcp(cmd, arg);
   }
 
   public void stop() {
@@ -409,8 +498,55 @@ public class IrcMediator {
         if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
       }
 
-      case IrcEvent.Notice ev ->
-          ui.appendNotice(status, "(notice) " + ev.from(), ev.text());
+      case IrcEvent.Notice ev -> {
+        // CTCP replies come back as NOTICE with 0x01-wrapped payload.
+        // Route them to the chat target where the request originated.
+        ParsedCtcp ctcp = parseCtcp(ev.text());
+        if (ctcp != null) {
+          String from = ev.from();
+          String cmd = ctcp.commandUpper();
+          String arg = ctcp.arg();
+
+          TargetRef dest = null;
+          String rendered = null;
+
+          if ("VERSION".equals(cmd)) {
+            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+            if (p != null) {
+              dest = p.target();
+              rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
+            }
+          } else if ("PING".equals(cmd)) {
+            String token = arg;
+            int sp = token.indexOf(' ');
+            if (sp >= 0) token = token.substring(0, sp);
+            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
+            if (p != null) {
+              dest = p.target();
+              long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
+              rendered = from + " PING reply: " + rtt + "ms";
+            }
+          }
+
+          if (dest != null && rendered != null) {
+            ensureTargetExists(dest);
+            ui.appendStatus(dest, "(ctcp)", rendered);
+            if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+            return;
+          }
+        }
+
+        ui.appendNotice(status, "(notice) " + ev.from(), ev.text());
+      }
+
+      case IrcEvent.WhoisResult ev -> {
+        TargetRef dest = pendingWhoisTargets.remove(new WhoisKey(sid, ev.nick()));
+        if (dest == null) dest = status;
+        ensureTargetExists(dest);
+        ui.appendStatus(dest, "(whois)", "WHOIS for " + ev.nick());
+        for (String line : ev.lines()) ui.appendStatus(dest, "(whois)", line);
+        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+      }
 
       case IrcEvent.UserJoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());

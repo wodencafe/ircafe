@@ -231,6 +231,15 @@ public class PircbotxIrcClientService implements IrcClientService {
         .subscribeOn(Schedulers.io());
   }
 
+  @Override
+  public Completable whois(String serverId, String nick) {
+    return Completable.fromAction(() -> {
+          String n = sanitizeNick(nick);
+          requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
   private Connection conn(String serverId) {
     String id = Objects.requireNonNull(serverId, "serverId").trim();
 
@@ -297,6 +306,43 @@ public class PircbotxIrcClientService implements IrcClientService {
     if (!(c.startsWith("#") || c.startsWith("&")))
       throw new IllegalArgumentException("channel must start with # or & (got: " + c + ")");
     return c;
+  }
+
+  @FunctionalInterface
+  private interface ThrowingSupplier<T> {
+    T get() throws Exception;
+  }
+
+  @FunctionalInterface
+  private interface ThrowingLongSupplier {
+    long getAsLong() throws Exception;
+  }
+
+  private static String safeStr(ThrowingSupplier<String> s, String def) {
+    try {
+      String v = s.get();
+      return v == null ? def : v;
+    } catch (Exception ignored) {
+      return def;
+    }
+  }
+
+  private static long safeLong(ThrowingLongSupplier s, long def) {
+    try {
+      return s.getAsLong();
+    } catch (Exception ignored) {
+      return def;
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> List<T> safeList(ThrowingSupplier<List<T>> s) {
+    try {
+      List<T> v = s.get();
+      return v == null ? java.util.List.of() : v;
+    } catch (Exception ignored) {
+      return java.util.List.of();
+    }
   }
 
   private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
@@ -508,6 +554,53 @@ public class PircbotxIrcClientService implements IrcClientService {
       touchInbound();
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, event.getNotice())));
+    }
+
+    @Override
+    public void onWhois(WhoisEvent event) {
+      touchInbound();
+      if (event == null) return;
+
+      try {
+        String nick = safeStr(() -> event.getNick(), "");
+        String login = safeStr(() -> event.getLogin(), "");
+        String host = safeStr(() -> event.getHostname(), "");
+        String real = safeStr(() -> event.getRealname(), "");
+        String server = safeStr(() -> event.getServer(), "");
+        String serverInfo = safeStr(() -> event.getServerInfo(), "");
+        List<String> channels = safeList(() -> event.getChannels());
+        long idleSeconds = safeLong(() -> event.getIdleSeconds(), -1);
+        long signOnTime = safeLong(() -> event.getSignOnTime(), -1);
+        String registeredAs = safeStr(() -> event.getRegisteredAs(), "");
+
+        // Pre-format into nice, compact lines so the app layer can just print them.
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+
+        String ident = login.isBlank() ? "" : login;
+        String hostPart = host.isBlank() ? "" : host;
+        String userHost = (!ident.isBlank() || !hostPart.isBlank())
+            ? (ident + "@" + hostPart).replaceAll("^@|@$", "")
+            : "";
+
+        if (!userHost.isBlank()) lines.add("User: " + userHost);
+        if (!real.isBlank()) lines.add("Realname: " + real);
+        if (!server.isBlank()) {
+          if (!serverInfo.isBlank()) lines.add("Server: " + server + " (" + serverInfo + ")");
+          else lines.add("Server: " + server);
+        }
+        if (!registeredAs.isBlank()) lines.add("Account: " + registeredAs);
+        if (idleSeconds >= 0) lines.add("Idle: " + idleSeconds + "s");
+        if (signOnTime > 0) lines.add("Sign-on: " + signOnTime);
+        if (channels != null && !channels.isEmpty()) lines.add("Channels: " + String.join(" ", channels));
+
+        // Even if we couldn't collect much, still emit something.
+        if (lines.isEmpty()) lines.add("(no WHOIS details)");
+
+        String n = nick == null || nick.isBlank() ? "(unknown)" : nick;
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.WhoisResult(Instant.now(), n, java.util.List.copyOf(lines))));
+      } catch (Exception ex) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Whois parse failed", ex)));
+      }
     }
 
     @Override

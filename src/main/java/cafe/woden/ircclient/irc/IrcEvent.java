@@ -18,6 +18,7 @@ public sealed interface IrcEvent permits
     IrcEvent.UserNickChangedChannel,
     IrcEvent.JoinedChannel,
     IrcEvent.NickListUpdated,
+    IrcEvent.WhoisResult,
     IrcEvent.Error {
 
   record Connected(Instant at, String serverHost, int serverPort, String nick) implements IrcEvent {}
@@ -63,4 +64,7 @@ public sealed interface IrcEvent permits
       int totalUsers,
       int operatorCount
   ) implements IrcEvent {}
+
+  /** Completed WHOIS response */
+  record WhoisResult(Instant at, String nick, List<String> lines) implements IrcEvent {}
 }

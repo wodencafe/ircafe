@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.PrivateMessageRequest;
+import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
@@ -80,6 +81,12 @@ public class SwingUiPort implements UiPort {
         users.privateMessageRequests(),
         chat.privateMessageRequests()
     );
+  }
+
+  @Override
+  public Flowable<UserActionRequest> userActionRequests() {
+    // Currently only sourced from the Users dock, but can be extended (e.g., transcript nick menu).
+    return users.userActionRequests();
   }
 
   @Override
