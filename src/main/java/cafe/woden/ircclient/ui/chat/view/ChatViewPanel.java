@@ -70,8 +70,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private StyledDocument currentDocument;
 
   // Track prior scrollbar state so we can keep "follow tail" enabled when the transcript grows.
-  // Without this, growing content can emit scrollbar adjustment events that look like the
-  // user scrolled away from the bottom, which disables auto-scroll.
   private int lastBarMax = -1;
   private int lastBarExtent = 0;
   private int lastBarValue = 0;
@@ -170,7 +168,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   /**
-   * Shows the find bar and focuses it. Triggered by Ctrl+F.
+   * Shows the find bar and focuses it.
    */
   public void openFindBar() {
     Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
@@ -178,7 +176,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   /**
-   * Toggles the find bar. If already visible, hides it.
+   * Toggles the find bar. If already visible, hide it.
    */
   public void toggleFindBar() {
     if (findBar.isVisible()) {
@@ -275,16 +273,12 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     boolean atBottomNow = (val + extent) >= (max - 2);
 
     if (atBottomNow) {
-      // If the user reaches the bottom, we (re)enable follow-tail.
+      // Enable follow tail
       setFollowTail(true);
     } else if (isFollowTail()) {
-      // IMPORTANT: Do NOT disable follow-tail just because the transcript grew.
-      // Only disable it when the user actively scrolls upward.
       if (val < lastBarValue) {
         setFollowTail(false);
       }
-      // If the doc grows and the scrollbar's maximum changes, 'val' may stay the same;
-      // in that case we keep follow-tail enabled.
     }
 
     setSavedScrollValue(val);
@@ -512,14 +506,14 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       status.setText("");
       clearHighlight();
 
-      // Clear selection highlight (best-effort) so the transcript doesn't look "stuck".
+      // Clear selection highlight.
       try {
         int cpos = chat.getCaretPosition();
         chat.select(cpos, cpos);
       } catch (Exception ignored) {
       }
 
-      // Best-effort: return focus to wherever the user was when they opened find.
+      // Return focus to wherever the user was when they opened find.
       Component c = restoreFocusTo;
       restoreFocusTo = null;
       if (c != null && c.isShowing()) {
@@ -672,7 +666,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
           chat.scrollRectToVisible(r);
         }
       } catch (Exception ignored) {
-        // Best-effort.
+        
       }
     }
   }
@@ -684,8 +678,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       // Best-effort.
     }
   }
-
-  // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of scrollbars.
+  
   // This panel contains its own internal JScrollPane (the transcript), so always track any outer viewport.
   @Override
   public Dimension getPreferredScrollableViewportSize() {
