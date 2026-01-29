@@ -7,7 +7,8 @@ public record UiSettings(
     String theme,
     String chatFontFamily,
     int chatFontSize,
-    boolean imageEmbedsEnabled
+    boolean imageEmbedsEnabled,
+    boolean presenceFoldsEnabled
 ) {
 
   public UiSettings {

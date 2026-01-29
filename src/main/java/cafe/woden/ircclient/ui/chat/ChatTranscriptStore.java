@@ -90,6 +90,34 @@ public class ChatTranscriptStore {
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
 
+    // Config: allow presence folding to be disabled (render as plain status lines).
+    boolean foldsEnabled = true;
+    try {
+      foldsEnabled = uiSettings == null || uiSettings.get() == null || uiSettings.get().presenceFoldsEnabled();
+    } catch (Exception ignored) {
+      foldsEnabled = true;
+    }
+
+    if (!foldsEnabled) {
+      // End any active presence run.
+      st.currentPresenceBlock = null;
+
+      // Append as a normal status line (with timestamp like other status lines).
+      ensureAtLineStart(doc);
+      try {
+        if (ts != null && ts.enabled()) {
+          doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+        }
+        AttributeSet base = styles.status();
+        renderer.insertRichText(doc, ref, event.displayText(), base);
+        doc.insertString(doc.getLength(), "\n", styles.timestamp());
+      } catch (Exception ignored2) {
+        // ignore
+      }
+      return;
+    }
+
+
     // If the current run is already folded, just extend the component live.
     if (st.currentPresenceBlock != null && st.currentPresenceBlock.folded
         && st.currentPresenceBlock.component != null) {
@@ -132,23 +160,6 @@ public class ChatTranscriptStore {
     // Fold immediately once the run reaches 2+.
     if (!block.folded && block.entries.size() == 2) {
       foldBlock(doc, ref, block);
-    }
-  }
-
-  private void appendPresenceAsStatusLine(StyledDocument doc, TargetRef ref, PresenceEvent event) {
-    if (doc == null || event == null) return;
-
-    // Keep this consistent with other transcript entries.
-    ensureAtLineStart(doc);
-    try {
-      if (ts != null && ts.enabled()) {
-        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
-      }
-      AttributeSet base = styles.status();
-      renderer.insertRichText(doc, ref, event.displayText(), base);
-      doc.insertString(doc.getLength(), "\n", styles.timestamp());
-    } catch (Exception ignored) {
-      // ignore
     }
   }
 
