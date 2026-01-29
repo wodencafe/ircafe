@@ -36,6 +36,10 @@ dependencies {
 	implementation "com.formdev:flatlaf:3.7"
 	implementation "com.formdev:flatlaf-extras:3.7"
 
+	// Nick auto-complete (tab completion popup) for Swing text components.
+	// https://github.com/bobbylight/AutoComplete
+	implementation "com.fifesoft:autocomplete:3.3.3"
+
 	implementation "org.sejda.imageio:webp-imageio:0.1.6"
 	implementation "com.madgag:animated-gif-lib:1.4"
 }

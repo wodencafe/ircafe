@@ -166,7 +166,13 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setUsersNicks(List<NickInfo> nicks) {
-    onEdt(() -> users.setNicks(nicks));
+    onEdt(() -> {
+      users.setNicks(nicks);
+      // Keep the message input's nick completions in-sync with the active channel's user list.
+      input.setNickCompletions(
+          nicks == null ? List.of() : nicks.stream().map(NickInfo::nick).toList()
+      );
+    });
   }
 
   @Override
