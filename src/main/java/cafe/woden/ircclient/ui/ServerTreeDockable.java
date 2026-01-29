@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.ui.util.TreeContextMenuDecorator;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -17,13 +18,11 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import javax.swing.JMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
@@ -31,8 +30,6 @@ import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -53,6 +50,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   public static final String ID = "server-tree";
 
   private AutoCloseable treeWheelSelectionDecorator;
+  private AutoCloseable treeContextMenuDecorator;
 
   private final FlowableProcessor<TargetRef> selections =
       PublishProcessor.<TargetRef>create().toSerialized();
@@ -148,35 +146,17 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     };
     tree.addTreeSelectionListener(tsl);
 
-    // Right-click context menu
-    MouseAdapter popupListener = new MouseAdapter() {
-      @Override
-      public void mousePressed(MouseEvent e) {
-        maybeShowPopup(e);
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        maybeShowPopup(e);
-      }
-
-      private void maybeShowPopup(MouseEvent e) {
-        if (!e.isPopupTrigger()) return;
-
-        int x = e.getX();
-        int y = e.getY();
-        TreePath path = tree.getPathForLocation(x, y);
-        if (path == null) {
-          return;
-        }
-
-        // Do not change selection on right-click; that would also switch the main Chat dock.
-        JPopupMenu menu = buildPopupMenu(path);
-        if (menu == null || menu.getComponentCount() == 0) return;
-        menu.show(tree, x, y);
-      }
-    };
-    tree.addMouseListener(popupListener);
+    // Right-click context menu (decorator + builder)
+    ServerTreeContextMenuBuilder contextMenuBuilder = new ServerTreeContextMenuBuilder(
+        this::isServerNode,
+        id -> Boolean.TRUE.equals(serverConnected.get(id)),
+        connectServerRequests::onNext,
+        disconnectServerRequests::onNext,
+        closeTargetRequests::onNext,
+        openPinnedChatRequests::onNext
+    );
+    // Do not change selection on right-click; that would also switch the main Chat dock.
+    treeContextMenuDecorator = TreeContextMenuDecorator.decorate(tree, contextMenuBuilder::build, false);
 
     // Default selection: first server's status, otherwise root.
     SwingUtilities.invokeLater(() -> {
@@ -190,62 +170,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
         tree.setSelectionPath(new TreePath(root.getPath()));
       }
     });
-  }
-
-  private JPopupMenu buildPopupMenu(TreePath path) {
-    if (path == null) return null;
-
-    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-    if (node == null) return null;
-
-    // Only show connect/disconnect on the server nodes (not status/channel/PM/group nodes).
-    if (isServerNode(node)) {
-      String serverId = Objects.toString(node.getUserObject(), "").trim();
-      if (serverId.isEmpty()) return null;
-
-      boolean connected = Boolean.TRUE.equals(serverConnected.get(serverId));
-      JPopupMenu menu = new JPopupMenu();
-
-      JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
-      connectOne.setEnabled(!connected);
-      connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
-      menu.add(connectOne);
-
-      JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
-      disconnectOne.setEnabled(connected);
-      disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
-      menu.add(disconnectOne);
-
-      return menu;
-    }
-
-    Object uo = node.getUserObject();
-    if (uo instanceof NodeData nd) {
-      if (nd.ref != null) {
-        JPopupMenu menu = new JPopupMenu();
-
-        JMenuItem openDock = new JMenuItem("Open chat dock");
-        openDock.addActionListener(ev -> openPinnedChatRequests.onNext(nd.ref));
-        menu.add(openDock);
-
-        if (!nd.ref.isStatus()) {
-          menu.addSeparator();
-          if (nd.ref.isChannel()) {
-            JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
-            leave.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
-            menu.add(leave);
-          } else {
-            JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
-            close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
-            menu.add(close);
-          }
-        }
-
-        return menu;
-      }
-    }
-
-    return null;
   }
 
   private boolean isServerNode(DefaultMutableTreeNode node) {
@@ -641,7 +565,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     }
   }
 
-  private static final class NodeData {
+  static final class NodeData {
     final TargetRef ref;
     final String label;
     int unread = 0;
@@ -662,6 +586,10 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   void shutdown() {
     try {
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
+    } catch (Exception ignored) {
+    }
+    try {
+      if (treeContextMenuDecorator != null) treeContextMenuDecorator.close();
     } catch (Exception ignored) {
     }
     disposables.dispose();
