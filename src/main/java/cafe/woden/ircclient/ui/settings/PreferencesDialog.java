@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.util.CloseableScope;
+import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -156,29 +158,36 @@ public class PreferencesDialog {
     };
 
     apply.addActionListener(e -> doApply.run());
+
+    // Construct dialog early so we can attach a CloseableScope that cleans up decorators/listeners
+    // regardless of exit path (OK, Cancel, window close).
+    final JDialog d = new JDialog(owner, "Preferences", JDialog.ModalityType.APPLICATION_MODAL);
+    d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+    this.dialog = d;
+
+    final CloseableScope scope = DialogCloseableScopeDecorator.install(d);
+    scope.add(fontSizeMouseWheelAC);
+    scope.addCleanup(() -> {
+      if (this.dialog == d) this.dialog = null;
+    });
+
     ok.addActionListener(e -> {
       doApply.run();
-      try {
-        fontSizeMouseWheelAC.close();
-      } catch (Exception ex) {
-        throw new RuntimeException(ex);
-      }
-      dialog.dispose();
+      d.dispose();
     });
-    cancel.addActionListener(e -> dialog.dispose());
+    cancel.addActionListener(e -> d.dispose());
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     buttons.add(apply);
     buttons.add(ok);
     buttons.add(cancel);
 
-    dialog = new JDialog(owner, "Preferences", JDialog.ModalityType.APPLICATION_MODAL);
-    dialog.setLayout(new BorderLayout());
-    dialog.add(form, BorderLayout.CENTER);
-    dialog.add(buttons, BorderLayout.SOUTH);
-    dialog.setMinimumSize(new Dimension(520, 220));
-    dialog.pack();
-    dialog.setLocationRelativeTo(owner);
-    dialog.setVisible(true);
+    d.setLayout(new BorderLayout());
+    d.add(form, BorderLayout.CENTER);
+    d.add(buttons, BorderLayout.SOUTH);
+    d.setMinimumSize(new Dimension(520, 220));
+    d.pack();
+    d.setLocationRelativeTo(owner);
+    d.setVisible(true);
   }
 }

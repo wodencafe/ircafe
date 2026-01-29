@@ -68,6 +68,14 @@ public class ChatDockManager {
   @PreDestroy
   void shutdown() {
     disposables.dispose();
+    // Best-effort cleanup of dynamically created dockables.
+    for (PinnedChatDockable d : openPinned.values()) {
+      try {
+        d.close();
+      } catch (Exception ignored) {
+      }
+    }
+    openPinned.clear();
   }
 
   public void openPinned(TargetRef target) {

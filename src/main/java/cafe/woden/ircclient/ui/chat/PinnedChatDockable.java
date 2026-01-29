@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 /**
  * One dockable = one pinned target transcript.
  */
-public class PinnedChatDockable extends ChatViewPanel implements Dockable {
+public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoCloseable {
 
   private final TargetRef target;
   private final String persistentId;
@@ -89,6 +89,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable {
 
   public TargetRef target() {
     return target;
+  }
+
+  @Override
+  public void close() {
+    closeDecorators();
   }
 
   private static String b64(String s) {

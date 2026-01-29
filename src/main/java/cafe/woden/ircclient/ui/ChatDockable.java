@@ -12,6 +12,8 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PreDestroy;
+
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import java.awt.*;
@@ -285,5 +287,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       text.setText(topic == null ? "" : topic);
       text.setCaretPosition(0);
     }
+  }
+
+  @PreDestroy
+  void shutdown() {
+    // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.
+    closeDecorators();
   }
 }
