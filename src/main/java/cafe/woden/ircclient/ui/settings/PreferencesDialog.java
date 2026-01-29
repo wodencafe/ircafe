@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -89,7 +90,7 @@ public class PreferencesDialog {
     fontFamily.setSelectedItem(current.chatFontFamily());
 
     JSpinner fontSize = new JSpinner(new SpinnerNumberModel(current.chatFontSize(), 8, 48, 1));
-
+    final var fontSizeMouseWheelAC = MouseWheelDecorator.decorateNumberSpinner(fontSize);
 
     JCheckBox imageEmbeds = new JCheckBox("Enable inline image embeds (direct links)");
     imageEmbeds.setSelected(current.imageEmbedsEnabled());
@@ -157,6 +158,11 @@ public class PreferencesDialog {
     apply.addActionListener(e -> doApply.run());
     ok.addActionListener(e -> {
       doApply.run();
+      try {
+        fontSizeMouseWheelAC.close();
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
       dialog.dispose();
     });
     cancel.addActionListener(e -> dialog.dispose());
