@@ -127,7 +127,9 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       @Override
       public void mouseMoved(MouseEvent e) {
         // Prefer link cursor, otherwise use nick cursor if it's a colored nick token.
-        setCursor((urlAt(e.getPoint()) != null || nickAt(e.getPoint()) != null) ? handCursor : textCursor);
+        setCursor((urlAt(e.getPoint()) != null
+            || channelAt(e.getPoint()) != null
+            || nickAt(e.getPoint()) != null) ? handCursor : textCursor);
       }
     });
 
@@ -138,6 +140,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         String url = urlAt(e.getPoint());
         if (url != null) {
           openUrl(url);
+          return;
+        }
+
+        String channel = channelAt(e.getPoint());
+        if (channel != null && onChannelClicked(channel)) {
           return;
         }
 
@@ -218,6 +225,15 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    * @return true if the click was handled/consumed
    */
   protected boolean onNickClicked(String nick) {
+    return false;
+  }
+
+  /**
+   * Called when the user clicks a channel token (e.g. "#channel") in the transcript.
+   *
+   * @return true if the click was handled/consumed
+   */
+  protected boolean onChannelClicked(String channel) {
     return false;
   }
 
@@ -360,6 +376,39 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       if (b <= a) return null;
 
       return token.substring(a, b);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private String channelAt(Point p) {
+    try {
+      int pos = chat.viewToModel2D(p);
+      if (pos < 0) return null;
+
+      StyledDocument doc = (StyledDocument) chat.getDocument();
+      Element el = doc.getCharacterElement(pos);
+      if (el == null) return null;
+
+      AttributeSet attrs = el.getAttributes();
+      Object marker = attrs.getAttribute(ChatStyles.ATTR_CHANNEL);
+      if (marker == null) return null;
+
+      int start = el.getStartOffset();
+      int end = el.getEndOffset();
+      if (end <= start) return null;
+
+      String token = doc.getText(start, end - start);
+      if (token == null) return null;
+      token = token.trim();
+      if (token.isEmpty()) return null;
+
+      // Renderer should have stored the exact channel token; be defensive anyway.
+      int hash = token.indexOf('#');
+      if (hash < 0) return null;
+      token = token.substring(hash).trim();
+      if (token.length() <= 1) return null;
+      return token;
     } catch (Exception ignored) {
       return null;
     }

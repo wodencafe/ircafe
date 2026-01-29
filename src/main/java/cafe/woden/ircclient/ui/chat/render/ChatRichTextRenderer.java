@@ -103,43 +103,69 @@ public class ChatRichTextRenderer {
     int i = 0;
     int len = text.length();
     while (i < len) {
-      int start = i;
-      while (start < len && !isNickChar(text.charAt(start))) start++;
-      if (start > i) {
-        doc.insertString(doc.getLength(), text.substring(i, start), baseStyle);
+      char c = text.charAt(i);
+
+      // Channel token: #something
+      if (c == '#') {
+        ChannelParts chan = tryParseChannel(text, i);
+        if (chan != null) {
+          SimpleAttributeSet chanAttr = new SimpleAttributeSet(styles.link());
+          chanAttr.addAttribute(ChatStyles.ATTR_CHANNEL, chan.channel);
+          doc.insertString(doc.getLength(), chan.channel, chanAttr);
+          if (!chan.trailing.isEmpty()) {
+            doc.insertString(doc.getLength(), chan.trailing, baseStyle);
+          }
+          i = chan.nextIndex;
+          continue;
+        }
       }
-      if (start >= len) break;
 
-      int end = start;
-      while (end < len && isNickChar(text.charAt(end))) end++;
+      // Nick/mention token
+      if (isNickChar(c)) {
+        int start = i;
+        int end = start;
+        while (end < len && isNickChar(text.charAt(end))) end++;
 
-      String token = text.substring(start, end);
-      String tokenLower = token.toLowerCase(Locale.ROOT);
+        String token = text.substring(start, end);
+        String tokenLower = token.toLowerCase(Locale.ROOT);
 
-      boolean isSelf = selfLower != null && tokenLower.equals(selfLower);
-      boolean inChannel = channelNicks.contains(tokenLower);
+        boolean isSelf = selfLower != null && tokenLower.equals(selfLower);
+        boolean inChannel = channelNicks.contains(tokenLower);
 
-      if (isSelf) {
-        // Mention background is always allowed; per-nick foreground only if it's a channel nick.
-        SimpleAttributeSet mention = new SimpleAttributeSet(styles.mention());
-        // Preserve the base emphasis (e.g. status italic).
-        StyleConstants.setBold(mention, StyleConstants.isBold(baseStyle));
-        StyleConstants.setItalic(mention, StyleConstants.isItalic(baseStyle));
+        if (isSelf) {
+          // Mention background is always allowed; per-nick foreground only if it's a channel nick.
+          SimpleAttributeSet mention = new SimpleAttributeSet(styles.mention());
+          // Preserve the base emphasis (e.g. status italic).
+          StyleConstants.setBold(mention, StyleConstants.isBold(baseStyle));
+          StyleConstants.setItalic(mention, StyleConstants.isItalic(baseStyle));
 
-        if (inChannel && nickColors != null && nickColors.enabled()) {
-          mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
-          nickColors.applyColor(mention, tokenLower);
+          if (inChannel && nickColors != null && nickColors.enabled()) {
+            mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
+            nickColors.applyColor(mention, tokenLower);
+          }
+
+          doc.insertString(doc.getLength(), token, mention);
+        } else if (inChannel && nickColors != null && nickColors.enabled()) {
+          // Channel nick mention: apply the deterministic nick color on top of the base style.
+          SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
+          doc.insertString(doc.getLength(), token, nickStyle);
+        } else {
+          doc.insertString(doc.getLength(), token, baseStyle);
         }
 
-        doc.insertString(doc.getLength(), token, mention);
-      } else if (inChannel && nickColors != null && nickColors.enabled()) {
-        // Channel nick mention: apply the deterministic nick color on top of the base style.
-        SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
-        doc.insertString(doc.getLength(), token, nickStyle);
-      } else {
-        doc.insertString(doc.getLength(), token, baseStyle);
+        i = end;
+        continue;
       }
 
+      // Plain text chunk until next interesting char.
+      int start = i;
+      int end = start + 1;
+      while (end < len) {
+        char d = text.charAt(end);
+        if (d == '#' || isNickChar(d)) break;
+        end++;
+      }
+      doc.insertString(doc.getLength(), text.substring(start, end), baseStyle);
       i = end;
     }
   }
@@ -150,6 +176,63 @@ public class ChatRichTextRenderer {
         || c == '_' || c == '^' || c == '{' || c == '|' || c == '}'
         || c == '-';
   }
+
+  /**
+   * IRC channel names start with '#'. The RFC rule is permissive: the rest of the name can contain
+   * anything except spaces, commas, or ASCII bell (\u0007). We also trim common trailing punctuation
+   * so "#chan," links as "#chan".
+   */
+  private static ChannelParts tryParseChannel(String text, int at) {
+    if (text == null) return null;
+    int len = text.length();
+    if (at < 0 || at >= len) return null;
+    if (text.charAt(at) != '#') return null;
+
+    int j = at + 1;
+    if (j >= len) return null;
+
+    // Parse until a delimiter.
+    while (j < len) {
+      char c = text.charAt(j);
+      if (isChannelDelimiter(c)) break;
+      j++;
+    }
+
+    if (j <= at + 1) return null; // just "#"
+
+    String raw = text.substring(at, j);
+
+    // Strip common trailing punctuation.
+    int end = raw.length();
+    while (end > 1) {
+      char c = raw.charAt(end - 1);
+      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '!' || c == '?' || c == ':' || c == ';') {
+        end--;
+      } else {
+        break;
+      }
+    }
+
+    String channel = raw.substring(0, end);
+    String trailing = raw.substring(end);
+
+    // If we stripped everything but '#', bail.
+    if (channel.length() <= 1) return null;
+
+    return new ChannelParts(channel, trailing, j);
+  }
+
+  private static boolean isChannelDelimiter(char c) {
+    // Stop on whitespace, commas, ASCII bell, or NUL.
+    // Also stop on any other control char to avoid weird escape/control sequences being treated as a channel.
+    return Character.isWhitespace(c)
+        || Character.isISOControl(c)
+        || c == ','
+        || c == '\u0007'
+        || c == '\u0000';
+  }
+
+  private record ChannelParts(String channel, String trailing, int nextIndex) {}
 
   public static String normalizeUrl(String url) {
     if (url == null) return "";

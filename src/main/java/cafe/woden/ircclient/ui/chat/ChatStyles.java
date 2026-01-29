@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 public class ChatStyles {
 
   public static final String ATTR_URL = "chat.url";
+  public static final String ATTR_CHANNEL = "chat.channel";
   public static final String ATTR_STYLE = "chat.style";
 
   public static final String STYLE_TIMESTAMP = "timestamp";

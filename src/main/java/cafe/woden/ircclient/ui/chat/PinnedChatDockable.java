@@ -20,14 +20,17 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable {
   private int savedScrollValue = 0;
 
   private final Consumer<TargetRef> activate;
+  private final cafe.woden.ircclient.ui.OutboundLineBus outboundBus;
 
   public PinnedChatDockable(TargetRef target,
                            ChatTranscriptStore transcripts,
                            UiSettingsBus settingsBus,
-                           Consumer<TargetRef> activate) {
+                           Consumer<TargetRef> activate,
+                           cafe.woden.ircclient.ui.OutboundLineBus outboundBus) {
     super(settingsBus);
     this.target = target;
     this.activate = activate;
+    this.outboundBus = outboundBus;
     this.persistentId = "chat-pinned:" + b64(target.serverId()) + ":" + b64(target.target());
 
     setName(getTabText());
@@ -39,6 +42,19 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable {
     if (activate != null) {
       activate.accept(target);
     }
+  }
+
+  @Override
+  protected boolean onChannelClicked(String channel) {
+    if (channel == null || channel.isBlank()) return false;
+    if (activate != null) {
+      activate.accept(target);
+    }
+    if (outboundBus != null) {
+      outboundBus.emit("/join " + channel.trim());
+      return true;
+    }
+    return false;
   }
 
   @Override
