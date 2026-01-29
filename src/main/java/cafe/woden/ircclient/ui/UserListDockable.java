@@ -5,10 +5,14 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.util.CloseableScope;
+import cafe.woden.ircclient.ui.util.ComponentCloseableScopeDecorator;
+import cafe.woden.ircclient.ui.util.ListContextMenuDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +30,8 @@ public class UserListDockable extends JPanel implements Dockable {
 
   private final DefaultListModel<String> model = new DefaultListModel<>();
   private final JList<String> list = new JList<>(model);
+
+  private final CloseableScope closeables = ComponentCloseableScopeDecorator.install(this);
 
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
@@ -59,7 +65,7 @@ public class UserListDockable extends JPanel implements Dockable {
     add(new JScrollPane(list), BorderLayout.CENTER);
 
     // Double-click a nick to open a PM
-    list.addMouseListener(new MouseAdapter() {
+    MouseAdapter doubleClick = new MouseAdapter() {
       @Override
       public void mouseClicked(MouseEvent e) {
         if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() != 2) return;
@@ -79,7 +85,9 @@ public class UserListDockable extends JPanel implements Dockable {
 
         openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
       }
-    });
+    };
+    list.addMouseListener(doubleClick);
+    closeables.addCleanup(() -> list.removeMouseListener(doubleClick));
 
     // Right-click context menu for common user actions.
     JPopupMenu menu = new JPopupMenu();
@@ -99,34 +107,25 @@ public class UserListDockable extends JPanel implements Dockable {
     version.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_VERSION));
     ping.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_PING));
 
-    list.addMouseListener(new MouseAdapter() {
-      @Override public void mousePressed(MouseEvent e) { maybeShowMenu(e); }
-      @Override public void mouseReleased(MouseEvent e) { maybeShowMenu(e); }
+    closeables.add(ListContextMenuDecorator.decorate(list, true, (index, e) -> {
+      // If we don't have a meaningful context target (e.g., status), disable actions.
+      boolean hasCtx = active != null && active.serverId() != null && !active.serverId().isBlank();
+      String raw = model.getElementAt(index);
+      String nick = stripNickPrefix(raw);
+      boolean hasNick = nick != null && !nick.isBlank();
 
-      private void maybeShowMenu(MouseEvent e) {
-        if (!e.isPopupTrigger()) return;
-        int index = list.locationToIndex(e.getPoint());
-        if (index < 0) return;
-        Rectangle r = list.getCellBounds(index, index);
-        if (r == null || !r.contains(e.getPoint())) return;
+      openQuery.setEnabled(hasCtx && hasNick);
+      whois.setEnabled(hasCtx && hasNick);
+      version.setEnabled(hasCtx && hasNick);
+      ping.setEnabled(hasCtx && hasNick);
 
-        list.setSelectedIndex(index);
+      return menu;
+    }));
+  }
 
-        // If we don't have a meaningful context target (e.g., status), disable actions.
-        boolean hasCtx = active != null && active.serverId() != null && !active.serverId().isBlank();
-        boolean hasNick = true;
-        String raw = model.getElementAt(index);
-        String nick = stripNickPrefix(raw);
-        hasNick = nick != null && !nick.isBlank();
-
-        openQuery.setEnabled(hasCtx && hasNick);
-        whois.setEnabled(hasCtx && hasNick);
-        version.setEnabled(hasCtx && hasNick);
-        ping.setEnabled(hasCtx && hasNick);
-
-        menu.show(list, e.getX(), e.getY());
-      }
-    });
+  @PreDestroy
+  void shutdown() {
+    closeables.closeQuietly();
   }
 
   public Flowable<PrivateMessageRequest> privateMessageRequests() {

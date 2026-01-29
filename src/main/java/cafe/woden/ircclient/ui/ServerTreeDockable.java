@@ -3,8 +3,6 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ui.util.TreeContextMenuDecorator;
-import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -19,12 +17,13 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import javax.swing.Action;
+import javax.swing.JMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
@@ -32,6 +31,8 @@ import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -52,8 +53,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   public static final String ID = "server-tree";
 
   private AutoCloseable treeWheelSelectionDecorator;
-  private AutoCloseable treeContextMenuDecorator;
-  private TreeNodeActions<TargetRef> treeNodeActions;
 
   private final FlowableProcessor<TargetRef> selections =
       PublishProcessor.<TargetRef>create().toSerialized();
@@ -149,30 +148,35 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     };
     tree.addTreeSelectionListener(tsl);
 
-    // Window-menu actions (Move Up / Move Down / Close Node)
-    treeNodeActions = new TreeNodeActions<>(
-        tree,
-        model,
-        new ServerTreeNodeReorderPolicy(this::isServerNode),
-        n -> {
-          Object uo = n.getUserObject();
-          if (uo instanceof NodeData nd) return nd.ref;
-          return null;
-        },
-        closeTargetRequests::onNext
-    );
+    // Right-click context menu
+    MouseAdapter popupListener = new MouseAdapter() {
+      @Override
+      public void mousePressed(MouseEvent e) {
+        maybeShowPopup(e);
+      }
 
-    // Right-click context menu (decorator + builder)
-    ServerTreeContextMenuBuilder contextMenuBuilder = new ServerTreeContextMenuBuilder(
-        this::isServerNode,
-        id -> Boolean.TRUE.equals(serverConnected.get(id)),
-        connectServerRequests::onNext,
-        disconnectServerRequests::onNext,
-        closeTargetRequests::onNext,
-        openPinnedChatRequests::onNext
-    );
-    // Do not change selection on right-click; that would also switch the main Chat dock.
-    treeContextMenuDecorator = TreeContextMenuDecorator.decorate(tree, contextMenuBuilder::build, false);
+      @Override
+      public void mouseReleased(MouseEvent e) {
+        maybeShowPopup(e);
+      }
+
+      private void maybeShowPopup(MouseEvent e) {
+        if (!e.isPopupTrigger()) return;
+
+        int x = e.getX();
+        int y = e.getY();
+        TreePath path = tree.getPathForLocation(x, y);
+        if (path == null) {
+          return;
+        }
+
+        // Do not change selection on right-click; that would also switch the main Chat dock.
+        JPopupMenu menu = buildPopupMenu(path);
+        if (menu == null || menu.getComponentCount() == 0) return;
+        menu.show(tree, x, y);
+      }
+    };
+    tree.addMouseListener(popupListener);
 
     // Default selection: first server's status, otherwise root.
     SwingUtilities.invokeLater(() -> {
@@ -186,6 +190,62 @@ public class ServerTreeDockable extends JPanel implements Dockable {
         tree.setSelectionPath(new TreePath(root.getPath()));
       }
     });
+  }
+
+  private JPopupMenu buildPopupMenu(TreePath path) {
+    if (path == null) return null;
+
+    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+    if (node == null) return null;
+
+    // Only show connect/disconnect on the server nodes (not status/channel/PM/group nodes).
+    if (isServerNode(node)) {
+      String serverId = Objects.toString(node.getUserObject(), "").trim();
+      if (serverId.isEmpty()) return null;
+
+      boolean connected = Boolean.TRUE.equals(serverConnected.get(serverId));
+      JPopupMenu menu = new JPopupMenu();
+
+      JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
+      connectOne.setEnabled(!connected);
+      connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
+      menu.add(connectOne);
+
+      JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
+      disconnectOne.setEnabled(connected);
+      disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
+      menu.add(disconnectOne);
+
+      return menu;
+    }
+
+    Object uo = node.getUserObject();
+    if (uo instanceof NodeData nd) {
+      if (nd.ref != null) {
+        JPopupMenu menu = new JPopupMenu();
+
+        JMenuItem openDock = new JMenuItem("Open chat dock");
+        openDock.addActionListener(ev -> openPinnedChatRequests.onNext(nd.ref));
+        menu.add(openDock);
+
+        if (!nd.ref.isStatus()) {
+          menu.addSeparator();
+          if (nd.ref.isChannel()) {
+            JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
+            leave.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
+            menu.add(leave);
+          } else {
+            JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
+            close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
+            menu.add(close);
+          }
+        }
+
+        return menu;
+      }
+    }
+
+    return null;
   }
 
   private boolean isServerNode(DefaultMutableTreeNode node) {
@@ -235,39 +295,149 @@ public class ServerTreeDockable extends JPanel implements Dockable {
    * Status and the "Private messages" group node are protected.
    */
   public boolean canMoveSelectedNodeUp() {
-    return treeNodeActions != null && treeNodeActions.canMoveUp();
+    DefaultMutableTreeNode n = selectedNode();
+    return n != null && canMoveNode(n, -1);
   }
 
   public boolean canMoveSelectedNodeDown() {
-    return treeNodeActions != null && treeNodeActions.canMoveDown();
+    DefaultMutableTreeNode n = selectedNode();
+    return n != null && canMoveNode(n, +1);
   }
 
   public boolean canCloseSelectedNode() {
-    return treeNodeActions != null && treeNodeActions.canClose();
+    DefaultMutableTreeNode n = selectedNode();
+    if (n == null) return false;
+    Object uo = n.getUserObject();
+    if (!(uo instanceof NodeData nd)) return false;
+    if (nd.ref == null) return false;
+    return !nd.ref.isStatus();
   }
 
   public void moveSelectedNodeUp() {
-    if (treeNodeActions != null) treeNodeActions.moveUp();
+    moveSelectedNode(-1);
   }
 
   public void moveSelectedNodeDown() {
-    if (treeNodeActions != null) treeNodeActions.moveDown();
+    moveSelectedNode(+1);
   }
 
   public void closeSelectedNode() {
-    if (treeNodeActions != null) treeNodeActions.closeSelected();
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::closeSelectedNode);
+      return;
+    }
+
+    DefaultMutableTreeNode n = selectedNode();
+    if (n == null) return;
+    Object uo = n.getUserObject();
+    if (!(uo instanceof NodeData nd)) return;
+    if (nd.ref == null || nd.ref.isStatus()) return;
+
+    // Delegate to the same stream the right-click menu uses.
+    closeTargetRequests.onNext(nd.ref);
   }
 
-  public Action moveNodeUpAction() {
-    return treeNodeActions != null ? treeNodeActions.moveUpAction() : null;
+  private void moveSelectedNode(int dir) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(() -> moveSelectedNode(dir));
+      return;
+    }
+    if (dir == 0) return;
+
+    DefaultMutableTreeNode n = selectedNode();
+    if (n == null) return;
+    if (!canMoveNode(n, dir)) return;
+
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) n.getParent();
+    if (parent == null) return;
+
+    int idx = parent.getIndex(n);
+    int min = minMovableIndex(parent);
+    int max = maxMovableIndex(parent);
+
+    int next = idx + (dir > 0 ? 1 : -1);
+    next = Math.max(min, Math.min(max, next));
+    if (next == idx) return;
+
+    // Preserve the node instance so our TargetRef -> node map stays valid.
+    model.removeNodeFromParent(n);
+    model.insertNodeInto(n, parent, next);
+
+    TreePath path = new TreePath(n.getPath());
+    tree.setSelectionPath(path);
+    tree.scrollPathToVisible(path);
   }
 
-  public Action moveNodeDownAction() {
-    return treeNodeActions != null ? treeNodeActions.moveDownAction() : null;
+  private DefaultMutableTreeNode selectedNode() {
+    Object last = tree.getLastSelectedPathComponent();
+    if (last instanceof DefaultMutableTreeNode n) return n;
+    return null;
   }
 
-  public Action closeNodeAction() {
-    return treeNodeActions != null ? treeNodeActions.closeAction() : null;
+  private boolean canMoveNode(DefaultMutableTreeNode node, int dir) {
+    if (node == null) return false;
+    if (dir == 0) return false;
+
+    // Only allow moving leaf nodes (channels / PMs). Never move root/server/group/status.
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd)) return false;
+    if (nd.ref == null || nd.ref.isStatus()) return false;
+
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+    if (parent == null) return false;
+
+    // Must be either:
+    //   - channel leaf under a server node
+    //   - PM leaf under the "Private messages" group node
+    boolean parentIsServer = isServerNode(parent);
+    boolean parentIsPmGroup = isPrivateMessagesGroupNode(parent);
+    if (!parentIsServer && !parentIsPmGroup) return false;
+
+    int idx = parent.getIndex(node);
+    int min = minMovableIndex(parent);
+    int max = maxMovableIndex(parent);
+    if (idx < min || idx > max) return false;
+
+    if (dir < 0) return idx > min;
+    return idx < max;
+  }
+
+  private int minMovableIndex(DefaultMutableTreeNode parent) {
+    if (parent == null) return 0;
+    if (isServerNode(parent)) {
+      // Keep status (index 0) fixed, if present.
+      if (parent.getChildCount() > 0) {
+        Object first = ((DefaultMutableTreeNode) parent.getChildAt(0)).getUserObject();
+        if (first instanceof NodeData nd && nd.ref != null && nd.ref.isStatus()) {
+          return 1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  private int maxMovableIndex(DefaultMutableTreeNode parent) {
+    if (parent == null) return -1;
+    int count = parent.getChildCount();
+    if (count == 0) return -1;
+
+    int max = count - 1;
+    if (isServerNode(parent)) {
+      // Keep the "Private messages" group as the last child, if present.
+      DefaultMutableTreeNode last = (DefaultMutableTreeNode) parent.getChildAt(count - 1);
+      if (isPrivateMessagesGroupNode(last)) {
+        max = count - 2;
+      }
+    }
+    return max;
+  }
+
+  private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String s)) return false;
+    String label = s.trim();
+    return label.equalsIgnoreCase("Private messages") || label.equalsIgnoreCase("Private Messages");
   }
 
   public void setServerConnected(String serverId, boolean connected) {
@@ -491,15 +661,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   @PreDestroy
   void shutdown() {
     try {
-      if (treeNodeActions != null) treeNodeActions.close();
-    } catch (Exception ignored) {
-    }
-    try {
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
-    } catch (Exception ignored) {
-    }
-    try {
-      if (treeContextMenuDecorator != null) treeContextMenuDecorator.close();
     } catch (Exception ignored) {
     }
     disposables.dispose();
