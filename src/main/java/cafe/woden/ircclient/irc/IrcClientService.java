@@ -22,6 +22,9 @@ public interface IrcClientService {
   Completable requestNames(String serverId, String channel);
   Completable joinChannel(String serverId, String channel);
 
+  /** Request WHOIS info for a nick (results will be emitted on {@link #events()}). */
+  Completable whois(String serverId, String nick);
+
 
   /** Leave a channel (PART). */
   default Completable partChannel(String serverId, String channel) {

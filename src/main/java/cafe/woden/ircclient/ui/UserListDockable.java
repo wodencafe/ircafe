@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -28,6 +29,9 @@ public class UserListDockable extends JPanel implements Dockable {
 
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
+
+  private final FlowableProcessor<UserActionRequest> userActions =
+      PublishProcessor.<UserActionRequest>create().toSerialized();
 
   private final NickColorService nickColors;
 
@@ -76,10 +80,61 @@ public class UserListDockable extends JPanel implements Dockable {
         openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
       }
     });
+
+    // Right-click context menu for common user actions.
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem openQuery = new JMenuItem("Open Query");
+    JMenuItem whois = new JMenuItem("Whois");
+    JMenuItem version = new JMenuItem("Version");
+    JMenuItem ping = new JMenuItem("Ping");
+
+    menu.add(openQuery);
+    menu.addSeparator();
+    menu.add(whois);
+    menu.add(version);
+    menu.add(ping);
+
+    openQuery.addActionListener(a -> emitSelected(UserActionRequest.Action.OPEN_QUERY));
+    whois.addActionListener(a -> emitSelected(UserActionRequest.Action.WHOIS));
+    version.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_VERSION));
+    ping.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_PING));
+
+    list.addMouseListener(new MouseAdapter() {
+      @Override public void mousePressed(MouseEvent e) { maybeShowMenu(e); }
+      @Override public void mouseReleased(MouseEvent e) { maybeShowMenu(e); }
+
+      private void maybeShowMenu(MouseEvent e) {
+        if (!e.isPopupTrigger()) return;
+        int index = list.locationToIndex(e.getPoint());
+        if (index < 0) return;
+        Rectangle r = list.getCellBounds(index, index);
+        if (r == null || !r.contains(e.getPoint())) return;
+
+        list.setSelectedIndex(index);
+
+        // If we don't have a meaningful context target (e.g., status), disable actions.
+        boolean hasCtx = active != null && active.serverId() != null && !active.serverId().isBlank();
+        boolean hasNick = true;
+        String raw = model.getElementAt(index);
+        String nick = stripNickPrefix(raw);
+        hasNick = nick != null && !nick.isBlank();
+
+        openQuery.setEnabled(hasCtx && hasNick);
+        whois.setEnabled(hasCtx && hasNick);
+        version.setEnabled(hasCtx && hasNick);
+        ping.setEnabled(hasCtx && hasNick);
+
+        menu.show(list, e.getX(), e.getY());
+      }
+    });
   }
 
   public Flowable<PrivateMessageRequest> privateMessageRequests() {
     return openPrivate.onBackpressureBuffer();
+  }
+
+  public Flowable<UserActionRequest> userActionRequests() {
+    return userActions.onBackpressureBuffer();
   }
 
   public void setChannel(TargetRef target) {
@@ -117,6 +172,23 @@ public class UserListDockable extends JPanel implements Dockable {
       return v.substring(1).trim();
     }
     return v;
+  }
+
+  private void emitSelected(UserActionRequest.Action action) {
+    try {
+      if (active == null) return;
+      int idx = list.getSelectedIndex();
+      if (idx < 0) return;
+      String nick = stripNickPrefix(model.getElementAt(idx));
+      if (nick == null || nick.isBlank()) return;
+
+      if (action == UserActionRequest.Action.OPEN_QUERY) {
+        openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
+      } else {
+        userActions.onNext(new UserActionRequest(active, nick, action));
+      }
+    } catch (Exception ignored) {
+    }
   }
 
   @Override public String getPersistentID() { return ID; }

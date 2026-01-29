@@ -678,7 +678,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       // Best-effort.
     }
   }
-  
+
+  // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of scrollbars.
   // This panel contains its own internal JScrollPane (the transcript), so always track any outer viewport.
   @Override
   public Dimension getPreferredScrollableViewportSize() {

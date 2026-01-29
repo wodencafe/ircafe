@@ -20,6 +20,9 @@ public interface UiPort {
   Flowable<TargetRef> targetActivations();
 
   Flowable<PrivateMessageRequest> privateMessageRequests();
+
+  /** UI-originated context menu actions (e.g., WHOIS/CTCP) for a nick. */
+  Flowable<UserActionRequest> userActionRequests();
   Flowable<String> outboundLines();
   Flowable<Object> connectClicks();
   Flowable<Object> disconnectClicks();
