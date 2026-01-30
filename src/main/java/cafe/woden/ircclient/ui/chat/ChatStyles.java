@@ -16,6 +16,16 @@ public class ChatStyles {
   public static final String ATTR_CHANNEL = "chat.channel";
   public static final String ATTR_STYLE = "chat.style";
 
+  // mIRC formatting metadata (preserved across restyle/theme changes)
+  public static final String ATTR_IRC_BOLD = "chat.irc.bold";
+  public static final String ATTR_IRC_ITALIC = "chat.irc.italic";
+  public static final String ATTR_IRC_UNDERLINE = "chat.irc.underline";
+  public static final String ATTR_IRC_REVERSE = "chat.irc.reverse";
+  /** Integer foreground mIRC color code (0-15), or null for default. */
+  public static final String ATTR_IRC_FG = "chat.irc.fg";
+  /** Integer background mIRC color code (0-15), or null for default. */
+  public static final String ATTR_IRC_BG = "chat.irc.bg";
+
   public static final String STYLE_TIMESTAMP = "timestamp";
   public static final String STYLE_FROM = "from";
   public static final String STYLE_MESSAGE = "message";

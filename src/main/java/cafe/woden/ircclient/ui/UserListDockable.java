@@ -95,17 +95,20 @@ public class UserListDockable extends JPanel implements Dockable {
     JMenuItem whois = new JMenuItem("Whois");
     JMenuItem version = new JMenuItem("Version");
     JMenuItem ping = new JMenuItem("Ping");
+    JMenuItem time = new JMenuItem("Time");
 
     menu.add(openQuery);
     menu.addSeparator();
     menu.add(whois);
     menu.add(version);
     menu.add(ping);
+    menu.add(time);
 
     openQuery.addActionListener(a -> emitSelected(UserActionRequest.Action.OPEN_QUERY));
     whois.addActionListener(a -> emitSelected(UserActionRequest.Action.WHOIS));
     version.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_VERSION));
     ping.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_PING));
+    time.addActionListener(a -> emitSelected(UserActionRequest.Action.CTCP_TIME));
 
     closeables.add(ListContextMenuDecorator.decorate(list, true, (index, e) -> {
       // If we don't have a meaningful context target (e.g., status), disable actions.
@@ -118,6 +121,7 @@ public class UserListDockable extends JPanel implements Dockable {
       whois.setEnabled(hasCtx && hasNick);
       version.setEnabled(hasCtx && hasNick);
       ping.setEnabled(hasCtx && hasNick);
+      time.setEnabled(hasCtx && hasNick);
 
       return menu;
     }));

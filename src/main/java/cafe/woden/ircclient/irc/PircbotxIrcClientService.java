@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.Method;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -223,6 +224,42 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable sendAction(String serverId, String target, String action) {
+    return Completable.fromAction(() -> {
+          String t = target == null ? "" : target.trim();
+          String a = action == null ? "" : action;
+          if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
+
+          // Prefer a native PircBotX action(...) API if present. Fall back to manual CTCP wrapper.
+          Object out = requireBot(serverId).sendIRC();
+
+          String dest;
+          if (t.startsWith("#") || t.startsWith("&")) {
+            dest = sanitizeChannel(t);
+          } else {
+            dest = sanitizeNick(t);
+          }
+
+          boolean sent = false;
+          try {
+            Method m = out.getClass().getMethod("action", String.class, String.class);
+            m.invoke(out, dest, a);
+            sent = true;
+          } catch (NoSuchMethodException ignored) {
+            // Older/newer OutputIRC API shape; we'll fall back.
+          } catch (Exception e) {
+            // Reflection failure: fall back to raw CTCP wrapper.
+            log.debug("sendAction: native action() invoke failed, falling back to CTCP wrapper", e);
+          }
+
+          if (!sent) {
+            requireBot(serverId).sendIRC().message(dest, "\u0001ACTION " + a + "\u0001");
+          }
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
   public Completable requestNames(String serverId, String channel) {
     return Completable.fromAction(() -> {
           String chan = sanitizeChannel(channel);
@@ -376,6 +413,23 @@ public class PircbotxIrcClientService implements IrcClientService {
       String v = (clientVersion == null) ? "" : clientVersion.trim();
       if (v.isEmpty()) v = "IRCafe";
       bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
+      return true;
+    }
+
+    if ("PING".equals(cmd)) {
+      // Reply with the same token/payload (if any).
+      String payload = "";
+      int sp2 = inner.indexOf(' ');
+      if (sp2 >= 0 && sp2 + 1 < inner.length()) payload = inner.substring(sp2 + 1).trim();
+      String body = payload.isEmpty() ? "\u0001PING\u0001" : "\u0001PING " + payload + "\u0001";
+      bot.sendIRC().notice(sanitizeNick(fromNick), body);
+      return true;
+    }
+
+    if ("TIME".equals(cmd)) {
+      // Best-effort local time string; servers/clients vary here.
+      String now = java.time.ZonedDateTime.now().toString();
+      bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001TIME " + now + "\u0001");
       return true;
     }
 

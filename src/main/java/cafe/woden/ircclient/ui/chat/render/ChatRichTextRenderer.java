@@ -5,6 +5,7 @@ import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import java.awt.Color;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -62,6 +63,20 @@ public class ChatRichTextRenderer {
     // serverId is used for self-mention highlighting.
     String serverId = ref != null ? ref.serverId() : "";
 
+    // First, parse and strip mIRC formatting codes, producing spans that already include
+    // the appropriate StyleConstants and metadata attributes.
+    for (IrcFormatting.Span span : IrcFormatting.parse(text, base)) {
+      insertRichTextPlain(doc, ref, serverId, span.text(), span.style());
+    }
+  }
+
+  /**
+   * Inserts text that may contain URLs and mentions (no mIRC control codes expected).
+   */
+  private void insertRichTextPlain(StyledDocument doc, TargetRef ref, String serverId, String text, AttributeSet base)
+      throws BadLocationException {
+    if (text == null || text.isEmpty()) return;
+
     Matcher m = URL_PATTERN.matcher(text);
     int last = 0;
     while (m.find()) {
@@ -72,8 +87,19 @@ public class ChatRichTextRenderer {
       String raw = m.group(1);
       UrlParts parts = splitUrlTrailingPunct(raw);
 
-      SimpleAttributeSet linkAttr = new SimpleAttributeSet(styles.link());
+      // Start from the base style so mIRC formatting (bold/italic/colors) is preserved.
+      SimpleAttributeSet linkAttr = new SimpleAttributeSet(base);
+      linkAttr.addAttributes(styles.link());
       linkAttr.addAttribute(ChatStyles.ATTR_URL, normalizeUrl(parts.url));
+
+      // If this segment has explicit mIRC colors, keep them (don't let the theme link color override).
+      if (hasIrcColors(base)) {
+        Color fg = StyleConstants.getForeground(base);
+        Color bg = StyleConstants.getBackground(base);
+        if (fg != null) StyleConstants.setForeground(linkAttr, fg);
+        if (bg != null) StyleConstants.setBackground(linkAttr, bg);
+      }
+
       doc.insertString(doc.getLength(), parts.url, linkAttr);
 
       if (!parts.trailing.isEmpty()) {
@@ -109,8 +135,17 @@ public class ChatRichTextRenderer {
       if (c == '#') {
         ChannelParts chan = tryParseChannel(text, i);
         if (chan != null) {
-          SimpleAttributeSet chanAttr = new SimpleAttributeSet(styles.link());
+          SimpleAttributeSet chanAttr = new SimpleAttributeSet(baseStyle);
+          chanAttr.addAttributes(styles.link());
           chanAttr.addAttribute(ChatStyles.ATTR_CHANNEL, chan.channel);
+
+          if (hasIrcColors(baseStyle)) {
+            Color fg = StyleConstants.getForeground(baseStyle);
+            Color bg = StyleConstants.getBackground(baseStyle);
+            if (fg != null) StyleConstants.setForeground(chanAttr, fg);
+            if (bg != null) StyleConstants.setBackground(chanAttr, bg);
+          }
+
           doc.insertString(doc.getLength(), chan.channel, chanAttr);
           if (!chan.trailing.isEmpty()) {
             doc.insertString(doc.getLength(), chan.trailing, baseStyle);
@@ -134,18 +169,16 @@ public class ChatRichTextRenderer {
 
         if (isSelf) {
           // Mention background is always allowed; per-nick foreground only if it's a channel nick.
-          SimpleAttributeSet mention = new SimpleAttributeSet(styles.mention());
-          // Preserve the base emphasis (e.g. status italic).
-          StyleConstants.setBold(mention, StyleConstants.isBold(baseStyle));
-          StyleConstants.setItalic(mention, StyleConstants.isItalic(baseStyle));
+          SimpleAttributeSet mention = new SimpleAttributeSet(baseStyle);
+          mention.addAttributes(styles.mention());
 
-          if (inChannel && nickColors != null && nickColors.enabled()) {
+          if (!hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
             mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
             nickColors.applyColor(mention, tokenLower);
           }
 
           doc.insertString(doc.getLength(), token, mention);
-        } else if (inChannel && nickColors != null && nickColors.enabled()) {
+        } else if (!hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
           // Channel nick mention: apply the deterministic nick color on top of the base style.
           SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
           doc.insertString(doc.getLength(), token, nickStyle);
@@ -168,6 +201,13 @@ public class ChatRichTextRenderer {
       doc.insertString(doc.getLength(), text.substring(start, end), baseStyle);
       i = end;
     }
+  }
+
+  private static boolean hasIrcColors(AttributeSet attrs) {
+    if (attrs == null) return false;
+    return attrs.getAttribute(ChatStyles.ATTR_IRC_FG) != null
+        || attrs.getAttribute(ChatStyles.ATTR_IRC_BG) != null
+        || Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_IRC_REVERSE));
   }
 
   private static boolean isNickChar(char c) {

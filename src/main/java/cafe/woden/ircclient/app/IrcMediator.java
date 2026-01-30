@@ -201,6 +201,13 @@ public class IrcMediator {
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
+
+      case CTCP_TIME -> {
+        pendingCtcp.put(new CtcpKey(sid, nick, "TIME", null), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " TIME");
+        disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
+            .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
+      }
     }
   }
 
@@ -267,6 +274,10 @@ public class IrcMediator {
       case ParsedInput.Query cmd -> handleQuery(cmd.nick());
       case ParsedInput.Msg cmd -> handleMsg(cmd.nick(), cmd.body());
       case ParsedInput.Me cmd -> handleMe(cmd.action());
+      case ParsedInput.CtcpVersion cmd -> handleCtcpVersion(cmd.nick());
+      case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
+      case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
+      case ParsedInput.Ctcp cmd -> handleCtcp(cmd.nick(), cmd.command(), cmd.args());
       case ParsedInput.Say cmd -> handleSay(cmd.text());
       case ParsedInput.Unknown cmd ->
           ui.appendStatus(safeStatusTarget(), "(system)", "Unknown command: " + cmd.raw());
@@ -396,9 +407,126 @@ public class IrcMediator {
     ui.appendAction(at, me, a);
 
     disposables.add(
-        irc.sendMessage(at.serverId(), at.target(), "\u0001ACTION " + a + "\u0001").subscribe(
+        irc.sendAction(at.serverId(), at.target(), a).subscribe(
             () -> {},
             err -> ui.appendError(safeStatusTarget(), "(send-error)", String.valueOf(err))
+        )
+    );
+  }
+
+  // --- CTCP slash commands --------------------------------------------------
+
+  private void handleCtcpVersion(String nick) {
+    sendCtcpSlash("VERSION", nick, "", false);
+  }
+
+  private void handleCtcpPing(String nick) {
+    // Token lets us compute RTT when the reply comes back.
+    String token = Long.toString(System.currentTimeMillis());
+    sendCtcpSlash("PING", nick, token, true);
+  }
+
+  private void handleCtcpTime(String nick) {
+    sendCtcpSlash("TIME", nick, "", false);
+  }
+
+  private void handleCtcp(String nick, String command, String args) {
+    String n = nick == null ? "" : nick.trim();
+    String cmd = command == null ? "" : command.trim();
+    String a = args == null ? "" : args.trim();
+
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(ctcp)", "Select a server first.");
+      return;
+    }
+
+    TargetRef ctx = at;
+    if (!java.util.Objects.equals(ctx.serverId(), at.serverId())) {
+      ctx = new TargetRef(at.serverId(), "status");
+    }
+
+    if (n.isEmpty() || cmd.isEmpty()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /ctcp <nick> <command> [args...]");
+      return;
+    }
+
+    String cmdU = cmd.toUpperCase(java.util.Locale.ROOT);
+
+    // Convenience: treat /ctcp nick PING [token] as RTT-measurable.
+    if ("PING".equals(cmdU)) {
+      final String payload;
+      final String tokenKey;
+      if (a.isEmpty()) {
+        payload = Long.toString(System.currentTimeMillis());
+        tokenKey = payload;
+      } else {
+        payload = a;
+        int sp = a.indexOf(' ');
+        tokenKey = (sp >= 0) ? a.substring(0, sp) : a;
+      }
+      sendCtcp(at, ctx, n, "PING", payload, tokenKey);
+      return;
+    }
+
+    // If you want /ctcp nick ACTION ... use /me instead.
+    if ("ACTION".equals(cmdU)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Use /me for ACTION.");
+      return;
+    }
+
+    sendCtcp(at, ctx, n, cmdU, a, null);
+  }
+
+  private void sendCtcpSlash(String cmdUpper, String nick, String args, boolean expectsReply) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(ctcp)", "Select a server first.");
+      return;
+    }
+
+    String n = nick == null ? "" : nick.trim();
+    String a = args == null ? "" : args.trim();
+    if (n.isEmpty()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /" + cmdUpper.toLowerCase(java.util.Locale.ROOT) + " <nick>");
+      return;
+    }
+
+    sendCtcp(at, at, n, cmdUpper, a, expectsReply ? a : null);
+  }
+
+  private void sendCtcp(TargetRef serverCtx, TargetRef outputCtx, String nick, String cmdUpper, String args, String tokenKey) {
+    if (serverCtx == null) return;
+    String sid = serverCtx.serverId();
+
+    if (!connectionCoordinator.isConnected(sid)) {
+      ui.appendStatus(new TargetRef(sid, "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) return;
+
+    String cmd = cmdUpper == null ? "" : cmdUpper.trim().toUpperCase(java.util.Locale.ROOT);
+    String a = args == null ? "" : args.trim();
+
+    TargetRef ctx = outputCtx != null ? outputCtx : new TargetRef(sid, "status");
+
+    StringBuilder inner = new StringBuilder(cmd);
+    if (!a.isEmpty()) inner.append(' ').append(a);
+    String ctcp = "\u0001" + inner + "\u0001";
+
+    // Track pending so replies can be routed back to the current context.
+    String nickLower = n.toLowerCase(java.util.Locale.ROOT);
+    pendingCtcp.put(new CtcpKey(sid, nickLower, cmd, tokenKey), new PendingCtcp(ctx, System.currentTimeMillis()));
+
+    String display = "→ " + n + " " + cmd + (a.isEmpty() ? "" : " " + a);
+    ui.appendStatus(ctx, "(ctcp)", display);
+
+    disposables.add(
+        irc.sendPrivateMessage(sid, n, ctcp).subscribe(
+            () -> {},
+            err -> ui.appendError(safeStatusTarget(), "(ctcp-error)", String.valueOf(err))
         )
     );
   }
@@ -539,6 +667,31 @@ public class IrcMediator {
               dest = p.target();
               long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
               rendered = from + " PING reply: " + rtt + "ms";
+            }
+          } else if ("TIME".equals(cmd)) {
+            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+            if (p != null) {
+              dest = p.target();
+              rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
+            }
+          }
+
+          // If we received a CTCP reply we recognize but didn't have a pending request for,
+          // still render a clean status line to the server status window (better than raw 0x01).
+          if (dest == null && rendered == null) {
+            if ("VERSION".equals(cmd)) {
+              dest = status;
+              rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
+            } else if ("PING".equals(cmd)) {
+              dest = status;
+              rendered = from + " PING: " + (arg.isBlank() ? "(no payload)" : arg);
+            } else if ("TIME".equals(cmd)) {
+              dest = status;
+              rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
+            } else {
+              PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+              dest = (p != null) ? p.target() : status;
+              rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
             }
           }
 
