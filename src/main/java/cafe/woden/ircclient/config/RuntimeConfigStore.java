@@ -185,7 +185,25 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether link previews are enabled (stored under ircafe.ui.linkPreviewsEnabled). */
+  
+
+  /** Persist whether inline image embeds should start collapsed (stored under ircafe.ui.imageEmbedsCollapsedByDefault). */
+  public synchronized void rememberImageEmbedsCollapsedByDefault(boolean collapsed) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("imageEmbedsCollapsedByDefault", collapsed);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist image embed collapse setting to '{}'", file, e);
+    }
+  }
+/** Persist whether link previews are enabled (stored under ircafe.ui.linkPreviewsEnabled). */
   public synchronized void rememberLinkPreviewsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -202,7 +220,25 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
+  
+
+  /** Persist whether link previews should start collapsed (stored under ircafe.ui.linkPreviewsCollapsedByDefault). */
+  public synchronized void rememberLinkPreviewsCollapsedByDefault(boolean collapsed) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("linkPreviewsCollapsedByDefault", collapsed);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist link preview collapse setting to '{}'", file, e);
+    }
+  }
+/** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
   public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;

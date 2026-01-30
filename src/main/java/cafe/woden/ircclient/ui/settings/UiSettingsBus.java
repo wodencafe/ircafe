@@ -24,7 +24,9 @@ public class UiSettingsBus {
         props.chatFontFamily(),
         props.chatFontSize(),
         props.imageEmbedsEnabled(),
+        props.imageEmbedsCollapsedByDefault(),
         props.linkPreviewsEnabled(),
+        props.linkPreviewsCollapsedByDefault(),
         props.presenceFoldsEnabled(),
         props.chatMessageTimestampsEnabled()
     );

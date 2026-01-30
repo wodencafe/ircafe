@@ -219,6 +219,7 @@ public class ChatTranscriptStore {
         imageEmbeds.appendEmbeds(doc, text);
       }
 
+      // Optionally embed OpenGraph/Twitter-card style previews for non-image URLs.
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
         linkPreviews.appendPreviews(doc, text);
       }
