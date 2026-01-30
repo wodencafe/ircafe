@@ -4,6 +4,7 @@ import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.util.ChatFindBarDecorator;
+import cafe.woden.ircclient.ui.util.ChatTranscriptContextMenuDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptMouseDecorator;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
@@ -80,6 +81,9 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
     // In-panel find UI + keybindings (Ctrl+F).
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
+
+    // Right-click context menu: Copy / Select All / Find Text.
+    decorators.add(ChatTranscriptContextMenuDecorator.decorate(chat, this::openFindBar));
 
     // Follow-tail scroll behavior is implemented as a decorator so the view stays lean.
     this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
