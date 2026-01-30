@@ -43,6 +43,11 @@ public final class MouseWheelDecorator {
     private final JSpinner spinner;
     private double preciseAccum = 0.0;
 
+    private static final long BURST_WINDOW_MS = 25;
+
+    private long lastStepWhenMs = -1;
+    private int lastStepDir = 0;
+
     private NumericSpinnerWheelListener(JSpinner spinner) {
       this.spinner = spinner;
     }
@@ -52,27 +57,35 @@ public final class MouseWheelDecorator {
       if (!spinner.isEnabled()) return;
       if (!(spinner.getModel() instanceof SpinnerNumberModel)) return;
 
-      int steps = e.getWheelRotation();
+      final int wheel = e.getWheelRotation();
 
-      if (steps == 0) {
+      int rawDir;
+
+      if (wheel != 0) {
+        preciseAccum = 0.0;
+        rawDir = Integer.signum(wheel);
+      } else {
         preciseAccum += e.getPreciseWheelRotation();
-        steps = (int) preciseAccum;     // take whole steps
-        preciseAccum -= steps;          // keep remainder
+        if (Math.abs(preciseAccum) < 1.0) return;
+        rawDir = (int) Math.signum(preciseAccum);
+        preciseAccum -= rawDir; // keep remainder (fractional)
       }
 
-      if (steps == 0) return;
+      final int dir = -rawDir;
 
-      int dir = steps > 0 ? 1 : -1;
-      int count = Math.abs(steps);
+      final long whenMs = e.getWhen();
+      if (lastStepWhenMs >= 0
+          && dir == lastStepDir
+          && (whenMs - lastStepWhenMs) <= BURST_WINDOW_MS) {
+        e.consume();
+        return;
+      }
 
-      // Optional: speed modifiers
-      if (e.isShiftDown()) count *= 5;
-      if (e.isControlDown()) count *= 10;
-
-      for (int i = 0; i < count; i++) {
-        Object next = (dir > 0) ? spinner.getNextValue() : spinner.getPreviousValue();
-        if (next == null) break; // hit min/max
+      Object next = (dir > 0) ? spinner.getNextValue() : spinner.getPreviousValue();
+      if (next != null) {
         spinner.setValue(next);
+        lastStepWhenMs = whenMs;
+        lastStepDir = dir;
       }
 
       e.consume(); // prevent scrollpane from also scrolling
