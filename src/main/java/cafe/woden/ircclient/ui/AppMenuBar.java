@@ -14,8 +14,6 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.SwingUtilities;
-import javax.swing.event.MenuEvent;
-import javax.swing.event.MenuListener;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -92,40 +90,12 @@ public class AppMenuBar extends JMenuBar {
     // Window (placeholder for future docking helpers)
     JMenu window = new JMenu("Window");
 
-    JMenuItem moveUp = new JMenuItem("Move Node Up");
-    moveUp.addActionListener(e -> serverTree.moveSelectedNodeUp());
-
-    JMenuItem moveDown = new JMenuItem("Move Node Down");
-    moveDown.addActionListener(e -> serverTree.moveSelectedNodeDown());
-
-    JMenuItem closeNode = new JMenuItem("Close Node");
-    closeNode.addActionListener(e -> serverTree.closeSelectedNode());
-
-    // Enable/disable based on the currently selected node in the server tree.
-    // We update when the menu is opened so it always reflects the latest selection.
-    window.addMenuListener(new MenuListener() {
-      @Override
-      public void menuSelected(MenuEvent e) {
-        moveUp.setEnabled(serverTree.canMoveSelectedNodeUp());
-        moveDown.setEnabled(serverTree.canMoveSelectedNodeDown());
-        closeNode.setEnabled(serverTree.canCloseSelectedNode());
-      }
-
-      @Override
-      public void menuDeselected(MenuEvent e) {
-        // no-op
-      }
-
-      @Override
-      public void menuCanceled(MenuEvent e) {
-        // no-op
-      }
-    });
-
-    window.add(moveUp);
-    window.add(moveDown);
+    // Node actions come from the server tree controller.
+    // Enabled/disabled state updates automatically based on the tree selection.
+    window.add(new JMenuItem(serverTree.moveNodeUpAction()));
+    window.add(new JMenuItem(serverTree.moveNodeDownAction()));
     window.addSeparator();
-    window.add(closeNode);
+    window.add(new JMenuItem(serverTree.closeNodeAction()));
 
     // Servers
     JMenu servers = new JMenu("Servers");
