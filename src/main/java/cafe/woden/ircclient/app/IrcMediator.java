@@ -1083,10 +1083,6 @@ public class IrcMediator {
         flushJoinModesIfAny(sid, ev.channel(), false);
         targetCoordinator.onNickListUpdated(sid, ev);
       }
-//
-//      case IrcEvent.Error ev -> {
-//        targetCoordinator.onNickListUpdated(sid, ev);
-//      }
 
       case IrcEvent.Error ev -> {
           ui.appendError(status, "(error)", ev.message());
