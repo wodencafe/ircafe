@@ -18,6 +18,9 @@ public record UiProperties(
     int chatFontSize,
     Timestamps timestamps,
 
+    /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
+    Boolean chatMessageTimestampsEnabled,
+
     /** Enable embedding inline image previews from direct image links. Default: false. */
     Boolean imageEmbedsEnabled,
 
@@ -65,6 +68,10 @@ public record UiProperties(
       timestamps = new Timestamps(true, "HH:mm:ss");
     }
 
+    // Default: disabled (preserve prior behavior where user messages have no timestamp prefix).
+    if (chatMessageTimestampsEnabled == null) {
+      chatMessageTimestampsEnabled = false;
+    }
 
     // Image embeds default: disabled.
     if (imageEmbedsEnabled == null) {

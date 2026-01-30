@@ -181,10 +181,22 @@ public class ChatTranscriptStore {
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
+      // Config: timestamps for regular chat messages are optional (status/error/notice timestamps remain controlled
+      // by ircafe.ui.timestamps.enabled).
+      boolean chatMessageTimestampsEnabled = false;
+      try {
+        chatMessageTimestampsEnabled = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().chatMessageTimestampsEnabled();
+      } catch (Exception ignored) {
+        chatMessageTimestampsEnabled = false;
+      }
+
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
-          || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId))) {
+          || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
+          || (chatMessageTimestampsEnabled && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
       }
 
@@ -232,6 +244,19 @@ public class ChatTranscriptStore {
     ensureAtLineStart(doc);
 
     try {
+      boolean chatMessageTimestampsEnabled = false;
+      try {
+        chatMessageTimestampsEnabled = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().chatMessageTimestampsEnabled();
+      } catch (Exception ignored) {
+        chatMessageTimestampsEnabled = false;
+      }
+
+      if (ts != null && ts.enabled() && chatMessageTimestampsEnabled) {
+        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+      }
+
       AttributeSet msgStyle = styles.actionMessage();
       AttributeSet fromStyle = styles.actionFrom();
 

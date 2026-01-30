@@ -16,6 +16,10 @@ ircafe:
       enabled: true
       format: "HH:mm:ss"
 
+    # If enabled, IRCafe will prepend a timestamp to regular user chat message lines.
+    # Default: false (preserve classic IRC look).
+    chatMessageTimestampsEnabled: false
+
 
     # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
     imageEmbedsEnabled: false
