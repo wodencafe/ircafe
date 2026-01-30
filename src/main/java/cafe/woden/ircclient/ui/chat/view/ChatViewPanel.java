@@ -82,8 +82,13 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     // In-panel find UI + keybindings (Ctrl+F).
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
 
-    // Right-click context menu: Copy / Select All / Find Text.
-    decorators.add(ChatTranscriptContextMenuDecorator.decorate(chat, this::openFindBar));
+    // Right-click context menu: default Copy / Select All / Find Text; URL-specific options on links.
+    decorators.add(ChatTranscriptContextMenuDecorator.decorate(
+        chat,
+        this::urlAt,
+        this::openUrl,
+        this::openFindBar
+    ));
 
     // Follow-tail scroll behavior is implemented as a decorator so the view stays lean.
     this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
