@@ -98,6 +98,10 @@ public class PreferencesDialog {
     imageEmbeds.setSelected(current.imageEmbedsEnabled());
     imageEmbeds.setToolTipText("If enabled, IRCafe will download and render images from direct image URLs in chat.");
 
+    JCheckBox chatTimestamps = new JCheckBox("Show timestamps on chat messages");
+    chatTimestamps.setSelected(current.chatMessageTimestampsEnabled());
+    chatTimestamps.setToolTipText("If enabled, IRCafe will prepend a timestamp to each regular user message line.");
+
     // Layout
     JPanel form = new JPanel(new GridBagLayout());
     GridBagConstraints c = new GridBagConstraints();
@@ -134,6 +138,13 @@ public class PreferencesDialog {
     c.gridx = 1;
     form.add(imageEmbeds, c);
 
+    c.gridx = 0;
+    c.gridy++;
+    form.add(new JLabel("Chat timestamps"), c);
+
+    c.gridx = 1;
+    form.add(chatTimestamps, c);
+
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
@@ -144,13 +155,15 @@ public class PreferencesDialog {
       int size = ((Number) fontSize.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
-      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected(), prev.presenceFoldsEnabled());
+      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected(), prev.presenceFoldsEnabled(),
+          chatTimestamps.isSelected());
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
       settingsBus.set(next);
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
       runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
+      runtimeConfig.rememberChatMessageTimestampsEnabled(next.chatMessageTimestampsEnabled());
 
       if (themeChanged) {
         themeManager.applyTheme(next.theme());
@@ -185,7 +198,7 @@ public class PreferencesDialog {
     d.setLayout(new BorderLayout());
     d.add(form, BorderLayout.CENTER);
     d.add(buttons, BorderLayout.SOUTH);
-    d.setMinimumSize(new Dimension(520, 220));
+    d.setMinimumSize(new Dimension(520, 280));
     d.pack();
     d.setLocationRelativeTo(owner);
     d.setVisible(true);

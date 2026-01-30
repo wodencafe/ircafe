@@ -8,7 +8,10 @@ public record UiSettings(
     String chatFontFamily,
     int chatFontSize,
     boolean imageEmbedsEnabled,
-    boolean presenceFoldsEnabled
+    boolean presenceFoldsEnabled,
+
+    /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
+    boolean chatMessageTimestampsEnabled
 ) {
 
   public UiSettings {
@@ -18,23 +21,32 @@ public record UiSettings(
   }
 
   public UiSettings withTheme(String nextTheme) {
-    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled);
+    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled,
+        chatMessageTimestampsEnabled);
   }
 
   public UiSettings withChatFontFamily(String family) {
-    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled);
+    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled,
+        chatMessageTimestampsEnabled);
   }
 
   public UiSettings withChatFontSize(int size) {
-    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled, presenceFoldsEnabled);
+    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled, presenceFoldsEnabled,
+        chatMessageTimestampsEnabled);
   }
 
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled, presenceFoldsEnabled);
+    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled, presenceFoldsEnabled,
+        chatMessageTimestampsEnabled);
   }
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, enabled);
+    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, enabled,
+        chatMessageTimestampsEnabled);
+  }
+
+  public UiSettings withChatMessageTimestampsEnabled(boolean enabled) {
+    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled, enabled);
   }
 }
