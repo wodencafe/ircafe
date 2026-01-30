@@ -10,6 +10,12 @@ public sealed interface ParsedInput permits
     ParsedInput.Msg,
     ParsedInput.Me,
     ParsedInput.Mode,
+    ParsedInput.Op,
+    ParsedInput.Deop,
+    ParsedInput.Voice,
+    ParsedInput.Devoice,
+    ParsedInput.Ban,
+    ParsedInput.Unban,
     ParsedInput.CtcpVersion,
     ParsedInput.CtcpPing,
     ParsedInput.CtcpTime,
@@ -29,6 +35,25 @@ public sealed interface ParsedInput permits
 
   /** /mode [#channel] [modes] [args...] */
   record Mode(String first, String rest) implements ParsedInput {}
+
+  /** /op [#channel] nick1 nick2 ... */
+  record Op(String channel, java.util.List<String> nicks) implements ParsedInput {}
+
+  /** /deop [#channel] nick1 nick2 ... */
+  record Deop(String channel, java.util.List<String> nicks) implements ParsedInput {}
+
+  /** /voice [#channel] nick1 nick2 ... */
+  record Voice(String channel, java.util.List<String> nicks) implements ParsedInput {}
+
+  /** /devoice [#channel] nick1 nick2 ... */
+  record Devoice(String channel, java.util.List<String> nicks) implements ParsedInput {}
+
+  /** /ban [#channel] maskOrNick1 maskOrNick2 ... */
+  record Ban(String channel, java.util.List<String> masksOrNicks) implements ParsedInput {}
+
+  /** /unban [#channel] maskOrNick1 maskOrNick2 ... */
+  record Unban(String channel, java.util.List<String> masksOrNicks) implements ParsedInput {}
+
 
   // CTCP convenience
   record CtcpVersion(String nick) implements ParsedInput {}

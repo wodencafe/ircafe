@@ -59,7 +59,38 @@ public class CommandParser {
       return new ParsedInput.Mode(first, tail);
     }
 
-    if (matchesCommand(line, "/version")) {
+    
+    if (matchesCommand(line, "/op")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/op"));
+      return new ParsedInput.Op(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/deop")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/deop"));
+      return new ParsedInput.Deop(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/voice")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/voice"));
+      return new ParsedInput.Voice(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/devoice")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/devoice"));
+      return new ParsedInput.Devoice(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/ban")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/ban"));
+      return new ParsedInput.Ban(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/unban")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/unban"));
+      return new ParsedInput.Unban(p.channel(), p.items());
+    }
+
+if (matchesCommand(line, "/version")) {
       String nick = argAfter(line, "/version");
       return new ParsedInput.CtcpVersion(nick);
     }
@@ -108,7 +139,30 @@ public class CommandParser {
     return rest.trim();
   }
 
-  /** Case-insensitive command match with a word boundary (end or whitespace). */
+  
+  private record ParsedTargetList(String channel, java.util.List<String> items) {}
+
+  private static ParsedTargetList parseTargetList(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedTargetList("", java.util.List.of());
+
+    String[] toks = r.split("\\s+");
+    String channel = "";
+    int idx = 0;
+    if (toks.length > 0 && (toks[0].startsWith("#") || toks[0].startsWith("&"))) {
+      channel = toks[0];
+      idx = 1;
+    }
+
+    java.util.List<String> items = new java.util.ArrayList<>();
+    for (int i = idx; i < toks.length; i++) {
+      String t = toks[i].trim();
+      if (!t.isEmpty()) items.add(t);
+    }
+    return new ParsedTargetList(channel, java.util.List.copyOf(items));
+  }
+
+/** Case-insensitive command match with a word boundary (end or whitespace). */
   private static boolean matchesCommand(String line, String cmd) {
     if (line == null || cmd == null) return false;
     if (line.length() < cmd.length()) return false;

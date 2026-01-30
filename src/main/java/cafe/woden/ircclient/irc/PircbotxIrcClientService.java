@@ -727,6 +727,51 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onUnknown(UnknownEvent event) {
       touchInbound();
+
+      String line = null;
+      Object l = reflectCall(event, "getLine");
+      if (l == null) l = reflectCall(event, "getRawLine");
+      if (l != null) line = String.valueOf(l);
+
+      // If we can't fetch the raw line, fall back to toString().
+      if (line == null || line.isBlank()) line = String.valueOf(event);
+
+      ParsedRpl324 parsed = parseRpl324(line);
+      if (parsed != null) {
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+      }
+    }
+
+    private record ParsedRpl324(String channel, String details) {}
+
+    private static ParsedRpl324 parseRpl324(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      String[] toks = s.split("\s+");
+      if (toks.length < 4) return null;
+
+      // Format: 324 <me> <#chan> <modes> [args...]
+      if (!"324".equals(toks[0])) return null;
+
+      String channel = toks[2];
+      if (channel == null || channel.isBlank()) return null;
+
+      StringBuilder details = new StringBuilder();
+      for (int i = 3; i < toks.length; i++) {
+        if (i > 3) details.append(' ');
+        details.append(toks[i]);
+      }
+
+      return new ParsedRpl324(channel, details.toString());
     }
 
     @Override
