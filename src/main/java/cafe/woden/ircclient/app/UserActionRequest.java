@@ -12,7 +12,8 @@ public record UserActionRequest(TargetRef contextTarget, String nick, Action act
     OPEN_QUERY,
     WHOIS,
     CTCP_VERSION,
-    CTCP_PING
+    CTCP_PING,
+    CTCP_TIME
   }
 
   public UserActionRequest {

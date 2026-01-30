@@ -16,6 +16,16 @@ public class ChatStyles {
   public static final String ATTR_CHANNEL = "chat.channel";
   public static final String ATTR_STYLE = "chat.style";
 
+  // mIRC formatting metadata (preserved across restyle/theme changes)
+  public static final String ATTR_IRC_BOLD = "chat.irc.bold";
+  public static final String ATTR_IRC_ITALIC = "chat.irc.italic";
+  public static final String ATTR_IRC_UNDERLINE = "chat.irc.underline";
+  public static final String ATTR_IRC_REVERSE = "chat.irc.reverse";
+  /** Integer foreground mIRC color code (0-15), or null for default. */
+  public static final String ATTR_IRC_FG = "chat.irc.fg";
+  /** Integer background mIRC color code (0-15), or null for default. */
+  public static final String ATTR_IRC_BG = "chat.irc.bg";
+
   public static final String STYLE_TIMESTAMP = "timestamp";
   public static final String STYLE_FROM = "from";
   public static final String STYLE_MESSAGE = "message";
@@ -25,6 +35,8 @@ public class ChatStyles {
   public static final String STYLE_ERROR = "error";
   public static final String STYLE_LINK = "link";
   public static final String STYLE_MENTION = "mention";
+  public static final String STYLE_ACTION_FROM = "actionFrom";
+  public static final String STYLE_ACTION_MESSAGE = "actionMessage";
 
   private SimpleAttributeSet tsStyle;
   private SimpleAttributeSet fromStyle;
@@ -35,6 +47,8 @@ public class ChatStyles {
   private SimpleAttributeSet errorStyle;
   private SimpleAttributeSet linkStyle;
   private SimpleAttributeSet mentionStyle;
+  private SimpleAttributeSet actionFromStyle;
+  private SimpleAttributeSet actionMsgStyle;
 
   public ChatStyles() {
     reload();
@@ -72,6 +86,10 @@ public class ChatStyles {
     StyleConstants.setUnderline(linkStyle, true);
 
     mentionStyle = attrs(STYLE_MENTION, fg, mentionBg, false, false);
+
+    // /me ACTION lines
+    actionFromStyle = attrs(STYLE_ACTION_FROM, fg, bg, true, true);
+    actionMsgStyle = attrs(STYLE_ACTION_MESSAGE, fg, bg, false, true);
   }
 
   public AttributeSet timestamp() { return tsStyle; }
@@ -83,6 +101,8 @@ public class ChatStyles {
   public AttributeSet error() { return errorStyle; }
   public AttributeSet link() { return linkStyle; }
   public AttributeSet mention() { return mentionStyle; }
+  public AttributeSet actionFrom() { return actionFromStyle; }
+  public AttributeSet actionMessage() { return actionMsgStyle; }
 
   public AttributeSet byStyleId(String id) {
     if (id == null) return msgStyle;
@@ -96,6 +116,8 @@ public class ChatStyles {
       case STYLE_ERROR -> errorStyle;
       case STYLE_LINK -> linkStyle;
       case STYLE_MENTION -> mentionStyle;
+      case STYLE_ACTION_FROM -> actionFromStyle;
+      case STYLE_ACTION_MESSAGE -> actionMsgStyle;
       default -> msgStyle;
     };
   }

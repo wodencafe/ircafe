@@ -62,6 +62,8 @@ public interface UiPort {
   void setInputEnabled(boolean enabled);
 
   void appendChat(TargetRef target, String from, String text);
+  /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
+  void appendAction(TargetRef target, String from, String action);
   /**
    * Append a foldable presence/system event (join/part/quit/nick) in a channel transcript.
    */

@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.lang.reflect.Method;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -223,6 +224,52 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable sendRaw(String serverId, String rawLine) {
+    return Completable.fromAction(() -> {
+          String line = rawLine == null ? "" : rawLine.trim();
+          if (line.isEmpty()) return;
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
+  public Completable sendAction(String serverId, String target, String action) {
+    return Completable.fromAction(() -> {
+          String t = target == null ? "" : target.trim();
+          String a = action == null ? "" : action;
+          if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
+
+          // Prefer a native PircBotX action(...) API if present. Fall back to manual CTCP wrapper.
+          Object out = requireBot(serverId).sendIRC();
+
+          String dest;
+          if (t.startsWith("#") || t.startsWith("&")) {
+            dest = sanitizeChannel(t);
+          } else {
+            dest = sanitizeNick(t);
+          }
+
+          boolean sent = false;
+          try {
+            Method m = out.getClass().getMethod("action", String.class, String.class);
+            m.invoke(out, dest, a);
+            sent = true;
+          } catch (NoSuchMethodException ignored) {
+            // Older/newer OutputIRC API shape; we'll fall back.
+          } catch (Exception e) {
+            // Reflection failure: fall back to raw CTCP wrapper.
+            log.debug("sendAction: native action() invoke failed, falling back to CTCP wrapper", e);
+          }
+
+          if (!sent) {
+            requireBot(serverId).sendIRC().message(dest, "\u0001ACTION " + a + "\u0001");
+          }
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
   public Completable requestNames(String serverId, String channel) {
     return Completable.fromAction(() -> {
           String chan = sanitizeChannel(channel);
@@ -345,6 +392,20 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
   }
 
+  private static String parseCtcpAction(String message) {
+    if (message == null || message.length() < 2) return null;
+    if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return null;
+    String inner = message.substring(1, message.length() - 1).trim();
+    if (inner.isEmpty()) return null;
+
+    // CTCP ACTION: "\u0001ACTION <text>\u0001"
+    if (inner.regionMatches(true, 0, "ACTION", 0, 6)) {
+      String rest = inner.length() > 6 ? inner.substring(6).trim() : "";
+      return rest;
+    }
+    return null;
+  }
+
   private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
     if (message == null || message.length() < 2) return false;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return false;
@@ -362,6 +423,23 @@ public class PircbotxIrcClientService implements IrcClientService {
       String v = (clientVersion == null) ? "" : clientVersion.trim();
       if (v.isEmpty()) v = "IRCafe";
       bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
+      return true;
+    }
+
+    if ("PING".equals(cmd)) {
+      // Reply with the same token/payload (if any).
+      String payload = "";
+      int sp2 = inner.indexOf(' ');
+      if (sp2 >= 0 && sp2 + 1 < inner.length()) payload = inner.substring(sp2 + 1).trim();
+      String body = payload.isEmpty() ? "\u0001PING\u0001" : "\u0001PING " + payload + "\u0001";
+      bot.sendIRC().notice(sanitizeNick(fromNick), body);
+      return true;
+    }
+
+    if ("TIME".equals(cmd)) {
+      // Best-effort local time string; servers/clients vary here.
+      String now = java.time.ZonedDateTime.now().toString();
+      bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001TIME " + now + "\u0001");
       return true;
     }
 
@@ -523,9 +601,38 @@ public class PircbotxIrcClientService implements IrcClientService {
     public void onMessage(MessageEvent event) {
       touchInbound();
       String channel = event.getChannel().getName();
+      String msg = event.getMessage();
+
+      String action = parseCtcpAction(msg);
+      if (action != null) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
+            Instant.now(), channel, event.getUser().getNick(), action
+        )));
+        return;
+      }
+
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelMessage(
-          Instant.now(), channel, event.getUser().getNick(), event.getMessage()
+          Instant.now(), channel, event.getUser().getNick(), msg
       )));
+    }
+
+    @Override
+    public void onAction(ActionEvent event) {
+      // PircBotX parses CTCP ACTION (/me) into ActionEvent for us.
+      touchInbound();
+      String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+      String action = safeStr(() -> event.getAction(), "");
+
+      if (event.getChannel() != null) {
+        String channel = event.getChannel().getName();
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
+            Instant.now(), channel, from, action
+        )));
+      } else {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
+            Instant.now(), from, action
+        )));
+      }
     }
 
     @Override
@@ -545,6 +652,15 @@ public class PircbotxIrcClientService implements IrcClientService {
       touchInbound();
       String from = event.getUser().getNick();
       String msg = event.getMessage();
+
+      String action = parseCtcpAction(msg);
+      if (action != null) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
+            Instant.now(), from, action
+        )));
+        return;
+      }
+
       if (handleCtcpIfPresent(event.getBot(), from, msg)) return;
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
     }
@@ -611,6 +727,51 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onUnknown(UnknownEvent event) {
       touchInbound();
+
+      String line = null;
+      Object l = reflectCall(event, "getLine");
+      if (l == null) l = reflectCall(event, "getRawLine");
+      if (l != null) line = String.valueOf(l);
+
+      // If we can't fetch the raw line, fall back to toString().
+      if (line == null || line.isBlank()) line = String.valueOf(event);
+
+      ParsedRpl324 parsed = parseRpl324(line);
+      if (parsed != null) {
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+      }
+    }
+
+    private record ParsedRpl324(String channel, String details) {}
+
+    private static ParsedRpl324 parseRpl324(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      String[] toks = s.split("\s+");
+      if (toks.length < 4) return null;
+
+      // Format: 324 <me> <#chan> <modes> [args...]
+      if (!"324".equals(toks[0])) return null;
+
+      String channel = toks[2];
+      if (channel == null || channel.isBlank()) return null;
+
+      StringBuilder details = new StringBuilder();
+      for (int i = 3; i < toks.length; i++) {
+        if (i > 3) details.append(' ');
+        details.append(toks[i]);
+      }
+
+      return new ParsedRpl324(channel, details.toString());
     }
 
     @Override
@@ -757,7 +918,23 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onMode(ModeEvent event) {
       touchInbound();
-      if (event.getChannel() != null) emitRoster(event.getChannel());
+      if (event == null) return;
+      if (event.getChannel() == null) return;
+
+      emitRoster(event.getChannel());
+
+      String chan = event.getChannel().getName();
+      String by = nickFromEvent(event);
+      String details = modeDetailsFromEvent(event, chan);
+
+      if (details != null && !details.isBlank()) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelModeChanged(
+            Instant.now(),
+            chan,
+            by,
+            details
+        )));
+      }
     }
 
     @Override public void onOp(OpEvent event) { emitRoster(event.getChannel()); }
@@ -779,24 +956,178 @@ public class PircbotxIrcClientService implements IrcClientService {
       } catch (Exception ignored) {}
     }
 
+
+    private static java.util.Set<?> setOrEmpty(Channel channel, String method) {
+      if (channel == null || method == null) return java.util.Set.of();
+      try {
+        java.lang.reflect.Method m = channel.getClass().getMethod(method);
+        Object v = m.invoke(channel);
+        if (v instanceof java.util.Set<?> s) return s;
+      } catch (Exception ignored) {}
+      return java.util.Set.of();
+    }
+
+    private static String prefixForUser(Object user, java.util.Set<?> owners, java.util.Set<?> admins,
+                                        java.util.Set<?> ops, java.util.Set<?> halfOps, java.util.Set<?> voices) {
+      if (user == null) return "";
+      if (owners != null && owners.contains(user)) return "~";
+      if (admins != null && admins.contains(user)) return "&";
+      if (ops != null && ops.contains(user)) return "@";
+      if (halfOps != null && halfOps.contains(user)) return "%";
+      if (voices != null && voices.contains(user)) return "+";
+      return "";
+    }
+
+    private static int prefixRank(String prefix) {
+      if (prefix == null || prefix.isBlank()) return 99;
+      return switch (prefix.charAt(0)) {
+        case '~' -> 0;
+        case '&' -> 1;
+        case '@' -> 2;
+        case '%' -> 3;
+        case '+' -> 4;
+        default -> 10;
+      };
+    }
+
+    private static boolean isOperatorLike(IrcEvent.NickInfo n) {
+      if (n == null) return false;
+      String p = n.prefix();
+      if (p == null || p.isBlank()) return false;
+      return p.indexOf('~') >= 0 || p.indexOf('&') >= 0 || p.indexOf('@') >= 0;
+    }
+
+    private static String nickFromEvent(Object event) {
+      if (event == null) return null;
+
+      Object user = reflectCall(event, "getUser");
+      if (user == null) user = reflectCall(event, "getSource");
+      if (user == null) user = reflectCall(event, "getSetter");
+
+      if (user != null) {
+        Object nick = reflectCall(user, "getNick");
+        if (nick != null) return String.valueOf(nick);
+      }
+
+      // Some services (e.g. ChanServ) may not be represented as a User; recover from raw line.
+      String rawNick = nickFromRawLine(event);
+      if (rawNick != null && !rawNick.isBlank()) return rawNick;
+
+      return null;
+    }
+
+    private static String nickFromRawLine(Object event) {
+      if (event == null) return null;
+      Object raw = reflectCall(event, "getRawLine");
+      if (raw == null) raw = reflectCall(event, "getRaw");
+      if (raw == null) raw = reflectCall(event, "getLine");
+      if (raw == null) return null;
+
+      String line = String.valueOf(raw).trim();
+      if (!line.startsWith(":")) return null;
+
+      int sp = line.indexOf(' ');
+      if (sp <= 1) return null;
+
+      String prefix = line.substring(1, sp);
+      int bang = prefix.indexOf('!');
+      if (bang >= 0) prefix = prefix.substring(0, bang);
+      return prefix;
+    }
+
+    private static String modeDetailsFromEvent(Object event, String channelName) {
+      if (event == null) return null;
+
+      // Common method names across libraries/versions.
+      Object mode = reflectCall(event, "getMode");
+      if (mode == null) mode = reflectCall(event, "getModeLine");
+      if (mode == null) mode = reflectCall(event, "getModeString");
+      String s = (mode != null) ? String.valueOf(mode) : null;
+
+      // Last-resort: try raw line.
+      if (s == null) {
+        Object raw = reflectCall(event, "getRawLine");
+        if (raw != null) s = String.valueOf(raw);
+      }
+
+      if (s == null) return null;
+
+      // If this is a raw MODE line, reduce it to just "<modes> [args...]"
+      String reduced = extractModeDetails(s, channelName);
+      return (reduced != null) ? reduced : s;
+    }
+
+    private static String extractModeDetails(String rawOrLine, String channelName) {
+      if (rawOrLine == null) return null;
+      String line = rawOrLine.trim();
+      if (line.isEmpty()) return null;
+
+      String l = line;
+      if (l.startsWith(":")) {
+        int sp = l.indexOf(' ');
+        if (sp > 0) l = l.substring(sp + 1).trim();
+      }
+
+      String[] toks = l.split("\s+");
+      for (int i = 0; i < toks.length; i++) {
+        if ("MODE".equalsIgnoreCase(toks[i])) {
+          int idx = i + 2; // MODE <chan> <modes...>
+          if (idx <= toks.length - 1) {
+            StringBuilder sb = new StringBuilder();
+            for (int j = idx; j < toks.length; j++) {
+              if (j > idx) sb.append(' ');
+              sb.append(toks[j]);
+            }
+            String r = sb.toString().trim();
+            return r.isEmpty() ? null : r;
+          }
+          return null;
+        }
+      }
+
+      // Sometimes the library returns "<chan> <modes...>"
+      if (channelName != null && !channelName.isBlank()) {
+        String ch = channelName.trim();
+        if (line.startsWith(ch + " ")) return line.substring(ch.length()).trim();
+      }
+
+      return null;
+    }
+
+    private static Object reflectCall(Object target, String method) {
+      if (target == null || method == null) return null;
+      try {
+        java.lang.reflect.Method m = target.getClass().getMethod(method);
+        return m.invoke(target);
+      } catch (Exception ignored) {
+        return null;
+      }
+    }
+
     private void emitRoster(Channel channel) {
       if (channel == null) return;
 
       String channelName = channel.getName();
-      var opsSet = channel.getOps();
+
+      // Try to gather privilege sets via reflection so we support multiple pircbotx versions gracefully.
+      java.util.Set<?> owners = setOrEmpty(channel, "getOwners");
+      java.util.Set<?> admins = setOrEmpty(channel, "getSuperOps");
+      java.util.Set<?> ops = setOrEmpty(channel, "getOps");
+      java.util.Set<?> halfOps = setOrEmpty(channel, "getHalfOps");
+      java.util.Set<?> voices = setOrEmpty(channel, "getVoices");
 
       List<IrcEvent.NickInfo> nicks = channel.getUsers().stream()
           .map(u -> new IrcEvent.NickInfo(
               u.getNick(),
-              opsSet.contains(u) ? "@" : ""
+              prefixForUser(u, owners, admins, ops, halfOps, voices)
           ))
           .sorted(Comparator
-              .comparing((IrcEvent.NickInfo n) -> n.prefix().equals("@") ? 0 : 1)
+              .comparingInt((IrcEvent.NickInfo n) -> prefixRank(n.prefix()))
               .thenComparing(IrcEvent.NickInfo::nick, String.CASE_INSENSITIVE_ORDER))
           .toList();
 
-      int totalUsers = channel.getUsers().size();
-      int operatorCount = opsSet.size();
+      int totalUsers = nicks.size();
+      int operatorCount = (int) nicks.stream().filter(BridgeListener::isOperatorLike).count();
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickListUpdated(
           Instant.now(),
@@ -805,6 +1136,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           totalUsers,
           operatorCount
       )));
+
     }
   }
 

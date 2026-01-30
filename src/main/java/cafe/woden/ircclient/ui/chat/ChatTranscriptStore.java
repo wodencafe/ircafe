@@ -5,7 +5,9 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
+import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -215,6 +217,45 @@ public class ChatTranscriptStore {
     appendLine(ref, from, text, fromStyle, styles.message());
   }
 
+  /**
+   * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
+   */
+  public void appendAction(TargetRef ref, String from, String action) {
+    breakPresenceRun(ref);
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return;
+
+    String a = action == null ? "" : action;
+
+    // New line
+    ensureAtLineStart(doc);
+
+    try {
+      AttributeSet msgStyle = styles.actionMessage();
+      AttributeSet fromStyle = styles.actionFrom();
+
+      if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+        fromStyle = nickColors.forNick(from, fromStyle);
+      }
+
+      doc.insertString(doc.getLength(), "* ", msgStyle);
+      if (from != null && !from.isBlank()) {
+        doc.insertString(doc.getLength(), from, fromStyle);
+        doc.insertString(doc.getLength(), " ", msgStyle);
+      }
+
+      renderer.insertRichText(doc, ref, a, msgStyle);
+      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+
+      if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
+        imageEmbeds.appendEmbeds(doc, a);
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
   public void appendNotice(TargetRef ref, String from, String text) {
     breakPresenceRun(ref);
     appendLine(ref, from, text, styles.noticeFrom(), styles.noticeMessage());
@@ -363,6 +404,12 @@ public class ChatTranscriptStore {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);
       }
 
+      // Preserve channel-link metadata.
+      Object chan = old.getAttribute(ChatStyles.ATTR_CHANNEL);
+      if (chan != null) {
+        fresh.addAttribute(ChatStyles.ATTR_CHANNEL, chan);
+      }
+
       // Preserve embedded Swing components (e.g., inline image previews, fold components).
       java.awt.Component comp = StyleConstants.getComponent(old);
       if (comp != null) {
@@ -378,6 +425,57 @@ public class ChatTranscriptStore {
           nickColors.applyColor(fresh, n);
         }
       }
+
+      // Preserve and re-apply mIRC formatting (bold/italic/underline/colors) across theme changes.
+      // The mIRC metadata attributes are set during insertion by {@link IrcFormatting}.
+      Object ircBold = old.getAttribute(ChatStyles.ATTR_IRC_BOLD);
+      Object ircItalic = old.getAttribute(ChatStyles.ATTR_IRC_ITALIC);
+      Object ircUnderline = old.getAttribute(ChatStyles.ATTR_IRC_UNDERLINE);
+      Object ircReverse = old.getAttribute(ChatStyles.ATTR_IRC_REVERSE);
+      Object ircFg = old.getAttribute(ChatStyles.ATTR_IRC_FG);
+      Object ircBg = old.getAttribute(ChatStyles.ATTR_IRC_BG);
+
+      if (ircBold != null) {
+        fresh.addAttribute(ChatStyles.ATTR_IRC_BOLD, ircBold);
+        if (ircBold instanceof Boolean b) StyleConstants.setBold(fresh, b);
+      }
+      if (ircItalic != null) {
+        fresh.addAttribute(ChatStyles.ATTR_IRC_ITALIC, ircItalic);
+        if (ircItalic instanceof Boolean b) StyleConstants.setItalic(fresh, b);
+      }
+      if (ircUnderline != null) {
+        fresh.addAttribute(ChatStyles.ATTR_IRC_UNDERLINE, ircUnderline);
+        if (ircUnderline instanceof Boolean b) {
+          // Always keep links underlined for click affordance.
+          if (!ChatStyles.STYLE_LINK.equals(styleId) || b) {
+            StyleConstants.setUnderline(fresh, b);
+          }
+        }
+      }
+      if (ircReverse != null) {
+        fresh.addAttribute(ChatStyles.ATTR_IRC_REVERSE, ircReverse);
+      }
+      if (ircFg != null) {
+        fresh.addAttribute(ChatStyles.ATTR_IRC_FG, ircFg);
+      }
+      if (ircBg != null) {
+        fresh.addAttribute(ChatStyles.ATTR_IRC_BG, ircBg);
+      }
+
+      // Apply palette colors (if any) and reverse.
+      boolean rev = Boolean.TRUE.equals(ircReverse);
+      Color fgColor = (ircFg instanceof Integer i) ? IrcFormatting.colorForCode(i) : null;
+      Color bgColor = (ircBg instanceof Integer i) ? IrcFormatting.colorForCode(i) : null;
+
+      Color finalFg = fgColor != null ? fgColor : StyleConstants.getForeground(fresh);
+      Color finalBg = bgColor != null ? bgColor : StyleConstants.getBackground(fresh);
+      if (rev) {
+        Color tmp = finalFg;
+        finalFg = finalBg;
+        finalBg = tmp;
+      }
+      if (finalFg != null) StyleConstants.setForeground(fresh, finalFg);
+      if (finalBg != null) StyleConstants.setBackground(fresh, finalBg);
 
       // Ensure the style marker survives replacements.
       if (styleId != null) {

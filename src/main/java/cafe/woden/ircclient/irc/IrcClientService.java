@@ -37,6 +37,21 @@ public interface IrcClientService {
 
   Completable sendPrivateMessage(String serverId, String nick, String message);
 
+  /** Send a raw IRC line (advanced). */
+  Completable sendRaw(String serverId, String rawLine);
+
+  /**
+   * Send a CTCP ACTION (/me).
+   *
+   * <p>Implementations may choose to use a native library API (preferred) instead of manually
+   * wrapping the message in 0x01 delimiters.
+   */
+  default Completable sendAction(String serverId, String target, String action) {
+    String a = action == null ? "" : action;
+    // Fallback implementation: manual CTCP wrapper.
+    return sendMessage(serverId, target, "\u0001ACTION " + a + "\u0001");
+  }
+
   /**
    * Convenience method used by the app layer.
    *

@@ -19,22 +19,22 @@ public class CommandParser {
       return new ParsedInput.Say(line);
     }
 
-    if (line.startsWith("/join")) {
+    if (matchesCommand(line, "/join")) {
       String chan = argAfter(line, "/join");
       return new ParsedInput.Join(chan);
     }
 
-    if (line.startsWith("/nick")) {
+    if (matchesCommand(line, "/nick")) {
       String nick = argAfter(line, "/nick");
       return new ParsedInput.Nick(nick);
     }
 
-    if (line.startsWith("/query")) {
+    if (matchesCommand(line, "/query")) {
       String nick = argAfter(line, "/query");
       return new ParsedInput.Query(nick);
     }
 
-    if (line.startsWith("/msg")) {
+    if (matchesCommand(line, "/msg")) {
       String rest = argAfter(line, "/msg");
       int sp = rest.indexOf(' ');
       if (sp <= 0) return new ParsedInput.Msg(rest.trim(), "");
@@ -43,9 +43,90 @@ public class CommandParser {
       return new ParsedInput.Msg(nick, body);
     }
 
-    if (line.startsWith("/me")) {
+    if (matchesCommand(line, "/me")) {
       String action = argAfter(line, "/me");
       return new ParsedInput.Me(action);
+    }
+
+
+    if (matchesCommand(line, "/mode")) {
+      String rest = argAfter(line, "/mode");
+      if (rest.isEmpty()) return new ParsedInput.Mode("", "");
+      int sp = rest.indexOf(' ');
+      if (sp < 0) return new ParsedInput.Mode(rest.trim(), "");
+      String first = rest.substring(0, sp).trim();
+      String tail = rest.substring(sp + 1).trim();
+      return new ParsedInput.Mode(first, tail);
+    }
+
+    
+    if (matchesCommand(line, "/op")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/op"));
+      return new ParsedInput.Op(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/deop")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/deop"));
+      return new ParsedInput.Deop(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/voice")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/voice"));
+      return new ParsedInput.Voice(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/devoice")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/devoice"));
+      return new ParsedInput.Devoice(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/ban")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/ban"));
+      return new ParsedInput.Ban(p.channel(), p.items());
+    }
+
+    if (matchesCommand(line, "/unban")) {
+      ParsedTargetList p = parseTargetList(argAfter(line, "/unban"));
+      return new ParsedInput.Unban(p.channel(), p.items());
+    }
+
+if (matchesCommand(line, "/version")) {
+      String nick = argAfter(line, "/version");
+      return new ParsedInput.CtcpVersion(nick);
+    }
+
+    if (matchesCommand(line, "/ping")) {
+      String nick = argAfter(line, "/ping");
+      return new ParsedInput.CtcpPing(nick);
+    }
+
+    if (matchesCommand(line, "/time")) {
+      String nick = argAfter(line, "/time");
+      return new ParsedInput.CtcpTime(nick);
+    }
+
+    if (matchesCommand(line, "/ctcp")) {
+      String rest = argAfter(line, "/ctcp");
+      String nick = "";
+      String cmd = "";
+      String args = "";
+
+      int sp1 = rest.indexOf(' ');
+      if (sp1 < 0) {
+        nick = rest.trim();
+      } else {
+        nick = rest.substring(0, sp1).trim();
+        String rest2 = rest.substring(sp1 + 1).trim();
+        int sp2 = rest2.indexOf(' ');
+        if (sp2 < 0) {
+          cmd = rest2.trim();
+        } else {
+          cmd = rest2.substring(0, sp2).trim();
+          args = rest2.substring(sp2 + 1).trim();
+        }
+      }
+
+      return new ParsedInput.Ctcp(nick, cmd, args);
     }
 
     return new ParsedInput.Unknown(line);
@@ -56,5 +137,38 @@ public class CommandParser {
     if (line.length() <= cmd.length()) return "";
     String rest = line.substring(cmd.length());
     return rest.trim();
+  }
+
+  
+  private record ParsedTargetList(String channel, java.util.List<String> items) {}
+
+  private static ParsedTargetList parseTargetList(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedTargetList("", java.util.List.of());
+
+    String[] toks = r.split("\\s+");
+    String channel = "";
+    int idx = 0;
+    if (toks.length > 0 && (toks[0].startsWith("#") || toks[0].startsWith("&"))) {
+      channel = toks[0];
+      idx = 1;
+    }
+
+    java.util.List<String> items = new java.util.ArrayList<>();
+    for (int i = idx; i < toks.length; i++) {
+      String t = toks[i].trim();
+      if (!t.isEmpty()) items.add(t);
+    }
+    return new ParsedTargetList(channel, java.util.List.copyOf(items));
+  }
+
+/** Case-insensitive command match with a word boundary (end or whitespace). */
+  private static boolean matchesCommand(String line, String cmd) {
+    if (line == null || cmd == null) return false;
+    if (line.length() < cmd.length()) return false;
+    if (!line.regionMatches(true, 0, cmd, 0, cmd.length())) return false;
+    if (line.length() == cmd.length()) return true;
+    char next = line.charAt(cmd.length());
+    return Character.isWhitespace(next);
   }
 }
