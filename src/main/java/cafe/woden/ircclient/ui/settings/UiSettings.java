@@ -8,6 +8,7 @@ public record UiSettings(
     String chatFontFamily,
     int chatFontSize,
     boolean imageEmbedsEnabled,
+    boolean linkPreviewsEnabled,
     boolean presenceFoldsEnabled,
 
     /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
@@ -21,32 +22,38 @@ public record UiSettings(
   }
 
   public UiSettings withTheme(String nextTheme) {
-    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled,
-        chatMessageTimestampsEnabled);
+    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, imageEmbedsEnabled, linkPreviewsEnabled,
+        presenceFoldsEnabled, chatMessageTimestampsEnabled);
   }
 
   public UiSettings withChatFontFamily(String family) {
-    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled,
-        chatMessageTimestampsEnabled);
+    return new UiSettings(theme, family, chatFontSize, imageEmbedsEnabled, linkPreviewsEnabled,
+        presenceFoldsEnabled, chatMessageTimestampsEnabled);
   }
 
   public UiSettings withChatFontSize(int size) {
-    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled, presenceFoldsEnabled,
-        chatMessageTimestampsEnabled);
+    return new UiSettings(theme, chatFontFamily, size, imageEmbedsEnabled, linkPreviewsEnabled,
+        presenceFoldsEnabled, chatMessageTimestampsEnabled);
   }
 
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled, presenceFoldsEnabled,
-        chatMessageTimestampsEnabled);
+    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled, linkPreviewsEnabled,
+        presenceFoldsEnabled, chatMessageTimestampsEnabled);
+  }
+
+  public UiSettings withLinkPreviewsEnabled(boolean enabled) {
+    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, enabled,
+        presenceFoldsEnabled, chatMessageTimestampsEnabled);
   }
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, enabled,
-        chatMessageTimestampsEnabled);
+    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, linkPreviewsEnabled,
+        enabled, chatMessageTimestampsEnabled);
   }
 
   public UiSettings withChatMessageTimestampsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, presenceFoldsEnabled, enabled);
+    return new UiSettings(theme, chatFontFamily, chatFontSize, imageEmbedsEnabled, linkPreviewsEnabled,
+        presenceFoldsEnabled, enabled);
   }
 }

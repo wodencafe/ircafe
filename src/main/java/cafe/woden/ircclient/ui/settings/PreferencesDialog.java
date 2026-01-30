@@ -98,6 +98,10 @@ public class PreferencesDialog {
     imageEmbeds.setSelected(current.imageEmbedsEnabled());
     imageEmbeds.setToolTipText("If enabled, IRCafe will download and render images from direct image URLs in chat.");
 
+    JCheckBox linkPreviews = new JCheckBox("Enable link previews (OpenGraph cards)");
+    linkPreviews.setSelected(current.linkPreviewsEnabled());
+    linkPreviews.setToolTipText("If enabled, IRCafe will fetch page metadata (title/description/image) and show a preview card under messages.\nNote: this makes network requests to the linked sites.");
+
     JCheckBox chatTimestamps = new JCheckBox("Show timestamps on chat messages");
     chatTimestamps.setSelected(current.chatMessageTimestampsEnabled());
     chatTimestamps.setToolTipText("If enabled, IRCafe will prepend a timestamp to each regular user message line.");
@@ -140,6 +144,13 @@ public class PreferencesDialog {
 
     c.gridx = 0;
     c.gridy++;
+    form.add(new JLabel("Link previews"), c);
+
+    c.gridx = 1;
+    form.add(linkPreviews, c);
+
+    c.gridx = 0;
+    c.gridy++;
     form.add(new JLabel("Chat timestamps"), c);
 
     c.gridx = 1;
@@ -155,14 +166,15 @@ public class PreferencesDialog {
       int size = ((Number) fontSize.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
-      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected(), prev.presenceFoldsEnabled(),
-          chatTimestamps.isSelected());
+      UiSettings next = new UiSettings(t, fam, size, imageEmbeds.isSelected(), linkPreviews.isSelected(),
+          prev.presenceFoldsEnabled(), chatTimestamps.isSelected());
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
       settingsBus.set(next);
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
       runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
+      runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
       runtimeConfig.rememberChatMessageTimestampsEnabled(next.chatMessageTimestampsEnabled());
 
       if (themeChanged) {

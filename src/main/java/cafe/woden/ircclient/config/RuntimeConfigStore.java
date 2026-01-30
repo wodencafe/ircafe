@@ -185,6 +185,23 @@ public class RuntimeConfigStore {
     }
   }
 
+  /** Persist whether link previews are enabled (stored under ircafe.ui.linkPreviewsEnabled). */
+  public synchronized void rememberLinkPreviewsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("linkPreviewsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist link preview setting to '{}'", file, e);
+    }
+  }
+
   /** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
   public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
     try {
