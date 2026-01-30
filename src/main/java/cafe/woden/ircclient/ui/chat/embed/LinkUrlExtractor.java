@@ -13,6 +13,8 @@ import java.util.regex.Pattern;
 /**
  * Best-effort extraction of normal web URLs from chat text.
  *
+ * <p>We intentionally keep this permissive (like {@link ImageUrlExtractor}): the transcript already
+ * shows the raw URL text; this is only used to decide if we should append a preview card.
  */
 final class LinkUrlExtractor {
 

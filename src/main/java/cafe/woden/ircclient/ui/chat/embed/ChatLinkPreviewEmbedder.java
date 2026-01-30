@@ -46,7 +46,7 @@ public class ChatLinkPreviewEmbedder {
     for (String url : urls) {
       if (count >= MAX_PREVIEWS_PER_MESSAGE) break;
       try {
-        ChatLinkPreviewComponent comp = new ChatLinkPreviewComponent(url, fetch, imageFetch);
+        ChatLinkPreviewComponent comp = new ChatLinkPreviewComponent(url, fetch, imageFetch, uiSettings.get().linkPreviewsCollapsedByDefault());
 
         SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
         a.addAttribute(ChatStyles.ATTR_URL, url);

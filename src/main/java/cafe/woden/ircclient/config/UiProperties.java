@@ -24,8 +24,14 @@ public record UiProperties(
     /** Enable embedding inline image previews from direct image links. Default: false. */
     Boolean imageEmbedsEnabled,
 
+    /** If enabled, newly inserted inline images start collapsed (you can expand per-image). Default: false. */
+    Boolean imageEmbedsCollapsedByDefault,
+
     /** Enable Discord/Signal-style link preview "cards" for regular web pages. Default: false. */
     Boolean linkPreviewsEnabled,
+
+    /** If enabled, newly inserted link preview cards start collapsed (you can expand per-card). Default: false. */
+    Boolean linkPreviewsCollapsedByDefault,
 
     /** Enable per-nick coloring in chat + user list. */
     Boolean nickColoringEnabled,
@@ -81,9 +87,19 @@ public record UiProperties(
       imageEmbedsEnabled = false;
     }
 
+    // Image embeds collapsed-by-default default: false (preserve current behavior).
+    if (imageEmbedsCollapsedByDefault == null) {
+      imageEmbedsCollapsedByDefault = false;
+    }
+
     // Link previews default: disabled (privacy + extra network traffic).
     if (linkPreviewsEnabled == null) {
       linkPreviewsEnabled = false;
+    }
+
+    // Link previews collapsed-by-default default: false (preserve current behavior).
+    if (linkPreviewsCollapsedByDefault == null) {
+      linkPreviewsCollapsedByDefault = false;
     }
     // Nick coloring defaults.
     if (nickColorMinContrast <= 0) {

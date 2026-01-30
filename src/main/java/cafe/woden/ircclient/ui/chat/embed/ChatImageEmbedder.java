@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
@@ -14,10 +15,12 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class ChatImageEmbedder {
 
+  private final UiSettingsBus uiSettings;
   private final ChatStyles styles;
   private final ImageFetchService fetch;
 
-  public ChatImageEmbedder(ChatStyles styles, ImageFetchService fetch) {
+  public ChatImageEmbedder(UiSettingsBus uiSettings, ChatStyles styles, ImageFetchService fetch) {
+    this.uiSettings = uiSettings;
     this.styles = styles;
     this.fetch = fetch;
   }
@@ -33,7 +36,7 @@ public class ChatImageEmbedder {
     for (String url : ImageUrlExtractor.extractImageUrls(messageText)) {
       try {
         // Insert a component as a single "character" in the styled document.
-        ChatImageComponent comp = new ChatImageComponent(url, fetch);
+        ChatImageComponent comp = new ChatImageComponent(url, fetch, uiSettings.get().imageEmbedsCollapsedByDefault());
 
         SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
         a.addAttribute(ChatStyles.ATTR_URL, url);
