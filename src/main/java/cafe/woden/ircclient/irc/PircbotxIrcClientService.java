@@ -224,6 +224,16 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable sendRaw(String serverId, String rawLine) {
+    return Completable.fromAction(() -> {
+          String line = rawLine == null ? "" : rawLine.trim();
+          if (line.isEmpty()) return;
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
   public Completable sendAction(String serverId, String target, String action) {
     return Completable.fromAction(() -> {
           String t = target == null ? "" : target.trim();
@@ -863,7 +873,23 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onMode(ModeEvent event) {
       touchInbound();
-      if (event.getChannel() != null) emitRoster(event.getChannel());
+      if (event == null) return;
+      if (event.getChannel() == null) return;
+
+      emitRoster(event.getChannel());
+
+      String chan = event.getChannel().getName();
+      String by = nickFromEvent(event);
+      String details = modeDetailsFromEvent(event, chan);
+
+      if (details != null && !details.isBlank()) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelModeChanged(
+            Instant.now(),
+            chan,
+            by,
+            details
+        )));
+      }
     }
 
     @Override public void onOp(OpEvent event) { emitRoster(event.getChannel()); }
@@ -885,24 +911,178 @@ public class PircbotxIrcClientService implements IrcClientService {
       } catch (Exception ignored) {}
     }
 
+
+    private static java.util.Set<?> setOrEmpty(Channel channel, String method) {
+      if (channel == null || method == null) return java.util.Set.of();
+      try {
+        java.lang.reflect.Method m = channel.getClass().getMethod(method);
+        Object v = m.invoke(channel);
+        if (v instanceof java.util.Set<?> s) return s;
+      } catch (Exception ignored) {}
+      return java.util.Set.of();
+    }
+
+    private static String prefixForUser(Object user, java.util.Set<?> owners, java.util.Set<?> admins,
+                                        java.util.Set<?> ops, java.util.Set<?> halfOps, java.util.Set<?> voices) {
+      if (user == null) return "";
+      if (owners != null && owners.contains(user)) return "~";
+      if (admins != null && admins.contains(user)) return "&";
+      if (ops != null && ops.contains(user)) return "@";
+      if (halfOps != null && halfOps.contains(user)) return "%";
+      if (voices != null && voices.contains(user)) return "+";
+      return "";
+    }
+
+    private static int prefixRank(String prefix) {
+      if (prefix == null || prefix.isBlank()) return 99;
+      return switch (prefix.charAt(0)) {
+        case '~' -> 0;
+        case '&' -> 1;
+        case '@' -> 2;
+        case '%' -> 3;
+        case '+' -> 4;
+        default -> 10;
+      };
+    }
+
+    private static boolean isOperatorLike(IrcEvent.NickInfo n) {
+      if (n == null) return false;
+      String p = n.prefix();
+      if (p == null || p.isBlank()) return false;
+      return p.indexOf('~') >= 0 || p.indexOf('&') >= 0 || p.indexOf('@') >= 0;
+    }
+
+    private static String nickFromEvent(Object event) {
+      if (event == null) return null;
+
+      Object user = reflectCall(event, "getUser");
+      if (user == null) user = reflectCall(event, "getSource");
+      if (user == null) user = reflectCall(event, "getSetter");
+
+      if (user != null) {
+        Object nick = reflectCall(user, "getNick");
+        if (nick != null) return String.valueOf(nick);
+      }
+
+      // Some services (e.g. ChanServ) may not be represented as a User; recover from raw line.
+      String rawNick = nickFromRawLine(event);
+      if (rawNick != null && !rawNick.isBlank()) return rawNick;
+
+      return null;
+    }
+
+    private static String nickFromRawLine(Object event) {
+      if (event == null) return null;
+      Object raw = reflectCall(event, "getRawLine");
+      if (raw == null) raw = reflectCall(event, "getRaw");
+      if (raw == null) raw = reflectCall(event, "getLine");
+      if (raw == null) return null;
+
+      String line = String.valueOf(raw).trim();
+      if (!line.startsWith(":")) return null;
+
+      int sp = line.indexOf(' ');
+      if (sp <= 1) return null;
+
+      String prefix = line.substring(1, sp);
+      int bang = prefix.indexOf('!');
+      if (bang >= 0) prefix = prefix.substring(0, bang);
+      return prefix;
+    }
+
+    private static String modeDetailsFromEvent(Object event, String channelName) {
+      if (event == null) return null;
+
+      // Common method names across libraries/versions.
+      Object mode = reflectCall(event, "getMode");
+      if (mode == null) mode = reflectCall(event, "getModeLine");
+      if (mode == null) mode = reflectCall(event, "getModeString");
+      String s = (mode != null) ? String.valueOf(mode) : null;
+
+      // Last-resort: try raw line.
+      if (s == null) {
+        Object raw = reflectCall(event, "getRawLine");
+        if (raw != null) s = String.valueOf(raw);
+      }
+
+      if (s == null) return null;
+
+      // If this is a raw MODE line, reduce it to just "<modes> [args...]"
+      String reduced = extractModeDetails(s, channelName);
+      return (reduced != null) ? reduced : s;
+    }
+
+    private static String extractModeDetails(String rawOrLine, String channelName) {
+      if (rawOrLine == null) return null;
+      String line = rawOrLine.trim();
+      if (line.isEmpty()) return null;
+
+      String l = line;
+      if (l.startsWith(":")) {
+        int sp = l.indexOf(' ');
+        if (sp > 0) l = l.substring(sp + 1).trim();
+      }
+
+      String[] toks = l.split("\s+");
+      for (int i = 0; i < toks.length; i++) {
+        if ("MODE".equalsIgnoreCase(toks[i])) {
+          int idx = i + 2; // MODE <chan> <modes...>
+          if (idx <= toks.length - 1) {
+            StringBuilder sb = new StringBuilder();
+            for (int j = idx; j < toks.length; j++) {
+              if (j > idx) sb.append(' ');
+              sb.append(toks[j]);
+            }
+            String r = sb.toString().trim();
+            return r.isEmpty() ? null : r;
+          }
+          return null;
+        }
+      }
+
+      // Sometimes the library returns "<chan> <modes...>"
+      if (channelName != null && !channelName.isBlank()) {
+        String ch = channelName.trim();
+        if (line.startsWith(ch + " ")) return line.substring(ch.length()).trim();
+      }
+
+      return null;
+    }
+
+    private static Object reflectCall(Object target, String method) {
+      if (target == null || method == null) return null;
+      try {
+        java.lang.reflect.Method m = target.getClass().getMethod(method);
+        return m.invoke(target);
+      } catch (Exception ignored) {
+        return null;
+      }
+    }
+
     private void emitRoster(Channel channel) {
       if (channel == null) return;
 
       String channelName = channel.getName();
-      var opsSet = channel.getOps();
+
+      // Try to gather privilege sets via reflection so we support multiple pircbotx versions gracefully.
+      java.util.Set<?> owners = setOrEmpty(channel, "getOwners");
+      java.util.Set<?> admins = setOrEmpty(channel, "getSuperOps");
+      java.util.Set<?> ops = setOrEmpty(channel, "getOps");
+      java.util.Set<?> halfOps = setOrEmpty(channel, "getHalfOps");
+      java.util.Set<?> voices = setOrEmpty(channel, "getVoices");
 
       List<IrcEvent.NickInfo> nicks = channel.getUsers().stream()
           .map(u -> new IrcEvent.NickInfo(
               u.getNick(),
-              opsSet.contains(u) ? "@" : ""
+              prefixForUser(u, owners, admins, ops, halfOps, voices)
           ))
           .sorted(Comparator
-              .comparing((IrcEvent.NickInfo n) -> n.prefix().equals("@") ? 0 : 1)
+              .comparingInt((IrcEvent.NickInfo n) -> prefixRank(n.prefix()))
               .thenComparing(IrcEvent.NickInfo::nick, String.CASE_INSENSITIVE_ORDER))
           .toList();
 
-      int totalUsers = channel.getUsers().size();
-      int operatorCount = opsSet.size();
+      int totalUsers = nicks.size();
+      int operatorCount = (int) nicks.stream().filter(BridgeListener::isOperatorLike).count();
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickListUpdated(
           Instant.now(),
@@ -911,6 +1091,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           totalUsers,
           operatorCount
       )));
+
     }
   }
 

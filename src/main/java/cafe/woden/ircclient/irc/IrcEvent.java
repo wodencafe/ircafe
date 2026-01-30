@@ -10,6 +10,7 @@ public sealed interface IrcEvent permits
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
     IrcEvent.ChannelAction,
+    IrcEvent.ChannelModeChanged,
     IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
     IrcEvent.PrivateAction,
@@ -34,6 +35,9 @@ public sealed interface IrcEvent permits
 
   /** A CTCP ACTION (/me) sent to a channel. */
   record ChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
+
+  /** A channel MODE change (e.g. +o nick, +m). */
+  record ChannelModeChanged(Instant at, String channel, String by, String details) implements IrcEvent {}
 
   /**
    * Channel topic update.

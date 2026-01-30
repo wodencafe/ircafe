@@ -274,6 +274,7 @@ public class IrcMediator {
       case ParsedInput.Query cmd -> handleQuery(cmd.nick());
       case ParsedInput.Msg cmd -> handleMsg(cmd.nick(), cmd.body());
       case ParsedInput.Me cmd -> handleMe(cmd.action());
+      case ParsedInput.Mode cmd -> handleMode(cmd.first(), cmd.rest());
       case ParsedInput.CtcpVersion cmd -> handleCtcpVersion(cmd.nick());
       case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
       case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
@@ -410,6 +411,56 @@ public class IrcMediator {
         irc.sendAction(at.serverId(), at.target(), a).subscribe(
             () -> {},
             err -> ui.appendError(safeStatusTarget(), "(send-error)", String.valueOf(err))
+        )
+    );
+  }
+
+
+  private void handleMode(String first, String rest) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
+      return;
+    }
+
+    String f = first == null ? "" : first.trim();
+    String r = rest == null ? "" : rest.trim();
+
+    // Determine target channel + mode string.
+    String channel;
+    String modeSpec;
+
+    if (f.startsWith("#") || f.startsWith("&")) {
+      channel = f;
+      modeSpec = r;
+    } else if (at.isChannel()) {
+      channel = at.target();
+      modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
+    } else {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: /mode <#channel> [modes] [args...]");
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can use /mode +o nick");
+      return;
+    }
+
+    if (channel == null || channel.isBlank()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: /mode <#channel> [modes] [args...]");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    String line = "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
+    TargetRef out = at.isChannel() ? new TargetRef(at.serverId(), channel) : new TargetRef(at.serverId(), "status");
+    ensureTargetExists(out);
+    ui.appendStatus(out, "(mode)", "→ " + line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line).subscribe(
+            () -> {},
+            err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
         )
     );
   }
@@ -618,6 +669,20 @@ public class IrcMediator {
         ensureTargetExists(chan);
         ui.appendAction(chan, ev.from(), ev.action());
         if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+      }
+
+
+      case IrcEvent.ChannelModeChanged ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+
+        String byRaw = ev.by();
+        String details = ev.details();
+
+        // Make MODE output human-friendly (e.g. +b mask -> "ban added").
+        for (String line : ModePrettyPrinter.pretty(byRaw, ev.channel(), details)) {
+          ui.appendNotice(chan, "(mode)", line);
+        }
       }
 
       case IrcEvent.ChannelTopicUpdated ev -> {

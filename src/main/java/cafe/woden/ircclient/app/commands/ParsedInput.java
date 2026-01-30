@@ -9,6 +9,7 @@ public sealed interface ParsedInput permits
     ParsedInput.Query,
     ParsedInput.Msg,
     ParsedInput.Me,
+    ParsedInput.Mode,
     ParsedInput.CtcpVersion,
     ParsedInput.CtcpPing,
     ParsedInput.CtcpTime,
@@ -25,6 +26,9 @@ public sealed interface ParsedInput permits
   record Msg(String nick, String body) implements ParsedInput {}
 
   record Me(String action) implements ParsedInput {}
+
+  /** /mode [#channel] [modes] [args...] */
+  record Mode(String first, String rest) implements ParsedInput {}
 
   // CTCP convenience
   record CtcpVersion(String nick) implements ParsedInput {}

@@ -48,6 +48,17 @@ public class CommandParser {
       return new ParsedInput.Me(action);
     }
 
+
+    if (matchesCommand(line, "/mode")) {
+      String rest = argAfter(line, "/mode");
+      if (rest.isEmpty()) return new ParsedInput.Mode("", "");
+      int sp = rest.indexOf(' ');
+      if (sp < 0) return new ParsedInput.Mode(rest.trim(), "");
+      String first = rest.substring(0, sp).trim();
+      String tail = rest.substring(sp + 1).trim();
+      return new ParsedInput.Mode(first, tail);
+    }
+
     if (matchesCommand(line, "/version")) {
       String nick = argAfter(line, "/version");
       return new ParsedInput.CtcpVersion(nick);

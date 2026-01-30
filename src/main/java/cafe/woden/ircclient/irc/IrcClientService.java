@@ -37,6 +37,9 @@ public interface IrcClientService {
 
   Completable sendPrivateMessage(String serverId, String nick, String message);
 
+  /** Send a raw IRC line (advanced). */
+  Completable sendRaw(String serverId, String rawLine);
+
   /**
    * Send a CTCP ACTION (/me).
    *
