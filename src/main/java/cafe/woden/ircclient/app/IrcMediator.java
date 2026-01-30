@@ -393,7 +393,7 @@ public class IrcMediator {
     }
 
     String me = irc.currentNick(at.serverId()).orElse("me");
-    ui.appendChat(at, "* " + me, a);
+    ui.appendAction(at, me, a);
 
     disposables.add(
         irc.sendMessage(at.serverId(), at.target(), "\u0001ACTION " + a + "\u0001").subscribe(
@@ -485,6 +485,13 @@ public class IrcMediator {
         if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
       }
 
+      case IrcEvent.ChannelAction ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendAction(chan, ev.from(), ev.action());
+        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+      }
+
       case IrcEvent.ChannelTopicUpdated ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
@@ -495,6 +502,13 @@ public class IrcMediator {
         TargetRef pm = new TargetRef(sid, ev.from());
         ensureTargetExists(pm);
         ui.appendChat(pm, ev.from(), ev.text());
+        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+      }
+
+      case IrcEvent.PrivateAction ev -> {
+        TargetRef pm = new TargetRef(sid, ev.from());
+        ensureTargetExists(pm);
+        ui.appendAction(pm, ev.from(), ev.action());
         if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
       }
 

@@ -345,6 +345,20 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
   }
 
+  private static String parseCtcpAction(String message) {
+    if (message == null || message.length() < 2) return null;
+    if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return null;
+    String inner = message.substring(1, message.length() - 1).trim();
+    if (inner.isEmpty()) return null;
+
+    // CTCP ACTION: "\u0001ACTION <text>\u0001"
+    if (inner.regionMatches(true, 0, "ACTION", 0, 6)) {
+      String rest = inner.length() > 6 ? inner.substring(6).trim() : "";
+      return rest;
+    }
+    return null;
+  }
+
   private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
     if (message == null || message.length() < 2) return false;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return false;
@@ -523,9 +537,38 @@ public class PircbotxIrcClientService implements IrcClientService {
     public void onMessage(MessageEvent event) {
       touchInbound();
       String channel = event.getChannel().getName();
+      String msg = event.getMessage();
+
+      String action = parseCtcpAction(msg);
+      if (action != null) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
+            Instant.now(), channel, event.getUser().getNick(), action
+        )));
+        return;
+      }
+
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelMessage(
-          Instant.now(), channel, event.getUser().getNick(), event.getMessage()
+          Instant.now(), channel, event.getUser().getNick(), msg
       )));
+    }
+
+    @Override
+    public void onAction(ActionEvent event) {
+      // PircBotX parses CTCP ACTION (/me) into ActionEvent for us.
+      touchInbound();
+      String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+      String action = safeStr(() -> event.getAction(), "");
+
+      if (event.getChannel() != null) {
+        String channel = event.getChannel().getName();
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
+            Instant.now(), channel, from, action
+        )));
+      } else {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
+            Instant.now(), from, action
+        )));
+      }
     }
 
     @Override
@@ -545,6 +588,15 @@ public class PircbotxIrcClientService implements IrcClientService {
       touchInbound();
       String from = event.getUser().getNick();
       String msg = event.getMessage();
+
+      String action = parseCtcpAction(msg);
+      if (action != null) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
+            Instant.now(), from, action
+        )));
+        return;
+      }
+
       if (handleCtcpIfPresent(event.getBot(), from, msg)) return;
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
     }

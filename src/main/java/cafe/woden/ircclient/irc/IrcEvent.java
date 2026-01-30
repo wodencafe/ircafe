@@ -9,8 +9,10 @@ public sealed interface IrcEvent permits
     IrcEvent.Reconnecting,
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
+    IrcEvent.ChannelAction,
     IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
+    IrcEvent.PrivateAction,
     IrcEvent.Notice,
     IrcEvent.UserJoinedChannel,
     IrcEvent.UserPartedChannel,
@@ -30,6 +32,9 @@ public sealed interface IrcEvent permits
 
   record ChannelMessage(Instant at, String channel, String from, String text) implements IrcEvent {}
 
+  /** A CTCP ACTION (/me) sent to a channel. */
+  record ChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
+
   /**
    * Channel topic update.
    *
@@ -38,6 +43,8 @@ public sealed interface IrcEvent permits
   record ChannelTopicUpdated(Instant at, String channel, String topic) implements IrcEvent {}
 
   record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
+  /** A CTCP ACTION (/me) sent as a private message. */
+  record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}
 
   /** Another user joined a channel we're in. */

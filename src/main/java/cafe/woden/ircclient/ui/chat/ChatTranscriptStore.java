@@ -215,6 +215,45 @@ public class ChatTranscriptStore {
     appendLine(ref, from, text, fromStyle, styles.message());
   }
 
+  /**
+   * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
+   */
+  public void appendAction(TargetRef ref, String from, String action) {
+    breakPresenceRun(ref);
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return;
+
+    String a = action == null ? "" : action;
+
+    // New line
+    ensureAtLineStart(doc);
+
+    try {
+      AttributeSet msgStyle = styles.actionMessage();
+      AttributeSet fromStyle = styles.actionFrom();
+
+      if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+        fromStyle = nickColors.forNick(from, fromStyle);
+      }
+
+      doc.insertString(doc.getLength(), "* ", msgStyle);
+      if (from != null && !from.isBlank()) {
+        doc.insertString(doc.getLength(), from, fromStyle);
+        doc.insertString(doc.getLength(), " ", msgStyle);
+      }
+
+      renderer.insertRichText(doc, ref, a, msgStyle);
+      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+
+      if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
+        imageEmbeds.appendEmbeds(doc, a);
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
   public void appendNotice(TargetRef ref, String from, String text) {
     breakPresenceRun(ref);
     appendLine(ref, from, text, styles.noticeFrom(), styles.noticeMessage());

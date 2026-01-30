@@ -25,6 +25,8 @@ public class ChatStyles {
   public static final String STYLE_ERROR = "error";
   public static final String STYLE_LINK = "link";
   public static final String STYLE_MENTION = "mention";
+  public static final String STYLE_ACTION_FROM = "actionFrom";
+  public static final String STYLE_ACTION_MESSAGE = "actionMessage";
 
   private SimpleAttributeSet tsStyle;
   private SimpleAttributeSet fromStyle;
@@ -35,6 +37,8 @@ public class ChatStyles {
   private SimpleAttributeSet errorStyle;
   private SimpleAttributeSet linkStyle;
   private SimpleAttributeSet mentionStyle;
+  private SimpleAttributeSet actionFromStyle;
+  private SimpleAttributeSet actionMsgStyle;
 
   public ChatStyles() {
     reload();
@@ -72,6 +76,10 @@ public class ChatStyles {
     StyleConstants.setUnderline(linkStyle, true);
 
     mentionStyle = attrs(STYLE_MENTION, fg, mentionBg, false, false);
+
+    // /me ACTION lines
+    actionFromStyle = attrs(STYLE_ACTION_FROM, fg, bg, true, true);
+    actionMsgStyle = attrs(STYLE_ACTION_MESSAGE, fg, bg, false, true);
   }
 
   public AttributeSet timestamp() { return tsStyle; }
@@ -83,6 +91,8 @@ public class ChatStyles {
   public AttributeSet error() { return errorStyle; }
   public AttributeSet link() { return linkStyle; }
   public AttributeSet mention() { return mentionStyle; }
+  public AttributeSet actionFrom() { return actionFromStyle; }
+  public AttributeSet actionMessage() { return actionMsgStyle; }
 
   public AttributeSet byStyleId(String id) {
     if (id == null) return msgStyle;
@@ -96,6 +106,8 @@ public class ChatStyles {
       case STYLE_ERROR -> errorStyle;
       case STYLE_LINK -> linkStyle;
       case STYLE_MENTION -> mentionStyle;
+      case STYLE_ACTION_FROM -> actionFromStyle;
+      case STYLE_ACTION_MESSAGE -> actionMsgStyle;
       default -> msgStyle;
     };
   }
