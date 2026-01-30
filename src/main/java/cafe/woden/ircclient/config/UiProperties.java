@@ -24,6 +24,9 @@ public record UiProperties(
     /** Enable embedding inline image previews from direct image links. Default: false. */
     Boolean imageEmbedsEnabled,
 
+    /** Enable Discord/Signal-style link preview "cards" for regular web pages. Default: false. */
+    Boolean linkPreviewsEnabled,
+
     /** Enable per-nick coloring in chat + user list. */
     Boolean nickColoringEnabled,
 
@@ -76,6 +79,11 @@ public record UiProperties(
     // Image embeds default: disabled.
     if (imageEmbedsEnabled == null) {
       imageEmbedsEnabled = false;
+    }
+
+    // Link previews default: disabled (privacy + extra network traffic).
+    if (linkPreviewsEnabled == null) {
+      linkPreviewsEnabled = false;
     }
     // Nick coloring defaults.
     if (nickColorMinContrast <= 0) {

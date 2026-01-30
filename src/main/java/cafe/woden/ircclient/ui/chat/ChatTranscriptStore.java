@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.PresenceEvent;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
+import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
 import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
@@ -33,6 +34,7 @@ public class ChatTranscriptStore {
   private final ChatTimestampFormatter ts;
   private final NickColorService nickColors;
   private final ChatImageEmbedder imageEmbeds;
+  private final ChatLinkPreviewEmbedder linkPreviews;
   private final UiSettingsBus uiSettings;
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
@@ -44,6 +46,7 @@ public class ChatTranscriptStore {
       ChatTimestampFormatter ts,
       NickColorService nickColors,
       ChatImageEmbedder imageEmbeds,
+      ChatLinkPreviewEmbedder linkPreviews,
       UiSettingsBus uiSettings
   ) {
     this.styles = styles;
@@ -51,6 +54,7 @@ public class ChatTranscriptStore {
     this.ts = ts;
     this.nickColors = nickColors;
     this.imageEmbeds = imageEmbeds;
+    this.linkPreviews = linkPreviews;
     this.uiSettings = uiSettings;
   }
 
@@ -214,6 +218,10 @@ public class ChatTranscriptStore {
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
         imageEmbeds.appendEmbeds(doc, text);
       }
+
+      if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
+        linkPreviews.appendPreviews(doc, text);
+      }
     } catch (Exception ignored) {
     }
   }
@@ -275,6 +283,10 @@ public class ChatTranscriptStore {
 
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
         imageEmbeds.appendEmbeds(doc, a);
+      }
+
+      if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
+        linkPreviews.appendPreviews(doc, a);
       }
     } catch (Exception ignored) {
       // ignore

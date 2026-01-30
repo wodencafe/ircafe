@@ -42,6 +42,8 @@ dependencies {
 
 	implementation "org.sejda.imageio:webp-imageio:0.1.6"
 	implementation "com.madgag:animated-gif-lib:1.4"
+
+	implementation "org.jsoup:jsoup:1.22.1"
 }
 
 tasks.named('test') {
