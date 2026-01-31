@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.UserActionRequest;
@@ -205,8 +206,8 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void setConnectedUi(boolean connected) {
-    onEdt(() -> serverTree.setConnectedUi(connected));
+  public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
+    onEdt(() -> serverTree.setConnectionControlsEnabled(connectEnabled, disconnectEnabled));
   }
 
   @Override
@@ -215,8 +216,8 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void setServerConnected(String serverId, boolean connected) {
-    onEdt(() -> serverTree.setServerConnected(serverId, connected));
+  public void setServerConnectionState(String serverId, ConnectionState state) {
+    onEdt(() -> serverTree.setServerConnectionState(serverId, state));
   }
 
   @Override

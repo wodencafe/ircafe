@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
@@ -95,7 +96,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
 
   /** Per-server connection state for context menu enabling/disabling. */
-  private final Map<String, Boolean> serverConnected = new HashMap<>();
+  private final Map<String, ConnectionState> serverStates = new HashMap<>();
 
   private final ServerRegistry serverRegistry;
 
@@ -122,7 +123,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     add(header, BorderLayout.NORTH);
 
     // Initial UI state
-    setConnectedUi(false);
+    setConnectionControlsEnabled(true, false);
 
     // Tree
     tree.setRootVisible(true);
@@ -241,7 +242,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
       String serverId = Objects.toString(node.getUserObject(), "").trim();
       if (serverId.isEmpty()) return null;
 
-      boolean connected = Boolean.TRUE.equals(serverConnected.get(serverId));
+      ConnectionState state = serverStates.getOrDefault(serverId, ConnectionState.DISCONNECTED);
       JPopupMenu menu = new JPopupMenu();
 
       // Keep these visible but disabled when not applicable, same as the Window menu.
@@ -250,12 +251,14 @@ public class ServerTreeDockable extends JPanel implements Dockable {
       menu.addSeparator();
 
       JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
-      connectOne.setEnabled(!connected);
+      connectOne.setEnabled(state == ConnectionState.DISCONNECTED);
       connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
       menu.add(connectOne);
 
       JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
-      disconnectOne.setEnabled(connected);
+      disconnectOne.setEnabled(state == ConnectionState.CONNECTING
+          || state == ConnectionState.CONNECTED
+          || state == ConnectionState.RECONNECTING);
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
 
@@ -352,22 +355,34 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     return nodeActions.closeAction();
   }
 
-  public void setServerConnected(String serverId, boolean connected) {
+  public void setServerConnectionState(String serverId, ConnectionState state) {
     if (serverId == null) return;
-    serverConnected.put(serverId, connected);
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    if (st == ConnectionState.DISCONNECTED) {
+      serverStates.remove(serverId);
+    } else {
+      serverStates.put(serverId, st);
+    }
   }
 
   public void setStatusText(String text) {
     statusLabel.setText(Objects.toString(text, ""));
   }
 
+  /** Enable/disable the global Connect/Disconnect buttons independently. */
+  public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
+    connectBtn.setEnabled(connectEnabled);
+    disconnectBtn.setEnabled(disconnectEnabled);
+  }
+
   /**
-   * Historical name; we keep it for compatibility with the app layer.
-   * For multi-server, we treat "connected" as "at least one server is connected".
+   * Back-compat convenience: historically we used a single boolean to toggle the buttons.
+   *
+   * @deprecated Prefer {@link #setConnectionControlsEnabled(boolean, boolean)}.
    */
+  @Deprecated
   public void setConnectedUi(boolean connected) {
-    connectBtn.setEnabled(!connected);
-    disconnectBtn.setEnabled(connected);
+    setConnectionControlsEnabled(!connected, connected);
   }
 
   public void ensureNode(TargetRef ref) {
@@ -506,7 +521,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     ServerNodes sn = servers.remove(serverId);
     if (sn == null) return;
 
-    serverConnected.remove(serverId);
+    serverStates.remove(serverId);
 
     // Remove all leaves for this server.
     leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
@@ -521,7 +536,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     if (servers.containsKey(id)) return servers.get(id);
 
     // Default per-server connection state.
-    serverConnected.putIfAbsent(id, false);
+    serverStates.putIfAbsent(id, ConnectionState.DISCONNECTED);
 
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");

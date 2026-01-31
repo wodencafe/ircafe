@@ -854,6 +854,7 @@ public class IrcMediator {
 
     // Delegate connectivity state changes.
     if (e instanceof IrcEvent.Connected
+        || e instanceof IrcEvent.Connecting
         || e instanceof IrcEvent.Reconnecting
         || e instanceof IrcEvent.Disconnected) {
       connectionCoordinator.handleConnectivityEvent(sid, e, targetCoordinator.getActiveTarget());
