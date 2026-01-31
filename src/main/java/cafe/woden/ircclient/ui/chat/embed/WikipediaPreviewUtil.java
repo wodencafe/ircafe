@@ -74,23 +74,13 @@ final class WikipediaPreviewUtil {
       pageUrl = originalArticleUri != null ? originalArticleUri.toString() : null;
     }
 
-    // Keep it "bigger than standard", but not obnoxious.
-    String desc = trimForPreview(extract, 900);
+    // Keep the extract reasonably sized; the UI will clamp to lines and prefer sentence boundaries.
+    String desc = PreviewTextUtil.trimToSentence(extract, 4000);
 
     return new LinkPreview(pageUrl, title, desc, "Wikipedia", imageUrl);
   }
 
-  private static String trimForPreview(String s, int maxChars) {
-    if (s == null) return null;
-    String t = s.strip();
-    if (t.length() <= maxChars) return t;
-    // Prefer truncating at a sentence boundary.
-    int cut = t.lastIndexOf('.', Math.min(t.length() - 1, maxChars));
-    if (cut >= 120) {
-      return t.substring(0, cut + 1).strip() + " …";
-    }
-    return t.substring(0, maxChars).strip() + " …";
-  }
+  // (No trim helper here: PreviewTextUtil handles sentence-aware trimming.)
 
   private static String normalizeWikipediaHost(String host) {
     if (host == null) return null;
