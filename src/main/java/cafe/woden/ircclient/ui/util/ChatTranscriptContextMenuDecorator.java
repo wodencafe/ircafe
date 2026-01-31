@@ -23,6 +23,7 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 import java.awt.Point;
+import java.time.Duration;
 
 /**
  * Decorates a chat transcript {@link JTextComponent} with a right-click context menu.
@@ -49,6 +50,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem saveLinkItem = new JMenuItem("Save Link As...");
 
   private volatile String currentPopupUrl;
+
+  // Some sites reject programmatic downloads unless the request looks like a browser.
+  private static final String DEFAULT_UA =
+      "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
 
   private boolean closed = false;
 
@@ -205,7 +210,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       }
 
       // Download off the EDT.
-      new Thread(() -> downloadToFile(url, out), "ircafe-save-link").start();
+      Thread t = new Thread(() -> downloadToFile(url, out), "ircafe-save-link");
+      t.setDaemon(true);
+      t.start();
     } catch (Exception ignored) {
     }
   }
@@ -250,47 +257,71 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     }
   }
 
-  private void downloadToFile(String url, Path out) {
-    HttpClient client = HttpClient.newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build();
+private void downloadToFile(String url, Path out) {
+  HttpClient client = HttpClient.newBuilder()
+      .followRedirects(HttpClient.Redirect.NORMAL)
+      .connectTimeout(Duration.ofSeconds(20))
+      .build();
 
-    try {
-      HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-          .GET()
-          .build();
+  try {
+    URI uri = URI.create(url);
 
-      HttpResponse<InputStream> resp = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
-      int code = resp.statusCode();
-      if (code < 200 || code >= 300) {
-        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-            transcript,
-            "Failed to download link (HTTP " + code + "):\n\n" + url,
-            "Save Link As...",
-            JOptionPane.ERROR_MESSAGE
-        ));
-        return;
-      }
+    // First attempt: "browser-ish" headers (many hosts 403 Java defaults).
+    HttpRequest.Builder b = HttpRequest.newBuilder(uri)
+        .timeout(Duration.ofMinutes(2))
+        .header("User-Agent", DEFAULT_UA)
+        .header("Accept", "*/*")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .GET();
 
-      try (InputStream in = resp.body()) {
-        Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
-      }
+    HttpResponse<InputStream> resp = client.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+    int code = resp.statusCode();
 
+    // Second attempt: some hosts require a plausible Referer (anti-hotlinking).
+    if (code == 403 && uri.getHost() != null) {
+      String origin = uri.getScheme() + "://" + uri.getHost() + "/";
+      resp = client.send(b.header("Referer", origin).build(), HttpResponse.BodyHandlers.ofInputStream());
+      code = resp.statusCode();
+    }
+
+    if (code < 200 || code >= 300) {
+      int finalCode = code;
       SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
           transcript,
-          "Saved to:\n\n" + out,
-          "Save Link As...",
-          JOptionPane.INFORMATION_MESSAGE
-      ));
-    } catch (Exception ex) {
-      SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-          transcript,
-          "Failed to download link:\n\n" + url + "\n\n" + ex.getMessage(),
+          "Failed to download link (HTTP " + finalCode + "):\n\n" + url
+              + "\n\nNote: Some sites block direct downloads from apps unless you\n"
+              + "are signed in (cookies) or they require special headers.\n"
+              + "If this keeps happening, use 'Open Link in Browser' then Save As there.",
           "Save Link As...",
           JOptionPane.ERROR_MESSAGE
       ));
+      return;
     }
+
+    Path parent = out.getParent();
+    if (parent != null) Files.createDirectories(parent);
+
+    try (InputStream in = resp.body()) {
+      Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+        transcript,
+        "Saved to:\n\n" + out,
+        "Save Link As...",
+        JOptionPane.INFORMATION_MESSAGE
+    ));
+  } catch (Exception ex) {
+    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
+        transcript,
+        "Failed to download link:\n\n" + url + "\n\n" + ex.getMessage(),
+        "Save Link As...",
+        JOptionPane.ERROR_MESSAGE
+    ));
   }
+}
+
+
 
   @Override
   public void close() {
