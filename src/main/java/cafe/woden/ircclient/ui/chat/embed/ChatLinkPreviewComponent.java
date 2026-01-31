@@ -33,8 +33,16 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final int WIDTH_MARGIN_PX = 32;
 
   private static final int THUMB_SIZE = 96;
+  private static final int YT_THUMB_W = 160;
+  private static final int YT_THUMB_H = 90;
+  private static final int X_THUMB_W = 160;
+  private static final int X_THUMB_H = 90;
   private static final int MAX_TITLE_LINES = 2;
-  private static final int MAX_DESC_LINES = 3;
+  private static final int DEFAULT_MAX_DESC_LINES = 3;
+  private static final int WIKIPEDIA_MAX_DESC_LINES = 10;
+  private static final int YOUTUBE_MAX_DESC_LINES = 8;
+  private static final int X_MAX_DESC_LINES = 8;
+  private static final int GITHUB_MAX_DESC_LINES = 6;
 
   // Padding tweaks for collapsed vs expanded previews.
   private static final Insets OUTER_PAD_EXPANDED = new Insets(2, 0, 6, 0);
@@ -59,6 +67,16 @@ final class ChatLinkPreviewComponent extends JPanel {
   private JTextArea title;
   private JTextArea desc;
   private JLabel site;
+
+  private boolean wikiExtended;
+
+  private boolean youtubeExtended;
+  private String youtubeVideoId;
+
+  private boolean xExtended;
+  private boolean githubExtended;
+
+  private String fullDescText;
 
   private boolean collapsed;
 
@@ -124,7 +142,13 @@ final class ChatLinkPreviewComponent extends JPanel {
     card.setBorder(buildCardBorder(collapsed));
 
     String targetUrl = safe(p.url()) != null ? p.url() : url;
+    wikiExtended = WikipediaPreviewUtil.isWikipediaArticleUrl(targetUrl);
 
+    youtubeVideoId = YouTubePreviewUtil.extractVideoId(targetUrl);
+    youtubeExtended = youtubeVideoId != null;
+
+    xExtended = XPreviewUtil.isXStatusUrl(targetUrl);
+    githubExtended = GitHubPreviewUtil.isGitHubUrl(targetUrl);
     // Header: collapse button + site + title.
     header = new JPanel(new BorderLayout(8, 0));
     header.setOpaque(false);
@@ -172,11 +196,14 @@ final class ChatLinkPreviewComponent extends JPanel {
     body.setOpaque(false);
 
     thumb = new JLabel();
-    thumb.setPreferredSize(new Dimension(THUMB_SIZE, THUMB_SIZE));
-    thumb.setMinimumSize(new Dimension(THUMB_SIZE, THUMB_SIZE));
+    int thumbW = youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : THUMB_SIZE);
+    int thumbH = youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : THUMB_SIZE);
+    thumb.setPreferredSize(new Dimension(thumbW, thumbH));
+    thumb.setMinimumSize(new Dimension(thumbW, thumbH));
     thumb.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
-    desc = textArea(safe(p.description()), false);
+    fullDescText = safe(p.description());
+    desc = textArea(fullDescText, false);
 
     if (p.imageUrl() != null && !p.imageUrl().isBlank()) {
       body.add(thumb, BorderLayout.WEST);
@@ -250,7 +277,14 @@ final class ChatLinkPreviewComponent extends JPanel {
                   img = gif.frames().get(0);
                 }
                 if (img != null) {
-                  java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(img, THUMB_SIZE);
+                  int maxW = THUMB_SIZE;
+                  try {
+                    Dimension dsz = thumb != null ? thumb.getPreferredSize() : null;
+                    if (dsz != null && dsz.width > 0) maxW = dsz.width;
+                  } catch (Exception ignored2) {
+                    // best effort
+                  }
+                  java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(img, maxW);
                   thumb.setIcon(new javax.swing.ImageIcon(scaled));
                 }
               } catch (Exception ignored) {
@@ -299,15 +333,49 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     // Clamp header/title and body/desc widths.
     int headerInnerW = Math.max(160, maxW - 28);
-    title.setSize(new Dimension(headerInnerW, Short.MAX_VALUE));
-    clampLines(title, MAX_TITLE_LINES);
+    if (title != null) {
+      title.setSize(new Dimension(headerInnerW, Short.MAX_VALUE));
+      clampLines(title, MAX_TITLE_LINES);
+    }
 
     int descInnerW = maxW;
-    if (thumb != null && thumb.getParent() == body) {
-      descInnerW = Math.max(120, maxW - THUMB_SIZE - 14);
+    if (thumb != null && body != null && thumb.getParent() == body) {
+      int tw = THUMB_SIZE;
+      try {
+        Dimension tps = thumb.getPreferredSize();
+        if (tps != null && tps.width > 0) tw = tps.width;
+      } catch (Exception ignored) {
+        // best effort
+      }
+      descInnerW = Math.max(120, maxW - tw - 14);
     }
-    desc.setSize(new Dimension(descInnerW, Short.MAX_VALUE));
-    clampLines(desc, MAX_DESC_LINES);
+
+    int maxDescLines;
+    if (wikiExtended) {
+      maxDescLines = WIKIPEDIA_MAX_DESC_LINES;
+    } else if (youtubeExtended) {
+      maxDescLines = YOUTUBE_MAX_DESC_LINES;
+    } else if (xExtended) {
+      maxDescLines = X_MAX_DESC_LINES;
+    } else if (githubExtended) {
+      maxDescLines = GITHUB_MAX_DESC_LINES;
+    } else {
+      maxDescLines = DEFAULT_MAX_DESC_LINES;
+    }
+
+    if (desc != null) {
+      desc.setSize(new Dimension(descInnerW, Short.MAX_VALUE));
+
+      // Prefer an end-of-sentence clamp instead of a hard visual clip.
+      if (fullDescText != null && !fullDescText.isBlank()) {
+        String clamped = PreviewTextUtil.clampToLines(fullDescText, desc, descInnerW, maxDescLines);
+        if (clamped != null && !clamped.equals(desc.getText())) {
+          desc.setText(clamped);
+        }
+      }
+
+      clampLines(desc, maxDescLines);
+    }
 
     // We want to clamp the width, but NOT lock the height.
     // If we set a preferred size with an expanded height, a later collapse may stay blank
