@@ -34,7 +34,8 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private static final int THUMB_SIZE = 96;
   private static final int MAX_TITLE_LINES = 2;
-  private static final int MAX_DESC_LINES = 3;
+  private static final int DEFAULT_MAX_DESC_LINES = 3;
+  private static final int WIKIPEDIA_MAX_DESC_LINES = 6;
 
   // Padding tweaks for collapsed vs expanded previews.
   private static final Insets OUTER_PAD_EXPANDED = new Insets(2, 0, 6, 0);
@@ -59,6 +60,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   private JTextArea title;
   private JTextArea desc;
   private JLabel site;
+
+  private boolean wikiExtended;
 
   private boolean collapsed;
 
@@ -124,6 +127,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     card.setBorder(buildCardBorder(collapsed));
 
     String targetUrl = safe(p.url()) != null ? p.url() : url;
+    wikiExtended = WikipediaPreviewUtil.isWikipediaArticleUrl(targetUrl);
 
     // Header: collapse button + site + title.
     header = new JPanel(new BorderLayout(8, 0));
@@ -307,7 +311,8 @@ final class ChatLinkPreviewComponent extends JPanel {
       descInnerW = Math.max(120, maxW - THUMB_SIZE - 14);
     }
     desc.setSize(new Dimension(descInnerW, Short.MAX_VALUE));
-    clampLines(desc, MAX_DESC_LINES);
+    int maxDescLines = wikiExtended ? WIKIPEDIA_MAX_DESC_LINES : DEFAULT_MAX_DESC_LINES;
+    clampLines(desc, maxDescLines);
 
     // We want to clamp the width, but NOT lock the height.
     // If we set a preferred size with an expanded height, a later collapse may stay blank

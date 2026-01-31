@@ -82,6 +82,14 @@ public class LinkPreviewFetchService {
       throw new IllegalArgumentException("refusing to fetch local/private host: " + uri.getHost());
     }
 
+    // Special-case: Wikipedia articles. OpenGraph descriptions are often a single sentence.
+    // The REST summary endpoint lets us show a slightly longer extract while still staying compact.
+    LinkPreview wiki = tryLoadWikipediaPreview(uri);
+    if (wiki != null) {
+      cache.put(url, new java.lang.ref.SoftReference<>(wiki));
+      return wiki;
+    }
+
     HttpRequest req = HttpRequest.newBuilder(uri)
         .timeout(TIMEOUT)
         .header("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
@@ -110,6 +118,31 @@ public class LinkPreviewFetchService {
     LinkPreview preview = LinkPreviewParser.parse(doc, url);
     cache.put(url, new java.lang.ref.SoftReference<>(preview));
     return preview;
+  }
+
+  private LinkPreview tryLoadWikipediaPreview(URI articleUri) {
+    try {
+      if (!WikipediaPreviewUtil.isWikipediaArticleUri(articleUri)) return null;
+      URI api = WikipediaPreviewUtil.toSummaryApiUri(articleUri);
+      if (api == null) return null;
+
+      HttpRequest req = HttpRequest.newBuilder(api)
+          .timeout(TIMEOUT)
+          .header("Accept", "application/json")
+          .header("User-Agent", "IRCafe LinkPreview/0.1")
+          .GET()
+          .build();
+
+      HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+      if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+        return null; // fall back to OG parser
+      }
+
+      LinkPreview p = WikipediaPreviewUtil.parseSummaryJson(resp.body(), articleUri);
+      return p;
+    } catch (Exception ignored) {
+      return null;
+    }
   }
 
   private static byte[] readUpTo(java.io.InputStream in, int maxBytes) throws Exception {
