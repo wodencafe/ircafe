@@ -334,6 +334,80 @@ public class IrcMediator {
     return new ParsedCtcp(cmd, arg);
   }
 
+
+
+  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler) {
+    // CTCP replies come back as NOTICE with 0x01-wrapped payload.
+    // Route them to the chat target where the request originated.
+    ParsedCtcp ctcp = parseCtcp(text);
+    if (ctcp != null) {
+      String cmd = ctcp.commandUpper();
+      String arg = ctcp.arg();
+
+      TargetRef dest = null;
+      String rendered = null;
+
+      if ("VERSION".equals(cmd)) {
+        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        if (p != null) {
+          dest = p.target();
+          rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
+        }
+      } else if ("PING".equals(cmd)) {
+        String token = arg;
+        int sp = token.indexOf(' ');
+        if (sp >= 0) token = token.substring(0, sp);
+        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
+        if (p != null) {
+          dest = p.target();
+          long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
+          rendered = from + " PING reply: " + rtt + "ms";
+        }
+      } else if ("TIME".equals(cmd)) {
+        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        if (p != null) {
+          dest = p.target();
+          rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
+        }
+      }
+
+      // If we received a CTCP reply we recognize but didn't have a pending request for,
+      // still render a clean status line to the server status window (better than raw 0x01).
+      if (dest == null && rendered == null) {
+        if ("VERSION".equals(cmd)) {
+          dest = status;
+          rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
+        } else if ("PING".equals(cmd)) {
+          dest = status;
+          rendered = from + " PING: " + (arg.isBlank() ? "(no payload)" : arg);
+        } else if ("TIME".equals(cmd)) {
+          dest = status;
+          rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
+        } else {
+          PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+          dest = (p != null) ? p.target() : status;
+          rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
+        }
+      }
+
+      if (dest != null && rendered != null) {
+        ensureTargetExists(dest);
+        if (spoiler) {
+          ui.appendSpoilerChat(dest, "(ctcp)", rendered);
+        } else {
+          ui.appendStatus(dest, "(ctcp)", rendered);
+        }
+        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        return;
+      }
+    }
+
+    if (spoiler) {
+      ui.appendSpoilerChat(status, "(notice) " + from, text);
+    } else {
+      ui.appendNotice(status, "(notice) " + from, text);
+    }
+  }
   public void stop() {
     if (!started.compareAndSet(true, false)) {
       return;
@@ -957,10 +1031,24 @@ public class IrcMediator {
         if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
       }
 
+      case IrcEvent.SoftChannelMessage ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendSpoilerChat(chan, ev.from(), ev.text());
+        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+      }
+
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendAction(chan, ev.from(), ev.action());
+        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+      }
+
+      case IrcEvent.SoftChannelAction ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendSpoilerChat(chan, ev.from(), "* " + ev.action());
         if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
       }
 
@@ -1035,6 +1123,13 @@ public class IrcMediator {
         if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
       }
 
+      case IrcEvent.SoftPrivateMessage ev -> {
+        TargetRef pm = new TargetRef(sid, ev.from());
+        ensureTargetExists(pm);
+        ui.appendSpoilerChat(pm, ev.from(), ev.text());
+        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+      }
+
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
         ensureTargetExists(pm);
@@ -1042,70 +1137,18 @@ public class IrcMediator {
         if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
       }
 
+      case IrcEvent.SoftPrivateAction ev -> {
+        TargetRef pm = new TargetRef(sid, ev.from());
+        ensureTargetExists(pm);
+        ui.appendSpoilerChat(pm, ev.from(), "* " + ev.action());
+        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+      }
       case IrcEvent.Notice ev -> {
-        // CTCP replies come back as NOTICE with 0x01-wrapped payload.
-        // Route them to the chat target where the request originated.
-        ParsedCtcp ctcp = parseCtcp(ev.text());
-        if (ctcp != null) {
-          String from = ev.from();
-          String cmd = ctcp.commandUpper();
-          String arg = ctcp.arg();
+        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
+      }
 
-          TargetRef dest = null;
-          String rendered = null;
-
-          if ("VERSION".equals(cmd)) {
-            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
-            if (p != null) {
-              dest = p.target();
-              rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
-            }
-          } else if ("PING".equals(cmd)) {
-            String token = arg;
-            int sp = token.indexOf(' ');
-            if (sp >= 0) token = token.substring(0, sp);
-            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
-            if (p != null) {
-              dest = p.target();
-              long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
-              rendered = from + " PING reply: " + rtt + "ms";
-            }
-          } else if ("TIME".equals(cmd)) {
-            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
-            if (p != null) {
-              dest = p.target();
-              rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
-            }
-          }
-
-          // If we received a CTCP reply we recognize but didn't have a pending request for,
-          // still render a clean status line to the server status window (better than raw 0x01).
-          if (dest == null && rendered == null) {
-            if ("VERSION".equals(cmd)) {
-              dest = status;
-              rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
-            } else if ("PING".equals(cmd)) {
-              dest = status;
-              rendered = from + " PING: " + (arg.isBlank() ? "(no payload)" : arg);
-            } else if ("TIME".equals(cmd)) {
-              dest = status;
-              rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
-            } else {
-              PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
-              dest = (p != null) ? p.target() : status;
-              rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
-            }
-          }
-
-          if (dest != null && rendered != null) {
-            ensureTargetExists(dest);
-            ui.appendStatus(dest, "(ctcp)", rendered);
-            if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
-            return;
-          }
-        }
-
-        ui.appendNotice(status, "(notice) " + ev.from(), ev.text());
+      case IrcEvent.SoftNotice ev -> {
+        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), true);
       }
 
       case IrcEvent.WhoisResult ev -> {

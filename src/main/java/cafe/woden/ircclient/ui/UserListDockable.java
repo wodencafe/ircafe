@@ -97,11 +97,11 @@ public class UserListDockable extends JPanel implements Dockable {
 
       // Tooltip is helpful when the tag is subtle.
       if (mark.ignore && mark.softIgnore) {
-        lbl.setToolTipText("Ignored + soft-ignored (lists only; behavior not implemented yet)");
+        lbl.setToolTipText("Ignored (messages hidden) + soft ignored (messages shown as spoilers)");
       } else if (mark.ignore) {
-        lbl.setToolTipText("Ignored (list only; behavior not implemented yet)");
+        lbl.setToolTipText("Ignored (messages hidden)");
       } else if (mark.softIgnore) {
-        lbl.setToolTipText("Soft ignored (list only; behavior not implemented yet)");
+        lbl.setToolTipText("Soft ignored (messages shown as spoilers)");
       } else {
         lbl.setToolTipText(null);
       }
@@ -170,8 +170,6 @@ public class UserListDockable extends JPanel implements Dockable {
     JMenuItem unignore = new JMenuItem("Unignore...");
     JMenuItem softIgnore = new JMenuItem("Soft Ignore...");
     JMenuItem softUnignore = new JMenuItem("Soft Unignore...");
-    JMenuItem manageIgnores = new JMenuItem("Manage Ignores...");
-    JMenuItem manageSoftIgnores = new JMenuItem("Manage Soft Ignores...");
 
     menu.add(openQuery);
     menu.addSeparator();
@@ -185,8 +183,6 @@ public class UserListDockable extends JPanel implements Dockable {
     menu.add(unignore);
     menu.add(softIgnore);
     menu.add(softUnignore);
-    menu.add(manageIgnores);
-    menu.add(manageSoftIgnores);
 
     openQuery.addActionListener(a -> emitSelected(UserActionRequest.Action.OPEN_QUERY));
     whois.addActionListener(a -> emitSelected(UserActionRequest.Action.WHOIS));
@@ -198,17 +194,6 @@ public class UserListDockable extends JPanel implements Dockable {
     unignore.addActionListener(a -> promptIgnore(true, false));
     softIgnore.addActionListener(a -> promptIgnore(false, true));
     softUnignore.addActionListener(a -> promptIgnore(true, true));
-    manageIgnores.addActionListener(a -> {
-      if (active == null || active.serverId() == null || active.serverId().isBlank()) return;
-      Window owner = SwingUtilities.getWindowAncestor(this);
-      if (ignoreDialog != null) ignoreDialog.open(owner, active.serverId(), IgnoreListDialog.Tab.IGNORE);
-    });
-
-    manageSoftIgnores.addActionListener(a -> {
-      if (active == null || active.serverId() == null || active.serverId().isBlank()) return;
-      Window owner = SwingUtilities.getWindowAncestor(this);
-      if (ignoreDialog != null) ignoreDialog.open(owner, active.serverId(), IgnoreListDialog.Tab.SOFT_IGNORE);
-    });
 
     closeables.add(ListContextMenuDecorator.decorate(list, true, (index, e) -> {
       // If we don't have a meaningful context target (e.g., status), disable actions.
@@ -229,8 +214,6 @@ public class UserListDockable extends JPanel implements Dockable {
       unignore.setEnabled(hasCtx && hasNick && mark.ignore);
       softIgnore.setEnabled(hasCtx && hasNick);
       softUnignore.setEnabled(hasCtx && hasNick && mark.softIgnore);
-      manageIgnores.setEnabled(hasCtx);
-      manageSoftIgnores.setEnabled(hasCtx);
 
       return menu;
     }));

@@ -231,6 +231,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendSpoilerChat(TargetRef target, String from, String text) {
+    onEdt(() -> transcripts.appendSpoilerChat(target, from, text));
+  }
+
+  @Override
   public void appendAction(TargetRef target, String from, String action) {
     onEdt(() -> transcripts.appendAction(target, from, action));
   }

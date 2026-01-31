@@ -12,9 +12,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "ircafe.ignore")
 public record IgnoreProperties(
+    /**
+     * If true (default), hard ignore masks apply to CTCP messages as well (including ACTION, VERSION, PING, etc.).
+     * If false, hard ignore only applies to non-CTCP messages.
+     */
+    Boolean hardIgnoreIncludesCtcp,
     /** Per-server ignore lists keyed by serverId. */
     Map<String, ServerIgnore> servers
 ) {
+
 
   /**
    * Per-server ignore configuration.
@@ -33,6 +39,7 @@ public record IgnoreProperties(
   }
 
   public IgnoreProperties {
+    if (hardIgnoreIncludesCtcp == null) hardIgnoreIncludesCtcp = Boolean.TRUE;
     if (servers == null) servers = Map.of();
   }
 }

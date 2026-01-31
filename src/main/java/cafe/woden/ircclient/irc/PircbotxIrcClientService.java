@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.ignore.IgnoreListService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -34,6 +35,7 @@ import org.slf4j.LoggerFactory;
 import org.pircbotx.Channel;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
+import org.pircbotx.User;
 import org.pircbotx.cap.SASLCapHandler;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.*;
@@ -55,10 +57,13 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final String clientVersion;
   private final IrcProperties.Reconnect reconnectPolicy;
 
-  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry) {
+  private final IgnoreListService ignoreListService;
+
+  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry, IgnoreListService ignoreListService) {
     this.serverRegistry = serverRegistry;
     this.clientVersion = props.client().version();
     this.reconnectPolicy = props.client().reconnect();
+    this.ignoreListService = ignoreListService;
   }
 
   @Override
@@ -396,18 +401,51 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
   }
 
+
   private static String parseCtcpAction(String message) {
     if (message == null || message.length() < 2) return null;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return null;
     String inner = message.substring(1, message.length() - 1).trim();
     if (inner.isEmpty()) return null;
 
-    // CTCP ACTION: "\u0001ACTION <text>\u0001"
+    // CTCP ACTION: "ACTION <text>"
     if (inner.regionMatches(true, 0, "ACTION", 0, 6)) {
       String rest = inner.length() > 6 ? inner.substring(6).trim() : "";
       return rest;
     }
     return null;
+  }
+
+  private static boolean isCtcpWrapped(String message) {
+    if (message == null || message.length() < 2) return false;
+    return message.charAt(0) == 0x01 && message.charAt(message.length() - 1) == 0x01;
+  }
+
+  private static String hostmaskFromUser(User user) {
+    if (user == null) return "";
+
+    String hm = safeStr(user::getHostmask, "");
+    if (hm != null && !hm.isBlank()) return hm;
+
+    String nick = safeStr(user::getNick, "");
+    String login = safeStr(user::getLogin, "");
+    String host = safeStr(user::getHostname, "");
+
+    if (nick == null) nick = "";
+    if (login == null) login = "";
+    if (host == null) host = "";
+
+    nick = nick.trim();
+    login = login.trim();
+    host = host.trim();
+
+    if (!nick.isEmpty()) {
+      String ident = login.isEmpty() ? "*" : login;
+      String h = host.isEmpty() ? "*" : host;
+      return nick + "!" + ident + "@" + h;
+    }
+
+    return "";
   }
 
   private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
@@ -601,23 +639,36 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
     }
 
-    @Override
+        @Override
     public void onMessage(MessageEvent event) {
       touchInbound();
       String channel = event.getChannel().getName();
       String msg = event.getMessage();
 
-      String action = parseCtcpAction(msg);
-      if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
-            Instant.now(), channel, event.getUser().getNick(), action
-        )));
+      // Hard ignore: optionally includes CTCP depending on config.
+      String hostmask = hostmaskFromUser(event.getUser());
+      boolean ctcp = isCtcpWrapped(msg);
+      if (!hostmask.isEmpty()
+          && ignoreListService.isHardIgnored(serverId, hostmask)
+          && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
         return;
       }
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelMessage(
-          Instant.now(), channel, event.getUser().getNick(), msg
-      )));
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
+      String action = parseCtcpAction(msg);
+      if (action != null) {
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
+            : new IrcEvent.ChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
+        ));
+        return;
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId, softIgnored
+          ? new IrcEvent.SoftChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
+          : new IrcEvent.ChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
+      ));
     }
 
     @Override
@@ -627,15 +678,27 @@ public class PircbotxIrcClientService implements IrcClientService {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = safeStr(() -> event.getAction(), "");
 
+      String hostmask = (event.getUser() != null) ? hostmaskFromUser(event.getUser()) : "";
+
+      // Hard ignore (CTCP): only applies if configured to include CTCP.
+      if (!hostmask.isEmpty() && ignoreListService.hardIgnoreIncludesCtcp()
+          && ignoreListService.isHardIgnored(serverId, hostmask)) {
+        return;
+      }
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
       if (event.getChannel() != null) {
         String channel = event.getChannel().getName();
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
-            Instant.now(), channel, from, action
-        )));
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftChannelAction(Instant.now(), channel, from, action)
+            : new IrcEvent.ChannelAction(Instant.now(), channel, from, action)
+        ));
       } else {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
-            Instant.now(), from, action
-        )));
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftPrivateAction(Instant.now(), from, action)
+            : new IrcEvent.PrivateAction(Instant.now(), from, action)
+        ));
       }
     }
 
@@ -651,30 +714,67 @@ public class PircbotxIrcClientService implements IrcClientService {
       )));
     }
 
-    @Override
+        @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       touchInbound();
       String from = event.getUser().getNick();
       String msg = event.getMessage();
 
+      // Hard ignore: optionally includes CTCP depending on config.
+      String hostmask = hostmaskFromUser(event.getUser());
+      boolean ctcp = isCtcpWrapped(msg);
+      if (!hostmask.isEmpty()
+          && ignoreListService.isHardIgnored(serverId, hostmask)
+          && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
+        return;
+      }
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
       String action = parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
-            Instant.now(), from, action
-        )));
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftPrivateAction(Instant.now(), from, action)
+            : new IrcEvent.PrivateAction(Instant.now(), from, action)
+        ));
         return;
       }
 
       if (handleCtcpIfPresent(event.getBot(), from, msg)) return;
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
+
+      bus.onNext(new ServerIrcEvent(serverId, softIgnored
+          ? new IrcEvent.SoftPrivateMessage(Instant.now(), from, msg)
+          : new IrcEvent.PrivateMessage(Instant.now(), from, msg)
+      ));
     }
 
     @Override
     public void onNotice(NoticeEvent event) {
       touchInbound();
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, event.getNotice())));
+      String notice = event.getNotice();
+
+      boolean softIgnored = false;
+
+      // Hard ignore: optionally includes CTCP depending on config.
+      if (event.getUser() != null) {
+        String hostmask = hostmaskFromUser(event.getUser());
+        boolean ctcp = isCtcpWrapped(notice);
+        if (!hostmask.isEmpty()
+            && ignoreListService.isHardIgnored(serverId, hostmask)
+            && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
+          return;
+        }
+        softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId, softIgnored
+          ? new IrcEvent.SoftNotice(Instant.now(), from, notice)
+          : new IrcEvent.Notice(Instant.now(), from, notice)
+      ));
     }
+
+
 
     @Override
     public void onWhois(WhoisEvent event) {

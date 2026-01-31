@@ -13,6 +13,7 @@ import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -27,9 +28,6 @@ import org.springframework.stereotype.Component;
 
 /**
  * UI for managing per-server ignore masks and soft-ignore masks.
- *
- * <p>NOTE: This dialog only manages the lists. Ignore/soft-ignore behavior is not
- * implemented yet.
  */
 @Component
 @Lazy
@@ -91,8 +89,7 @@ public class IgnoreListDialog {
     refreshIgnore(ignoreModel, sid);
     refreshSoft(softModel, sid);
 
-    JLabel help = new JLabel(
-        "Manage ignore and soft-ignore masks for this server only. (Behavior not implemented yet.)");
+    JLabel help = new JLabel("Manage ignore and soft-ignore masks for this server only.");
     help.putClientProperty(FlatClientProperties.STYLE, "font: -1");
 
     tabs = new JTabbedPane();
@@ -103,8 +100,18 @@ public class IgnoreListDialog {
     JButton close = new JButton("Close");
     close.addActionListener(e -> dialog.dispose());
 
-    JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    footer.add(close);
+    JCheckBox ctcpToggle = new JCheckBox("Hard ignore includes CTCP");
+    ctcpToggle.setSelected(ignores != null && ignores.hardIgnoreIncludesCtcp());
+    ctcpToggle.setToolTipText(
+        "When enabled, CTCP messages (e.g., VERSION/PING/ACTION) from hard-ignored users are also dropped.");
+    ctcpToggle.addActionListener(e -> {
+      if (ignores == null) return;
+      ignores.setHardIgnoreIncludesCtcp(ctcpToggle.isSelected());
+    });
+
+    JPanel footer = new JPanel(new BorderLayout());
+    footer.add(ctcpToggle, BorderLayout.WEST);
+    footer.add(close, BorderLayout.EAST);
 
     JPanel root = new JPanel(new BorderLayout(10, 10));
     root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -112,7 +119,7 @@ public class IgnoreListDialog {
     root.add(tabs, BorderLayout.CENTER);
     root.add(footer, BorderLayout.SOUTH);
 
-    dialog = new JDialog(owner, "Ignore Lists — " + sid);
+    dialog = new JDialog(owner, "Ignore Lists - " + sid);
     dialog.setModal(false);
     dialog.setContentPane(root);
     dialog.pack();

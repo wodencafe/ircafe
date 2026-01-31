@@ -67,6 +67,9 @@ public interface UiPort {
 
   void appendChat(TargetRef target, String from, String text);
 
+  /** Append a chat message as a click-to-reveal spoiler block (used by soft-ignore). */
+  void appendSpoilerChat(TargetRef target, String from, String text);
+
   /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
   void appendAction(TargetRef target, String from, String action);
 

@@ -11,12 +11,17 @@ public sealed interface IrcEvent permits
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
     IrcEvent.ChannelAction,
+    IrcEvent.SoftChannelMessage,
+    IrcEvent.SoftChannelAction,
     IrcEvent.ChannelModeChanged,
     IrcEvent.ChannelModesListed,
     IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
     IrcEvent.PrivateAction,
+    IrcEvent.SoftPrivateMessage,
+    IrcEvent.SoftPrivateAction,
     IrcEvent.Notice,
+    IrcEvent.SoftNotice,
     IrcEvent.UserJoinedChannel,
     IrcEvent.UserPartedChannel,
     IrcEvent.UserQuitChannel,
@@ -40,6 +45,12 @@ public sealed interface IrcEvent permits
   /** A CTCP ACTION (/me) sent to a channel. */
   record ChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
 
+  /** A channel message from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftChannelMessage(Instant at, String channel, String from, String text) implements IrcEvent {}
+
+  /** A CTCP ACTION (/me) sent to a channel from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
+
   /** A channel MODE change (e.g. +o nick, +m). */
   record ChannelModeChanged(Instant at, String channel, String by, String details) implements IrcEvent {}
   record ChannelModesListed(Instant at, String channel, String details) implements IrcEvent {}
@@ -54,7 +65,15 @@ public sealed interface IrcEvent permits
   record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
   /** A CTCP ACTION (/me) sent as a private message. */
   record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
+
+  /** A private message from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftPrivateMessage(Instant at, String from, String text) implements IrcEvent {}
+
+  /** A CTCP ACTION (/me) sent as a private message from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftPrivateAction(Instant at, String from, String action) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}
+  /** A NOTICE from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftNotice(Instant at, String from, String text) implements IrcEvent {}
 
   /** Another user joined a channel we're in. */
   record UserJoinedChannel(Instant at, String channel, String nick) implements IrcEvent {}

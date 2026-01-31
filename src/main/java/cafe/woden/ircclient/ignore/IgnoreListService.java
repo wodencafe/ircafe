@@ -25,6 +25,9 @@ public class IgnoreListService {
 
   private final RuntimeConfigStore runtimeConfig;
 
+  /** Whether hard ignore masks should also apply to CTCP messages. */
+  private volatile boolean hardIgnoreIncludesCtcp;
+
   /** In-memory copy of ignore masks (serverId -> ordered list of masks). */
   private final ConcurrentHashMap<String, List<String>> masksByServer = new ConcurrentHashMap<>();
 
@@ -43,10 +46,19 @@ public class IgnoreListService {
     return changes.onBackpressureBuffer();
   }
 
+  public boolean hardIgnoreIncludesCtcp() {
+    return hardIgnoreIncludesCtcp;
+  }
 
+  public void setHardIgnoreIncludesCtcp(boolean enabled) {
+    this.hardIgnoreIncludesCtcp = enabled;
+    runtimeConfig.rememberHardIgnoreIncludesCtcp(enabled);
+  }
   public IgnoreListService(IgnoreProperties props, RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
-
+    this.hardIgnoreIncludesCtcp = (props == null)
+        ? true
+        : Boolean.TRUE.equals(props.hardIgnoreIncludesCtcp());
     // Seed from configuration (including runtime YAML import).
     if (props != null && props.servers() != null) {
       for (Map.Entry<String, IgnoreProperties.ServerIgnore> e : props.servers().entrySet()) {
@@ -250,4 +262,93 @@ public class IgnoreListService {
     String lower = s.toLowerCase(Locale.ROOT);
     return lower.contains(".") || lower.contains(":") || lower.endsWith("/");
   }
+
+  // ----------------- matching (hard ignore) -----------------
+
+  /**
+   * Returns true if the given hostmask matches any hard-ignore mask for this server.
+   *
+   * <p>Matching supports "*" (any sequence) and "?" (single char) wildcards and is case-insensitive.
+   *
+   * <p>NOTE: Hard-ignore matching is separate from soft-ignore matching.
+   */
+  public boolean isHardIgnored(String serverId, String fromHostmask) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+
+    String hm = Objects.toString(fromHostmask, "").trim();
+    if (hm.isEmpty()) return false;
+
+    List<String> masks = listMasks(sid);
+    if (masks.isEmpty()) return false;
+
+    for (String m : masks) {
+      if (m == null || m.isBlank()) continue;
+      if (globMatchIgnoreMask(m, hm)) return true;
+    }
+    return false;
+  }
+
+
+
+  /**
+   * Returns true if the given hostmask matches any soft-ignore mask for this server.
+   *
+   * <p>Matching supports "*" (any sequence) and "?" (single char) wildcards and is case-insensitive.
+   */
+  public boolean isSoftIgnored(String serverId, String fromHostmask) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+
+    String hm = Objects.toString(fromHostmask, "").trim();
+    if (hm.isEmpty()) return false;
+
+    List<String> masks = listSoftMasks(sid);
+    if (masks.isEmpty()) return false;
+
+    for (String m : masks) {
+      if (m == null || m.isBlank()) continue;
+      if (globMatchIgnoreMask(m, hm)) return true;
+    }
+    return false;
+  }
+
+  private static boolean globMatchIgnoreMask(String pattern, String text) {
+    String ptn = Objects.toString(pattern, "").trim().toLowerCase(Locale.ROOT);
+    String txt = Objects.toString(text, "").trim().toLowerCase(Locale.ROOT);
+    if (ptn.isEmpty() || txt.isEmpty()) return false;
+
+    int p = 0;
+    int t = 0;
+    int star = -1;
+    int match = 0;
+
+    while (t < txt.length()) {
+      if (p < ptn.length() && (ptn.charAt(p) == '?' || ptn.charAt(p) == txt.charAt(t))) {
+        p++;
+        t++;
+        continue;
+      }
+
+      if (p < ptn.length() && ptn.charAt(p) == '*') {
+        star = p;
+        match = t;
+        p++;
+        continue;
+      }
+
+      if (star != -1) {
+        p = star + 1;
+        match++;
+        t = match;
+        continue;
+      }
+
+      return false;
+    }
+
+    while (p < ptn.length() && ptn.charAt(p) == '*') p++;
+    return p == ptn.length();
+  }
+
 }

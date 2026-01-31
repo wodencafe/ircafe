@@ -6,7 +6,6 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
-import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -102,9 +101,8 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private final ServerRegistry serverRegistry;
 
-  private final IgnoreListDialog ignoreDialog;
 
-  public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn, IgnoreListDialog ignoreDialog) {
+  public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
     super(new BorderLayout());
 
     this.serverRegistry = serverRegistry;
@@ -112,7 +110,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
 
-    this.ignoreDialog = ignoreDialog;
 
     // Header
     JPanel header = new JPanel();
@@ -267,15 +264,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
           || state == ConnectionState.RECONNECTING);
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
-
-      menu.addSeparator();
-      JMenuItem manageIgnores = new JMenuItem("Manage Ignores...");
-      manageIgnores.addActionListener(ev -> {
-        if (ignoreDialog == null) return;
-        Window owner = SwingUtilities.getWindowAncestor(this);
-        ignoreDialog.open(owner, serverId);
-      });
-      menu.add(manageIgnores);
 
       return menu;
     }

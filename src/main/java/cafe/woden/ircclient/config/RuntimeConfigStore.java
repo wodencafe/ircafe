@@ -414,6 +414,24 @@ public class RuntimeConfigStore {
   }
 
 
+  /** Persist whether hard ignores should also apply to CTCP (stored under ircafe.ignore.hardIgnoreIncludesCtcp). */
+  public synchronized void rememberHardIgnoreIncludesCtcp(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+
+      ignore.put("hardIgnoreIncludesCtcp", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist hard-ignore CTCP setting to '{}'", file, e);
+    }
+  }
+
+
   /**
    * Persist per-nick color overrides (stored under {@code ircafe.ui.nickColorOverrides}).
    */
