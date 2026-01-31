@@ -112,7 +112,7 @@ final class YouTubePreviewUtil {
     }
 
     String url = originalVideoUri.toString();
-    return new LinkPreview(url, title, desc, provider, thumb);
+    return new LinkPreview(url, title, desc, provider, thumb, thumb != null ? 1 : 0);
   }
 
   /**

@@ -142,7 +142,7 @@ static String extractStatusId(String url) {
         if (handle != null) title = title + " (@" + handle + ")";
       }
 
-      return new LinkPreview(url, title, desc, siteName, thumb);
+      return new LinkPreview(url, title, desc, siteName, thumb, thumb != null ? 1 : 0);
     } catch (Exception ignored) {
       return null;
     }
@@ -327,7 +327,7 @@ static String extractStatusId(String url) {
     String url = buildCanonicalUrl(handle, id, originalStatusUri);
 
     // siteName: keep "X" so the UI looks neat.
-    return new LinkPreview(url, title, desc, "X", mediaUrl);
+    return new LinkPreview(url, title, desc, "X", mediaUrl, mediaUrl != null ? 1 : 0);
   }
 
   private static String buildCanonicalUrl(String handle, String id, URI fallback) {

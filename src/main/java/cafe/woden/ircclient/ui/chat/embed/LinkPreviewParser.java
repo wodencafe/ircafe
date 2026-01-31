@@ -14,7 +14,7 @@ final class LinkPreviewParser {
 
   static LinkPreview parse(Document doc, String requestedUrl) {
     if (doc == null) {
-      return new LinkPreview(requestedUrl, null, null, hostOf(requestedUrl), null);
+      return new LinkPreview(requestedUrl, null, null, hostOf(requestedUrl), null, 0);
     }
 
     String baseUrl = firstNonBlank(
@@ -48,7 +48,8 @@ final class LinkPreviewParser {
     );
     image = resolveAgainst(baseUrl, image);
 
-    return new LinkPreview(baseUrl, title, description, siteName, image);
+    int mediaCount = (image != null && !image.isBlank()) ? 1 : 0;
+    return new LinkPreview(baseUrl, title, description, siteName, image, mediaCount);
   }
 
   private static String canonical(Document doc) {

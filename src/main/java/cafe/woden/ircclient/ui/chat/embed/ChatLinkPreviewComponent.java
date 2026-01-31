@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat.embed;
 import cafe.woden.ircclient.ui.SwingEdt;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -17,12 +18,9 @@ import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextPane;
+import javax.swing.OverlayLayout;
 import javax.swing.SwingUtilities;
-import javax.swing.plaf.basic.BasicTextUI;
-import javax.swing.text.View;
 
 /**
  * Inline link preview component inserted into the chat transcript StyledDocument.
@@ -64,6 +62,7 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private JButton collapseBtn;
   private JLabel thumb;
+  private java.awt.Component thumbHost;
   private JTextArea title;
   private JTextArea desc;
   private JLabel site;
@@ -196,17 +195,50 @@ final class ChatLinkPreviewComponent extends JPanel {
     body.setOpaque(false);
 
     thumb = new JLabel();
+    thumbHost = thumb;
     int thumbW = youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : THUMB_SIZE);
     int thumbH = youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : THUMB_SIZE);
     thumb.setPreferredSize(new Dimension(thumbW, thumbH));
     thumb.setMinimumSize(new Dimension(thumbW, thumbH));
     thumb.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
+    // Badge for multi-media posts (e.g., Mastodon with multiple attachments).
+    int extraMedia = Math.max(0, p.mediaCount() - 1);
+    if (extraMedia > 0) {
+      JPanel wrap = new JPanel();
+      wrap.setOpaque(false);
+      wrap.setLayout(new OverlayLayout(wrap));
+      Dimension tdim = new Dimension(thumbW, thumbH);
+      wrap.setPreferredSize(tdim);
+      wrap.setMinimumSize(tdim);
+      wrap.setMaximumSize(tdim);
+
+      // Keep the thumbnail centered; badge pinned to bottom-right.
+      thumb.setAlignmentX(0.5f);
+      thumb.setAlignmentY(0.5f);
+
+      JLabel badge = new JLabel("+" + extraMedia + " more");
+      badge.setOpaque(true);
+      badge.setForeground(Color.WHITE);
+      badge.setBackground(new Color(0, 0, 0, 170));
+      badge.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+      try {
+        badge.setFont(badge.getFont().deriveFont(badge.getFont().getStyle() | Font.BOLD));
+      } catch (Exception ignored) {
+      }
+      badge.setAlignmentX(1.0f);
+      badge.setAlignmentY(1.0f);
+
+      wrap.add(thumb);
+      wrap.add(badge);
+      thumbHost = wrap;
+    }
+
     fullDescText = safe(p.description());
     desc = textArea(fullDescText, false);
 
     if (p.imageUrl() != null && !p.imageUrl().isBlank()) {
-      body.add(thumb, BorderLayout.WEST);
+      body.add(thumbHost, BorderLayout.WEST);
       loadThumbnail(p.imageUrl());
     }
 
@@ -324,7 +356,7 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private void layoutForCurrentWidth() {
     if (card == null) return;
-    int maxW = computeMaxInlineWidth();
+    int maxW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
     if (maxW <= 0) maxW = FALLBACK_MAX_W;
 
     if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0 && collapsed == lastCollapsedLayout) return;
@@ -339,10 +371,10 @@ final class ChatLinkPreviewComponent extends JPanel {
     }
 
     int descInnerW = maxW;
-    if (thumb != null && body != null && thumb.getParent() == body) {
+    if (thumbHost != null && body != null && thumbHost.getParent() == body) {
       int tw = THUMB_SIZE;
       try {
-        Dimension tps = thumb.getPreferredSize();
+        Dimension tps = thumbHost.getPreferredSize();
         if (tps != null && tps.width > 0) tw = tps.width;
       } catch (Exception ignored) {
         // best effort
@@ -386,27 +418,7 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     revalidate();
     repaint();
-    requestHostReflow();
-  }
-
-  private void requestHostReflow() {
-    JTextPane pane = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
-    if (pane == null) return;
-
-    SwingUtilities.invokeLater(() -> {
-      try {
-        if (pane.getUI() instanceof BasicTextUI btui) {
-          View root = btui.getRootView(pane);
-          if (root != null) {
-            root.preferenceChanged(null, true, true);
-          }
-        }
-      } catch (Exception ignored) {
-        // best-effort
-      }
-      pane.revalidate();
-      pane.repaint();
-    });
+    EmbedHostLayoutUtil.requestHostReflow(this);
   }
 
   private static JTextArea textArea(String text, boolean bold) {
@@ -436,42 +448,12 @@ final class ChatLinkPreviewComponent extends JPanel {
     }
   }
 
-  private int computeMaxInlineWidth() {
-    JTextPane pane = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
-    if (pane != null) {
-      int w = pane.getVisibleRect().width;
-      if (w <= 0) w = pane.getWidth();
-      if (w > 0) return Math.max(220, w - WIDTH_MARGIN_PX);
-    }
-
-    JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
-    if (scroller != null) {
-      int w = scroller.getViewport().getExtentSize().width;
-      if (w > 0) return Math.max(220, w - WIDTH_MARGIN_PX);
-    }
-    return FALLBACK_MAX_W;
-  }
-
   private void hookResizeListener() {
-    java.awt.Component target = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
-    if (target == null) {
-      JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
-      if (scroller != null) {
-        target = scroller.getViewport();
-      }
-    }
-    if (target != null && target != resizeListeningOn) {
-      unhookResizeListener();
-      resizeListeningOn = target;
-      resizeListeningOn.addComponentListener(resizeListener);
-    }
+    resizeListeningOn = EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
   }
 
   private void unhookResizeListener() {
-    if (resizeListeningOn != null) {
-      resizeListeningOn.removeComponentListener(resizeListener);
-      resizeListeningOn = null;
-    }
+    resizeListeningOn = EmbedHostLayoutUtil.unhookResizeListener(resizeListener, resizeListeningOn);
   }
 
   private void disposeSubs() {

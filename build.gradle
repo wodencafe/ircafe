@@ -43,6 +43,8 @@ dependencies {
 	implementation "org.sejda.imageio:webp-imageio:0.1.6"
 	implementation "com.madgag:animated-gif-lib:1.4"
 
+	implementation "com.fasterxml.jackson.core:jackson-databind"
+
 	implementation "org.jsoup:jsoup:1.22.1"
 }
 

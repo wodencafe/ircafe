@@ -105,7 +105,7 @@ final class GitHubPreviewUtil {
 
     String htmlUrl = MiniJson.findString(json, "html_url");
     if (htmlUrl == null) htmlUrl = originalUri != null ? originalUri.toString() : null;
-    return new LinkPreview(htmlUrl, fullName, body, "GitHub", avatar);
+    return new LinkPreview(htmlUrl, fullName, body, "GitHub", avatar, avatar != null ? 1 : 0);
   }
 
   private static LinkPreview parseIssueOrPr(String json, GitHubLink link, URI originalUri) {
@@ -131,7 +131,7 @@ final class GitHubPreviewUtil {
 
     String shownTitle = title != null ? title : (kind + " #" + link.numberOrShaOrTag);
     String site = "GitHub";
-    return new LinkPreview(htmlUrl, shownTitle, desc, site, avatar);
+    return new LinkPreview(htmlUrl, shownTitle, desc, site, avatar, avatar != null ? 1 : 0);
   }
 
   private static LinkPreview parseCommit(String json, GitHubLink link, URI originalUri) {
@@ -162,7 +162,7 @@ final class GitHubPreviewUtil {
     if (htmlUrl == null) htmlUrl = originalUri != null ? originalUri.toString() : null;
 
     String shownTitle = firstNonBlank(firstLine, "Commit " + shortSha(sha != null ? sha : link.numberOrShaOrTag));
-    return new LinkPreview(htmlUrl, shownTitle, desc, "GitHub", avatar);
+    return new LinkPreview(htmlUrl, shownTitle, desc, "GitHub", avatar, avatar != null ? 1 : 0);
   }
 
   private static LinkPreview parseRelease(String json, GitHubLink link, URI originalUri) {
@@ -180,7 +180,7 @@ final class GitHubPreviewUtil {
 
     String htmlUrl = MiniJson.findString(json, "html_url");
     if (htmlUrl == null) htmlUrl = originalUri != null ? originalUri.toString() : null;
-    return new LinkPreview(htmlUrl, name, desc, "GitHub", avatar);
+    return new LinkPreview(htmlUrl, name, desc, "GitHub", avatar, avatar != null ? 1 : 0);
   }
 
   private static String buildRepoDetails(Long stars, Long forks, String lang, String updatedIso) {
