@@ -17,8 +17,6 @@ import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
-import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 
 /**
@@ -244,7 +242,7 @@ final class ChatImageComponent extends JPanel {
     DecodedImage d = decoded;
     if (d == null) return;
 
-    int maxW = computeMaxInlineWidth();
+    int maxW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 96);
     if (maxW <= 0) maxW = FALLBACK_MAX_W;
 
     // Avoid re-scaling on every tiny jitter.
@@ -302,52 +300,12 @@ final class ChatImageComponent extends JPanel {
     }
   }
 
-  private int computeMaxInlineWidth() {
-    // Try to find the transcript viewport width (JScrollPane -> JViewport -> JTextPane).
-    JTextPane pane = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
-    if (pane != null) {
-      int w = pane.getVisibleRect().width;
-      if (w <= 0) {
-        w = pane.getWidth();
-      }
-      if (w > 0) {
-        return Math.max(96, w - WIDTH_MARGIN_PX);
-      }
-    }
-
-    JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
-    if (scroller != null) {
-      int w = scroller.getViewport().getExtentSize().width;
-      if (w > 0) {
-        return Math.max(96, w - WIDTH_MARGIN_PX);
-      }
-    }
-
-    return FALLBACK_MAX_W;
-  }
-
   private void hookResizeListener() {
-    // Listen on the ancestor text pane (or scroll pane) so we can rescale on resize.
-    java.awt.Component target = (java.awt.Component) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
-    if (target == null) {
-      target = (java.awt.Component) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
-    }
-    if (target == null) return;
-
-    if (resizeListeningOn == target) return;
-    unhookResizeListener();
-    resizeListeningOn = target;
-    target.addComponentListener(resizeListener);
+    resizeListeningOn = EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
   }
 
   private void unhookResizeListener() {
-    if (resizeListeningOn != null) {
-      try {
-        resizeListeningOn.removeComponentListener(resizeListener);
-      } catch (Exception ignored) {
-      }
-      resizeListeningOn = null;
-    }
+    resizeListeningOn = EmbedHostLayoutUtil.unhookResizeListener(resizeListener, resizeListeningOn);
   }
 
   private void installPopup(JPanel target) {

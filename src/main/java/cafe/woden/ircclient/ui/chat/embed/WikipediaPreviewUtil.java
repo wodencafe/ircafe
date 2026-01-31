@@ -77,7 +77,7 @@ final class WikipediaPreviewUtil {
     // Keep the extract reasonably sized; the UI will clamp to lines and prefer sentence boundaries.
     String desc = PreviewTextUtil.trimToSentence(extract, 4000);
 
-    return new LinkPreview(pageUrl, title, desc, "Wikipedia", imageUrl);
+    return new LinkPreview(pageUrl, title, desc, "Wikipedia", imageUrl, imageUrl != null ? 1 : 0);
   }
 
   // (No trim helper here: PreviewTextUtil handles sentence-aware trimming.)

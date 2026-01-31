@@ -8,6 +8,8 @@ public record LinkPreview(
     String title,
     String description,
     String siteName,
-    String imageUrl
+    String imageUrl,
+    /** Number of media attachments represented by {@code imageUrl}. */
+    int mediaCount
 ) {
 }
