@@ -5,11 +5,14 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
+import javax.swing.BoundedRangeModel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.text.StyledDocument;
 
 /**
@@ -21,6 +24,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
   private final JScrollPane scroll;
   private final JScrollBar bar;
+  private final BoundedRangeModel barModel;
 
   private final BooleanSupplier isFollowTail;
   private final Consumer<Boolean> setFollowTail;
@@ -46,6 +50,8 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     updateScrollStateFromBar();
   };
 
+  private final ChangeListener modelListener = (ChangeEvent e) -> onBarModelChanged();
+
   private boolean closed = false;
 
   public FollowTailScrollDecorator(
@@ -57,12 +63,14 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
   ) {
     this.scroll = scroll;
     this.bar = scroll.getVerticalScrollBar();
+    this.barModel = this.bar.getModel();
     this.isFollowTail = isFollowTail;
     this.setFollowTail = setFollowTail;
     this.getSavedScrollValue = getSavedScrollValue;
     this.setSavedScrollValue = setSavedScrollValue;
 
     this.bar.addAdjustmentListener(barListener);
+    this.barModel.addChangeListener(modelListener);
   }
 
   /**
@@ -101,6 +109,38 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     if (closed) return;
     if (!isFollowTail.getAsBoolean()) return;
     SwingUtilities.invokeLater(this::scrollToBottom);
+  }
+
+
+  private void onBarModelChanged() {
+    if (closed) return;
+
+    // Ignore re-entrant updates caused by our own scroll operations.
+    if (programmaticScroll) {
+      captureBarState();
+      return;
+    }
+
+    int max = bar.getMaximum();
+    int extent = barModel.getExtent();
+    int val = bar.getValue();
+
+    boolean maxOrExtentChanged = (max != lastBarMax) || (extent != lastBarExtent);
+    if (!maxOrExtentChanged) {
+      lastBarValue = val;
+      return;
+    }
+
+    boolean wasAtBottom = lastBarMax < 0 || (lastBarValue + lastBarExtent) >= (lastBarMax - 2);
+
+    // Update the cached model state.
+    lastBarMax = max;
+    lastBarExtent = extent;
+    lastBarValue = val;
+
+    if (isFollowTail.getAsBoolean() && wasAtBottom) {
+      SwingUtilities.invokeLater(this::scrollToBottom);
+    }
   }
 
   public void scrollToBottom() {
@@ -168,6 +208,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
     try {
       bar.removeAdjustmentListener(barListener);
+      barModel.removeChangeListener(modelListener);
     } catch (Exception ignored) {
     }
 

@@ -6,7 +6,6 @@ import java.util.List;
 
 /**
  * Boundary between application logic and the Swing UI.
- *
  */
 public interface UiPort {
   // User-initiated stuff.
@@ -23,6 +22,7 @@ public interface UiPort {
 
   /** UI-originated context menu actions (e.g., WHOIS/CTCP) for a nick. */
   Flowable<UserActionRequest> userActionRequests();
+
   Flowable<String> outboundLines();
   Flowable<Object> connectClicks();
   Flowable<Object> disconnectClicks();
@@ -53,21 +53,26 @@ public interface UiPort {
   void setStatusBarCounts(int users, int ops);
   void setStatusBarServer(String serverText);
 
-  void setConnectedUi(boolean connected);
+  /** Enable/disable the global Connect/Disconnect buttons. */
+  void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled);
+
+  /** Text shown next to the global connect/disconnect controls. */
   void setConnectionStatusText(String text);
 
-  void setServerConnected(String serverId, boolean connected);
+  /** Per-server connection state for context menu enabling/disabling. */
+  void setServerConnectionState(String serverId, ConnectionState state);
 
   /** Enable/disable the global input bar. */
   void setInputEnabled(boolean enabled);
 
   void appendChat(TargetRef target, String from, String text);
+
   /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
   void appendAction(TargetRef target, String from, String action);
-  /**
-   * Append a foldable presence/system event (join/part/quit/nick) in a channel transcript.
-   */
+
+  /** Append a foldable presence/system event (join/part/quit/nick) in a channel transcript. */
   void appendPresence(TargetRef target, PresenceEvent event);
+
   void appendNotice(TargetRef target, String from, String text);
   void appendStatus(TargetRef target, String from, String text);
   void appendError(TargetRef target, String from, String text);

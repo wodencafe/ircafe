@@ -85,6 +85,10 @@ public class PircbotxIrcClientService implements IrcClientService {
 
           IrcProperties.Server s = serverRegistry.require(serverId);
 
+          // Surface a "connecting" state to the app/UI immediately.
+          bus.onNext(new ServerIrcEvent(
+              serverId, new IrcEvent.Connecting(Instant.now(), s.host(), s.port(), s.nick())));
+
           SocketFactory socketFactory = s.tls()
               ? SSLSocketFactory.getDefault()
               : SocketFactory.getDefault();
