@@ -255,11 +255,167 @@ public class RuntimeConfigStore {
     }
   }
 
+  // ---------------- ignore masks ----------------
+
+  /** Persist an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
+  public synchronized void rememberIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (servers.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> masks = getOrCreateStringList(server, "masks");
+      if (masks.stream().noneMatch(x -> x != null && x.equalsIgnoreCase(m))) {
+        masks.add(m);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask to '{}'", file, e);
+    }
+  }
+
+  /** Remove an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
+  public synchronized void forgetIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      Object so = servers.get(sid);
+      if (!(so instanceof Map<?, ?>)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (Map<String, Object>) so;
+
+      Object o = server.get("masks");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> masks = (List<String>) list;
+
+      masks.removeIf(x -> x != null && x.equalsIgnoreCase(m));
+
+      // Clean up empty structures to keep the YAML tidy.
+      if (masks.isEmpty()) {
+        server.remove("masks");
+      }
+      if (server.isEmpty()) {
+        servers.remove(sid);
+      }
+      if (servers.isEmpty()) {
+        ignore.remove("servers");
+      }
+      if (ignore.isEmpty()) {
+        ircafe.remove("ignore");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not remove ignore mask from '{}'", file, e);
+    }
+  }
+
+  // ---------------- soft ignore masks ----------------
+
+  /**
+   * Persist a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}).
+   *
+   * <p>Soft ignores are reserved for a future feature; they are tracked/persisted but not yet applied.
+   */
+  public synchronized void rememberSoftIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (servers.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> masks = getOrCreateStringList(server, "softMasks");
+      if (masks.stream().noneMatch(x -> x != null && x.equalsIgnoreCase(m))) {
+        masks.add(m);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist soft-ignore mask to '{}'", file, e);
+    }
+  }
+
+  /** Remove a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}). */
+  public synchronized void forgetSoftIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      Object so = servers.get(sid);
+      if (!(so instanceof Map<?, ?>)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (Map<String, Object>) so;
+
+      Object o = server.get("softMasks");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> masks = (List<String>) list;
+
+      masks.removeIf(x -> x != null && x.equalsIgnoreCase(m));
+
+      // Clean up empty structures to keep the YAML tidy.
+      if (masks.isEmpty()) {
+        server.remove("softMasks");
+      }
+      if (server.isEmpty()) {
+        servers.remove(sid);
+      }
+      if (servers.isEmpty()) {
+        ignore.remove("servers");
+      }
+      if (ignore.isEmpty()) {
+        ircafe.remove("ignore");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not remove soft-ignore mask from '{}'", file, e);
+    }
+  }
 
 
   /**
    * Persist per-nick color overrides (stored under {@code ircafe.ui.nickColorOverrides}).
-   *
    */
   public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {
     try {

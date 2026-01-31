@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
@@ -32,6 +33,7 @@ public class IrcMediator {
   private final CommandParser commandParser;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
+  private final IgnoreListService ignoreListService;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -70,6 +72,7 @@ public class IrcMediator {
       CommandParser commandParser,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
+      IgnoreListService ignoreListService,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator
   ) {
@@ -78,6 +81,7 @@ public class IrcMediator {
     this.commandParser = commandParser;
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
+    this.ignoreListService = ignoreListService;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
   }
@@ -366,6 +370,9 @@ public class IrcMediator {
       case ParsedInput.Devoice cmd -> handleDevoice(cmd.channel(), cmd.nicks());
       case ParsedInput.Ban cmd -> handleBan(cmd.channel(), cmd.masksOrNicks());
       case ParsedInput.Unban cmd -> handleUnban(cmd.channel(), cmd.masksOrNicks());
+      case ParsedInput.Ignore cmd -> handleIgnore(cmd.maskOrNick());
+      case ParsedInput.Unignore cmd -> handleUnignore(cmd.maskOrNick());
+      case ParsedInput.IgnoreList cmd -> handleIgnoreList();
       case ParsedInput.CtcpVersion cmd -> handleCtcpVersion(cmd.nick());
       case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
       case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
@@ -684,6 +691,72 @@ public class IrcMediator {
     if (!ch.isEmpty()) return ch;
     if (active != null && active.isChannel()) return active.target();
     return null;
+  }
+
+
+
+  private void handleIgnore(String maskOrNick) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
+      return;
+    }
+
+    String arg = maskOrNick == null ? "" : maskOrNick.trim();
+    if (arg.isEmpty()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Usage: /ignore <maskOrNick>");
+      return;
+    }
+
+    boolean added = ignoreListService.addMask(at.serverId(), arg);
+    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    if (added) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Ignoring: " + stored);
+    } else {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
+    }
+  }
+
+  private void handleUnignore(String maskOrNick) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(unignore)", "Select a server first.");
+      return;
+    }
+
+    String arg = maskOrNick == null ? "" : maskOrNick.trim();
+    if (arg.isEmpty()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Usage: /unignore <maskOrNick>");
+      return;
+    }
+
+    boolean removed = ignoreListService.removeMask(at.serverId(), arg);
+    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    if (removed) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
+    } else {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
+    }
+  }
+
+  private void handleIgnoreList() {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
+      return;
+    }
+
+    java.util.List<String> masks = ignoreListService.listMasks(at.serverId());
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    if (masks.isEmpty()) {
+      ui.appendStatus(status, "(ignore)", "Ignore list is empty.");
+      return;
+    }
+
+    ui.appendStatus(status, "(ignore)", "Ignore masks (" + masks.size() + "): ");
+    for (String m : masks) {
+      ui.appendStatus(status, "(ignore)", "  - " + m);
+    }
   }
 
   private void handleCtcpVersion(String nick) {

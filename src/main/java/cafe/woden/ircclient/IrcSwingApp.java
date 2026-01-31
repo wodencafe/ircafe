@@ -3,6 +3,7 @@ package cafe.woden.ircclient;
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -16,7 +17,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
-@EnableConfigurationProperties({IrcProperties.class, UiProperties.class})
+@EnableConfigurationProperties({IrcProperties.class, UiProperties.class, IgnoreProperties.class})
 public class IrcSwingApp {
   public static void main(String[] args) {
     new SpringApplicationBuilder(IrcSwingApp.class)

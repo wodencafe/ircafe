@@ -6,6 +6,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -13,6 +14,7 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Window;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -100,13 +102,17 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private final ServerRegistry serverRegistry;
 
-  public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
+  private final IgnoreListDialog ignoreDialog;
+
+  public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn, IgnoreListDialog ignoreDialog) {
     super(new BorderLayout());
 
     this.serverRegistry = serverRegistry;
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
+
+    this.ignoreDialog = ignoreDialog;
 
     // Header
     JPanel header = new JPanel();
@@ -261,6 +267,15 @@ public class ServerTreeDockable extends JPanel implements Dockable {
           || state == ConnectionState.RECONNECTING);
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
+
+      menu.addSeparator();
+      JMenuItem manageIgnores = new JMenuItem("Manage Ignores...");
+      manageIgnores.addActionListener(ev -> {
+        if (ignoreDialog == null) return;
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        ignoreDialog.open(owner, serverId);
+      });
+      menu.add(manageIgnores);
 
       return menu;
     }
