@@ -27,6 +27,28 @@ public record UiProperties(
     /** If enabled, newly inserted inline images start collapsed (you can expand per-image). Default: false. */
     Boolean imageEmbedsCollapsedByDefault,
 
+    /**
+     * Maximum inline image embed width (pixels).
+     *
+     * <p>If <= 0, no additional cap is applied (images scale down only to fit the chat viewport).
+     */
+    Integer imageEmbedsMaxWidthPx,
+
+    /**
+     * Maximum inline image embed height (pixels).
+     *
+     * <p>If <= 0, no additional cap is applied (images scale down only to fit the chat viewport).
+     */
+    Integer imageEmbedsMaxHeightPx,
+
+
+    /**
+     * Enable animated GIF playback for inline image embeds.
+     *
+     * <p>If false, GIFs are rendered as a still image using the first frame.
+     */
+    Boolean imageEmbedsAnimateGifs,
+
     /** Enable Discord/Signal-style link preview "cards" for regular web pages. Default: false. */
     Boolean linkPreviewsEnabled,
 
@@ -90,6 +112,16 @@ public record UiProperties(
     // Image embeds collapsed-by-default default: false (preserve current behavior).
     if (imageEmbedsCollapsedByDefault == null) {
       imageEmbedsCollapsedByDefault = false;
+    }
+
+    // Image embed max width default: 0 (no extra cap).
+    if (imageEmbedsMaxWidthPx == null || imageEmbedsMaxWidthPx <= 0) {
+      imageEmbedsMaxWidthPx = 0;
+    }
+
+    // Image embed max height default: 0 (no extra cap).
+    if (imageEmbedsMaxHeightPx == null || imageEmbedsMaxHeightPx <= 0) {
+      imageEmbedsMaxHeightPx = 0;
     }
 
     // Link previews default: disabled (privacy + extra network traffic).

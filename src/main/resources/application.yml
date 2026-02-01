@@ -24,6 +24,15 @@ ircafe:
     # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
     imageEmbedsEnabled: false
 
+    # Maximum width cap for inline image embeds (pixels). If 0, no extra cap (only scales down to fit the viewport).
+    imageEmbedsMaxWidthPx: 0
+
+    # Maximum height cap for inline image embeds (pixels). If 0, no extra cap.
+    imageEmbedsMaxHeightPx: 0
+
+    # Enable animated GIF playback for inline images. If false, GIFs render as a still first frame.
+    imageEmbedsAnimateGifs: true
+
     # Collapse presence noise in channel logs (join/part/quit/nick) into Lounge-style fold blocks.
     # Default: true.
     presenceFoldsEnabled: true

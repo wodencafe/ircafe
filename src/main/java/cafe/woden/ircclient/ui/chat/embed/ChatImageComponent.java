@@ -1,7 +1,10 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.settings.UiSettings;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
+import java.beans.PropertyChangeListener;
 import java.awt.BorderLayout;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -31,6 +34,11 @@ final class ChatImageComponent extends JPanel {
 
   private final String url;
   private final ImageFetchService fetch;
+  private final UiSettingsBus uiSettingsBus;
+
+  // Coordinates "only newest GIF animates" within a transcript.
+  private final GifAnimationCoordinator gifCoordinator;
+  private final long embedSeq;
 
   private final boolean collapsedByDefault;
   private boolean collapsed;
@@ -46,8 +54,17 @@ final class ChatImageComponent extends JPanel {
   private volatile byte[] bytes;
   private volatile DecodedImage decoded;
   private volatile int lastMaxW = -1;
+  private volatile int lastMaxH = -1;
 
   private Disposable sub;
+
+  private boolean settingsListenerInstalled;
+  private final PropertyChangeListener settingsListener = evt -> {
+    if (evt == null) return;
+    if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+    // Re-render when the user changes max-width, font, etc.
+    SwingUtilities.invokeLater(this::renderForCurrentWidth);
+  };
 
   private java.awt.Component resizeListeningOn;
   private final java.awt.event.ComponentListener resizeListener = new java.awt.event.ComponentAdapter() {
@@ -60,10 +77,28 @@ final class ChatImageComponent extends JPanel {
 
   private AnimatedGifPlayer gifPlayer;
 
-  ChatImageComponent(String url, ImageFetchService fetch, boolean collapsedByDefault) {
+  // When this component is an animated GIF, only the newest GIF in the transcript should animate.
+  private boolean gifAnimationAllowed = true;
+
+  // Global user setting: enable/disable animated GIF playback.
+  private boolean gifAnimationEnabled = true;
+  private boolean lastAnimateSetting = true;
+  private java.util.List<javax.swing.ImageIcon> gifFrames = java.util.List.of();
+  private int[] gifDelaysMs = new int[0];
+
+  ChatImageComponent(
+      String url,
+      ImageFetchService fetch,
+      boolean collapsedByDefault,
+      UiSettingsBus uiSettingsBus,
+      GifAnimationCoordinator gifCoordinator,
+      long embedSeq) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
     this.url = url;
     this.fetch = fetch;
+    this.uiSettingsBus = uiSettingsBus;
+    this.gifCoordinator = gifCoordinator;
+    this.embedSeq = embedSeq;
     this.collapsedByDefault = collapsedByDefault;
     this.collapsed = collapsedByDefault;
 
@@ -71,6 +106,30 @@ final class ChatImageComponent extends JPanel {
 
     renderScaffold();
     beginLoad();
+  }
+
+  /**
+   * Called by {@link GifAnimationCoordinator} to enforce "only newest GIF animates".
+   * Must be invoked on the Swing EDT.
+   */
+  void setGifAnimationAllowed(boolean allowed) {
+    if (this.gifAnimationAllowed == allowed) return;
+    this.gifAnimationAllowed = allowed;
+
+    if (gifPlayer != null) {
+      if (allowed && gifAnimationEnabled && !collapsed) {
+        gifPlayer.start();
+      } else {
+        gifPlayer.stop();
+        // Prefer a stable first frame when disabled.
+        if (gifFrames != null && !gifFrames.isEmpty()) {
+          imageLabel.setIcon(gifFrames.get(0));
+          setLabelPreferredSize(gifFrames.get(0));
+        }
+      }
+      revalidate();
+      repaint();
+    }
   }
 
   private void renderScaffold() {
@@ -162,7 +221,7 @@ final class ChatImageComponent extends JPanel {
     }
 
     if (gifPlayer != null) {
-      if (collapsed) {
+      if (collapsed || !gifAnimationAllowed) {
         gifPlayer.stop();
       } else {
         gifPlayer.start();
@@ -186,18 +245,34 @@ final class ChatImageComponent extends JPanel {
               bytes = b;
               try {
                 decoded = ImageDecodeUtil.decode(url, b);
+
+                // Confirm/deny GIF-ness so the coordinator can enforce "only newest GIF animates".
+                if (gifCoordinator != null) {
+                  if (decoded instanceof AnimatedGifDecoded) {
+                    gifCoordinator.registerAnimatedGif(embedSeq, this);
+                  } else {
+                    gifCoordinator.rejectGifHint(embedSeq);
+                  }
+                }
+
                 imageLabel.setText("");
                 if (!collapsed) {
                   renderForCurrentWidth();
                 }
               } catch (Exception ex) {
                 decoded = null;
+                if (gifCoordinator != null) {
+                  gifCoordinator.rejectGifHint(embedSeq);
+                }
                 imageLabel.setText("(image decode failed)");
                 imageLabel.setToolTipText(url + System.lineSeparator() + ex.getMessage());
               }
             },
             err -> {
               decoded = null;
+              if (gifCoordinator != null) {
+                gifCoordinator.rejectGifHint(embedSeq);
+              }
               imageLabel.setText("(image failed to load)");
               imageLabel.setToolTipText(url + System.lineSeparator() + err.getMessage());
             }
@@ -209,6 +284,7 @@ final class ChatImageComponent extends JPanel {
     super.addNotify();
 
     hookResizeListener();
+    hookSettingsListener();
 
     // If Swing re-adds this component during view rebuilds and scrolling, and we haven't loaded yet,
     // (re)start the fetch. (Do NOT cancel on removeNotify; see removeNotify below.)
@@ -218,7 +294,7 @@ final class ChatImageComponent extends JPanel {
       }
     }
 
-    if (gifPlayer != null && !collapsed) {
+    if (gifPlayer != null && !collapsed && gifAnimationAllowed) {
       gifPlayer.start();
     }
   }
@@ -233,6 +309,7 @@ final class ChatImageComponent extends JPanel {
       gifPlayer.stop();
     }
     unhookResizeListener();
+    unhookSettingsListener();
     super.removeNotify();
   }
 
@@ -245,26 +322,59 @@ final class ChatImageComponent extends JPanel {
     int maxW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 96);
     if (maxW <= 0) maxW = FALLBACK_MAX_W;
 
+    int capW = 0;
+    int capH = 0;
+    boolean animateGifs = true;
+    if (uiSettingsBus != null) {
+      try {
+        UiSettings s = uiSettingsBus.get();
+        if (s != null) {
+          capW = s.imageEmbedsMaxWidthPx();
+          capH = s.imageEmbedsMaxHeightPx();
+          animateGifs = s.imageEmbedsAnimateGifs();
+        }
+      } catch (Exception ignored) {
+      }
+    }
+    this.gifAnimationEnabled = animateGifs;
+
+    if (capW > 0) {
+      maxW = Math.min(maxW, capW);
+    }
+
+    int maxH = (capH > 0) ? capH : 0;
+
     // Avoid re-scaling on every tiny jitter.
-    if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0) {
+    if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0 && maxH == lastMaxH && animateGifs == lastAnimateSetting) {
       return;
     }
     lastMaxW = maxW;
+    lastMaxH = maxH;
+    lastAnimateSetting = animateGifs;
 
     if (d instanceof AnimatedGifDecoded gif) {
       // Build scaled frame icons.
       java.util.List<javax.swing.ImageIcon> icons = new java.util.ArrayList<>(gif.frames().size());
       for (java.awt.image.BufferedImage frame : gif.frames()) {
-        java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(frame, maxW);
+        java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToFit(frame, maxW, maxH);
         icons.add(new javax.swing.ImageIcon(scaled));
       }
+
+      this.gifFrames = java.util.List.copyOf(icons);
+      this.gifDelaysMs = gif.delaysMs();
 
       if (gifPlayer == null) {
         gifPlayer = new AnimatedGifPlayer(imageLabel);
       }
       gifPlayer.setFrames(icons, gif.delaysMs());
-      if (!collapsed) {
+      if (!collapsed && gifAnimationAllowed && gifAnimationEnabled) {
         gifPlayer.start();
+      } else {
+        gifPlayer.stop();
+        // Ensure a stable still frame when disabled.
+        if (!icons.isEmpty()) {
+          imageLabel.setIcon(icons.get(0));
+        }
       }
 
       // Set sizing based on the first frame.
@@ -282,7 +392,7 @@ final class ChatImageComponent extends JPanel {
     }
 
     if (d instanceof StaticImageDecoded st) {
-      java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(st.image(), maxW);
+      java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToFit(st.image(), maxW, maxH);
       javax.swing.ImageIcon icon = new javax.swing.ImageIcon(scaled);
       imageLabel.setIcon(icon);
       imageLabel.setText("");
@@ -306,6 +416,20 @@ final class ChatImageComponent extends JPanel {
 
   private void unhookResizeListener() {
     resizeListeningOn = EmbedHostLayoutUtil.unhookResizeListener(resizeListener, resizeListeningOn);
+  }
+
+  private void hookSettingsListener() {
+    if (uiSettingsBus == null) return;
+    if (settingsListenerInstalled) return;
+    uiSettingsBus.addListener(settingsListener);
+    settingsListenerInstalled = true;
+  }
+
+  private void unhookSettingsListener() {
+    if (uiSettingsBus == null) return;
+    if (!settingsListenerInstalled) return;
+    uiSettingsBus.removeListener(settingsListener);
+    settingsListenerInstalled = false;
   }
 
   private void installPopup(JPanel target) {

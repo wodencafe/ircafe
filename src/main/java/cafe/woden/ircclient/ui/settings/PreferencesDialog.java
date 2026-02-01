@@ -103,13 +103,52 @@ public class PreferencesDialog {
     imageEmbedsCollapsed.setSelected(current.imageEmbedsCollapsedByDefault());
     imageEmbedsCollapsed.setToolTipText("If enabled, newly inserted inline images start collapsed (header shown; click to expand).");
     imageEmbedsCollapsed.setEnabled(imageEmbeds.isSelected());
-    imageEmbeds.addActionListener(e -> imageEmbedsCollapsed.setEnabled(imageEmbeds.isSelected()));
+
+    // Max width cap (0 = no extra cap; images still scale to fit the viewport).
+    JSpinner imageMaxWidth = new JSpinner(new SpinnerNumberModel(current.imageEmbedsMaxWidthPx(), 0, 4096, 10));
+    final var imageMaxWidthMouseWheelAC = MouseWheelDecorator.decorateNumberSpinner(imageMaxWidth);
+    imageMaxWidth.setToolTipText("Maximum width for inline images (pixels).\n" +
+        "If 0, IRCafe will only scale images down to fit the chat viewport.");
+    imageMaxWidth.setEnabled(imageEmbeds.isSelected());
+
+    // Max height cap (0 = no extra cap; images still scale to fit the viewport / max-width cap).
+    JSpinner imageMaxHeight = new JSpinner(new SpinnerNumberModel(current.imageEmbedsMaxHeightPx(), 0, 4096, 10));
+    final var imageMaxHeightMouseWheelAC = MouseWheelDecorator.decorateNumberSpinner(imageMaxHeight);
+    imageMaxHeight.setToolTipText("Maximum height for inline images (pixels).\n" +
+        "If 0, IRCafe will only scale images down based on viewport width (and max width cap, if set).");
+    imageMaxHeight.setEnabled(imageEmbeds.isSelected());
+
+    JCheckBox animateGifs = new JCheckBox("Animate GIFs");
+    animateGifs.setSelected(current.imageEmbedsAnimateGifs());
+    animateGifs.setToolTipText("If disabled, animated GIFs render as a still image (first frame).");
+    animateGifs.setEnabled(imageEmbeds.isSelected());
+
+    imageEmbeds.addActionListener(e -> {
+      boolean enabled = imageEmbeds.isSelected();
+      imageEmbedsCollapsed.setEnabled(enabled);
+      imageMaxWidth.setEnabled(enabled);
+      imageMaxHeight.setEnabled(enabled);
+      animateGifs.setEnabled(enabled);
+    });
+
+    JPanel imageMaxWidthRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    imageMaxWidthRow.setOpaque(false);
+    imageMaxWidthRow.add(new JLabel("Max image width (px, 0 = no limit): "));
+    imageMaxWidthRow.add(imageMaxWidth);
+
+    JPanel imageMaxHeightRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    imageMaxHeightRow.setOpaque(false);
+    imageMaxHeightRow.add(new JLabel("Max image height (px, 0 = no limit): "));
+    imageMaxHeightRow.add(imageMaxHeight);
 
     JPanel imagePanel = new JPanel();
     imagePanel.setOpaque(false);
     imagePanel.setLayout(new BoxLayout(imagePanel, BoxLayout.Y_AXIS));
     imagePanel.add(imageEmbeds);
     imagePanel.add(imageEmbedsCollapsed);
+    imagePanel.add(imageMaxWidthRow);
+    imagePanel.add(imageMaxHeightRow);
+    imagePanel.add(animateGifs);
 
     JCheckBox linkPreviews = new JCheckBox("Enable link previews (OpenGraph cards)");
     linkPreviews.setSelected(current.linkPreviewsEnabled());
@@ -189,6 +228,8 @@ public class PreferencesDialog {
       String t = String.valueOf(theme.getSelectedItem());
       String fam = String.valueOf(fontFamily.getSelectedItem());
       int size = ((Number) fontSize.getValue()).intValue();
+      int maxImageW = ((Number) imageMaxWidth.getValue()).intValue();
+      int maxImageH = ((Number) imageMaxHeight.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
       UiSettings next = new UiSettings(
@@ -197,6 +238,9 @@ public class PreferencesDialog {
           size,
           imageEmbeds.isSelected(),
           imageEmbedsCollapsed.isSelected(),
+          maxImageW,
+          maxImageH,
+          animateGifs.isSelected(),
           linkPreviews.isSelected(),
           linkPreviewsCollapsed.isSelected(),
           prev.presenceFoldsEnabled(),
@@ -209,6 +253,9 @@ public class PreferencesDialog {
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
       runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
       runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
+      runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
+      runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
+      runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
       runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberChatMessageTimestampsEnabled(next.chatMessageTimestampsEnabled());
@@ -228,6 +275,8 @@ public class PreferencesDialog {
 
     final CloseableScope scope = DialogCloseableScopeDecorator.install(d);
     scope.add(fontSizeMouseWheelAC);
+    scope.add(imageMaxWidthMouseWheelAC);
+    scope.add(imageMaxHeightMouseWheelAC);
     scope.addCleanup(() -> {
       if (this.dialog == d) this.dialog = null;
     });
