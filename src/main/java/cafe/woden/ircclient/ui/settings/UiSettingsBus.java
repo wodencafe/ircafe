@@ -33,6 +33,8 @@ public class UiSettingsBus {
         props.linkPreviewsCollapsedByDefault(),
         props.presenceFoldsEnabled(),
         props.chatMessageTimestampsEnabled(),
+        props.clientLineColorEnabled(),
+        props.clientLineColor(),
 
         // Hostmask discovery / USERHOST
         hm == null || Boolean.TRUE.equals(hm.userhostEnabled()),

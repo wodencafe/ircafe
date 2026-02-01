@@ -312,6 +312,42 @@ public class RuntimeConfigStore {
     }
   }
 
+
+
+  /** Persist whether outgoing messages should use a custom color (stored under ircafe.ui.clientLineColorEnabled). */
+  public synchronized void rememberClientLineColorEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("clientLineColorEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist outgoing message color enabled setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the outgoing message color (stored under ircafe.ui.clientLineColor). */
+  public synchronized void rememberClientLineColor(String hex) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("clientLineColor", Objects.toString(hex, "").trim());
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist outgoing message color setting to '{}'", file, e);
+    }
+  }
+
   // ---------------- hostmask discovery ----------------
 
   /** Persist whether USERHOST-based hostmask discovery is enabled (stored under {@code ircafe.ui.hostmaskDiscovery.userhostEnabled}). */

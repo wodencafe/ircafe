@@ -20,6 +20,12 @@ ircafe:
     # Default: false (preserve classic IRC look).
     chatMessageTimestampsEnabled: false
 
+    # Outgoing message custom color (lines you send that are locally echoed into the transcript).
+    # Default: false
+    clientLineColorEnabled: false
+    # Color when enabled (hex like "#RRGGBB").
+    clientLineColor: "#6AA2FF"
+
 
     # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
     imageEmbedsEnabled: false

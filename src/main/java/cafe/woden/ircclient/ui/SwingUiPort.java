@@ -232,7 +232,12 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void appendChat(TargetRef target, String from, String text) {
-    onEdt(() -> transcripts.appendChat(target, from, text));
+    onEdt(() -> transcripts.appendChat(target, from, text, false));
+  }
+
+  @Override
+  public void appendChat(TargetRef target, String from, String text, boolean outgoingLocalEcho) {
+    onEdt(() -> transcripts.appendChat(target, from, text, outgoingLocalEcho));
   }
 
   @Override
@@ -242,7 +247,12 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void appendAction(TargetRef target, String from, String action) {
-    onEdt(() -> transcripts.appendAction(target, from, action));
+    onEdt(() -> transcripts.appendAction(target, from, action, false));
+  }
+
+  @Override
+  public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
+    onEdt(() -> transcripts.appendAction(target, from, action, outgoingLocalEcho));
   }
 
   @Override
