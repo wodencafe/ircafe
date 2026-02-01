@@ -1201,6 +1201,10 @@ public class IrcMediator {
         targetCoordinator.onNickListUpdated(sid, ev);
       }
 
+      case IrcEvent.UserHostmaskObserved ev -> {
+        targetCoordinator.onUserHostmaskObserved(sid, ev);
+      }
+
       case IrcEvent.Error ev -> {
           ui.appendError(status, "(error)", ev.message());
       }

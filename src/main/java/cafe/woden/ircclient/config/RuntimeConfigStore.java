@@ -294,7 +294,8 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist link preview collapse setting to '{}'", file, e);
     }
   }
-/** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
+
+  /** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
   public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -308,6 +309,99 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist chat message timestamp setting to '{}'", file, e);
+    }
+  }
+
+  // ---------------- hostmask discovery ----------------
+
+  /** Persist whether USERHOST-based hostmask discovery is enabled (stored under {@code ircafe.ui.hostmaskDiscovery.userhostEnabled}). */
+  public synchronized void rememberUserhostDiscoveryEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST discovery enabled setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the minimum interval (seconds) between USERHOST commands (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMinIntervalSeconds}). */
+  public synchronized void rememberUserhostMinIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostMinIntervalSeconds", Math.max(1, seconds));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST min interval setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the max USERHOST commands per minute (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMaxCommandsPerMinute}). */
+  public synchronized void rememberUserhostMaxCommandsPerMinute(int maxPerMinute) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostMaxCommandsPerMinute", Math.max(1, maxPerMinute));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST max commands/min setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the per-nick cooldown (minutes) before re-querying USERHOST (stored under {@code ircafe.ui.hostmaskDiscovery.userhostNickCooldownMinutes}). */
+  public synchronized void rememberUserhostNickCooldownMinutes(int minutes) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostNickCooldownMinutes", Math.max(1, minutes));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST nick cooldown setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the max nicks to include per USERHOST command (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMaxNicksPerCommand}). */
+  public synchronized void rememberUserhostMaxNicksPerCommand(int maxNicks) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      int capped = Math.max(1, Math.min(5, maxNicks));
+      hostmaskDiscovery.put("userhostMaxNicksPerCommand", capped);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST max nicks/command setting to '{}'", file, e);
     }
   }
 

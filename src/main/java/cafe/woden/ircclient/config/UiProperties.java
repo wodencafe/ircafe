@@ -49,6 +49,15 @@ public record UiProperties(
      */
     Boolean imageEmbedsAnimateGifs,
 
+    /**
+     * Hostmask discovery settings.
+     *
+     * <p>IRCafe prefers the IRCv3 {@code userhost-in-names} capability (free, no extra traffic).
+     * If hostmasks are still missing and you have hostmask-based ignore rules configured, IRCafe can
+     * carefully use {@code USERHOST} with conservative anti-flood limits.
+     */
+    HostmaskDiscovery hostmaskDiscovery,
+
     /** Enable Discord/Signal-style link preview "cards" for regular web pages. Default: false. */
     Boolean linkPreviewsEnabled,
 
@@ -82,6 +91,35 @@ public record UiProperties(
       if (format == null || format.isBlank()) {
         format = "HH:mm:ss";
       }
+    }
+  }
+
+  /**
+   * Hostmask discovery configuration.
+   *
+   * <p>Defaults are intentionally conservative:
+   * <ul>
+   *   <li>{@code userhostEnabled=true}
+   *   <li>{@code userhostMinIntervalSeconds=7}
+   *   <li>{@code userhostMaxCommandsPerMinute=6}
+   *   <li>{@code userhostNickCooldownMinutes=30}
+   *   <li>{@code userhostMaxNicksPerCommand=5} (most servers allow up to 5)
+   * </ul>
+   */
+  public record HostmaskDiscovery(
+      Boolean userhostEnabled,
+      Integer userhostMinIntervalSeconds,
+      Integer userhostMaxCommandsPerMinute,
+      Integer userhostNickCooldownMinutes,
+      Integer userhostMaxNicksPerCommand
+  ) {
+    public HostmaskDiscovery {
+      if (userhostEnabled == null) userhostEnabled = true;
+      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0) userhostMinIntervalSeconds = 7;
+      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0) userhostMaxCommandsPerMinute = 6;
+      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0) userhostNickCooldownMinutes = 30;
+      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0) userhostMaxNicksPerCommand = 5;
+      if (userhostMaxNicksPerCommand > 5) userhostMaxNicksPerCommand = 5;
     }
   }
 
@@ -122,6 +160,16 @@ public record UiProperties(
     // Image embed max height default: 0 (no extra cap).
     if (imageEmbedsMaxHeightPx == null || imageEmbedsMaxHeightPx <= 0) {
       imageEmbedsMaxHeightPx = 0;
+    }
+
+    // GIF animation default: enabled.
+    if (imageEmbedsAnimateGifs == null) {
+      imageEmbedsAnimateGifs = true;
+    }
+
+    // Hostmask discovery defaults.
+    if (hostmaskDiscovery == null) {
+      hostmaskDiscovery = new HostmaskDiscovery(true, 7, 6, 30, 5);
     }
 
     // Link previews default: disabled (privacy + extra network traffic).

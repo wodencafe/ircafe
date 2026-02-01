@@ -19,6 +19,7 @@ public class UiSettingsBus {
   private volatile UiSettings current;
 
   public UiSettingsBus(UiProperties props) {
+    UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
     this.current = new UiSettings(
         props.theme(),
         props.chatFontFamily(),
@@ -31,7 +32,14 @@ public class UiSettingsBus {
         props.linkPreviewsEnabled(),
         props.linkPreviewsCollapsedByDefault(),
         props.presenceFoldsEnabled(),
-        props.chatMessageTimestampsEnabled()
+        props.chatMessageTimestampsEnabled(),
+
+        // Hostmask discovery / USERHOST
+        hm == null || Boolean.TRUE.equals(hm.userhostEnabled()),
+        hm != null ? hm.userhostMinIntervalSeconds() : 7,
+        hm != null ? hm.userhostMaxCommandsPerMinute() : 6,
+        hm != null ? hm.userhostNickCooldownMinutes() : 30,
+        hm != null ? hm.userhostMaxNicksPerCommand() : 5
     );
   }
 

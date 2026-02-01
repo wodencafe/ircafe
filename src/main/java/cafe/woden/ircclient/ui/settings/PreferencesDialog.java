@@ -8,8 +8,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GraphicsEnvironment;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
 import java.util.Arrays;
@@ -22,9 +20,14 @@ import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import net.miginfocom.swing.MigLayout;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -131,24 +134,15 @@ public class PreferencesDialog {
       animateGifs.setEnabled(enabled);
     });
 
-    JPanel imageMaxWidthRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-    imageMaxWidthRow.setOpaque(false);
-    imageMaxWidthRow.add(new JLabel("Max image width (px, 0 = no limit): "));
-    imageMaxWidthRow.add(imageMaxWidth);
-
-    JPanel imageMaxHeightRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-    imageMaxHeightRow.setOpaque(false);
-    imageMaxHeightRow.add(new JLabel("Max image height (px, 0 = no limit): "));
-    imageMaxHeightRow.add(imageMaxHeight);
-
-    JPanel imagePanel = new JPanel();
+    JPanel imagePanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]8[nogrid]", "[]4[]4[]4[]4[]"));
     imagePanel.setOpaque(false);
-    imagePanel.setLayout(new BoxLayout(imagePanel, BoxLayout.Y_AXIS));
-    imagePanel.add(imageEmbeds);
-    imagePanel.add(imageEmbedsCollapsed);
-    imagePanel.add(imageMaxWidthRow);
-    imagePanel.add(imageMaxHeightRow);
-    imagePanel.add(animateGifs);
+    imagePanel.add(imageEmbeds, "span 2, wrap");
+    imagePanel.add(imageEmbedsCollapsed, "span 2, wrap");
+    imagePanel.add(new JLabel("Max image width (px, 0 = no limit):"));
+    imagePanel.add(imageMaxWidth, "w 90!");
+    imagePanel.add(new JLabel("Max image height (px, 0 = no limit):"));
+    imagePanel.add(imageMaxHeight, "w 90!");
+    imagePanel.add(animateGifs, "span 2, wrap");
 
     JCheckBox linkPreviews = new JCheckBox("Enable link previews (OpenGraph cards)");
     linkPreviews.setSelected(current.linkPreviewsEnabled());
@@ -160,9 +154,8 @@ public class PreferencesDialog {
     linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected());
     linkPreviews.addActionListener(e -> linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected()));
 
-    JPanel linkPanel = new JPanel();
+    JPanel linkPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]"));
     linkPanel.setOpaque(false);
-    linkPanel.setLayout(new BoxLayout(linkPanel, BoxLayout.Y_AXIS));
     linkPanel.add(linkPreviews);
     linkPanel.add(linkPreviewsCollapsed);
 
@@ -170,55 +163,85 @@ public class PreferencesDialog {
     chatTimestamps.setSelected(current.chatMessageTimestampsEnabled());
     chatTimestamps.setToolTipText("If enabled, IRCafe will prepend a timestamp to each regular user message line.");
 
-    // Layout
-    JPanel form = new JPanel(new GridBagLayout());
-    GridBagConstraints c = new GridBagConstraints();
-    c.insets = new Insets(8, 10, 8, 10);
-    c.anchor = GridBagConstraints.WEST;
-    c.fill = GridBagConstraints.HORIZONTAL;
-    c.weightx = 1.0;
+    // ---- Hostmask discovery / USERHOST anti-flood settings ----
+    JPanel userhostPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]8[]8[]8[]"));
 
-    c.gridx = 0;
-    c.gridy = 0;
-    form.add(new JLabel("Theme"), c);
+    JTextArea userhostInfo = new JTextArea(
+        "IRCafe prefers IRCv3 userhost-in-names (free). " +
+            "If hostmasks are still missing and you have hostmask-based ignore rules, IRCafe can " +
+            "use USERHOST carefully with conservative rate limits."
+    );
+    userhostInfo.setEditable(false);
+    userhostInfo.setLineWrap(true);
+    userhostInfo.setWrapStyleWord(true);
+    userhostInfo.setOpaque(false);
+    userhostInfo.setFocusable(false);
+    userhostInfo.setBorder(null);
+    userhostInfo.setFont(UIManager.getFont("Label.font"));
+    userhostInfo.setForeground(UIManager.getColor("Label.foreground"));
+    // Keep the dialog from packing excessively wide; MigLayout will allow it to grow if needed.
+    userhostInfo.setColumns(48);
 
-    c.gridx = 1;
-    form.add(theme, c);
+    JCheckBox userhostEnabled = new JCheckBox("Resolve missing hostmasks using USERHOST (rate-limited)");
+    userhostEnabled.setSelected(current.userhostDiscoveryEnabled());
+    userhostEnabled.setToolTipText("When enabled, IRCafe may send USERHOST only when hostmask-based ignore rules exist and some nicks are missing hostmasks.");
 
-    c.gridx = 0;
-    c.gridy++;
-    form.add(new JLabel("Chat font"), c);
+    JSpinner userhostMinIntervalSeconds = new JSpinner(new SpinnerNumberModel(current.userhostMinIntervalSeconds(), 1, 60, 1));
+    userhostMinIntervalSeconds.setToolTipText("Minimum seconds between USERHOST commands per server.");
+    AutoCloseable userhostMinIntervalAC = MouseWheelDecorator.decorateNumberSpinner(userhostMinIntervalSeconds);
 
-    c.gridx = 1;
-    form.add(fontFamily, c);
+    JSpinner userhostMaxPerMinute = new JSpinner(new SpinnerNumberModel(current.userhostMaxCommandsPerMinute(), 1, 60, 1));
+    userhostMaxPerMinute.setToolTipText("Maximum USERHOST commands per minute per server.");
+    AutoCloseable userhostMaxPerMinuteAC = MouseWheelDecorator.decorateNumberSpinner(userhostMaxPerMinute);
 
-    c.gridx = 0;
-    c.gridy++;
-    form.add(new JLabel("Chat font size"), c);
+    JSpinner userhostNickCooldownMinutes = new JSpinner(new SpinnerNumberModel(current.userhostNickCooldownMinutes(), 1, 240, 1));
+    userhostNickCooldownMinutes.setToolTipText("Cooldown in minutes before re-querying the same nick.");
+    AutoCloseable userhostNickCooldownAC = MouseWheelDecorator.decorateNumberSpinner(userhostNickCooldownMinutes);
 
-    c.gridx = 1;
-    form.add(fontSize, c);
+    JSpinner userhostMaxNicksPerCommand = new JSpinner(new SpinnerNumberModel(current.userhostMaxNicksPerCommand(), 1, 5, 1));
+    userhostMaxNicksPerCommand.setToolTipText("How many nicks to include per USERHOST command (servers typically allow up to 5).");
+    AutoCloseable userhostMaxNicksPerCommandAC = MouseWheelDecorator.decorateNumberSpinner(userhostMaxNicksPerCommand);
 
-    c.gridx = 0;
-    c.gridy++;
-    form.add(new JLabel("Inline images"), c);
+    Runnable updateUserhostEnabledState = () -> {
+      boolean enabled = userhostEnabled.isSelected();
+      userhostMinIntervalSeconds.setEnabled(enabled);
+      userhostMaxPerMinute.setEnabled(enabled);
+      userhostNickCooldownMinutes.setEnabled(enabled);
+      userhostMaxNicksPerCommand.setEnabled(enabled);
+    };
+    userhostEnabled.addActionListener(e -> updateUserhostEnabledState.run());
+    updateUserhostEnabledState.run();
 
-    c.gridx = 1;
-    form.add(imagePanel, c);
+    userhostPanel.add(userhostInfo, "span 2, growx, wrap");
+    userhostPanel.add(userhostEnabled, "span 2, wrap");
+    userhostPanel.add(new JLabel("Min interval (sec):"));
+    userhostPanel.add(userhostMinIntervalSeconds, "w 90!");
+    userhostPanel.add(new JLabel("Max commands/min:"));
+    userhostPanel.add(userhostMaxPerMinute, "w 90!");
+    userhostPanel.add(new JLabel("Nick cooldown (min):"));
+    userhostPanel.add(userhostNickCooldownMinutes, "w 90!");
+    userhostPanel.add(new JLabel("Max nicks/command:"));
+    userhostPanel.add(userhostMaxNicksPerCommand, "w 90!");
 
-    c.gridx = 0;
-    c.gridy++;
-    form.add(new JLabel("Link previews"), c);
+    // Layout (MiGLayout avoids the fragile GridBag sizing issues)
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]8[]8[]8[]8[]"));
+    form.add(new JLabel("Theme"));
+    form.add(theme, "growx");
 
-    c.gridx = 1;
-    form.add(linkPanel, c);
+    form.add(new JLabel("Chat font"));
+    form.add(fontFamily, "growx");
 
-    c.gridx = 0;
-    c.gridy++;
-    form.add(new JLabel("Chat timestamps"), c);
+    form.add(new JLabel("Chat font size"));
+    form.add(fontSize, "w 90!");
 
-    c.gridx = 1;
-    form.add(chatTimestamps, c);
+    form.add(new JLabel("Inline images"), "aligny top");
+    form.add(imagePanel, "growx");
+
+    form.add(new JLabel("Link previews"), "aligny top");
+    form.add(linkPanel, "growx");
+
+    form.add(new JLabel("Chat timestamps"));
+    form.add(chatTimestamps);
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
@@ -230,6 +253,12 @@ public class PreferencesDialog {
       int size = ((Number) fontSize.getValue()).intValue();
       int maxImageW = ((Number) imageMaxWidth.getValue()).intValue();
       int maxImageH = ((Number) imageMaxHeight.getValue()).intValue();
+
+      boolean userhostEnabledV = userhostEnabled.isSelected();
+      int userhostMinIntervalV = ((Number) userhostMinIntervalSeconds.getValue()).intValue();
+      int userhostMaxPerMinuteV = ((Number) userhostMaxPerMinute.getValue()).intValue();
+      int userhostNickCooldownV = ((Number) userhostNickCooldownMinutes.getValue()).intValue();
+      int userhostMaxNicksV = ((Number) userhostMaxNicksPerCommand.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
       UiSettings next = new UiSettings(
@@ -244,7 +273,12 @@ public class PreferencesDialog {
           linkPreviews.isSelected(),
           linkPreviewsCollapsed.isSelected(),
           prev.presenceFoldsEnabled(),
-          chatTimestamps.isSelected()
+          chatTimestamps.isSelected(),
+          userhostEnabledV,
+          userhostMinIntervalV,
+          userhostMaxPerMinuteV,
+          userhostNickCooldownV,
+          userhostMaxNicksV
       );
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
@@ -259,6 +293,12 @@ public class PreferencesDialog {
       runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberChatMessageTimestampsEnabled(next.chatMessageTimestampsEnabled());
+
+      runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
+      runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
+      runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
+      runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
+      runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
 
       if (themeChanged) {
         themeManager.applyTheme(next.theme());
@@ -277,6 +317,10 @@ public class PreferencesDialog {
     scope.add(fontSizeMouseWheelAC);
     scope.add(imageMaxWidthMouseWheelAC);
     scope.add(imageMaxHeightMouseWheelAC);
+    scope.add(userhostMinIntervalAC);
+    scope.add(userhostMaxPerMinuteAC);
+    scope.add(userhostNickCooldownAC);
+    scope.add(userhostMaxNicksPerCommandAC);
     scope.addCleanup(() -> {
       if (this.dialog == d) this.dialog = null;
     });
@@ -292,10 +336,20 @@ public class PreferencesDialog {
     buttons.add(ok);
     buttons.add(cancel);
 
+    // Tabs
+    JTabbedPane tabs = new JTabbedPane();
+    JScrollPane generalScroll = new JScrollPane(form);
+    generalScroll.setBorder(null);
+    tabs.addTab("General", generalScroll);
+
+    JScrollPane userhostScroll = new JScrollPane(userhostPanel);
+    userhostScroll.setBorder(null);
+    tabs.addTab("Hostmask discovery", userhostScroll);
+
     d.setLayout(new BorderLayout());
-    d.add(form, BorderLayout.CENTER);
+    d.add(tabs, BorderLayout.CENTER);
     d.add(buttons, BorderLayout.SOUTH);
-    d.setMinimumSize(new Dimension(560, 340));
+    d.setMinimumSize(new Dimension(520, 340));
     d.pack();
     d.setLocationRelativeTo(owner);
     d.setVisible(true);

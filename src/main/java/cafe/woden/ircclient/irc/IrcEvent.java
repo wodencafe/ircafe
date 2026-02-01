@@ -28,6 +28,7 @@ public sealed interface IrcEvent permits
     IrcEvent.UserNickChangedChannel,
     IrcEvent.JoinedChannel,
     IrcEvent.NickListUpdated,
+    IrcEvent.UserHostmaskObserved,
     IrcEvent.WhoisResult,
     IrcEvent.Error {
 
@@ -90,7 +91,12 @@ public sealed interface IrcEvent permits
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
 
-  record NickInfo(String nick, String prefix) {} // prefix like "@", "+", "~", etc.
+  /**
+   * Channel roster entry.
+   *
+   * <p>Hostmask may be empty if not known (e.g. some NAMES implementations do not provide it).
+   */
+  record NickInfo(String nick, String prefix, String hostmask) {} // prefix like "@", "+", "~", etc.
 
   record NickListUpdated(
       Instant at,
@@ -99,6 +105,14 @@ public sealed interface IrcEvent permits
       int totalUsers,
       int operatorCount
   ) implements IrcEvent {}
+
+  /**
+   * Opportunistically observed a user's hostmask in the wild (e.g. from JOIN/PRIVMSG prefixes).
+   *
+   * <p>This is used to enrich the cached user list even when NAMES doesn't provide hostmasks.
+   * No extra network traffic is generated.
+   */
+  record UserHostmaskObserved(Instant at, String channel, String nick, String hostmask) implements IrcEvent {}
 
   /** Completed WHOIS response */
   record WhoisResult(Instant at, String nick, List<String> lines) implements IrcEvent {}

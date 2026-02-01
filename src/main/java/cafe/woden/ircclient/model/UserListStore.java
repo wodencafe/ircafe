@@ -17,6 +17,39 @@ public class UserListStore {
   private final Map<String, Map<String, List<NickInfo>>> usersByServerAndChannel = new ConcurrentHashMap<>();
   private final Map<String, Map<String, Set<String>>> lowerNickSetByServerAndChannel = new ConcurrentHashMap<>();
 
+  /**
+   * Best-effort learned hostmasks by server + lowercase nick.
+   *
+   * <p>This is populated opportunistically from inbound IRC prefixes (messages, joins, parts, etc.).
+   * It helps us enrich NAMES rosters that do not include user@host.
+   */
+  private final Map<String, Map<String, String>> hostmaskByServerAndNickLower = new ConcurrentHashMap<>();
+
+  private static String norm(String s) {
+    return Objects.toString(s, "").trim();
+  }
+
+  private static String nickKey(String nick) {
+    String n = norm(nick);
+    return n.isEmpty() ? "" : n.toLowerCase(Locale.ROOT);
+  }
+
+  private static boolean isUsefulHostmask(String hostmask) {
+    String hm = norm(hostmask);
+    if (hm.isEmpty()) return false;
+
+    int bang = hm.indexOf('!');
+    int at = hm.indexOf('@');
+    if (bang <= 0 || at <= bang + 1 || at >= hm.length() - 1) return false;
+
+    String ident = hm.substring(bang + 1, at).trim();
+    String host = hm.substring(at + 1).trim();
+
+    boolean identUnknown = ident.isEmpty() || "*".equals(ident);
+    boolean hostUnknown = host.isEmpty() || "*".equals(host);
+    return !(identUnknown && hostUnknown);
+  }
+
   public List<NickInfo> get(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
     String ch = Objects.toString(channel, "").trim();
@@ -43,11 +76,36 @@ public class UserListStore {
   }
 
   public void put(String serverId, String channel, List<NickInfo> nicks) {
-    String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
+    String sid = norm(serverId);
+    String ch = norm(channel);
     if (sid.isEmpty() || ch.isEmpty()) return;
 
-    List<NickInfo> safe = nicks == null ? List.of() : List.copyOf(nicks);
+    // Merge any learned hostmasks into the roster, but do not overwrite a useful hostmask provided
+    // by the server.
+    Map<String, String> known = hostmaskByServerAndNickLower.getOrDefault(sid, Map.of());
+    List<NickInfo> safe;
+    if (nicks == null || nicks.isEmpty() || known.isEmpty()) {
+      safe = nicks == null ? List.of() : List.copyOf(nicks);
+    } else {
+      java.util.ArrayList<NickInfo> merged = new java.util.ArrayList<>(nicks.size());
+      for (NickInfo ni : nicks) {
+        if (ni == null) {
+          merged.add(null);
+          continue;
+        }
+        String nk = nickKey(ni.nick());
+        String hm = norm(ni.hostmask());
+        if ((hm.isEmpty() || !isUsefulHostmask(hm)) && !nk.isEmpty()) {
+          String learned = known.get(nk);
+          if (isUsefulHostmask(learned)) {
+            merged.add(new NickInfo(ni.nick(), ni.prefix(), learned));
+            continue;
+          }
+        }
+        merged.add(ni);
+      }
+      safe = List.copyOf(merged);
+    }
 
     usersByServerAndChannel
         .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
@@ -80,9 +138,125 @@ public class UserListStore {
   }
 
   public void clearServer(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
+    String sid = norm(serverId);
     if (sid.isEmpty()) return;
     usersByServerAndChannel.remove(sid);
     lowerNickSetByServerAndChannel.remove(sid);
+    hostmaskByServerAndNickLower.remove(sid);
+  }
+
+  /**
+   * Update the cached hostmask for a nick within a channel, if present.
+   *
+   * <p>Returns true only if an existing roster entry was updated.
+   */
+  public boolean updateHostmask(String serverId, String channel, String nick, String hostmask) {
+    String sid = norm(serverId);
+    String ch = norm(channel);
+    String n = norm(nick);
+    String hm = norm(hostmask);
+
+    if (sid.isEmpty() || ch.isEmpty() || n.isEmpty() || hm.isEmpty()) return false;
+
+    // Remember learned hostmask server-wide.
+    if (isUsefulHostmask(hm)) {
+      hostmaskByServerAndNickLower
+          .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+          .put(nickKey(n), hm);
+    }
+
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel == null) return false;
+
+    List<NickInfo> cur = byChannel.get(ch);
+    if (cur == null || cur.isEmpty()) return false;
+
+    boolean changed = false;
+    java.util.ArrayList<NickInfo> next = new java.util.ArrayList<>(cur.size());
+
+    for (NickInfo ni : cur) {
+      if (ni == null) {
+        next.add(null);
+        continue;
+      }
+
+      String niNick = Objects.toString(ni.nick(), "");
+      if (!niNick.isBlank() && niNick.equalsIgnoreCase(n)) {
+        String existing = Objects.toString(ni.hostmask(), "").trim();
+        if (!Objects.equals(existing, hm)) {
+          next.add(new NickInfo(ni.nick(), ni.prefix(), hm));
+          changed = true;
+          continue;
+        }
+      }
+
+      next.add(ni);
+    }
+
+    if (!changed) return false;
+
+    // Store a new immutable list instance so downstream UI can re-render.
+    byChannel.put(ch, List.copyOf(next));
+    return true;
+  }
+
+  /**
+   * Update the cached hostmask for a nick across all cached channels on a server.
+   *
+   * <p>This enables "step 1.5" propagation: once we learn a user's hostmask from any inbound
+   * prefix in one channel, we can reflect hostmask-based ignores in other channel userlists
+   * where that nick is present.
+   *
+   * @return set of channels whose roster list was modified.
+   */
+  public Set<String> updateHostmaskAcrossChannels(String serverId, String nick, String hostmask) {
+    String sid = norm(serverId);
+    String n = norm(nick);
+    String hm = norm(hostmask);
+
+    if (sid.isEmpty() || n.isEmpty() || hm.isEmpty() || !isUsefulHostmask(hm)) return Set.of();
+
+    // Remember learned hostmask server-wide.
+    hostmaskByServerAndNickLower
+        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+        .put(nickKey(n), hm);
+
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel == null || byChannel.isEmpty()) return Set.of();
+
+    java.util.Set<String> changedChannels = new java.util.HashSet<>();
+
+    for (Map.Entry<String, List<NickInfo>> e : byChannel.entrySet()) {
+      String ch = e.getKey();
+      List<NickInfo> cur = e.getValue();
+      if (cur == null || cur.isEmpty()) continue;
+
+      boolean changed = false;
+      java.util.ArrayList<NickInfo> next = new java.util.ArrayList<>(cur.size());
+
+      for (NickInfo ni : cur) {
+        if (ni == null) {
+          next.add(null);
+          continue;
+        }
+        String niNick = norm(ni.nick());
+        if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
+          String existing = norm(ni.hostmask());
+          if (!Objects.equals(existing, hm)) {
+            next.add(new NickInfo(ni.nick(), ni.prefix(), hm));
+            changed = true;
+            continue;
+          }
+        }
+        next.add(ni);
+      }
+
+      if (changed) {
+        byChannel.put(ch, List.copyOf(next));
+        changedChannels.add(ch);
+      }
+    }
+
+    return java.util.Set.copyOf(changedChannels);
   }
 }

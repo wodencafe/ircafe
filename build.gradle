@@ -43,6 +43,9 @@ dependencies {
 	implementation "org.sejda.imageio:webp-imageio:0.1.6"
 	implementation "com.madgag:animated-gif-lib:1.4"
 
+	// Better (and far less fragile) Swing dialog layouts.
+	implementation "com.miglayout:miglayout-swing:11.4.2"
+
 	implementation "com.fasterxml.jackson.core:jackson-databind"
 
 	implementation "org.jsoup:jsoup:1.22.1"

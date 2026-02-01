@@ -34,8 +34,59 @@ import java.util.regex.Pattern;
 public class UserListDockable extends JPanel implements Dockable {
   public static final String ID = "users";
 
-  private final DefaultListModel<String> model = new DefaultListModel<>();
-  private final JList<String> list = new JList<>(model);
+  /**
+   * Store full NickInfo entries so we can retain metadata (e.g. hostmask) even if we only render the nick.
+   */
+  private final DefaultListModel<NickInfo> model = new DefaultListModel<>();
+  private final JList<NickInfo> list = new JList<>(model) {
+    @Override
+    public String getToolTipText(MouseEvent e) {
+      if (e == null) return null;
+
+      int index = locationToIndex(e.getPoint());
+      if (index < 0) return null;
+
+      Rectangle r = getCellBounds(index, index);
+      if (r == null || !r.contains(e.getPoint())) return null;
+
+      NickInfo ni = model.getElementAt(index);
+      if (ni == null) return null;
+
+      IgnoreMark mark = ignoreMark(ni);
+      String nick = Objects.toString(ni.nick(), "").trim();
+      String hostmask = Objects.toString(ni.hostmask(), "").trim();
+
+      boolean hasHostmask = isUsefulHostmask(hostmask);
+      // Always show a tooltip for a real nick; if hostmask isn't known yet, show a pending hint.
+      if (nick.isEmpty()) return null;
+
+      StringBuilder sb = new StringBuilder(128);
+      sb.append("<html>");
+      if (!nick.isEmpty()) {
+        sb.append("<b>").append(escapeHtml(nick)).append("</b>");
+      }
+
+      if (hasHostmask) {
+        sb.append("<br>")
+            .append("<span style='font-family:monospace'>")
+            .append(escapeHtml(hostmask))
+            .append("</span>");
+      } else {
+        sb.append("<br>").append("<i>Hostmask pending</i>");
+      }
+
+      if (mark.ignore && mark.softIgnore) {
+        sb.append("<br>").append("Ignored + soft ignored");
+      } else if (mark.ignore) {
+        sb.append("<br>").append("Ignored (messages hidden)");
+      } else if (mark.softIgnore) {
+        sb.append("<br>").append("Soft ignored (messages shown as spoilers)");
+      }
+
+      sb.append("</html>");
+      return sb.toString();
+    }
+  };
 
   private final CloseableScope closeables = ComponentCloseableScopeDecorator.install(this);
 
@@ -69,18 +120,22 @@ public class UserListDockable extends JPanel implements Dockable {
     this.ignoreDialog = ignoreDialog;
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    // Enable ToolTipManager support for this component. The actual tooltip text is provided
+    // by the JList#getToolTipText(MouseEvent) override above.
+    list.setToolTipText("");
 
     // Deterministic, global per-nick coloring in the user list + ignore indicators.
-    final ListCellRenderer<? super String> baseRenderer = list.getCellRenderer();
-    list.setCellRenderer((JList<? extends String> l, String value, int index, boolean isSelected, boolean cellHasFocus) -> {
+    final ListCellRenderer<? super NickInfo> baseRenderer = list.getCellRenderer();
+    list.setCellRenderer((JList<? extends NickInfo> l, NickInfo value, int index, boolean isSelected, boolean cellHasFocus) -> {
       java.awt.Component c = baseRenderer.getListCellRendererComponent(l, value, index, isSelected, cellHasFocus);
 
       if (!(c instanceof JLabel lbl)) return c;
 
-      String raw = Objects.toString(value, "");
-      String nick = stripNickPrefix(raw);
+      String nick = value == null ? "" : Objects.toString(value.nick(), "");
+      String prefix = value == null ? "" : Objects.toString(value.prefix(), "");
+      String raw = prefix + nick;
 
-      IgnoreMark mark = ignoreMark(nick);
+      IgnoreMark mark = ignoreMark(value);
 
       // Text decoration (keep the underlying model unchanged).
       String display = raw;
@@ -94,17 +149,6 @@ public class UserListDockable extends JPanel implements Dockable {
       if (mark.ignore) style |= Font.BOLD;
       if (mark.softIgnore) style |= Font.ITALIC;
       lbl.setFont(f.deriveFont(style));
-
-      // Tooltip is helpful when the tag is subtle.
-      if (mark.ignore && mark.softIgnore) {
-        lbl.setToolTipText("Ignored (messages hidden) + soft ignored (messages shown as spoilers)");
-      } else if (mark.ignore) {
-        lbl.setToolTipText("Ignored (messages hidden)");
-      } else if (mark.softIgnore) {
-        lbl.setToolTipText("Soft ignored (messages shown as spoilers)");
-      } else {
-        lbl.setToolTipText(null);
-      }
 
       // Apply per-nick color last so it wins for the nick label.
       if (nick != null && !nick.isBlank() && nickColors != null && nickColors.enabled()) {
@@ -148,8 +192,8 @@ public class UserListDockable extends JPanel implements Dockable {
         // Only meaningful when we're viewing a channel user list.
         if (active == null || !active.isChannel()) return;
 
-        String raw = model.getElementAt(index);
-        String nick = stripNickPrefix(raw);
+        NickInfo ni = model.getElementAt(index);
+        String nick = (ni == null) ? "" : Objects.toString(ni.nick(), "").trim();
         if (nick.isBlank()) return;
 
         openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
@@ -198,8 +242,8 @@ public class UserListDockable extends JPanel implements Dockable {
     closeables.add(ListContextMenuDecorator.decorate(list, true, (index, e) -> {
       // If we don't have a meaningful context target (e.g., status), disable actions.
       boolean hasCtx = active != null && active.serverId() != null && !active.serverId().isBlank();
-      String raw = model.getElementAt(index);
-      String nick = stripNickPrefix(raw);
+      NickInfo ni = model.getElementAt(index);
+      String nick = (ni == null) ? "" : Objects.toString(ni.nick(), "").trim();
       boolean hasNick = nick != null && !nick.isBlank();
 
       openQuery.setEnabled(hasCtx && hasNick);
@@ -208,7 +252,7 @@ public class UserListDockable extends JPanel implements Dockable {
       ping.setEnabled(hasCtx && hasNick);
       time.setEnabled(hasCtx && hasNick);
 
-      IgnoreMark mark = ignoreMark(nick);
+      IgnoreMark mark = ignoreMark(ni);
 
       ignore.setEnabled(hasCtx && hasNick);
       unignore.setEnabled(hasCtx && hasNick && mark.ignore);
@@ -240,20 +284,26 @@ public class UserListDockable extends JPanel implements Dockable {
 
   public void setNicks(List<NickInfo> nicks) {
     model.clear();
-    for (String n : nicks.stream().map(x -> x.prefix() + x.nick()).toList()) model.addElement(n);
+    if (nicks == null) return;
+    for (NickInfo n : nicks) model.addElement(n);
   }
 
   public void setPlaceholder(String... nicks) {
     model.clear();
-    for (String n : nicks) model.addElement(n);
+    if (nicks == null) return;
+    for (String n : nicks) {
+      String nick = Objects.toString(n, "").trim();
+      if (nick.isEmpty()) continue;
+      model.addElement(new NickInfo(nick, "", ""));
+    }
   }
 
   public TargetRef getChannel() {
     return active;
   }
 
-  public List<String> getNicksSnapshot() {
-    List<String> out = new ArrayList<>(model.size());
+  public List<NickInfo> getNicksSnapshot() {
+    List<NickInfo> out = new ArrayList<>(model.size());
     for (int i = 0; i < model.size(); i++) out.add(model.getElementAt(i));
     return out;
   }
@@ -284,16 +334,85 @@ public class UserListDockable extends JPanel implements Dockable {
     }
   }
 
-  private IgnoreMark ignoreMark(String nick) {
+  private IgnoreMark ignoreMark(NickInfo ni) {
     if (ignoreListService == null) return new IgnoreMark(false, false);
-    String n = Objects.toString(nick, "").trim();
-    if (n.isEmpty()) return new IgnoreMark(false, false);
+    if (ni == null) return new IgnoreMark(false, false);
+
+    String nick = Objects.toString(ni.nick(), "").trim();
+    String hostmask = Objects.toString(ni.hostmask(), "").trim();
+    if (nick.isEmpty() && hostmask.isEmpty()) return new IgnoreMark(false, false);
 
     refreshIgnoreCache(false);
 
-    boolean hard = nickTargetedByAny(ignoreCacheMasks, n);
-    boolean soft = nickTargetedByAny(ignoreCacheSoftMasks, n);
+    // Prefer full hostmask matching when we have it, because it can match host-only ignores like "*!*@host".
+    // When we don't know a user's hostmask yet, fall back to nick-glob heuristics so nick-based ignores
+    // (stored as "nick!*@*") still show up in the user list.
+    boolean hard = false;
+    boolean soft = false;
+
+    if (isUsefulHostmask(hostmask)) {
+      hard = hostmaskTargetedByAny(ignoreCacheMasks, hostmask);
+      soft = hostmaskTargetedByAny(ignoreCacheSoftMasks, hostmask);
+    } else if (!nick.isEmpty()) {
+      hard = nickTargetedByAny(ignoreCacheMasks, nick);
+      soft = nickTargetedByAny(ignoreCacheSoftMasks, nick);
+    }
+
     return new IgnoreMark(hard, soft);
+  }
+
+  private boolean hostmaskTargetedByAny(List<String> masks, String hostmask) {
+    if (masks == null || masks.isEmpty()) return false;
+    String hm = Objects.toString(hostmask, "").trim();
+    if (hm.isEmpty()) return false;
+
+    for (String m : masks) {
+      if (m == null || m.isBlank()) continue;
+      if (globMatchIgnoreMask(m, hm)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Glob match for ignore masks: "*" = any sequence, "?" = any char, case-insensitive.
+   * Mirrors IgnoreListService matching so the user list indicators agree with message filtering.
+   */
+  private static boolean globMatchIgnoreMask(String pattern, String text) {
+    String ptn = Objects.toString(pattern, "").trim().toLowerCase(Locale.ROOT);
+    String txt = Objects.toString(text, "").trim().toLowerCase(Locale.ROOT);
+    if (ptn.isEmpty() || txt.isEmpty()) return false;
+
+    int p = 0;
+    int t = 0;
+    int star = -1;
+    int match = 0;
+
+    while (t < txt.length()) {
+      if (p < ptn.length() && (ptn.charAt(p) == '?' || ptn.charAt(p) == txt.charAt(t))) {
+        p++;
+        t++;
+        continue;
+      }
+
+      if (p < ptn.length() && ptn.charAt(p) == '*') {
+        star = p;
+        match = t;
+        p++;
+        continue;
+      }
+
+      if (star != -1) {
+        p = star + 1;
+        match++;
+        t = match;
+        continue;
+      }
+
+      return false;
+    }
+
+    while (p < ptn.length() && ptn.charAt(p) == '*') p++;
+    return p == ptn.length();
   }
 
   private boolean nickTargetedByAny(List<String> masks, String nick) {
@@ -340,17 +459,65 @@ public class UserListDockable extends JPanel implements Dockable {
     return sb.toString();
   }
 
-  private String stripNickPrefix(String s) {
-    if (s == null) return "";
-    String v = s.trim();
-    if (v.isEmpty()) return v;
+  /**
+   * Best-effort check that a hostmask is "useful" (not empty and not just a derived wildcard placeholder).
+   *
+   * <p>We treat the common forms {@code nick!user@host} and {@code user@host} as valid. We treat
+   * placeholders like {@code nick!*@*} as not useful.
+   */
+  private static boolean isUsefulHostmask(String hostmask) {
+    if (hostmask == null) return false;
+    String hm = hostmask.trim();
+    if (hm.isEmpty()) return false;
 
-    // PircBotX gives us prefixes like "@", "+", "~", etc.
-    char c = v.charAt(0);
-    if (c == '@' || c == '+' || c == '~' || c == '&' || c == '%') {
-      return v.substring(1).trim();
+    int at = hm.indexOf('@');
+    if (at <= 0 || at >= hm.length() - 1) return false;
+
+    int bang = hm.indexOf('!');
+    String user;
+    if (bang >= 0) {
+      if (bang == 0 || bang >= at - 1) return false;
+      user = hm.substring(bang + 1, at).trim();
+    } else {
+      user = hm.substring(0, at).trim();
     }
-    return v;
+
+    String host = hm.substring(at + 1).trim();
+    boolean userUnknown = user.isEmpty() || "*".equals(user);
+    boolean hostUnknown = host.isEmpty() || "*".equals(host);
+    return !(userUnknown && hostUnknown);
+  }
+
+  private static String escapeHtml(String s) {
+    if (s == null || s.isEmpty()) return "";
+    StringBuilder sb = new StringBuilder(s.length() + 16);
+    for (int i = 0; i < s.length(); i++) {
+      char c = s.charAt(i);
+      switch (c) {
+        case '&': sb.append("&amp;"); break;
+        case '<': sb.append("&lt;"); break;
+        case '>': sb.append("&gt;"); break;
+        case '"': sb.append("&quot;"); break;
+        case '\'': sb.append("&#39;"); break;
+        default: sb.append(c);
+      }
+    }
+    return sb.toString();
+  }
+
+  private NickInfo selectedNickInfo(int index) {
+    if (index < 0 || index >= model.size()) return null;
+    try {
+      return model.getElementAt(index);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private String selectedNick(int index) {
+    NickInfo ni = selectedNickInfo(index);
+    if (ni == null) return "";
+    return Objects.toString(ni.nick(), "").trim();
   }
 
   private void promptIgnore(boolean removing, boolean soft) {
@@ -359,10 +526,14 @@ public class UserListDockable extends JPanel implements Dockable {
       int idx = list.getSelectedIndex();
       if (idx < 0) return;
 
-      String nick = stripNickPrefix(model.getElementAt(idx));
-      if (nick == null || nick.isBlank()) return;
+      NickInfo ni = selectedNickInfo(idx);
+      String nick = selectedNick(idx);
+      if (nick.isBlank()) return;
 
-      String seed = IgnoreListService.normalizeMaskOrNickToHostmask(nick);
+      // If we already know the hostmask, seed the dialog with the full hostmask.
+      // Otherwise, fall back to a nick-based pattern.
+      String hm = ni == null ? "" : Objects.toString(ni.hostmask(), "").trim();
+      String seed = IgnoreListService.normalizeMaskOrNickToHostmask(isUsefulHostmask(hm) ? hm : nick);
       Window owner = SwingUtilities.getWindowAncestor(this);
 
       String title;
@@ -437,8 +608,9 @@ public class UserListDockable extends JPanel implements Dockable {
       if (active == null) return;
       int idx = list.getSelectedIndex();
       if (idx < 0) return;
-      String nick = stripNickPrefix(model.getElementAt(idx));
-      if (nick == null || nick.isBlank()) return;
+
+      String nick = selectedNick(idx);
+      if (nick.isBlank()) return;
 
       if (action == UserActionRequest.Action.OPEN_QUERY) {
         openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
