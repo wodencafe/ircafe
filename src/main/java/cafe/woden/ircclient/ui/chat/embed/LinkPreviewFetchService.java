@@ -38,6 +38,7 @@ public class LinkPreviewFetchService {
       new WikipediaLinkPreviewResolver(),
       new YouTubeLinkPreviewResolver(),
       new ImdbLinkPreviewResolver(),
+      new RottenTomatoesLinkPreviewResolver(),
       new XLinkPreviewResolver(MAX_BYTES),
       new GitHubLinkPreviewResolver(),
       new RedditLinkPreviewResolver(),

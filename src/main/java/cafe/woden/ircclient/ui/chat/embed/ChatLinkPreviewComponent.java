@@ -87,6 +87,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private boolean githubExtended;
 
   private boolean imdbExtended;
+  private boolean rtExtended;
 
   private JLabel imdbMeta;
   private JTextArea imdbCredits;
@@ -169,6 +170,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     xExtended = XPreviewUtil.isXStatusUrl(targetUrl);
     githubExtended = GitHubPreviewUtil.isGitHubUrl(targetUrl);
     imdbExtended = ImdbPreviewUtil.isImdbTitleUrl(targetUrl);
+    rtExtended = RottenTomatoesPreviewUtil.isRottenTomatoesTitleUrl(targetUrl);
     // Header: collapse button + site + title.
     header = new JPanel(new BorderLayout(8, 0));
     header.setOpaque(false);
@@ -217,8 +219,9 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     thumb = new JLabel();
     thumbHost = thumb;
-    int thumbW = youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : (imdbExtended ? IMDB_THUMB_W : THUMB_SIZE));
-    int thumbH = youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : (imdbExtended ? IMDB_THUMB_H : THUMB_SIZE));
+    boolean tallPoster = imdbExtended || rtExtended;
+    int thumbW = youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : (tallPoster ? IMDB_THUMB_W : THUMB_SIZE));
+    int thumbH = youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : (tallPoster ? IMDB_THUMB_H : THUMB_SIZE));
     thumb.setPreferredSize(new Dimension(thumbW, thumbH));
     thumb.setMinimumSize(new Dimension(thumbW, thumbH));
     thumb.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
@@ -262,7 +265,7 @@ final class ChatLinkPreviewComponent extends JPanel {
       loadThumbnail(p.imageUrl());
     }
 
-    if (imdbExtended && rawDesc != null && !rawDesc.isBlank()) {
+    if ((imdbExtended || rtExtended) && rawDesc != null && !rawDesc.isBlank()) {
       ImdbDescParts parts = splitImdbDesc(rawDesc);
 
       JPanel imdbCenter = new JPanel();
@@ -500,7 +503,7 @@ final class ChatLinkPreviewComponent extends JPanel {
       maxDescLines = WIKIPEDIA_MAX_DESC_LINES;
     } else if (youtubeExtended) {
       maxDescLines = YOUTUBE_MAX_DESC_LINES;
-    } else if (imdbExtended) {
+    } else if (imdbExtended || rtExtended) {
       maxDescLines = IMDB_MAX_DESC_LINES;
     } else if (xExtended) {
       maxDescLines = X_MAX_DESC_LINES;
@@ -510,7 +513,7 @@ final class ChatLinkPreviewComponent extends JPanel {
       maxDescLines = DEFAULT_MAX_DESC_LINES;
     }
 
-    if (imdbExtended && imdbCredits != null) {
+    if ((imdbExtended || rtExtended) && imdbCredits != null) {
       imdbCredits.setSize(new Dimension(descInnerW, Short.MAX_VALUE));
 
       if (imdbCreditsText != null && !imdbCreditsText.isBlank()) {
