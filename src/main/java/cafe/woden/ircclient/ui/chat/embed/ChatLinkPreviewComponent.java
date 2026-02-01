@@ -14,23 +14,32 @@ import java.net.URI;
 import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JSeparator;
 import javax.swing.JTextArea;
 import javax.swing.OverlayLayout;
 import javax.swing.SwingUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Inline link preview component inserted into the chat transcript StyledDocument.
  */
 final class ChatLinkPreviewComponent extends JPanel {
 
+  private static final Logger log = LoggerFactory.getLogger(ChatLinkPreviewComponent.class);
+
   private static final int FALLBACK_MAX_W = 420;
   private static final int WIDTH_MARGIN_PX = 32;
 
   private static final int THUMB_SIZE = 96;
+  private static final int IMDB_THUMB_W = 96;
+  private static final int IMDB_THUMB_H = 144;
   private static final int YT_THUMB_W = 160;
   private static final int YT_THUMB_H = 90;
   private static final int X_THUMB_W = 160;
@@ -39,6 +48,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final int DEFAULT_MAX_DESC_LINES = 3;
   private static final int WIKIPEDIA_MAX_DESC_LINES = 10;
   private static final int YOUTUBE_MAX_DESC_LINES = 8;
+  private static final int IMDB_CREDITS_MAX_LINES = 4;
+  private static final int IMDB_MAX_DESC_LINES = 30;
   private static final int X_MAX_DESC_LINES = 8;
   private static final int GITHUB_MAX_DESC_LINES = 6;
 
@@ -74,6 +85,15 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private boolean xExtended;
   private boolean githubExtended;
+
+  private boolean imdbExtended;
+
+  private JLabel imdbMeta;
+  private JTextArea imdbCredits;
+  private JSeparator imdbSeparator;
+  private JTextArea imdbSummary;
+  private String imdbCreditsText;
+
 
   private String fullDescText;
 
@@ -148,6 +168,7 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     xExtended = XPreviewUtil.isXStatusUrl(targetUrl);
     githubExtended = GitHubPreviewUtil.isGitHubUrl(targetUrl);
+    imdbExtended = ImdbPreviewUtil.isImdbTitleUrl(targetUrl);
     // Header: collapse button + site + title.
     header = new JPanel(new BorderLayout(8, 0));
     header.setOpaque(false);
@@ -196,8 +217,8 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     thumb = new JLabel();
     thumbHost = thumb;
-    int thumbW = youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : THUMB_SIZE);
-    int thumbH = youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : THUMB_SIZE);
+    int thumbW = youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : (imdbExtended ? IMDB_THUMB_W : THUMB_SIZE));
+    int thumbH = youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : (imdbExtended ? IMDB_THUMB_H : THUMB_SIZE));
     thumb.setPreferredSize(new Dimension(thumbW, thumbH));
     thumb.setMinimumSize(new Dimension(thumbW, thumbH));
     thumb.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
@@ -234,16 +255,78 @@ final class ChatLinkPreviewComponent extends JPanel {
       thumbHost = wrap;
     }
 
-    fullDescText = safe(p.description());
-    desc = textArea(fullDescText, false);
+    String rawDesc = safe(p.description());
 
     if (p.imageUrl() != null && !p.imageUrl().isBlank()) {
       body.add(thumbHost, BorderLayout.WEST);
       loadThumbnail(p.imageUrl());
     }
 
-    if (!desc.getText().isBlank()) {
-      body.add(desc, BorderLayout.CENTER);
+    if (imdbExtended && rawDesc != null && !rawDesc.isBlank()) {
+      ImdbDescParts parts = splitImdbDesc(rawDesc);
+
+      JPanel imdbCenter = new JPanel();
+      imdbCenter.setOpaque(false);
+      imdbCenter.setLayout(new BoxLayout(imdbCenter, BoxLayout.Y_AXIS));
+      // With BoxLayout.Y_AXIS, components default to alignmentX=0.5 (center).
+      // For single-line labels (like the IMDb meta line), that makes them appear
+      // horizontally "indented" (centered within the available width). Force left alignment.
+      imdbCenter.setAlignmentX(LEFT_ALIGNMENT);
+
+      if (parts.meta() != null && !parts.meta().isBlank()) {
+        imdbMeta = new JLabel(parts.meta());
+        imdbMeta.setOpaque(false);
+        imdbMeta.setAlignmentX(LEFT_ALIGNMENT);
+        imdbMeta.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        try {
+          imdbMeta.setFont(imdbMeta.getFont().deriveFont(imdbMeta.getFont().getStyle() | Font.BOLD));
+        } catch (Exception ignored) {
+        }
+        // Wrap in a BorderLayout anchored WEST to avoid BoxLayout centering quirks.
+        JPanel metaWrap = new JPanel(new BorderLayout());
+        metaWrap.setOpaque(false);
+        metaWrap.setAlignmentX(LEFT_ALIGNMENT);
+        metaWrap.add(imdbMeta, BorderLayout.WEST);
+        imdbCenter.add(metaWrap);
+      }
+
+      imdbCreditsText = parts.credits();
+      if (imdbCreditsText != null && !imdbCreditsText.isBlank()) {
+        imdbCredits = textArea(imdbCreditsText, false);
+        imdbCredits.setAlignmentX(LEFT_ALIGNMENT);
+        imdbCenter.add(Box.createVerticalStrut(2));
+        imdbCenter.add(imdbCredits);
+      }
+
+      String summaryText = parts.summary();
+      fullDescText = summaryText;
+      imdbSummary = textArea(summaryText, false);
+      desc = imdbSummary;
+      if (desc != null) desc.setAlignmentX(LEFT_ALIGNMENT);
+
+      if (desc != null && !desc.getText().isBlank()) {
+        // Horizontal line above the summary.
+        if (imdbMeta != null || imdbCredits != null) {
+          imdbSeparator = new JSeparator();
+          JPanel sepWrap = new JPanel(new BorderLayout());
+          sepWrap.setOpaque(false);
+          sepWrap.setAlignmentX(LEFT_ALIGNMENT);
+          sepWrap.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
+          sepWrap.add(imdbSeparator, BorderLayout.CENTER);
+          imdbCenter.add(sepWrap);
+        }
+        imdbCenter.add(desc);
+      }
+
+      if (imdbCenter.getComponentCount() > 0) {
+        body.add(imdbCenter, BorderLayout.CENTER);
+      }
+    } else {
+      fullDescText = rawDesc;
+      desc = textArea(fullDescText, false);
+      if (desc != null && !desc.getText().isBlank()) {
+        body.add(desc, BorderLayout.CENTER);
+      }
     }
 
     card.add(header, BorderLayout.NORTH);
@@ -318,15 +401,45 @@ final class ChatLinkPreviewComponent extends JPanel {
                   }
                   java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(img, maxW);
                   thumb.setIcon(new javax.swing.ImageIcon(scaled));
+                } else {
+                  log.warn("Thumbnail decode produced no image for {}", imageUrl);
+                  dropThumbnailPlaceholder();
                 }
-              } catch (Exception ignored) {
-                // ignore thumbnail failures
+              } catch (Exception ex) {
+                log.warn("Thumbnail decode failed for {}: {}", imageUrl, ex.toString());
+                dropThumbnailPlaceholder();
               }
             },
             err -> {
-              // ignore thumbnail failures
+              log.warn("Thumbnail download failed for {}: {}", imageUrl, err.toString());
+              dropThumbnailPlaceholder();
             }
         );
+  }
+
+  /** If a thumbnail fails to load/decode, don't reserve empty space for it. */
+  private void dropThumbnailPlaceholder() {
+    try {
+      if (body == null || thumbHost == null) return;
+      // Only drop if the icon isn't set (otherwise we'd hide a successfully loaded image).
+      if (thumb != null && thumb.getIcon() != null) return;
+      if (thumbHost.getParent() != body) return;
+
+      SwingUtilities.invokeLater(() -> {
+        try {
+          if (thumb != null && thumb.getIcon() != null) return;
+          if (body == null || thumbHost == null) return;
+          if (thumbHost.getParent() != body) return;
+          body.remove(thumbHost);
+          body.revalidate();
+          body.repaint();
+          lastMaxW = -1; // bust cached layout
+          layoutForCurrentWidth();
+        } catch (Exception ignored) {
+        }
+      });
+    } catch (Exception ignored) {
+    }
   }
 
   @Override
@@ -387,12 +500,32 @@ final class ChatLinkPreviewComponent extends JPanel {
       maxDescLines = WIKIPEDIA_MAX_DESC_LINES;
     } else if (youtubeExtended) {
       maxDescLines = YOUTUBE_MAX_DESC_LINES;
+    } else if (imdbExtended) {
+      maxDescLines = IMDB_MAX_DESC_LINES;
     } else if (xExtended) {
       maxDescLines = X_MAX_DESC_LINES;
     } else if (githubExtended) {
       maxDescLines = GITHUB_MAX_DESC_LINES;
     } else {
       maxDescLines = DEFAULT_MAX_DESC_LINES;
+    }
+
+    if (imdbExtended && imdbCredits != null) {
+      imdbCredits.setSize(new Dimension(descInnerW, Short.MAX_VALUE));
+
+      if (imdbCreditsText != null && !imdbCreditsText.isBlank()) {
+        String clampedCredits = PreviewTextUtil.clampToLines(
+            imdbCreditsText,
+            imdbCredits,
+            descInnerW,
+            IMDB_CREDITS_MAX_LINES
+        );
+        if (clampedCredits != null && !clampedCredits.equals(imdbCredits.getText())) {
+          imdbCredits.setText(clampedCredits);
+        }
+      }
+
+      clampLines(imdbCredits, IMDB_CREDITS_MAX_LINES);
     }
 
     if (desc != null) {
@@ -420,6 +553,38 @@ final class ChatLinkPreviewComponent extends JPanel {
     repaint();
     EmbedHostLayoutUtil.requestHostReflow(this);
   }
+
+  private static ImdbDescParts splitImdbDesc(String rawDesc) {
+    if (rawDesc == null) return new ImdbDescParts(null, null, null);
+    String t = rawDesc.strip();
+    if (t.isEmpty()) return new ImdbDescParts(null, null, null);
+
+    String[] lines = t.split("\\R");
+    String meta = lines.length > 0 ? safe(lines[0]) : null;
+
+    StringBuilder credits = new StringBuilder();
+    StringBuilder summary = new StringBuilder();
+
+    for (int i = 1; i < lines.length; i++) {
+      String line = lines[i] == null ? "" : lines[i].strip();
+      if (line.startsWith("Director:") || line.startsWith("Cast:")
+          || line.startsWith("Creator:") || line.startsWith("Creators:")) {
+        if (!credits.isEmpty()) credits.append("\n");
+        credits.append(line);
+        continue;
+      }
+
+      if (line.isBlank()) continue;
+      if (!summary.isEmpty()) summary.append("\n");
+      summary.append(line);
+    }
+
+    String creditsText = credits.isEmpty() ? null : credits.toString();
+    String summaryText = summary.isEmpty() ? null : summary.toString();
+    return new ImdbDescParts(safe(meta), safe(creditsText), safe(summaryText));
+  }
+
+  private record ImdbDescParts(String meta, String credits, String summary) {}
 
   private static JTextArea textArea(String text, boolean bold) {
     JTextArea ta = new JTextArea(text == null ? "" : text);

@@ -37,6 +37,7 @@ public class LinkPreviewFetchService {
   private final List<LinkPreviewResolver> resolvers = List.of(
       new WikipediaLinkPreviewResolver(),
       new YouTubeLinkPreviewResolver(),
+      new ImdbLinkPreviewResolver(),
       new XLinkPreviewResolver(MAX_BYTES),
       new GitHubLinkPreviewResolver(),
       new RedditLinkPreviewResolver(),
