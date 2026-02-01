@@ -4,6 +4,13 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
+import com.formdev.flatlaf.FlatClientProperties;
+import java.awt.Color;
+import javax.swing.BorderFactory;
+import javax.swing.JColorChooser;
+import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -163,6 +170,65 @@ public class PreferencesDialog {
     chatTimestamps.setSelected(current.chatMessageTimestampsEnabled());
     chatTimestamps.setToolTipText("If enabled, IRCafe will prepend a timestamp to each regular user message line.");
 
+    JCheckBox outgoingColorEnabled = new JCheckBox("Use custom color for my outgoing messages");
+    outgoingColorEnabled.setSelected(current.clientLineColorEnabled());
+    outgoingColorEnabled.setToolTipText("If enabled, IRCafe will render lines you send (locally echoed into chat) using a custom color.");
+
+    JTextField outgoingColorHex = new JTextField(UiSettings.normalizeHexOrDefault(current.clientLineColor(), "#6AA2FF"), 10);
+    outgoingColorHex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#RRGGBB");
+
+    JLabel outgoingPreview = new JLabel();
+    outgoingPreview.setOpaque(true);
+    outgoingPreview.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
+    outgoingPreview.setPreferredSize(new Dimension(120, 24));
+
+    JButton outgoingPick = new JButton("Pick...");
+    outgoingPick.addActionListener(e -> {
+      Color currentColor = parseHexColor(outgoingColorHex.getText());
+      if (currentColor == null) currentColor = parseHexColor(current.clientLineColor());
+      if (currentColor == null) currentColor = Color.WHITE;
+      Color chosen = JColorChooser.showDialog(dialog, "Choose Outgoing Message Color", currentColor);
+      if (chosen != null) {
+        outgoingColorHex.setText(toHex(chosen));
+      }
+    });
+
+    JPanel outgoingColorPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]8[nogrid]8[nogrid]", "[]4[]"));
+    outgoingColorPanel.setOpaque(false);
+    outgoingColorPanel.add(outgoingColorEnabled, "span 3, wrap");
+    outgoingColorPanel.add(outgoingColorHex, "w 110!");
+    outgoingColorPanel.add(outgoingPick);
+    outgoingColorPanel.add(outgoingPreview);
+
+    Runnable updateOutgoingColorUi = () -> {
+      boolean enabled = outgoingColorEnabled.isSelected();
+      outgoingColorHex.setEnabled(enabled);
+      outgoingPick.setEnabled(enabled);
+
+      if (!enabled) {
+        outgoingPreview.setOpaque(false);
+        outgoingPreview.setText("");
+        outgoingPreview.repaint();
+        return;
+      }
+
+      Color c = parseHexColor(outgoingColorHex.getText());
+      if (c != null) {
+        outgoingPreview.setOpaque(true);
+        outgoingPreview.setBackground(c);
+        outgoingPreview.setText(toHex(c));
+      } else {
+        outgoingPreview.setOpaque(false);
+        outgoingPreview.setText("Invalid");
+      }
+      outgoingPreview.repaint();
+    };
+
+    outgoingColorEnabled.addActionListener(e -> updateOutgoingColorUi.run());
+    outgoingColorHex.getDocument().addDocumentListener(new SimpleDocListener(updateOutgoingColorUi));
+    updateOutgoingColorUi.run();
+
+
     // ---- Hostmask discovery / USERHOST anti-flood settings ----
     JPanel userhostPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]8[]8[]8[]"));
 
@@ -243,6 +309,9 @@ public class PreferencesDialog {
     form.add(new JLabel("Chat timestamps"));
     form.add(chatTimestamps);
 
+    form.add(new JLabel("Outgoing messages"), "aligny top");
+    form.add(outgoingColorPanel, "growx");
+
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
@@ -261,6 +330,11 @@ public class PreferencesDialog {
       int userhostMaxNicksV = ((Number) userhostMaxNicksPerCommand.getValue()).intValue();
 
       UiSettings prev = settingsBus.get();
+      boolean outgoingColorEnabledV = outgoingColorEnabled.isSelected();
+      String outgoingHexV = UiSettings.normalizeHexOrDefault(outgoingColorHex.getText(), prev.clientLineColor());
+      // Normalize the text field to a canonical #RRGGBB form.
+      outgoingColorHex.setText(outgoingHexV);
+
       UiSettings next = new UiSettings(
           t,
           fam,
@@ -274,6 +348,8 @@ public class PreferencesDialog {
           linkPreviewsCollapsed.isSelected(),
           prev.presenceFoldsEnabled(),
           chatTimestamps.isSelected(),
+          outgoingColorEnabledV,
+          outgoingHexV,
           userhostEnabledV,
           userhostMinIntervalV,
           userhostMaxPerMinuteV,
@@ -293,6 +369,9 @@ public class PreferencesDialog {
       runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberChatMessageTimestampsEnabled(next.chatMessageTimestampsEnabled());
+
+      runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
+      runtimeConfig.rememberClientLineColor(next.clientLineColor());
 
       runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
       runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
@@ -354,4 +433,38 @@ public class PreferencesDialog {
     d.setLocationRelativeTo(owner);
     d.setVisible(true);
   }
+
+
+  private static String toHex(Color c) {
+    if (c == null) return "";
+    return String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
+  }
+
+  private static Color parseHexColor(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() != 6) return null;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      return new Color(rgb);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static final class SimpleDocListener implements DocumentListener {
+    private final Runnable onChange;
+
+    private SimpleDocListener(Runnable onChange) {
+      this.onChange = onChange;
+    }
+
+    @Override public void insertUpdate(DocumentEvent e) { onChange.run(); }
+    @Override public void removeUpdate(DocumentEvent e) { onChange.run(); }
+    @Override public void changedUpdate(DocumentEvent e) { onChange.run(); }
+  }
+
 }

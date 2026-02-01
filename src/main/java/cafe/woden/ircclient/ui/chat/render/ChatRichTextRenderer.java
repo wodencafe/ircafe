@@ -100,6 +100,13 @@ public class ChatRichTextRenderer {
         if (bg != null) StyleConstants.setBackground(linkAttr, bg);
       }
 
+      // Respect a whole-line foreground override (used for outgoing local-echo lines) unless this
+      // segment already has explicit mIRC colors.
+      Color overrideFg = (Color) base.getAttribute(ChatStyles.ATTR_OVERRIDE_FG);
+      if (overrideFg != null && !hasIrcColors(base)) {
+        StyleConstants.setForeground(linkAttr, overrideFg);
+      }
+
       doc.insertString(doc.getLength(), parts.url, linkAttr);
 
       if (!parts.trailing.isEmpty()) {
@@ -125,6 +132,8 @@ public class ChatRichTextRenderer {
     }
 
     String selfLower = mentions != null ? mentions.currentNickLower(serverId) : null;
+    Color overrideFg = (Color) baseStyle.getAttribute(ChatStyles.ATTR_OVERRIDE_FG);
+    boolean hasOverrideFg = overrideFg != null;
 
     int i = 0;
     int len = text.length();
@@ -144,6 +153,12 @@ public class ChatRichTextRenderer {
             Color bg = StyleConstants.getBackground(baseStyle);
             if (fg != null) StyleConstants.setForeground(chanAttr, fg);
             if (bg != null) StyleConstants.setBackground(chanAttr, bg);
+          }
+
+          // Respect a whole-line foreground override (used for outgoing local-echo lines) unless this
+          // segment already has explicit mIRC colors.
+          if (overrideFg != null && !hasIrcColors(baseStyle)) {
+            StyleConstants.setForeground(chanAttr, overrideFg);
           }
 
           doc.insertString(doc.getLength(), chan.channel, chanAttr);
@@ -172,13 +187,19 @@ public class ChatRichTextRenderer {
           SimpleAttributeSet mention = new SimpleAttributeSet(baseStyle);
           mention.addAttributes(styles.mention());
 
-          if (!hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
+          if (!hasOverrideFg && !hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
             mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
             nickColors.applyColor(mention, tokenLower);
           }
 
+          // If the whole line has a foreground override (outgoing local-echo), keep it even when the
+          // mention background style is applied.
+          if (overrideFg != null && !hasIrcColors(baseStyle)) {
+            StyleConstants.setForeground(mention, overrideFg);
+          }
+
           doc.insertString(doc.getLength(), token, mention);
-        } else if (!hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
+        } else if (!hasOverrideFg && !hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
           // Channel nick mention: apply the deterministic nick color on top of the base style.
           SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
           doc.insertString(doc.getLength(), token, nickStyle);

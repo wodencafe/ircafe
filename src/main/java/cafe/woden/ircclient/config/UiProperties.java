@@ -21,6 +21,16 @@ public record UiProperties(
     /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
     Boolean chatMessageTimestampsEnabled,
 
+    /**
+     * If enabled, render *outgoing* messages (lines you send that are locally echoed into the transcript)
+     * using a custom foreground color. Default: false.
+     */
+    Boolean clientLineColorEnabled,
+
+    /** Foreground color for outgoing message lines (hex like "#RRGGBB"). */
+    String clientLineColor,
+
+
     /** Enable embedding inline image previews from direct image links. Default: false. */
     Boolean imageEmbedsEnabled,
 
@@ -142,6 +152,14 @@ public record UiProperties(
       chatMessageTimestampsEnabled = false;
     }
 
+    // Outgoing message color default: disabled.
+    if (clientLineColorEnabled == null) {
+      clientLineColorEnabled = false;
+    }
+    // Default outgoing message color if enabled but not set explicitly.
+    clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
+
+
     // Image embeds default: disabled.
     if (imageEmbedsEnabled == null) {
       imageEmbedsEnabled = false;
@@ -201,4 +219,24 @@ public record UiProperties(
       nickColorOverrides = Map.of();
     }
   }
+
+  static String normalizeHexOrDefault(String raw, String fallback) {
+    String fb = (fallback == null || fallback.isBlank()) ? "#6AA2FF" : fallback.trim();
+    if (raw == null) return fb;
+    String s = raw.trim();
+    if (s.isEmpty()) return fb;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() != 6) return fb;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      int r = (rgb >> 16) & 0xFF;
+      int g = (rgb >> 8) & 0xFF;
+      int b = (rgb) & 0xFF;
+      return String.format("#%02X%02X%02X", r, g, b);
+    } catch (Exception ignored) {
+      return fb;
+    }
+  }
+
 }

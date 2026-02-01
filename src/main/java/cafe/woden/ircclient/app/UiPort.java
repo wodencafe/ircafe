@@ -66,13 +66,33 @@ public interface UiPort {
   /** Enable/disable the global input bar. */
   void setInputEnabled(boolean enabled);
 
-  void appendChat(TargetRef target, String from, String text);
+  /**
+   * Append a chat message line.
+   *
+   * <p>By default this is treated as an <em>incoming</em> line. Use the overload with
+   * {@code outgoingLocalEcho=true} for locally-echoed lines you just sent.</p>
+   */
+  default void appendChat(TargetRef target, String from, String text) {
+    appendChat(target, from, text, false);
+  }
+
+  /**
+   * Append a chat message line.
+   *
+   * @param outgoingLocalEcho true when the line is locally echoed (you just sent it)
+   */
+  void appendChat(TargetRef target, String from, String text, boolean outgoingLocalEcho);
 
   /** Append a chat message as a click-to-reveal spoiler block (used by soft-ignore). */
   void appendSpoilerChat(TargetRef target, String from, String text);
 
   /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
-  void appendAction(TargetRef target, String from, String action);
+  default void appendAction(TargetRef target, String from, String action) {
+    appendAction(target, from, action, false);
+  }
+
+  /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
+  void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho);
 
   /** Append a foldable presence/system event (join/part/quit/nick) in a channel transcript. */
   void appendPresence(TargetRef target, PresenceEvent event);

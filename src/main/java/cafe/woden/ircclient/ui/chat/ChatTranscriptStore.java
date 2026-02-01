@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
 import cafe.woden.ircclient.ui.chat.fold.SpoilerMessageComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
+import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.awt.Font;
 import java.awt.Color;
@@ -231,6 +232,15 @@ public class ChatTranscriptStore {
   }
 
   public void appendChat(TargetRef ref, String from, String text) {
+    appendChat(ref, from, text, false);
+  }
+
+  /**
+   * Append a chat message line.
+   *
+   * @param outgoingLocalEcho true for locally-echoed lines you just sent
+   */
+  public void appendChat(TargetRef ref, String from, String text, boolean outgoingLocalEcho) {
     // Chat message, start a new run
     breakPresenceRun(ref);
 
@@ -238,7 +248,61 @@ public class ChatTranscriptStore {
     if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
       fromStyle = nickColors.forNick(from, fromStyle);
     }
-    appendLine(ref, from, text, fromStyle, styles.message());
+
+    SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+    SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+    applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+    appendLine(ref, from, text, fs, ms);
+  }
+
+  private void applyOutgoingLineColor(SimpleAttributeSet fromStyle,
+                                      SimpleAttributeSet msgStyle,
+                                      boolean outgoingLocalEcho) {
+    if (!outgoingLocalEcho) return;
+
+    // Always mark outgoing lines so we can recolor them later when the user toggles the setting.
+    if (fromStyle != null) fromStyle.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
+    if (msgStyle != null) msgStyle.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
+
+    UiSettings s = safeSettings();
+    boolean enabled = s != null && s.clientLineColorEnabled();
+    if (!enabled) return;
+
+    Color c = parseHexColor(s.clientLineColor());
+    if (c == null) return;
+
+    if (fromStyle != null) {
+      fromStyle.addAttribute(ChatStyles.ATTR_OVERRIDE_FG, c);
+      StyleConstants.setForeground(fromStyle, c);
+    }
+    if (msgStyle != null) {
+      msgStyle.addAttribute(ChatStyles.ATTR_OVERRIDE_FG, c);
+      StyleConstants.setForeground(msgStyle, c);
+    }
+  }
+
+  private UiSettings safeSettings() {
+    try {
+      return uiSettings != null ? uiSettings.get() : null;
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static Color parseHexColor(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() != 6) return null;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      return new Color(rgb);
+    } catch (Exception ignored) {
+      return null;
+    }
   }
 
   /**
@@ -506,6 +570,15 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
    * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
    */
   public void appendAction(TargetRef ref, String from, String action) {
+    appendAction(ref, from, action, false);
+  }
+
+  /**
+   * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
+   *
+   * @param outgoingLocalEcho true for locally-echoed lines you just sent
+   */
+  public void appendAction(TargetRef ref, String from, String action, boolean outgoingLocalEcho) {
     breakPresenceRun(ref);
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
@@ -537,13 +610,17 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         fromStyle = nickColors.forNick(from, fromStyle);
       }
 
-      doc.insertString(doc.getLength(), "* ", msgStyle);
+      SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
+      SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+      applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+      doc.insertString(doc.getLength(), "* ", ms);
       if (from != null && !from.isBlank()) {
-        doc.insertString(doc.getLength(), from, fromStyle);
-        doc.insertString(doc.getLength(), " ", msgStyle);
+        doc.insertString(doc.getLength(), from, fs);
+        doc.insertString(doc.getLength(), " ", ms);
       }
 
-      renderer.insertRichText(doc, ref, a, msgStyle);
+      renderer.insertRichText(doc, ref, a, ms);
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
 
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
@@ -680,6 +757,10 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   private void restyle(StyledDocument doc) {
     if (doc == null) return;
 
+    UiSettings s = safeSettings();
+    boolean outgoingColorEnabled = s != null && s.clientLineColorEnabled();
+    Color outgoingColor = outgoingColorEnabled ? parseHexColor(s.clientLineColor()) : null;
+
     int len = doc.getLength();
     int offset = 0;
 
@@ -762,6 +843,16 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       }
       if (ircBg != null) {
         fresh.addAttribute(ChatStyles.ATTR_IRC_BG, ircBg);
+      }
+
+      // Preserve locally-echoed "outgoing" marker and apply (or remove) its optional override color.
+      boolean outgoing = Boolean.TRUE.equals(old.getAttribute(ChatStyles.ATTR_OUTGOING));
+      if (outgoing) {
+        fresh.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
+        if (outgoingColorEnabled && outgoingColor != null) {
+          fresh.addAttribute(ChatStyles.ATTR_OVERRIDE_FG, outgoingColor);
+          StyleConstants.setForeground(fresh, outgoingColor);
+        }
       }
 
       // Apply palette colors (if any) and reverse.

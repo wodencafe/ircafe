@@ -23,6 +23,9 @@ public class ChatStyles {
   public static final String ATTR_IRC_REVERSE = "chat.irc.reverse";
   /** Integer foreground mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_FG = "chat.irc.fg";
+  public static final String ATTR_OVERRIDE_FG = "chat.override.fg";
+  /** Boolean marker for locally-echoed outgoing lines (lines you send). */
+  public static final String ATTR_OUTGOING = "chat.outgoing";
   /** Integer background mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_BG = "chat.irc.bg";
 

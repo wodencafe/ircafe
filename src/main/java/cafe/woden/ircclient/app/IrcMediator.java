@@ -577,7 +577,7 @@ public class IrcMediator {
     }
 
     String me = irc.currentNick(at.serverId()).orElse("me");
-    ui.appendAction(at, me, a);
+    ui.appendAction(at, me, a, true);
 
     disposables.add(
         irc.sendAction(at.serverId(), at.target(), a).subscribe(
@@ -988,7 +988,7 @@ public class IrcMediator {
     );
 
     String me = irc.currentNick(target.serverId()).orElse("me");
-    ui.appendChat(target, "(" + me + ")", m);
+    ui.appendChat(target, "(" + me + ")", m, true);
   }
 
   private void onServerIrcEvent(ServerIrcEvent se) {
