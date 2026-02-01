@@ -1028,28 +1028,40 @@ public class IrcMediator {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
+        }
       }
 
       case IrcEvent.SoftChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendSpoilerChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
+        }
       }
 
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendAction(chan, ev.from(), ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
+        }
       }
 
       case IrcEvent.SoftChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendSpoilerChat(chan, ev.from(), "* " + ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
+        }
       }
 
 
@@ -1266,6 +1278,70 @@ public class IrcMediator {
 
     joinModeSummaryPrintedMs.put(key, System.currentTimeMillis());
     ui.appendNotice(chan, "(mode)", summary);
+  }
+
+  private boolean containsSelfMention(String serverId, String from, String message) {
+    if (serverId == null || message == null || message.isEmpty()) return false;
+    String me = irc.currentNick(serverId).orElse(null);
+    if (me == null || me.isBlank()) return false;
+
+    String fromNorm = normalizeNickForCompare(from);
+    if (fromNorm != null && fromNorm.equalsIgnoreCase(me)) return false;
+
+    return containsNickToken(message, me);
+  }
+
+  private static String normalizeNickForCompare(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return s;
+
+    // Some UI paths wrap self-nick in parentheses.
+    if (s.startsWith("(") && s.endsWith(")") && s.length() > 2) {
+      s = s.substring(1, s.length() - 1).trim();
+    }
+
+    // Strip common IRC user-mode prefixes if they appear.
+    while (!s.isEmpty()) {
+      char c = s.charAt(0);
+      if (c == '@' || c == '+' || c == '%' || c == '~' || c == '&') {
+        s = s.substring(1);
+      } else {
+        break;
+      }
+    }
+    return s;
+  }
+
+  private static boolean containsNickToken(String message, String nick) {
+    if (message == null || nick == null || nick.isEmpty()) return false;
+
+    String nickLower = nick.toLowerCase(Locale.ROOT);
+    int nlen = nickLower.length();
+
+    int i = 0;
+    final int len = message.length();
+    while (i < len) {
+      // Skip non-nick chars.
+      while (i < len && !isNickChar(message.charAt(i))) i++;
+      if (i >= len) break;
+      int start = i;
+      while (i < len && isNickChar(message.charAt(i))) i++;
+      int end = i;
+      int tokLen = end - start;
+      if (tokLen == nlen) {
+        String tokenLower = message.substring(start, end).toLowerCase(Locale.ROOT);
+        if (tokenLower.equals(nickLower)) return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isNickChar(char ch) {
+    if (ch >= '0' && ch <= '9') return true;
+    if (ch >= 'A' && ch <= 'Z') return true;
+    if (ch >= 'a' && ch <= 'z') return true;
+    return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
   }
 
   private void ensureTargetExists(TargetRef target) {

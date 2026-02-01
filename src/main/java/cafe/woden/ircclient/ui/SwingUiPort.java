@@ -155,6 +155,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void markHighlight(TargetRef target) {
+    onEdt(() -> serverTree.markHighlight(target));
+  }
+
+  @Override
   public void clearUnread(TargetRef target) {
     onEdt(() -> serverTree.clearUnread(target));
   }

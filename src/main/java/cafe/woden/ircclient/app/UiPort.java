@@ -38,6 +38,7 @@ public interface UiPort {
 
   void closeTarget(TargetRef target);
   void markUnread(TargetRef target);
+  void markHighlight(TargetRef target);
   void clearUnread(TargetRef target);
 
   void setChatActiveTarget(TargetRef target);
