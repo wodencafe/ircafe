@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.Insets;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -22,7 +23,9 @@ import javax.swing.UIManager;
  */
 public class SpoilerMessageComponent extends JPanel {
 
-  private final JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+  // IMPORTANT: FlowLayout's hgap is also used as the *leading* left padding.
+  // We keep it at 0 so the timestamp/nick column lines up with normal transcript text.
+  private final JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
   private final JLabel ts = new JLabel();
   private final JLabel from = new JLabel();
   private final JLabel pill = new JLabel();
@@ -41,9 +44,16 @@ public class SpoilerMessageComponent extends JPanel {
 
     // Keep it looking like a "chip" / covered pill.
     pill.setOpaque(true);
-    pill.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+    // No vertical padding: it causes the whole line height to grow and makes the prefix look misaligned.
+    pill.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
     pill.setText("soft ignored - click to reveal");
     applyPillColors();
+
+    // Match transcript fonts as closely as we can (embedded Swing components do NOT automatically
+    // inherit the JTextPane's styled font). Callers may override via setTranscriptFont(...).
+    Font base = UIManager.getFont("TextPane.font");
+    if (base == null) base = UIManager.getFont("Label.font");
+    setTranscriptFont(base);
 
     if (!ts.getText().isBlank()) header.add(ts);
     if (!from.getText().isBlank()) header.add(from);
@@ -78,6 +88,45 @@ public class SpoilerMessageComponent extends JPanel {
 
     setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
   }
+
+  /**
+   * Apply the chat transcript font (typically the JTextPane font). The "from" prefix is styled as bold
+   * to match the regular transcript rendering.
+   */
+  public void setTranscriptFont(Font base) {
+    if (base == null) return;
+    ts.setFont(base);
+    from.setFont(base.deriveFont(Font.BOLD));
+    pill.setFont(base);
+  }
+
+  /**
+   * JTextPane embeds Swing components using a baseline-aware view. JPanel has no baseline by default,
+   * which can create a subtle "north" padding above the component. Provide a stable baseline derived
+   * from our prefix/pill labels so the spoiler row aligns with normal text.
+   */
+  @Override
+  public int getBaseline(int width, int height) {
+    Insets in = getInsets();
+    int ascent = 0;
+
+    try {
+      if (ts.getFont() != null) ascent = Math.max(ascent, getFontMetrics(ts.getFont()).getAscent());
+      if (from.getFont() != null) ascent = Math.max(ascent, getFontMetrics(from.getFont()).getAscent());
+      if (pill.getFont() != null) ascent = Math.max(ascent, getFontMetrics(pill.getFont()).getAscent());
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    if (ascent <= 0) return -1;
+    return in.top + ascent;
+  }
+
+  @Override
+  public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+    return java.awt.Component.BaselineResizeBehavior.CONSTANT_ASCENT;
+  }
+
 
   /** Set the reveal handler. Must be safe to call from the EDT. */
   public void setOnReveal(BooleanSupplier onReveal) {

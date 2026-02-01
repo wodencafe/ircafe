@@ -9,6 +9,7 @@ import cafe.woden.ircclient.ui.chat.fold.SpoilerMessageComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Font;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -257,9 +258,15 @@ public class ChatTranscriptStore {
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
+    // Match the normal transcript prefix formatting exactly: "nick: " (including trailing space).
+    // Using the same punctuation/spacing keeps the spoiler line aligned with regular lines.
     String fromLabel = from == null ? "" : from;
-    if (!fromLabel.isBlank() && !fromLabel.endsWith(":")) {
-      fromLabel = fromLabel + ":";
+    if (!fromLabel.isBlank()) {
+      if (fromLabel.endsWith(":")) {
+        fromLabel = fromLabel + " ";
+      } else {
+        fromLabel = fromLabel + ": ";
+      }
     }
 
     boolean chatMessageTimestampsEnabled = false;
@@ -281,7 +288,22 @@ public class ChatTranscriptStore {
     final String fromLabelFinal = fromLabel;
 
     final SpoilerMessageComponent comp = new SpoilerMessageComponent(tsPrefixFinal, fromLabelFinal);
-// If nick coloring is enabled, apply it to the visible prefix label.
+
+    // Ensure the embedded spoiler component uses the same font as the transcript JTextPane.
+    // (Embedded Swing components do not automatically inherit the text pane's font.)
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        comp.setTranscriptFont(new Font(
+            uiSettings.get().chatFontFamily(),
+            Font.PLAIN,
+            uiSettings.get().chatFontSize()
+        ));
+      }
+    } catch (Exception ignored) {
+      // fall back to UI defaults
+    }
+
+    // If nick coloring is enabled, apply it to the visible prefix label.
     try {
       if (nickColors != null && nickColors.enabled() && from != null && !from.isBlank()) {
         Color bg = javax.swing.UIManager.getColor("TextPane.background");
@@ -307,8 +329,8 @@ public class ChatTranscriptStore {
       comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
           tsPrefixFinal, fromFinal, msgFinal));
 
-doc.insertString(doc.getLength(), "\n", styles.timestamp());
-} catch (Exception ignored) {
+      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+    } catch (Exception ignored) {
       // ignore
     }
   }
