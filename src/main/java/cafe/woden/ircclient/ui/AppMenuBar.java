@@ -1,8 +1,11 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.app.TargetCoordinator;
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -26,11 +29,13 @@ public class AppMenuBar extends JMenuBar {
 
   public AppMenuBar(PreferencesDialog preferencesDialog,
                     NickColorOverridesDialog nickColorOverridesDialog,
+                    IgnoreListDialog ignoreListDialog,
                     UiSettingsBus settingsBus,
                     ThemeManager themeManager,
                     RuntimeConfigStore runtimeConfig,
                     ServerDialogs serverDialogs,
-                    ServerTreeDockable serverTree) {
+                    ServerTreeDockable serverTree,
+                    TargetCoordinator targetCoordinator) {
 
     // File
     JMenu file = new JMenu("File");
@@ -83,9 +88,21 @@ public class AppMenuBar extends JMenuBar {
       Window w = SwingUtilities.getWindowAncestor(this);
       preferencesDialog.open(w);
     });
+
+    JMenuItem ignoreLists = new JMenuItem("Ignore Lists...");
+    ignoreLists.addActionListener(e -> {
+      if (ignoreListDialog == null) return;
+      Window w = SwingUtilities.getWindowAncestor(this);
+      TargetRef t = (targetCoordinator == null) ? null : targetCoordinator.getActiveTarget();
+      String sid = (t != null && t.serverId() != null && !t.serverId().isBlank())
+          ? t.serverId()
+          : (targetCoordinator == null ? "default" : targetCoordinator.safeStatusTarget().serverId());
+      ignoreListDialog.open(w, sid);
+    });
     settings.addSeparator();
     settings.add(nickColors);
     settings.add(prefs);
+    settings.add(ignoreLists);
 
     // Window (placeholder for future docking helpers)
     JMenu window = new JMenu("Window");

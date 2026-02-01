@@ -90,7 +90,22 @@ public class CommandParser {
       return new ParsedInput.Unban(p.channel(), p.items());
     }
 
-if (matchesCommand(line, "/version")) {
+    if (matchesCommand(line, "/ignore")) {
+      String arg = argAfter(line, "/ignore");
+      return new ParsedInput.Ignore(arg);
+    }
+
+    if (matchesCommand(line, "/unignore")) {
+      String arg = argAfter(line, "/unignore");
+      return new ParsedInput.Unignore(arg);
+    }
+
+    if (matchesCommand(line, "/ignorelist") || matchesCommand(line, "/ignores")) {
+      return new ParsedInput.IgnoreList();
+    }
+
+
+    if (matchesCommand(line, "/version")) {
       String nick = argAfter(line, "/version");
       return new ParsedInput.CtcpVersion(nick);
     }

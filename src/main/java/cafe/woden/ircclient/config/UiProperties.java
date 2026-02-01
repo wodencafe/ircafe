@@ -27,6 +27,37 @@ public record UiProperties(
     /** If enabled, newly inserted inline images start collapsed (you can expand per-image). Default: false. */
     Boolean imageEmbedsCollapsedByDefault,
 
+    /**
+     * Maximum inline image embed width (pixels).
+     *
+     * <p>If <= 0, no additional cap is applied (images scale down only to fit the chat viewport).
+     */
+    Integer imageEmbedsMaxWidthPx,
+
+    /**
+     * Maximum inline image embed height (pixels).
+     *
+     * <p>If <= 0, no additional cap is applied (images scale down only to fit the chat viewport).
+     */
+    Integer imageEmbedsMaxHeightPx,
+
+
+    /**
+     * Enable animated GIF playback for inline image embeds.
+     *
+     * <p>If false, GIFs are rendered as a still image using the first frame.
+     */
+    Boolean imageEmbedsAnimateGifs,
+
+    /**
+     * Hostmask discovery settings.
+     *
+     * <p>IRCafe prefers the IRCv3 {@code userhost-in-names} capability (free, no extra traffic).
+     * If hostmasks are still missing and you have hostmask-based ignore rules configured, IRCafe can
+     * carefully use {@code USERHOST} with conservative anti-flood limits.
+     */
+    HostmaskDiscovery hostmaskDiscovery,
+
     /** Enable Discord/Signal-style link preview "cards" for regular web pages. Default: false. */
     Boolean linkPreviewsEnabled,
 
@@ -63,6 +94,35 @@ public record UiProperties(
     }
   }
 
+  /**
+   * Hostmask discovery configuration.
+   *
+   * <p>Defaults are intentionally conservative:
+   * <ul>
+   *   <li>{@code userhostEnabled=true}
+   *   <li>{@code userhostMinIntervalSeconds=7}
+   *   <li>{@code userhostMaxCommandsPerMinute=6}
+   *   <li>{@code userhostNickCooldownMinutes=30}
+   *   <li>{@code userhostMaxNicksPerCommand=5} (most servers allow up to 5)
+   * </ul>
+   */
+  public record HostmaskDiscovery(
+      Boolean userhostEnabled,
+      Integer userhostMinIntervalSeconds,
+      Integer userhostMaxCommandsPerMinute,
+      Integer userhostNickCooldownMinutes,
+      Integer userhostMaxNicksPerCommand
+  ) {
+    public HostmaskDiscovery {
+      if (userhostEnabled == null) userhostEnabled = true;
+      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0) userhostMinIntervalSeconds = 7;
+      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0) userhostMaxCommandsPerMinute = 6;
+      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0) userhostNickCooldownMinutes = 30;
+      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0) userhostMaxNicksPerCommand = 5;
+      if (userhostMaxNicksPerCommand > 5) userhostMaxNicksPerCommand = 5;
+    }
+  }
+
   public UiProperties {
     if (theme == null || theme.isBlank()) {
       theme = "dark";
@@ -90,6 +150,26 @@ public record UiProperties(
     // Image embeds collapsed-by-default default: false (preserve current behavior).
     if (imageEmbedsCollapsedByDefault == null) {
       imageEmbedsCollapsedByDefault = false;
+    }
+
+    // Image embed max width default: 0 (no extra cap).
+    if (imageEmbedsMaxWidthPx == null || imageEmbedsMaxWidthPx <= 0) {
+      imageEmbedsMaxWidthPx = 0;
+    }
+
+    // Image embed max height default: 0 (no extra cap).
+    if (imageEmbedsMaxHeightPx == null || imageEmbedsMaxHeightPx <= 0) {
+      imageEmbedsMaxHeightPx = 0;
+    }
+
+    // GIF animation default: enabled.
+    if (imageEmbedsAnimateGifs == null) {
+      imageEmbedsAnimateGifs = true;
+    }
+
+    // Hostmask discovery defaults.
+    if (hostmaskDiscovery == null) {
+      hostmaskDiscovery = new HostmaskDiscovery(true, 7, 6, 30, 5);
     }
 
     // Link previews default: disabled (privacy + extra network traffic).

@@ -20,6 +20,9 @@ public sealed interface ParsedInput permits
     ParsedInput.CtcpPing,
     ParsedInput.CtcpTime,
     ParsedInput.Ctcp,
+    ParsedInput.Ignore,
+    ParsedInput.Unignore,
+    ParsedInput.IgnoreList,
     ParsedInput.Say,
     ParsedInput.Unknown {
 
@@ -64,6 +67,15 @@ public sealed interface ParsedInput permits
 
   /** Generic CTCP: /ctcp <nick> <command> [args...] */
   record Ctcp(String nick, String command, String args) implements ParsedInput {}
+
+  /** /ignore <maskOrNick> */
+  record Ignore(String maskOrNick) implements ParsedInput {}
+
+  /** /unignore <maskOrNick> */
+  record Unignore(String maskOrNick) implements ParsedInput {}
+
+  /** /ignorelist */
+  record IgnoreList() implements ParsedInput {}
 
   record Say(String text) implements ParsedInput {}
 

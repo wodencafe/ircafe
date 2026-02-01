@@ -24,6 +24,29 @@ ircafe:
     # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
     imageEmbedsEnabled: false
 
+    # Maximum width cap for inline image embeds (pixels). If 0, no extra cap (only scales down to fit the viewport).
+    imageEmbedsMaxWidthPx: 0
+
+    # Maximum height cap for inline image embeds (pixels). If 0, no extra cap.
+    imageEmbedsMaxHeightPx: 0
+
+    # Enable animated GIF playback for inline images. If false, GIFs render as a still first frame.
+    imageEmbedsAnimateGifs: true
+
+    # Hostmask discovery (USERHOST) anti-flood settings. This is only used when hostmask-based ignore rules exist
+    # and some nicks in a channel are missing hostmasks.
+    hostmaskDiscovery:
+      # If false, IRCafe will never send USERHOST (hostmask discovery will rely solely on userhost-in-names / passive capture).
+      userhostEnabled: true
+      # Minimum interval between USERHOST commands per server (seconds).
+      userhostMinIntervalSeconds: 7
+      # Maximum number of USERHOST commands per minute per server.
+      userhostMaxCommandsPerMinute: 6
+      # Per-nick cooldown to avoid repeated USERHOST requests (minutes).
+      userhostNickCooldownMinutes: 30
+      # Max nicks per USERHOST command (1..5; the protocol typically caps at 5).
+      userhostMaxNicksPerCommand: 5
+
     # Collapse presence noise in channel logs (join/part/quit/nick) into Lounge-style fold blocks.
     # Default: true.
     presenceFoldsEnabled: true

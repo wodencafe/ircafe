@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.ignore.IgnoreListService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -34,6 +35,8 @@ import org.slf4j.LoggerFactory;
 import org.pircbotx.Channel;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
+import org.pircbotx.User;
+import org.pircbotx.cap.EnableCapHandler;
 import org.pircbotx.cap.SASLCapHandler;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.*;
@@ -55,10 +58,13 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final String clientVersion;
   private final IrcProperties.Reconnect reconnectPolicy;
 
-  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry) {
+  private final IgnoreListService ignoreListService;
+
+  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry, IgnoreListService ignoreListService) {
     this.serverRegistry = serverRegistry;
     this.clientVersion = props.client().version();
     this.reconnectPolicy = props.client().reconnect();
+    this.ignoreListService = ignoreListService;
   }
 
   @Override
@@ -99,7 +105,10 @@ public class PircbotxIrcClientService implements IrcClientService {
               .setRealName(s.realName())
               .addServer(s.host(), s.port())
               .setSocketFactory(socketFactory)
-              .setCapEnabled(false) // we may enable below
+              // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
+              .setCapEnabled(true)
+              // Prefer hostmasks in the initial NAMES list (when supported). If unsupported, ignore.
+              .addCapHandler(new EnableCapHandler("userhost-in-names", true))
               .setAutoNickChange(true)
               // We manage reconnects ourselves so we can surface status + use backoff.
               .setAutoReconnect(false)
@@ -316,6 +325,12 @@ public class PircbotxIrcClientService implements IrcClientService {
     final AtomicReference<ScheduledFuture<?>> reconnectFuture = new AtomicReference<>();
     final AtomicReference<String> disconnectReasonOverride = new AtomicReference<>();
 
+    /**
+     * Best-effort, passive hostmask cache learned from server prefixes (JOIN/PRIVMSG/etc.).
+     * Keyed by lowercase nick. Used to avoid spamming the app layer with redundant observations.
+     */
+    final Map<String, String> lastHostmaskByNickLower = new ConcurrentHashMap<>();
+
     private Connection(String serverId) {
       this.serverId = serverId;
     }
@@ -396,18 +411,69 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
   }
 
+
   private static String parseCtcpAction(String message) {
     if (message == null || message.length() < 2) return null;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return null;
     String inner = message.substring(1, message.length() - 1).trim();
     if (inner.isEmpty()) return null;
 
-    // CTCP ACTION: "\u0001ACTION <text>\u0001"
+    // CTCP ACTION: "ACTION <text>"
     if (inner.regionMatches(true, 0, "ACTION", 0, 6)) {
       String rest = inner.length() > 6 ? inner.substring(6).trim() : "";
       return rest;
     }
     return null;
+  }
+
+  private static boolean isCtcpWrapped(String message) {
+    if (message == null || message.length() < 2) return false;
+    return message.charAt(0) == 0x01 && message.charAt(message.length() - 1) == 0x01;
+  }
+
+  private static String hostmaskFromUser(User user) {
+    if (user == null) return "";
+
+    String hm = safeStr(user::getHostmask, "");
+    if (hm != null && !hm.isBlank()) return hm;
+
+    String nick = safeStr(user::getNick, "");
+    String login = safeStr(user::getLogin, "");
+    String host = safeStr(user::getHostname, "");
+
+    if (nick == null) nick = "";
+    if (login == null) login = "";
+    if (host == null) host = "";
+
+    nick = nick.trim();
+    login = login.trim();
+    host = host.trim();
+
+    if (!nick.isEmpty()) {
+      String ident = login.isEmpty() ? "*" : login;
+      String h = host.isEmpty() ? "*" : host;
+      return nick + "!" + ident + "@" + h;
+    }
+
+    return "";
+  }
+
+  private static boolean isUsefulHostmask(String hostmask) {
+    if (hostmask == null) return false;
+    String hm = hostmask.trim();
+    if (hm.isEmpty()) return false;
+
+    int bang = hm.indexOf('!');
+    int at = hm.indexOf('@');
+    if (bang <= 0 || at <= bang + 1 || at >= hm.length() - 1) return false;
+
+    String ident = hm.substring(bang + 1, at).trim();
+    String host = hm.substring(at + 1).trim();
+
+    // If both are unknown wildcards, this is just a placeholder derived from NAMES and isn't useful.
+    boolean identUnknown = ident.isEmpty() || "*".equals(ident);
+    boolean hostUnknown = host.isEmpty() || "*".equals(host);
+    return !(identUnknown && hostUnknown);
   }
 
   private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
@@ -601,23 +667,38 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
     }
 
-    @Override
+        @Override
     public void onMessage(MessageEvent event) {
       touchInbound();
       String channel = event.getChannel().getName();
+      // Passive capture: learn hostmask for userlist/ignore visualization.
+      maybeEmitHostmaskObserved(channel, event.getUser());
       String msg = event.getMessage();
 
-      String action = parseCtcpAction(msg);
-      if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
-            Instant.now(), channel, event.getUser().getNick(), action
-        )));
+      // Hard ignore: optionally includes CTCP depending on config.
+      String hostmask = hostmaskFromUser(event.getUser());
+      boolean ctcp = isCtcpWrapped(msg);
+      if (!hostmask.isEmpty()
+          && ignoreListService.isHardIgnored(serverId, hostmask)
+          && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
         return;
       }
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelMessage(
-          Instant.now(), channel, event.getUser().getNick(), msg
-      )));
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
+      String action = parseCtcpAction(msg);
+      if (action != null) {
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
+            : new IrcEvent.ChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
+        ));
+        return;
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId, softIgnored
+          ? new IrcEvent.SoftChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
+          : new IrcEvent.ChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
+      ));
     }
 
     @Override
@@ -627,15 +708,28 @@ public class PircbotxIrcClientService implements IrcClientService {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = safeStr(() -> event.getAction(), "");
 
+      String hostmask = (event.getUser() != null) ? hostmaskFromUser(event.getUser()) : "";
+
+      // Hard ignore (CTCP): only applies if configured to include CTCP.
+      if (!hostmask.isEmpty() && ignoreListService.hardIgnoreIncludesCtcp()
+          && ignoreListService.isHardIgnored(serverId, hostmask)) {
+        return;
+      }
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
       if (event.getChannel() != null) {
         String channel = event.getChannel().getName();
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(
-            Instant.now(), channel, from, action
-        )));
+        maybeEmitHostmaskObserved(channel, event.getUser());
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftChannelAction(Instant.now(), channel, from, action)
+            : new IrcEvent.ChannelAction(Instant.now(), channel, from, action)
+        ));
       } else {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
-            Instant.now(), from, action
-        )));
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftPrivateAction(Instant.now(), from, action)
+            : new IrcEvent.PrivateAction(Instant.now(), from, action)
+        ));
       }
     }
 
@@ -651,30 +745,67 @@ public class PircbotxIrcClientService implements IrcClientService {
       )));
     }
 
-    @Override
+        @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       touchInbound();
       String from = event.getUser().getNick();
       String msg = event.getMessage();
 
+      // Hard ignore: optionally includes CTCP depending on config.
+      String hostmask = hostmaskFromUser(event.getUser());
+      boolean ctcp = isCtcpWrapped(msg);
+      if (!hostmask.isEmpty()
+          && ignoreListService.isHardIgnored(serverId, hostmask)
+          && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
+        return;
+      }
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
       String action = parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(
-            Instant.now(), from, action
-        )));
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftPrivateAction(Instant.now(), from, action)
+            : new IrcEvent.PrivateAction(Instant.now(), from, action)
+        ));
         return;
       }
 
       if (handleCtcpIfPresent(event.getBot(), from, msg)) return;
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
+
+      bus.onNext(new ServerIrcEvent(serverId, softIgnored
+          ? new IrcEvent.SoftPrivateMessage(Instant.now(), from, msg)
+          : new IrcEvent.PrivateMessage(Instant.now(), from, msg)
+      ));
     }
 
     @Override
     public void onNotice(NoticeEvent event) {
       touchInbound();
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, event.getNotice())));
+      String notice = event.getNotice();
+
+      boolean softIgnored = false;
+
+      // Hard ignore: optionally includes CTCP depending on config.
+      if (event.getUser() != null) {
+        String hostmask = hostmaskFromUser(event.getUser());
+        boolean ctcp = isCtcpWrapped(notice);
+        if (!hostmask.isEmpty()
+            && ignoreListService.isHardIgnored(serverId, hostmask)
+            && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
+          return;
+        }
+        softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId, softIgnored
+          ? new IrcEvent.SoftNotice(Instant.now(), from, notice)
+          : new IrcEvent.Notice(Instant.now(), from, notice)
+      ));
     }
+
+
 
     @Override
     public void onWhois(WhoisEvent event) {
@@ -701,6 +832,15 @@ public class PircbotxIrcClientService implements IrcClientService {
         String userHost = (!ident.isBlank() || !hostPart.isBlank())
             ? (ident + "@" + hostPart).replaceAll("^@|@$", "")
             : "";
+
+        // Passive hostmask enrichment from WHOIS results.
+        // WHOIS is user-initiated, so this generates no additional IRC traffic.
+        // If we have a useful user@host, treat it as authoritative and push it into the roster cache.
+        if (!nick.isBlank() && !userHost.isBlank() && userHost.contains("@")) {
+          String observed = nick + "!" + userHost;
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.UserHostmaskObserved(Instant.now(), "", nick, observed)));
+        }
 
         if (!userHost.isBlank()) lines.add("User: " + userHost);
         if (!real.isBlank()) lines.add("Realname: " + real);
@@ -744,10 +884,320 @@ public class PircbotxIrcClientService implements IrcClientService {
       if (parsed != null) {
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+        return;
       }
+
+      // RPL_USERHOST (302): used by our low-traffic hostmask resolver.
+      java.util.List<UserhostEntry> uh = parseRpl302Userhost(line);
+      if (uh != null && !uh.isEmpty()) {
+        Instant now = Instant.now();
+        for (UserhostEntry e : uh) {
+          if (e == null) continue;
+          // Channel-agnostic; TargetCoordinator will propagate across channels.
+          bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(now, "", e.nick(), e.hostmask())));
+        }
+      }
+
+      // WHOIS fallback: some networks/bots may not surface a complete WhoisEvent through PircBotX,
+      // but the numerics still arrive. Parse the key ones here so manual WHOIS can still populate
+      // the user list hostmask cache.
+      ParsedWhoisUser whoisUser = parseRpl311WhoisUser(line);
+      if (whoisUser == null) whoisUser = parseRpl314WhowasUser(line);
+      if (whoisUser != null && !whoisUser.nick().isBlank() && !whoisUser.user().isBlank() && !whoisUser.host().isBlank()) {
+        String hm = whoisUser.nick() + "!" + whoisUser.user() + "@" + whoisUser.host();
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserHostmaskObserved(Instant.now(), "", whoisUser.nick(), hm)));
+      }
+
+      // WHO fallback: parse WHOREPLY (352) lines. We don't actively issue WHO queries by default
+      // (to keep traffic low), but if a user runs WHO manually, or a future resolver uses WHO/WHOX,
+      // we can still learn hostmasks from the replies.
+      ParsedWhoReply whoReply = parseRpl352WhoReply(line);
+      if (whoReply != null
+          && !whoReply.channel().isBlank()
+          && !whoReply.nick().isBlank()
+          && !whoReply.user().isBlank()
+          && !whoReply.host().isBlank()) {
+        String hm = whoReply.nick() + "!" + whoReply.user() + "@" + whoReply.host();
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserHostmaskObserved(Instant.now(), whoReply.channel(), whoReply.nick(), hm)));
+      }
+      // WHOX fallback: parse RPL_WHOSPCRPL (354) lines (WHOX). Format varies based on requested fields,
+      // so we apply a conservative heuristic to extract channel/user/host/nick when present.
+      ParsedWhoxReply whox = parseRpl354WhoxReply(line);
+      if (whox != null
+          && !whox.nick().isBlank()
+          && !whox.user().isBlank()
+          && !whox.host().isBlank()) {
+        String hm = whox.nick() + "!" + whox.user() + "@" + whox.host();
+        String ch = (whox.channel() == null) ? "" : whox.channel();
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserHostmaskObserved(Instant.now(), ch, whox.nick(), hm)));
+      }
+
     }
 
     private record ParsedRpl324(String channel, String details) {}
+
+    private record ParsedWhoisUser(String nick, String user, String host) {}
+
+    private record ParsedWhoReply(String channel, String nick, String user, String host) {}
+
+    private record ParsedWhoxReply(String channel, String nick, String user, String host) {}
+
+    private record UserhostEntry(String nick, String hostmask) {}
+
+    /**
+     * Parse RPL_WHOISUSER (311) lines.
+     *
+     * <p>Format: ":server 311 <me> <nick> <user> <host> * :<realname>"
+     */
+    private static ParsedWhoisUser parseRpl311WhoisUser(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      String[] toks = s.split("\\s+");
+      if (toks.length < 5) return null;
+      if (!"311".equals(toks[0])) return null;
+
+      // 311 <me> <nick> <user> <host> ...
+      String nick = toks[2];
+      String user = toks[3];
+      String host = toks[4];
+      if (nick == null || nick.isBlank() || user == null || user.isBlank() || host == null || host.isBlank()) return null;
+      return new ParsedWhoisUser(nick, user, host);
+    }
+
+    /**
+     * Parse RPL_WHOWASUSER (314) lines.
+     *
+     * <p>Format: ":server 314 <me> <nick> <user> <host> * :<realname>"
+     */
+    private static ParsedWhoisUser parseRpl314WhowasUser(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      String[] toks = s.split("\\s+");
+      if (toks.length < 5) return null;
+      if (!"314".equals(toks[0])) return null;
+
+      // 314 <me> <nick> <user> <host> ...
+      String nick = toks[2];
+      String user = toks[3];
+      String host = toks[4];
+      if (nick == null || nick.isBlank() || user == null || user.isBlank() || host == null || host.isBlank()) return null;
+      return new ParsedWhoisUser(nick, user, host);
+    }
+
+    /**
+     * Parse RPL_WHOREPLY (352) lines.
+     *
+     * <p>Common format: ":server 352 <me> <channel> <user> <host> <server> <nick> <flags> :<hopcount> <realname>"
+     */
+    private static ParsedWhoReply parseRpl352WhoReply(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      String[] toks = s.split("\\s+");
+      if (toks.length < 8) return null;
+      if (!"352".equals(toks[0])) return null;
+
+      // 352 <me> <channel> <user> <host> <server> <nick> <flags> ...
+      String channel = toks[2];
+      String user = toks[3];
+      String host = toks[4];
+      String nick = toks[6];
+
+      if (channel == null || channel.isBlank()) return null;
+      if (nick == null || nick.isBlank()) return null;
+      if (user == null || user.isBlank()) return null;
+      if (host == null || host.isBlank()) return null;
+
+      return new ParsedWhoReply(channel, nick, user, host);
+    }
+
+
+    /**
+     * Parse RPL_WHOSPCRPL (354) / WHOX lines.
+     *
+     * <p>Format varies based on the requested WHOX fields (see the WHOX extension). We use a conservative heuristic:
+     * <ul>
+     *   <li>Strip the server prefix</li>
+     *   <li>Tokenize up to the trailing ":" parameter (realname)</li>
+     *   <li>Capture an optional querytype (integer) and optional channel token</li>
+     *   <li>Find a (user, host) pair (adjacent or separated by an IP field)</li>
+     *   <li>Then pick the first plausible nick token after that host (skipping host-like tokens such as server names)</li>
+     * </ul>
+     *
+     * <p>If we cannot confidently extract user/host/nick, returns null.
+     */
+    private static ParsedWhoxReply parseRpl354WhoxReply(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      // Remove trailing ":" parameter (usually realname)
+      int colon = s.indexOf(" :");
+      String head = colon >= 0 ? s.substring(0, colon).trim() : s;
+
+      String[] toks = head.split("\\s+");
+      if (toks.length < 3) return null;
+      if (!"354".equals(toks[0])) return null;
+
+      // toks: 354 <me> <fields...>
+      java.util.List<String> fields = new java.util.ArrayList<>();
+      for (int i = 2; i < toks.length; i++) {
+        String t = toks[i];
+        if (t == null || t.isBlank()) continue;
+        fields.add(t);
+      }
+      if (fields.isEmpty()) return null;
+
+      // Optional querytype at start
+      int idx = 0;
+      if (looksNumeric(fields.get(0))) idx++;
+
+      String channel = "";
+      if (idx < fields.size() && looksLikeChannel(fields.get(idx))) {
+        channel = fields.get(idx);
+      } else {
+        // Channel might appear later depending on requested fields.
+        for (String f : fields) {
+          if (looksLikeChannel(f)) {
+            channel = f;
+            break;
+          }
+        }
+      }
+
+      // Find a user/host pair.
+      int userIdx = -1;
+      int hostIdx = -1;
+      for (int i = 0; i < fields.size(); i++) {
+        String a = fields.get(i);
+        if (!looksLikeUser(a)) continue;
+
+        if (i + 1 < fields.size()) {
+          String b = fields.get(i + 1);
+          if (looksLikeHost(b) && !looksLikeChannel(b) && !looksNumeric(b)) {
+            userIdx = i;
+            hostIdx = i + 1;
+            break;
+          }
+        }
+        if (i + 2 < fields.size()) {
+          String b = fields.get(i + 1);
+          String c = fields.get(i + 2);
+          if (looksLikeIp(b) && looksLikeHost(c) && !looksLikeChannel(c) && !looksNumeric(c)) {
+            userIdx = i;
+            hostIdx = i + 2;
+            break;
+          }
+        }
+      }
+      if (userIdx < 0 || hostIdx < 0) return null;
+
+      String user = fields.get(userIdx);
+      String host = fields.get(hostIdx);
+      if (user == null || user.isBlank() || host == null || host.isBlank()) return null;
+
+      // Find nick after host, skipping server/host-like tokens, flags/hops, etc.
+      String nick = null;
+      for (int j = hostIdx + 1; j < fields.size(); j++) {
+        String t = fields.get(j);
+        if (t == null || t.isBlank()) continue;
+        if (looksNumeric(t)) continue;
+        if (looksLikeChannel(t)) continue;
+        if (looksLikeHost(t) || looksLikeIp(t)) continue; // likely server name / IP
+        if (!looksLikeNick(t)) continue;
+        nick = t;
+        break;
+      }
+      if (nick == null || nick.isBlank()) return null;
+
+      String hm = nick + "!" + user + "@" + host;
+      if (!isUsefulHostmask(hm)) return null;
+
+      return new ParsedWhoxReply(channel, nick, user, host);
+    }
+
+    private static boolean looksNumeric(String s) {
+      if (s == null || s.isBlank()) return false;
+      for (int i = 0; i < s.length(); i++) {
+        char c = s.charAt(i);
+        if (c < '0' || c > '9') return false;
+      }
+      return true;
+    }
+
+    private static boolean looksLikeChannel(String s) {
+      if (s == null || s.isBlank()) return false;
+      char c = s.charAt(0);
+      return c == '#' || c == '&';
+    }
+
+    private static boolean looksLikeUser(String s) {
+      if (s == null || s.isBlank()) return false;
+      if (looksLikeChannel(s)) return false;
+      if (looksNumeric(s)) return false;
+      if (s.indexOf('!') >= 0 || s.indexOf('@') >= 0) return false;
+      // Usernames are typically short-ish and don't contain spaces or colons.
+      if (s.indexOf(':') >= 0) return false;
+      if (s.length() > 64) return false;
+      return true;
+    }
+
+    private static boolean looksLikeHost(String s) {
+      if (s == null || s.isBlank()) return false;
+      if (looksLikeChannel(s)) return false;
+      if (s.indexOf('!') >= 0 || s.indexOf('@') >= 0) return false;
+      // Hostnames (or vhost/gateway strings) usually contain '.', ':', or '/'.
+      return (s.indexOf('.') >= 0) || (s.indexOf(':') >= 0) || (s.indexOf('/') >= 0);
+    }
+
+    private static boolean looksLikeIp(String s) {
+      if (s == null || s.isBlank()) return false;
+      // IPv4
+      if (s.matches("\\d{1,3}(?:\\.\\d{1,3}){3}")) return true;
+      // IPv6 (very loose)
+      return s.indexOf(':') >= 0 && s.matches("[0-9A-Fa-f:]+");
+    }
+
+    private static boolean looksLikeNick(String s) {
+      if (s == null || s.isBlank()) return false;
+      if (looksLikeChannel(s)) return false;
+      if (looksNumeric(s)) return false;
+      // Loose IRC nick pattern; allow '.' and '-' for permissive networks.
+      return s.matches("[A-Za-z\\[\\]\\\\`_\\^\\{\\|\\}][A-Za-z0-9\\-\\.\\[\\]\\\\`_\\^\\{\\|\\}]*");
+    }
+
 
     private static ParsedRpl324 parseRpl324(String line) {
       if (line == null) return null;
@@ -778,10 +1228,77 @@ public class PircbotxIrcClientService implements IrcClientService {
       return new ParsedRpl324(channel, details.toString());
     }
 
+    /**
+     * Parse RPL_USERHOST (302) lines.
+     *
+     * <p>Format: ":server 302 <me> :nick[\*]=[+|-]user@host ..."
+     */
+    private static java.util.List<UserhostEntry> parseRpl302Userhost(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      // Quick check
+      if (!s.startsWith("302 ") && !s.startsWith("302\t") && !s.startsWith("302\n")) {
+        // Sometimes the numeric is not at offset 0 due to stray formatting; fall back to token check.
+      }
+
+      String[] toks = s.split("\\s+");
+      if (toks.length < 4) return null;
+      if (!"302".equals(toks[0])) return null;
+
+      int colon = s.indexOf(" :");
+      if (colon < 0 || colon + 2 >= s.length()) return null;
+      String payload = s.substring(colon + 2).trim();
+      if (payload.isEmpty()) return null;
+
+      java.util.List<UserhostEntry> out = new java.util.ArrayList<>();
+      for (String part : payload.split("\\s+")) {
+        if (part == null || part.isBlank()) continue;
+        String p = part.trim();
+        if (p.startsWith(":")) p = p.substring(1);
+
+        int eq = p.indexOf('=');
+        if (eq <= 0 || eq >= p.length() - 1) continue;
+
+        String nickPart = p.substring(0, eq).trim();
+        if (nickPart.endsWith("*")) nickPart = nickPart.substring(0, nickPart.length() - 1);
+        String nick = nickPart.trim();
+        if (nick.isEmpty()) continue;
+
+        String rhs = p.substring(eq + 1).trim();
+        if (rhs.isEmpty()) continue;
+
+        // Strip away/available marker.
+        if (rhs.charAt(0) == '+' || rhs.charAt(0) == '-') {
+          rhs = rhs.substring(1);
+        }
+
+        int at = rhs.indexOf('@');
+        if (at <= 0 || at >= rhs.length() - 1) continue;
+        String user = rhs.substring(0, at).trim();
+        String host = rhs.substring(at + 1).trim();
+        if (user.isEmpty() || host.isEmpty()) continue;
+
+        String hm = nick + "!" + user + "@" + host;
+        if (!isUsefulHostmask(hm)) continue;
+        out.add(new UserhostEntry(nick, hm));
+      }
+
+      return out.isEmpty() ? null : java.util.List.copyOf(out);
+    }
+
     @Override
     public void onJoin(JoinEvent event) {
       touchInbound();
       Channel channel = event.getChannel();
+      if (channel != null) maybeEmitHostmaskObserved(channel.getName(), event.getUser());
 
       String nick = event.getUser() == null ? null : event.getUser().getNick();
 
@@ -802,6 +1319,9 @@ public class PircbotxIrcClientService implements IrcClientService {
     @Override
     public void onPart(PartEvent event) {
       touchInbound();
+      try {
+        maybeEmitHostmaskObserved(event.getChannelName(), event.getUser());
+      } catch (Exception ignored) {}
       try {
         String nick = event.getUser() == null ? null : event.getUser().getNick();
         if (!isSelf(event.getBot(), nick)) {
@@ -879,6 +1399,23 @@ public class PircbotxIrcClientService implements IrcClientService {
     private void touchInbound() {
       conn.lastInboundMs.set(System.currentTimeMillis());
       conn.localTimeoutEmitted.set(false);
+    }
+
+    private void maybeEmitHostmaskObserved(String channel, User user) {
+      if (channel == null || channel.isBlank() || user == null) return;
+      String nick = safeStr(user::getNick, "");
+      if (nick == null || nick.isBlank()) return;
+
+      String hm = hostmaskFromUser(user);
+      if (!isUsefulHostmask(hm)) return;
+
+      String key = nick.trim().toLowerCase(Locale.ROOT);
+      String prev = conn.lastHostmaskByNickLower.put(key, hm);
+      if (Objects.equals(prev, hm)) return; // no change
+
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(
+          Instant.now(), channel, nick.trim(), hm
+      )));
     }
 
 
@@ -1123,7 +1660,8 @@ public class PircbotxIrcClientService implements IrcClientService {
       List<IrcEvent.NickInfo> nicks = channel.getUsers().stream()
           .map(u -> new IrcEvent.NickInfo(
               u.getNick(),
-              prefixForUser(u, owners, admins, ops, halfOps, voices)
+              prefixForUser(u, owners, admins, ops, halfOps, voices),
+              hostmaskFromUser(u)
           ))
           .sorted(Comparator
               .comparingInt((IrcEvent.NickInfo n) -> prefixRank(n.prefix()))

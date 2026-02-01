@@ -11,18 +11,24 @@ public sealed interface IrcEvent permits
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
     IrcEvent.ChannelAction,
+    IrcEvent.SoftChannelMessage,
+    IrcEvent.SoftChannelAction,
     IrcEvent.ChannelModeChanged,
     IrcEvent.ChannelModesListed,
     IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
     IrcEvent.PrivateAction,
+    IrcEvent.SoftPrivateMessage,
+    IrcEvent.SoftPrivateAction,
     IrcEvent.Notice,
+    IrcEvent.SoftNotice,
     IrcEvent.UserJoinedChannel,
     IrcEvent.UserPartedChannel,
     IrcEvent.UserQuitChannel,
     IrcEvent.UserNickChangedChannel,
     IrcEvent.JoinedChannel,
     IrcEvent.NickListUpdated,
+    IrcEvent.UserHostmaskObserved,
     IrcEvent.WhoisResult,
     IrcEvent.Error {
 
@@ -40,6 +46,12 @@ public sealed interface IrcEvent permits
   /** A CTCP ACTION (/me) sent to a channel. */
   record ChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
 
+  /** A channel message from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftChannelMessage(Instant at, String channel, String from, String text) implements IrcEvent {}
+
+  /** A CTCP ACTION (/me) sent to a channel from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
+
   /** A channel MODE change (e.g. +o nick, +m). */
   record ChannelModeChanged(Instant at, String channel, String by, String details) implements IrcEvent {}
   record ChannelModesListed(Instant at, String channel, String details) implements IrcEvent {}
@@ -54,7 +66,15 @@ public sealed interface IrcEvent permits
   record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
   /** A CTCP ACTION (/me) sent as a private message. */
   record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
+
+  /** A private message from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftPrivateMessage(Instant at, String from, String text) implements IrcEvent {}
+
+  /** A CTCP ACTION (/me) sent as a private message from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftPrivateAction(Instant at, String from, String action) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}
+  /** A NOTICE from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftNotice(Instant at, String from, String text) implements IrcEvent {}
 
   /** Another user joined a channel we're in. */
   record UserJoinedChannel(Instant at, String channel, String nick) implements IrcEvent {}
@@ -71,7 +91,12 @@ public sealed interface IrcEvent permits
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
 
-  record NickInfo(String nick, String prefix) {} // prefix like "@", "+", "~", etc.
+  /**
+   * Channel roster entry.
+   *
+   * <p>Hostmask may be empty if not known (e.g. some NAMES implementations do not provide it).
+   */
+  record NickInfo(String nick, String prefix, String hostmask) {} // prefix like "@", "+", "~", etc.
 
   record NickListUpdated(
       Instant at,
@@ -80,6 +105,14 @@ public sealed interface IrcEvent permits
       int totalUsers,
       int operatorCount
   ) implements IrcEvent {}
+
+  /**
+   * Opportunistically observed a user's hostmask in the wild (e.g. from JOIN/PRIVMSG prefixes).
+   *
+   * <p>This is used to enrich the cached user list even when NAMES doesn't provide hostmasks.
+   * No extra network traffic is generated.
+   */
+  record UserHostmaskObserved(Instant at, String channel, String nick, String hostmask) implements IrcEvent {}
 
   /** Completed WHOIS response */
   record WhoisResult(Instant at, String nick, List<String> lines) implements IrcEvent {}

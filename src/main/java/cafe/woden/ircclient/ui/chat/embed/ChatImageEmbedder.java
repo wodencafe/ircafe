@@ -19,10 +19,26 @@ public class ChatImageEmbedder {
   private final ChatStyles styles;
   private final ImageFetchService fetch;
 
+  /**
+   * Per-document state (weakly keyed to avoid leaks): assigns insertion sequence numbers and
+   * coordinates GIF animation (only newest GIF animates per document).
+   */
+  private final java.util.Map<StyledDocument, DocState> perDocState =
+      java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
   public ChatImageEmbedder(UiSettingsBus uiSettings, ChatStyles styles, ImageFetchService fetch) {
     this.uiSettings = uiSettings;
     this.styles = styles;
     this.fetch = fetch;
+  }
+
+  private DocState stateFor(StyledDocument doc) {
+    return perDocState.computeIfAbsent(doc, d -> new DocState());
+  }
+
+  private static final class DocState {
+    long nextSeq = 0;
+    final GifAnimationCoordinator gifCoordinator = new GifAnimationCoordinator();
   }
 
   /**
@@ -33,10 +49,25 @@ public class ChatImageEmbedder {
   public void appendEmbeds(StyledDocument doc, String messageText) {
     if (doc == null) return;
 
+    DocState st = stateFor(doc);
     for (String url : ImageUrlExtractor.extractImageUrls(messageText)) {
       try {
+        long seq = st.nextSeq++;
+
+        // If it looks like a GIF by URL, proactively hint to stop older GIFs immediately.
+        // If the decode later shows it's NOT a GIF, the component will call rejectGifHint(seq).
+        if (ImageDecodeUtil.looksLikeGif(url, null)) {
+          st.gifCoordinator.hintNewGifPlaceholder(seq);
+        }
+
         // Insert a component as a single "character" in the styled document.
-        ChatImageComponent comp = new ChatImageComponent(url, fetch, uiSettings.get().imageEmbedsCollapsedByDefault());
+        ChatImageComponent comp = new ChatImageComponent(
+            url,
+            fetch,
+            uiSettings.get().imageEmbedsCollapsedByDefault(),
+            uiSettings,
+            st.gifCoordinator,
+            seq);
 
         SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
         a.addAttribute(ChatStyles.ATTR_URL, url);

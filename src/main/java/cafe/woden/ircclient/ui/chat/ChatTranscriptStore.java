@@ -5,9 +5,11 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
 import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
+import cafe.woden.ircclient.ui.chat.fold.SpoilerMessageComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Font;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,6 +18,7 @@ import java.util.Map;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Element;
+import javax.swing.text.Position;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.StyleConstants;
@@ -236,6 +239,267 @@ public class ChatTranscriptStore {
       fromStyle = nickColors.forNick(from, fromStyle);
     }
     appendLine(ref, from, text, fromStyle, styles.message());
+  }
+
+  /**
+   * Append a message as a collapsible "spoiler" (click-to-reveal) block.
+   *
+   * <p>This is UI plumbing for the upcoming soft-ignore feature. It does not
+   * perform any matching or apply soft-ignore rules by itself; call-sites will
+   * decide when to use it.
+   */
+  public void appendSpoilerChat(TargetRef ref, String from, String text) {
+    breakPresenceRun(ref);
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return;
+
+    // New line
+    ensureAtLineStart(doc);
+
+    String msg = text == null ? "" : text;
+    // Match the normal transcript prefix formatting exactly: "nick: " (including trailing space).
+    // Using the same punctuation/spacing keeps the spoiler line aligned with regular lines.
+    String fromLabel = from == null ? "" : from;
+    if (!fromLabel.isBlank()) {
+      if (fromLabel.endsWith(":")) {
+        fromLabel = fromLabel + " ";
+      } else {
+        fromLabel = fromLabel + ": ";
+      }
+    }
+
+    boolean chatMessageTimestampsEnabled = false;
+    try {
+      chatMessageTimestampsEnabled = uiSettings != null
+          && uiSettings.get() != null
+          && uiSettings.get().chatMessageTimestampsEnabled();
+    } catch (Exception ignored) {
+      chatMessageTimestampsEnabled = false;
+    }
+    final String tsPrefixFinal =
+        (ts != null && ts.enabled() && chatMessageTimestampsEnabled) ? ts.prefixNow() : "";
+
+    final int offFinal = doc.getLength();
+    final TargetRef refFinal = ref;
+    final StyledDocument docFinal = doc;
+    final String fromFinal = from;
+    final String msgFinal = msg;
+    final String fromLabelFinal = fromLabel;
+
+    final SpoilerMessageComponent comp = new SpoilerMessageComponent(tsPrefixFinal, fromLabelFinal);
+
+    // Ensure the embedded spoiler component uses the same font as the transcript JTextPane.
+    // (Embedded Swing components do not automatically inherit the text pane's font.)
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        comp.setTranscriptFont(new Font(
+            uiSettings.get().chatFontFamily(),
+            Font.PLAIN,
+            uiSettings.get().chatFontSize()
+        ));
+      }
+    } catch (Exception ignored) {
+      // fall back to UI defaults
+    }
+
+    // If nick coloring is enabled, apply it to the visible prefix label.
+    try {
+      if (nickColors != null && nickColors.enabled() && from != null && !from.isBlank()) {
+        Color bg = javax.swing.UIManager.getColor("TextPane.background");
+        Color fg = javax.swing.UIManager.getColor("TextPane.foreground");
+        comp.setFromColor(nickColors.colorForNick(from, bg, fg));
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
+    StyleConstants.setComponent(attrs, comp);
+    try {
+      doc.insertString(offFinal, " ", attrs);
+
+      // Anchor the spoiler component location with a live Position so later transcript edits
+      // (e.g., presence folding) don't break reveal.
+      final Position spoilerPos = doc.createPosition(offFinal);
+
+      // IMPORTANT: pass the exact component instance we inserted. The transcript may contain
+      // multiple spoiler components close together; searching by type alone can reveal/remove
+      // the wrong one, leaving the clicked component stuck in "revealing...".
+      comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
+          tsPrefixFinal, fromFinal, msgFinal));
+
+      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
+  /**
+   * Replace a spoiler placeholder (embedded component) with the original message line in-place.
+   *
+   * <p>This avoids JTextPane embedded-component resizing issues by swapping the component out
+   * entirely once the user clicks reveal.
+   */
+  private boolean revealSpoilerInPlace(TargetRef ref,
+                                    StyledDocument doc,
+                                    Position anchor,
+                                    SpoilerMessageComponent expected,
+                                    String tsPrefix,
+                                    String from,
+                                    String msg) {
+  if (doc == null || anchor == null) return false;
+
+  // We must mutate the transcript on the EDT so the JTextPane updates reliably.
+  if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+    final boolean[] ok = new boolean[] {false};
+    try {
+      javax.swing.SwingUtilities.invokeAndWait(() -> ok[0] =
+          revealSpoilerInPlace(ref, doc, anchor, expected, tsPrefix, from, msg));
+    } catch (Exception ignored) {
+      return false;
+    }
+    return ok[0];
+  }
+
+  synchronized (ChatTranscriptStore.this) {
+    try {
+      int len = doc.getLength();
+      if (len <= 0) return false;
+
+      int guess = anchor.getOffset();
+      if (guess < 0) guess = 0;
+      if (guess >= len) guess = len - 1;
+
+      int off = findSpoilerOffset(doc, guess, expected);
+      if (off < 0) return false;
+
+      // Only proceed if the character at 'off' is still our embedded component.
+      Element el = doc.getCharacterElement(off);
+      if (el == null) return false;
+      AttributeSet as = el.getAttributes();
+      Object comp = as != null ? StyleConstants.getComponent(as) : null;
+      if (!(comp instanceof SpoilerMessageComponent)) return false;
+      if (expected != null && comp != expected) return false;
+
+      // Remove the component char and its newline (if present).
+      int removeLen = 1;
+      if (off + 1 < doc.getLength()) {
+        try {
+          String next = doc.getText(off + 1, 1);
+          if ("\n".equals(next)) removeLen = 2;
+        } catch (Exception ignored2) {
+          // ignore
+        }
+      }
+      doc.remove(off, removeLen);
+
+      int pos = off;
+
+      // Timestamp (only if enabled when the spoiler was created)
+      if (tsPrefix != null && !tsPrefix.isBlank()) {
+        doc.insertString(pos, tsPrefix, styles.timestamp());
+        pos += tsPrefix.length();
+      }
+
+      // Nick prefix
+      if (from != null && !from.isBlank()) {
+        AttributeSet fromStyle = styles.from();
+        if (nickColors != null && nickColors.enabled()) {
+          fromStyle = nickColors.forNick(from, fromStyle);
+        }
+        String prefix = from + ": ";
+        doc.insertString(pos, prefix, fromStyle);
+        pos += prefix.length();
+      }
+
+      // Message body, inserted as rich text so URLs/mentions/channel-links retain metadata.
+      // (We intentionally do not create inline image/link-preview blocks when revealing.)
+      DefaultStyledDocument inner = new DefaultStyledDocument();
+      try {
+        if (renderer != null) {
+          renderer.insertRichText(inner, ref, msg, styles.message());
+        } else {
+          inner.insertString(0, msg, styles.message());
+        }
+      } catch (Exception ignored2) {
+        try {
+          inner.remove(0, inner.getLength());
+          inner.insertString(0, msg, styles.message());
+        } catch (Exception ignored3) {
+          // ignore
+        }
+      }
+
+      pos = insertStyled(inner, doc, pos);
+      doc.insertString(pos, "\n", styles.timestamp());
+      return true;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+}
+
+/**
+ * Find the offset for a spoiler embedded component near a guessed offset.
+ *
+ * <p>This exists because transcript edits (like folding) can shift offsets after the spoiler was
+ * inserted. We search a small window around the anchor to find the actual component char.</p>
+ */
+private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessageComponent expected) {
+  if (doc == null) return -1;
+  int len = doc.getLength();
+  if (len <= 0) return -1;
+
+  int start = Math.max(0, guess - 256);
+  int end = Math.min(len - 1, guess + 256);
+  for (int i = start; i <= end; i++) {
+    try {
+      Element el = doc.getCharacterElement(i);
+      if (el == null) continue;
+      AttributeSet as = el.getAttributes();
+      Object comp = as != null ? StyleConstants.getComponent(as) : null;
+      if (comp instanceof SpoilerMessageComponent) {
+        if (expected == null || comp == expected) return i;
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+  return -1;
+}
+  /**
+   * Inserts styled content from src into dest at position pos.
+   *
+   * <p>This is used to reveal spoiler messages in-place while preserving URL/mention/channel metadata.</p>
+   */
+  private static int insertStyled(StyledDocument src, StyledDocument dest, int pos) {
+    if (src == null || dest == null) return pos;
+    try {
+      int len = src.getLength();
+      int i = 0;
+      while (i < len) {
+        Element el = src.getCharacterElement(i);
+        if (el == null) break;
+
+        int start = Math.max(0, Math.min(el.getStartOffset(), len));
+        int end = Math.max(start, Math.min(el.getEndOffset(), len));
+        if (end <= start) {
+          i = Math.min(len, i + 1);
+          continue;
+        }
+
+        String t = src.getText(start, end - start);
+        if (t != null && !t.isEmpty()) {
+          dest.insertString(pos, t, el.getAttributes());
+          pos += t.length();
+        }
+        i = end;
+      }
+    } catch (Exception ignored) {
+      // best-effort
+    }
+    return pos;
   }
 
   /**

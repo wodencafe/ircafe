@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
@@ -32,6 +33,7 @@ public class IrcMediator {
   private final CommandParser commandParser;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
+  private final IgnoreListService ignoreListService;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -70,6 +72,7 @@ public class IrcMediator {
       CommandParser commandParser,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
+      IgnoreListService ignoreListService,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator
   ) {
@@ -78,6 +81,7 @@ public class IrcMediator {
     this.commandParser = commandParser;
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
+    this.ignoreListService = ignoreListService;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
   }
@@ -330,6 +334,80 @@ public class IrcMediator {
     return new ParsedCtcp(cmd, arg);
   }
 
+
+
+  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler) {
+    // CTCP replies come back as NOTICE with 0x01-wrapped payload.
+    // Route them to the chat target where the request originated.
+    ParsedCtcp ctcp = parseCtcp(text);
+    if (ctcp != null) {
+      String cmd = ctcp.commandUpper();
+      String arg = ctcp.arg();
+
+      TargetRef dest = null;
+      String rendered = null;
+
+      if ("VERSION".equals(cmd)) {
+        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        if (p != null) {
+          dest = p.target();
+          rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
+        }
+      } else if ("PING".equals(cmd)) {
+        String token = arg;
+        int sp = token.indexOf(' ');
+        if (sp >= 0) token = token.substring(0, sp);
+        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
+        if (p != null) {
+          dest = p.target();
+          long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
+          rendered = from + " PING reply: " + rtt + "ms";
+        }
+      } else if ("TIME".equals(cmd)) {
+        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        if (p != null) {
+          dest = p.target();
+          rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
+        }
+      }
+
+      // If we received a CTCP reply we recognize but didn't have a pending request for,
+      // still render a clean status line to the server status window (better than raw 0x01).
+      if (dest == null && rendered == null) {
+        if ("VERSION".equals(cmd)) {
+          dest = status;
+          rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
+        } else if ("PING".equals(cmd)) {
+          dest = status;
+          rendered = from + " PING: " + (arg.isBlank() ? "(no payload)" : arg);
+        } else if ("TIME".equals(cmd)) {
+          dest = status;
+          rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
+        } else {
+          PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+          dest = (p != null) ? p.target() : status;
+          rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
+        }
+      }
+
+      if (dest != null && rendered != null) {
+        ensureTargetExists(dest);
+        if (spoiler) {
+          ui.appendSpoilerChat(dest, "(ctcp)", rendered);
+        } else {
+          ui.appendStatus(dest, "(ctcp)", rendered);
+        }
+        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        return;
+      }
+    }
+
+    if (spoiler) {
+      ui.appendSpoilerChat(status, "(notice) " + from, text);
+    } else {
+      ui.appendNotice(status, "(notice) " + from, text);
+    }
+  }
   public void stop() {
     if (!started.compareAndSet(true, false)) {
       return;
@@ -366,6 +444,9 @@ public class IrcMediator {
       case ParsedInput.Devoice cmd -> handleDevoice(cmd.channel(), cmd.nicks());
       case ParsedInput.Ban cmd -> handleBan(cmd.channel(), cmd.masksOrNicks());
       case ParsedInput.Unban cmd -> handleUnban(cmd.channel(), cmd.masksOrNicks());
+      case ParsedInput.Ignore cmd -> handleIgnore(cmd.maskOrNick());
+      case ParsedInput.Unignore cmd -> handleUnignore(cmd.maskOrNick());
+      case ParsedInput.IgnoreList cmd -> handleIgnoreList();
       case ParsedInput.CtcpVersion cmd -> handleCtcpVersion(cmd.nick());
       case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
       case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
@@ -686,6 +767,72 @@ public class IrcMediator {
     return null;
   }
 
+
+
+  private void handleIgnore(String maskOrNick) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
+      return;
+    }
+
+    String arg = maskOrNick == null ? "" : maskOrNick.trim();
+    if (arg.isEmpty()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Usage: /ignore <maskOrNick>");
+      return;
+    }
+
+    boolean added = ignoreListService.addMask(at.serverId(), arg);
+    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    if (added) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Ignoring: " + stored);
+    } else {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
+    }
+  }
+
+  private void handleUnignore(String maskOrNick) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(unignore)", "Select a server first.");
+      return;
+    }
+
+    String arg = maskOrNick == null ? "" : maskOrNick.trim();
+    if (arg.isEmpty()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Usage: /unignore <maskOrNick>");
+      return;
+    }
+
+    boolean removed = ignoreListService.removeMask(at.serverId(), arg);
+    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    if (removed) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
+    } else {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
+    }
+  }
+
+  private void handleIgnoreList() {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
+      return;
+    }
+
+    java.util.List<String> masks = ignoreListService.listMasks(at.serverId());
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    if (masks.isEmpty()) {
+      ui.appendStatus(status, "(ignore)", "Ignore list is empty.");
+      return;
+    }
+
+    ui.appendStatus(status, "(ignore)", "Ignore masks (" + masks.size() + "): ");
+    for (String m : masks) {
+      ui.appendStatus(status, "(ignore)", "  - " + m);
+    }
+  }
+
   private void handleCtcpVersion(String nick) {
     sendCtcpSlash("VERSION", nick, "", false);
   }
@@ -881,14 +1028,40 @@ public class IrcMediator {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
+        }
+      }
+
+      case IrcEvent.SoftChannelMessage ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendSpoilerChat(chan, ev.from(), ev.text());
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
+        }
       }
 
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendAction(chan, ev.from(), ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) ui.markUnread(chan);
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
+        }
+      }
+
+      case IrcEvent.SoftChannelAction ev -> {
+        TargetRef chan = new TargetRef(sid, ev.channel());
+        ensureTargetExists(chan);
+        ui.appendSpoilerChat(chan, ev.from(), "* " + ev.action());
+        if (!chan.equals(targetCoordinator.getActiveTarget())) {
+          ui.markUnread(chan);
+          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
+        }
       }
 
 
@@ -962,6 +1135,13 @@ public class IrcMediator {
         if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
       }
 
+      case IrcEvent.SoftPrivateMessage ev -> {
+        TargetRef pm = new TargetRef(sid, ev.from());
+        ensureTargetExists(pm);
+        ui.appendSpoilerChat(pm, ev.from(), ev.text());
+        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+      }
+
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
         ensureTargetExists(pm);
@@ -969,70 +1149,18 @@ public class IrcMediator {
         if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
       }
 
+      case IrcEvent.SoftPrivateAction ev -> {
+        TargetRef pm = new TargetRef(sid, ev.from());
+        ensureTargetExists(pm);
+        ui.appendSpoilerChat(pm, ev.from(), "* " + ev.action());
+        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+      }
       case IrcEvent.Notice ev -> {
-        // CTCP replies come back as NOTICE with 0x01-wrapped payload.
-        // Route them to the chat target where the request originated.
-        ParsedCtcp ctcp = parseCtcp(ev.text());
-        if (ctcp != null) {
-          String from = ev.from();
-          String cmd = ctcp.commandUpper();
-          String arg = ctcp.arg();
+        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
+      }
 
-          TargetRef dest = null;
-          String rendered = null;
-
-          if ("VERSION".equals(cmd)) {
-            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
-            if (p != null) {
-              dest = p.target();
-              rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
-            }
-          } else if ("PING".equals(cmd)) {
-            String token = arg;
-            int sp = token.indexOf(' ');
-            if (sp >= 0) token = token.substring(0, sp);
-            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
-            if (p != null) {
-              dest = p.target();
-              long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
-              rendered = from + " PING reply: " + rtt + "ms";
-            }
-          } else if ("TIME".equals(cmd)) {
-            PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
-            if (p != null) {
-              dest = p.target();
-              rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
-            }
-          }
-
-          // If we received a CTCP reply we recognize but didn't have a pending request for,
-          // still render a clean status line to the server status window (better than raw 0x01).
-          if (dest == null && rendered == null) {
-            if ("VERSION".equals(cmd)) {
-              dest = status;
-              rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
-            } else if ("PING".equals(cmd)) {
-              dest = status;
-              rendered = from + " PING: " + (arg.isBlank() ? "(no payload)" : arg);
-            } else if ("TIME".equals(cmd)) {
-              dest = status;
-              rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
-            } else {
-              PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
-              dest = (p != null) ? p.target() : status;
-              rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
-            }
-          }
-
-          if (dest != null && rendered != null) {
-            ensureTargetExists(dest);
-            ui.appendStatus(dest, "(ctcp)", rendered);
-            if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
-            return;
-          }
-        }
-
-        ui.appendNotice(status, "(notice) " + ev.from(), ev.text());
+      case IrcEvent.SoftNotice ev -> {
+        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), true);
       }
 
       case IrcEvent.WhoisResult ev -> {
@@ -1083,6 +1211,10 @@ public class IrcMediator {
       case IrcEvent.NickListUpdated ev -> {
         flushJoinModesIfAny(sid, ev.channel(), false);
         targetCoordinator.onNickListUpdated(sid, ev);
+      }
+
+      case IrcEvent.UserHostmaskObserved ev -> {
+        targetCoordinator.onUserHostmaskObserved(sid, ev);
       }
 
       case IrcEvent.Error ev -> {
@@ -1146,6 +1278,70 @@ public class IrcMediator {
 
     joinModeSummaryPrintedMs.put(key, System.currentTimeMillis());
     ui.appendNotice(chan, "(mode)", summary);
+  }
+
+  private boolean containsSelfMention(String serverId, String from, String message) {
+    if (serverId == null || message == null || message.isEmpty()) return false;
+    String me = irc.currentNick(serverId).orElse(null);
+    if (me == null || me.isBlank()) return false;
+
+    String fromNorm = normalizeNickForCompare(from);
+    if (fromNorm != null && fromNorm.equalsIgnoreCase(me)) return false;
+
+    return containsNickToken(message, me);
+  }
+
+  private static String normalizeNickForCompare(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return s;
+
+    // Some UI paths wrap self-nick in parentheses.
+    if (s.startsWith("(") && s.endsWith(")") && s.length() > 2) {
+      s = s.substring(1, s.length() - 1).trim();
+    }
+
+    // Strip common IRC user-mode prefixes if they appear.
+    while (!s.isEmpty()) {
+      char c = s.charAt(0);
+      if (c == '@' || c == '+' || c == '%' || c == '~' || c == '&') {
+        s = s.substring(1);
+      } else {
+        break;
+      }
+    }
+    return s;
+  }
+
+  private static boolean containsNickToken(String message, String nick) {
+    if (message == null || nick == null || nick.isEmpty()) return false;
+
+    String nickLower = nick.toLowerCase(Locale.ROOT);
+    int nlen = nickLower.length();
+
+    int i = 0;
+    final int len = message.length();
+    while (i < len) {
+      // Skip non-nick chars.
+      while (i < len && !isNickChar(message.charAt(i))) i++;
+      if (i >= len) break;
+      int start = i;
+      while (i < len && isNickChar(message.charAt(i))) i++;
+      int end = i;
+      int tokLen = end - start;
+      if (tokLen == nlen) {
+        String tokenLower = message.substring(start, end).toLowerCase(Locale.ROOT);
+        if (tokenLower.equals(nickLower)) return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isNickChar(char ch) {
+    if (ch >= '0' && ch <= '9') return true;
+    if (ch >= 'A' && ch <= 'Z') return true;
+    if (ch >= 'a' && ch <= 'z') return true;
+    return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
   }
 
   private void ensureTargetExists(TargetRef target) {

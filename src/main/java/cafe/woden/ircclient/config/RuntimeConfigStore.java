@@ -203,7 +203,63 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist image embed collapse setting to '{}'", file, e);
     }
   }
-/** Persist whether link previews are enabled (stored under ircafe.ui.linkPreviewsEnabled). */
+
+
+  /** Persist max width cap for inline image embeds (stored under ircafe.ui.imageEmbedsMaxWidthPx). */
+  public synchronized void rememberImageEmbedsMaxWidthPx(int maxWidthPx) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("imageEmbedsMaxWidthPx", Math.max(0, maxWidthPx));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist image embed max width setting to '{}'", file, e);
+    }
+  }
+
+
+  /** Persist max height cap for inline image embeds (stored under ircafe.ui.imageEmbedsMaxHeightPx). */
+  public synchronized void rememberImageEmbedsMaxHeightPx(int maxHeightPx) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("imageEmbedsMaxHeightPx", Math.max(0, maxHeightPx));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist image embed max height setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist whether animated GIFs should play for inline image embeds (stored under ircafe.ui.imageEmbedsAnimateGifs). */
+  public synchronized void rememberImageEmbedsAnimateGifs(boolean animate) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("imageEmbedsAnimateGifs", animate);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist image embed GIF animation setting to '{}'", file, e);
+    }
+  }
+
+
+
+  /** Persist whether link previews are enabled (stored under ircafe.ui.linkPreviewsEnabled). */
   public synchronized void rememberLinkPreviewsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -238,7 +294,8 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist link preview collapse setting to '{}'", file, e);
     }
   }
-/** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
+
+  /** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
   public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -255,11 +312,278 @@ public class RuntimeConfigStore {
     }
   }
 
+  // ---------------- hostmask discovery ----------------
+
+  /** Persist whether USERHOST-based hostmask discovery is enabled (stored under {@code ircafe.ui.hostmaskDiscovery.userhostEnabled}). */
+  public synchronized void rememberUserhostDiscoveryEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST discovery enabled setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the minimum interval (seconds) between USERHOST commands (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMinIntervalSeconds}). */
+  public synchronized void rememberUserhostMinIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostMinIntervalSeconds", Math.max(1, seconds));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST min interval setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the max USERHOST commands per minute (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMaxCommandsPerMinute}). */
+  public synchronized void rememberUserhostMaxCommandsPerMinute(int maxPerMinute) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostMaxCommandsPerMinute", Math.max(1, maxPerMinute));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST max commands/min setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the per-nick cooldown (minutes) before re-querying USERHOST (stored under {@code ircafe.ui.hostmaskDiscovery.userhostNickCooldownMinutes}). */
+  public synchronized void rememberUserhostNickCooldownMinutes(int minutes) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      hostmaskDiscovery.put("userhostNickCooldownMinutes", Math.max(1, minutes));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST nick cooldown setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the max nicks to include per USERHOST command (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMaxNicksPerCommand}). */
+  public synchronized void rememberUserhostMaxNicksPerCommand(int maxNicks) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> hostmaskDiscovery = getOrCreateMap(ui, "hostmaskDiscovery");
+
+      int capped = Math.max(1, Math.min(5, maxNicks));
+      hostmaskDiscovery.put("userhostMaxNicksPerCommand", capped);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist USERHOST max nicks/command setting to '{}'", file, e);
+    }
+  }
+
+  // ---------------- ignore masks ----------------
+
+  /** Persist an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
+  public synchronized void rememberIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (servers.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> masks = getOrCreateStringList(server, "masks");
+      if (masks.stream().noneMatch(x -> x != null && x.equalsIgnoreCase(m))) {
+        masks.add(m);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask to '{}'", file, e);
+    }
+  }
+
+  /** Remove an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
+  public synchronized void forgetIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      Object so = servers.get(sid);
+      if (!(so instanceof Map<?, ?>)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (Map<String, Object>) so;
+
+      Object o = server.get("masks");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> masks = (List<String>) list;
+
+      masks.removeIf(x -> x != null && x.equalsIgnoreCase(m));
+
+      // Clean up empty structures to keep the YAML tidy.
+      if (masks.isEmpty()) {
+        server.remove("masks");
+      }
+      if (server.isEmpty()) {
+        servers.remove(sid);
+      }
+      if (servers.isEmpty()) {
+        ignore.remove("servers");
+      }
+      if (ignore.isEmpty()) {
+        ircafe.remove("ignore");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not remove ignore mask from '{}'", file, e);
+    }
+  }
+
+  // ---------------- soft ignore masks ----------------
+
+  /**
+   * Persist a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}).
+   *
+   * <p>Soft ignores are reserved for a future feature; they are tracked/persisted but not yet applied.
+   */
+  public synchronized void rememberSoftIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (servers.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> masks = getOrCreateStringList(server, "softMasks");
+      if (masks.stream().noneMatch(x -> x != null && x.equalsIgnoreCase(m))) {
+        masks.add(m);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist soft-ignore mask to '{}'", file, e);
+    }
+  }
+
+  /** Remove a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}). */
+  public synchronized void forgetSoftIgnoreMask(String serverId, String mask) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      Object so = servers.get(sid);
+      if (!(so instanceof Map<?, ?>)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server = (Map<String, Object>) so;
+
+      Object o = server.get("softMasks");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> masks = (List<String>) list;
+
+      masks.removeIf(x -> x != null && x.equalsIgnoreCase(m));
+
+      // Clean up empty structures to keep the YAML tidy.
+      if (masks.isEmpty()) {
+        server.remove("softMasks");
+      }
+      if (server.isEmpty()) {
+        servers.remove(sid);
+      }
+      if (servers.isEmpty()) {
+        ignore.remove("servers");
+      }
+      if (ignore.isEmpty()) {
+        ircafe.remove("ignore");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not remove soft-ignore mask from '{}'", file, e);
+    }
+  }
+
+
+  /** Persist whether hard ignores should also apply to CTCP (stored under ircafe.ignore.hardIgnoreIncludesCtcp). */
+  public synchronized void rememberHardIgnoreIncludesCtcp(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+
+      ignore.put("hardIgnoreIncludesCtcp", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist hard-ignore CTCP setting to '{}'", file, e);
+    }
+  }
 
 
   /**
    * Persist per-nick color overrides (stored under {@code ircafe.ui.nickColorOverrides}).
-   *
    */
   public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {
     try {

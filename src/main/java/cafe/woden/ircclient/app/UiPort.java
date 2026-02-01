@@ -38,6 +38,7 @@ public interface UiPort {
 
   void closeTarget(TargetRef target);
   void markUnread(TargetRef target);
+  void markHighlight(TargetRef target);
   void clearUnread(TargetRef target);
 
   void setChatActiveTarget(TargetRef target);
@@ -66,6 +67,9 @@ public interface UiPort {
   void setInputEnabled(boolean enabled);
 
   void appendChat(TargetRef target, String from, String text);
+
+  /** Append a chat message as a click-to-reveal spoiler block (used by soft-ignore). */
+  void appendSpoilerChat(TargetRef target, String from, String text);
 
   /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
   void appendAction(TargetRef target, String from, String action);

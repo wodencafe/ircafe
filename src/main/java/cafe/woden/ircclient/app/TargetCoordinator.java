@@ -2,8 +2,10 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.model.UserListStore;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
@@ -25,6 +27,8 @@ public class TargetCoordinator {
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
+  private final IgnoreListService ignoreList;
+  private final UserhostQueryService userhostQueryService;
 
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -36,7 +40,9 @@ public class TargetCoordinator {
       IrcClientService irc,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
-      ConnectionCoordinator connectionCoordinator
+      ConnectionCoordinator connectionCoordinator,
+      IgnoreListService ignoreList,
+      UserhostQueryService userhostQueryService
   ) {
     this.ui = ui;
     this.userListStore = userListStore;
@@ -44,6 +50,8 @@ public class TargetCoordinator {
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
     this.connectionCoordinator = connectionCoordinator;
+    this.ignoreList = ignoreList;
+    this.userhostQueryService = userhostQueryService;
   }
 
   @PreDestroy
@@ -92,6 +100,7 @@ public class TargetCoordinator {
     if (sid.isEmpty()) return;
 
     userListStore.clearServer(sid);
+    userhostQueryService.clearServer(sid);
     if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
       ui.setStatusBarCounts(0, 0);
       ui.setUsersNicks(List.of());
@@ -109,6 +118,34 @@ public class TargetCoordinator {
         && Objects.equals(activeTarget.target(), ev.channel())) {
       ui.setUsersNicks(ev.nicks());
       ui.setStatusBarCounts(ev.totalUsers(), ev.operatorCount());
+
+      // If hostmask-based ignores exist, opportunistically resolve missing hostmasks.
+      maybeRequestMissingHostmasks(sid, ev.channel(), ev.nicks());
+    }
+  }
+
+  /**
+   * Passive hostmask capture: when we observe a user's hostmask from a server prefix, enrich
+   * the cached roster so ignore markers can reflect hostmask-based ignores even if NAMES
+   * didn't provide user@host.
+   */
+  public void onUserHostmaskObserved(String serverId, IrcEvent.UserHostmaskObserved ev) {
+    if (ev == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    // Step 1.5 propagation: update across all cached channels on this server.
+    java.util.Set<String> changedChannels = userListStore.updateHostmaskAcrossChannels(sid, ev.nick(), ev.hostmask());
+    if (changedChannels.isEmpty()) return;
+
+    // Refresh users panel only if the active target is a channel that was modified.
+    if (activeTarget != null
+        && Objects.equals(activeTarget.serverId(), sid)
+        && activeTarget.isChannel()
+        && changedChannels.contains(activeTarget.target())) {
+      List<IrcEvent.NickInfo> cached = userListStore.get(sid, activeTarget.target());
+      ui.setUsersNicks(cached);
+      ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
     }
   }
 
@@ -179,6 +216,9 @@ public class TargetCoordinator {
       ui.setUsersNicks(cached);
       ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
 
+      // Opportunistically resolve missing hostmasks (low traffic).
+      maybeRequestMissingHostmasks(target.serverId(), target.target(), cached);
+
       // Request names if cache is empty.
       if (cached.isEmpty() && connectionCoordinator.isConnected(target.serverId())) {
         disposables.add(
@@ -198,6 +238,79 @@ public class TargetCoordinator {
 
     ui.clearUnread(target);
     refreshInputEnabledForActiveTarget();
+  }
+
+  /**
+   * Step 2 (careful): If hostmask-based ignore patterns exist, request missing hostmasks via USERHOST.
+   *
+   * <p>This is deliberately conservative and relies on {@link UserhostQueryService} for anti-flood behavior.
+   */
+  private void maybeRequestMissingHostmasks(String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!connectionCoordinator.isConnected(sid)) return;
+    if (nicks == null || nicks.isEmpty()) return;
+
+    // Only do this if there is at least one ignore mask that actually depends on user/host.
+    if (!hasHostmaskDependentIgnores(sid)) return;
+
+    java.util.ArrayList<String> missing = new java.util.ArrayList<>();
+    for (IrcEvent.NickInfo ni : nicks) {
+      if (ni == null) continue;
+      String nick = Objects.toString(ni.nick(), "").trim();
+      if (nick.isEmpty()) continue;
+
+      String hm = Objects.toString(ni.hostmask(), "").trim();
+      if (isUsefulHostmask(hm)) continue;
+
+      missing.add(nick);
+    }
+    if (missing.isEmpty()) return;
+
+    userhostQueryService.enqueue(sid, missing);
+  }
+
+  private boolean hasHostmaskDependentIgnores(String serverId) {
+    for (String m : ignoreList.listMasks(serverId)) {
+      if (maskDependsOnUserOrHost(m)) return true;
+    }
+    for (String m : ignoreList.listSoftMasks(serverId)) {
+      if (maskDependsOnUserOrHost(m)) return true;
+    }
+    return false;
+  }
+
+  private static boolean maskDependsOnUserOrHost(String mask) {
+    String m = Objects.toString(mask, "").trim();
+    if (m.isEmpty()) return false;
+    int bang = m.indexOf('!');
+    int at = m.indexOf('@');
+    if (bang < 0 || at < 0 || at <= bang) return false;
+
+    String ident = m.substring(bang + 1, at).trim();
+    String host = m.substring(at + 1).trim();
+
+    // Pure nick-based ignore patterns look like "nick!*@*" (ident == "*" and host == "*").
+    boolean identUnknown = ident.isEmpty() || "*".equals(ident);
+    boolean hostUnknown = host.isEmpty() || "*".equals(host);
+    return !(identUnknown && hostUnknown);
+  }
+
+  private static boolean isUsefulHostmask(String hostmask) {
+    if (hostmask == null) return false;
+    String hm = hostmask.trim();
+    if (hm.isEmpty()) return false;
+
+    int bang = hm.indexOf('!');
+    int at = hm.indexOf('@');
+    if (bang <= 0 || at <= bang + 1 || at >= hm.length() - 1) return false;
+
+    String ident = hm.substring(bang + 1, at).trim();
+    String host = hm.substring(at + 1).trim();
+
+    boolean identUnknown = ident.isEmpty() || "*".equals(ident);
+    boolean hostUnknown = host.isEmpty() || "*".equals(host);
+    return !(identUnknown && hostUnknown);
   }
 
   private void ensureTargetExists(TargetRef target) {

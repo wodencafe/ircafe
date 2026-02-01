@@ -155,6 +155,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void markHighlight(TargetRef target) {
+    onEdt(() -> serverTree.markHighlight(target));
+  }
+
+  @Override
   public void clearUnread(TargetRef target) {
     onEdt(() -> serverTree.clearUnread(target));
   }
@@ -228,6 +233,11 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendChat(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendChat(target, from, text));
+  }
+
+  @Override
+  public void appendSpoilerChat(TargetRef target, String from, String text) {
+    onEdt(() -> transcripts.appendSpoilerChat(target, from, text));
   }
 
   @Override
