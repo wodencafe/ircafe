@@ -22,6 +22,20 @@ public record UiProperties(
     Boolean chatMessageTimestampsEnabled,
 
     /**
+     * How many historical log lines to load into a transcript when selecting a target.
+     *
+     * <p>If &lt;= 0, history prefill is disabled.
+     */
+    Integer chatHistoryInitialLoadLines,
+
+    /**
+     * Page size for the in-transcript "Load older messages…" control.
+     *
+     * <p>If &lt;= 0, the paging control will still render, but loads will fall back to a safe default.
+     */
+    Integer chatHistoryPageSize,
+
+    /**
      * If enabled, render *outgoing* messages (lines you send that are locally echoed into the transcript)
      * using a custom foreground color. Default: false.
      */
@@ -150,6 +164,18 @@ public record UiProperties(
     // Default: disabled (preserve prior behavior where user messages have no timestamp prefix).
     if (chatMessageTimestampsEnabled == null) {
       chatMessageTimestampsEnabled = false;
+    }
+
+    // History defaults: conservative initial load, generous paging.
+    if (chatHistoryInitialLoadLines == null) {
+      chatHistoryInitialLoadLines = 100;
+    }
+    if (chatHistoryInitialLoadLines < 0) {
+      chatHistoryInitialLoadLines = 0;
+    }
+
+    if (chatHistoryPageSize == null || chatHistoryPageSize <= 0) {
+      chatHistoryPageSize = 200;
     }
 
     // Outgoing message color default: disabled.

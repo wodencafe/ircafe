@@ -32,6 +32,8 @@ public interface UiPort {
 
   Flowable<TargetRef> closeTargetRequests();
 
+  Flowable<TargetRef> clearLogRequests();
+
   // Rendering and view updates.
   void ensureTargetExists(TargetRef target);
   void selectTarget(TargetRef target);
@@ -40,6 +42,8 @@ public interface UiPort {
   void markUnread(TargetRef target);
   void markHighlight(TargetRef target);
   void clearUnread(TargetRef target);
+
+  void clearTranscript(TargetRef target);
 
   void setChatActiveTarget(TargetRef target);
   void setChatCurrentNick(String serverId, String nick);

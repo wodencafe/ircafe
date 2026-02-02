@@ -5,6 +5,8 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
 import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
+import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
+import cafe.woden.ircclient.ui.chat.fold.HistoryDividerComponent;
 import cafe.woden.ircclient.ui.chat.fold.SpoilerMessageComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
@@ -72,6 +74,157 @@ public class ChatTranscriptStore {
     return docs.get(ref);
   }
 
+  /**
+   * Ensure the in-transcript "Load older messages…" control exists at the very top of the transcript.
+   *
+   * <p>This is a purely-visual control embedded as a Swing component inside the document. Paging
+   * behavior (DB fetch + prepend) is handled elsewhere.
+   */
+  public synchronized LoadOlderMessagesComponent ensureLoadOlderMessagesControl(TargetRef ref) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return null;
+
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null && st.loadOlderControl != null) {
+      return st.loadOlderControl.component;
+    }
+
+    int beforeLen = doc.getLength();
+    int insertPos = 0;
+
+    LoadOlderMessagesComponent comp = new LoadOlderMessagesComponent();
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        comp.setTranscriptFont(new Font(
+            uiSettings.get().chatFontFamily(),
+            Font.PLAIN,
+            uiSettings.get().chatFontSize()
+        ));
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    try {
+      SimpleAttributeSet attrs = new SimpleAttributeSet(styles.status());
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(insertPos, " ", attrs);
+      Position pos = doc.createPosition(insertPos);
+      doc.insertString(insertPos + 1, "\n", styles.timestamp());
+      if (st != null) {
+        st.loadOlderControl = new LoadOlderControl(pos, comp);
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertPos, delta);
+    return comp;
+  }
+
+  /**
+   * Ensure a single visual divider exists in the transcript to separate loaded history from live
+   * messages.
+   *
+   * <p>This is inserted as an embedded Swing component inside the document.
+   */
+  public synchronized HistoryDividerComponent ensureHistoryDivider(TargetRef ref,
+                                                                   int insertAt,
+                                                                   String labelText) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return null;
+
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null && st.historyDivider != null) {
+      try {
+        st.historyDivider.component.setText(labelText);
+      } catch (Exception ignored) {
+        // ignore
+      }
+      return st.historyDivider.component;
+    }
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    HistoryDividerComponent comp = new HistoryDividerComponent(labelText);
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        comp.setTranscriptFont(new Font(
+            uiSettings.get().chatFontFamily(),
+            Font.PLAIN,
+            uiSettings.get().chatFontSize()
+        ));
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    try {
+      SimpleAttributeSet attrs = new SimpleAttributeSet(styles.status());
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(pos, " ", attrs);
+      Position p = doc.createPosition(pos);
+      doc.insertString(pos + 1, "\n", styles.timestamp());
+      if (st != null) {
+        st.historyDivider = new HistoryDividerControl(p, comp);
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return comp;
+  }
+
+  /**
+   * Returns the insertion offset immediately after the "Load older messages…" control line.
+   * If the control is not present, this returns 0.
+   */
+  public synchronized int loadOlderInsertOffset(TargetRef ref) {
+    if (ref == null) return 0;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || st.loadOlderControl == null) return 0;
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return 0;
+    int base = st.loadOlderControl.pos.getOffset();
+    // We insert exactly two characters for the control: component marker + newline.
+    int off = base + 2;
+    return Math.max(0, Math.min(off, doc.getLength()));
+  }
+
+  /** Update the visual state of the load-older control (if present). */
+  public synchronized void setLoadOlderMessagesControlState(TargetRef ref, LoadOlderMessagesComponent.State s) {
+    if (ref == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || st.loadOlderControl == null) return;
+    try {
+      st.loadOlderControl.component.setState(s);
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
+  /** Set the click handler for the load-older control (if present). */
+  public synchronized void setLoadOlderMessagesControlHandler(TargetRef ref, java.util.function.BooleanSupplier onLoad) {
+    if (ref == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || st.loadOlderControl == null) return;
+    try {
+      st.loadOlderControl.component.setOnLoadRequested(onLoad);
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
   public synchronized void appendPlain(TargetRef ref, String text) {
     ensureTargetExists(ref);
     breakPresenceRun(ref);
@@ -86,6 +239,28 @@ public class ChatTranscriptStore {
     if (ref == null) return;
     docs.remove(ref);
     stateByTarget.remove(ref);
+  }
+
+  /**
+   * Clear the in-memory transcript for a target.
+   *
+   * <p>This does not touch any persisted history store; it's strictly a UI reset.
+   */
+  public synchronized void clearTarget(TargetRef ref) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return;
+
+    try {
+      doc.remove(0, doc.getLength());
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    // Reset per-target control state (presence folds, load-older controls, dividers, etc.).
+    stateByTarget.put(ref, new TranscriptState());
   }
 
   /**
@@ -178,6 +353,22 @@ public class ChatTranscriptStore {
                                       String text,
                                       AttributeSet fromStyle,
                                       AttributeSet msgStyle) {
+    appendLineInternal(ref, from, text, fromStyle, msgStyle, true, null);
+  }
+
+  /**
+   * Internal line appender that supports history replay.
+   *
+   * @param allowEmbeds if true, append inline image embeds and link previews (if enabled)
+   * @param epochMs if non-null, use this timestamp for the line (instead of "now")
+   */
+  private synchronized void appendLineInternal(TargetRef ref,
+                                  String from,
+                                  String text,
+                                  AttributeSet fromStyle,
+                                  AttributeSet msgStyle,
+                                  boolean allowEmbeds,
+                                  Long epochMs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
 
@@ -205,7 +396,8 @@ public class ChatTranscriptStore {
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
           || (chatMessageTimestampsEnabled && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
-        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+        String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
+        doc.insertString(doc.getLength(), prefix, styles.timestamp());
       }
 
       if (from != null && !from.isBlank()) {
@@ -216,6 +408,10 @@ public class ChatTranscriptStore {
       renderer.insertRichText(doc, ref, text, base);
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
+
+      if (!allowEmbeds) {
+        return;
+      }
 
       // After the line, optionally embed any image URLs found in the message.
       // This keeps the raw URL text visible but also shows a thumbnail block.
@@ -228,6 +424,7 @@ public class ChatTranscriptStore {
         linkPreviews.appendPreviews(doc, text);
       }
     } catch (Exception ignored) {
+      // ignore
     }
   }
 
@@ -254,6 +451,434 @@ public class ChatTranscriptStore {
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
     appendLine(ref, from, text, fs, ms);
+  }
+
+  /**
+   * Append a chat message line from history (no embeds; uses the persisted timestamp).
+   *
+   * <p>Note: this does not trigger image embeds or link previews when replaying history.
+   */
+  public void appendChatFromHistory(TargetRef ref,
+                                    String from,
+                                    String text,
+                                    boolean outgoingLocalEcho,
+                                    long tsEpochMs) {
+    // Chat message, start a new run
+    breakPresenceRun(ref);
+
+    AttributeSet fromStyle = styles.from();
+    if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+
+    SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+    SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+    applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+    appendLineInternal(ref, from, text, fs, ms, false, tsEpochMs);
+  }
+
+  /**
+   * Insert a chat message line from history at a specific document offset.
+   *
+   *
+   * @return the next insertion offset after the inserted line
+   */
+  public synchronized int insertChatFromHistoryAt(TargetRef ref,
+                                                  int insertAt,
+                                                  String from,
+                                                  String text,
+                                                  boolean outgoingLocalEcho,
+                                                  long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return Math.max(0, insertAt);
+
+    AttributeSet fromStyle = styles.from();
+    if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+
+    SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+    SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+    applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+    return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, tsEpochMs);
+  }
+
+  /**
+   * Prepend a chat message line from history (insert at offset 0).
+   */
+  public synchronized int prependChatFromHistory(TargetRef ref,
+                                                 String from,
+                                                 String text,
+                                                 boolean outgoingLocalEcho,
+                                                 long tsEpochMs) {
+    return insertChatFromHistoryAt(ref, 0, from, text, outgoingLocalEcho, tsEpochMs);
+  }
+
+  /**
+   * Insert a CTCP ACTION (/me) line from history at a specific document offset.
+   *
+   * @return the next insertion offset after the inserted line
+   */
+  public synchronized int insertActionFromHistoryAt(TargetRef ref,
+                                                    int insertAt,
+                                                    String from,
+                                                    String action,
+                                                    boolean outgoingLocalEcho,
+                                                    long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return Math.max(0, insertAt);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    String a = action == null ? "" : action;
+
+    try {
+      boolean chatMessageTimestampsEnabled = false;
+      try {
+        chatMessageTimestampsEnabled = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().chatMessageTimestampsEnabled();
+      } catch (Exception ignored) {
+        chatMessageTimestampsEnabled = false;
+      }
+
+      if (ts != null && ts.enabled() && chatMessageTimestampsEnabled) {
+        String prefix = ts.prefixAt(tsEpochMs);
+        doc.insertString(pos, prefix, styles.timestamp());
+        pos += prefix.length();
+      }
+
+      AttributeSet msgStyle = styles.actionMessage();
+      AttributeSet fromStyle = styles.actionFrom();
+
+      if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+        fromStyle = nickColors.forNick(from, fromStyle);
+      }
+
+      SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
+      SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+      applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+      doc.insertString(pos, "* ", ms);
+      pos += 2;
+      if (from != null && !from.isBlank()) {
+        doc.insertString(pos, from, fs);
+        pos += from.length();
+        doc.insertString(pos, " ", ms);
+        pos += 1;
+      }
+
+      if (renderer != null) {
+        pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
+      } else {
+        doc.insertString(pos, a, ms);
+        pos += a.length();
+      }
+
+      doc.insertString(pos, "\n", styles.timestamp());
+      pos += 1;
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return pos;
+  }
+
+  public synchronized int prependActionFromHistory(TargetRef ref,
+                                                   String from,
+                                                   String action,
+                                                   boolean outgoingLocalEcho,
+                                                   long tsEpochMs) {
+    return insertActionFromHistoryAt(ref, 0, from, action, outgoingLocalEcho, tsEpochMs);
+  }
+
+  public synchronized int insertNoticeFromHistoryAt(TargetRef ref,
+                                                    int insertAt,
+                                                    String from,
+                                                    String text,
+                                                    long tsEpochMs) {
+    return insertLineInternalAt(ref, insertAt, from, text,
+        styles.noticeFrom(), styles.noticeMessage(), false, tsEpochMs);
+  }
+
+  public synchronized int prependNoticeFromHistory(TargetRef ref,
+                                                   String from,
+                                                   String text,
+                                                   long tsEpochMs) {
+    return insertNoticeFromHistoryAt(ref, 0, from, text, tsEpochMs);
+  }
+
+  public synchronized int insertStatusFromHistoryAt(TargetRef ref,
+                                                    int insertAt,
+                                                    String from,
+                                                    String text,
+                                                    long tsEpochMs) {
+    return insertLineInternalAt(ref, insertAt, from, text,
+        styles.status(), styles.status(), false, tsEpochMs);
+  }
+
+  public synchronized int prependStatusFromHistory(TargetRef ref,
+                                                   String from,
+                                                   String text,
+                                                   long tsEpochMs) {
+    return insertStatusFromHistoryAt(ref, 0, from, text, tsEpochMs);
+  }
+
+  public synchronized int insertErrorFromHistoryAt(TargetRef ref,
+                                                   int insertAt,
+                                                   String from,
+                                                   String text,
+                                                   long tsEpochMs) {
+    return insertLineInternalAt(ref, insertAt, from, text,
+        styles.error(), styles.error(), false, tsEpochMs);
+  }
+
+  public synchronized int prependErrorFromHistory(TargetRef ref,
+                                                  String from,
+                                                  String text,
+                                                  long tsEpochMs) {
+    return insertErrorFromHistoryAt(ref, 0, from, text, tsEpochMs);
+  }
+
+  /**
+   * Insert a presence-style line from history (stored as display text) at a specific offset.
+   */
+  public synchronized int insertPresenceFromHistoryAt(TargetRef ref,
+                                                      int insertAt,
+                                                      String displayText,
+                                                      long tsEpochMs) {
+    return insertLineInternalAt(ref, insertAt, null, displayText,
+        styles.status(), styles.status(), false, tsEpochMs);
+  }
+
+  public synchronized int prependPresenceFromHistory(TargetRef ref,
+                                                     String displayText,
+                                                     long tsEpochMs) {
+    return insertPresenceFromHistoryAt(ref, 0, displayText, tsEpochMs);
+  }
+
+  /**
+   * Insert a spoiler (soft-ignored) message from history at a specific offset.
+   */
+  public synchronized int insertSpoilerChatFromHistoryAt(TargetRef ref,
+                                                         int insertAt,
+                                                         String from,
+                                                         String text,
+                                                         long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return Math.max(0, insertAt);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+
+    String msg = text == null ? "" : text;
+    String fromLabel = from == null ? "" : from;
+    if (!fromLabel.isBlank()) {
+      if (fromLabel.endsWith(":")) {
+        fromLabel = fromLabel + " ";
+      } else {
+        fromLabel = fromLabel + ": ";
+      }
+    }
+
+    boolean chatMessageTimestampsEnabled = false;
+    try {
+      chatMessageTimestampsEnabled = uiSettings != null
+          && uiSettings.get() != null
+          && uiSettings.get().chatMessageTimestampsEnabled();
+    } catch (Exception ignored) {
+      chatMessageTimestampsEnabled = false;
+    }
+    final String tsPrefixFinal =
+        (ts != null && ts.enabled() && chatMessageTimestampsEnabled) ? ts.prefixAt(tsEpochMs) : "";
+
+    final int offFinal = pos;
+    final TargetRef refFinal = ref;
+    final StyledDocument docFinal = doc;
+    final String fromFinal = from;
+    final String msgFinal = msg;
+    final String fromLabelFinal = fromLabel;
+
+    final SpoilerMessageComponent comp = new SpoilerMessageComponent(tsPrefixFinal, fromLabelFinal);
+
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        comp.setTranscriptFont(new Font(
+            uiSettings.get().chatFontFamily(),
+            Font.PLAIN,
+            uiSettings.get().chatFontSize()
+        ));
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    try {
+      if (nickColors != null && nickColors.enabled() && from != null && !from.isBlank()) {
+        Color bg = javax.swing.UIManager.getColor("TextPane.background");
+        Color fg = javax.swing.UIManager.getColor("TextPane.foreground");
+        comp.setFromColor(nickColors.colorForNick(from, bg, fg));
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
+    StyleConstants.setComponent(attrs, comp);
+    try {
+      doc.insertString(offFinal, " ", attrs);
+      final Position spoilerPos = doc.createPosition(offFinal);
+      comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
+          tsPrefixFinal, fromFinal, msgFinal));
+      doc.insertString(offFinal + 1, "\n", styles.timestamp());
+      pos = offFinal + 2;
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, offFinal, delta);
+    return pos;
+  }
+
+  public synchronized int prependSpoilerChatFromHistory(TargetRef ref,
+                                                        String from,
+                                                        String text,
+                                                        long tsEpochMs) {
+    return insertSpoilerChatFromHistoryAt(ref, 0, from, text, tsEpochMs);
+  }
+
+  private int insertLineInternalAt(TargetRef ref,
+                                   int insertAt,
+                                   String from,
+                                   String text,
+                                   AttributeSet fromStyle,
+                                   AttributeSet msgStyle,
+                                   boolean allowEmbeds,
+                                   Long epochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return Math.max(0, insertAt);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    try {
+      AttributeSet baseForId = msgStyle != null ? msgStyle : styles.message();
+      Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
+      String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
+
+      boolean chatMessageTimestampsEnabled = false;
+      try {
+        chatMessageTimestampsEnabled = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().chatMessageTimestampsEnabled();
+      } catch (Exception ignored) {
+        chatMessageTimestampsEnabled = false;
+      }
+
+      if (ts != null && ts.enabled()
+          && (ChatStyles.STYLE_STATUS.equals(styleId)
+          || ChatStyles.STYLE_ERROR.equals(styleId)
+          || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
+          || (chatMessageTimestampsEnabled && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
+        String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
+        doc.insertString(pos, prefix, styles.timestamp());
+        pos += prefix.length();
+      }
+
+      if (from != null && !from.isBlank()) {
+        String prefix = from + ": ";
+        doc.insertString(pos, prefix, fromStyle != null ? fromStyle : styles.from());
+        pos += prefix.length();
+      }
+
+      AttributeSet base = msgStyle != null ? msgStyle : styles.message();
+      if (renderer != null) {
+        pos = renderer.insertRichTextAt(doc, ref, text, base, pos);
+      } else {
+        String t = text == null ? "" : text;
+        doc.insertString(pos, t, base);
+        pos += t.length();
+      }
+
+      doc.insertString(pos, "\n", styles.timestamp());
+      pos += 1;
+
+      // Embeds are intentionally not supported for non-append insertions.
+      if (allowEmbeds) {
+        // no-op
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return pos;
+  }
+
+  private int normalizeInsertAtLineStart(StyledDocument doc, int insertAt) {
+    if (doc == null) return 0;
+    int len = doc.getLength();
+    if (len <= 0) return 0;
+    int p = Math.max(0, Math.min(insertAt, len));
+    if (p <= 0 || p >= len) return p;
+
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return p;
+      int line = root.getElementIndex(p);
+      Element el = root.getElement(line);
+      if (el == null) return p;
+      int start = el.getStartOffset();
+      return Math.max(0, Math.min(start, len));
+    } catch (Exception ignored) {
+      return p;
+    }
+  }
+
+  private int ensureAtLineStartForInsert(StyledDocument doc, int pos) {
+    if (doc == null) return Math.max(0, pos);
+    int len = doc.getLength();
+    int p = Math.max(0, Math.min(pos, len));
+    if (p <= 0) return p;
+    try {
+      String prev = doc.getText(p - 1, 1);
+      if (!"\n".equals(prev)) {
+        doc.insertString(p, "\n", styles.timestamp());
+        return p + 1;
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+    return p;
+  }
+
+  private void shiftCurrentPresenceBlock(TargetRef ref, int insertAt, int delta) {
+    if (ref == null || delta == 0) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || st.currentPresenceBlock == null) return;
+    PresenceBlock b = st.currentPresenceBlock;
+
+    // If the insertion occurs before the block, shift its tracked offsets so live folding continues to work.
+    if (insertAt <= b.startOffset) {
+      b.startOffset += delta;
+      b.endOffset += delta;
+    }
   }
 
   private void applyOutgoingLineColor(SimpleAttributeSet fromStyle,
@@ -390,6 +1015,88 @@ public class ChatTranscriptStore {
       // IMPORTANT: pass the exact component instance we inserted. The transcript may contain
       // multiple spoiler components close together; searching by type alone can reveal/remove
       // the wrong one, leaving the clicked component stuck in "revealing...".
+      comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
+          tsPrefixFinal, fromFinal, msgFinal));
+
+      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+    } catch (Exception ignored) {
+      // ignore
+    }
+  }
+
+  /**
+   * Append a message as a collapsible "spoiler" (click-to-reveal) block from history.
+   *
+   * <p>This behaves like {@link #appendSpoilerChat(TargetRef, String, String)} but uses the persisted timestamp.
+   */
+  public void appendSpoilerChatFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    breakPresenceRun(ref);
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return;
+
+    // New line
+    ensureAtLineStart(doc);
+
+    String msg = text == null ? "" : text;
+    String fromLabel = from == null ? "" : from;
+    if (!fromLabel.isBlank()) {
+      if (fromLabel.endsWith(":")) {
+        fromLabel = fromLabel + " ";
+      } else {
+        fromLabel = fromLabel + ": ";
+      }
+    }
+
+    boolean chatMessageTimestampsEnabled = false;
+    try {
+      chatMessageTimestampsEnabled = uiSettings != null
+          && uiSettings.get() != null
+          && uiSettings.get().chatMessageTimestampsEnabled();
+    } catch (Exception ignored) {
+      chatMessageTimestampsEnabled = false;
+    }
+    final String tsPrefixFinal =
+        (ts != null && ts.enabled() && chatMessageTimestampsEnabled) ? ts.prefixAt(tsEpochMs) : "";
+
+    final int offFinal = doc.getLength();
+    final TargetRef refFinal = ref;
+    final StyledDocument docFinal = doc;
+    final String fromFinal = from;
+    final String msgFinal = msg;
+    final String fromLabelFinal = fromLabel;
+
+    final SpoilerMessageComponent comp = new SpoilerMessageComponent(tsPrefixFinal, fromLabelFinal);
+
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        comp.setTranscriptFont(new Font(
+            uiSettings.get().chatFontFamily(),
+            Font.PLAIN,
+            uiSettings.get().chatFontSize()
+        ));
+      }
+    } catch (Exception ignored) {
+      // fall back to UI defaults
+    }
+
+    try {
+      if (nickColors != null && nickColors.enabled() && from != null && !from.isBlank()) {
+        Color bg = javax.swing.UIManager.getColor("TextPane.background");
+        Color fg = javax.swing.UIManager.getColor("TextPane.foreground");
+        comp.setFromColor(nickColors.colorForNick(from, bg, fg));
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+
+    SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
+    StyleConstants.setComponent(attrs, comp);
+    try {
+      doc.insertString(offFinal, " ", attrs);
+
+      final Position spoilerPos = doc.createPosition(offFinal);
+
       comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
           tsPrefixFinal, fromFinal, msgFinal));
 
@@ -566,7 +1273,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     return pos;
   }
 
-  /**
+    /**
    * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
    */
   public void appendAction(TargetRef ref, String from, String action) {
@@ -579,6 +1286,22 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
    * @param outgoingLocalEcho true for locally-echoed lines you just sent
    */
   public void appendAction(TargetRef ref, String from, String action, boolean outgoingLocalEcho) {
+    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null);
+  }
+
+  /**
+   * Append a CTCP ACTION (/me) line from history (no embeds; uses the persisted timestamp).
+   */
+  public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
+    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs);
+  }
+
+  private void appendActionInternal(TargetRef ref,
+                                    String from,
+                                    String action,
+                                    boolean outgoingLocalEcho,
+                                    boolean allowEmbeds,
+                                    Long epochMs) {
     breakPresenceRun(ref);
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
@@ -600,7 +1323,8 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       }
 
       if (ts != null && ts.enabled() && chatMessageTimestampsEnabled) {
-        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+        String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
+        doc.insertString(doc.getLength(), prefix, styles.timestamp());
       }
 
       AttributeSet msgStyle = styles.actionMessage();
@@ -622,6 +1346,10 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
 
       renderer.insertRichText(doc, ref, a, ms);
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
+
+      if (!allowEmbeds) {
+        return;
+      }
 
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
         imageEmbeds.appendEmbeds(doc, a);
@@ -649,6 +1377,33 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   public void appendError(TargetRef ref, String from, String text) {
     breakPresenceRun(ref);
     appendLine(ref, from, text, styles.error(), styles.error());
+  }
+
+  // --- History replay variants (no embeds; use persisted timestamps) ---
+
+  public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    breakPresenceRun(ref);
+    appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), false, tsEpochMs);
+  }
+
+  public void appendStatusFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    breakPresenceRun(ref);
+    appendLineInternal(ref, from, text, styles.status(), styles.status(), false, tsEpochMs);
+  }
+
+  public void appendErrorFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    breakPresenceRun(ref);
+    appendLineInternal(ref, from, text, styles.error(), styles.error(), false, tsEpochMs);
+  }
+
+  /**
+   * Presence-style line from history.
+   *
+   * <p>We store presence entries as display text (not the raw event), so we replay them as status lines.
+   */
+  public void appendPresenceFromHistory(TargetRef ref, String displayText, long tsEpochMs) {
+    breakPresenceRun(ref);
+    appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, tsEpochMs);
   }
 
   private void breakPresenceRun(TargetRef ref) {
@@ -727,6 +1482,28 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
 
   private static final class TranscriptState {
     PresenceBlock currentPresenceBlock;
+    LoadOlderControl loadOlderControl;
+    HistoryDividerControl historyDivider;
+  }
+
+  private static final class LoadOlderControl {
+    final Position pos;
+    final LoadOlderMessagesComponent component;
+
+    private LoadOlderControl(Position pos, LoadOlderMessagesComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
+  }
+
+  private static final class HistoryDividerControl {
+    final Position pos;
+    final HistoryDividerComponent component;
+
+    private HistoryDividerControl(Position pos, HistoryDividerComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
   }
 
   private static final class PresenceBlock {

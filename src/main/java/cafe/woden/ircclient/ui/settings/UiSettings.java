@@ -28,6 +28,12 @@ public record UiSettings(
     /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
     boolean chatMessageTimestampsEnabled,
 
+    /** How many historical lines to load when selecting a target (0 disables initial history prefill). */
+    int chatHistoryInitialLoadLines,
+
+    /** Page size for the in-transcript "Load older messages…" control. */
+    int chatHistoryPageSize,
+
     /**
      * If enabled, render *outgoing* messages (lines you send that are locally echoed into the transcript)
      * using a custom foreground color.
@@ -63,6 +69,9 @@ public record UiSettings(
     if (imageEmbedsMaxWidthPx < 0) imageEmbedsMaxWidthPx = 0;
     if (imageEmbedsMaxHeightPx < 0) imageEmbedsMaxHeightPx = 0;
 
+    if (chatHistoryInitialLoadLines < 0) chatHistoryInitialLoadLines = 0;
+    if (chatHistoryPageSize <= 0) chatHistoryPageSize = 200;
+
     clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
 
     if (userhostMinIntervalSeconds <= 0) userhostMinIntervalSeconds = 7;
@@ -97,6 +106,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -106,6 +116,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -115,6 +126,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -124,6 +136,7 @@ public record UiSettings(
         enabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -133,6 +146,7 @@ public record UiSettings(
         imageEmbedsEnabled, collapsed, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -142,6 +156,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, Math.max(0, maxWidthPx), imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -151,6 +166,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, Math.max(0, maxHeightPx), imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -160,6 +176,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         enabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -169,6 +186,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, collapsed,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -178,6 +196,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         enabled, chatMessageTimestampsEnabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }
@@ -187,6 +206,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, enabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
   }

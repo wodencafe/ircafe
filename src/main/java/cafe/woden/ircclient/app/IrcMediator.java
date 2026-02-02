@@ -166,6 +166,13 @@ public class IrcMediator {
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
     );
 
+    disposables.add(
+        ui.clearLogRequests()
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(targetCoordinator::clearLog,
+                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
+    );
+
     // React to runtime server list edits.
     disposables.add(
         serverRegistry.updates()

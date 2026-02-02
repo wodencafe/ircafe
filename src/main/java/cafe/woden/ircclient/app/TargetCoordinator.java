@@ -6,11 +6,19 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.UserhostQueryService;
+import cafe.woden.ircclient.logging.ChatLogMaintenance;
 import cafe.woden.ircclient.model.UserListStore;
+import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +29,8 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class TargetCoordinator {
+  private static final Logger log = LoggerFactory.getLogger(TargetCoordinator.class);
+
   private final UiPort ui;
   private final UserListStore userListStore;
   private final IrcClientService irc;
@@ -29,6 +39,17 @@ public class TargetCoordinator {
   private final ConnectionCoordinator connectionCoordinator;
   private final IgnoreListService ignoreList;
   private final UserhostQueryService userhostQueryService;
+  private final ChatHistoryService chatHistoryService;
+  private final ChatLogMaintenance chatLogMaintenance;
+
+  private final ExecutorService maintenanceExec = Executors.newSingleThreadExecutor(new ThreadFactory() {
+    @Override
+    public Thread newThread(Runnable r) {
+      Thread t = new Thread(r, "ircafe-chatlog-maintenance");
+      t.setDaemon(true);
+      return t;
+    }
+  });
 
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -42,7 +63,9 @@ public class TargetCoordinator {
       RuntimeConfigStore runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
       IgnoreListService ignoreList,
-      UserhostQueryService userhostQueryService
+      UserhostQueryService userhostQueryService,
+      ChatHistoryService chatHistoryService,
+      ChatLogMaintenance chatLogMaintenance
   ) {
     this.ui = ui;
     this.userListStore = userListStore;
@@ -52,11 +75,40 @@ public class TargetCoordinator {
     this.connectionCoordinator = connectionCoordinator;
     this.ignoreList = ignoreList;
     this.userhostQueryService = userhostQueryService;
+    this.chatHistoryService = chatHistoryService;
+    this.chatLogMaintenance = chatLogMaintenance;
   }
 
   @PreDestroy
   void shutdown() {
     disposables.dispose();
+    maintenanceExec.shutdown();
+    try {
+      maintenanceExec.awaitTermination(500, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
+  public void clearLog(TargetRef target) {
+    if (target == null) return;
+    // Requested scope: channels + status only.
+    if (!(target.isChannel() || target.isStatus())) return;
+
+    ensureTargetExists(target);
+    // Immediate UI reset on EDT (caller is already on EDT via IrcMediator subscription).
+    ui.clearTranscript(target);
+    ui.clearUnread(target);
+    chatHistoryService.reset(target);
+
+    // DB purge off the EDT.
+    maintenanceExec.submit(() -> {
+      try {
+        chatLogMaintenance.clearTarget(target);
+      } catch (Throwable t) {
+        log.warn("[ircafe] Clear log failed for {}", target, t);
+      }
+    });
   }
 
   public TargetRef getActiveTarget() {
@@ -87,6 +139,9 @@ public class TargetCoordinator {
     if (target == null) return;
 
     ensureTargetExists(target);
+
+    // Load history into an empty transcript before showing it (async; won't block the EDT).
+    chatHistoryService.onTargetSelected(target);
 
     // Selection in the server tree drives what the main Chat dock is displaying.
     ui.setChatActiveTarget(target);

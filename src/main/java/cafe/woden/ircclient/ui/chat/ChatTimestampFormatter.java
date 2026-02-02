@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.config.UiProperties;
+import java.time.Instant;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import org.slf4j.Logger;
@@ -38,6 +40,17 @@ public class ChatTimestampFormatter {
 
   public boolean enabled() {
     return enabled;
+  }
+
+  public String prefixAt(long epochMs) {
+    String s;
+    try {
+      s = LocalTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault()).format(formatter);
+    } catch (RuntimeException e) {
+      s = LocalTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault())
+          .format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+    }
+    return "[" + s + "] ";
   }
 
   public String prefixNow() {

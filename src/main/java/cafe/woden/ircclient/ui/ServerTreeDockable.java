@@ -37,6 +37,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
+import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.Action;
 import javax.swing.SwingUtilities;
@@ -88,6 +89,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
       PublishProcessor.<String>create().toSerialized();
 
   private final FlowableProcessor<TargetRef> closeTargetRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<TargetRef> clearLogRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
@@ -525,6 +529,13 @@ private static final class InsertionLine {
         menu.add(new JMenuItem(moveNodeUpAction()));
         menu.add(new JMenuItem(moveNodeDownAction()));
 
+        if (nd.ref.isChannel() || nd.ref.isStatus()) {
+          menu.addSeparator();
+          JMenuItem clearLog = new JMenuItem("Clear Log…");
+          clearLog.addActionListener(ev -> confirmAndRequestClearLog(nd.ref, nd.label));
+          menu.add(clearLog);
+        }
+
         if (!nd.ref.isStatus()) {
           menu.addSeparator();
           if (nd.ref.isChannel()) {
@@ -543,6 +554,31 @@ private static final class InsertionLine {
     }
 
     return null;
+  }
+
+  private void confirmAndRequestClearLog(TargetRef target, String label) {
+    if (target == null) return;
+    // Only channels + status per request.
+    if (!(target.isChannel() || target.isStatus())) return;
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    String pretty = (label == null || label.isBlank()) ? target.target() : label;
+    String scope = target.isStatus() ? "status" : "channel";
+
+    String msg = "Clear log for " + scope + " \"" + pretty + "\"?\n\n"
+        + "This will permanently delete the persisted chat history for this target.";
+
+    int choice = JOptionPane.showConfirmDialog(
+        w,
+        msg,
+        "Clear Log",
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.WARNING_MESSAGE
+    );
+
+    if (choice == JOptionPane.YES_OPTION) {
+      clearLogRequests.onNext(target);
+    }
   }
 
   private boolean isServerNode(DefaultMutableTreeNode node) {
@@ -690,6 +726,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public Flowable<TargetRef> closeTargetRequests() {
     return closeTargetRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> clearLogRequests() {
+    return clearLogRequests.onBackpressureLatest();
   }
 
   public Flowable<TargetRef> openPinnedChatRequests() {

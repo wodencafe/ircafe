@@ -33,6 +33,8 @@ public class UiSettingsBus {
         props.linkPreviewsCollapsedByDefault(),
         props.presenceFoldsEnabled(),
         props.chatMessageTimestampsEnabled(),
+        props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
+        props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
         props.clientLineColorEnabled(),
         props.clientLineColor(),
 
