@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
@@ -55,6 +56,7 @@ public class UserListDockable extends JPanel implements Dockable {
       IgnoreMark mark = ignoreMark(ni);
       String nick = Objects.toString(ni.nick(), "").trim();
       String hostmask = Objects.toString(ni.hostmask(), "").trim();
+      AwayState away = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
 
       boolean hasHostmask = isUsefulHostmask(hostmask);
       // Always show a tooltip for a real nick; if hostmask isn't known yet, show a pending hint.
@@ -73,6 +75,15 @@ public class UserListDockable extends JPanel implements Dockable {
             .append("</span>");
       } else {
         sb.append("<br>").append("<i>Hostmask pending</i>");
+      }
+
+      if (away == AwayState.AWAY) {
+        String reason = ni.awayMessage();
+        if (reason != null && !reason.isBlank()) {
+          sb.append("<br>").append("<i>Away</i>: ").append(escapeHtml(reason));
+        } else {
+          sb.append("<br>").append("<i>Away</i>");
+        }
       }
 
       if (mark.ignore && mark.softIgnore) {
@@ -139,6 +150,7 @@ public class UserListDockable extends JPanel implements Dockable {
 
       // Text decoration (keep the underlying model unchanged).
       String display = raw;
+      AwayState away = (value == null || value.awayState() == null) ? AwayState.UNKNOWN : value.awayState();
       if (mark.ignore) display += "  [IGN]";
       if (mark.softIgnore) display += "  [SOFT]";
       lbl.setText(display);
@@ -148,6 +160,7 @@ public class UserListDockable extends JPanel implements Dockable {
       int style = f.getStyle();
       if (mark.ignore) style |= Font.BOLD;
       if (mark.softIgnore) style |= Font.ITALIC;
+      if (away == AwayState.AWAY) style |= Font.ITALIC;
       lbl.setFont(f.deriveFont(style));
 
       // Apply per-nick color last so it wins for the nick label.

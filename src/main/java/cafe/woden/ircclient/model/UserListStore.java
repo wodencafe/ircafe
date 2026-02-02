@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.model;
 
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,12 @@ public class UserListStore {
    */
   private final Map<String, Map<String, String>> hostmaskByServerAndNickLower = new ConcurrentHashMap<>();
 
+  /** Best-effort learned away state by server + lowercase nick (intended for IRCv3 away-notify). */
+  private final Map<String, Map<String, AwayState>> awayStateByServerAndNickLower = new ConcurrentHashMap<>();
+
+  /** Best-effort learned away reason/message by server + lowercase nick (only meaningful when AWAY). */
+  private final Map<String, Map<String, String>> awayMessageByServerAndNickLower = new ConcurrentHashMap<>();
+
   private static String norm(String s) {
     return Objects.toString(s, "").trim();
   }
@@ -48,6 +55,16 @@ public class UserListStore {
     boolean identUnknown = ident.isEmpty() || "*".equals(ident);
     boolean hostUnknown = host.isEmpty() || "*".equals(host);
     return !(identUnknown && hostUnknown);
+  }
+
+  private static boolean isKnownAway(AwayState state) {
+    return state != null && state != AwayState.UNKNOWN;
+  }
+
+  private static String normalizeAwayMessage(AwayState state, String msg) {
+    if (state == null || state != AwayState.AWAY) return null;
+    String m = norm(msg);
+    return m.isEmpty() ? null : m;
   }
 
   public List<NickInfo> get(String serverId, String channel) {
@@ -80,11 +97,13 @@ public class UserListStore {
     String ch = norm(channel);
     if (sid.isEmpty() || ch.isEmpty()) return;
 
-    // Merge any learned hostmasks into the roster, but do not overwrite a useful hostmask provided
-    // by the server.
-    Map<String, String> known = hostmaskByServerAndNickLower.getOrDefault(sid, Map.of());
+    // Merge any learned hostmasks / away-state into the roster, but do not overwrite a useful value
+    // provided by the server.
+    Map<String, String> knownHostmasks = hostmaskByServerAndNickLower.getOrDefault(sid, Map.of());
+    Map<String, AwayState> knownAway = awayStateByServerAndNickLower.getOrDefault(sid, Map.of());
+    Map<String, String> knownAwayMsg = awayMessageByServerAndNickLower.getOrDefault(sid, Map.of());
     List<NickInfo> safe;
-    if (nicks == null || nicks.isEmpty() || known.isEmpty()) {
+    if (nicks == null || nicks.isEmpty() || (knownHostmasks.isEmpty() && knownAway.isEmpty() && knownAwayMsg.isEmpty())) {
       safe = nicks == null ? List.of() : List.copyOf(nicks);
     } else {
       java.util.ArrayList<NickInfo> merged = new java.util.ArrayList<>(nicks.size());
@@ -94,15 +113,52 @@ public class UserListStore {
           continue;
         }
         String nk = nickKey(ni.nick());
+
+        boolean changed = false;
+
+        // Hostmask merge
         String hm = norm(ni.hostmask());
+        String hmNext = hm;
         if ((hm.isEmpty() || !isUsefulHostmask(hm)) && !nk.isEmpty()) {
-          String learned = known.get(nk);
+          String learned = knownHostmasks.get(nk);
           if (isUsefulHostmask(learned)) {
-            merged.add(new NickInfo(ni.nick(), ni.prefix(), learned));
-            continue;
+            hmNext = learned;
+            changed = true;
           }
         }
-        merged.add(ni);
+
+        // Away state merge
+        AwayState as = ni.awayState();
+        AwayState asNext = (as == null) ? AwayState.UNKNOWN : as;
+        if (!isKnownAway(asNext) && !nk.isEmpty()) {
+          AwayState learned = knownAway.get(nk);
+          if (isKnownAway(learned)) {
+            asNext = learned;
+            changed = true;
+          }
+        }
+
+        // Away message merge (only meaningful for AWAY)
+        String am = ni.awayMessage();
+        String amNext = normalizeAwayMessage(asNext, am);
+        if (asNext == AwayState.AWAY && amNext == null && !nk.isEmpty()) {
+          String learnedMsg = knownAwayMsg.get(nk);
+          learnedMsg = normalizeAwayMessage(asNext, learnedMsg);
+          if (learnedMsg != null) {
+            amNext = learnedMsg;
+            changed = true;
+          }
+        }
+        if (asNext != AwayState.AWAY && amNext != null) {
+          amNext = null;
+          changed = true;
+        }
+
+        if (changed) {
+          merged.add(new NickInfo(ni.nick(), ni.prefix(), hmNext, asNext, amNext));
+        } else {
+          merged.add(ni);
+        }
       }
       safe = List.copyOf(merged);
     }
@@ -143,6 +199,8 @@ public class UserListStore {
     usersByServerAndChannel.remove(sid);
     lowerNickSetByServerAndChannel.remove(sid);
     hostmaskByServerAndNickLower.remove(sid);
+    awayStateByServerAndNickLower.remove(sid);
+    awayMessageByServerAndNickLower.remove(sid);
   }
 
   /**
@@ -184,7 +242,7 @@ public class UserListStore {
       if (!niNick.isBlank() && niNick.equalsIgnoreCase(n)) {
         String existing = Objects.toString(ni.hostmask(), "").trim();
         if (!Objects.equals(existing, hm)) {
-          next.add(new NickInfo(ni.nick(), ni.prefix(), hm));
+          next.add(new NickInfo(ni.nick(), ni.prefix(), hm, ni.awayState(), ni.awayMessage()));
           changed = true;
           continue;
         }
@@ -243,7 +301,160 @@ public class UserListStore {
         if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
           String existing = norm(ni.hostmask());
           if (!Objects.equals(existing, hm)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), hm));
+            next.add(new NickInfo(ni.nick(), ni.prefix(), hm, ni.awayState(), ni.awayMessage()));
+            changed = true;
+            continue;
+          }
+        }
+        next.add(ni);
+      }
+
+      if (changed) {
+        byChannel.put(ch, List.copyOf(next));
+        changedChannels.add(ch);
+      }
+    }
+
+    return java.util.Set.copyOf(changedChannels);
+  }
+
+  /**
+   * Update the cached away state for a nick within a channel, if present.
+   *
+   * <p>This is intentionally NOT wired up yet; it exists so we can later plug in IRCv3
+   * {@code away-notify} (or similar) and have the user list react.
+   *
+   * <p>Returns true only if an existing roster entry was updated.
+   */
+  public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState) {
+    return updateAwayState(serverId, channel, nick, awayState, null);
+  }
+
+  /** Update away state + optional away reason for a nick within a channel. */
+  public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState, String awayMessage) {
+    String sid = norm(serverId);
+    String ch = norm(channel);
+    String n = norm(nick);
+    AwayState as = (awayState == null) ? AwayState.UNKNOWN : awayState;
+    String msg = normalizeAwayMessage(as, awayMessage);
+
+    if (sid.isEmpty() || ch.isEmpty() || n.isEmpty() || !isKnownAway(as)) return false;
+
+    // Remember learned away state server-wide.
+    awayStateByServerAndNickLower
+        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+        .put(nickKey(n), as);
+
+    // Remember learned away message server-wide (only meaningful for AWAY).
+    if (as == AwayState.AWAY) {
+      if (msg != null) {
+        awayMessageByServerAndNickLower
+            .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+            .put(nickKey(n), msg);
+      }
+    } else {
+      Map<String, String> m = awayMessageByServerAndNickLower.get(sid);
+      if (m != null) m.remove(nickKey(n));
+    }
+
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel == null) return false;
+
+    List<NickInfo> cur = byChannel.get(ch);
+    if (cur == null || cur.isEmpty()) return false;
+
+    boolean changed = false;
+    java.util.ArrayList<NickInfo> next = new java.util.ArrayList<>(cur.size());
+
+    for (NickInfo ni : cur) {
+      if (ni == null) {
+        next.add(null);
+        continue;
+      }
+      String niNick = Objects.toString(ni.nick(), "");
+      if (!niNick.isBlank() && niNick.equalsIgnoreCase(n)) {
+        AwayState existing = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
+        String existingMsg = normalizeAwayMessage(existing, ni.awayMessage());
+        // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing reason.
+        String nextMsg = (as == AwayState.AWAY) ? ((msg != null) ? msg : existingMsg) : null;
+        if (!Objects.equals(existing, as) || !Objects.equals(existingMsg, nextMsg)) {
+          next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), as, nextMsg));
+          changed = true;
+          continue;
+        }
+      }
+      next.add(ni);
+    }
+
+    if (!changed) return false;
+
+    byChannel.put(ch, List.copyOf(next));
+    return true;
+  }
+
+  /**
+   * Update the cached away state for a nick across all cached channels on a server.
+   *
+   * <p>This is the away-state analogue to {@link #updateHostmaskAcrossChannels(String, String, String)}.
+   *
+   * @return set of channels whose roster list was modified.
+   */
+  public Set<String> updateAwayStateAcrossChannels(String serverId, String nick, AwayState awayState) {
+    return updateAwayStateAcrossChannels(serverId, nick, awayState, null);
+  }
+
+  /** Update away state + optional away reason across all cached channels on a server. */
+  public Set<String> updateAwayStateAcrossChannels(String serverId, String nick, AwayState awayState, String awayMessage) {
+    String sid = norm(serverId);
+    String n = norm(nick);
+    AwayState as = (awayState == null) ? AwayState.UNKNOWN : awayState;
+    String msg = normalizeAwayMessage(as, awayMessage);
+
+    if (sid.isEmpty() || n.isEmpty() || !isKnownAway(as)) return Set.of();
+
+    // Remember learned away state server-wide.
+    awayStateByServerAndNickLower
+        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+        .put(nickKey(n), as);
+
+    // Remember learned away message server-wide (only meaningful for AWAY).
+    if (as == AwayState.AWAY) {
+      if (msg != null) {
+        awayMessageByServerAndNickLower
+            .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+            .put(nickKey(n), msg);
+      }
+    } else {
+      Map<String, String> m = awayMessageByServerAndNickLower.get(sid);
+      if (m != null) m.remove(nickKey(n));
+    }
+
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel == null || byChannel.isEmpty()) return Set.of();
+
+    java.util.Set<String> changedChannels = new java.util.HashSet<>();
+
+    for (Map.Entry<String, List<NickInfo>> e : byChannel.entrySet()) {
+      String ch = e.getKey();
+      List<NickInfo> cur = e.getValue();
+      if (cur == null || cur.isEmpty()) continue;
+
+      boolean changed = false;
+      java.util.ArrayList<NickInfo> next = new java.util.ArrayList<>(cur.size());
+
+      for (NickInfo ni : cur) {
+        if (ni == null) {
+          next.add(null);
+          continue;
+        }
+        String niNick = norm(ni.nick());
+        if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
+          AwayState existing = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
+          String existingMsg = normalizeAwayMessage(existing, ni.awayMessage());
+          // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing reason.
+          String nextMsg = (as == AwayState.AWAY) ? ((msg != null) ? msg : existingMsg) : null;
+          if (!Objects.equals(existing, as) || !Objects.equals(existingMsg, nextMsg)) {
+            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), as, nextMsg));
             changed = true;
             continue;
           }

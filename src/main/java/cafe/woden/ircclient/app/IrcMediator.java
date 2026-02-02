@@ -12,6 +12,7 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,6 +51,21 @@ public class IrcMediator {
 
   // If we already printed a join-burst mode summary, suppress a near-immediate 324 summary to avoid duplicates.
   private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs = new ConcurrentHashMap<>();
+
+  // Away state tracking (per server) so bare `/away` can toggle between set/clear.
+  private final ConcurrentHashMap<String, Boolean> awayByServer = new ConcurrentHashMap<>();
+
+  // Last away reason (per server). Used to decorate server confirmation numerics (306) with the
+  // reason the user supplied (or the default).
+  private final ConcurrentHashMap<String, String> awayReasonByServer = new ConcurrentHashMap<>();
+
+  // Route away confirmations back to where the user initiated the /away command.
+  // This avoids dumping 305/306 into the status tab when the user expected to see it
+  // in the chat buffer they were typing in.
+  private final ConcurrentHashMap<String, RecentTarget> recentAwayTargets = new ConcurrentHashMap<>();
+
+  private record RecentTarget(TargetRef target, Instant at) {}
+
 
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -441,6 +457,7 @@ public class IrcMediator {
     switch (in) {
       case ParsedInput.Join cmd -> handleJoin(cmd.channel());
       case ParsedInput.Nick cmd -> handleNick(cmd.newNick());
+      case ParsedInput.Away cmd -> handleAway(cmd.message());
       case ParsedInput.Query cmd -> handleQuery(cmd.nick());
       case ParsedInput.Msg cmd -> handleMsg(cmd.nick(), cmd.body());
       case ParsedInput.Me cmd -> handleMe(cmd.action());
@@ -518,6 +535,74 @@ public class IrcMediator {
         irc.changeNick(at.serverId(), nick).subscribe(
             () -> ui.appendStatus(new TargetRef(at.serverId(), "status"), "(nick)", "Requested nick change to " + nick),
             err -> ui.appendError(safeStatusTarget(), "(nick-error)", String.valueOf(err))
+        )
+    );
+  }
+
+  private void handleAway(String message) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(away)", "Select a server first.");
+      return;
+    }
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+
+    String msg = message == null ? "" : message.trim();
+
+    boolean explicitClear = "-".equals(msg)
+        || "off".equalsIgnoreCase(msg)
+        || "clear".equalsIgnoreCase(msg);
+
+    boolean clear;
+    String toSend;
+
+    // Bare /away toggles: if not away, set a default; if already away, clear it.
+    if (msg.isEmpty()) {
+      boolean currentlyAway = Boolean.TRUE.equals(awayByServer.get(at.serverId()));
+      if (currentlyAway) {
+        clear = true;
+        toSend = "";
+      } else {
+        clear = false;
+        toSend = "Gone for now.";
+      }
+    } else if (explicitClear) {
+      clear = true;
+      toSend = "";
+    } else {
+      clear = false;
+      toSend = msg;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+
+    // Remember where the user initiated /away so the server confirmation (305/306)
+    // can be printed into the same buffer.
+    recentAwayTargets.put(at.serverId(), new RecentTarget(at, Instant.now()));
+
+    // Store the requested reason immediately so the upcoming 306 confirmation can
+    // include it, even if the numeric arrives before the Completable callback runs.
+    // If the request fails, we restore the previous value in the error handler.
+    String prevReason = awayReasonByServer.get(at.serverId());
+    if (clear) awayReasonByServer.remove(at.serverId());
+    else awayReasonByServer.put(at.serverId(), toSend);
+
+
+    disposables.add(
+        irc.setAway(at.serverId(), toSend).subscribe(
+            () -> {
+              awayByServer.put(at.serverId(), !clear);
+              ui.appendStatus(status, "(away)", clear ? "Away cleared" : ("Away set: " + toSend));
+            },
+            err -> {
+              if (prevReason == null) awayReasonByServer.remove(at.serverId());
+              else awayReasonByServer.put(at.serverId(), prevReason);
+              ui.appendError(status, "(away-error)", String.valueOf(err));
+            }
         )
     );
   }
@@ -1166,6 +1251,41 @@ public class IrcMediator {
         handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
       }
 
+      case IrcEvent.AwayStatusChanged ev -> {
+        awayByServer.put(sid, ev.away());
+        if (!ev.away()) awayReasonByServer.remove(sid);
+        TargetRef dest = null;
+
+        // Prefer routing back to where the user initiated /away (if recent), otherwise
+        // fall back to the currently active target on the same server.
+        RecentTarget rt = recentAwayTargets.get(sid);
+        if (rt != null && rt.target() != null) {
+          long ageMs = Math.abs(Duration.between(rt.at(), ev.at()).toMillis());
+          if (ageMs <= 15_000L && Objects.equals(rt.target().serverId(), sid)) {
+            dest = rt.target();
+          }
+        }
+
+        if (dest == null) {
+          dest = targetCoordinator.getActiveTarget();
+          if (dest == null || !Objects.equals(dest.serverId(), sid)) dest = status;
+        }
+        ensureTargetExists(dest);
+
+        String rendered;
+        if (ev.away()) {
+          String reason = awayReasonByServer.get(sid);
+          rendered = "You are now marked as being away";
+          if (reason != null && !reason.isBlank()) rendered += " (Reason: " + reason + ")";
+          else rendered = ev.message();
+        } else {
+          rendered = "You are no longer marked as being away";
+        }
+
+        ui.appendStatus(dest, "(away)", rendered);
+        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+      }
+
       case IrcEvent.SoftNotice ev -> {
         handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), true);
       }
@@ -1222,6 +1342,10 @@ public class IrcMediator {
 
       case IrcEvent.UserHostmaskObserved ev -> {
         targetCoordinator.onUserHostmaskObserved(sid, ev);
+      }
+
+      case IrcEvent.UserAwayStateObserved ev -> {
+        targetCoordinator.onUserAwayStateObserved(sid, ev);
       }
 
       case IrcEvent.Error ev -> {

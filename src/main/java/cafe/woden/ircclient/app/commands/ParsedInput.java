@@ -6,6 +6,7 @@ package cafe.woden.ircclient.app.commands;
 public sealed interface ParsedInput permits
     ParsedInput.Join,
     ParsedInput.Nick,
+    ParsedInput.Away,
     ParsedInput.Query,
     ParsedInput.Msg,
     ParsedInput.Me,
@@ -29,6 +30,13 @@ public sealed interface ParsedInput permits
   record Join(String channel) implements ParsedInput {}
 
   record Nick(String newNick) implements ParsedInput {}
+
+  /**
+   * /away [message]
+   *
+   * <p>If {@code message} is blank, the away status should be cleared.
+   */
+  record Away(String message) implements ParsedInput {}
 
   record Query(String nick) implements ParsedInput {}
 

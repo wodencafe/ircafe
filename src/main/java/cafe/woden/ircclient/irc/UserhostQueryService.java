@@ -35,7 +35,8 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
  *   <li>Applies a max commands-per-minute cap to avoid accidental flooding.</li>
  * </ul>
  *
- * <p>It does not parse responses; parsing is handled by the IRC event layer (RPL 302).
+ * <p>It does not parse responses; parsing is handled by the IRC event layer (RPL 302),
+ * which enriches the user cache with both hostmask and (best-effort) away state.
  */
 @Component
 public class UserhostQueryService {
@@ -153,6 +154,11 @@ public class UserhostQueryService {
 
     // Send outside synchronized block.
     String line = "USERHOST " + String.join(" ", batch);
+
+    // Requested: emit an info log whenever we perform a USERHOST lookup.
+    // (We log per-batch to avoid excessive spam while still being traceable.)
+    log.info("[{}] USERHOST lookup: {}", serverId, String.join(", ", batch));
+
     Disposable d = irc.sendRaw(serverId, line).subscribe(
         () -> {},
         err -> log.debug("USERHOST failed for {}: {}", serverId, err.toString())

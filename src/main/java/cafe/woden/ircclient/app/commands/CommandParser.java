@@ -29,6 +29,11 @@ public class CommandParser {
       return new ParsedInput.Nick(nick);
     }
 
+    if (matchesCommand(line, "/away")) {
+      String msg = argAfter(line, "/away");
+      return new ParsedInput.Away(msg);
+    }
+
     if (matchesCommand(line, "/query")) {
       String nick = argAfter(line, "/query");
       return new ParsedInput.Query(nick);
