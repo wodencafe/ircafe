@@ -55,6 +55,16 @@ public class RuntimeConfigStore {
   }
 
   /**
+   * Returns the resolved runtime config YAML path.
+   *
+   * <p>Used by optional subsystems (e.g. chat logging) that want to store
+   * their own files next to the runtime config.
+   */
+  public Path runtimeConfigPath() {
+    return file;
+  }
+
+  /**
    * Ensure the file exists.
    *
    * <p>Important behavior:
@@ -164,6 +174,82 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist UI config to '{}'", file, e);
+    }
+  }
+
+
+  // --- Chat logging / history persistence (ircafe.logging.*) ---
+
+  /** Persist the master chat logging toggle (stored under ircafe.logging.enabled). */
+  public synchronized void rememberChatLoggingEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging enabled setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist whether soft-ignored (spoiler) lines should be logged (stored under ircafe.logging.logSoftIgnoredLines). */
+  public synchronized void rememberChatLoggingLogSoftIgnoredLines(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("logSoftIgnoredLines", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging soft-ignore setting to '{}'", file, e);
+    }
+  }
+
+  /** Persist the HSQLDB file base name (stored under ircafe.logging.hsqldb.fileBaseName). */
+  public synchronized void rememberChatLoggingDbFileBaseName(String fileBaseName) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String base = Objects.toString(fileBaseName, "").trim();
+      if (base.isEmpty()) base = "ircafe-chatlog";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+      Map<String, Object> hsqldb = getOrCreateMap(logging, "hsqldb");
+
+      hsqldb.put("fileBaseName", base);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging DB file base name to '{}'", file, e);
+    }
+  }
+
+  /** Persist whether the HSQLDB files should live next to the runtime YAML (stored under ircafe.logging.hsqldb.nextToRuntimeConfig). */
+  public synchronized void rememberChatLoggingDbNextToRuntimeConfig(boolean nextToRuntimeConfig) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+      Map<String, Object> hsqldb = getOrCreateMap(logging, "hsqldb");
+
+      hsqldb.put("nextToRuntimeConfig", nextToRuntimeConfig);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging DB location setting to '{}'", file, e);
     }
   }
 
@@ -309,6 +395,46 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist chat message timestamp setting to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Persist how many history lines should be prefetched into a transcript when selecting a target
+   * (stored under ircafe.ui.chatHistoryInitialLoadLines).
+   */
+  public synchronized void rememberChatHistoryInitialLoadLines(int lines) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryInitialLoadLines", Math.max(0, lines));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat history initial load setting to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Persist the paging size for "Load older messages…" inside the transcript
+   * (stored under ircafe.ui.chatHistoryPageSize).
+   */
+  public synchronized void rememberChatHistoryPageSize(int pageSize) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryPageSize", Math.max(1, pageSize));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat history page size setting to '{}'", file, e);
     }
   }
 

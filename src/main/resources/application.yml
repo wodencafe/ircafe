@@ -1,6 +1,9 @@
 spring:
   application:
     name: "ircafe"
+  flyway:
+    # We run Flyway manually for the optional chat logging DB only when ircafe.logging.enabled=true.
+    enabled: false
   main:
     headless: false
   config:
@@ -19,6 +22,14 @@ ircafe:
     # If enabled, IRCafe will prepend a timestamp to regular user chat message lines.
     # Default: false (preserve classic IRC look).
     chatMessageTimestampsEnabled: false
+
+    # Chat history load behavior
+    # How many lines to prefill into the transcript when selecting a channel or user.
+    # 0 disables prefill.
+    chatHistoryInitialLoadLines: 100
+
+    # How many lines to fetch per click for the in-transcript "Load older messages..." button.
+    chatHistoryPageSize: 200
 
     # Outgoing message custom color (lines you send that are locally echoed into the transcript).
     # Default: false
@@ -70,6 +81,26 @@ ircafe:
     nickColorOverrides:
         "NickServ": "#FFB300"
         "ChanServ": "#26A69A"
+
+  logging:
+    # Master toggle for persistence logging (chat history / message logs).
+    # Default: false
+    enabled: false
+
+    # If true (default), "soft ignore" lines are still logged, but flagged.
+    logSoftIgnoredLines: true
+
+    # Default behavior: keep logs indefinitely.
+    keepForever: true
+    # Optional retention window. 0 means no retention (keep forever).
+    retentionDays: 0
+
+    # Embedded HSQLDB settings.
+    hsqldb:
+      # Base filename only (no extension). HSQLDB will create .data/.script/.properties files.
+      fileBaseName: "ircafe-chatlog"
+      # Store the DB next to the runtime YAML config file (loaded via spring.config.import).
+      nextToRuntimeConfig: true
 
 irc:
   client:

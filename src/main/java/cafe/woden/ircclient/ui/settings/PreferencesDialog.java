@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
@@ -48,15 +49,18 @@ public class PreferencesDialog {
   private final UiSettingsBus settingsBus;
   private final ThemeManager themeManager;
   private final RuntimeConfigStore runtimeConfig;
+  private final LogProperties logProps;
 
   private JDialog dialog;
 
   public PreferencesDialog(UiSettingsBus settingsBus,
                            ThemeManager themeManager,
-                           RuntimeConfigStore runtimeConfig) {
+                           RuntimeConfigStore runtimeConfig,
+                           LogProperties logProps) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.runtimeConfig = runtimeConfig;
+    this.logProps = logProps;
   }
 
   public void open(Window owner) {
@@ -169,6 +173,92 @@ public class PreferencesDialog {
     JCheckBox chatTimestamps = new JCheckBox("Show timestamps on chat messages");
     chatTimestamps.setSelected(current.chatMessageTimestampsEnabled());
     chatTimestamps.setToolTipText("If enabled, IRCafe will prepend a timestamp to each regular user message line.");
+
+    // ---- Chat history / paging (UI-level settings; stored under ircafe.ui.*) ----
+    JSpinner historyInitialLoadLines = new JSpinner(new SpinnerNumberModel(current.chatHistoryInitialLoadLines(), 0, 10_000, 50));
+    historyInitialLoadLines.setToolTipText("How many logged lines to prefill into a transcript when you select a channel/query.\n" +
+        "Set to 0 to disable history prefill.");
+    final var historyInitialLoadLinesAC = MouseWheelDecorator.decorateNumberSpinner(historyInitialLoadLines);
+
+    JSpinner historyPageSize = new JSpinner(new SpinnerNumberModel(current.chatHistoryPageSize(), 50, 10_000, 50));
+    historyPageSize.setToolTipText("How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
+    final var historyPageSizeAC = MouseWheelDecorator.decorateNumberSpinner(historyPageSize);
+
+    JTextArea historyInfo = new JTextArea(
+        "Chat history settings (requires chat logging to be enabled).\n" +
+            "These affect how many messages are pulled from the database when opening a transcript or paging older history."
+    );
+    historyInfo.setEditable(false);
+    historyInfo.setLineWrap(true);
+    historyInfo.setWrapStyleWord(true);
+    historyInfo.setOpaque(false);
+    historyInfo.setFocusable(false);
+    historyInfo.setBorder(null);
+    historyInfo.setFont(UIManager.getFont("Label.font"));
+    historyInfo.setForeground(UIManager.getColor("Label.foreground"));
+    historyInfo.setColumns(48);
+
+    JPanel historyPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]"));
+    historyPanel.setOpaque(false);
+    historyPanel.add(historyInfo, "span 2, growx, wrap");
+    historyPanel.add(new JLabel("Initial load (lines):"));
+    historyPanel.add(historyInitialLoadLines, "w 110!");
+    historyPanel.add(new JLabel("Page size (Load older):"));
+    historyPanel.add(historyPageSize, "w 110!");
+
+    // ---- Logging (persisted under ircafe.logging.*; takes effect on next restart) ----
+    boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
+    boolean logSoftIgnoredCurrent = logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
+
+    JCheckBox loggingEnabled = new JCheckBox("Enable chat logging (store messages to local DB)");
+    loggingEnabled.setSelected(loggingEnabledCurrent);
+    loggingEnabled.setToolTipText("When enabled, IRCafe will persist chat messages to an embedded local database for history loading.\n" +
+        "Privacy-first: this is OFF by default.\n\n" +
+        "Note: enabling/disabling requires restarting IRCafe to take effect.");
+
+    JCheckBox loggingSoftIgnore = new JCheckBox("Log soft-ignored (spoiler) lines");
+    loggingSoftIgnore.setSelected(logSoftIgnoredCurrent);
+    loggingSoftIgnore.setToolTipText("If enabled, messages that are soft-ignored (spoiler-covered) are still stored,\n" +
+        "and will re-load as spoiler-covered lines in history.");
+    loggingSoftIgnore.setEnabled(loggingEnabled.isSelected());
+
+    String dbBaseNameCurrent = (logProps != null && logProps.hsqldb() != null) ? logProps.hsqldb().fileBaseName() : "ircafe-chatlog";
+    boolean dbNextToConfigCurrent = logProps == null || (logProps.hsqldb() != null && Boolean.TRUE.equals(logProps.hsqldb().nextToRuntimeConfig()));
+
+    JTextField dbBaseName = new JTextField(dbBaseNameCurrent, 18);
+    dbBaseName.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "ircafe-chatlog");
+    dbBaseName.setToolTipText("Base filename for HSQLDB (no extension).\n" +
+        "HSQLDB will create multiple files like .data/.script/.properties.");
+
+    JCheckBox dbNextToConfig = new JCheckBox("Store DB next to runtime config file");
+    dbNextToConfig.setSelected(dbNextToConfigCurrent);
+    dbNextToConfig.setToolTipText("If enabled, the DB files are stored alongside your runtime YAML config (recommended).\n" +
+        "If disabled, IRCafe uses the default ~/.config/ircafe directory.");
+
+    JTextArea loggingInfo = new JTextArea(
+        "Logging settings are applied on the next restart.\n" +
+            "Tip: You can enable logging first, restart, then history controls (Load older messages…) will appear when data exists."
+    );
+    loggingInfo.setEditable(false);
+    loggingInfo.setLineWrap(true);
+    loggingInfo.setWrapStyleWord(true);
+    loggingInfo.setOpaque(false);
+    loggingInfo.setFocusable(false);
+    loggingInfo.setBorder(null);
+    loggingInfo.setFont(UIManager.getFont("Label.font"));
+    loggingInfo.setForeground(UIManager.getColor("Label.foreground"));
+    loggingInfo.setColumns(48);
+
+    Runnable updateLoggingEnabledState = () -> {
+      boolean en = loggingEnabled.isSelected();
+      loggingSoftIgnore.setEnabled(en);
+      // The history settings are meaningful only when logging is enabled, but users may want to pre-configure.
+      // We leave them enabled; the info text communicates that logging must be enabled.
+      dbBaseName.setEnabled(true);
+      dbNextToConfig.setEnabled(true);
+    };
+    loggingEnabled.addActionListener(e -> updateLoggingEnabledState.run());
+    updateLoggingEnabledState.run();
 
     JCheckBox outgoingColorEnabled = new JCheckBox("Use custom color for my outgoing messages");
     outgoingColorEnabled.setSelected(current.clientLineColorEnabled());
@@ -312,6 +402,19 @@ public class PreferencesDialog {
     form.add(new JLabel("Outgoing messages"), "aligny top");
     form.add(outgoingColorPanel, "growx");
 
+    // Logging tab panel (separate tab by request)
+    // Keep labels right-aligned (common form pattern), but ensure checkboxes spanning both columns are left-aligned.
+    JPanel loggingPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]8[]8[]8[]"));
+    loggingPanel.add(loggingInfo, "span 2, growx, wrap");
+    loggingPanel.add(loggingEnabled, "span 2, alignx left, wrap");
+    loggingPanel.add(loggingSoftIgnore, "span 2, alignx left, wrap");
+    loggingPanel.add(new JLabel("DB file base name:"));
+    loggingPanel.add(dbBaseName, "w 240!");
+    loggingPanel.add(new JLabel("DB location:"));
+    loggingPanel.add(dbNextToConfig, "alignx left, wrap");
+    loggingPanel.add(new JLabel("History paging"), "aligny top");
+    loggingPanel.add(historyPanel, "growx");
+
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
@@ -322,6 +425,9 @@ public class PreferencesDialog {
       int size = ((Number) fontSize.getValue()).intValue();
       int maxImageW = ((Number) imageMaxWidth.getValue()).intValue();
       int maxImageH = ((Number) imageMaxHeight.getValue()).intValue();
+
+      int historyInitialLoadV = ((Number) historyInitialLoadLines.getValue()).intValue();
+      int historyPageSizeV = ((Number) historyPageSize.getValue()).intValue();
 
       boolean userhostEnabledV = userhostEnabled.isSelected();
       int userhostMinIntervalV = ((Number) userhostMinIntervalSeconds.getValue()).intValue();
@@ -348,6 +454,8 @@ public class PreferencesDialog {
           linkPreviewsCollapsed.isSelected(),
           prev.presenceFoldsEnabled(),
           chatTimestamps.isSelected(),
+          historyInitialLoadV,
+          historyPageSizeV,
           outgoingColorEnabledV,
           outgoingHexV,
           userhostEnabledV,
@@ -369,6 +477,15 @@ public class PreferencesDialog {
       runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberChatMessageTimestampsEnabled(next.chatMessageTimestampsEnabled());
+
+      runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
+      runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
+
+      // Logging settings (take effect on next restart)
+      runtimeConfig.rememberChatLoggingEnabled(loggingEnabled.isSelected());
+      runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(loggingSoftIgnore.isSelected());
+      runtimeConfig.rememberChatLoggingDbFileBaseName(dbBaseName.getText());
+      runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(dbNextToConfig.isSelected());
 
       runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
       runtimeConfig.rememberClientLineColor(next.clientLineColor());
@@ -396,6 +513,8 @@ public class PreferencesDialog {
     scope.add(fontSizeMouseWheelAC);
     scope.add(imageMaxWidthMouseWheelAC);
     scope.add(imageMaxHeightMouseWheelAC);
+    scope.add(historyInitialLoadLinesAC);
+    scope.add(historyPageSizeAC);
     scope.add(userhostMinIntervalAC);
     scope.add(userhostMaxPerMinuteAC);
     scope.add(userhostNickCooldownAC);
@@ -420,6 +539,10 @@ public class PreferencesDialog {
     JScrollPane generalScroll = new JScrollPane(form);
     generalScroll.setBorder(null);
     tabs.addTab("General", generalScroll);
+
+    JScrollPane loggingScroll = new JScrollPane(loggingPanel);
+    loggingScroll.setBorder(null);
+    tabs.addTab("Logging", loggingScroll);
 
     JScrollPane userhostScroll = new JScrollPane(userhostPanel);
     userhostScroll.setBorder(null);

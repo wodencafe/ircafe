@@ -54,26 +54,47 @@ public class ChatRichTextRenderer {
    */
   public void insertRichText(StyledDocument doc, TargetRef ref, String text, AttributeSet baseStyle)
       throws BadLocationException {
-    if (text == null || text.isEmpty()) {
-      return;
+    insertRichTextAt(doc, ref, text, baseStyle, doc != null ? doc.getLength() : 0);
+  }
+
+  /**
+   * Inserts text that may contain URLs and mentions at an arbitrary offset.
+   *
+   * <p>This is used for transcript history insertion (prepends) so URL/mention/channel metadata is
+   * preserved when inserting above existing content.</p>
+   *
+   * @return the next insertion offset (i.e., {@code insertPos + insertedLength})
+   */
+  public int insertRichTextAt(StyledDocument doc,
+                              TargetRef ref,
+                              String text,
+                              AttributeSet baseStyle,
+                              int insertPos) throws BadLocationException {
+    if (doc == null || text == null || text.isEmpty()) {
+      return Math.max(0, insertPos);
     }
 
+    int pos = Math.max(0, Math.min(insertPos, doc.getLength()));
     AttributeSet base = baseStyle != null ? baseStyle : styles.message();
 
     // serverId is used for self-mention highlighting.
     String serverId = ref != null ? ref.serverId() : "";
 
+    InsertCursor cur = new InsertCursor(doc, pos);
+
     // First, parse and strip mIRC formatting codes, producing spans that already include
     // the appropriate StyleConstants and metadata attributes.
     for (IrcFormatting.Span span : IrcFormatting.parse(text, base)) {
-      insertRichTextPlain(doc, ref, serverId, span.text(), span.style());
+      insertRichTextPlain(cur, ref, serverId, span.text(), span.style());
     }
+
+    return cur.pos;
   }
 
   /**
    * Inserts text that may contain URLs and mentions (no mIRC control codes expected).
    */
-  private void insertRichTextPlain(StyledDocument doc, TargetRef ref, String serverId, String text, AttributeSet base)
+  private void insertRichTextPlain(InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet base)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
 
@@ -81,7 +102,7 @@ public class ChatRichTextRenderer {
     int last = 0;
     while (m.find()) {
       if (m.start() > last) {
-        insertWithMentions(doc, ref, serverId, text.substring(last, m.start()), base);
+        insertWithMentions(cur, ref, serverId, text.substring(last, m.start()), base);
       }
 
       String raw = m.group(1);
@@ -107,21 +128,21 @@ public class ChatRichTextRenderer {
         StyleConstants.setForeground(linkAttr, overrideFg);
       }
 
-      doc.insertString(doc.getLength(), parts.url, linkAttr);
+      cur.insert(parts.url, linkAttr);
 
       if (!parts.trailing.isEmpty()) {
-        insertWithMentions(doc, ref, serverId, parts.trailing, base);
+        insertWithMentions(cur, ref, serverId, parts.trailing, base);
       }
 
       last = m.end();
     }
 
     if (last < text.length()) {
-      insertWithMentions(doc, ref, serverId, text.substring(last), base);
+      insertWithMentions(cur, ref, serverId, text.substring(last), base);
     }
   }
 
-  private void insertWithMentions(StyledDocument doc, TargetRef ref, String serverId, String text, AttributeSet baseStyle)
+  private void insertWithMentions(InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet baseStyle)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
 
@@ -161,9 +182,9 @@ public class ChatRichTextRenderer {
             StyleConstants.setForeground(chanAttr, overrideFg);
           }
 
-          doc.insertString(doc.getLength(), chan.channel, chanAttr);
+          cur.insert(chan.channel, chanAttr);
           if (!chan.trailing.isEmpty()) {
-            doc.insertString(doc.getLength(), chan.trailing, baseStyle);
+            cur.insert(chan.trailing, baseStyle);
           }
           i = chan.nextIndex;
           continue;
@@ -198,13 +219,13 @@ public class ChatRichTextRenderer {
             StyleConstants.setForeground(mention, overrideFg);
           }
 
-          doc.insertString(doc.getLength(), token, mention);
+          cur.insert(token, mention);
         } else if (!hasOverrideFg && !hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
           // Channel nick mention: apply the deterministic nick color on top of the base style.
           SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
-          doc.insertString(doc.getLength(), token, nickStyle);
+          cur.insert(token, nickStyle);
         } else {
-          doc.insertString(doc.getLength(), token, baseStyle);
+          cur.insert(token, baseStyle);
         }
 
         i = end;
@@ -219,8 +240,24 @@ public class ChatRichTextRenderer {
         if (d == '#' || isNickChar(d)) break;
         end++;
       }
-      doc.insertString(doc.getLength(), text.substring(start, end), baseStyle);
+      cur.insert(text.substring(start, end), baseStyle);
       i = end;
+    }
+  }
+
+  private static final class InsertCursor {
+    final StyledDocument doc;
+    int pos;
+
+    InsertCursor(StyledDocument doc, int pos) {
+      this.doc = doc;
+      this.pos = pos;
+    }
+
+    void insert(String s, AttributeSet attrs) throws BadLocationException {
+      if (s == null || s.isEmpty()) return;
+      doc.insertString(pos, s, attrs);
+      pos += s.length();
     }
   }
 

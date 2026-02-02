@@ -128,6 +128,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<TargetRef> clearLogRequests() {
+    return serverTree.clearLogRequests();
+  }
+
+  @Override
   public void ensureTargetExists(TargetRef target) {
     onEdt(() -> {
       transcripts.ensureTargetExists(target);
@@ -162,6 +167,11 @@ public class SwingUiPort implements UiPort {
   @Override
   public void clearUnread(TargetRef target) {
     onEdt(() -> serverTree.clearUnread(target));
+  }
+
+  @Override
+  public void clearTranscript(TargetRef target) {
+    onEdt(() -> transcripts.clearTarget(target));
   }
 
   @Override

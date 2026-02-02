@@ -22,6 +22,11 @@ configurations {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter'
+	// Embedded chat logging (history persistence)
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+	implementation 'org.flywaydb:flyway-core'
+	runtimeOnly 'org.flywaydb:flyway-database-hsqldb'
+	runtimeOnly 'org.hsqldb:hsqldb'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 	implementation 'org.yaml:snakeyaml'
