@@ -28,10 +28,7 @@ public record LogProperties(
     Integer retentionDays,
 
     /** Embedded HSQLDB storage configuration. */
-    Hsqldb hsqldb,
-
-    /** History replay settings (e.g., how many lines to load when selecting a target). */
-    History history
+    Hsqldb hsqldb
 ) {
 
   /** Embedded HSQLDB file settings. */
@@ -54,23 +51,9 @@ public record LogProperties(
 
   public LogProperties {
     if (enabled == null) enabled = Boolean.FALSE;
-
     if (logSoftIgnoredLines == null) logSoftIgnoredLines = Boolean.TRUE;
-
     if (keepForever == null) keepForever = Boolean.TRUE;
-
     if (retentionDays == null || retentionDays <= 0) retentionDays = 0;
-
     if (hsqldb == null) hsqldb = new Hsqldb("ircafe-chatlog", Boolean.TRUE);
-
-    if (history == null) history = new History(100);
   }
-
-
-  public record History(int loadRecentLines) {
-    public History {
-      if (loadRecentLines < 0) loadRecentLines = 0;
-    }
-  }
-
 }

@@ -231,8 +231,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
     try {
       if (settingsBus != null) {
         limit = settingsBus.get().chatHistoryInitialLoadLines();
-      } else if (props != null && props.history() != null) {
-        limit = props.history().loadRecentLines();
       }
     } catch (Exception ignored) {
       limit = 100;

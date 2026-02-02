@@ -102,10 +102,6 @@ ircafe:
       # Store the DB next to the runtime YAML config file (loaded via spring.config.import).
       nextToRuntimeConfig: true
 
-    # History replay settings.
-    history:
-      loadRecentLines: 100
-
 irc:
   client:
     version: "${IRCAFE_CTCP_VERSION:IRCafe}"
