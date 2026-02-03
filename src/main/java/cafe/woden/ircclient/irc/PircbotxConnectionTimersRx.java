@@ -4,8 +4,8 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
@@ -31,12 +31,9 @@ import org.springframework.stereotype.Component;
 final class PircbotxConnectionTimersRx {
   private static final Logger log = LoggerFactory.getLogger(PircbotxConnectionTimersRx.class);
 
-  // Default heartbeat settings.
-  private static final long HEARTBEAT_CHECK_PERIOD_MS = 15_000; // 15s
-  private static final long HEARTBEAT_TIMEOUT_MS = 360_000; // 6 min
-
   private final ServerRegistry serverRegistry;
   private final IrcProperties.Reconnect reconnectPolicy;
+  private final IrcProperties.Heartbeat heartbeatPolicy;
 
   // Dedicated schedulers so we keep behavior deterministic and thread names sane.
   private final ScheduledExecutorService heartbeatExec;
@@ -46,7 +43,9 @@ final class PircbotxConnectionTimersRx {
 
   PircbotxConnectionTimersRx(IrcProperties props, ServerRegistry serverRegistry) {
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
-    this.reconnectPolicy = (props != null && props.client() != null) ? props.client().reconnect() : null;
+    IrcProperties.Client c = (props != null) ? props.client() : null;
+    this.reconnectPolicy = (c != null) ? c.reconnect() : null;
+    this.heartbeatPolicy = (c != null) ? c.heartbeat() : null;
 
     this.heartbeatExec = Executors.newSingleThreadScheduledExecutor(r -> {
       Thread t = new Thread(r, "ircafe-heartbeat");
@@ -68,10 +67,16 @@ final class PircbotxConnectionTimersRx {
     c.lastInboundMs.set(System.currentTimeMillis());
     c.localTimeoutEmitted.set(false);
 
+    IrcProperties.Heartbeat hb = heartbeatPolicy;
+    if (hb == null || !hb.enabled()) {
+      stopHeartbeat(c);
+      return;
+    }
+
     Disposable d = Flowable
         .interval(
-            HEARTBEAT_CHECK_PERIOD_MS,
-            HEARTBEAT_CHECK_PERIOD_MS,
+            hb.checkPeriodMs(),
+            hb.checkPeriodMs(),
             TimeUnit.MILLISECONDS,
             heartbeatScheduler)
         .subscribe(
@@ -94,7 +99,10 @@ final class PircbotxConnectionTimersRx {
     if (bot == null) return;
 
     long idleMs = System.currentTimeMillis() - c.lastInboundMs.get();
-    if (idleMs > HEARTBEAT_TIMEOUT_MS && c.localTimeoutEmitted.compareAndSet(false, true)) {
+    IrcProperties.Heartbeat hb = heartbeatPolicy;
+    if (hb == null || !hb.enabled()) return;
+
+    if (idleMs > hb.timeoutMs() && c.localTimeoutEmitted.compareAndSet(false, true)) {
       // Don't emit Disconnected here (DisconnectEvent will fire). Instead, stash a reason override.
       c.disconnectReasonOverride.set(
           "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)"

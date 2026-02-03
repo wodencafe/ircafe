@@ -124,6 +124,17 @@ irc:
       # 0 = infinite attempts.
       maxAttempts: 0
 
+
+    # Heartbeat / ping-timeout detection (client-side).
+    # If enabled, IRCafe will close the connection if it sees no inbound traffic for the timeout.
+    # This helps recover from silent network drops.
+    heartbeat:
+      enabled: true
+      # How often to check for inbound traffic (ms).
+      checkPeriodMs: 15000
+      # If no inbound traffic is seen for this long, close the bot (ms).
+      timeoutMs: 360000
+
   servers:
     - id: "libera"
       host: "irc.libera.chat"
