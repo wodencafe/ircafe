@@ -8,12 +8,16 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.app.state.AwayRoutingState;
+import cafe.woden.ircclient.app.state.CtcpRoutingState;
+import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
+import cafe.woden.ircclient.app.state.ModeRoutingState;
+import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
@@ -40,32 +44,17 @@ public class IrcMediator {
   private final TargetCoordinator targetCoordinator;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
-  // Pending action routing: ensure WHOIS/CTCP responses print into the chat where the request originated.
-  private final ConcurrentHashMap<WhoisKey, TargetRef> pendingWhoisTargets = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<CtcpKey, PendingCtcp> pendingCtcp = new ConcurrentHashMap<>();
-
-  // Pending MODE queries: route numeric 324 output back to the requesting tab.
-  private final ConcurrentHashMap<ModeKey, TargetRef> pendingModeTargets = new ConcurrentHashMap<>();
+  // Routing/correlation state extracted from IrcMediator.
+  private final WhoisRoutingState whoisRoutingState;
+  private final CtcpRoutingState ctcpRoutingState;
+  private final ModeRoutingState modeRoutingState;
+  private final AwayRoutingState awayRoutingState;
 
   // Join-burst mode suppression: buffer simple channel-state modes and print once after join completes.
   private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers = new ConcurrentHashMap<>();
 
   // If we already printed a join-burst mode summary, suppress a near-immediate 324 summary to avoid duplicates.
   private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs = new ConcurrentHashMap<>();
-
-  // Away state tracking (per server) so bare `/away` can toggle between set/clear.
-  private final ConcurrentHashMap<String, Boolean> awayByServer = new ConcurrentHashMap<>();
-
-  // Last away reason (per server). Used to decorate server confirmation numerics (306) with the
-  // reason the user supplied (or the default).
-  private final ConcurrentHashMap<String, String> awayReasonByServer = new ConcurrentHashMap<>();
-
-  // Route away confirmations back to where the user initiated the /away command.
-  // This avoids dumping 305/306 into the status tab when the user expected to see it
-  // in the chat buffer they were typing in.
-  private final ConcurrentHashMap<String, RecentTarget> recentAwayTargets = new ConcurrentHashMap<>();
-
-  private record RecentTarget(TargetRef target, Instant at) {}
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -89,7 +78,11 @@ public class IrcMediator {
       RuntimeConfigStore runtimeConfig,
       IgnoreListService ignoreListService,
       ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator
+      TargetCoordinator targetCoordinator,
+      WhoisRoutingState whoisRoutingState,
+      CtcpRoutingState ctcpRoutingState,
+      ModeRoutingState modeRoutingState,
+      AwayRoutingState awayRoutingState
   ) {
     this.irc = irc;
     this.ui = ui;
@@ -99,6 +92,10 @@ public class IrcMediator {
     this.ignoreListService = ignoreListService;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
+    this.whoisRoutingState = whoisRoutingState;
+    this.ctcpRoutingState = ctcpRoutingState;
+    this.modeRoutingState = modeRoutingState;
+    this.awayRoutingState = awayRoutingState;
   }
 
   public void start() {
@@ -213,7 +210,7 @@ public class IrcMediator {
       case OPEN_QUERY -> targetCoordinator.openPrivateConversation(new PrivateMessageRequest(sid, nick));
 
       case WHOIS -> {
-        pendingWhoisTargets.put(new WhoisKey(sid, nick), ctx);
+        whoisRoutingState.put(sid, nick, ctx);
         ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + nick + "...");
         Disposable d = irc.whois(sid, nick)
             .subscribe(
@@ -224,7 +221,7 @@ public class IrcMediator {
       }
 
       case CTCP_VERSION -> {
-        pendingCtcp.put(new CtcpKey(sid, nick, "VERSION", null), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ctcpRoutingState.put(sid, nick, "VERSION", null, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " VERSION");
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001VERSION\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
@@ -232,14 +229,14 @@ public class IrcMediator {
 
       case CTCP_PING -> {
         String token = Long.toString(System.currentTimeMillis());
-        pendingCtcp.put(new CtcpKey(sid, nick, "PING", token), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ctcpRoutingState.put(sid, nick, "PING", token, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " PING");
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
 
       case CTCP_TIME -> {
-        pendingCtcp.put(new CtcpKey(sid, nick, "TIME", null), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ctcpRoutingState.put(sid, nick, "TIME", null, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " TIME");
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
@@ -247,25 +244,6 @@ public class IrcMediator {
     }
   }
 
-  private record WhoisKey(String serverId, String nickLower) {
-    // Compact canonical constructor: normalize inputs before field assignment.
-    WhoisKey {
-      serverId = (serverId == null) ? "" : serverId.trim();
-      nickLower = (nickLower == null) ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
-    }
-  }
-
-  private record CtcpKey(String serverId, String nickLower, String commandUpper, String token) {
-    // Compact canonical constructor: normalize inputs before field assignment.
-    CtcpKey {
-      serverId = (serverId == null) ? "" : serverId.trim();
-      nickLower = (nickLower == null) ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
-      commandUpper = (commandUpper == null) ? "" : commandUpper.trim().toUpperCase(Locale.ROOT);
-      token = (token == null) ? null : token.trim();
-    }
-  }
-
-  private record PendingCtcp(TargetRef target, long startedMs) {}
 
   private record ModeKey(String serverId, String channelLower) {
     ModeKey {
@@ -370,7 +348,7 @@ public class IrcMediator {
       String rendered = null;
 
       if ("VERSION".equals(cmd)) {
-        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, null);
         if (p != null) {
           dest = p.target();
           rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
@@ -379,14 +357,14 @@ public class IrcMediator {
         String token = arg;
         int sp = token.indexOf(' ');
         if (sp >= 0) token = token.substring(0, sp);
-        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
+        PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, token);
         if (p != null) {
           dest = p.target();
           long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
           rendered = from + " PING reply: " + rtt + "ms";
         }
       } else if ("TIME".equals(cmd)) {
-        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, null);
         if (p != null) {
           dest = p.target();
           rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
@@ -406,7 +384,7 @@ public class IrcMediator {
           dest = status;
           rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
         } else {
-          PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+          PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, null);
           dest = (p != null) ? p.target() : status;
           rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
         }
@@ -613,7 +591,7 @@ public class IrcMediator {
 
     // Bare /away toggles: if not away, set a default; if already away, clear it.
     if (msg.isEmpty()) {
-      boolean currentlyAway = Boolean.TRUE.equals(awayByServer.get(at.serverId()));
+      boolean currentlyAway = awayRoutingState.isAway(at.serverId());
       if (currentlyAway) {
         clear = true;
         toSend = "";
@@ -636,25 +614,24 @@ public class IrcMediator {
 
     // Remember where the user initiated /away so the server confirmation (305/306)
     // can be printed into the same buffer.
-    recentAwayTargets.put(at.serverId(), new RecentTarget(at, Instant.now()));
+    awayRoutingState.rememberOrigin(at.serverId(), at);
 
     // Store the requested reason immediately so the upcoming 306 confirmation can
     // include it, even if the numeric arrives before the Completable callback runs.
     // If the request fails, we restore the previous value in the error handler.
-    String prevReason = awayReasonByServer.get(at.serverId());
-    if (clear) awayReasonByServer.remove(at.serverId());
-    else awayReasonByServer.put(at.serverId(), toSend);
+    String prevReason = awayRoutingState.getLastReason(at.serverId());
+    if (clear) awayRoutingState.setLastReason(at.serverId(), null);
+    else awayRoutingState.setLastReason(at.serverId(), toSend);
 
 
     disposables.add(
         irc.setAway(at.serverId(), toSend).subscribe(
             () -> {
-              awayByServer.put(at.serverId(), !clear);
+              awayRoutingState.setAway(at.serverId(), !clear);
               ui.appendStatus(status, "(away)", clear ? "Away cleared" : ("Away set: " + toSend));
             },
             err -> {
-              if (prevReason == null) awayReasonByServer.remove(at.serverId());
-              else awayReasonByServer.put(at.serverId(), prevReason);
+              awayRoutingState.setLastReason(at.serverId(), prevReason);
               ui.appendError(status, "(away-error)", String.valueOf(err));
             }
         )
@@ -773,7 +750,7 @@ public class IrcMediator {
     String line = "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
     TargetRef out = at.isChannel() ? new TargetRef(at.serverId(), channel) : new TargetRef(at.serverId(), "status");
     if (modeSpec == null || modeSpec.isBlank()) {
-      pendingModeTargets.put(ModeKey.of(at.serverId(), channel), out);
+      modeRoutingState.putPendingModeTarget(at.serverId(), channel, out);
     }
     ensureTargetExists(out);
     ui.appendStatus(out, "(mode)", "→ " + line);
@@ -1080,8 +1057,7 @@ public class IrcMediator {
     String ctcp = "\u0001" + inner + "\u0001";
 
     // Track pending so replies can be routed back to the current context.
-    String nickLower = n.toLowerCase(java.util.Locale.ROOT);
-    pendingCtcp.put(new CtcpKey(sid, nickLower, cmd, tokenKey), new PendingCtcp(ctx, System.currentTimeMillis()));
+    ctcpRoutingState.put(sid, n, cmd, tokenKey, ctx);
 
     String display = "→ " + n + " " + cmd + (a.isEmpty() ? "" : " " + a);
     ui.appendStatus(ctx, "(ctcp)", display);
@@ -1153,6 +1129,11 @@ public class IrcMediator {
       connectionCoordinator.handleConnectivityEvent(sid, e, targetCoordinator.getActiveTarget());
       if (e instanceof IrcEvent.Disconnected) {
         targetCoordinator.onServerDisconnected(sid);
+        // Drop any per-server correlation state so it doesn't stick across reconnects.
+        whoisRoutingState.clearServer(sid);
+        ctcpRoutingState.clearServer(sid);
+        modeRoutingState.clearServer(sid);
+        awayRoutingState.clearServer(sid);
       }
       targetCoordinator.refreshInputEnabledForActiveTarget();
       return;
@@ -1234,7 +1215,7 @@ public class IrcMediator {
         JoinModeBuffer removed = joinModeBuffers.remove(key);
         if (removed != null) removed.cancelFlushTimer();
 
-        TargetRef out = pendingModeTargets.remove(key);
+        TargetRef out = modeRoutingState.removePendingModeTarget(sid, ev.channel());
         if (out == null) out = chan;
 
         String summary = ModeSummary.describeCurrentChannelModes(ev.details());
@@ -1318,18 +1299,15 @@ public class IrcMediator {
       }
 
       case IrcEvent.AwayStatusChanged ev -> {
-        awayByServer.put(sid, ev.away());
-        if (!ev.away()) awayReasonByServer.remove(sid);
+        awayRoutingState.setAway(sid, ev.away());
+        if (!ev.away()) awayRoutingState.setLastReason(sid, null);
         TargetRef dest = null;
 
         // Prefer routing back to where the user initiated /away (if recent), otherwise
         // fall back to the currently active target on the same server.
-        RecentTarget rt = recentAwayTargets.get(sid);
-        if (rt != null && rt.target() != null) {
-          long ageMs = Math.abs(Duration.between(rt.at(), ev.at()).toMillis());
-          if (ageMs <= 15_000L && Objects.equals(rt.target().serverId(), sid)) {
-            dest = rt.target();
-          }
+        TargetRef origin = awayRoutingState.recentOriginIfFresh(sid, Duration.ofSeconds(15));
+        if (origin != null && Objects.equals(origin.serverId(), sid)) {
+          dest = origin;
         }
 
         if (dest == null) {
@@ -1338,7 +1316,7 @@ public class IrcMediator {
 
         final String rendered;
         if (ev.away()) {
-          String reason = awayReasonByServer.get(sid);
+          String reason = awayRoutingState.getLastReason(sid);
           if (reason != null && !reason.isBlank()) {
             rendered = "You are now marked as being away (Reason: " + reason + ")";
           } else {
@@ -1357,7 +1335,7 @@ public class IrcMediator {
       }
 
       case IrcEvent.WhoisResult ev -> {
-        TargetRef dest = pendingWhoisTargets.remove(new WhoisKey(sid, ev.nick()));
+        TargetRef dest = whoisRoutingState.remove(sid, ev.nick());
         if (dest == null) dest = status;
         postTo(dest, true, d -> {
           ui.appendStatus(d, "(whois)", "WHOIS for " + ev.nick());
