@@ -37,6 +37,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JTextComponent transcript;
   private final Runnable openFind;
   private final Function<Point, String> urlAt;
+  private final Function<Point, String> nickAt;
+  private final Function<String, JPopupMenu> nickMenuFor;
   private final Consumer<String> openUrl;
   private final MouseAdapter mouse;
 
@@ -60,11 +62,15 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private ChatTranscriptContextMenuDecorator(
       JTextComponent transcript,
       Function<Point, String> urlAt,
+      Function<Point, String> nickAt,
+      Function<String, JPopupMenu> nickMenuFor,
       Consumer<String> openUrl,
       Runnable openFind
   ) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
     this.urlAt = urlAt;
+    this.nickAt = nickAt;
+    this.nickMenuFor = nickMenuFor;
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
 
@@ -98,6 +104,21 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         if (!e.isPopupTrigger() && !SwingUtilities.isRightMouseButton(e)) return;
         if (!transcript.isShowing() || !transcript.isEnabled()) return;
 
+        // If this click is on a nick token and a nick-menu factory is provided, prefer that menu.
+        String nick = safeHit(nickAt, e.getPoint());
+        if (nick != null && !nick.isBlank() && nickMenuFor != null) {
+          JPopupMenu nickMenu = null;
+          try {
+            nickMenu = nickMenuFor.apply(nick);
+          } catch (Exception ignored) {
+          }
+          if (nickMenu != null && nickMenu.getComponentCount() > 0) {
+            currentPopupUrl = null;
+            nickMenu.show(transcript, e.getX(), e.getY());
+            return;
+          }
+        }
+
         String url = safeHit(urlAt, e.getPoint());
         currentPopupUrl = url;
         rebuildMenu(url);
@@ -113,7 +134,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
    * Backward-compatible overload: installs the default Copy / Select All / Find menu.
    */
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
-    return new ChatTranscriptContextMenuDecorator(transcript, null, null, openFind);
+    return new ChatTranscriptContextMenuDecorator(transcript, null, null, null, null, openFind);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -122,7 +143,18 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind
   ) {
-    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, openUrl, openFind);
+    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, null, null, openUrl, openFind);
+  }
+
+  public static ChatTranscriptContextMenuDecorator decorate(
+      JTextComponent transcript,
+      Function<Point, String> urlAt,
+      Function<Point, String> nickAt,
+      Function<String, JPopupMenu> nickMenuFor,
+      Consumer<String> openUrl,
+      Runnable openFind
+  ) {
+    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind);
   }
 
   private void rebuildMenu(String url) {

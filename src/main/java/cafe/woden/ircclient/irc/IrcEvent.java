@@ -22,6 +22,7 @@ public sealed interface IrcEvent permits
     IrcEvent.SoftPrivateAction,
     IrcEvent.Notice,
     IrcEvent.SoftNotice,
+    IrcEvent.AwayStatusChanged,
     IrcEvent.UserJoinedChannel,
     IrcEvent.UserPartedChannel,
     IrcEvent.UserQuitChannel,
@@ -29,8 +30,24 @@ public sealed interface IrcEvent permits
     IrcEvent.JoinedChannel,
     IrcEvent.NickListUpdated,
     IrcEvent.UserHostmaskObserved,
+    IrcEvent.UserAwayStateObserved,
     IrcEvent.WhoisResult,
-    IrcEvent.Error {
+    IrcEvent.Error,
+    IrcEvent.CtcpRequestReceived,
+    IrcEvent.SoftCtcpRequestReceived {
+
+  /**
+   * Best-effort away status for a user.
+   *
+   * <p>Most networks do not provide away state in NAMES. This is intended to be updated later via
+   * IRCv3 {@code away-notify} (or similar mechanisms). Until then, entries will generally be
+   * {@link #UNKNOWN}.
+   */
+  enum AwayState {
+    UNKNOWN,
+    HERE,
+    AWAY
+  }
 
   record Connected(Instant at, String serverHost, int serverPort, String nick) implements IrcEvent {}
 
@@ -76,6 +93,15 @@ public sealed interface IrcEvent permits
   /** A NOTICE from a soft-ignored hostmask; UI should render as a spoiler. */
   record SoftNotice(Instant at, String from, String text) implements IrcEvent {}
 
+  /** A CTCP request received from a user; intended to be shown as an in-chat notification. */
+  record CtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
+
+  /** A CTCP request received from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftCtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
+
+  /** Server confirmation for /away (RPL_UNAWAY 305, RPL_NOWAWAY 306). */
+  record AwayStatusChanged(Instant at, boolean away, String message) implements IrcEvent {}
+
   /** Another user joined a channel we're in. */
   record UserJoinedChannel(Instant at, String channel, String nick) implements IrcEvent {}
 
@@ -96,7 +122,24 @@ public sealed interface IrcEvent permits
    *
    * <p>Hostmask may be empty if not known (e.g. some NAMES implementations do not provide it).
    */
-  record NickInfo(String nick, String prefix, String hostmask) {} // prefix like "@", "+", "~", etc.
+  record NickInfo(String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) { // prefix like "@", "+", "~", etc.
+    public NickInfo {
+      // Normalize null to UNKNOWN to keep downstream UI / stores simple.
+      if (awayState == null) awayState = AwayState.UNKNOWN;
+      // Keep empty/blank away messages as null (we use this for tooltip display).
+      if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
+    }
+
+    /** Backward-compatible constructor for code paths that don't track away reason yet. */
+    public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
+      this(nick, prefix, hostmask, awayState, null);
+    }
+
+    /** Backward-compatible constructor for code paths that don't track away state yet. */
+    public NickInfo(String nick, String prefix, String hostmask) {
+      this(nick, prefix, hostmask, AwayState.UNKNOWN, null);
+    }
+  }
 
   record NickListUpdated(
       Instant at,
@@ -113,6 +156,26 @@ public sealed interface IrcEvent permits
    * No extra network traffic is generated.
    */
   record UserHostmaskObserved(Instant at, String channel, String nick, String hostmask) implements IrcEvent {}
+
+
+  /**
+   * Opportunistically observed a user's away state (e.g. from WHOIS 301/318 or IRCv3 away-notify).
+   *
+   * <p>Channel-agnostic: app layer may propagate across all cached channels for this server.
+   */
+  record UserAwayStateObserved(Instant at, String nick, AwayState awayState, String awayMessage) implements IrcEvent {
+    public UserAwayStateObserved {
+      if (awayState == null) awayState = AwayState.UNKNOWN;
+      if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
+      // If the user is not away, we don't keep a reason.
+      if (awayState != AwayState.AWAY) awayMessage = null;
+    }
+
+    /** Backward-compatible constructor for call sites that don't track away reasons. */
+    public UserAwayStateObserved(Instant at, String nick, AwayState awayState) {
+      this(at, nick, awayState, null);
+    }
+  }
 
   /** Completed WHOIS response */
   record WhoisResult(Instant at, String nick, List<String> lines) implements IrcEvent {}

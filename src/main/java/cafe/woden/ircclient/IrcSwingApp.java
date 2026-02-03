@@ -38,7 +38,9 @@ public class IrcSwingApp {
       frames.getObject().setVisible(true);
 
       IrcMediator mediator = mediatorProvider.getObject();
-      mediator.connectAll();
+      if (settingsBus.get().autoConnectOnStart()) {
+        mediator.connectAll();
+      }
     });
   }
 }

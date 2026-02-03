@@ -16,6 +16,10 @@ public record UiProperties(
     String theme,
     String chatFontFamily,
     int chatFontSize,
+
+    /** If enabled, connect to all configured servers automatically after the UI loads. Default: true. */
+    Boolean autoConnectOnStart,
+
     Timestamps timestamps,
 
     /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
@@ -157,6 +161,12 @@ public record UiProperties(
     if (chatFontSize <= 0) {
       chatFontSize = 12;
     }
+
+    // Default: true (preserve prior behavior where IRCafe auto-connects on startup).
+    if (autoConnectOnStart == null) {
+      autoConnectOnStart = true;
+    }
+
     if (timestamps == null) {
       timestamps = new Timestamps(true, "HH:mm:ss");
     }

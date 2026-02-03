@@ -13,8 +13,16 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.swing.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
+import javax.swing.text.BadLocationException;
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
@@ -62,6 +70,9 @@ public class MessageInputDockable extends JPanel implements Dockable {
     add(input, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
 
+    // Right-click context menu (UI-only for now; actions intentionally not wired)
+    installInputContextMenu();
+
     // Allow Tab in the input field (we use it as the auto-complete trigger)
     input.setFocusTraversalKeysEnabled(false);
 
@@ -88,6 +99,124 @@ public class MessageInputDockable extends JPanel implements Dockable {
     // Click Send
     send.addActionListener(e -> emit());
   }
+
+private void installInputContextMenu() {
+  final JPopupMenu menu = new JPopupMenu();
+
+  final JMenuItem cutItem = new JMenuItem("Cut");
+  cutItem.addActionListener(e -> input.cut());
+
+  final JMenuItem copyItem = new JMenuItem("Copy");
+  copyItem.addActionListener(e -> input.copy());
+
+  final JMenuItem pasteItem = new JMenuItem("Paste");
+  pasteItem.addActionListener(e -> input.paste());
+
+  final JMenuItem deleteItem = new JMenuItem("Delete");
+  deleteItem.addActionListener(e -> {
+    if (!input.isEditable() || !input.isEnabled()) return;
+
+    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+    try {
+      if (start != end) {
+        input.getDocument().remove(start, end - start);
+        input.setCaretPosition(start);
+      } else {
+        int caret = input.getCaretPosition();
+        int len = input.getDocument().getLength();
+        if (caret < len) {
+          input.getDocument().remove(caret, 1);
+        } else {
+          Toolkit.getDefaultToolkit().beep();
+        }
+      }
+    } catch (BadLocationException ex) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+  });
+
+  final JMenuItem clearItem = new JMenuItem("Clear");
+  clearItem.addActionListener(e -> {
+    if (!input.isEditable() || !input.isEnabled()) return;
+    if (input.getDocument().getLength() == 0) return;
+    input.setText("");
+  });
+
+  final JMenuItem selectAllItem = new JMenuItem("Select All");
+  selectAllItem.addActionListener(e -> {
+    if (!input.isEnabled()) return;
+    input.selectAll();
+  });
+
+  menu.add(cutItem);
+  menu.add(copyItem);
+  menu.add(pasteItem);
+  menu.addSeparator();
+  menu.add(deleteItem);
+  menu.add(clearItem);
+  menu.addSeparator();
+  menu.add(selectAllItem);
+
+  final Runnable refreshEnabledStates = () -> {
+    boolean enabled = input.isEnabled();
+    boolean editable = enabled && input.isEditable();
+
+    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+    boolean hasSelection = start != end;
+
+    int len = input.getDocument().getLength();
+    int caret = input.getCaretPosition();
+
+    cutItem.setEnabled(editable && hasSelection);
+    copyItem.setEnabled(enabled && hasSelection);
+    pasteItem.setEnabled(editable && clipboardHasText());
+    deleteItem.setEnabled(editable && (hasSelection || caret < len));
+    clearItem.setEnabled(editable && len > 0);
+    selectAllItem.setEnabled(enabled && len > 0 && !(start == 0 && end == len));
+  };
+
+  menu.addPopupMenuListener(new PopupMenuListener() {
+    @Override public void popupMenuWillBecomeVisible(PopupMenuEvent e) { refreshEnabledStates.run(); }
+    @Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
+    @Override public void popupMenuCanceled(PopupMenuEvent e) { }
+  });
+
+  // Use an explicit listener rather than setComponentPopupMenu() for consistent behavior across
+  // LAFs/platforms, and to support context-aware enablement right before showing.
+  input.addMouseListener(new MouseAdapter() {
+    private void maybeShow(MouseEvent e) {
+      if (!e.isPopupTrigger()) return;
+      if (!input.isShowing()) return;
+
+      // Typical UX: focus + caret follow the right-click location.
+      if (!input.hasFocus()) input.requestFocusInWindow();
+      try {
+        int pos = input.viewToModel2D(e.getPoint());
+        if (pos >= 0) input.setCaretPosition(pos);
+      } catch (Exception ignored) {
+      }
+
+      refreshEnabledStates.run();
+      menu.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
+    @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
+  });
+}
+
+private boolean clipboardHasText() {
+  try {
+    Clipboard cb = Toolkit.getDefaultToolkit().getSystemClipboard();
+    if (cb == null) return false;
+    Transferable t = cb.getContents(null);
+    return t != null && t.isDataFlavorSupported(DataFlavor.stringFlavor);
+  } catch (Exception ignored) {
+    return false;
+  }
+}
 
   @Override
   public void addNotify() {

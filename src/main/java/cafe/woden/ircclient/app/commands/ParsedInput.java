@@ -6,6 +6,7 @@ package cafe.woden.ircclient.app.commands;
 public sealed interface ParsedInput permits
     ParsedInput.Join,
     ParsedInput.Nick,
+    ParsedInput.Away,
     ParsedInput.Query,
     ParsedInput.Msg,
     ParsedInput.Me,
@@ -23,12 +24,20 @@ public sealed interface ParsedInput permits
     ParsedInput.Ignore,
     ParsedInput.Unignore,
     ParsedInput.IgnoreList,
+    ParsedInput.Quote,
     ParsedInput.Say,
     ParsedInput.Unknown {
 
   record Join(String channel) implements ParsedInput {}
 
   record Nick(String newNick) implements ParsedInput {}
+
+  /**
+   * /away [message]
+   *
+   * <p>If {@code message} is blank, the away status should be cleared.
+   */
+  record Away(String message) implements ParsedInput {}
 
   record Query(String nick) implements ParsedInput {}
 
@@ -76,6 +85,13 @@ public sealed interface ParsedInput permits
 
   /** /ignorelist */
   record IgnoreList() implements ParsedInput {}
+
+  /**
+   * /quote <RAW IRC LINE>
+   *
+   * <p>Sends a raw IRC protocol line to the server (for advanced/unsupported commands).
+   */
+  record Quote(String rawLine) implements ParsedInput {}
 
   record Say(String text) implements ParsedInput {}
 

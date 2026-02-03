@@ -24,6 +24,7 @@ public class UiSettingsBus {
         props.theme(),
         props.chatFontFamily(),
         props.chatFontSize(),
+        props.autoConnectOnStart() == null || Boolean.TRUE.equals(props.autoConnectOnStart()),
         props.imageEmbedsEnabled(),
         props.imageEmbedsCollapsedByDefault(),
         props.imageEmbedsMaxWidthPx(),

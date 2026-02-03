@@ -13,6 +13,10 @@ spring:
 
 ircafe:
   ui:
+    # If true (default), connect to all configured servers automatically after the UI loads.
+    # If false, IRCafe starts disconnected and you can connect manually using the Connect button.
+    autoConnectOnStart: true
+
     # Timestamp prefix shown for status/error lines in the chat transcript.
     # Format uses Java time patterns (ex: "HH:mm:ss", "HH:mm", "h:mm a").
     timestamps:

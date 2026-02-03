@@ -19,6 +19,13 @@ public interface IrcClientService {
 
   Completable changeNick(String serverId, String newNick);
 
+  /**
+   * Set the local user's away message.
+   *
+   * <p>If {@code awayMessage} is null or blank, away should be cleared.
+   */
+  Completable setAway(String serverId, String awayMessage);
+
   Completable requestNames(String serverId, String channel);
   Completable joinChannel(String serverId, String channel);
 

@@ -26,6 +26,7 @@ import java.awt.Dimension;
 import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;
@@ -86,6 +87,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     decorators.add(ChatTranscriptContextMenuDecorator.decorate(
         chat,
         this::urlAt,
+        this::nickAt,
+        this::nickContextMenuFor,
         this::openUrl,
         this::openFindBar
     ));
@@ -189,6 +192,15 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    */
   protected boolean onChannelClicked(String channel) {
     return false;
+  }
+
+  /**
+   * Optional hook: if provided, this menu is shown when the user right-clicks a nick token
+   * in the transcript. Return {@code null} (or an empty menu) to fall back to the default
+   * transcript context menu.
+   */
+  protected JPopupMenu nickContextMenuFor(String nick) {
+    return null;
   }
 
   protected void setDocument(StyledDocument doc) {

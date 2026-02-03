@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -34,12 +35,15 @@ import org.slf4j.LoggerFactory;
 
 import org.pircbotx.Channel;
 import org.pircbotx.Configuration;
+import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
 import org.pircbotx.User;
 import org.pircbotx.cap.EnableCapHandler;
 import org.pircbotx.cap.SASLCapHandler;
 import org.pircbotx.hooks.ListenerAdapter;
+import org.pircbotx.hooks.Event;
 import org.pircbotx.hooks.events.*;
+import org.pircbotx.hooks.types.GenericCTCPEvent;
 import org.pircbotx.snapshot.ChannelSnapshot;
 import org.pircbotx.snapshot.UserChannelDaoSnapshot;
 import org.pircbotx.snapshot.UserSnapshot;
@@ -55,15 +59,16 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private final Map<String, Connection> connections = new ConcurrentHashMap<>();
   private final ServerRegistry serverRegistry;
-  private final String clientVersion;
   private final IrcProperties.Reconnect reconnectPolicy;
 
   private final IgnoreListService ignoreListService;
-
-  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry, IgnoreListService ignoreListService) {
+  private String version;
+  public PircbotxIrcClientService(IrcProperties props,
+                                 ServerRegistry serverRegistry,
+                                 IgnoreListService ignoreListService) {
     this.serverRegistry = serverRegistry;
-    this.clientVersion = props.client().version();
     this.reconnectPolicy = props.client().reconnect();
+    version = props.client().version();
     this.ignoreListService = ignoreListService;
   }
 
@@ -103,12 +108,16 @@ public class PircbotxIrcClientService implements IrcClientService {
               .setName(s.nick())
               .setLogin(s.login())
               .setRealName(s.realName())
+              .setVersion(version)
               .addServer(s.host(), s.port())
+
               .setSocketFactory(socketFactory)
               // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
               .setCapEnabled(true)
               // Prefer hostmasks in the initial NAMES list (when supported). If unsupported, ignore.
               .addCapHandler(new EnableCapHandler("userhost-in-names", true))
+              // IRCv3 away-notify: server will send user AWAY state changes as raw AWAY commands.
+              .addCapHandler(new EnableCapHandler("away-notify", true))
               .setAutoNickChange(true)
               // We manage reconnects ourselves so we can surface status + use backoff.
               .setAutoReconnect(false)
@@ -140,6 +149,10 @@ public class PircbotxIrcClientService implements IrcClientService {
 
           PircBotX bot = new PircBotX(builder.buildConfiguration());
           c.botRef.set(bot);
+
+          // PircBotX tracks away-notify on the User model but doesn't publish a dedicated event.
+          // We install a tiny InputParser hook so we can surface AWAY state changes into our own event bus.
+          installAwayNotifyInputParserHook(bot, serverId);
 
           startHeartbeat(c);
           // Run bot on IO thread; connect() completes immediately
@@ -200,6 +213,22 @@ public class PircbotxIrcClientService implements IrcClientService {
     return Completable.fromAction(() -> {
           String nick = sanitizeNick(newNick);
           requireBot(serverId).sendIRC().changeNick(nick);
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
+  public Completable setAway(String serverId, String awayMessage) {
+    return Completable.fromAction(() -> {
+          String msg = awayMessage == null ? "" : awayMessage.trim();
+          if (msg.contains("\r") || msg.contains("\n")) {
+            throw new IllegalArgumentException("away message contains CR/LF");
+          }
+          if (msg.isEmpty()) {
+            requireBot(serverId).sendRaw().rawLine("AWAY");
+          } else {
+            requireBot(serverId).sendRaw().rawLine("AWAY :" + msg);
+          }
         })
         .subscribeOn(Schedulers.io());
   }
@@ -295,6 +324,10 @@ public class PircbotxIrcClientService implements IrcClientService {
   public Completable whois(String serverId, String nick) {
     return Completable.fromAction(() -> {
           String n = sanitizeNick(nick);
+
+          // Track this WHOIS so we can infer HERE on 318 if no 301 is received.
+          conn(serverId).whoisSawAwayByNickLower.putIfAbsent(n.toLowerCase(java.util.Locale.ROOT), Boolean.FALSE);
+
           requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
         })
         .subscribeOn(Schedulers.io());
@@ -330,6 +363,9 @@ public class PircbotxIrcClientService implements IrcClientService {
      * Keyed by lowercase nick. Used to avoid spamming the app layer with redundant observations.
      */
     final Map<String, String> lastHostmaskByNickLower = new ConcurrentHashMap<>();
+
+    /** Tracks whether a WHOIS for a nick reported RPL_AWAY (301) before RPL_ENDOFWHOIS (318). */
+    final Map<String, Boolean> whoisSawAwayByNickLower = new ConcurrentHashMap<>();
 
     private Connection(String serverId) {
       this.serverId = serverId;
@@ -490,8 +526,7 @@ public class PircbotxIrcClientService implements IrcClientService {
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
 
     if ("VERSION".equals(cmd)) {
-      String v = (clientVersion == null) ? "" : clientVersion.trim();
-      if (v.isEmpty()) v = "IRCafe";
+      String v = (version == null) ? "IRCafe" : version;
       bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
       return true;
     }
@@ -619,6 +654,133 @@ public class PircbotxIrcClientService implements IrcClientService {
     return Math.max(250, withJitter); // don't go crazy-small
   }
 
+  /**
+   * PircBotX updates {@link User#isAway()} / {@link User#getAwayMessage()} on IRCv3 away-notify,
+   * but does not publish a dedicated hook event for it in the stock event model.
+   *
+   * <p>We solve this by swapping the bot's {@link InputParser} with a tiny subclass that
+   * intercepts the "AWAY" command (as broadcast by away-notify) and emits our own
+   * {@link IrcEvent.UserAwayStateObserved} into the app bus.
+   */
+  private void installAwayNotifyInputParserHook(PircBotX bot, String serverId) {
+    if (bot == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    try {
+      InputParser replacement = new AwayNotifyInputParser(bot, sid);
+      boolean swapped = swapInputParser(bot, replacement);
+      if (swapped) {
+        log.info("[{}] installed away-notify InputParser hook", sid);
+      } else {
+        log.warn("[{}] could not install away-notify InputParser hook (no compatible field found)", sid);
+      }
+    } catch (Exception ex) {
+      log.warn("[{}] failed to install away-notify InputParser hook", sid, ex);
+    }
+  }
+
+  private boolean swapInputParser(PircBotX bot, InputParser replacement) throws Exception {
+    Field target = null;
+    Class<?> c = bot.getClass();
+    while (c != null) {
+      for (Field f : c.getDeclaredFields()) {
+        if (InputParser.class.isAssignableFrom(f.getType())) {
+          target = f;
+          break;
+        }
+      }
+      if (target != null) break;
+      c = c.getSuperclass();
+    }
+    if (target == null) return false;
+
+    target.setAccessible(true);
+    target.set(bot, replacement);
+    return true;
+  }
+
+  /**
+   * InputParser hook for IRCv3 away-notify.
+   *
+   * <p>Away-notify arrives as raw lines like:
+   * <ul>
+   *   <li><code>:nick!user@host AWAY :Gone away for now</code></li>
+   *   <li><code>:nick!user@host AWAY</code></li>
+   * </ul>
+   */
+  private final class AwayNotifyInputParser extends InputParser {
+    private final String serverId;
+
+    AwayNotifyInputParser(PircBotX bot, String serverId) {
+      super(bot);
+      this.serverId = serverId;
+    }
+
+    @Override
+    public void processCommand(
+        String target,
+        org.pircbotx.UserHostmask source,
+        String command,
+        String line,
+        java.util.List<String> parsedLine,
+        com.google.common.collect.ImmutableMap<String, String> tags
+    ) throws java.io.IOException {
+      // Preserve default behavior first (this keeps User.isAway()/getAwayMessage() accurate).
+      super.processCommand(target, source, command, line, parsedLine, tags);
+
+      if (source == null || command == null) return;
+      if (!"AWAY".equalsIgnoreCase(command)) return;
+
+      String nick = Objects.toString(source.getNick(), "").trim();
+      if (nick.isEmpty()) return;
+
+      // AWAY with a parameter means "now away". AWAY with no parameter means "back".
+      // NOTE: In this callback, `command` is already the IRC command and `parsedLine` is the
+      // *parameter* list (e.g. [":Gone away"]), not the entire tokenized line. Our earlier
+      // size>=3 check was wrong and caused every AWAY-with-reason to be treated as HERE.
+      boolean nowAway = (parsedLine != null && !parsedLine.isEmpty());
+      IrcEvent.AwayState state = nowAway ? IrcEvent.AwayState.AWAY : IrcEvent.AwayState.HERE;
+
+      // Extra diagnostics for this specific gap in PircBotX.
+      String msg = null;
+      if (nowAway && parsedLine != null && !parsedLine.isEmpty()) {
+        // For AWAY, the only parameter is the away message (if present).
+        msg = parsedLine.get(0);
+        if (msg != null && msg.startsWith(":")) msg = msg.substring(1);
+      }
+      // Per-event away-notify logs can get noisy; keep at DEBUG.
+      log.debug("[{}] away-notify observed via InputParser: nick={} state={} msg={} params={} raw={}",
+          serverId, nick, state, msg, parsedLine, line);
+      // Opportunistic hostmask capture: away-notify lines include a full prefix (nick!user@host),
+      // which we can use to enrich the roster hostmask cache (same propagation path as WHOIS).
+      String observedHostmask = null;
+      if (line != null && !line.isBlank()) {
+        String norm = line;
+        // Strip IRCv3 message tags if present (e.g. "@time=...;... :nick!user@host AWAY ...")
+        if (norm.startsWith("@")) {
+          int sp = norm.indexOf(' ');
+          if (sp > 0 && sp < norm.length() - 1) norm = norm.substring(sp + 1);
+        }
+        if (norm.startsWith(":")) {
+          int sp = norm.indexOf(' ');
+          if (sp > 1) {
+            observedHostmask = norm.substring(1, sp).trim();
+          }
+        }
+      }
+      if (isUsefulHostmask(observedHostmask)) {
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserHostmaskObserved(Instant.now(), "", nick, observedHostmask)));
+      }
+
+
+
+      bus.onNext(new ServerIrcEvent(serverId,
+          new IrcEvent.UserAwayStateObserved(Instant.now(), nick, state, msg)));
+    }
+  }
+
   private final class BridgeListener extends ListenerAdapter {
     private final String serverId;
     private final Connection conn;
@@ -667,7 +829,8 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
     }
 
-        @Override
+
+    @Override
     public void onMessage(MessageEvent event) {
       touchInbound();
       String channel = event.getChannel().getName();
@@ -745,7 +908,8 @@ public class PircbotxIrcClientService implements IrcClientService {
       )));
     }
 
-        @Override
+
+    @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       touchInbound();
       String from = event.getUser().getNick();
@@ -803,6 +967,74 @@ public class PircbotxIrcClientService implements IrcClientService {
           ? new IrcEvent.SoftNotice(Instant.now(), from, notice)
           : new IrcEvent.Notice(Instant.now(), from, notice)
       ));
+    }
+
+    @Override
+    public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
+      touchInbound();
+      log.info("CTCP: {}", event);
+
+      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+      String hostmask = (event != null && event.getUser() != null) ? hostmaskFromUser(event.getUser()) : "";
+
+      // Hard ignore (CTCP): only applies if configured to include CTCP.
+      boolean hardIgnored = !hostmask.isEmpty()
+          && ignoreListService.hardIgnoreIncludesCtcp()
+          && ignoreListService.isHardIgnored(serverId, hostmask);
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
+      if (!hardIgnored) {
+        String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+
+        // In PircBotX, the CTCP command is implied by the event type (PingEvent, VersionEvent, TimeEvent, etc).
+        String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
+        String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
+        cmd = cmd.toUpperCase(java.util.Locale.ROOT);
+
+        // Some CTCP types carry a value (e.g. PING has a ping value).
+        String arg = null;
+        try {
+          java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
+          Object v = m.invoke(event);
+          if (v != null) arg = v.toString();
+        } catch (Exception ignored) {
+          // Ignore: not all CTCP events expose a value.
+        }
+
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftCtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
+            : new IrcEvent.CtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
+        ));
+      }
+
+      super.onGenericCTCP(event);
+    }
+
+    // FingerEvent is a CTCP request, but in PircBotX it is not part of the GenericCTCPEvent hierarchy.
+    @Override
+    public void onFinger(FingerEvent event) throws Exception {
+      touchInbound();
+      log.info("CTCP (FINGER): {}", event);
+
+      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+      String hostmask = (event != null && event.getUser() != null) ? hostmaskFromUser(event.getUser()) : "";
+
+      boolean hardIgnored = !hostmask.isEmpty()
+          && ignoreListService.hardIgnoreIncludesCtcp()
+          && ignoreListService.isHardIgnored(serverId, hostmask);
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
+      if (!hardIgnored) {
+        String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftCtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
+            : new IrcEvent.CtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
+        ));
+      }
+
+      super.onFinger(event);
     }
 
 
@@ -880,29 +1112,96 @@ public class PircbotxIrcClientService implements IrcClientService {
       // If we can't fetch the raw line, fall back to toString().
       if (line == null || line.isBlank()) line = String.valueOf(event);
 
-      ParsedRpl324 parsed = parseRpl324(line);
+      // Normalize for parsing:
+      // - strip IRCv3 message tags ("@tag=value ... ")
+      // - unwrap some toString() formats like "UnknownEvent(line=...)"
+      String rawLine = normalizeIrcLineForParsing(line);
+
+      // Targeted diagnostics: confirm where IRCv3 away-notify lines are landing.
+      // (Users broadcast AWAY state changes as raw AWAY commands.)
+      if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
+        log.debug("[{}] inbound AWAY-ish line received in onUnknown: {}", serverId, rawLine);
+      }
+
+      // IRCv3 away-notify: users broadcast AWAY state changes as raw AWAY commands.
+      // Example: ":nick!user@host AWAY :Gone away for now"  (sets AWAY)
+      //          ":nick!user@host AWAY"                    (clears AWAY)
+      ParsedAwayNotify awayNotify = parseAwayNotify(rawLine);
+      if (awayNotify != null && awayNotify.nick() != null && !awayNotify.nick().isBlank()) {
+        log.debug("[{}] parsed away-notify: nick={} state={} msg={}", serverId, awayNotify.nick(), awayNotify.awayState(), awayNotify.message());
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserAwayStateObserved(Instant.now(), awayNotify.nick(), awayNotify.awayState(), awayNotify.message())));
+        return;
+      } else if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
+        // If we see an AWAY-ish line here but fail to parse it, that's the smoking gun.
+        log.debug("[{}] inbound AWAY-ish line did NOT parse as away-notify: {}", serverId, rawLine);
+      }
+
+      ParsedRpl324 parsed = parseRpl324(rawLine);
       if (parsed != null) {
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
         return;
       }
 
+      ParsedAwayConfirmation away = parseRpl305or306Away(rawLine);
+      if (away != null) {
+        // RPL_UNAWAY (305), RPL_NOWAWAY (306)
+        String msg = away.message();
+        if (msg == null || msg.isBlank()) {
+          msg = away.away() ? "You have been marked as being away" : "You are no longer marked as being away";
+        }
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.AwayStatusChanged(Instant.now(), away.away(), msg)));
+        return;
+      }
+
       // RPL_USERHOST (302): used by our low-traffic hostmask resolver.
-      java.util.List<UserhostEntry> uh = parseRpl302Userhost(line);
+      java.util.List<UserhostEntry> uh = parseRpl302Userhost(rawLine);
       if (uh != null && !uh.isEmpty()) {
         Instant now = Instant.now();
         for (UserhostEntry e : uh) {
           if (e == null) continue;
           // Channel-agnostic; TargetCoordinator will propagate across channels.
           bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(now, "", e.nick(), e.hostmask())));
+
+          // USERHOST also carries an away marker (+/-). Opportunistically propagate away state too,
+          // so a hostmask lookup can update the roster state without requiring WHOIS.
+          IrcEvent.AwayState as = (e.awayState() == null) ? IrcEvent.AwayState.UNKNOWN : e.awayState();
+          if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
+            bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserAwayStateObserved(now, e.nick(), as)));
+          }
         }
       }
 
       // WHOIS fallback: some networks/bots may not surface a complete WhoisEvent through PircBotX,
       // but the numerics still arrive. Parse the key ones here so manual WHOIS can still populate
       // the user list hostmask cache.
-      ParsedWhoisUser whoisUser = parseRpl311WhoisUser(line);
-      if (whoisUser == null) whoisUser = parseRpl314WhowasUser(line);
+      // WHOIS away-state capture: parse RPL_AWAY (301) and RPL_ENDOFWHOIS (318) so a manual WHOIS
+      // can enrich the user list with best-effort away markers.
+      ParsedWhoisAway whoisAway = parseRpl301WhoisAway(rawLine);
+      if (whoisAway != null && whoisAway.nick() != null && !whoisAway.nick().isBlank()) {
+        String nk = whoisAway.nick().trim();
+        String k = nk.toLowerCase(java.util.Locale.ROOT);
+        // Only mark the WHOIS probe as "saw away" if we actually initiated a WHOIS for this nick.
+        conn.whoisSawAwayByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.AWAY, whoisAway.message())));
+      }
+
+      String endWhoisNick = parseRpl318EndOfWhoisNick(rawLine);
+      if (endWhoisNick != null && !endWhoisNick.isBlank()) {
+        String nk = endWhoisNick.trim();
+        Boolean sawAway = conn.whoisSawAwayByNickLower.remove(nk.toLowerCase(java.util.Locale.ROOT));
+        // Only infer HERE when this 318 completes a WHOIS probe we initiated.
+        if (sawAway != null && !sawAway.booleanValue()) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.HERE)));
+        }
+      }
+
+      ParsedWhoisUser whoisUser = parseRpl311WhoisUser(rawLine);
+      if (whoisUser == null) whoisUser = parseRpl314WhowasUser(rawLine);
       if (whoisUser != null && !whoisUser.nick().isBlank() && !whoisUser.user().isBlank() && !whoisUser.host().isBlank()) {
         String hm = whoisUser.nick() + "!" + whoisUser.user() + "@" + whoisUser.host();
         bus.onNext(new ServerIrcEvent(serverId,
@@ -912,7 +1211,7 @@ public class PircbotxIrcClientService implements IrcClientService {
       // WHO fallback: parse WHOREPLY (352) lines. We don't actively issue WHO queries by default
       // (to keep traffic low), but if a user runs WHO manually, or a future resolver uses WHO/WHOX,
       // we can still learn hostmasks from the replies.
-      ParsedWhoReply whoReply = parseRpl352WhoReply(line);
+      ParsedWhoReply whoReply = parseRpl352WhoReply(rawLine);
       if (whoReply != null
           && !whoReply.channel().isBlank()
           && !whoReply.nick().isBlank()
@@ -924,7 +1223,7 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
       // WHOX fallback: parse RPL_WHOSPCRPL (354) lines (WHOX). Format varies based on requested fields,
       // so we apply a conservative heuristic to extract channel/user/host/nick when present.
-      ParsedWhoxReply whox = parseRpl354WhoxReply(line);
+      ParsedWhoxReply whox = parseRpl354WhoxReply(rawLine);
       if (whox != null
           && !whox.nick().isBlank()
           && !whox.user().isBlank()
@@ -937,15 +1236,138 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     }
 
+    @Override
+    public void onServerResponse(ServerResponseEvent event) {
+      // Some numerics are handled by PircBotX as ServerResponseEvent (not UnknownEvent).
+      // We specifically care about away confirmations (305/306).
+      touchInbound();
+
+      int code;
+      try {
+        code = event.getCode();
+      } catch (Exception ex) {
+        // Extremely defensive: if we can't get a code, bail.
+        return;
+      }
+
+      if (code == 301 || code == 318) {
+        // WHOIS away-state capture:
+        // - 301 indicates the user is AWAY
+        // - 318 indicates end-of-WHOIS; if we never saw 301 for this nick, infer HERE
+
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        if (code == 301) {
+          ParsedWhoisAway whoisAway = parseRpl301WhoisAway(line);
+          if (whoisAway != null && whoisAway.nick() != null && !whoisAway.nick().isBlank()) {
+            String nk = whoisAway.nick().trim();
+            String k = nk.toLowerCase(java.util.Locale.ROOT);
+            conn.whoisSawAwayByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
+            bus.onNext(new ServerIrcEvent(serverId,
+                new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.AWAY, whoisAway.message())));
+          }
+        } else {
+          String nk = parseRpl318EndOfWhoisNick(line);
+          if (nk != null && !nk.isBlank()) {
+            nk = nk.trim();
+            Boolean sawAway = conn.whoisSawAwayByNickLower.remove(nk.toLowerCase(java.util.Locale.ROOT));
+            if (sawAway != null && !sawAway.booleanValue()) {
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.HERE)));
+            }
+          }
+        }
+        return;
+      }
+
+      if (code != 305 && code != 306) return;
+
+      // Prefer a raw line when available so we can reuse the same parser.
+      String line = null;
+      Object l = reflectCall(event, "getLine");
+      if (l == null) l = reflectCall(event, "getRawLine");
+      if (l != null) line = String.valueOf(l);
+      if (line == null || line.isBlank()) line = String.valueOf(event);
+
+      ParsedAwayConfirmation away = parseRpl305or306Away(line);
+      boolean isAway = (code == 306);
+      String msg = null;
+      if (away != null) {
+        isAway = away.away();
+        msg = away.message();
+      }
+      if (msg == null || msg.isBlank()) {
+        msg = isAway ? "You have been marked as being away" : "You are no longer marked as being away";
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.AwayStatusChanged(Instant.now(), isAway, msg)));
+    }
+
     private record ParsedRpl324(String channel, String details) {}
 
+    /** Parsed IRCv3 away-notify line (AWAY command from another user). */
+    private record ParsedAwayNotify(String nick, IrcEvent.AwayState awayState, String message) {}
+
+  /**
+   * Best-effort normalization for server lines we parse ourselves.
+   * <ul>
+   *   <li>Strips IRCv3 message tags (leading "@tag=value;... ")</li>
+   *   <li>Unwraps some toString() formats like "UnknownEvent(line=...)"</li>
+   * </ul>
+   */
+  private static String normalizeIrcLineForParsing(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+
+    // Some PircBotX/ListenerManager implementations (or fallbacks to toString())
+    // may format unknown lines like: "UnknownEvent(line=:nick!u@h AWAY :msg)".
+    // Try to unwrap to the actual IRC line.
+    int idx = s.indexOf("line=");
+    int keyLen = 5;
+    if (idx < 0) {
+      idx = s.indexOf("rawLine=");
+      keyLen = 8;
+    }
+    if (idx >= 0) {
+      String sub = s.substring(idx + keyLen).trim();
+      // Strip trailing wrapper chars, but keep whitespace inside the IRC line intact.
+      while (!sub.isEmpty()) {
+        char last = sub.charAt(sub.length() - 1);
+        if (last == ')' || last == '}' || last == ']') sub = sub.substring(0, sub.length() - 1).trim();
+        else break;
+      }
+      if (sub.startsWith("\"") && sub.endsWith("\"") && sub.length() >= 2) {
+        sub = sub.substring(1, sub.length() - 1);
+      }
+      s = sub;
+    }
+
+    // IRCv3 message tags: "@aaa=bbb;ccc :prefix COMMAND ..."
+    if (s.startsWith("@")) {
+      int sp = s.indexOf(' ');
+      if (sp > 0 && sp + 1 < s.length()) {
+        s = s.substring(sp + 1).trim();
+      }
+    }
+
+    return s;
+  }
+
+    private record ParsedAwayConfirmation(boolean away, String server, String message) {}
+
     private record ParsedWhoisUser(String nick, String user, String host) {}
+
+    private record ParsedWhoisAway(String nick, String message) {}
 
     private record ParsedWhoReply(String channel, String nick, String user, String host) {}
 
     private record ParsedWhoxReply(String channel, String nick, String user, String host) {}
 
-    private record UserhostEntry(String nick, String hostmask) {}
+    private record UserhostEntry(String nick, String hostmask, IrcEvent.AwayState awayState) {}
 
     /**
      * Parse RPL_WHOISUSER (311) lines.
@@ -1003,6 +1425,67 @@ public class PircbotxIrcClientService implements IrcClientService {
       return new ParsedWhoisUser(nick, user, host);
     }
 
+
+
+    /**
+     * Parse RPL_AWAY (301) lines received during WHOIS.
+     *
+     * <p>Format: ":server 301 <me> <nick> :<away message>"
+     */
+    private static ParsedWhoisAway parseRpl301WhoisAway(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      if (!s.startsWith("301 ") && !s.equals("301") && !s.startsWith("301	")) {
+        // Token-based check below will handle most cases; this is just a small fast-path.
+      }
+
+      String[] toks = s.split("\\s+");
+      if (toks.length < 3) return null;
+      if (!"301".equals(toks[0])) return null;
+
+      String nick = toks[2];
+      if (nick == null || nick.isBlank()) return null;
+
+      String msg = null;
+      int colon = s.indexOf(" :");
+      if (colon >= 0 && colon + 2 < s.length()) {
+        msg = s.substring(colon + 2).trim();
+      }
+      return new ParsedWhoisAway(nick, msg);
+    }
+
+    /**
+     * Parse RPL_ENDOFWHOIS (318) lines.
+     *
+     * <p>Format: ":server 318 <me> <nick> :End of /WHOIS list."
+     */
+    private static String parseRpl318EndOfWhoisNick(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      // Drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+      }
+
+      String[] toks = s.split("\\s+");
+      if (toks.length < 3) return null;
+      if (!"318".equals(toks[0])) return null;
+
+      String nick = toks[2];
+      if (nick == null || nick.isBlank()) return null;
+      return nick;
+    }
     /**
      * Parse RPL_WHOREPLY (352) lines.
      *
@@ -1210,7 +1693,7 @@ public class PircbotxIrcClientService implements IrcClientService {
         if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
       }
 
-      String[] toks = s.split("\s+");
+      String[] toks = s.split("\\s+");
       if (toks.length < 4) return null;
 
       // Format: 324 <me> <#chan> <modes> [args...]
@@ -1226,6 +1709,96 @@ public class PircbotxIrcClientService implements IrcClientService {
       }
 
       return new ParsedRpl324(channel, details.toString());
+    }
+
+    /**
+     * Parse an IRCv3 away-notify line, which is delivered as a raw {@code AWAY} command
+     * from another user.
+     *
+     * <p>Examples:
+     * <ul>
+     *   <li>{@code :nick!user@host AWAY :Gone away for now} (sets away)</li>
+     *   <li>{@code :nick!user@host AWAY} (clears away)</li>
+     * </ul>
+     */
+    private static ParsedAwayNotify parseAwayNotify(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (!s.startsWith(":")) return null;
+
+      // Extract prefix up to first space.
+      int sp = s.indexOf(' ');
+      if (sp <= 1 || sp + 1 >= s.length()) return null;
+      String prefix = s.substring(1, sp);
+      String rest = s.substring(sp + 1).trim();
+
+      if (!(rest.startsWith("AWAY") && (rest.length() == 4 || Character.isWhitespace(rest.charAt(4))))) {
+        return null;
+      }
+
+      String nick = prefix;
+      int bang = nick.indexOf('!');
+      if (bang > 0) nick = nick.substring(0, bang);
+      nick = nick.trim();
+      if (nick.isBlank()) return null;
+
+      // RFC: AWAY with a parameter sets away; AWAY with no parameter clears it.
+      // away-notify SHOULD follow that; however, be resilient to weird formatting.
+      boolean hasParam = rest.length() > 4;
+      IrcEvent.AwayState state = hasParam ? IrcEvent.AwayState.AWAY : IrcEvent.AwayState.HERE;
+
+      String msg = null;
+      if (state == IrcEvent.AwayState.AWAY) {
+        String rem = rest.substring(4).trim();
+        if (rem.startsWith(":")) rem = rem.substring(1).trim();
+        msg = rem.isEmpty() ? null : rem;
+      }
+
+      return new ParsedAwayNotify(nick, state, msg);
+    }
+
+
+    /**
+     * Parse RPL_UNAWAY (305) / RPL_NOWAWAY (306) lines and extract the trailing message.
+     *
+     * <p>Typical format: ":server 305 <me> :You are no longer marked as being away"
+     * <br>Typical format: ":server 306 <me> :You have been marked as being away"
+     */
+    private static ParsedAwayConfirmation parseRpl305or306Away(String line) {
+      if (line == null) return null;
+      String s = line.trim();
+      if (s.isEmpty()) return null;
+
+      String server = "";
+      // Capture and drop prefix (e.g., ":server ")
+      if (s.startsWith(":")) {
+        int sp = s.indexOf(' ');
+        if (sp > 1) {
+          server = s.substring(1, sp);
+          if (sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+        }
+      }
+
+      boolean is305 = s.startsWith("305 ") || s.startsWith("305\t") || s.equals("305");
+      boolean is306 = s.startsWith("306 ") || s.startsWith("306\t") || s.equals("306");
+      if (!is305 && !is306) return null;
+
+      boolean away = is306;
+
+      // Prefer IRC trailing parameter extraction (space-colon).
+      String msg = null;
+      int trail = s.indexOf(" :");
+      if (trail >= 0 && trail + 2 < s.length()) {
+        msg = s.substring(trail + 2).trim();
+      } else {
+        // Fallback: join tokens after the numeric + target.
+        String[] toks = s.split("\\s+");
+        if (toks.length >= 3) {
+          msg = String.join(" ", java.util.Arrays.copyOfRange(toks, 2, toks.length)).trim();
+        }
+      }
+
+      return new ParsedAwayConfirmation(away, server, msg);
     }
 
     /**
@@ -1276,7 +1849,10 @@ public class PircbotxIrcClientService implements IrcClientService {
         if (rhs.isEmpty()) continue;
 
         // Strip away/available marker.
+        // Per RPL_USERHOST (302), '+' means not away and '-' means away.
+        IrcEvent.AwayState as = IrcEvent.AwayState.UNKNOWN;
         if (rhs.charAt(0) == '+' || rhs.charAt(0) == '-') {
+          as = (rhs.charAt(0) == '-') ? IrcEvent.AwayState.AWAY : IrcEvent.AwayState.HERE;
           rhs = rhs.substring(1);
         }
 
@@ -1288,7 +1864,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
         String hm = nick + "!" + user + "@" + host;
         if (!isUsefulHostmask(hm)) continue;
-        out.add(new UserhostEntry(nick, hm));
+        out.add(new UserhostEntry(nick, hm, as));
       }
 
       return out.isEmpty() ? null : java.util.List.copyOf(out);

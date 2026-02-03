@@ -177,6 +177,23 @@ public class RuntimeConfigStore {
     }
   }
 
+  /** Persist whether IRCafe should auto-connect on startup (stored under ircafe.ui.autoConnectOnStart). */
+  public synchronized void rememberAutoConnectOnStart(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("autoConnectOnStart", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist autoConnectOnStart setting to '{}'", file, e);
+    }
+  }
+
 
   // --- Chat logging / history persistence (ircafe.logging.*) ---
 

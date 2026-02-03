@@ -29,6 +29,11 @@ public class CommandParser {
       return new ParsedInput.Nick(nick);
     }
 
+    if (matchesCommand(line, "/away")) {
+      String msg = argAfter(line, "/away");
+      return new ParsedInput.Away(msg);
+    }
+
     if (matchesCommand(line, "/query")) {
       String nick = argAfter(line, "/query");
       return new ParsedInput.Query(nick);
@@ -142,6 +147,18 @@ public class CommandParser {
       }
 
       return new ParsedInput.Ctcp(nick, cmd, args);
+    }
+
+    // Raw IRC line escape hatch.
+    if (matchesCommand(line, "/quote")) {
+      String rawLine = argAfter(line, "/quote");
+      return new ParsedInput.Quote(rawLine);
+    }
+
+    // Alias used by some clients.
+    if (matchesCommand(line, "/raw")) {
+      String rawLine = argAfter(line, "/raw");
+      return new ParsedInput.Quote(rawLine);
     }
 
     return new ParsedInput.Unknown(line);

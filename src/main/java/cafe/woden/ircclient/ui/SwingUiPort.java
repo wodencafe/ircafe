@@ -88,9 +88,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public Flowable<UserActionRequest> userActionRequests() {
-    // Currently only sourced from the Users dock, but can be extended (e.g., transcript nick menu).
-    return users.userActionRequests();
+    public Flowable<UserActionRequest> userActionRequests() {
+    return Flowable.mergeArray(
+        users.userActionRequests(),
+        chat.userActionRequests()
+    ).onBackpressureBuffer();
   }
 
   @Override

@@ -204,6 +204,37 @@ public class TargetCoordinator {
     }
   }
 
+  /**
+   * Passive away-state capture (currently via WHOIS): enrich cached roster so the user list can
+   * eventually show away markers.
+   */
+  public void onUserAwayStateObserved(String serverId, IrcEvent.UserAwayStateObserved ev) {
+    if (ev == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    String msg = ev.awayMessage();
+    java.util.Set<String> changedChannels = userListStore.updateAwayStateAcrossChannels(sid, ev.nick(), ev.awayState(), msg);
+    if (changedChannels.isEmpty()) {
+      // This is typically a sign that we parsed an away update for a nick that isn't present in any
+      // cached channel rosters (or that the state didn't change). If you're debugging away-notify,
+      // this log helps confirm the event made it to the coordinator even if the UI doesn't change.
+      log.debug("Away state observed but no roster entries changed: serverId={} nick={} state={}", sid, ev.nick(), ev.awayState());
+      return;
+    }
+
+    // Refresh users panel only if the active target is a channel that was modified.
+    if (activeTarget != null
+        && Objects.equals(activeTarget.serverId(), sid)
+        && activeTarget.isChannel()
+        && changedChannels.contains(activeTarget.target())) {
+      List<IrcEvent.NickInfo> cached = userListStore.get(sid, activeTarget.target());
+      ui.setUsersNicks(cached);
+      ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
+    }
+  }
+
+
   public void refreshInputEnabledForActiveTarget() {
     if (activeTarget == null) {
       ui.setInputEnabled(false);
