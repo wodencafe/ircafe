@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -65,8 +66,6 @@ public class IrcMediator {
   private final ConcurrentHashMap<String, RecentTarget> recentAwayTargets = new ConcurrentHashMap<>();
 
   private record RecentTarget(TargetRef target, Instant at) {}
-
-
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -1173,42 +1172,30 @@ public class IrcMediator {
 
       case IrcEvent.ChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
-        }
+        TargetRef active = targetCoordinator.getActiveTarget();
+        postTo(chan, active, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
       }
 
       case IrcEvent.SoftChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendSpoilerChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
-        }
+        TargetRef active = targetCoordinator.getActiveTarget();
+        postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
       }
 
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendAction(chan, ev.from(), ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
-        }
+        TargetRef active = targetCoordinator.getActiveTarget();
+        postTo(chan, active, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
       }
 
       case IrcEvent.SoftChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendSpoilerChat(chan, ev.from(), "* " + ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
-        }
+        TargetRef active = targetCoordinator.getActiveTarget();
+        postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
       }
 
 
@@ -1277,60 +1264,58 @@ public class IrcMediator {
 
       case IrcEvent.PrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendChat(pm, ev.from(), ev.text());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+        postTo(pm, true, d -> ui.appendChat(d, ev.from(), ev.text()));
       }
 
       case IrcEvent.SoftPrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendSpoilerChat(pm, ev.from(), ev.text());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+        postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
       }
 
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendAction(pm, ev.from(), ev.action());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+        postTo(pm, true, d -> ui.appendAction(d, ev.from(), ev.action()));
       }
 
       case IrcEvent.SoftPrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendSpoilerChat(pm, ev.from(), "* " + ev.action());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+        postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
       }
       case IrcEvent.Notice ev -> {
         handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
       }
 
-	      case IrcEvent.CtcpRequestReceived ev -> {
-	        // Requested behavior: show inbound CTCP requests in the currently active chat target.
-	        // (If the active target is on a different server, fall back to status.)
-	        TargetRef active = targetCoordinator.getActiveTarget();
-	        TargetRef dest = (active != null && Objects.equals(active.serverId(), sid)) ? active : status;
-	        ensureTargetExists(dest);
+      case IrcEvent.CtcpRequestReceived ev -> {
+        // Requested behavior: show inbound CTCP requests in the currently active chat target.
+        // (If the active target is on a different server, fall back to status.)
+        TargetRef dest = resolveActiveOrStatus(sid, status);
 
-	        String rendered = "\u2190 " + ev.from() + " CTCP " + ev.command();
-	        if (ev.argument() != null && !ev.argument().isBlank()) rendered += " " + ev.argument();
-	        if (ev.channel() != null && !ev.channel().isBlank()) rendered += " in " + ev.channel();
-	        ui.appendStatus(dest, "(ctcp)", rendered);
-	        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
-	      }
+        StringBuilder sb = new StringBuilder()
+            .append("\u2190 ")
+            .append(ev.from())
+            .append(" CTCP ")
+            .append(ev.command());
+        if (ev.argument() != null && !ev.argument().isBlank()) sb.append(' ').append(ev.argument());
+        if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
+        final String rendered = sb.toString();
 
-	      case IrcEvent.SoftCtcpRequestReceived ev -> {
-	        TargetRef active = targetCoordinator.getActiveTarget();
-	        TargetRef dest = (active != null && Objects.equals(active.serverId(), sid)) ? active : status;
-	        ensureTargetExists(dest);
+        postTo(dest, true, d -> ui.appendStatus(d, "(ctcp)", rendered));
+      }
 
-	        String rendered = "\u2190 " + ev.from() + " CTCP " + ev.command();
-	        if (ev.argument() != null && !ev.argument().isBlank()) rendered += " " + ev.argument();
-	        if (ev.channel() != null && !ev.channel().isBlank()) rendered += " in " + ev.channel();
-	        ui.appendSpoilerChat(dest, "(ctcp)", rendered);
-	        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
-	      }
+      case IrcEvent.SoftCtcpRequestReceived ev -> {
+        TargetRef dest = resolveActiveOrStatus(sid, status);
+
+        StringBuilder sb = new StringBuilder()
+            .append("\u2190 ")
+            .append(ev.from())
+            .append(" CTCP ")
+            .append(ev.command());
+        if (ev.argument() != null && !ev.argument().isBlank()) sb.append(' ').append(ev.argument());
+        if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
+        final String rendered = sb.toString();
+
+        postTo(dest, true, d -> ui.appendSpoilerChat(d, "(ctcp)", rendered));
+      }
 
       case IrcEvent.AwayStatusChanged ev -> {
         awayByServer.put(sid, ev.away());
@@ -1348,23 +1333,23 @@ public class IrcMediator {
         }
 
         if (dest == null) {
-          dest = targetCoordinator.getActiveTarget();
-          if (dest == null || !Objects.equals(dest.serverId(), sid)) dest = status;
+          dest = resolveActiveOrStatus(sid, status);
         }
-        ensureTargetExists(dest);
 
-        String rendered;
+        final String rendered;
         if (ev.away()) {
           String reason = awayReasonByServer.get(sid);
-          rendered = "You are now marked as being away";
-          if (reason != null && !reason.isBlank()) rendered += " (Reason: " + reason + ")";
-          else rendered = ev.message();
+          if (reason != null && !reason.isBlank()) {
+            rendered = "You are now marked as being away (Reason: " + reason + ")";
+          } else {
+            rendered = ev.message();
+          }
         } else {
           rendered = "You are no longer marked as being away";
         }
 
-        ui.appendStatus(dest, "(away)", rendered);
-        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        TargetRef finalDest = dest;
+        postTo(finalDest, true, d -> ui.appendStatus(d, "(away)", rendered));
       }
 
       case IrcEvent.SoftNotice ev -> {
@@ -1374,10 +1359,10 @@ public class IrcMediator {
       case IrcEvent.WhoisResult ev -> {
         TargetRef dest = pendingWhoisTargets.remove(new WhoisKey(sid, ev.nick()));
         if (dest == null) dest = status;
-        ensureTargetExists(dest);
-        ui.appendStatus(dest, "(whois)", "WHOIS for " + ev.nick());
-        for (String line : ev.lines()) ui.appendStatus(dest, "(whois)", line);
-        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        postTo(dest, true, d -> {
+          ui.appendStatus(d, "(whois)", "WHOIS for " + ev.nick());
+          for (String line : ev.lines()) ui.appendStatus(d, "(whois)", line);
+        });
       }
 
       case IrcEvent.UserJoinedChannel ev -> {
@@ -1554,6 +1539,51 @@ public class IrcMediator {
     if (ch >= 'A' && ch <= 'Z') return true;
     if (ch >= 'a' && ch <= 'z') return true;
     return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
+  }
+
+  /**
+   * Convenience helper used by event handlers:
+   * <ul>
+   *   <li>Ensures the target exists</li>
+   *   <li>Writes output via the provided callback</li>
+   *   <li>Optionally marks the target unread if it is not the active tab</li>
+   * </ul>
+   */
+  private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
+    postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
+  }
+
+  /**
+   * Resolves the destination target as:
+   * <ol>
+   *   <li>the currently active target, if it belongs to {@code sid}</li>
+   *   <li>otherwise {@code status}</li>
+   * </ol>
+   *
+   * This is used by events (CTCP, away, etc.) that should "notify the user" in the active tab,
+   * but must not leak messages across different server sessions.
+   */
+  private TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
+    TargetRef active = targetCoordinator.getActiveTarget();
+    if (active != null && Objects.equals(active.serverId(), sid)) return active;
+    return status != null ? status : safeStatusTarget();
+  }
+
+  /**
+   * Overload used when the caller wants to make additional decisions (eg, highlight) based on a stable view of
+   * what was considered the active target at the time of handling.
+   */
+  private void postTo(TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
+    if (dest == null) dest = safeStatusTarget();
+    ensureTargetExists(dest);
+
+    if (write != null) {
+      write.accept(dest);
+    }
+
+    if (markUnreadIfNotActive && active != null && !dest.equals(active)) {
+      ui.markUnread(dest);
+    }
   }
 
   private void ensureTargetExists(TargetRef target) {
