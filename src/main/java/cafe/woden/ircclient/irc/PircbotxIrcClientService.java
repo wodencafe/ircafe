@@ -58,15 +58,18 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private final Map<String, Connection> connections = new ConcurrentHashMap<>();
   private final ServerRegistry serverRegistry;
-  private final String clientVersion;
   private final IrcProperties.Reconnect reconnectPolicy;
 
   private final IgnoreListService ignoreListService;
-
-  public PircbotxIrcClientService(IrcProperties props, ServerRegistry serverRegistry, IgnoreListService ignoreListService) {
+  private String version;
+  public PircbotxIrcClientService(IrcProperties props,
+                                 ServerRegistry serverRegistry,
+                                 IgnoreListService ignoreListService,
+                                 ClientIdentityService identity) {
     this.serverRegistry = serverRegistry;
-    this.clientVersion = props.client().version();
+    this.identity = identity;
     this.reconnectPolicy = props.client().reconnect();
+    version = props.client().version();
     this.ignoreListService = ignoreListService;
   }
 
@@ -106,7 +109,9 @@ public class PircbotxIrcClientService implements IrcClientService {
               .setName(s.nick())
               .setLogin(s.login())
               .setRealName(s.realName())
+              .setVersion(version)
               .addServer(s.host(), s.port())
+
               .setSocketFactory(socketFactory)
               // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
               .setCapEnabled(true)
@@ -522,8 +527,7 @@ public class PircbotxIrcClientService implements IrcClientService {
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
 
     if ("VERSION".equals(cmd)) {
-      String v = (clientVersion == null) ? "" : clientVersion.trim();
-      if (v.isEmpty()) v = "IRCafe";
+      String v = (identity == null) ? "IRCafe" : identity.version();
       bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
       return true;
     }
