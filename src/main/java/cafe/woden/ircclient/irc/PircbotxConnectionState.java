@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.irc;
 
+import io.reactivex.rxjava3.disposables.Disposable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,11 +21,11 @@ final class PircbotxConnectionState {
 
   final AtomicLong lastInboundMs = new AtomicLong(0);
   final AtomicBoolean localTimeoutEmitted = new AtomicBoolean(false);
-  final AtomicReference<ScheduledFuture<?>> heartbeatFuture = new AtomicReference<>();
+  final AtomicReference<Disposable> heartbeatDisposable = new AtomicReference<>();
 
   final AtomicBoolean manualDisconnect = new AtomicBoolean(false);
   final AtomicLong reconnectAttempts = new AtomicLong(0);
-  final AtomicReference<ScheduledFuture<?>> reconnectFuture = new AtomicReference<>();
+  final AtomicReference<Disposable> reconnectDisposable = new AtomicReference<>();
   final AtomicReference<String> disconnectReasonOverride = new AtomicReference<>();
 
   /**
