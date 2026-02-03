@@ -19,7 +19,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.springframework.context.annotation.Lazy;
@@ -50,11 +49,8 @@ public class IrcMediator {
   private final ModeRoutingState modeRoutingState;
   private final AwayRoutingState awayRoutingState;
 
-  // Join-burst mode suppression: buffer simple channel-state modes and print once after join completes.
-  private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers = new ConcurrentHashMap<>();
-
-  // If we already printed a join-burst mode summary, suppress a near-immediate 324 summary to avoid duplicates.
-  private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs = new ConcurrentHashMap<>();
+  // Inbound MODE-related event handler (join-burst buffering + MODE pretty printing + 324 routing).
+  private final InboundModeEventHandler inboundModeEventHandler;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -82,7 +78,8 @@ public class IrcMediator {
       WhoisRoutingState whoisRoutingState,
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
-      AwayRoutingState awayRoutingState
+      AwayRoutingState awayRoutingState,
+      InboundModeEventHandler inboundModeEventHandler
   ) {
     this.irc = irc;
     this.ui = ui;
@@ -96,6 +93,7 @@ public class IrcMediator {
     this.ctcpRoutingState = ctcpRoutingState;
     this.modeRoutingState = modeRoutingState;
     this.awayRoutingState = awayRoutingState;
+    this.inboundModeEventHandler = inboundModeEventHandler;
   }
 
   public void start() {
@@ -244,80 +242,6 @@ public class IrcMediator {
     }
   }
 
-
-  private record ModeKey(String serverId, String channelLower) {
-    ModeKey {
-      serverId = (serverId == null) ? "" : serverId.trim();
-      channelLower = (channelLower == null) ? "" : channelLower.trim().toLowerCase(Locale.ROOT);
-    }
-
-    static ModeKey of(String serverId, String channel) {
-      return new ModeKey(serverId, channel);
-    }
-  }
-
-  /**
-   * Buffers the initial "join burst" of simple channel-state modes (like +ntspimrC) so we can print
-   * a single summary line after the join feels complete.
-   */
-  private static final class JoinModeBuffer {
-    private final java.util.LinkedHashSet<Character> plus = new java.util.LinkedHashSet<>();
-    private final java.util.LinkedHashSet<Character> minus = new java.util.LinkedHashSet<>();
-
-
-    // Debounce flush so we print once shortly after the join-mode burst settles.
-    private javax.swing.Timer flushTimer;
-
-    void bumpFlush(Runnable flush) {
-      if (flush == null) return;
-      if (flushTimer != null) flushTimer.stop();
-      flushTimer = new javax.swing.Timer(200, e -> flush.run());
-      flushTimer.setRepeats(false);
-      flushTimer.start();
-    }
-
-    void cancelFlushTimer() {
-      if (flushTimer != null) {
-        flushTimer.stop();
-        flushTimer = null;
-      }
-    }
-
-    boolean tryAdd(String details) {
-      if (details == null) return false;
-      String d = details.trim();
-      if (d.isEmpty()) return false;
-
-      // Only accept simple flag sets with no args (no spaces).
-      int sp = d.indexOf(' ');
-      if (sp >= 0) return false;
-
-      char sign = d.charAt(0);
-      if (sign != '+' && sign != '-') return false;
-
-      for (int i = 1; i < d.length(); i++) {
-        char c = d.charAt(i);
-        // Accept any simple flag (no args) during the join burst.
-        // We'll render known ones as phrases and unknowns as +x/-x.
-        if (!Character.isLetterOrDigit(c)) return false;
-      }
-
-      java.util.LinkedHashSet<Character> target = (sign == '+') ? plus : minus;
-      for (int i = 1; i < d.length(); i++) {
-        target.add(d.charAt(i));
-      }
-
-      return true;
-    }
-
-    boolean isEmpty() {
-      return plus.isEmpty() && minus.isEmpty();
-    }
-
-    String summarize() {
-      return ModeSummary.describeBufferedJoinModes(plus, minus);
-    }
-  }
 
 
   private record ParsedCtcp(String commandUpper, String arg) {}
@@ -1134,6 +1058,7 @@ public class IrcMediator {
         ctcpRoutingState.clearServer(sid);
         modeRoutingState.clearServer(sid);
         awayRoutingState.clearServer(sid);
+        inboundModeEventHandler.clearServer(sid);
       }
       targetCoordinator.refreshInputEnabledForActiveTarget();
       return;
@@ -1181,63 +1106,15 @@ public class IrcMediator {
 
 
       case IrcEvent.ChannelModeChanged ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-
-        String byRaw = ev.by();
-        String details = ev.details();
-
-        // Suppress the initial burst of simple channel-flag modes right after joining.
-        JoinModeBuffer joinBuf = joinModeBuffers.get(ModeKey.of(sid, ev.channel()));
-        if (joinBuf != null) {
-          if (joinBuf.tryAdd(details)) {
-            // Print quickly (debounced) instead of waiting for TOPIC/NAMES.
-            joinBuf.bumpFlush(() -> flushJoinModesIfAny(sid, ev.channel(), true));
-            return;
-          }
-          // As soon as we see something else, flush the buffered summary so the join feels complete.
-          flushJoinModesIfAny(sid, ev.channel(), true);
-        }
-
-        // Make MODE output human-friendly (e.g. +b mask -> "ban added").
-        for (String line : ModePrettyPrinter.pretty(byRaw, ev.channel(), details)) {
-          ui.appendNotice(chan, "(mode)", line);
-        }
+        inboundModeEventHandler.handleChannelModeChanged(sid, ev);
       }
 
       case IrcEvent.ChannelModesListed ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-
-        ModeKey key = ModeKey.of(sid, ev.channel());
-
-        // If this arrived during join, prefer the authoritative 324 summary and discard any buffered noise.
-        JoinModeBuffer removed = joinModeBuffers.remove(key);
-        if (removed != null) removed.cancelFlushTimer();
-
-        TargetRef out = modeRoutingState.removePendingModeTarget(sid, ev.channel());
-        if (out == null) out = chan;
-
-        String summary = ModeSummary.describeCurrentChannelModes(ev.details());
-        if (summary != null && !summary.isBlank()) {
-          // If we already printed a join-burst summary, don't immediately duplicate it with 324.
-          if (out.equals(chan)) {
-            Long printedMs = joinModeSummaryPrintedMs.remove(key);
-            if (printedMs != null && (System.currentTimeMillis() - printedMs) < 4000L) {
-              return;
-            }
-          } else {
-            // Clean up any stale marker.
-            joinModeSummaryPrintedMs.remove(key);
-          }
-
-          ui.appendNotice(out, "(mode)", summary);
-        }
-
+        inboundModeEventHandler.handleChannelModesListed(sid, ev);
       }
 
       case IrcEvent.ChannelTopicUpdated ev -> {
-        flushJoinModesIfAny(sid, ev.channel(), false);
+        inboundModeEventHandler.onChannelTopicUpdated(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.setChannelTopic(chan, ev.topic());
@@ -1372,7 +1249,7 @@ public class IrcMediator {
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
 
         // Buffer the initial channel-flag modes so the join doesn't spam the view.
-        startJoinModeBuffer(sid, ev.channel());
+        inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
 
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
@@ -1380,7 +1257,7 @@ public class IrcMediator {
       }
 
       case IrcEvent.NickListUpdated ev -> {
-        flushJoinModesIfAny(sid, ev.channel(), false);
+        inboundModeEventHandler.onNickListUpdated(sid, ev.channel());
         targetCoordinator.onNickListUpdated(sid, ev);
       }
 
@@ -1401,59 +1278,6 @@ public class IrcMediator {
     }
   }
 
-
-  private void startJoinModeBuffer(String serverId, String channel) {
-    if (channel == null || channel.isBlank()) return;
-
-    ModeKey key = ModeKey.of(serverId, channel);
-
-    // Always overwrite: the latest join wins.
-    joinModeSummaryPrintedMs.remove(key);
-
-    joinModeBuffers.put(key, new JoinModeBuffer());
-
-    // Fallback flush: if we already collected any join-burst flags, print soon after join.
-    // IMPORTANT: do NOT discard an empty buffer here; some networks delay MODE for a couple seconds.
-    javax.swing.Timer t = new javax.swing.Timer(1500, e -> flushJoinModesIfAny(serverId, channel, false));
-    t.setRepeats(false);
-    t.start();
-
-    // Cleanup: if we never receive join-burst modes, don't keep the empty buffer forever.
-    javax.swing.Timer cleanup = new javax.swing.Timer(15000, e -> flushJoinModesIfAny(serverId, channel, true));
-    cleanup.setRepeats(false);
-    cleanup.start();
-  }
-
-  private void flushJoinModesIfAny(String serverId, String channel, boolean finalizeIfEmpty) {
-    if (channel == null || channel.isBlank()) return;
-
-    ModeKey key = ModeKey.of(serverId, channel);
-
-    JoinModeBuffer buf = joinModeBuffers.get(key);
-    if (buf == null) return;
-
-    // Don't finalize early when we haven't seen any join-burst modes yet (topic/NAMES can arrive first).
-    if (buf.isEmpty()) {
-      if (finalizeIfEmpty) {
-        joinModeBuffers.remove(key, buf);
-        buf.cancelFlushTimer();
-      }
-      return;
-    }
-
-    // We have something to print; finalize this join-burst.
-    joinModeBuffers.remove(key, buf);
-    buf.cancelFlushTimer();
-
-    TargetRef chan = new TargetRef(serverId, channel);
-    ensureTargetExists(chan);
-
-    String summary = buf.summarize();
-    if (summary == null || summary.isBlank()) return;
-
-    joinModeSummaryPrintedMs.put(key, System.currentTimeMillis());
-    ui.appendNotice(chan, "(mode)", summary);
-  }
 
   private boolean containsSelfMention(String serverId, String from, String message) {
     if (serverId == null || message == null || message.isEmpty()) return false;

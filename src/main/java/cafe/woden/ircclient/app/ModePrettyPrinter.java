@@ -9,7 +9,7 @@ import java.util.List;
  * <p>Input format is typically something like "+o nick", "+b mask", "+ov nick1 nick2", etc.
  * If a raw line sneaks through, we try to recover the mode section.
  */
-public final class ModePrettyPrinter {
+final class ModePrettyPrinter {
 
   private ModePrettyPrinter() {}
 
