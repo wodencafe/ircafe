@@ -43,6 +43,7 @@ import org.pircbotx.cap.SASLCapHandler;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.Event;
 import org.pircbotx.hooks.events.*;
+import org.pircbotx.hooks.types.GenericCTCPEvent;
 import org.pircbotx.snapshot.ChannelSnapshot;
 import org.pircbotx.snapshot.UserChannelDaoSnapshot;
 import org.pircbotx.snapshot.UserSnapshot;
@@ -966,6 +967,74 @@ public class PircbotxIrcClientService implements IrcClientService {
           ? new IrcEvent.SoftNotice(Instant.now(), from, notice)
           : new IrcEvent.Notice(Instant.now(), from, notice)
       ));
+    }
+
+    @Override
+    public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
+      touchInbound();
+      log.info("CTCP: {}", event);
+
+      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+      String hostmask = (event != null && event.getUser() != null) ? hostmaskFromUser(event.getUser()) : "";
+
+      // Hard ignore (CTCP): only applies if configured to include CTCP.
+      boolean hardIgnored = !hostmask.isEmpty()
+          && ignoreListService.hardIgnoreIncludesCtcp()
+          && ignoreListService.isHardIgnored(serverId, hostmask);
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
+      if (!hardIgnored) {
+        String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+
+        // In PircBotX, the CTCP command is implied by the event type (PingEvent, VersionEvent, TimeEvent, etc).
+        String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
+        String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
+        cmd = cmd.toUpperCase(java.util.Locale.ROOT);
+
+        // Some CTCP types carry a value (e.g. PING has a ping value).
+        String arg = null;
+        try {
+          java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
+          Object v = m.invoke(event);
+          if (v != null) arg = v.toString();
+        } catch (Exception ignored) {
+          // Ignore: not all CTCP events expose a value.
+        }
+
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftCtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
+            : new IrcEvent.CtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
+        ));
+      }
+
+      super.onGenericCTCP(event);
+    }
+
+    // FingerEvent is a CTCP request, but in PircBotX it is not part of the GenericCTCPEvent hierarchy.
+    @Override
+    public void onFinger(FingerEvent event) throws Exception {
+      touchInbound();
+      log.info("CTCP (FINGER): {}", event);
+
+      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+      String hostmask = (event != null && event.getUser() != null) ? hostmaskFromUser(event.getUser()) : "";
+
+      boolean hardIgnored = !hostmask.isEmpty()
+          && ignoreListService.hardIgnoreIncludesCtcp()
+          && ignoreListService.isHardIgnored(serverId, hostmask);
+
+      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+
+      if (!hardIgnored) {
+        String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+        bus.onNext(new ServerIrcEvent(serverId, softIgnored
+            ? new IrcEvent.SoftCtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
+            : new IrcEvent.CtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
+        ));
+      }
+
+      super.onFinger(event);
     }
 
 

@@ -32,7 +32,9 @@ public sealed interface IrcEvent permits
     IrcEvent.UserHostmaskObserved,
     IrcEvent.UserAwayStateObserved,
     IrcEvent.WhoisResult,
-    IrcEvent.Error {
+    IrcEvent.Error,
+    IrcEvent.CtcpRequestReceived,
+    IrcEvent.SoftCtcpRequestReceived {
 
   /**
    * Best-effort away status for a user.
@@ -90,6 +92,12 @@ public sealed interface IrcEvent permits
   record Notice(Instant at, String from, String text) implements IrcEvent {}
   /** A NOTICE from a soft-ignored hostmask; UI should render as a spoiler. */
   record SoftNotice(Instant at, String from, String text) implements IrcEvent {}
+
+  /** A CTCP request received from a user; intended to be shown as an in-chat notification. */
+  record CtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
+
+  /** A CTCP request received from a soft-ignored hostmask; UI should render as a spoiler. */
+  record SoftCtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
 
   /** Server confirmation for /away (RPL_UNAWAY 305, RPL_NOWAWAY 306). */
   record AwayStatusChanged(Instant at, boolean away, String message) implements IrcEvent {}

@@ -1306,6 +1306,32 @@ public class IrcMediator {
         handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
       }
 
+	      case IrcEvent.CtcpRequestReceived ev -> {
+	        // Requested behavior: show inbound CTCP requests in the currently active chat target.
+	        // (If the active target is on a different server, fall back to status.)
+	        TargetRef active = targetCoordinator.getActiveTarget();
+	        TargetRef dest = (active != null && Objects.equals(active.serverId(), sid)) ? active : status;
+	        ensureTargetExists(dest);
+
+	        String rendered = "\u2190 " + ev.from() + " CTCP " + ev.command();
+	        if (ev.argument() != null && !ev.argument().isBlank()) rendered += " " + ev.argument();
+	        if (ev.channel() != null && !ev.channel().isBlank()) rendered += " in " + ev.channel();
+	        ui.appendStatus(dest, "(ctcp)", rendered);
+	        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+	      }
+
+	      case IrcEvent.SoftCtcpRequestReceived ev -> {
+	        TargetRef active = targetCoordinator.getActiveTarget();
+	        TargetRef dest = (active != null && Objects.equals(active.serverId(), sid)) ? active : status;
+	        ensureTargetExists(dest);
+
+	        String rendered = "\u2190 " + ev.from() + " CTCP " + ev.command();
+	        if (ev.argument() != null && !ev.argument().isBlank()) rendered += " " + ev.argument();
+	        if (ev.channel() != null && !ev.channel().isBlank()) rendered += " in " + ev.channel();
+	        ui.appendSpoilerChat(dest, "(ctcp)", rendered);
+	        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+	      }
+
       case IrcEvent.AwayStatusChanged ev -> {
         awayByServer.put(sid, ev.away());
         if (!ev.away()) awayReasonByServer.remove(sid);
