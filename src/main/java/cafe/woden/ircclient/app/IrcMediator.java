@@ -475,10 +475,65 @@ public class IrcMediator {
       case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
       case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
       case ParsedInput.Ctcp cmd -> handleCtcp(cmd.nick(), cmd.command(), cmd.args());
+      case ParsedInput.Quote cmd -> handleQuote(cmd.rawLine());
       case ParsedInput.Say cmd -> handleSay(cmd.text());
       case ParsedInput.Unknown cmd ->
           ui.appendStatus(safeStatusTarget(), "(system)", "Unknown command: " + cmd.raw());
     }
+  }
+
+  private void handleQuote(String rawLine) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(safeStatusTarget(), "(quote)", "Select a server first.");
+      return;
+    }
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ensureTargetExists(status);
+
+    String line = rawLine == null ? "" : rawLine.trim();
+    if (line.isEmpty()) {
+      ui.appendStatus(status, "(quote)", "Usage: /quote <RAW IRC LINE>");
+      ui.appendStatus(status, "(quote)", "Example: /quote MONITOR +nick");
+      ui.appendStatus(status, "(quote)", "Alias: /raw <RAW IRC LINE>");
+      return;
+    }
+
+    // Prevent accidental multi-line injection.
+    if (line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) {
+      ui.appendStatus(status, "(quote)", "Refusing to send multi-line /quote input.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+
+    // Echo a safe preview of what we are sending (avoid leaking secrets).
+    String echo = redactIfSensitive(line);
+    ui.appendStatus(status, "(quote)", "→ " + echo);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line).subscribe(
+            () -> {},
+            err -> ui.appendError(status, "(quote-error)", String.valueOf(err))
+        )
+    );
+  }
+
+  private static String redactIfSensitive(String raw) {
+    String s = raw == null ? "" : raw.trim();
+    if (s.isEmpty()) return s;
+
+    int sp = s.indexOf(' ');
+    String head = (sp < 0 ? s : s.substring(0, sp)).trim();
+    String upper = head.toUpperCase(java.util.Locale.ROOT);
+    if (upper.equals("PASS") || upper.equals("OPER") || upper.equals("AUTHENTICATE")) {
+      return upper + (sp < 0 ? "" : " <redacted>");
+    }
+    return s;
   }
 
   private void handleJoin(String channel) {

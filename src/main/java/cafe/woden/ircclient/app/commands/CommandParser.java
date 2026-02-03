@@ -149,6 +149,18 @@ public class CommandParser {
       return new ParsedInput.Ctcp(nick, cmd, args);
     }
 
+    // Raw IRC line escape hatch.
+    if (matchesCommand(line, "/quote")) {
+      String rawLine = argAfter(line, "/quote");
+      return new ParsedInput.Quote(rawLine);
+    }
+
+    // Alias used by some clients.
+    if (matchesCommand(line, "/raw")) {
+      String rawLine = argAfter(line, "/raw");
+      return new ParsedInput.Quote(rawLine);
+    }
+
     return new ParsedInput.Unknown(line);
   }
 

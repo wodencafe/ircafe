@@ -64,10 +64,8 @@ public class PircbotxIrcClientService implements IrcClientService {
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
                                  ServerRegistry serverRegistry,
-                                 IgnoreListService ignoreListService,
-                                 ClientIdentityService identity) {
+                                 IgnoreListService ignoreListService) {
     this.serverRegistry = serverRegistry;
-    this.identity = identity;
     this.reconnectPolicy = props.client().reconnect();
     version = props.client().version();
     this.ignoreListService = ignoreListService;
@@ -527,7 +525,7 @@ public class PircbotxIrcClientService implements IrcClientService {
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
 
     if ("VERSION".equals(cmd)) {
-      String v = (identity == null) ? "IRCafe" : identity.version();
+      String v = (version == null) ? "IRCafe" : version;
       bot.sendIRC().notice(sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
       return true;
     }

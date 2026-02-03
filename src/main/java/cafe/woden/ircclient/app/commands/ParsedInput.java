@@ -24,6 +24,7 @@ public sealed interface ParsedInput permits
     ParsedInput.Ignore,
     ParsedInput.Unignore,
     ParsedInput.IgnoreList,
+    ParsedInput.Quote,
     ParsedInput.Say,
     ParsedInput.Unknown {
 
@@ -84,6 +85,13 @@ public sealed interface ParsedInput permits
 
   /** /ignorelist */
   record IgnoreList() implements ParsedInput {}
+
+  /**
+   * /quote <RAW IRC LINE>
+   *
+   * <p>Sends a raw IRC protocol line to the server (for advanced/unsupported commands).
+   */
+  record Quote(String rawLine) implements ParsedInput {}
 
   record Say(String text) implements ParsedInput {}
 

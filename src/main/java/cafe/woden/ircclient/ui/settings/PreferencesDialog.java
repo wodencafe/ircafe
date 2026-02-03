@@ -109,6 +109,11 @@ public class PreferencesDialog {
     JSpinner fontSize = new JSpinner(new SpinnerNumberModel(current.chatFontSize(), 8, 48, 1));
     final var fontSizeMouseWheelAC = MouseWheelDecorator.decorateNumberSpinner(fontSize);
 
+    JCheckBox autoConnectOnStart = new JCheckBox("Auto-connect to servers on startup");
+    autoConnectOnStart.setSelected(current.autoConnectOnStart());
+    autoConnectOnStart.setToolTipText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads.\n" +
+        "If disabled, IRCafe starts disconnected and you can connect manually using the Connect button.");
+
     JCheckBox imageEmbeds = new JCheckBox("Enable inline image embeds (direct links)");
     imageEmbeds.setSelected(current.imageEmbedsEnabled());
     imageEmbeds.setToolTipText("If enabled, IRCafe will download and render images from direct image URLs in chat.");
@@ -390,6 +395,9 @@ public class PreferencesDialog {
     form.add(new JLabel("Chat font size"));
     form.add(fontSize, "w 90!");
 
+    form.add(new JLabel("Startup"));
+    form.add(autoConnectOnStart);
+
     form.add(new JLabel("Inline images"), "aligny top");
     form.add(imagePanel, "growx");
 
@@ -423,6 +431,7 @@ public class PreferencesDialog {
       String t = String.valueOf(theme.getSelectedItem());
       String fam = String.valueOf(fontFamily.getSelectedItem());
       int size = ((Number) fontSize.getValue()).intValue();
+      boolean autoConnectV = autoConnectOnStart.isSelected();
       int maxImageW = ((Number) imageMaxWidth.getValue()).intValue();
       int maxImageH = ((Number) imageMaxHeight.getValue()).intValue();
 
@@ -445,6 +454,7 @@ public class PreferencesDialog {
           t,
           fam,
           size,
+          autoConnectV,
           imageEmbeds.isSelected(),
           imageEmbedsCollapsed.isSelected(),
           maxImageW,
@@ -469,6 +479,7 @@ public class PreferencesDialog {
 
       settingsBus.set(next);
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
+      runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
       runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
       runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
       runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());

@@ -8,6 +8,9 @@ public record UiSettings(
     String chatFontFamily,
     int chatFontSize,
 
+    /** If enabled, connect to all configured servers automatically after the UI loads. */
+    boolean autoConnectOnStart,
+
     boolean imageEmbedsEnabled,
     boolean imageEmbedsCollapsedByDefault,
 
@@ -102,7 +105,7 @@ public record UiSettings(
   }
 
   public UiSettings withTheme(String nextTheme) {
-    return new UiSettings(nextTheme, chatFontFamily, chatFontSize,
+    return new UiSettings(nextTheme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -112,7 +115,7 @@ public record UiSettings(
   }
 
   public UiSettings withChatFontFamily(String family) {
-    return new UiSettings(theme, family, chatFontSize,
+    return new UiSettings(theme, family, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -122,7 +125,7 @@ public record UiSettings(
   }
 
   public UiSettings withChatFontSize(int size) {
-    return new UiSettings(theme, chatFontFamily, size,
+    return new UiSettings(theme, chatFontFamily, size, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -132,7 +135,7 @@ public record UiSettings(
   }
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         enabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -142,7 +145,7 @@ public record UiSettings(
   }
 
   public UiSettings withImageEmbedsCollapsedByDefault(boolean collapsed) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, collapsed, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -152,7 +155,7 @@ public record UiSettings(
   }
 
   public UiSettings withImageEmbedsMaxWidthPx(int maxWidthPx) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, Math.max(0, maxWidthPx), imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -162,7 +165,7 @@ public record UiSettings(
   }
 
   public UiSettings withImageEmbedsMaxHeightPx(int maxHeightPx) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, Math.max(0, maxHeightPx), imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -172,7 +175,7 @@ public record UiSettings(
   }
 
   public UiSettings withLinkPreviewsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         enabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -182,7 +185,7 @@ public record UiSettings(
   }
 
   public UiSettings withLinkPreviewsCollapsedByDefault(boolean collapsed) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, collapsed,
         presenceFoldsEnabled, chatMessageTimestampsEnabled,
@@ -192,7 +195,7 @@ public record UiSettings(
   }
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         enabled, chatMessageTimestampsEnabled,
@@ -202,10 +205,20 @@ public record UiSettings(
   }
 
   public UiSettings withChatMessageTimestampsEnabled(boolean enabled) {
-    return new UiSettings(theme, chatFontFamily, chatFontSize,
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, enabled,
+        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        clientLineColorEnabled, clientLineColor,
+        userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
+  }
+
+  public UiSettings withAutoConnectOnStart(boolean enabled) {
+    return new UiSettings(theme, chatFontFamily, chatFontSize, enabled,
+        imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
+        linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
+        presenceFoldsEnabled, chatMessageTimestampsEnabled,
         chatHistoryInitialLoadLines, chatHistoryPageSize,
         clientLineColorEnabled, clientLineColor,
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand);
