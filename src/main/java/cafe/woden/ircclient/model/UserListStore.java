@@ -61,6 +61,25 @@ public class UserListStore {
     return state != null && state != AwayState.UNKNOWN;
   }
 
+  /**
+   * Best-effort learned hostmask for a nick on a server.
+   *
+   * <p>This is populated opportunistically from inbound IRC prefixes (messages, joins, parts, etc.).
+   * It is NOT guaranteed to exist for every nick.
+   */
+  public String getLearnedHostmask(String serverId, String nick) {
+    String sid = norm(serverId);
+    if (sid.isEmpty()) return null;
+    String nk = nickKey(nick);
+    if (nk.isEmpty()) return null;
+
+    Map<String, String> byNick = hostmaskByServerAndNickLower.get(sid);
+    if (byNick == null) return null;
+    String hm = byNick.get(nk);
+    hm = norm(hm);
+    return hm.isEmpty() ? null : hm;
+  }
+
   private static String normalizeAwayMessage(AwayState state, String msg) {
     if (state == null || state != AwayState.AWAY) return null;
     String m = norm(msg);

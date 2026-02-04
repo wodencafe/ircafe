@@ -105,8 +105,30 @@ public record UiProperties(
     List<String> nickColors,
 
     /** Optional per-nick color overrides (case-insensitive keys, hex color values). */
-    Map<String, String> nickColorOverrides
+    Map<String, String> nickColorOverrides,
+
+    /** Docking/layout defaults (initial dock sizes on first open). */
+    Layout layout
 ) {
+
+  /**
+   * Docking/layout defaults.
+   *
+   * <p>These sizes are used as a best-effort "first open" hint. After the user drags split dividers,
+   * those new sizes are preserved by the split-pane lock logic.
+   */
+  public record Layout(
+      Integer serverDockWidthPx,
+      Integer userDockWidthPx,
+      Integer inputDockHeightPx
+  ) {
+    public Layout {
+      if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
+      if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
+      // The input dock is primarily height-locked; keep a reasonable default.
+      if (inputDockHeightPx == null || inputDockHeightPx <= 0) inputDockHeightPx = 140;
+    }
+  }
 
   /**
    * Chat/status timestamp settings.
@@ -194,6 +216,10 @@ public record UiProperties(
     }
     // Default outgoing message color if enabled but not set explicitly.
     clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
+
+    if (layout == null) {
+      layout = new Layout(null, null, null);
+    }
 
 
     // Image embeds default: disabled.

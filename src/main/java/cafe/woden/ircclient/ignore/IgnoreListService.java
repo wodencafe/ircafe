@@ -282,11 +282,7 @@ public class IgnoreListService {
     List<String> masks = listMasks(sid);
     if (masks.isEmpty()) return false;
 
-    for (String m : masks) {
-      if (m == null || m.isBlank()) continue;
-      if (globMatchIgnoreMask(m, hm)) return true;
-    }
-    return false;
+    return IgnoreMaskMatcher.hostmaskTargetedByAny(masks, hm);
   }
 
 
@@ -306,11 +302,7 @@ public class IgnoreListService {
     List<String> masks = listSoftMasks(sid);
     if (masks.isEmpty()) return false;
 
-    for (String m : masks) {
-      if (m == null || m.isBlank()) continue;
-      if (globMatchIgnoreMask(m, hm)) return true;
-    }
-    return false;
+    return IgnoreMaskMatcher.hostmaskTargetedByAny(masks, hm);
   }
 
   private static boolean globMatchIgnoreMask(String pattern, String text) {

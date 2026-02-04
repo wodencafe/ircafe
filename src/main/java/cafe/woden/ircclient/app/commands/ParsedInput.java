@@ -24,6 +24,9 @@ public sealed interface ParsedInput permits
     ParsedInput.Ignore,
     ParsedInput.Unignore,
     ParsedInput.IgnoreList,
+    ParsedInput.SoftIgnore,
+    ParsedInput.UnsoftIgnore,
+    ParsedInput.SoftIgnoreList,
     ParsedInput.Quote,
     ParsedInput.Say,
     ParsedInput.Unknown {
@@ -85,6 +88,15 @@ public sealed interface ParsedInput permits
 
   /** /ignorelist */
   record IgnoreList() implements ParsedInput {}
+
+  /** /softignore <maskOrNick> */
+  record SoftIgnore(String maskOrNick) implements ParsedInput {}
+
+  /** /unsoftignore <maskOrNick> */
+  record UnsoftIgnore(String maskOrNick) implements ParsedInput {}
+
+  /** /softignorelist */
+  record SoftIgnoreList() implements ParsedInput {}
 
   /**
    * /quote <RAW IRC LINE>

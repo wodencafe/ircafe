@@ -109,6 +109,21 @@ public class CommandParser {
       return new ParsedInput.IgnoreList();
     }
 
+    if (matchesCommand(line, "/softignore")) {
+      String arg = argAfter(line, "/softignore");
+      return new ParsedInput.SoftIgnore(arg);
+    }
+
+    if (matchesCommand(line, "/unsoftignore")) {
+      String arg = argAfter(line, "/unsoftignore");
+      return new ParsedInput.UnsoftIgnore(arg);
+    }
+
+    if (matchesCommand(line, "/softignorelist") || matchesCommand(line, "/softignores")) {
+      return new ParsedInput.SoftIgnoreList();
+    }
+
+
 
     if (matchesCommand(line, "/version")) {
       String nick = argAfter(line, "/version");

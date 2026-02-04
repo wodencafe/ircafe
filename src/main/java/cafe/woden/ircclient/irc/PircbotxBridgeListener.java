@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.irc;
 
-import cafe.woden.ircclient.ignore.IgnoreListService;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.Comparator;
@@ -39,7 +38,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   private final String serverId;
   private final PircbotxConnectionState conn;
-  private final IgnoreListService ignoreListService;
   private final FlowableProcessor<ServerIrcEvent> bus;
   private final Consumer<PircbotxConnectionState> heartbeatStopper;
   private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
@@ -48,7 +46,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   PircbotxBridgeListener(
       String serverId,
       PircbotxConnectionState conn,
-      IgnoreListService ignoreListService,
       FlowableProcessor<ServerIrcEvent> bus,
       Consumer<PircbotxConnectionState> heartbeatStopper,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
@@ -56,7 +53,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   ) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
-    this.ignoreListService = Objects.requireNonNull(ignoreListService, "ignoreListService");
     this.bus = Objects.requireNonNull(bus, "bus");
     this.heartbeatStopper = Objects.requireNonNull(heartbeatStopper, "heartbeatStopper");
     this.reconnectScheduler = Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
@@ -118,31 +114,21 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       maybeEmitHostmaskObserved(channel, event.getUser());
       String msg = event.getMessage();
 
-      // Hard ignore: optionally includes CTCP depending on config.
-      String hostmask = PircbotxUtil.hostmaskFromUser(event.getUser());
-      boolean ctcp = PircbotxUtil.isCtcpWrapped(msg);
-      if (!hostmask.isEmpty()
-          && ignoreListService.isHardIgnored(serverId, hostmask)
-          && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
-        return;
-      }
-
-      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+      // No ignore filtering here (handled centrally in the app layer).
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, softIgnored
-            ? new IrcEvent.SoftChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
-            : new IrcEvent.ChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.ChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
         ));
         return;
       }
 
-      bus.onNext(new ServerIrcEvent(serverId, softIgnored
-          ? new IrcEvent.SoftChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
-          : new IrcEvent.ChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
+      bus.onNext(new ServerIrcEvent(serverId,
+          new IrcEvent.ChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
       ));
     }
+
 
     @Override
     public void onAction(ActionEvent event) {
@@ -151,28 +137,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
 
-      String hostmask = (event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
-
-      // Hard ignore (CTCP): only applies if configured to include CTCP.
-      if (!hostmask.isEmpty() && ignoreListService.hardIgnoreIncludesCtcp()
-          && ignoreListService.isHardIgnored(serverId, hostmask)) {
-        return;
-      }
-
-      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+      // No ignore filtering here (handled centrally in the app layer).
 
       if (event.getChannel() != null) {
         String channel = event.getChannel().getName();
         maybeEmitHostmaskObserved(channel, event.getUser());
-        bus.onNext(new ServerIrcEvent(serverId, softIgnored
-            ? new IrcEvent.SoftChannelAction(Instant.now(), channel, from, action)
-            : new IrcEvent.ChannelAction(Instant.now(), channel, from, action)
-        ));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(Instant.now(), channel, from, action)));
       } else {
-        bus.onNext(new ServerIrcEvent(serverId, softIgnored
-            ? new IrcEvent.SoftPrivateAction(Instant.now(), from, action)
-            : new IrcEvent.PrivateAction(Instant.now(), from, action)
-        ));
+        maybeEmitHostmaskObserved("", event.getUser());
+
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(Instant.now(), from, action)));
       }
     }
 
@@ -195,32 +169,19 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String from = event.getUser().getNick();
       String msg = event.getMessage();
 
-      // Hard ignore: optionally includes CTCP depending on config.
-      String hostmask = PircbotxUtil.hostmaskFromUser(event.getUser());
-      boolean ctcp = PircbotxUtil.isCtcpWrapped(msg);
-      if (!hostmask.isEmpty()
-          && ignoreListService.isHardIgnored(serverId, hostmask)
-          && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
-        return;
-      }
-
-      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+      // Passive capture: learn hostmask even for PMs (channel may be blank).
+      maybeEmitHostmaskObserved("", event.getUser());
+      // No ignore filtering here (handled centrally in the app layer).
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, softIgnored
-            ? new IrcEvent.SoftPrivateAction(Instant.now(), from, action)
-            : new IrcEvent.PrivateAction(Instant.now(), from, action)
-        ));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(Instant.now(), from, action)));
         return;
       }
 
       if (ctcpHandler.handle(event.getBot(), from, msg)) return;
 
-      bus.onNext(new ServerIrcEvent(serverId, softIgnored
-          ? new IrcEvent.SoftPrivateMessage(Instant.now(), from, msg)
-          : new IrcEvent.PrivateMessage(Instant.now(), from, msg)
-      ));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
     }
 
     @Override
@@ -229,24 +190,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       String notice = event.getNotice();
 
-      boolean softIgnored = false;
-
-      // Hard ignore: optionally includes CTCP depending on config.
       if (event.getUser() != null) {
-        String hostmask = PircbotxUtil.hostmaskFromUser(event.getUser());
-        boolean ctcp = PircbotxUtil.isCtcpWrapped(notice);
-        if (!hostmask.isEmpty()
-            && ignoreListService.isHardIgnored(serverId, hostmask)
-            && (ignoreListService.hardIgnoreIncludesCtcp() || !ctcp)) {
-          return;
-        }
-        softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
+        // Passive capture: learn hostmask from NOTICE prefixes (incl. CTCP replies).
+        maybeEmitHostmaskObserved("", event.getUser());
       }
+      // No ignore filtering here (handled centrally in the app layer).
 
-      bus.onNext(new ServerIrcEvent(serverId, softIgnored
-          ? new IrcEvent.SoftNotice(Instant.now(), from, notice)
-          : new IrcEvent.Notice(Instant.now(), from, notice)
-      ));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, notice)));
     }
 
     @Override
@@ -257,36 +207,33 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
       String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
 
-      // Hard ignore (CTCP): only applies if configured to include CTCP.
-      boolean hardIgnored = !hostmask.isEmpty()
-          && ignoreListService.hardIgnoreIncludesCtcp()
-          && ignoreListService.isHardIgnored(serverId, hostmask);
-
-      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
-
-      if (!hardIgnored) {
-        String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-
-        // In PircBotX, the CTCP command is implied by the event type (PingEvent, VersionEvent, TimeEvent, etc).
-        String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
-        String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
-        cmd = cmd.toUpperCase(Locale.ROOT);
-
-        // Some CTCP types carry a value (e.g. PING has a ping value).
-        String arg = null;
-        try {
-          java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
-          Object v = m.invoke(event);
-          if (v != null) arg = v.toString();
-        } catch (Exception ignored) {
-          // Ignore: not all CTCP events expose a value.
-        }
-
-        bus.onNext(new ServerIrcEvent(serverId, softIgnored
-            ? new IrcEvent.SoftCtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
-            : new IrcEvent.CtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
-        ));
+      if (event != null && event.getUser() != null) {
+        String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
+        // Passive capture: learn hostmask from CTCP request prefixes.
+        maybeEmitHostmaskObserved(ch, event.getUser());
       }
+      // No ignore filtering here (handled centrally in the app layer).
+
+      String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+
+      // In PircBotX, the CTCP command is implied by the event type (PingEvent, VersionEvent, TimeEvent, etc).
+      String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
+      String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
+      cmd = cmd.toUpperCase(Locale.ROOT);
+
+      // Some CTCP types carry a value (e.g. PING has a ping value).
+      String arg = null;
+      try {
+        java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
+        Object v = m.invoke(event);
+        if (v != null) arg = v.toString();
+      } catch (Exception ignored) {
+        // Ignore: not all CTCP events expose a value.
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId,
+          new IrcEvent.CtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
+      ));
 
       super.onGenericCTCP(event);
     }
@@ -300,19 +247,17 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
       String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
 
-      boolean hardIgnored = !hostmask.isEmpty()
-          && ignoreListService.hardIgnoreIncludesCtcp()
-          && ignoreListService.isHardIgnored(serverId, hostmask);
-
-      boolean softIgnored = !hostmask.isEmpty() && ignoreListService.isSoftIgnored(serverId, hostmask);
-
-      if (!hardIgnored) {
-        String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-        bus.onNext(new ServerIrcEvent(serverId, softIgnored
-            ? new IrcEvent.SoftCtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
-            : new IrcEvent.CtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
-        ));
+      if (event != null && event.getUser() != null) {
+        String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
+        // Passive capture: learn hostmask from CTCP request prefixes.
+        maybeEmitHostmaskObserved(ch, event.getUser());
       }
+      // No ignore filtering here (handled centrally in the app layer).
+
+      String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+      bus.onNext(new ServerIrcEvent(serverId,
+          new IrcEvent.CtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
+      ));
 
       super.onFinger(event);
     }
@@ -638,6 +583,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       touchInbound();
       PircBotX bot = event.getBot();
 
+      try {
+        maybeEmitHostmaskObserved("", event.getUser());
+      } catch (Exception ignored) {}
+
       String nick = null;
       try {
         nick = event.getUser() == null ? null : event.getUser().getNick();
@@ -699,7 +648,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
 
     private void maybeEmitHostmaskObserved(String channel, User user) {
-      if (channel == null || channel.isBlank() || user == null) return;
+      if (user == null) return;
       String nick = PircbotxUtil.safeStr(user::getNick, "");
       if (nick == null || nick.isBlank()) return;
 
@@ -710,10 +659,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String prev = conn.lastHostmaskByNickLower.put(key, hm);
       if (Objects.equals(prev, hm)) return; // no change
 
+      String ch = (channel == null) ? "" : channel;
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(
-          Instant.now(), channel, nick.trim(), hm
+          Instant.now(), ch, nick.trim(), hm
       )));
     }
+
 
 
     @Override
@@ -731,6 +682,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onNickChange(NickChangeEvent event) {
       touchInbound();
+      try {
+        maybeEmitHostmaskObserved("", event.getUser());
+      } catch (Exception ignored) {}
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickChanged(
           Instant.now(),
           event.getOldNick(),

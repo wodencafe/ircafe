@@ -75,6 +75,13 @@ ircafe:
     # Nick color section
     nickColoringEnabled: true
     nickColorMinContrast: 4.5   # 4.5 is a solid default
+
+    # Docking/layout defaults (best-effort "first open" sizes). After you drag split dividers,
+    # those sizes are preserved by IRCafe's split-pane lock logic.
+    layout:
+      serverDockWidthPx: 280
+      userDockWidthPx: 240
+      inputDockHeightPx: 140
     # Optional: custom palette (hex strings). If omitted, uses built-in 32-color palette.
     # nickColors:
     #   - "#E57373"
@@ -118,6 +125,7 @@ irc:
       # Maximum delay between retries.
       maxDelayMs: 120000
       # Exponential backoff multiplier.
+
       multiplier: 2.0
       # Random +/- jitter (0.0 - 0.75) applied to the computed delay.
       jitterPct: 0.20

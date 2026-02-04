@@ -2,7 +2,6 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.IgnoreListService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -33,21 +32,17 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private final Map<String, PircbotxConnectionState> connections = new ConcurrentHashMap<>();
   private final ServerRegistry serverRegistry;
-
-  private final IgnoreListService ignoreListService;
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
   private final PircbotxConnectionTimersRx timers;
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
                                  ServerRegistry serverRegistry,
-                                 IgnoreListService ignoreListService,
                                  PircbotxInputParserHookInstaller inputParserHookInstaller,
                                  PircbotxBotFactory botFactory,
                                  PircbotxConnectionTimersRx timers) {
     this.serverRegistry = serverRegistry;
     version = props.client().version();
-    this.ignoreListService = ignoreListService;
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
     this.timers = timers;
@@ -84,7 +79,6 @@ public class PircbotxIrcClientService implements IrcClientService {
           PircbotxBridgeListener listener = new PircbotxBridgeListener(
               serverId,
               c,
-              ignoreListService,
               bus,
               timers::stopHeartbeat,
               this::scheduleReconnect,

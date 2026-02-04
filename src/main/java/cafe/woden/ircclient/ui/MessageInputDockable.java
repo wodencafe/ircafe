@@ -199,6 +199,7 @@ private void installInputContextMenu() {
       }
 
       refreshEnabledStates.run();
+      SwingUtilities.updateComponentTreeUI(menu);
       menu.show(e.getComponent(), e.getX(), e.getY());
     }
 

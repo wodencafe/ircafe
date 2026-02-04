@@ -3,15 +3,16 @@ package cafe.woden.ircclient.app;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
+import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
@@ -41,9 +42,9 @@ public class IrcMediator {
   private final CommandParser commandParser;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
-  private final IgnoreListService ignoreListService;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   // Routing/correlation state extracted from IrcMediator.
@@ -57,6 +58,7 @@ public class IrcMediator {
   private final OutboundModeCommandService outboundModeCommandService;
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundIgnoreCommandService outboundIgnoreCommandService;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -78,7 +80,6 @@ public class IrcMediator {
       CommandParser commandParser,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
-      IgnoreListService ignoreListService,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       WhoisRoutingState whoisRoutingState,
@@ -88,14 +89,16 @@ public class IrcMediator {
       InboundModeEventHandler inboundModeEventHandler,
       OutboundModeCommandService outboundModeCommandService,
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
-      OutboundChatCommandService outboundChatCommandService
+      OutboundChatCommandService outboundChatCommandService,
+      OutboundIgnoreCommandService outboundIgnoreCommandService,
+      InboundIgnorePolicy inboundIgnorePolicy
   ) {
+
     this.irc = irc;
     this.ui = ui;
     this.commandParser = commandParser;
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
-    this.ignoreListService = ignoreListService;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
     this.whoisRoutingState = whoisRoutingState;
@@ -106,6 +109,8 @@ public class IrcMediator {
     this.outboundModeCommandService = outboundModeCommandService;
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundIgnoreCommandService = outboundIgnoreCommandService;
+    this.inboundIgnorePolicy = inboundIgnorePolicy;
   }
 
   public void start() {
@@ -272,7 +277,17 @@ public class IrcMediator {
 
 
 
-  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler) {
+  
+  private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
+    if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
+    String f = Objects.toString(from, "").trim();
+    if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
+    // PircBotX uses "server" when no user prefix is present; don't apply user ignore rules to that.
+    if ("server".equalsIgnoreCase(f)) return InboundIgnorePolicy.Decision.ALLOW;
+    return inboundIgnorePolicy.decide(sid, f, null, isCtcp);
+  }
+
+  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler, boolean suppressOutput) {
     // CTCP replies come back as NOTICE with 0x01-wrapped payload.
     // Route them to the chat target where the request originated.
     ParsedCtcp ctcp = parseCtcp(text);
@@ -327,6 +342,7 @@ public class IrcMediator {
       }
 
       if (dest != null && rendered != null) {
+        if (suppressOutput) return;
         ensureTargetExists(dest);
         if (spoiler) {
           ui.appendSpoilerChat(dest, "(ctcp)", rendered);
@@ -337,6 +353,8 @@ public class IrcMediator {
         return;
       }
     }
+
+    if (suppressOutput) return;
 
     if (spoiler) {
       ui.appendSpoilerChat(status, "(notice) " + from, text);
@@ -381,9 +399,12 @@ public class IrcMediator {
       case ParsedInput.Devoice cmd -> outboundModeCommandService.handleDevoice(disposables, cmd.channel(), cmd.nicks());
       case ParsedInput.Ban cmd -> outboundModeCommandService.handleBan(disposables, cmd.channel(), cmd.masksOrNicks());
       case ParsedInput.Unban cmd -> outboundModeCommandService.handleUnban(disposables, cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Ignore cmd -> handleIgnore(cmd.maskOrNick());
-      case ParsedInput.Unignore cmd -> handleUnignore(cmd.maskOrNick());
-      case ParsedInput.IgnoreList cmd -> handleIgnoreList();
+      case ParsedInput.Ignore cmd -> outboundIgnoreCommandService.handleIgnore(cmd.maskOrNick());
+      case ParsedInput.Unignore cmd -> outboundIgnoreCommandService.handleUnignore(cmd.maskOrNick());
+      case ParsedInput.IgnoreList cmd -> outboundIgnoreCommandService.handleIgnoreList();
+      case ParsedInput.SoftIgnore cmd -> outboundIgnoreCommandService.handleSoftIgnore(cmd.maskOrNick());
+      case ParsedInput.UnsoftIgnore cmd -> outboundIgnoreCommandService.handleUnsoftIgnore(cmd.maskOrNick());
+      case ParsedInput.SoftIgnoreList cmd -> outboundIgnoreCommandService.handleSoftIgnoreList();
       case ParsedInput.CtcpVersion cmd -> outboundCtcpWhoisCommandService.handleCtcpVersion(disposables, cmd.nick());
       case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
       case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
@@ -398,70 +419,6 @@ public class IrcMediator {
   // --- Chatty slash commands extracted to OutboundChatCommandService --------------------
 
   // --- MODE slash commands extracted to OutboundModeCommandService --------------------
-
-  private void handleIgnore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
-      return;
-    }
-
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Usage: /ignore <maskOrNick>");
-      return;
-    }
-
-    boolean added = ignoreListService.addMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
-    if (added) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Ignoring: " + stored);
-    } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
-    }
-  }
-
-  private void handleUnignore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(unignore)", "Select a server first.");
-      return;
-    }
-
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Usage: /unignore <maskOrNick>");
-      return;
-    }
-
-    boolean removed = ignoreListService.removeMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
-    if (removed) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
-    } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
-    }
-  }
-
-  private void handleIgnoreList() {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
-      return;
-    }
-
-    java.util.List<String> masks = ignoreListService.listMasks(at.serverId());
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    if (masks.isEmpty()) {
-      ui.appendStatus(status, "(ignore)", "Ignore list is empty.");
-      return;
-    }
-
-    ui.appendStatus(status, "(ignore)", "Ignore masks (" + masks.size() + "): ");
-    for (String m : masks) {
-      ui.appendStatus(status, "(ignore)", "  - " + m);
-    }
-  }
 
   private void handleSay(String msg) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -544,36 +501,36 @@ public class IrcMediator {
           }
         });
       }
-
       case IrcEvent.ChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
-        postTo(chan, active, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+        } else {
+          postTo(chan, active, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+        }
+
         if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
       }
-
-      case IrcEvent.SoftChannelMessage ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        TargetRef active = targetCoordinator.getActiveTarget();
-        postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
-        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
-      }
-
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
-        postTo(chan, active, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+        } else {
+          postTo(chan, active, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+        }
+
         if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
       }
-
-      case IrcEvent.SoftChannelAction ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        TargetRef active = targetCoordinator.getActiveTarget();
-        postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
-        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
-      }
-
-
       case IrcEvent.ChannelModeChanged ev -> {
         inboundModeEventHandler.handleChannelModeChanged(sid, ev);
       }
@@ -588,31 +545,41 @@ public class IrcMediator {
         ensureTargetExists(chan);
         ui.setChannelTopic(chan, ev.topic());
       }
-
       case IrcEvent.PrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        postTo(pm, true, d -> ui.appendChat(d, ev.from(), ev.text()));
-      }
 
-      case IrcEvent.SoftPrivateMessage ev -> {
-        TargetRef pm = new TargetRef(sid, ev.from());
-        postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
-      }
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+        } else {
+          postTo(pm, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+        }
+      }
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        postTo(pm, true, d -> ui.appendAction(d, ev.from(), ev.action()));
-      }
 
-      case IrcEvent.SoftPrivateAction ev -> {
-        TargetRef pm = new TargetRef(sid, ev.from());
-        postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+        } else {
+          postTo(pm, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+        }
       }
       case IrcEvent.Notice ev -> {
-        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
+        boolean isCtcp = parseCtcp(ev.text()) != null;
+        InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
+        boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
+        boolean suppress = d == InboundIgnorePolicy.Decision.HARD_DROP;
+        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), spoiler, suppress);
       }
-
       case IrcEvent.CtcpRequestReceived ev -> {
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
         // Requested behavior: show inbound CTCP requests in the currently active chat target.
         // (If the active target is on a different server, fall back to status.)
         TargetRef dest = resolveActiveOrStatus(sid, status);
@@ -626,24 +593,12 @@ public class IrcMediator {
         if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
         final String rendered = sb.toString();
 
-        postTo(dest, true, d -> ui.appendStatus(d, "(ctcp)", rendered));
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(dest, true, d -> ui.appendSpoilerChat(d, "(ctcp)", rendered));
+        } else {
+          postTo(dest, true, d -> ui.appendStatus(d, "(ctcp)", rendered));
+        }
       }
-
-      case IrcEvent.SoftCtcpRequestReceived ev -> {
-        TargetRef dest = resolveActiveOrStatus(sid, status);
-
-        StringBuilder sb = new StringBuilder()
-            .append("\u2190 ")
-            .append(ev.from())
-            .append(" CTCP ")
-            .append(ev.command());
-        if (ev.argument() != null && !ev.argument().isBlank()) sb.append(' ').append(ev.argument());
-        if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
-        final String rendered = sb.toString();
-
-        postTo(dest, true, d -> ui.appendSpoilerChat(d, "(ctcp)", rendered));
-      }
-
       case IrcEvent.AwayStatusChanged ev -> {
         awayRoutingState.setAway(sid, ev.away());
         if (!ev.away()) awayRoutingState.setLastReason(sid, null);
@@ -675,11 +630,6 @@ public class IrcMediator {
         TargetRef finalDest = dest;
         postTo(finalDest, true, d -> ui.appendStatus(d, "(away)", rendered));
       }
-
-      case IrcEvent.SoftNotice ev -> {
-        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), true);
-      }
-
       case IrcEvent.WhoisResult ev -> {
         TargetRef dest = whoisRoutingState.remove(sid, ev.nick());
         if (dest == null) dest = status;

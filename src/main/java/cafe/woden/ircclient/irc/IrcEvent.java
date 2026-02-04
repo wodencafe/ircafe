@@ -11,17 +11,17 @@ public sealed interface IrcEvent permits
     IrcEvent.NickChanged,
     IrcEvent.ChannelMessage,
     IrcEvent.ChannelAction,
-    IrcEvent.SoftChannelMessage,
-    IrcEvent.SoftChannelAction,
+
+
     IrcEvent.ChannelModeChanged,
     IrcEvent.ChannelModesListed,
     IrcEvent.ChannelTopicUpdated,
     IrcEvent.PrivateMessage,
     IrcEvent.PrivateAction,
-    IrcEvent.SoftPrivateMessage,
-    IrcEvent.SoftPrivateAction,
+
+
     IrcEvent.Notice,
-    IrcEvent.SoftNotice,
+
     IrcEvent.AwayStatusChanged,
     IrcEvent.UserJoinedChannel,
     IrcEvent.UserPartedChannel,
@@ -33,8 +33,8 @@ public sealed interface IrcEvent permits
     IrcEvent.UserAwayStateObserved,
     IrcEvent.WhoisResult,
     IrcEvent.Error,
-    IrcEvent.CtcpRequestReceived,
-    IrcEvent.SoftCtcpRequestReceived {
+    IrcEvent.CtcpRequestReceived
+ {
 
   /**
    * Best-effort away status for a user.
@@ -63,12 +63,6 @@ public sealed interface IrcEvent permits
   /** A CTCP ACTION (/me) sent to a channel. */
   record ChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
 
-  /** A channel message from a soft-ignored hostmask; UI should render as a spoiler. */
-  record SoftChannelMessage(Instant at, String channel, String from, String text) implements IrcEvent {}
-
-  /** A CTCP ACTION (/me) sent to a channel from a soft-ignored hostmask; UI should render as a spoiler. */
-  record SoftChannelAction(Instant at, String channel, String from, String action) implements IrcEvent {}
-
   /** A channel MODE change (e.g. +o nick, +m). */
   record ChannelModeChanged(Instant at, String channel, String by, String details) implements IrcEvent {}
   record ChannelModesListed(Instant at, String channel, String details) implements IrcEvent {}
@@ -84,20 +78,9 @@ public sealed interface IrcEvent permits
   /** A CTCP ACTION (/me) sent as a private message. */
   record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
 
-  /** A private message from a soft-ignored hostmask; UI should render as a spoiler. */
-  record SoftPrivateMessage(Instant at, String from, String text) implements IrcEvent {}
-
-  /** A CTCP ACTION (/me) sent as a private message from a soft-ignored hostmask; UI should render as a spoiler. */
-  record SoftPrivateAction(Instant at, String from, String action) implements IrcEvent {}
   record Notice(Instant at, String from, String text) implements IrcEvent {}
-  /** A NOTICE from a soft-ignored hostmask; UI should render as a spoiler. */
-  record SoftNotice(Instant at, String from, String text) implements IrcEvent {}
-
   /** A CTCP request received from a user; intended to be shown as an in-chat notification. */
   record CtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
-
-  /** A CTCP request received from a soft-ignored hostmask; UI should render as a spoiler. */
-  record SoftCtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
 
   /** Server confirmation for /away (RPL_UNAWAY 305, RPL_NOWAWAY 306). */
   record AwayStatusChanged(Instant at, boolean away, String message) implements IrcEvent {}
