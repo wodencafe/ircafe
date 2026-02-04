@@ -50,7 +50,6 @@ public final class TreeWheelSelectionDecorator implements AutoCloseable {
         .subscribe(
             dir -> SwingUtilities.invokeLater(() -> moveSelectionBy(dir)),
             err -> {
-              // ignore
             }
         );
 

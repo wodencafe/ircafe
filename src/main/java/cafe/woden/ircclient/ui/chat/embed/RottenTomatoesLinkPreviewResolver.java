@@ -23,7 +23,7 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  /** Avoid downloading giant pages just to find metadata. */
+  
   private static final int MAX_BYTES = 2 * 1024 * 1024; // 2 MiB
 
   // JSON-LD "@type" values we accept.

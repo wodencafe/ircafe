@@ -67,7 +67,7 @@ public final class LoadOlderMessagesComponent extends JPanel {
     setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
   }
 
-  /** Apply the chat transcript font (typically the JTextPane font). */
+  
   public void setTranscriptFont(Font base) {
     if (base == null) return;
     button.setFont(base);
@@ -118,7 +118,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     try {
       if (button.getFont() != null) ascent = Math.max(ascent, getFontMetrics(button.getFont()).getAscent());
     } catch (Exception ignored) {
-      // ignore
     }
     if (ascent <= 0) return -1;
     return in.top + ascent;

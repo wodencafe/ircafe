@@ -18,12 +18,12 @@ public final class ModeFormattingService {
     return ModePrettyPrinter.pretty(actor, channel, details);
   }
 
-  /** Summarizes current channel modes from the 324 numeric details string. */
+  
   public String describeCurrentChannelModes(String details) {
     return ModeSummary.describeCurrentChannelModes(details);
   }
 
-  /** Summarizes buffered join-burst modes into a single human-friendly line. */
+  
   public String describeBufferedJoinModes(Set<Character> plus, Set<Character> minus) {
     return ModeSummary.describeBufferedJoinModes(plus, minus);
   }

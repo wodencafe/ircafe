@@ -246,7 +246,6 @@ public class UserListDockable extends JPanel implements Dockable {
             if (!active.serverId().equalsIgnoreCase(ch.serverId())) return;
             list.repaint();
           }, err -> {
-            // ignore
           });
       closeables.add((AutoCloseable) d::dispose);
     }

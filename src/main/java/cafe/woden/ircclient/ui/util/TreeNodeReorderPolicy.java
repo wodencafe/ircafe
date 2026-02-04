@@ -8,7 +8,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
  */
 public interface TreeNodeReorderPolicy {
 
-  /** A planned move for a node within its current parent. */
+  
   record MovePlan(DefaultMutableTreeNode parent, int fromIndex, int toIndex) {}
 
   /**

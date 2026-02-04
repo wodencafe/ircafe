@@ -91,9 +91,7 @@ static String extractStatusId(String url) {
     return URI.create("https://cdn.syndication.twimg.com/tweet-result?id=" + enc + "&token=" + tEnc + "&lang=en");
   }
 
-  /**
-   * X oEmbed endpoint (no-auth). This is a stable fallback that avoids scraping JS-heavy pages.
-   */
+  
   static URI oEmbedApiUri(String statusId) {
     if (statusId == null || statusId.isBlank()) return null;
 
@@ -166,7 +164,7 @@ static String extractStatusId(String url) {
     }
   }
 
-  /** Minimal JSON string unescape (enough for oEmbed's HTML field). */
+  
   private static String unescapeJsonString(String s) {
     if (s == null) return null;
     StringBuilder out = new StringBuilder(s.length());

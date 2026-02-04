@@ -51,16 +51,13 @@ public class AwayRoutingState {
     }
   }
 
-  /** Remember that the user initiated /away from {@code target} at the current time. */
+  
   public void rememberOrigin(String serverId, TargetRef target) {
     if (target == null) return;
     recentAwayTargets.put(normalizeServer(serverId), new RecentTarget(target, Instant.now()));
   }
 
-  /**
-   * Return the recent origin tab if it is not older than {@code maxAge}; otherwise return {@code null}.
-   * This is useful to keep routing from "sticking" indefinitely.
-   */
+  
   public TargetRef recentOriginIfFresh(String serverId, Duration maxAge) {
     Objects.requireNonNull(maxAge, "maxAge");
     RecentTarget rt = recentAwayTargets.get(normalizeServer(serverId));

@@ -20,7 +20,7 @@ import javax.swing.SwingUtilities;
  */
 public final class JoinPartFoldComponent extends JPanel {
 
-  /** Item in the folded group. */
+  
   public record Item(boolean isJoin, String nick, String reason) {}
 
   private static final int FALLBACK_MAX_W = 420;

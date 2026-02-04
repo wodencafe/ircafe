@@ -20,9 +20,7 @@ public class PircbotxInputParserHookInstaller {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxInputParserHookInstaller.class);
 
-  /**
-   * Install the away-notify input parser hook.
-   */
+  
   public void installAwayNotifyHook(PircBotX bot, String serverId, Consumer<ServerIrcEvent> sink) {
     if (bot == null) return;
     String sid = Objects.toString(serverId, "").trim();
@@ -41,9 +39,7 @@ public class PircbotxInputParserHookInstaller {
     }
   }
 
-  /**
-   * Attempt to replace the first InputParser-like field on the bot instance.
-   */
+  
   boolean swapInputParser(PircBotX bot, InputParser replacement) throws Exception {
     Field target = null;
     Class<?> c = bot.getClass();

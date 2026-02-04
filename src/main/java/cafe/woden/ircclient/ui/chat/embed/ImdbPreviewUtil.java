@@ -11,7 +11,7 @@ final class ImdbPreviewUtil {
 
   private ImdbPreviewUtil() {}
 
-  /** IMDb title IDs look like tt1234567. */
+  
   private static final Pattern TITLE_ID = Pattern.compile("\\b(tt\\d{5,12})\\b", Pattern.CASE_INSENSITIVE);
 
   static boolean isImdbTitleUrl(String url) {

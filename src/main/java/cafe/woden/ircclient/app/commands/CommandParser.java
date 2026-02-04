@@ -209,7 +209,7 @@ public class CommandParser {
     return new ParsedTargetList(channel, java.util.List.copyOf(items));
   }
 
-/** Case-insensitive command match with a word boundary (end or whitespace). */
+
   private static boolean matchesCommand(String line, String cmd) {
     if (line == null || cmd == null) return false;
     if (line.length() < cmd.length()) return false;

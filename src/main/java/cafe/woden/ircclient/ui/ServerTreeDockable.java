@@ -791,7 +791,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     statusLabel.setText(Objects.toString(text, ""));
   }
 
-  /** Enable/disable the global Connect/Disconnect buttons independently. */
+  
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
     connectBtn.setEnabled(connectEnabled);
     disconnectBtn.setEnabled(disconnectEnabled);
@@ -987,14 +987,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return sn;
   }
 
-  /**
-   * Forces the tree's internal layout cache to recompute row bounds after a
-   * Look & Feel / theme switch.
-   *
-   * <p>When Swing switches LAF, JTree's UI and layout cache can keep stale row
-   * widths computed before fonts/UI defaults were fully applied, which in FlatLaf
-   * can show up as renderer text being truncated with "..." despite plenty of space.
-   */
+  /** Refresh JTree UI/layout caches after LAF/theme switches to avoid stale row bounds. */
   private void refreshTreeLayoutAfterUiChange() {
     try {
       TreePath rootPath = new TreePath(root.getPath());

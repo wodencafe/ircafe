@@ -420,7 +420,7 @@ final class ChatLinkPreviewComponent extends JPanel {
         );
   }
 
-  /** If a thumbnail fails to load/decode, don't reserve empty space for it. */
+  
   private void dropThumbnailPlaceholder() {
     try {
       if (body == null || thumbHost == null) return;

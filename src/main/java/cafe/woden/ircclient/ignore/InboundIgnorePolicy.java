@@ -13,11 +13,11 @@ import org.springframework.stereotype.Component;
 public class InboundIgnorePolicy {
 
   public enum Decision {
-    /** Render normally. */
+    
     ALLOW,
-    /** Render, but as a spoiler/covered line. */
+    
     SOFT_SPOILER,
-    /** Do not render at all. */
+    
     HARD_DROP
   }
 

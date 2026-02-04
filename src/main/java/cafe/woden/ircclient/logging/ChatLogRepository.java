@@ -125,7 +125,7 @@ public class ChatLogRepository {
     this.jdbc = jdbc;
   }
 
-  /** Insert a single line. */
+  
   public void insert(LogLine line) {
     if (line == null) return;
     jdbc.update(
@@ -143,7 +143,7 @@ public class ChatLogRepository {
     );
   }
 
-  /** Batch insert. */
+  
   public int[] insertBatch(List<LogLine> lines) {
     if (lines == null || lines.isEmpty()) return new int[0];
 
@@ -208,7 +208,7 @@ public class ChatLogRepository {
     );
   }
 
-  /** True if there exists at least one row older than the provided cursor. */
+  
   public boolean hasOlderRows(String serverId, String target, long beforeTs, long beforeId) {
     // NOTE: Avoid JdbcTemplate#query overload ambiguity when using lambdas.
     // We only need existence; the query is LIMIT 1.
@@ -224,7 +224,7 @@ public class ChatLogRepository {
     return rows != null && !rows.isEmpty();
   }
 
-  /** Delete all lines older than the provided cutoff. */
+  
   public int deleteOlderThan(long cutoffEpochMs) {
     return jdbc.update(DELETE_OLDER_THAN_SQL, cutoffEpochMs);
   }

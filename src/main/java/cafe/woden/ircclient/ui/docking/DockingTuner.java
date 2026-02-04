@@ -12,17 +12,7 @@ import java.util.Deque;
 import java.util.List;
 
 /**
- * Small Swing/Docking utility tweaks.
- *
- * <p>ModernDocking (and many docking frameworks) use nested {@link JSplitPane}s internally.
- * By default, extra width/height is shared proportionally across nested splits during resize.
- *
- * <p>For IRCafe we generally want:
- * <ul>
- *   <li>Chat transcript in the middle to receive most extra space</li>
- *   <li>Side docks (Server / Users) to keep a stable width</li>
- *   <li>Input dock to keep a stable height</li>
- * </ul>
+ * Swing/docking helpers for keeping side and input docks at a stable size (nested {@link JSplitPane} tuning).
  */
 public final class DockingTuner {
   private static final String CLIENT_PROP_SOUTH_LOCKED = "ircafe.lockSouthDockHeight";
@@ -44,12 +34,7 @@ public final class DockingTuner {
   private record SplitCandidate(JSplitPane split, Side side, int depth, int score) {}
 
   /**
-   * Best-effort: set an initial WEST dock width (pixels) on first open.
-   *
-   * <p>This is intentionally separate from {@link #lockWestDockWidth(Window, Component)}.
-   * The lock will preserve whatever size is present when it captures. On first open,
-   * docking frameworks can lay out side docks wider than desired (timing + preferred sizes).
-   * This method nudges the divider to a reasonable default after the docking layout exists.
+   * Best-effort: set an initial WEST dock width (pixels) on first open, before the width lock is captured.
    */
   public static boolean applyInitialWestDockWidth(Window window, Component dockable, int targetWidthPx) {
     if (window == null || dockable == null) return false;

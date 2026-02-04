@@ -89,9 +89,7 @@ public class PresenceFoldComponent extends JPanel {
     return Math.max(0, w);
   }
 
-  /**
-   * Append a new presence event to this fold and refresh the summary + tooltip (and details if expanded).
-   */
+  
   public void addEntry(PresenceEvent e) {
     if (e == null) return;
     entries.add(e);
@@ -103,9 +101,7 @@ public class PresenceFoldComponent extends JPanel {
     repaint();
   }
 
-  /**
-   * Replace all entries.
-   */
+  
   public void setEntries(List<PresenceEvent> newEntries) {
     entries.clear();
     if (newEntries != null) entries.addAll(newEntries);

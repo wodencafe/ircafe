@@ -9,17 +9,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
 /**
- * Minimal mIRC formatting parser.
- *
- * <p>Supported control codes:
- * <ul>
- *   <li>\u0002 Bold</li>
- *   <li>\u001D Italic</li>
- *   <li>\u001F Underline</li>
- *   <li>\u0016 Reverse</li>
- *   <li>\u0003 Color (fg[,bg])</li>
- *   <li>\u000F Reset</li>
- * </ul>
+ * Minimal mIRC formatting parser (bold/italic/underline/reverse/color/reset).
  */
 public final class IrcFormatting {
 
@@ -45,15 +35,7 @@ public final class IrcFormatting {
       new Color(0xD2D2D2)  // 15 light gray
   };
 
-  /**
-   * A parsed span of plain text with an attribute set that includes:
-   * <ul>
-   *   <li>the caller's base style</li>
-   *   <li>StyleConstants bold/italic/underline</li>
-   *   <li>optional foreground/background colors</li>
-   *   <li>mIRC metadata attributes for restyling</li>
-   * </ul>
-   */
+  /** A parsed span of plain text with derived attributes (base style + mIRC styling). */
   public record Span(String text, AttributeSet style) {}
 
   /** Parse {@code input} into spans, stripping mIRC control codes. */

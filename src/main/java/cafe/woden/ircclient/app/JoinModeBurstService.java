@@ -26,7 +26,7 @@ public final class JoinModeBurstService {
     this.modeFormattingService = modeFormattingService;
   }
 
-  /** Starts buffering join-burst modes for a channel. */
+  
   public void startJoinModeBuffer(String serverId, String channel) {
     if (channel == null || channel.isBlank()) return;
 
@@ -73,7 +73,7 @@ public final class JoinModeBurstService {
     return false;
   }
 
-  /** Discards any active join-burst buffer (used when the authoritative 324 summary arrives). */
+  
   public void discardJoinModeBuffer(String serverId, String channel) {
     if (channel == null || channel.isBlank()) return;
     ModeKey key = ModeKey.of(serverId, channel);
@@ -81,10 +81,7 @@ public final class JoinModeBurstService {
     if (removed != null) removed.cancelFlushTimer();
   }
 
-  /**
-   * Returns true if a 324 summary should be suppressed because we printed an equivalent join-burst
-   * summary very recently.
-   */
+  
   public boolean shouldSuppressModesListedSummary(String serverId, String channel, boolean outputIsChannel) {
     if (channel == null || channel.isBlank()) return false;
     ModeKey key = ModeKey.of(serverId, channel);
@@ -99,7 +96,7 @@ public final class JoinModeBurstService {
     return false;
   }
 
-  /** Flushes buffered join modes if present. */
+  
   public void flushJoinModesIfAny(String serverId, String channel, boolean finalizeIfEmpty) {
     if (channel == null || channel.isBlank()) return;
 

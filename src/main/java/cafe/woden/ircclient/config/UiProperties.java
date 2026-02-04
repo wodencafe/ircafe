@@ -22,7 +22,7 @@ public record UiProperties(
 
     Timestamps timestamps,
 
-    /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
+    
     Boolean chatMessageTimestampsEnabled,
 
     /**
@@ -45,7 +45,7 @@ public record UiProperties(
      */
     Boolean clientLineColorEnabled,
 
-    /** Foreground color for outgoing message lines (hex like "#RRGGBB"). */
+    
     String clientLineColor,
 
 

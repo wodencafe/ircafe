@@ -48,7 +48,7 @@ public interface UiPort {
   void setChatActiveTarget(TargetRef target);
   void setChatCurrentNick(String serverId, String nick);
 
-  /** Update the known topic for a channel target (shown in the main chat view when selected). */
+  
   void setChannelTopic(TargetRef target, String topic);
 
   void setUsersChannel(TargetRef target);
@@ -58,16 +58,16 @@ public interface UiPort {
   void setStatusBarCounts(int users, int ops);
   void setStatusBarServer(String serverText);
 
-  /** Enable/disable the global Connect/Disconnect buttons. */
+  
   void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled);
 
-  /** Text shown next to the global connect/disconnect controls. */
+  
   void setConnectionStatusText(String text);
 
   /** Per-server connection state for context menu enabling/disabling. */
   void setServerConnectionState(String serverId, ConnectionState state);
 
-  /** Enable/disable the global input bar. */
+  
   void setInputEnabled(boolean enabled);
 
   /**
@@ -87,7 +87,7 @@ public interface UiPort {
    */
   void appendChat(TargetRef target, String from, String text, boolean outgoingLocalEcho);
 
-  /** Append a chat message as a click-to-reveal spoiler block (used by soft-ignore). */
+  
   void appendSpoilerChat(TargetRef target, String from, String text);
 
   /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */

@@ -276,9 +276,7 @@ public class IrcMediator {
   }
 
 
-
-  
-  private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
+private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
     if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
     String f = Objects.toString(from, "").trim();
     if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
@@ -762,38 +760,19 @@ public class IrcMediator {
     return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
   }
 
-  /**
-   * Convenience helper used by event handlers:
-   * <ul>
-   *   <li>Ensures the target exists</li>
-   *   <li>Writes output via the provided callback</li>
-   *   <li>Optionally marks the target unread if it is not the active tab</li>
-   * </ul>
-   */
+  /** Ensure the target exists, write via callback, and optionally mark unread if not active. */
   private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
   }
 
-  /**
-   * Resolves the destination target as:
-   * <ol>
-   *   <li>the currently active target, if it belongs to {@code sid}</li>
-   *   <li>otherwise {@code status}</li>
-   * </ol>
-   *
-   * This is used by events (CTCP, away, etc.) that should "notify the user" in the active tab,
-   * but must not leak messages across different server sessions.
-   */
+  /** Prefer the active target for {@code sid}, otherwise fall back to {@code status}. */
   private TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
     TargetRef active = targetCoordinator.getActiveTarget();
     if (active != null && Objects.equals(active.serverId(), sid)) return active;
     return status != null ? status : safeStatusTarget();
   }
 
-  /**
-   * Overload used when the caller wants to make additional decisions (eg, highlight) based on a stable view of
-   * what was considered the active target at the time of handling.
-   */
+  /** Overload that accepts a stable view of what was active at the time of handling. */
   private void postTo(TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     if (dest == null) dest = safeStatusTarget();
     ensureTargetExists(dest);

@@ -2,9 +2,7 @@ package cafe.woden.ircclient.app;
 
 import java.util.Objects;
 
-/**
- * A foldable presence/system line that can be rendered in a channel transcript.
- */
+
 public record PresenceEvent(
     PresenceKind kind,
     String nick,
@@ -33,9 +31,7 @@ public record PresenceEvent(
     Objects.requireNonNull(kind, "kind");
   }
 
-  /**
-   * Human-friendly line used for expanded views and tooltips.
-   */
+  
   public String displayText() {
     return switch (kind) {
       case JOIN -> safe(nick) + " joined";

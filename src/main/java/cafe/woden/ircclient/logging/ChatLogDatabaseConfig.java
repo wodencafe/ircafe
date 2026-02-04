@@ -38,10 +38,7 @@ public class ChatLogDatabaseConfig {
 
   private static final Logger log = LoggerFactory.getLogger(ChatLogDatabaseConfig.class);
 
-  /**
-   * Dedicated DataSource for the embedded chat log DB.
-   *
-   */
+  
   @Bean(name = "chatLogDataSource", destroyMethod = "close")
   public DataSource chatLogDataSource(LogProperties logProps, RuntimeConfigStore runtimeConfigStore) {
     Path basePath = resolveDbBasePath(logProps, runtimeConfigStore);

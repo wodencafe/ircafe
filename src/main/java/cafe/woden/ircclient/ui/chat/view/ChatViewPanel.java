@@ -136,16 +136,12 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     super.removeNotify();
   }
 
-  /**
-   * Shows the find bar and focuses it.
-   */
+  
   public void openFindBar() {
     findBar.open();
   }
 
-  /**
-   * Toggles the find bar. If already visible, hide it.
-   */
+  
   public void toggleFindBar() {
     findBar.toggle();
   }
@@ -169,9 +165,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     chat.repaint();
   }
 
-  /**
-   * Called on non-link clicks. Subclasses can use this to "activate" a target.
-   */
+  
   protected void onTranscriptClicked() {
     // default: no-op
   }

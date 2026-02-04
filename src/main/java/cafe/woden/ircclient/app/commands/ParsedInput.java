@@ -48,7 +48,7 @@ public sealed interface ParsedInput permits
 
   record Me(String action) implements ParsedInput {}
 
-  /** /mode [#channel] [modes] [args...] */
+  
   record Mode(String first, String rest) implements ParsedInput {}
 
   /** /op [#channel] nick1 nick2 ... */
@@ -86,7 +86,7 @@ public sealed interface ParsedInput permits
   /** /unignore <maskOrNick> */
   record Unignore(String maskOrNick) implements ParsedInput {}
 
-  /** /ignorelist */
+  
   record IgnoreList() implements ParsedInput {}
 
   /** /softignore <maskOrNick> */
@@ -95,7 +95,7 @@ public sealed interface ParsedInput permits
   /** /unsoftignore <maskOrNick> */
   record UnsoftIgnore(String maskOrNick) implements ParsedInput {}
 
-  /** /softignorelist */
+  
   record SoftIgnoreList() implements ParsedInput {}
 
   /**

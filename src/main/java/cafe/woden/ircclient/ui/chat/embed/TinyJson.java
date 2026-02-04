@@ -55,7 +55,7 @@ final class TinyJson {
     return null;
   }
 
-  /** Returns the first JSON object ({...}) inside an array string ([...]). */
+  
   static String firstObjectInArray(String arrayJson) {
     if (arrayJson == null) return null;
     int start = arrayJson.indexOf('{');

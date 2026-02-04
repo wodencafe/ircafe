@@ -85,13 +85,13 @@ public sealed interface IrcEvent permits
   /** Server confirmation for /away (RPL_UNAWAY 305, RPL_NOWAWAY 306). */
   record AwayStatusChanged(Instant at, boolean away, String message) implements IrcEvent {}
 
-  /** Another user joined a channel we're in. */
+  
   record UserJoinedChannel(Instant at, String channel, String nick) implements IrcEvent {}
 
-  /** Another user left (PART) a channel we're in. */
+  
   record UserPartedChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}
 
-  /** A user QUIT and we emit one event per channel where they were present. */
+  
   record UserQuitChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}
 
   /** A user changed nick and we emit one event per channel where they were present. */
@@ -113,12 +113,12 @@ public sealed interface IrcEvent permits
       if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
     }
 
-    /** Backward-compatible constructor for code paths that don't track away reason yet. */
+    
     public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
       this(nick, prefix, hostmask, awayState, null);
     }
 
-    /** Backward-compatible constructor for code paths that don't track away state yet. */
+    
     public NickInfo(String nick, String prefix, String hostmask) {
       this(nick, prefix, hostmask, AwayState.UNKNOWN, null);
     }
@@ -154,7 +154,7 @@ public sealed interface IrcEvent permits
       if (awayState != AwayState.AWAY) awayMessage = null;
     }
 
-    /** Backward-compatible constructor for call sites that don't track away reasons. */
+    
     public UserAwayStateObserved(Instant at, String nick, AwayState awayState) {
       this(at, nick, awayState, null);
     }

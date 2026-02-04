@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  */
 final class OEmbedLinkPreviewResolver implements LinkPreviewResolver {
 
-  /** Minimal fields we care about from oEmbed JSON. */
+  
   record OEmbedFields(String title, String authorName, String providerName, String thumbnailUrl, String html) {}
 
   /**

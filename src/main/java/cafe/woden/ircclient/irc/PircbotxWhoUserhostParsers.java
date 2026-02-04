@@ -1,10 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 /**
- * Parsers for WHO/WHOX and USERHOST related numerics.
- *
- * <p>This class intentionally contains only pure parsing helpers extracted from
- * {@link PircbotxIrcClientService} during refactor step B2.4.
+ * Pure parsing helpers for WHO/WHOX and USERHOST related numerics.
  */
 final class PircbotxWhoUserhostParsers {
   private PircbotxWhoUserhostParsers() {}
@@ -54,16 +51,8 @@ final class PircbotxWhoUserhostParsers {
   /**
    * Parse RPL_WHOSPCRPL (354) / WHOX lines.
    *
-   * <p>Format varies based on the requested WHOX fields (see the WHOX extension). We use a conservative heuristic:
-   * <ul>
-   *   <li>Strip the server prefix</li>
-   *   <li>Tokenize up to the trailing ":" parameter (realname)</li>
-   *   <li>Capture an optional querytype (integer) and optional channel token</li>
-   *   <li>Find a (user, host) pair (adjacent or separated by an IP field)</li>
-   *   <li>Then pick the first plausible nick token after that host (skipping host-like tokens such as server names)</li>
-   * </ul>
-   *
-   * <p>If we cannot confidently extract user/host/nick, returns null.
+   * <p>WHOX format varies by server/field selection, so we use heuristics to extract channel/user/host/nick.
+   * Returns null if we can't confidently extract the key fields.
    */
   static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (line == null) return null;

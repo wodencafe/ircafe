@@ -61,7 +61,6 @@ public final class HistoryDividerComponent extends JPanel {
     try {
       if (label.getFont() != null) ascent = Math.max(ascent, getFontMetrics(label.getFont()).getAscent());
     } catch (Exception ignored) {
-      // ignore
     }
     if (ascent <= 0) return -1;
     return in.top + ascent;

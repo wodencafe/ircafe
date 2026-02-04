@@ -115,7 +115,6 @@ public class SpoilerMessageComponent extends JPanel {
       if (from.getFont() != null) ascent = Math.max(ascent, getFontMetrics(from.getFont()).getAscent());
       if (pill.getFont() != null) ascent = Math.max(ascent, getFontMetrics(pill.getFont()).getAscent());
     } catch (Exception ignored) {
-      // ignore
     }
 
     if (ascent <= 0) return -1;

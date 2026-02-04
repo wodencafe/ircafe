@@ -33,7 +33,7 @@ public interface IrcClientService {
   Completable whois(String serverId, String nick);
 
 
-  /** Leave a channel (PART). */
+  
   default Completable partChannel(String serverId, String channel) {
     return partChannel(serverId, channel, null);
   }

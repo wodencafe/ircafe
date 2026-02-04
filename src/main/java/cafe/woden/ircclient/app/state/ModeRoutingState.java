@@ -20,18 +20,18 @@ public class ModeRoutingState {
 
   private final ConcurrentHashMap<ModeKey, TargetRef> pendingModeTargets = new ConcurrentHashMap<>();
 
-  /** Record that a MODE query for {@code channel} should route output to {@code target}. */
+  
   public void putPendingModeTarget(String serverId, String channel, TargetRef target) {
     if (target == null) return;
     pendingModeTargets.put(ModeKey.of(serverId, channel), target);
   }
 
-  /** Remove and return the routing target for {@code channel}, or {@code null} if none. */
+  
   public TargetRef removePendingModeTarget(String serverId, String channel) {
     return pendingModeTargets.remove(ModeKey.of(serverId, channel));
   }
 
-  /** Peek the routing target for {@code channel}, or {@code null} if none. */
+  
   public TargetRef getPendingModeTarget(String serverId, String channel) {
     return pendingModeTargets.get(ModeKey.of(serverId, channel));
   }

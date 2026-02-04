@@ -491,7 +491,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  // ---------------- hostmask discovery ----------------
 
   /** Persist whether USERHOST-based hostmask discovery is enabled (stored under {@code ircafe.ui.hostmaskDiscovery.userhostEnabled}). */
   public synchronized void rememberUserhostDiscoveryEnabled(boolean enabled) {
@@ -584,7 +583,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  // ---------------- ignore masks ----------------
 
   /** Persist an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
   public synchronized void rememberIgnoreMask(String serverId, String mask) {
@@ -661,7 +659,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  // ---------------- soft ignore masks ----------------
 
   /**
    * Persist a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}).
@@ -791,7 +788,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  // ---------------- internals ----------------
 
   private interface ServerUpdater {
     void update(Map<String, Object> serverMap);

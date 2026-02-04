@@ -1,8 +1,6 @@
 package cafe.woden.ircclient.ui.settings;
 
-/**
- * Runtime UI settings.
- */
+
 public record UiSettings(
     String theme,
     String chatFontFamily,
@@ -20,7 +18,7 @@ public record UiSettings(
     /** Maximum inline image embed height in pixels. <=0 disables extra cap. */
     int imageEmbedsMaxHeightPx,
 
-    /** If false, animated GIFs render as a still first frame. */
+    
     boolean imageEmbedsAnimateGifs,
 
     boolean linkPreviewsEnabled,
@@ -28,22 +26,19 @@ public record UiSettings(
 
     boolean presenceFoldsEnabled,
 
-    /** If enabled, prepend timestamps to regular user chat messages (not just status/notice lines). */
+    
     boolean chatMessageTimestampsEnabled,
 
-    /** How many historical lines to load when selecting a target (0 disables initial history prefill). */
+    
     int chatHistoryInitialLoadLines,
 
-    /** Page size for the in-transcript "Load older messages…" control. */
+    
     int chatHistoryPageSize,
 
-    /**
-     * If enabled, render *outgoing* messages (lines you send that are locally echoed into the transcript)
-     * using a custom foreground color.
-     */
+    
     boolean clientLineColorEnabled,
 
-    /** Foreground color for outgoing message lines (hex like "#RRGGBB"). */
+    
     String clientLineColor,
 
 

@@ -532,11 +532,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.AwayStatusChanged(Instant.now(), isAway, msg)));
     }
 
-    
 
-
-
-    @Override
+@Override
     public void onJoin(JoinEvent event) {
       touchInbound();
       Channel channel = event.getChannel();

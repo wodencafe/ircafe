@@ -116,7 +116,7 @@ public class IgnoreListService {
     }
   }
 
-  /** Add an ignore mask (case-insensitive uniqueness). Returns true if newly added. */
+  
   public boolean addMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -137,7 +137,7 @@ public class IgnoreListService {
     return true;
   }
 
-  /** Add a soft-ignore mask (case-insensitive uniqueness). Returns true if newly added. */
+  
   public boolean addSoftMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -158,7 +158,7 @@ public class IgnoreListService {
     return true;
   }
 
-  /** Remove an ignore mask (case-insensitive). Returns true if removed. */
+  
   public boolean removeMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -182,7 +182,7 @@ public class IgnoreListService {
     return removed;
   }
 
-  /** Remove a soft-ignore mask (case-insensitive). Returns true if removed. */
+  
   public boolean removeSoftMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -206,13 +206,12 @@ public class IgnoreListService {
     return removed;
   }
 
-  // ----------------- normalization helpers -----------------
 
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }
 
-  /** Trim + collapse whitespace. */
+  
   private static String normalizeMask(String raw) {
     String s = Objects.toString(raw, "").trim();
     // no internal whitespace in masks
@@ -221,14 +220,7 @@ public class IgnoreListService {
   }
 
   /**
-   * Convert user input to a hostmask pattern.
-   *
-   * <p>We do NOT resolve nicks to actual hostmasks yet. For now:
-   * <ul>
-   *   <li>If input contains '!' and '@', we treat it as a full hostmask/pattern and store it.</li>
-   *   <li>If input contains '@' but not '!', we treat it as "*!user@host" (or "*!*@host").</li>
-   *   <li>If input contains neither, we treat it as a nick pattern: "nick!*@*".</li>
-   * </ul>
+   * Convert user input to a hostmask pattern (full mask, user@host, host-only, or nick pattern).
    */
   public static String normalizeMaskOrNickToHostmask(String rawMaskOrNick) {
     String s = normalizeMask(rawMaskOrNick);
@@ -263,7 +255,6 @@ public class IgnoreListService {
     return lower.contains(".") || lower.contains(":") || lower.endsWith("/");
   }
 
-  // ----------------- matching (hard ignore) -----------------
 
   /**
    * Returns true if the given hostmask matches any hard-ignore mask for this server.

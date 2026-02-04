@@ -48,7 +48,6 @@ public class IgnoreStatusService {
                 cacheByServer.remove(sid);
               },
               err -> {
-                // ignore
               }
           )
       );

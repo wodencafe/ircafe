@@ -103,7 +103,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     try {
@@ -117,7 +116,6 @@ public class ChatTranscriptStore {
         st.loadOlderControl = new LoadOlderControl(pos, comp);
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -143,7 +141,6 @@ public class ChatTranscriptStore {
       try {
         st.historyDivider.component.setText(labelText);
       } catch (Exception ignored) {
-        // ignore
       }
       return st.historyDivider.component;
     }
@@ -163,7 +160,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     try {
@@ -177,7 +173,6 @@ public class ChatTranscriptStore {
         st.historyDivider = new HistoryDividerControl(p, comp);
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -201,7 +196,7 @@ public class ChatTranscriptStore {
     return Math.max(0, Math.min(off, doc.getLength()));
   }
 
-  /** Update the visual state of the load-older control (if present). */
+  
   public synchronized void setLoadOlderMessagesControlState(TargetRef ref, LoadOlderMessagesComponent.State s) {
     if (ref == null) return;
     TranscriptState st = stateByTarget.get(ref);
@@ -209,11 +204,10 @@ public class ChatTranscriptStore {
     try {
       st.loadOlderControl.component.setState(s);
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
-  /** Set the click handler for the load-older control (if present). */
+  
   public synchronized void setLoadOlderMessagesControlHandler(TargetRef ref, java.util.function.BooleanSupplier onLoad) {
     if (ref == null) return;
     TranscriptState st = stateByTarget.get(ref);
@@ -221,7 +215,6 @@ public class ChatTranscriptStore {
     try {
       st.loadOlderControl.component.setOnLoadRequested(onLoad);
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -256,7 +249,6 @@ public class ChatTranscriptStore {
     try {
       doc.remove(0, doc.getLength());
     } catch (Exception ignored) {
-      // ignore
     }
 
     // Reset per-target control state (presence folds, load-older controls, dividers, etc.).
@@ -297,7 +289,6 @@ public class ChatTranscriptStore {
         renderer.insertRichText(doc, ref, event.displayText(), base);
         doc.insertString(doc.getLength(), "\n", styles.timestamp());
       } catch (Exception ignored2) {
-        // ignore
       }
       return;
     }
@@ -424,7 +415,6 @@ public class ChatTranscriptStore {
         linkPreviews.appendPreviews(doc, text);
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -506,9 +496,7 @@ public class ChatTranscriptStore {
     return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, tsEpochMs);
   }
 
-  /**
-   * Prepend a chat message line from history (insert at offset 0).
-   */
+  
   public synchronized int prependChatFromHistory(TargetRef ref,
                                                  String from,
                                                  String text,
@@ -585,7 +573,6 @@ public class ChatTranscriptStore {
       doc.insertString(pos, "\n", styles.timestamp());
       pos += 1;
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -649,9 +636,7 @@ public class ChatTranscriptStore {
     return insertErrorFromHistoryAt(ref, 0, from, text, tsEpochMs);
   }
 
-  /**
-   * Insert a presence-style line from history (stored as display text) at a specific offset.
-   */
+  
   public synchronized int insertPresenceFromHistoryAt(TargetRef ref,
                                                       int insertAt,
                                                       String displayText,
@@ -666,9 +651,7 @@ public class ChatTranscriptStore {
     return insertPresenceFromHistoryAt(ref, 0, displayText, tsEpochMs);
   }
 
-  /**
-   * Insert a spoiler (soft-ignored) message from history at a specific offset.
-   */
+  
   public synchronized int insertSpoilerChatFromHistoryAt(TargetRef ref,
                                                          int insertAt,
                                                          String from,
@@ -721,7 +704,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     try {
@@ -731,7 +713,6 @@ public class ChatTranscriptStore {
         comp.setFromColor(nickColors.colorForNick(from, bg, fg));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
@@ -744,7 +725,6 @@ public class ChatTranscriptStore {
       doc.insertString(offFinal + 1, "\n", styles.timestamp());
       pos = offFinal + 2;
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -823,7 +803,6 @@ public class ChatTranscriptStore {
         // no-op
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -863,7 +842,6 @@ public class ChatTranscriptStore {
         return p + 1;
       }
     } catch (Exception ignored) {
-      // ignore
     }
     return p;
   }
@@ -1000,7 +978,6 @@ public class ChatTranscriptStore {
         comp.setFromColor(nickColors.colorForNick(from, bg, fg));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
@@ -1020,7 +997,6 @@ public class ChatTranscriptStore {
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -1087,7 +1063,6 @@ public class ChatTranscriptStore {
         comp.setFromColor(nickColors.colorForNick(from, bg, fg));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
@@ -1102,7 +1077,6 @@ public class ChatTranscriptStore {
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -1160,7 +1134,6 @@ public class ChatTranscriptStore {
           String next = doc.getText(off + 1, 1);
           if ("\n".equals(next)) removeLen = 2;
         } catch (Exception ignored2) {
-          // ignore
         }
       }
       doc.remove(off, removeLen);
@@ -1198,7 +1171,6 @@ public class ChatTranscriptStore {
           inner.remove(0, inner.getLength());
           inner.insertString(0, msg, styles.message());
         } catch (Exception ignored3) {
-          // ignore
         }
       }
 
@@ -1234,7 +1206,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         if (expected == null || comp == expected) return i;
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
   return -1;
@@ -1359,7 +1330,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         linkPreviews.appendPreviews(doc, a);
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -1425,7 +1395,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         doc.insertString(len, "\n", styles.timestamp());
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -1461,7 +1430,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
             insertPos++;
           }
         } catch (Exception ignored2) {
-          // ignore
         }
       }
 

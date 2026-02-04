@@ -31,7 +31,7 @@ public record LogProperties(
     Hsqldb hsqldb
 ) {
 
-  /** Embedded HSQLDB file settings. */
+  
   public record Hsqldb(
       /** Base filename (no extension). HSQLDB will create .data/.script/.properties files. */
       String fileBaseName,

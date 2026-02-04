@@ -42,7 +42,6 @@ public class OutboundCtcpWhoisCommandService {
     this.whoisRoutingState = whoisRoutingState;
   }
 
-  // ===== User-action entry points (context menu actions) =====
 
   public void requestWhois(CompositeDisposable disposables, TargetRef ctx, String nick) {
     if (ctx == null) return;
@@ -83,7 +82,6 @@ public class OutboundCtcpWhoisCommandService {
     sendCtcpForUserAction(disposables, ctx, nick, "PING", token, token, "→ " + nick + " PING");
   }
 
-  // ===== Slash-command entry points (/version, /ping, /time, /ctcp) =====
 
   public void handleCtcpVersion(CompositeDisposable disposables, String nick) {
     sendCtcpSlash(disposables, "VERSION", nick, "", false);

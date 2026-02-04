@@ -86,7 +86,6 @@ final class LinkPreviewParser {
         return base.resolve(maybeUrl).toString();
       }
     } catch (Exception ignored) {
-      // ignore
     }
     return maybeUrl;
   }
