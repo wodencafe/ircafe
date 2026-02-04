@@ -15,19 +15,9 @@ import javax.swing.text.StyleConstants;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Deterministic per-nick coloring from a configurable palette.
- *
- * <p>We also enforce a minimum contrast ratio against the current theme background,
- * nudging colors lighter/darker if needed.
- *
- * <p>Nick color overrides are mutable at runtime via {@link #setOverrides(Map)}.
- */
 @Component
 @Lazy
 public class NickColorService {
-
-  /** Attribute marker to preserve the nick across restyle passes. Value is lowercased nick. */
   public static final String ATTR_NICK = "chat.nick";
 
   private static final List<String> DEFAULT_32 = List.of(
@@ -45,9 +35,7 @@ public class NickColorService {
   private final double minContrast;
   private final List<Color> palette;
 
-  /** Case-insensitive keying: all keys are stored lowercased. */
   private volatile Map<String, Color> overrides = Map.of();
-  /** Original hex string values (e.g. "#RRGGBB"), keys are lowercased. */
   private volatile Map<String, String> overridesHex = Map.of();
 
   public NickColorService(UiProperties props) {
@@ -73,18 +61,12 @@ public class NickColorService {
     return minContrast;
   }
 
-  /** Current per-nick overrides as hex strings (case-insensitive keys stored lowercased). */
   public Map<String, String> overridesHex() {
     return overridesHex;
   }
 
-  /**
-   * Replace the current per-nick overrides.
-   *
-   * <p>Keys are treated case-insensitively and stored as lowercased.
-   * Values are expected to be hex colors like "#RRGGBB" (also accepts "RRGGBB" and "0xRRGGBB").
-   */
-  public synchronized void setOverrides(Map<String, String> rawOverrides) {
+  /** Replace the current per-nick overrides. */
+public synchronized void setOverrides(Map<String, String> rawOverrides) {
     Map<String, String> norm = normalizeRawOverrides(rawOverrides);
     this.overridesHex = Map.copyOf(norm);
     this.overrides = parseOverrides(this.overridesHex);
@@ -101,7 +83,6 @@ public class NickColorService {
     return a;
   }
 
-  /** Re-apply the correct nick color to an existing attribute set (used during transcript restyling). */
   public void applyColor(SimpleAttributeSet attrs, String nickLower) {
     if (!enabled) return;
     String n = nickLower == null ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
@@ -120,7 +101,6 @@ public class NickColorService {
     }
   }
 
-  /** Convenience for non-AttributeSet contexts (e.g. user list renderer). */
   public Color colorForNick(String nick, Color background, Color fallbackForeground) {
     if (!enabled) return fallbackForeground;
     String lower = normalizeNick(nick);

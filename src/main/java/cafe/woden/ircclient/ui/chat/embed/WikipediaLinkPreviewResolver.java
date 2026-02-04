@@ -2,7 +2,6 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import java.net.URI;
 
-/** Best-effort resolver for Wikipedia article URLs via the REST summary endpoint. */
 final class WikipediaLinkPreviewResolver implements LinkPreviewResolver {
 
   @Override

@@ -10,17 +10,11 @@ import java.util.List;
 public interface UiPort {
   // User-initiated stuff.
   Flowable<TargetRef> targetSelections();
-  /**
-   * Requests to activate a target for input/status/user list updates without changing
-   * the main Chat dock's displayed transcript.
-   *
-   * <p>Used by pinned chat docks so you can read multiple channels at once.
-   */
-  Flowable<TargetRef> targetActivations();
+  /** Requests to activate a target for input/status/user list updates without changing the main Chat dock's displayed transcript. */
+Flowable<TargetRef> targetActivations();
 
   Flowable<PrivateMessageRequest> privateMessageRequests();
 
-  /** UI-originated context menu actions (e.g., WHOIS/CTCP) for a nick. */
   Flowable<UserActionRequest> userActionRequests();
 
   Flowable<String> outboundLines();
@@ -64,7 +58,6 @@ public interface UiPort {
   
   void setConnectionStatusText(String text);
 
-  /** Per-server connection state for context menu enabling/disabling. */
   void setServerConnectionState(String serverId, ConnectionState state);
 
   
@@ -90,15 +83,12 @@ public interface UiPort {
   
   void appendSpoilerChat(TargetRef target, String from, String text);
 
-  /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
   default void appendAction(TargetRef target, String from, String action) {
     appendAction(target, from, action, false);
   }
 
-  /** Append a CTCP ACTION (/me) line (rendered as '* nick action'). */
   void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho);
 
-  /** Append a foldable presence/system event (join/part/quit/nick) in a channel transcript. */
   void appendPresence(TargetRef target, PresenceEvent event);
 
   void appendNotice(TargetRef target, String from, String text);

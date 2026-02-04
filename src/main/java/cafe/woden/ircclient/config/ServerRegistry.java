@@ -69,7 +69,6 @@ public class ServerRegistry {
     return updates.onBackpressureLatest();
   }
 
-  /** Overwrite the full server list (persisted). */
   public synchronized void setAll(List<IrcProperties.Server> servers) {
     byId.clear();
     if (servers != null) {
@@ -83,7 +82,6 @@ public class ServerRegistry {
     persistAndEmit();
   }
 
-  /** Add or replace a server (persisted). */
   public synchronized void upsert(IrcProperties.Server server) {
     if (server == null) return;
     String id = Objects.toString(server.id(), "").trim();
@@ -92,7 +90,6 @@ public class ServerRegistry {
     persistAndEmit();
   }
 
-  /** Remove a server by id (persisted). */
   public synchronized void remove(String serverId) {
     String id = Objects.toString(serverId, "").trim();
     if (id.isEmpty()) return;

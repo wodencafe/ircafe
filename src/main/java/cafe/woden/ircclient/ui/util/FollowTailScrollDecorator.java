@@ -15,11 +15,7 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.text.StyledDocument;
 
-/**
- * Decorates a transcript scrollpane with "follow tail" behavior:
- * if the user is at the bottom, new content keeps the view pinned to the bottom.
- * If the user scrolls up, the view stays where it is.
- */
+/** Decorates a transcript scrollpane with "follow tail" behavior: if the user is at the bottom, new content keeps the view pinned to the bot… */
 public final class FollowTailScrollDecorator implements AutoCloseable {
 
   private final JScrollPane scroll;
@@ -73,12 +69,8 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     this.barModel.addChangeListener(modelListener);
   }
 
-  /**
-   * Call after the view's document has been swapped.
-   * The decorator will detach from the previous document and attach to the new one,
-   * then restore scroll position according to the follow-tail state.
-   */
-  public void onDocumentSwapped(StyledDocument next) {
+  /** Call after the view's document has been swapped. */
+public void onDocumentSwapped(StyledDocument next) {
     if (closed) return;
 
     if (currentDocument == next) {
@@ -110,7 +102,6 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     if (!isFollowTail.getAsBoolean()) return;
     SwingUtilities.invokeLater(this::scrollToBottom);
   }
-
 
   private void onBarModelChanged() {
     if (closed) return;

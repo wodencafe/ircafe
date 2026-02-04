@@ -15,16 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record IrcProperties(Client client, List<Server> servers) {
 
 
-  /**
-   * Global IRC client identity/settings.
-   *
-   * <p>Example YAML:
-   * <pre>
-   * irc:
-   *   client:
-   *     version: "IRCafe 1.2.3"
-   * </pre>
-   */
+  /** Global IRC client identity/settings. <p>Example YAML: <pre> irc: client: version: "IRCafe 1.2.3" </pre>. */
 
   public record Client(String version, Reconnect reconnect, Heartbeat heartbeat) {
     public Client {

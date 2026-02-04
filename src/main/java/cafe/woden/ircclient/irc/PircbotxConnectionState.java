@@ -28,13 +28,8 @@ final class PircbotxConnectionState {
   final AtomicReference<Disposable> reconnectDisposable = new AtomicReference<>();
   final AtomicReference<String> disconnectReasonOverride = new AtomicReference<>();
 
-  /**
-   * Best-effort, passive hostmask cache learned from server prefixes (JOIN/PRIVMSG/etc.).
-   * Keyed by lowercase nick. Used to avoid spamming the app layer with redundant observations.
-   */
   final Map<String, String> lastHostmaskByNickLower = new ConcurrentHashMap<>();
 
-  /** Tracks whether a WHOIS for a nick reported RPL_AWAY (301) before RPL_ENDOFWHOIS (318). */
   final Map<String, Boolean> whoisSawAwayByNickLower = new ConcurrentHashMap<>();
 
   PircbotxConnectionState(String serverId) {

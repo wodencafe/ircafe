@@ -1,8 +1,5 @@
 package cafe.woden.ircclient.app.commands;
 
-/**
- * Parsed representation of a line from the input box.
- */
 public sealed interface ParsedInput permits
     ParsedInput.Join,
     ParsedInput.Nick,
@@ -51,24 +48,17 @@ public sealed interface ParsedInput permits
   
   record Mode(String first, String rest) implements ParsedInput {}
 
-  /** /op [#channel] nick1 nick2 ... */
   record Op(String channel, java.util.List<String> nicks) implements ParsedInput {}
 
-  /** /deop [#channel] nick1 nick2 ... */
   record Deop(String channel, java.util.List<String> nicks) implements ParsedInput {}
 
-  /** /voice [#channel] nick1 nick2 ... */
   record Voice(String channel, java.util.List<String> nicks) implements ParsedInput {}
 
-  /** /devoice [#channel] nick1 nick2 ... */
   record Devoice(String channel, java.util.List<String> nicks) implements ParsedInput {}
 
-  /** /ban [#channel] maskOrNick1 maskOrNick2 ... */
   record Ban(String channel, java.util.List<String> masksOrNicks) implements ParsedInput {}
 
-  /** /unban [#channel] maskOrNick1 maskOrNick2 ... */
   record Unban(String channel, java.util.List<String> masksOrNicks) implements ParsedInput {}
-
 
   // CTCP convenience
   record CtcpVersion(String nick) implements ParsedInput {}
@@ -77,22 +67,17 @@ public sealed interface ParsedInput permits
 
   record CtcpTime(String nick) implements ParsedInput {}
 
-  /** Generic CTCP: /ctcp <nick> <command> [args...] */
   record Ctcp(String nick, String command, String args) implements ParsedInput {}
 
-  /** /ignore <maskOrNick> */
   record Ignore(String maskOrNick) implements ParsedInput {}
 
-  /** /unignore <maskOrNick> */
   record Unignore(String maskOrNick) implements ParsedInput {}
 
   
   record IgnoreList() implements ParsedInput {}
 
-  /** /softignore <maskOrNick> */
   record SoftIgnore(String maskOrNick) implements ParsedInput {}
 
-  /** /unsoftignore <maskOrNick> */
   record UnsoftIgnore(String maskOrNick) implements ParsedInput {}
 
   

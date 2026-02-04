@@ -33,9 +33,6 @@ public final class DockingTuner {
 
   private record SplitCandidate(JSplitPane split, Side side, int depth, int score) {}
 
-  /**
-   * Best-effort: set an initial WEST dock width (pixels) on first open, before the width lock is captured.
-   */
   public static boolean applyInitialWestDockWidth(Window window, Component dockable, int targetWidthPx) {
     if (window == null || dockable == null) return false;
     if (targetWidthPx <= 0) return false;
@@ -71,9 +68,6 @@ public final class DockingTuner {
     return true;
   }
 
-  /**
-   * Best-effort: set an initial EAST dock width (pixels) on first open.
-   */
   public static boolean applyInitialEastDockWidth(Window window, Component dockable, int targetWidthPx) {
     if (window == null || dockable == null) return false;
     if (targetWidthPx <= 0) return false;
@@ -109,9 +103,6 @@ public final class DockingTuner {
     return true;
   }
 
-  /**
-   * Best-effort: set an initial SOUTH dock height (pixels) on first open.
-   */
   public static boolean applyInitialSouthDockHeight(Window window, Component dockable, int targetHeightPx) {
     if (window == null || dockable == null) return false;
     if (targetHeightPx <= 0) return false;
@@ -226,7 +217,6 @@ public final class DockingTuner {
     }
   }
 
-
   /**
    * Like {@link #lockEastDockWidth(Window, Component)} but seeds the lock with a specific width.
    *
@@ -252,14 +242,8 @@ public final class DockingTuner {
     }
   }
 
-  /**
-   * Finds the "best" split pane to tune for a dockable.
-   *
-   * <p>We only want to adjust the *nearest* split pane that separates the dockable from the rest of the UI.
-   * In nested docking layouts, a dockable can appear in many ancestor splits (containment is recursive).
-   * Picking all of them leads to broken layouts.
-   */
-  private static SplitCandidate findBestSplitPane(Component root, Component dockable, int orientation) {
+  /** Finds the "best" split pane to tune for a dockable. */
+private static SplitCandidate findBestSplitPane(Component root, Component dockable, int orientation) {
     SplitCandidate best = null;
 
     List<JSplitPane> allSplits = findAllSplitPanes(root);

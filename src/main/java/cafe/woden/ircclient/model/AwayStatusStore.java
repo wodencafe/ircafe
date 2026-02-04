@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/** In-memory cache of user away state, keyed by server + lowercase nick. */
 @Component
 public class AwayStatusStore {
 

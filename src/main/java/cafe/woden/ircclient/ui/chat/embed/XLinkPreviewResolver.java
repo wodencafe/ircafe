@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui.chat.embed;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 
-/** Best-effort resolver for X/Twitter status links. */
 final class XLinkPreviewResolver implements LinkPreviewResolver {
 
   // Keep in sync with LinkPreviewFetchService's HTML cap.

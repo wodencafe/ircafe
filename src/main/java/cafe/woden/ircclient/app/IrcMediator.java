@@ -259,8 +259,6 @@ public class IrcMediator {
     }
   }
 
-
-
   private record ParsedCtcp(String commandUpper, String arg) {}
 
   private ParsedCtcp parseCtcp(String text) {
@@ -274,7 +272,6 @@ public class IrcMediator {
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
     return new ParsedCtcp(cmd, arg);
   }
-
 
 private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
     if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
@@ -367,16 +364,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     disposables.dispose();
   }
 
-  /**
-   * Connect to all configured servers.
-   *
-   * <p>Safe to call multiple times; connection attempts are idempotent per server.
-   */
   public void connectAll() {
     connectionCoordinator.connectAll();
   }
 
-  /** Disconnect from all configured servers. */
   public void disconnectAll() {
     connectionCoordinator.disconnectAll();
   }
@@ -695,7 +686,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     }
   }
 
-
   private boolean containsSelfMention(String serverId, String from, String message) {
     if (serverId == null || message == null || message.isEmpty()) return false;
     String me = irc.currentNick(serverId).orElse(null);
@@ -760,7 +750,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
   }
 
-  /** Ensure the target exists, write via callback, and optionally mark unread if not active. */
   private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
   }
@@ -772,7 +761,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     return status != null ? status : safeStatusTarget();
   }
 
-  /** Overload that accepts a stable view of what was active at the time of handling. */
   private void postTo(TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     if (dest == null) dest = safeStatusTarget();
     ensureTargetExists(dest);

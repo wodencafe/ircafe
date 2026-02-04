@@ -75,9 +75,6 @@ public final class TreeContextMenuDecorator implements AutoCloseable {
     tree.addMouseListener(this.mouseListener);
   }
 
-  /**
-   * Installs a context menu decorator that does <b>not</b> change selection when opening the popup.
-   */
   public static TreeContextMenuDecorator decorate(JTree tree, Function<TreePath, JPopupMenu> menuFactory) {
     Objects.requireNonNull(menuFactory, "menuFactory");
     return new TreeContextMenuDecorator(tree, (path, e) -> menuFactory.apply(path), false);

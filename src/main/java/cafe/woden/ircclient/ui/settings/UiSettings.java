@@ -1,21 +1,17 @@
 package cafe.woden.ircclient.ui.settings;
 
-
 public record UiSettings(
     String theme,
     String chatFontFamily,
     int chatFontSize,
 
-    /** If enabled, connect to all configured servers automatically after the UI loads. */
     boolean autoConnectOnStart,
 
     boolean imageEmbedsEnabled,
     boolean imageEmbedsCollapsedByDefault,
 
-    /** Maximum inline image embed width in pixels. <=0 disables extra cap. */
     int imageEmbedsMaxWidthPx,
 
-    /** Maximum inline image embed height in pixels. <=0 disables extra cap. */
     int imageEmbedsMaxHeightPx,
 
     
@@ -41,22 +37,16 @@ public record UiSettings(
     
     String clientLineColor,
 
-
     // --- Hostmask discovery / USERHOST anti-flood ---
 
-    /** If false, IRCafe will not use USERHOST to resolve missing hostmasks (even when hostmask ignores exist). */
     boolean userhostDiscoveryEnabled,
 
-    /** Minimum delay between USERHOST commands per server (seconds). */
     int userhostMinIntervalSeconds,
 
-    /** Maximum USERHOST commands per minute per server. */
     int userhostMaxCommandsPerMinute,
 
-    /** Cooldown before re-querying the same nick (minutes). */
     int userhostNickCooldownMinutes,
 
-    /** Maximum number of nicks to include in a single USERHOST command (servers typically allow up to 5). */
     int userhostMaxNicksPerCommand
 ) {
 
@@ -78,7 +68,6 @@ public record UiSettings(
     if (userhostMaxNicksPerCommand <= 0) userhostMaxNicksPerCommand = 5;
     if (userhostMaxNicksPerCommand > 5) userhostMaxNicksPerCommand = 5;
   }
-
 
   static String normalizeHexOrDefault(String raw, String fallback) {
     String fb = (fallback == null || fallback.isBlank()) ? "#6AA2FF" : fallback.trim();

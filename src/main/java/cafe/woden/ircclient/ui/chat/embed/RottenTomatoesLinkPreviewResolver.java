@@ -16,7 +16,6 @@ import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Best-effort resolver for Rotten Tomatoes movie/TV pages. */
 final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
 
   private static final Logger log = LoggerFactory.getLogger(RottenTomatoesLinkPreviewResolver.class);
@@ -410,13 +409,8 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
     return sb.isEmpty() ? null : sb.toString();
   }
 
-
-  /**
-   * Rotten Tomatoes pages sometimes put the real synopsis only in the rendered "Movie Info"/"Series Info" section,
-   * while meta/JSON-LD description can be generic marketing copy. This extracts the synopsis from the visible
-   * page text as a robust fallback.
-   */
-  private static String extractSynopsisFromVisibleText(String visible) {
+  /** Rotten Tomatoes pages sometimes put the real synopsis only in the rendered "Movie Info"/"Series Info" section, while meta/JSON-LD descrip… */
+private static String extractSynopsisFromVisibleText(String visible) {
     String t = blankToNull(visible);
     if (t == null) return null;
 

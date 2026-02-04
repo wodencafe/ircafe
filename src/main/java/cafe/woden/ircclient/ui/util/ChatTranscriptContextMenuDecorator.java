@@ -143,9 +143,6 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     transcript.addMouseListener(this.mouse);
   }
 
-  /**
-   * Backward-compatible overload: installs the default Copy / Select All / Find menu.
-   */
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(transcript, null, null, null, null, openFind);
   }
@@ -365,8 +362,6 @@ private void downloadToFile(String url, Path out) {
     ));
   }
 }
-
-
 
   @Override
   public void close() {

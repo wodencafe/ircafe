@@ -3,11 +3,6 @@ package cafe.woden.ircclient.ui.chat.embed;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 
-/**
- * Generic OpenGraph/Twitter-card based resolver for regular HTML pages.
- *
- * <p>This should usually be the last resolver in the chain.
- */
 final class OpenGraphLinkPreviewResolver implements LinkPreviewResolver {
 
   private final int maxHtmlBytes;

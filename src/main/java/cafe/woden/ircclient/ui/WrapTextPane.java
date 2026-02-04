@@ -8,12 +8,7 @@ import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
 import java.awt.*;
 
-/**
- * JTextPane that word/line wraps when placed inside a JScrollPane.
- *
- * <p>Also allows wrapping long "words" (e.g., URLs) by lowering the paragraph's
- * minimum X span to 0, so content never forces horizontal growth.</p>
- */
+/** JTextPane that word/line wraps when placed inside a JScrollPane. */
 public class WrapTextPane extends JTextPane {
 
   public WrapTextPane() {
@@ -39,9 +34,6 @@ public class WrapTextPane extends JTextPane {
     super.setSize(d);
   }
 
-  /**
-   * StyledEditorKit that installs a ViewFactory which allows long tokens to wrap.
-   */
   private static final class WrapEditorKit extends StyledEditorKit {
     private final ViewFactory factory = new WrapViewFactory(super.getViewFactory());
 

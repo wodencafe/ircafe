@@ -9,10 +9,8 @@ package cafe.woden.ircclient.irc;
 final class PircbotxAwayParsers {
   private PircbotxAwayParsers() {}
 
-  /** Parsed IRCv3 away-notify line (AWAY command from another user). */
   static record ParsedAwayNotify(String nick, IrcEvent.AwayState awayState, String message) {}
 
-  /** Parsed RPL_UNAWAY (305) / RPL_NOWAWAY (306) confirmation line. */
   static record ParsedAwayConfirmation(boolean away, String server, String message) {}
 
   /**
@@ -61,13 +59,8 @@ final class PircbotxAwayParsers {
     return new ParsedAwayNotify(nick, state, msg);
   }
 
-  /**
-   * Parse RPL_UNAWAY (305) / RPL_NOWAWAY (306) lines and extract the trailing message.
-   *
-   * <p>Typical format: ":server 305 <me> :You are no longer marked as being away"
-   * <br>Typical format: ":server 306 <me> :You have been marked as being away"
-   */
-  static ParsedAwayConfirmation parseRpl305or306Away(String line) {
+  /** Parse RPL_UNAWAY (305) / RPL_NOWAWAY (306) lines and extract the trailing message. */
+static ParsedAwayConfirmation parseRpl305or306Away(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;

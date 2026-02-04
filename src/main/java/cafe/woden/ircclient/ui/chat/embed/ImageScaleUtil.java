@@ -4,7 +4,6 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 
-/** Small helpers for scaling images with decent quality. */
 final class ImageScaleUtil {
 
   private ImageScaleUtil() {}
@@ -34,11 +33,6 @@ final class ImageScaleUtil {
     return out;
   }
 
-  /**
-   * Scale the image down to fit within the given bounds while preserving aspect ratio.
-   *
-   * <p>Either bound may be <= 0 to indicate "no cap" for that dimension.
-   */
   static BufferedImage scaleDownToFit(BufferedImage src, int maxW, int maxH) {
     if (src == null) return null;
     int w = src.getWidth();

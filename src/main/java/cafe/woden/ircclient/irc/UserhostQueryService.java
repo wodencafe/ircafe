@@ -65,18 +65,12 @@ public class UserhostQueryService {
     exec.shutdownNow();
   }
 
-  /** Clear all queued state for a server (e.g., on disconnect). */
   public void clearServer(String serverId) {
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
     stateByServer.remove(sid);
   }
 
-  /**
-   * Enqueue nicks for hostmask resolution via USERHOST.
-   *
-   * <p>Nicks are de-duplicated and applied with per-nick cooldown.
-   */
   public void enqueue(String serverId, Collection<String> nicks) {
     if (!config().enabled) return;
     String sid = norm(serverId);

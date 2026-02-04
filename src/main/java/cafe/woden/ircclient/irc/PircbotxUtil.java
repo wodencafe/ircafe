@@ -4,11 +4,6 @@ import java.util.List;
 import java.util.Objects;
 import org.pircbotx.User;
 
-/**
- * Small, boring helpers used by the PircBotX bridge.
- *
- * <p>Keep this intentionally lightweight and mostly pure so we can unit test later.
- */
 final class PircbotxUtil {
 
   private PircbotxUtil() {}
@@ -72,7 +67,6 @@ final class PircbotxUtil {
     }
   }
 
-  /** Returns CTCP ACTION body or null if message isn't a CTCP ACTION. */
   static String parseCtcpAction(String message) {
     if (message == null || message.length() < 2) return null;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return null;

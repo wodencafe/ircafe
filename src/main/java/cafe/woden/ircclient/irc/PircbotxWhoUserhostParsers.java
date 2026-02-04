@@ -1,8 +1,5 @@
 package cafe.woden.ircclient.irc;
 
-/**
- * Pure parsing helpers for WHO/WHOX and USERHOST related numerics.
- */
 final class PircbotxWhoUserhostParsers {
   private PircbotxWhoUserhostParsers() {}
 
@@ -12,12 +9,6 @@ final class PircbotxWhoUserhostParsers {
 
   static record UserhostEntry(String nick, String hostmask, IrcEvent.AwayState awayState) {}
 
-
-  /**
-   * Parse RPL_WHOREPLY (352) lines.
-   *
-   * <p>Common format: ":server 352 <me> <channel> <user> <host> <server> <nick> <flags> :<hopcount> <realname>"
-   */
   static ParsedWhoReply parseRpl352WhoReply(String line) {
     if (line == null) return null;
     String s = line.trim();
@@ -47,14 +38,8 @@ final class PircbotxWhoUserhostParsers {
     return new ParsedWhoReply(channel, nick, user, host);
   }
 
-
-  /**
-   * Parse RPL_WHOSPCRPL (354) / WHOX lines.
-   *
-   * <p>WHOX format varies by server/field selection, so we use heuristics to extract channel/user/host/nick.
-   * Returns null if we can't confidently extract the key fields.
-   */
-  static ParsedWhoxReply parseRpl354WhoxReply(String line) {
+  /** Parse RPL_WHOSPCRPL (354) / WHOX lines. */
+static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -154,7 +139,6 @@ final class PircbotxWhoUserhostParsers {
 
     return new ParsedWhoxReply(channel, nick, user, host);
   }
-
 
   /**
    * Parse RPL_USERHOST (302) lines.

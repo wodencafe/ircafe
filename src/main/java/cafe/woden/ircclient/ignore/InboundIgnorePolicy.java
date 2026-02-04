@@ -3,12 +3,7 @@ package cafe.woden.ircclient.ignore;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
-/**
- * Centralized decision point for how inbound messages should be handled with respect to ignore lists.
- *
- * <p>Step 11 is implemented in small increments. In this first increment, we only introduce the
- * policy component (no call sites yet).
- */
+/** Centralized decision point for how inbound messages should be handled with respect to ignore lists. */
 @Component
 public class InboundIgnorePolicy {
 
@@ -45,7 +40,6 @@ public class InboundIgnorePolicy {
 
     String nick = Objects.toString(fromNick, "").trim();
     if (nick.isEmpty()) return Decision.ALLOW;
-
 
     // Delegate the matching rules to IgnoreStatusService so UI + inbound agree.
     IgnoreStatusService.Status st = (ignoreStatusService == null)

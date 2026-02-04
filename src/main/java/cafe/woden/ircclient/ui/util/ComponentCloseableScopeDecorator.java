@@ -4,10 +4,6 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
 import javax.swing.JComponent;
 
-/**
- * Installs a CloseableScope on a component and automatically closes it when the component
- * becomes non-displayable.
- */
 public final class ComponentCloseableScopeDecorator {
 
   private ComponentCloseableScopeDecorator() {}

@@ -4,9 +4,6 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import javax.swing.JDialog;
 
-/**
- * Installs a CloseableScope on a dialog and automatically closes it when the dialog closes.
- */
 public final class DialogCloseableScopeDecorator {
 
   private DialogCloseableScopeDecorator() {}

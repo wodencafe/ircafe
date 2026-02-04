@@ -17,10 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * Async log writer for persisted chat history.
- *
- */
 public class ChatLogService implements ChatLogWriter, AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(ChatLogService.class);
@@ -40,7 +36,6 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final AtomicLong dropped = new AtomicLong(0);
 
-  /** Guards flush operations (scheduled + manual) so they never overlap. */
   private final Object flushLock = new Object();
 
   public ChatLogService(ChatLogRepository repo, TransactionTemplate tx, LogProperties props) {

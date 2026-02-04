@@ -7,10 +7,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks away state per server, plus (optionally) the most recent tab where the user initiated
- * an /away command so confirmations (305/306) can be printed where the user expects.
- */
 @Component
 public class AwayRoutingState {
 
@@ -68,7 +64,6 @@ public class AwayRoutingState {
     return null;
   }
 
-  /** Drop all stored state for a server (e.g., on disconnect). */
   public void clearServer(String serverId) {
     String sid = normalizeServer(serverId);
     awayByServer.remove(sid);

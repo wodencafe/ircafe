@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 @Component
 public final class ModeFormattingService {
 
-  /** Pretty-prints a MODE change (e.g. "+b mask") into human-friendly sentences. */
   public List<String> prettyModeChange(String actor, String channel, String details) {
     return ModePrettyPrinter.pretty(actor, channel, details);
   }

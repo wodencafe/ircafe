@@ -7,7 +7,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.util.Locale;
 
-/** Small helper utilities for embedded image handling. */
 final class FileUtil {
 
   private FileUtil() {}

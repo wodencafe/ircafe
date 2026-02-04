@@ -26,9 +26,6 @@ import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * List/manage servers: add, edit, remove.
- */
 public class ServersDialog extends JDialog {
 
   private static final Logger log = LoggerFactory.getLogger(ServersDialog.class);

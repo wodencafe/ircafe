@@ -14,10 +14,6 @@ import javax.swing.JTextArea;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 
-/**
- * Collapsible join/part burst component inserted into the chat transcript StyledDocument.
- *
- */
 public final class JoinPartFoldComponent extends JPanel {
 
   

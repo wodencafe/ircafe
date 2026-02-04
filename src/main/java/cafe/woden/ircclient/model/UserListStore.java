@@ -11,25 +11,15 @@ import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/** In-memory cache of channel userlists, keyed by server + channel. */
 @Component
 public class UserListStore {
 
   private final Map<String, Map<String, List<NickInfo>>> usersByServerAndChannel = new ConcurrentHashMap<>();
   private final Map<String, Map<String, Set<String>>> lowerNickSetByServerAndChannel = new ConcurrentHashMap<>();
-
-  /**
-   * Best-effort learned hostmasks by server + lowercase nick.
-   *
-   * <p>This is populated opportunistically from inbound IRC prefixes (messages, joins, parts, etc.).
-   * It helps us enrich NAMES rosters that do not include user@host.
-   */
   private final Map<String, Map<String, String>> hostmaskByServerAndNickLower = new ConcurrentHashMap<>();
 
-  /** Best-effort learned away state by server + lowercase nick (intended for IRCv3 away-notify). */
   private final Map<String, Map<String, AwayState>> awayStateByServerAndNickLower = new ConcurrentHashMap<>();
 
-  /** Best-effort learned away reason/message by server + lowercase nick (only meaningful when AWAY). */
   private final Map<String, Map<String, String>> awayMessageByServerAndNickLower = new ConcurrentHashMap<>();
 
   private static String norm(String s) {
@@ -61,12 +51,6 @@ public class UserListStore {
     return state != null && state != AwayState.UNKNOWN;
   }
 
-  /**
-   * Best-effort learned hostmask for a nick on a server.
-   *
-   * <p>This is populated opportunistically from inbound IRC prefixes (messages, joins, parts, etc.).
-   * It is NOT guaranteed to exist for every nick.
-   */
   public String getLearnedHostmask(String serverId, String nick) {
     String sid = norm(serverId);
     if (sid.isEmpty()) return null;
@@ -95,12 +79,6 @@ public class UserListStore {
     if (byChannel == null) return Collections.emptyList();
     return byChannel.getOrDefault(ch, Collections.emptyList());
   }
-
-  /**
-   * Case-insensitive (lowercased) nick set for mention matching.
-   *
-   * <p>This is kept in sync with {@link #put(String, String, List)}.
-   */
   public Set<String> getLowerNickSet(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
     String ch = Objects.toString(channel, "").trim();
@@ -222,11 +200,6 @@ public class UserListStore {
     awayMessageByServerAndNickLower.remove(sid);
   }
 
-  /**
-   * Update the cached hostmask for a nick within a channel, if present.
-   *
-   * <p>Returns true only if an existing roster entry was updated.
-   */
   public boolean updateHostmask(String serverId, String channel, String nick, String hostmask) {
     String sid = norm(serverId);
     String ch = norm(channel);
@@ -276,16 +249,6 @@ public class UserListStore {
     byChannel.put(ch, List.copyOf(next));
     return true;
   }
-
-  /**
-   * Update the cached hostmask for a nick across all cached channels on a server.
-   *
-   * <p>This enables "step 1.5" propagation: once we learn a user's hostmask from any inbound
-   * prefix in one channel, we can reflect hostmask-based ignores in other channel userlists
-   * where that nick is present.
-   *
-   * @return set of channels whose roster list was modified.
-   */
   public Set<String> updateHostmaskAcrossChannels(String serverId, String nick, String hostmask) {
     String sid = norm(serverId);
     String n = norm(nick);
@@ -337,19 +300,10 @@ public class UserListStore {
     return java.util.Set.copyOf(changedChannels);
   }
 
-  /**
-   * Update the cached away state for a nick within a channel, if present.
-   *
-   * <p>This is intentionally NOT wired up yet; it exists so we can later plug in IRCv3
-   * {@code away-notify} (or similar) and have the user list react.
-   *
-   * <p>Returns true only if an existing roster entry was updated.
-   */
   public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState) {
     return updateAwayState(serverId, channel, nick, awayState, null);
   }
 
-  /** Update away state + optional away reason for a nick within a channel. */
   public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState, String awayMessage) {
     String sid = norm(serverId);
     String ch = norm(channel);
@@ -411,18 +365,10 @@ public class UserListStore {
     return true;
   }
 
-  /**
-   * Update the cached away state for a nick across all cached channels on a server.
-   *
-   * <p>This is the away-state analogue to {@link #updateHostmaskAcrossChannels(String, String, String)}.
-   *
-   * @return set of channels whose roster list was modified.
-   */
   public Set<String> updateAwayStateAcrossChannels(String serverId, String nick, AwayState awayState) {
     return updateAwayStateAcrossChannels(serverId, nick, awayState, null);
   }
 
-  /** Update away state + optional away reason across all cached channels on a server. */
   public Set<String> updateAwayStateAcrossChannels(String serverId, String nick, AwayState awayState, String awayMessage) {
     String sid = norm(serverId);
     String n = norm(nick);

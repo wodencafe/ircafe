@@ -5,7 +5,6 @@ import java.awt.Component;
 import java.awt.Graphics;
 import javax.swing.Icon;
 
-/** Small square swatch icon for previewing a color in table cells/buttons. */
 class ColorSwatchIcon implements Icon {
   private final Color color;
   private final int w;

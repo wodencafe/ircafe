@@ -8,12 +8,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Centralized ignore matching service.
- *
- * <p>This exists so that UI indicators (context menus, user list badges/tooltips) and
- * inbound message filtering agree on the same ignore matching rules.
- */
+/** Centralized ignore matching service. */
 @Component
 public class IgnoreStatusService {
 
@@ -71,13 +66,8 @@ public class IgnoreStatusService {
     ));
   }
 
-  /**
-   * Compute ignore status for a sender.
-   *
-   * <p>If a useful hostmask is available (either passed in, or learned from the user store),
-   * we prefer hostmask matching. Otherwise we fall back to nick-glob matching.
-   */
-  public Status status(String serverId, String nick, String hostmask) {
+  /** Compute ignore status for a sender. */
+public Status status(String serverId, String nick, String hostmask) {
     if (ignoreListService == null) return new Status(false, false, false, "");
 
     String sid = Objects.toString(serverId, "").trim();
@@ -117,9 +107,6 @@ public class IgnoreStatusService {
     return new Status(hard, soft, useHostmask, useHostmask ? hm : "");
   }
 
-  /**
-   * Convenience for ignore dialogs: choose the best identifier (hostmask if useful, else nick).
-   */
   public String bestSeedForMask(String serverId, String nick, String hostmask) {
     Status st = status(serverId, nick, hostmask);
     if (st.usedHostmask() && st.hostmaskUsed() != null && !st.hostmaskUsed().isBlank()) {

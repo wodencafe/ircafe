@@ -2,7 +2,6 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import java.net.URI;
 
-/** Best-effort resolver for GitHub links using the GitHub REST API. */
 final class GitHubLinkPreviewResolver implements LinkPreviewResolver {
 
   @Override

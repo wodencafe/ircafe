@@ -128,7 +128,6 @@ public final class JoinModeBurstService {
     ui.appendNotice(chanTarget, "(mode)", summary);
   }
 
-  /** Clears all join-burst state for a server (call on disconnect). */
   public void clearServer(String serverId) {
     if (serverId == null) return;
     String sid = serverId.trim();
@@ -158,10 +157,6 @@ public final class JoinModeBurstService {
     }
   }
 
-  /**
-   * Buffers the initial join-burst of simple channel-state modes (no args) so we can print
-   * a single summary line after the join feels complete.
-   */
   private static final class JoinModeBuffer {
     private final java.util.LinkedHashSet<Character> plus = new java.util.LinkedHashSet<>();
     private final java.util.LinkedHashSet<Character> minus = new java.util.LinkedHashSet<>();

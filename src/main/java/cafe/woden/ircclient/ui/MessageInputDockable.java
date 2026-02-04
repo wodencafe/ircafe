@@ -54,9 +54,7 @@ public class MessageInputDockable extends JPanel implements Dockable {
     super(new BorderLayout(8, 0));
     this.settingsBus = settingsBus;
 
-    setPreferredSize(new Dimension(10, 34)); // width ignored by layout; height matters
-
-    // Tab completion hint (right side, next to Send)
+    setPreferredSize(new Dimension(10, 34));
     completionHint.setText(" ");
     completionHint.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
     completionHint.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -69,22 +67,14 @@ public class MessageInputDockable extends JPanel implements Dockable {
 
     add(input, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
-
-    // Right-click context menu (UI-only for now; actions intentionally not wired)
     installInputContextMenu();
-
-    // Allow Tab in the input field (we use it as the auto-complete trigger)
     input.setFocusTraversalKeysEnabled(false);
-
-    // Auto-complete setup (bobbylight/AutoComplete)
     autoCompletion.setAutoActivationEnabled(false);
     autoCompletion.setParameterAssistanceEnabled(false);
     autoCompletion.setShowDescWindow(false);
     autoCompletion.setAutoCompleteSingleChoices(true);
     autoCompletion.setTriggerKey(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));
     autoCompletion.install(input);
-
-    // Keep the hint label updated as the user types.
     input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
       @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateHint(); }
       @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateHint(); }
@@ -93,131 +83,127 @@ public class MessageInputDockable extends JPanel implements Dockable {
     input.addCaretListener(e -> updateHint());
 
     applySettings(settingsBus.get());
-
-    // Press Enter
     input.addActionListener(e -> emit());
-    // Click Send
     send.addActionListener(e -> emit());
   }
 
-private void installInputContextMenu() {
-  final JPopupMenu menu = new JPopupMenu();
+  private void installInputContextMenu() {
+    final JPopupMenu menu = new JPopupMenu();
 
-  final JMenuItem cutItem = new JMenuItem("Cut");
-  cutItem.addActionListener(e -> input.cut());
+    final JMenuItem cutItem = new JMenuItem("Cut");
+    cutItem.addActionListener(e -> input.cut());
 
-  final JMenuItem copyItem = new JMenuItem("Copy");
-  copyItem.addActionListener(e -> input.copy());
+    final JMenuItem copyItem = new JMenuItem("Copy");
+    copyItem.addActionListener(e -> input.copy());
 
-  final JMenuItem pasteItem = new JMenuItem("Paste");
-  pasteItem.addActionListener(e -> input.paste());
+    final JMenuItem pasteItem = new JMenuItem("Paste");
+    pasteItem.addActionListener(e -> input.paste());
 
-  final JMenuItem deleteItem = new JMenuItem("Delete");
-  deleteItem.addActionListener(e -> {
-    if (!input.isEditable() || !input.isEnabled()) return;
+    final JMenuItem deleteItem = new JMenuItem("Delete");
+    deleteItem.addActionListener(e -> {
+      if (!input.isEditable() || !input.isEnabled()) return;
 
-    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
-    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
-    try {
-      if (start != end) {
-        input.getDocument().remove(start, end - start);
-        input.setCaretPosition(start);
-      } else {
-        int caret = input.getCaretPosition();
-        int len = input.getDocument().getLength();
-        if (caret < len) {
-          input.getDocument().remove(caret, 1);
-        } else {
-          Toolkit.getDefaultToolkit().beep();
-        }
-      }
-    } catch (BadLocationException ex) {
-      Toolkit.getDefaultToolkit().beep();
-    }
-  });
-
-  final JMenuItem clearItem = new JMenuItem("Clear");
-  clearItem.addActionListener(e -> {
-    if (!input.isEditable() || !input.isEnabled()) return;
-    if (input.getDocument().getLength() == 0) return;
-    input.setText("");
-  });
-
-  final JMenuItem selectAllItem = new JMenuItem("Select All");
-  selectAllItem.addActionListener(e -> {
-    if (!input.isEnabled()) return;
-    input.selectAll();
-  });
-
-  menu.add(cutItem);
-  menu.add(copyItem);
-  menu.add(pasteItem);
-  menu.addSeparator();
-  menu.add(deleteItem);
-  menu.add(clearItem);
-  menu.addSeparator();
-  menu.add(selectAllItem);
-
-  final Runnable refreshEnabledStates = () -> {
-    boolean enabled = input.isEnabled();
-    boolean editable = enabled && input.isEditable();
-
-    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
-    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
-    boolean hasSelection = start != end;
-
-    int len = input.getDocument().getLength();
-    int caret = input.getCaretPosition();
-
-    cutItem.setEnabled(editable && hasSelection);
-    copyItem.setEnabled(enabled && hasSelection);
-    pasteItem.setEnabled(editable && clipboardHasText());
-    deleteItem.setEnabled(editable && (hasSelection || caret < len));
-    clearItem.setEnabled(editable && len > 0);
-    selectAllItem.setEnabled(enabled && len > 0 && !(start == 0 && end == len));
-  };
-
-  menu.addPopupMenuListener(new PopupMenuListener() {
-    @Override public void popupMenuWillBecomeVisible(PopupMenuEvent e) { refreshEnabledStates.run(); }
-    @Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
-    @Override public void popupMenuCanceled(PopupMenuEvent e) { }
-  });
-
-  // Use an explicit listener rather than setComponentPopupMenu() for consistent behavior across
-  // LAFs/platforms, and to support context-aware enablement right before showing.
-  input.addMouseListener(new MouseAdapter() {
-    private void maybeShow(MouseEvent e) {
-      if (!e.isPopupTrigger()) return;
-      if (!input.isShowing()) return;
-
-      // Typical UX: focus + caret follow the right-click location.
-      if (!input.hasFocus()) input.requestFocusInWindow();
+      int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+      int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
       try {
-        int pos = input.viewToModel2D(e.getPoint());
-        if (pos >= 0) input.setCaretPosition(pos);
-      } catch (Exception ignored) {
+        if (start != end) {
+          input.getDocument().remove(start, end - start);
+          input.setCaretPosition(start);
+        } else {
+          int caret = input.getCaretPosition();
+          int len = input.getDocument().getLength();
+          if (caret < len) {
+            input.getDocument().remove(caret, 1);
+          } else {
+            Toolkit.getDefaultToolkit().beep();
+          }
+        }
+      } catch (BadLocationException ex) {
+        Toolkit.getDefaultToolkit().beep();
+      }
+    });
+
+    final JMenuItem clearItem = new JMenuItem("Clear");
+    clearItem.addActionListener(e -> {
+      if (!input.isEditable() || !input.isEnabled()) return;
+      if (input.getDocument().getLength() == 0) return;
+      input.setText("");
+    });
+
+    final JMenuItem selectAllItem = new JMenuItem("Select All");
+    selectAllItem.addActionListener(e -> {
+      if (!input.isEnabled()) return;
+      input.selectAll();
+    });
+
+    menu.add(cutItem);
+    menu.add(copyItem);
+    menu.add(pasteItem);
+    menu.addSeparator();
+    menu.add(deleteItem);
+    menu.add(clearItem);
+    menu.addSeparator();
+    menu.add(selectAllItem);
+
+    final Runnable refreshEnabledStates = () -> {
+      boolean enabled = input.isEnabled();
+      boolean editable = enabled && input.isEditable();
+
+      int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+      int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+      boolean hasSelection = start != end;
+
+      int len = input.getDocument().getLength();
+      int caret = input.getCaretPosition();
+
+      cutItem.setEnabled(editable && hasSelection);
+      copyItem.setEnabled(enabled && hasSelection);
+      pasteItem.setEnabled(editable && clipboardHasText());
+      deleteItem.setEnabled(editable && (hasSelection || caret < len));
+      clearItem.setEnabled(editable && len > 0);
+      selectAllItem.setEnabled(enabled && len > 0 && !(start == 0 && end == len));
+    };
+
+    menu.addPopupMenuListener(new PopupMenuListener() {
+      @Override public void popupMenuWillBecomeVisible(PopupMenuEvent e) { refreshEnabledStates.run(); }
+      @Override public void popupMenuWillBecomeInvisible(PopupMenuEvent e) { }
+      @Override public void popupMenuCanceled(PopupMenuEvent e) { }
+    });
+
+    // Use an explicit listener so enablement refreshes before showing.
+    input.addMouseListener(new MouseAdapter() {
+      private void maybeShow(MouseEvent e) {
+        if (!e.isPopupTrigger()) return;
+        if (!input.isShowing()) return;
+
+        if (!input.hasFocus()) input.requestFocusInWindow();
+        try {
+          int pos = input.viewToModel2D(e.getPoint());
+          if (pos >= 0) input.setCaretPosition(pos);
+        } catch (Exception ignored) {
+        }
+
+        refreshEnabledStates.run();
+        SwingUtilities.updateComponentTreeUI(menu);
+        menu.show(e.getComponent(), e.getX(), e.getY());
       }
 
-      refreshEnabledStates.run();
-      SwingUtilities.updateComponentTreeUI(menu);
-      menu.show(e.getComponent(), e.getX(), e.getY());
-    }
-
-    @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
-    @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
-  });
-}
-
-private boolean clipboardHasText() {
-  try {
-    Clipboard cb = Toolkit.getDefaultToolkit().getSystemClipboard();
-    if (cb == null) return false;
-    Transferable t = cb.getContents(null);
-    return t != null && t.isDataFlavorSupported(DataFlavor.stringFlavor);
-  } catch (Exception ignored) {
-    return false;
+      @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
+      @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
+    });
   }
-}
+
+  private boolean clipboardHasText() {
+    try {
+      Clipboard cb = Toolkit.getDefaultToolkit().getSystemClipboard();
+      if (cb == null) return false;
+      Transferable t = cb.getContents(null);
+      return t != null && t.isDataFlavorSupported(DataFlavor.stringFlavor);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
 
   @Override
   public void addNotify() {
@@ -249,15 +235,9 @@ private boolean clipboardHasText() {
     }
   }
 
-  /**
-   * Updates the set of nick completions offered by the Tab completion popup.
-   *
-   */
   public void setNickCompletions(List<String> nicks) {
     List<String> cleaned = cleanNickList(nicks);
     nickSnapshot = cleaned;
-
-    // Rebuild provider contents.
     completionProvider.clear();
     for (String nick : cleaned) {
       completionProvider.addCompletion(new BasicCompletion(completionProvider, nick, "IRC nick"));
@@ -276,8 +256,6 @@ private boolean clipboardHasText() {
       if (s.isEmpty()) continue;
       out.add(s);
     }
-
-    // Sort and de-dupe with case-insensitive order.
     out.sort(String.CASE_INSENSITIVE_ORDER);
     ArrayList<String> deduped = new ArrayList<>(out.size());
     String last = null;
@@ -323,7 +301,6 @@ private boolean clipboardHasText() {
     }
 
     String token = text.substring(start, caret);
-    // Allow completing when user types "@nick" or "nick," etc.
     token = stripLeadingPunct(token);
     token = stripTrailingPunct(token);
     return token;

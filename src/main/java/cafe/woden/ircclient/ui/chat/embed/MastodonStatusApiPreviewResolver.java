@@ -4,13 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 
-/**
- * Mastodon status preview via the public instance API.
- *
- * <p>Many Mastodon instances return oEmbed HTML that is only a thin wrapper unless JS runs.
- * The REST API provides the actual status content (as HTML) without requiring auth for
- * public posts.
- */
+/** Mastodon status preview via the public instance API. */
 final class MastodonStatusApiPreviewResolver implements LinkPreviewResolver {
 
   private static final ObjectMapper JSON = new ObjectMapper();

@@ -9,10 +9,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-/**
- * Best-effort enrichment for X/Twitter status URLs.
- *
- */
 final class XPreviewUtil {
 
   private XPreviewUtil() {}
@@ -215,10 +211,6 @@ static String extractStatusId(String url) {
     }
   }
 
-  /**
-   * Best-effort approximation of JS Number#toString(36) for a positive number, then
-   * remove all '.' and '0' characters (matching /(0+|\.)/g).
-   */
   private static String tokenFromNumber(double n) {
     if (!(n > 0)) return "a";
 
@@ -338,7 +330,6 @@ static String extractStatusId(String url) {
     return fallback != null ? fallback.toString() : null;
   }
 
-
   private static String buildAuthorTitle(String name, String handle) {
     String n = safe(name);
     String h = safe(handle);
@@ -444,11 +435,6 @@ static String extractStatusId(String url) {
     return null;
   }
 
-  /**
-   * Minimal JSON scanner good enough for tweet syndication payloads.
-   *
-   * <p>Not a general JSON parser; best-effort only.
-   */
   static final class MiniJson {
     private MiniJson() {}
 
@@ -621,7 +607,6 @@ static String extractStatusId(String url) {
     }
   }
 
-
 static java.util.List<URI> proxyUnfurlCandidates(URI originalStatusUri) {
   if (originalStatusUri == null) return java.util.List.of();
   String id = extractStatusId(originalStatusUri);
@@ -699,6 +684,5 @@ private static void tryAdd(java.util.List<URI> out, String raw) {
     // ignore bad URIs
   }
 }
-
 
 }

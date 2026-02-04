@@ -13,9 +13,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Fetch and parse link preview metadata (resolver chain + caching + inflight de-dupe).
- */
 @Component
 @Lazy
 public class LinkPreviewFetchService {

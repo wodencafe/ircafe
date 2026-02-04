@@ -22,9 +22,6 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 
-/**
- * Inline image preview component inserted into the chat transcript StyledDocument.
- */
 final class ChatImageComponent extends JPanel {
 
   // Fallback width if we can't determine the transcript viewport width yet.

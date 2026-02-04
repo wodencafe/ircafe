@@ -8,13 +8,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import org.springframework.stereotype.Component;
 
-/**
- * Builds the standard context menu used when right-clicking a nickname.
- *
- * <p>The goal is to keep the menu options consistent across surfaces
- * (chat transcript, user list, etc.), while letting each surface provide
- * its own lookup/policy hooks (ignore prompt, CTCP dispatch, etc.).
- */
+/** Builds the standard context menu used when right-clicking a nickname. */
 @Component
 public final class NickContextMenuFactory {
 
@@ -26,11 +20,6 @@ public final class NickContextMenuFactory {
    */
   public record IgnoreMark(boolean hard, boolean soft) {}
 
-  /**
-   * Callbacks required for menu actions.
-   *
-   * <p>Implementations should be defensive: menu code should never crash the UI.
-   */
   public interface Callbacks {
     void openQuery(TargetRef ctx, String nick);
 
@@ -39,9 +28,6 @@ public final class NickContextMenuFactory {
     void promptIgnore(TargetRef ctx, String nick, boolean removing, boolean soft);
   }
 
-  /**
-   * A stateful menu instance. Each view creates one instance and reuses it.
-   */
   public static final class NickContextMenu {
     private final Callbacks callbacks;
 
@@ -104,9 +90,6 @@ public final class NickContextMenuFactory {
       }
     }
 
-    /**
-     * Prepares the menu for a particular nick + context, updates enabled state, and returns the menu.
-     */
     public JPopupMenu forNick(TargetRef ctx, String nick, IgnoreMark mark) {
       // This menu is not part of any visible component tree, so it won't automatically
       // receive Look-and-Feel updates when the main frame is updated. Ensure that the
@@ -141,7 +124,6 @@ public final class NickContextMenuFactory {
     }
   }
 
-  /** Creates a reusable nick context menu instance for a particular view/dock. */
   public NickContextMenu create(Callbacks callbacks) {
     return new NickContextMenu(callbacks);
   }

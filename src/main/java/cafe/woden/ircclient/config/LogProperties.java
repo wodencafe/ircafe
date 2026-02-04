@@ -2,22 +2,12 @@ package cafe.woden.ircclient.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/**
- * Chat logging / history persistence configuration.
- *
- */
 @ConfigurationProperties(prefix = "ircafe.logging")
 public record LogProperties(
-    /** Master toggle for persistence logging. Default: false (privacy-first). */
     Boolean enabled,
 
-    /**
-     * If true (default), messages that are "soft ignored" (spoiler-covered) are still persisted,
-     * but flagged so UI can render them as hidden by default when loading history.
-     */
     Boolean logSoftIgnoredLines,
 
-    /** If true (default), keep logs indefinitely. */
     Boolean keepForever,
 
     /**
@@ -27,16 +17,13 @@ public record LogProperties(
      */
     Integer retentionDays,
 
-    /** Embedded HSQLDB storage configuration. */
     Hsqldb hsqldb
 ) {
 
   
   public record Hsqldb(
-      /** Base filename (no extension). HSQLDB will create .data/.script/.properties files. */
       String fileBaseName,
 
-      /** If true (default), store the DB next to the runtime YAML config file. */
       Boolean nextToRuntimeConfig
   ) {
     public Hsqldb {

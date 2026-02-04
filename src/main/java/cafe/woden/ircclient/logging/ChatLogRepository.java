@@ -11,9 +11,6 @@ import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
-/**
- * Low-level persistence operations for chat logs.
- */
 public class ChatLogRepository {
 
   private static final int TEXT_MAX = 8192;

@@ -6,7 +6,6 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Small helpers for recognizing and canonicalizing IMDb title links. */
 final class ImdbPreviewUtil {
 
   private ImdbPreviewUtil() {}

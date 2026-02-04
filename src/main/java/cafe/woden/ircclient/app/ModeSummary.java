@@ -5,7 +5,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Human-friendly summaries for common channel mode flags. */
 final class ModeSummary {
 
   // Preference order for the "join burst" / summary display.

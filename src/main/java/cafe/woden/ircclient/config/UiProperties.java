@@ -17,7 +17,6 @@ public record UiProperties(
     String chatFontFamily,
     int chatFontSize,
 
-    /** If enabled, connect to all configured servers automatically after the UI loads. Default: true. */
     Boolean autoConnectOnStart,
 
     Timestamps timestamps,
@@ -25,56 +24,23 @@ public record UiProperties(
     
     Boolean chatMessageTimestampsEnabled,
 
-    /**
-     * How many historical log lines to load into a transcript when selecting a target.
-     *
-     * <p>If &lt;= 0, history prefill is disabled.
-     */
     Integer chatHistoryInitialLoadLines,
 
-    /**
-     * Page size for the in-transcript "Load older messages…" control.
-     *
-     * <p>If &lt;= 0, the paging control will still render, but loads will fall back to a safe default.
-     */
     Integer chatHistoryPageSize,
 
-    /**
-     * If enabled, render *outgoing* messages (lines you send that are locally echoed into the transcript)
-     * using a custom foreground color. Default: false.
-     */
     Boolean clientLineColorEnabled,
 
     
     String clientLineColor,
 
-
-    /** Enable embedding inline image previews from direct image links. Default: false. */
     Boolean imageEmbedsEnabled,
 
-    /** If enabled, newly inserted inline images start collapsed (you can expand per-image). Default: false. */
     Boolean imageEmbedsCollapsedByDefault,
 
-    /**
-     * Maximum inline image embed width (pixels).
-     *
-     * <p>If <= 0, no additional cap is applied (images scale down only to fit the chat viewport).
-     */
     Integer imageEmbedsMaxWidthPx,
 
-    /**
-     * Maximum inline image embed height (pixels).
-     *
-     * <p>If <= 0, no additional cap is applied (images scale down only to fit the chat viewport).
-     */
     Integer imageEmbedsMaxHeightPx,
 
-
-    /**
-     * Enable animated GIF playback for inline image embeds.
-     *
-     * <p>If false, GIFs are rendered as a still image using the first frame.
-     */
     Boolean imageEmbedsAnimateGifs,
 
     /**
@@ -86,28 +52,20 @@ public record UiProperties(
      */
     HostmaskDiscovery hostmaskDiscovery,
 
-    /** Enable Discord/Signal-style link preview "cards" for regular web pages. Default: false. */
     Boolean linkPreviewsEnabled,
 
-    /** If enabled, newly inserted link preview cards start collapsed (you can expand per-card). Default: false. */
     Boolean linkPreviewsCollapsedByDefault,
 
-    /** Enable per-nick coloring in chat + user list. */
     Boolean nickColoringEnabled,
 
-    /** Enable folding/collapsing of presence noise in channel transcripts (join/part/quit/nick). */
     Boolean presenceFoldsEnabled,
 
-    /** Minimum contrast ratio against the current background (WCAG-style). */
     double nickColorMinContrast,
 
-    /** Palette used for deterministic nick colors (hex strings like "#RRGGBB"). */
     List<String> nickColors,
 
-    /** Optional per-nick color overrides (case-insensitive keys, hex color values). */
     Map<String, String> nickColorOverrides,
 
-    /** Docking/layout defaults (initial dock sizes on first open). */
     Layout layout
 ) {
 
@@ -220,7 +178,6 @@ public record UiProperties(
     if (layout == null) {
       layout = new Layout(null, null, null);
     }
-
 
     // Image embeds default: disabled.
     if (imageEmbedsEnabled == null) {

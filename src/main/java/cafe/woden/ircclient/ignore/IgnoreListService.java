@@ -14,27 +14,17 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks ignore masks per server.
- *
- * <p>This service ONLY tracks and persists ignore masks. It does not apply ignoring
- * to incoming/outgoing messages (that comes later).
- */
 @Component
 public class IgnoreListService {
 
   private final RuntimeConfigStore runtimeConfig;
 
-  /** Whether hard ignore masks should also apply to CTCP messages. */
   private volatile boolean hardIgnoreIncludesCtcp;
 
-  /** In-memory copy of ignore masks (serverId -> ordered list of masks). */
   private final ConcurrentHashMap<String, List<String>> masksByServer = new ConcurrentHashMap<>();
 
-  /** In-memory copy of soft-ignore masks (serverId -> ordered list of masks). */
   private final ConcurrentHashMap<String, List<String>> softMasksByServer = new ConcurrentHashMap<>();
 
-  /** Emits when an ignore list changes (for UI repainting, etc.). */
   public enum ListKind { IGNORE, SOFT_IGNORE }
 
   public record Change(String serverId, ListKind kind) {}
@@ -94,7 +84,6 @@ public class IgnoreListService {
     return cleaned;
   }
 
-  /** List current ignore masks for a server (stable order). */
   public List<String> listMasks(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
@@ -105,7 +94,6 @@ public class IgnoreListService {
     }
   }
 
-  /** List current soft-ignore masks for a server (stable order). */
   public List<String> listSoftMasks(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
@@ -206,7 +194,6 @@ public class IgnoreListService {
     return removed;
   }
 
-
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }
@@ -255,14 +242,6 @@ public class IgnoreListService {
     return lower.contains(".") || lower.contains(":") || lower.endsWith("/");
   }
 
-
-  /**
-   * Returns true if the given hostmask matches any hard-ignore mask for this server.
-   *
-   * <p>Matching supports "*" (any sequence) and "?" (single char) wildcards and is case-insensitive.
-   *
-   * <p>NOTE: Hard-ignore matching is separate from soft-ignore matching.
-   */
   public boolean isHardIgnored(String serverId, String fromHostmask) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -276,13 +255,6 @@ public class IgnoreListService {
     return IgnoreMaskMatcher.hostmaskTargetedByAny(masks, hm);
   }
 
-
-
-  /**
-   * Returns true if the given hostmask matches any soft-ignore mask for this server.
-   *
-   * <p>Matching supports "*" (any sequence) and "?" (single char) wildcards and is case-insensitive.
-   */
   public boolean isSoftIgnored(String serverId, String fromHostmask) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;

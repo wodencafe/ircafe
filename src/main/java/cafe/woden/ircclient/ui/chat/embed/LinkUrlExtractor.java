@@ -69,9 +69,6 @@ final class LinkUrlExtractor {
     }
   }
 
-  /**
-   * Strip common trailing punctuation that tends to cling to URLs in chat.
-   */
   private static UrlParts splitUrlTrailingPunct(String raw) {
     if (raw == null || raw.isEmpty()) return new UrlParts("", "");
     int end = raw.length();

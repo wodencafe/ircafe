@@ -9,7 +9,6 @@ package cafe.woden.ircclient.irc;
 final class PircbotxChannelModeParsers {
   private PircbotxChannelModeParsers() {}
 
-  /** Parsed RPL_CHANNELMODEIS (324) line: channel + raw mode details string. */
   record ParsedRpl324(String channel, String details) {}
 
   /**

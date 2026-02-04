@@ -36,7 +36,6 @@ public class ModeRoutingState {
     return pendingModeTargets.get(ModeKey.of(serverId, channel));
   }
 
-  /** Drop all pending MODE entries for a server (e.g., on disconnect). */
   public void clearServer(String serverId) {
     String sid = normalizeServer(serverId);
     pendingModeTargets.keySet().removeIf(k -> Objects.equals(k.serverId, sid));

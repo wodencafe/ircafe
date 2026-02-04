@@ -9,17 +9,10 @@ package cafe.woden.ircclient.irc;
 final class PircbotxWhoisParsers {
   private PircbotxWhoisParsers() {}
 
-  /** Parsed RPL_WHOISUSER (311) or RPL_WHOWASUSER (314) user/host fields. */
   static record ParsedWhoisUser(String nick, String user, String host) {}
 
-  /** Parsed RPL_AWAY (301) during WHOIS. */
   static record ParsedWhoisAway(String nick, String message) {}
 
-  /**
-   * Parse RPL_WHOISUSER (311) lines.
-   *
-   * <p>Format: ":server 311 <me> <nick> <user> <host> * :<realname>"
-   */
   static ParsedWhoisUser parseRpl311WhoisUser(String line) {
     if (line == null) return null;
     String s = line.trim();
@@ -43,11 +36,6 @@ final class PircbotxWhoisParsers {
     return new ParsedWhoisUser(nick, user, host);
   }
 
-  /**
-   * Parse RPL_WHOWASUSER (314) lines.
-   *
-   * <p>Format: ":server 314 <me> <nick> <user> <host> * :<realname>"
-   */
   static ParsedWhoisUser parseRpl314WhowasUser(String line) {
     if (line == null) return null;
     String s = line.trim();
@@ -71,11 +59,6 @@ final class PircbotxWhoisParsers {
     return new ParsedWhoisUser(nick, user, host);
   }
 
-  /**
-   * Parse RPL_AWAY (301) lines received during WHOIS.
-   *
-   * <p>Format: ":server 301 <me> <nick> :<away message>"
-   */
   static ParsedWhoisAway parseRpl301WhoisAway(String line) {
     if (line == null) return null;
     String s = line.trim();
@@ -106,11 +89,6 @@ final class PircbotxWhoisParsers {
     return new ParsedWhoisAway(nick, msg);
   }
 
-  /**
-   * Parse RPL_ENDOFWHOIS (318) lines and extract the nick.
-   *
-   * <p>Format: ":server 318 <me> <nick> :End of /WHOIS list."
-   */
   static String parseRpl318EndOfWhoisNick(String line) {
     if (line == null) return null;
     String s = line.trim();

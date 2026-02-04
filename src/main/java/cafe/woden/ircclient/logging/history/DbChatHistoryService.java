@@ -33,11 +33,7 @@ import javax.swing.text.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Loads recent log lines from the database and replays them into the transcript when a target is selected.
- *
- * <p>History replay deliberately does NOT trigger image embeds or link previews, and uses the persisted timestamps.
- */
+/** Loads recent log lines from the database and replays them into the transcript when a target is selected. */
 public final class DbChatHistoryService implements ChatHistoryService {
 
   private static final Logger log = LoggerFactory.getLogger(DbChatHistoryService.class);
@@ -387,9 +383,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
     });
   }
 
-  /**
-   * Keeps the viewport stable when older history is inserted at the top (anchor + restore scroll position).
-   */
   private static final class ScrollAnchor {
     private final JViewport viewport;
     private final Point beforePos;

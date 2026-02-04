@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui.chat.embed;
 import java.net.URI;
 import java.util.Locale;
 
-/** Helpers for recognizing Rotten Tomatoes movie/TV title links. */
 final class RottenTomatoesPreviewUtil {
 
   private RottenTomatoesPreviewUtil() {}

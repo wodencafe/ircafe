@@ -6,9 +6,6 @@ import java.beans.PropertyChangeSupport;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Lightweight event hub for UI settings (font size, theme, etc.).
- */
 @Component
 @Lazy
 public class UiSettingsBus {

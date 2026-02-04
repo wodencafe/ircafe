@@ -7,12 +7,7 @@ import javax.swing.JComponent;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 
-/**
- * Forces a revalidate/repaint of a wrapped component when its viewport resizes.
- *
- * <p>This is useful for wrapping text panes that need to recalculate line breaks
- * immediately when the window is resized.
- */
+/** Forces a revalidate/repaint of a wrapped component when its viewport resizes. */
 public final class ViewportWrapRevalidateDecorator implements AutoCloseable {
 
   private final JViewport viewport;

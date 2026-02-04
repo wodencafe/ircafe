@@ -34,17 +34,9 @@ import java.util.Objects;
 public class UserListDockable extends JPanel implements Dockable {
   public static final String ID = "users";
 
-  /**
-   * Store full NickInfo entries so we can retain metadata (e.g. hostmask) even if we only render the nick.
-   */
   private final DefaultListModel<NickInfo> model = new DefaultListModel<>();
   private final JList<NickInfo> list = new JList<>(model) {
-    /**
-     * The nick list should never require horizontal scrolling.
-     *
-     * Some Look-and-Feels can briefly show a horizontal scrollbar while the list is empty
-     * during the first layout pass. Tracking the viewport width prevents that.
-     */
+
     @Override
     public boolean getScrollableTracksViewportWidth() {
       return true;
@@ -69,7 +61,6 @@ public class UserListDockable extends JPanel implements Dockable {
       AwayState away = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
 
       boolean hasHostmask = IgnoreMaskMatcher.isUsefulHostmask(hostmask);
-      // Always show a tooltip for a real nick; if hostmask isn't known yet, show a pending hint.
       if (nick.isEmpty()) return null;
 
       StringBuilder sb = new StringBuilder(128);
@@ -126,7 +117,6 @@ public class UserListDockable extends JPanel implements Dockable {
 
   private record IgnoreMark(boolean ignore, boolean softIgnore) {}
 
-
   private TargetRef active = new TargetRef("default", "status");
 
   public UserListDockable(NickColorService nickColors, IgnoreListService ignoreListService, IgnoreListDialog ignoreDialog,
@@ -168,19 +158,13 @@ public class UserListDockable extends JPanel implements Dockable {
 
       @Override
       public void promptIgnore(TargetRef ctx, String nick, boolean removing, boolean soft) {
-        // ListContextMenuDecorator selects the nick before showing the popup.
         if (ctx != null) setChannel(ctx);
-        // Qualify to avoid resolving to the callback method itself.
         UserListDockable.this.promptIgnore(removing, soft);
       }
     });
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    // Enable ToolTipManager support for this component. The actual tooltip text is provided
-    // by the JList#getToolTipText(MouseEvent) override above.
     list.setToolTipText("");
-
-    // Deterministic, global per-nick coloring in the user list + ignore indicators.
     final ListCellRenderer<? super NickInfo> baseRenderer = list.getCellRenderer();
     list.setCellRenderer((JList<? extends NickInfo> l, NickInfo value, int index, boolean isSelected, boolean cellHasFocus) -> {
       java.awt.Component c = baseRenderer.getListCellRendererComponent(l, value, index, isSelected, cellHasFocus);
@@ -192,23 +176,17 @@ public class UserListDockable extends JPanel implements Dockable {
       String raw = prefix + nick;
 
       IgnoreMark mark = ignoreMark(value);
-
-      // Text decoration (keep the underlying model unchanged).
       String display = raw;
       AwayState away = (value == null || value.awayState() == null) ? AwayState.UNKNOWN : value.awayState();
       if (mark.ignore) display += "  [IGN]";
       if (mark.softIgnore) display += "  [SOFT]";
       lbl.setText(display);
-
-      // Font decoration (reset per cell render).
       Font f = lbl.getFont();
       int style = f.getStyle();
       if (mark.ignore) style |= Font.BOLD;
       if (mark.softIgnore) style |= Font.ITALIC;
       if (away == AwayState.AWAY) style |= Font.ITALIC;
       lbl.setFont(f.deriveFont(style));
-
-      // Apply per-nick color last so it wins for the nick label.
       if (nick != null && !nick.isBlank() && nickColors != null && nickColors.enabled()) {
         Color fg = nickColors.colorForNick(nick, lbl.getBackground(), lbl.getForeground());
         lbl.setForeground(fg);
@@ -216,14 +194,11 @@ public class UserListDockable extends JPanel implements Dockable {
 
       return c;
     });
-    // Nick lists should never horizontally scroll; long nicks can clip (tooltips show full data).
     JScrollPane scroll = new JScrollPane(
         list,
         ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
         ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    // Belt-and-suspenders: ensure the horizontal scrollbar doesn't reserve height even if a LAF
-    // briefly toggles its visibility during early layout.
+    // Ensure the horizontal scrollbar never reserves height.
     JScrollBar hbar = scroll.getHorizontalScrollBar();
     if (hbar != null) {
       hbar.setVisible(false);
@@ -234,8 +209,6 @@ public class UserListDockable extends JPanel implements Dockable {
     }
 
     add(scroll, BorderLayout.CENTER);
-
-    // Repaint the list when ignore/soft-ignore lists change for the active server.
     if (ignoreListService != null) {
       var d = ignoreListService.changes()
           .observeOn(SwingEdt.scheduler())
@@ -249,8 +222,6 @@ public class UserListDockable extends JPanel implements Dockable {
           });
       closeables.add((AutoCloseable) d::dispose);
     }
-
-    // Double-click a nick to open a PM
     MouseAdapter doubleClick = new MouseAdapter() {
       @Override
       public void mouseClicked(MouseEvent e) {
@@ -261,8 +232,6 @@ public class UserListDockable extends JPanel implements Dockable {
 
         Rectangle r = list.getCellBounds(index, index);
         if (r == null || !r.contains(e.getPoint())) return;
-
-        // Only meaningful when we're viewing a channel user list.
         if (active == null || !active.isChannel()) return;
 
         NickInfo ni = model.getElementAt(index);
@@ -274,8 +243,6 @@ public class UserListDockable extends JPanel implements Dockable {
     };
     list.addMouseListener(doubleClick);
     closeables.addCleanup(() -> list.removeMouseListener(doubleClick));
-
-    // Right-click context menu for common user actions.
     closeables.add(ListContextMenuDecorator.decorate(list, true, (index, e) -> {
       if (nickContextMenu == null) return null;
       if (active == null || active.serverId() == null || active.serverId().isBlank()) return null;
@@ -390,9 +357,6 @@ public class UserListDockable extends JPanel implements Dockable {
       NickInfo ni = selectedNickInfo(idx);
       String nick = selectedNick(idx);
       if (nick.isBlank()) return;
-
-      // If we already know the hostmask, seed the dialog with the full hostmask.
-      // Otherwise, fall back to a nick-based pattern.
       String hm = ni == null ? "" : Objects.toString(ni.hostmask(), "").trim();
       String seedBase = (ignoreStatusService == null)
           ? (IgnoreMaskMatcher.isUsefulHostmask(hm) ? hm : nick)
@@ -459,8 +423,6 @@ public class UserListDockable extends JPanel implements Dockable {
       }
 
       JOptionPane.showMessageDialog(owner != null ? owner : this, msg, title, JOptionPane.INFORMATION_MESSAGE);
-
-      // Update UI indicators immediately.
       list.repaint();
     } catch (Exception ignored) {
     }

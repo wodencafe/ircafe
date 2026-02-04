@@ -6,10 +6,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks pending CTCP requests so inbound CTCP replies (arriving as NOTICEs) can be routed
- * back to the tab where the request was initiated.
- */
 @Component
 public class CtcpRoutingState {
 
@@ -31,7 +27,6 @@ public class CtcpRoutingState {
     return pending.get(new CtcpKey(serverId, nick, command, token));
   }
 
-  /** Drop all pending CTCP entries for a server (e.g., on disconnect). */
   public void clearServer(String serverId) {
     String sid = normalizeServer(serverId);
     pending.keySet().removeIf(k -> Objects.equals(k.serverId, sid));

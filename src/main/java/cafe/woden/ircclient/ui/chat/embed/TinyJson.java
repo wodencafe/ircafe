@@ -1,11 +1,6 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
-/**
- * Tiny, best-effort JSON string helper.
- *
- * <p>This is not a full JSON parser. It is intended for the limited, stable shapes we
- * consume in link preview resolvers (oEmbed and a couple of public JSON endpoints).
- */
+/** Tiny, best-effort JSON string helper. */
 final class TinyJson {
 
   private TinyJson() {}

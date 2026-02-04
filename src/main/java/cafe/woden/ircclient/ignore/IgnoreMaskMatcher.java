@@ -4,12 +4,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-/**
- * Shared ignore-mask matching utilities.
- *
- * <p>We intentionally keep this small and dependency-free so it can be used
- * from both UI code (menu indicators) and inbound message filtering.
- */
 public final class IgnoreMaskMatcher {
 
   private IgnoreMaskMatcher() {}
@@ -35,7 +29,6 @@ public final class IgnoreMaskMatcher {
     return !(identUnknown && hostUnknown);
   }
 
-  /** Match a hostmask against any ignore mask (glob match, case-insensitive). */
   public static boolean hostmaskTargetedByAny(List<String> masks, String hostmask) {
     if (masks == null || masks.isEmpty()) return false;
     String hm = Objects.toString(hostmask, "").trim();
@@ -75,7 +68,6 @@ public final class IgnoreMaskMatcher {
     return false;
   }
 
-  /** Simple glob match for nicks: '*' = any sequence, '?' = any char. */
   public static boolean globMatches(String glob, String text) {
     String ptn = Objects.toString(glob, "").trim().toLowerCase(Locale.ROOT);
     String txt = Objects.toString(text, "").trim().toLowerCase(Locale.ROOT);
@@ -107,11 +99,6 @@ public final class IgnoreMaskMatcher {
     return p == ptn.length();
   }
 
-  /**
-   * Glob match for ignore masks: '*' = any sequence, '?' = any char, case-insensitive.
-   *
-   * <p>This is the shared matching rule we use for hostmasks.
-   */
   public static boolean globMatchIgnoreMask(String pattern, String text) {
     return globMatches(pattern, text);
   }

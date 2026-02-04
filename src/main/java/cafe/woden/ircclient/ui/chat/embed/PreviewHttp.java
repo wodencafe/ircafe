@@ -11,12 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Shared HTTP helper for preview/embeds.
- *
- * <p>This keeps request headers, timeouts, and common read logic in one place
- * so individual preview resolvers don't reimplement it.
- */
 final class PreviewHttp {
 
   static final Duration TIMEOUT = Duration.ofSeconds(8);

@@ -2,10 +2,6 @@ package cafe.woden.ircclient.app;
 
 import java.util.Objects;
 
-/**
- * Identifies a chat target within a specific server connection.
- *
- */
 public record TargetRef(String serverId, String target) {
 
   public TargetRef {

@@ -17,10 +17,6 @@ import java.util.Set;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Coordinates connection lifecycle (connect/disconnect/reconnect/connecting state) and keeps the
- * global and per-server UI controls consistent.
- */
 @Component
 @Lazy
 public class ConnectionCoordinator {
@@ -38,7 +34,6 @@ public class ConnectionCoordinator {
   /** Per-server connection states (missing => {@link ConnectionState#DISCONNECTED}). */
   private final Map<String, ConnectionState> states = new HashMap<>();
 
-  /** Track which servers are configured so we can react to runtime add/edit/remove. */
   private final Set<String> configuredServers = new HashSet<>();
 
   public ConnectionCoordinator(
@@ -89,7 +84,6 @@ public class ConnectionCoordinator {
     return Set.copyOf(out);
   }
 
-  /** Connect to all configured servers. */
   public void connectAll() {
     Set<String> serverIds = serverRegistry.serverIds();
     if (serverIds.isEmpty()) {
@@ -154,7 +148,6 @@ public class ConnectionCoordinator {
     );
   }
 
-  /** Disconnect from all configured servers. */
   public void disconnectAll() {
     Set<String> serverIds = serverRegistry.serverIds();
 
@@ -204,7 +197,6 @@ public class ConnectionCoordinator {
     );
   }
 
-  /** React to runtime server list edits. */
   public void onServersUpdated(List<IrcProperties.Server> latest, TargetRef activeTarget) {
     // Compute current ids.
     Set<String> current = new HashSet<>();

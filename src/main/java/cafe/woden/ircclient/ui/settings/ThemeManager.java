@@ -14,9 +14,6 @@ import javax.swing.UIManager;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Applies and switches Look & Feel at runtime.
- */
 @Component
 @Lazy
 public class ThemeManager {
@@ -46,9 +43,6 @@ public class ThemeManager {
     return THEMES.clone();
   }
 
-  /**
-   * Startup: install LAF before any UI beans are constructed.
-   */
   public void installLookAndFeel(String themeId) {
     runOnEdt(() -> {
       setLookAndFeel(themeId);
@@ -59,9 +53,6 @@ public class ThemeManager {
     });
   }
 
-  /**
-   * Runtime: switch LAF + refresh all windows and restyle transcripts.
-   */
   public void applyTheme(String themeId) {
     runOnEdt(() -> {
       setLookAndFeel(themeId);

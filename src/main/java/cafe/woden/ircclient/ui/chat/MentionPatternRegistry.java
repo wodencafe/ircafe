@@ -8,12 +8,7 @@ import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-/**
- * Tracks per-server nick mention patterns.
- *
- * <p>We store a compiled regex for the current nick so renderers can highlight
- * mentions without depending on whichever chat view is currently active.
- */
+/** Tracks per-server nick mention patterns. */
 @Component
 @Lazy
 public class MentionPatternRegistry {
@@ -43,7 +38,6 @@ public class MentionPatternRegistry {
     byServer.put(id, Pattern.compile(regex));
   }
 
-  /** Lowercased current nick for the given server, or null if unknown. */
   public String currentNickLower(String serverId) {
     String id = Objects.toString(serverId, "").trim();
     if (id.isEmpty()) return null;

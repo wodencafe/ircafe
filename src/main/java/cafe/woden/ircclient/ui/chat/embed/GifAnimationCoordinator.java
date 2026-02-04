@@ -12,10 +12,8 @@ import java.util.TreeSet;
  */
 final class GifAnimationCoordinator {
 
-  /** Confirmed animated GIF components, keyed by per-doc insertion sequence. */
   private final NavigableMap<Long, WeakReference<ChatImageComponent>> gifsBySeq = new TreeMap<>();
 
-  /** "Likely GIF" placeholders (e.g., .gif URLs) so we can stop older animations immediately. */
   private final TreeSet<Long> hintedGifSeqs = new TreeSet<>();
 
   private long activeSeq = -1;

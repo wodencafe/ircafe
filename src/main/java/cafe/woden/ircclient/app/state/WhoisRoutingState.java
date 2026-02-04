@@ -34,7 +34,6 @@ public class WhoisRoutingState {
     return pendingWhoisTargets.get(new WhoisKey(serverId, nick));
   }
 
-  /** Drop all pending WHOIS entries for a server (e.g., on disconnect). */
   public void clearServer(String serverId) {
     String sid = normalizeServer(serverId);
     pendingWhoisTargets.keySet().removeIf(k -> Objects.equals(k.serverId, sid));

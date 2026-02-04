@@ -7,13 +7,7 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * UI-local event bus for activating a target (for input/status/users) without changing
- * which transcript the main Chat dockable is currently displaying.
- *
- * <p>This is primarily used by pinned chat dockables so you can read multiple targets
- * simultaneously.
- */
+/** UI-local event bus for activating a target (for input/status/users) without changing which transcript the main Chat dockable is currently… */
 @Component
 @Lazy
 public class TargetActivationBus {

@@ -39,9 +39,6 @@ import net.miginfocom.swing.MigLayout;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Simple preferences dialog.
- */
 @Component
 @Lazy
 public class PreferencesDialog {
@@ -323,7 +320,6 @@ public class PreferencesDialog {
     outgoingColorHex.getDocument().addDocumentListener(new SimpleDocListener(updateOutgoingColorUi));
     updateOutgoingColorUi.run();
 
-
     // ---- Hostmask discovery / USERHOST anti-flood settings ----
     JPanel userhostPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]8[]8[]8[]"));
 
@@ -567,7 +563,6 @@ public class PreferencesDialog {
     d.setLocationRelativeTo(owner);
     d.setVisible(true);
   }
-
 
   private static String toHex(Color c) {
     if (c == null) return "";
