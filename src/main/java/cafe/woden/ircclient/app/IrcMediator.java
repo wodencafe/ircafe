@@ -10,6 +10,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
+import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
@@ -53,6 +54,7 @@ public class IrcMediator {
   // Inbound MODE-related event handler (join-burst buffering + MODE pretty printing + 324 routing).
   private final InboundModeEventHandler inboundModeEventHandler;
   private final OutboundModeCommandService outboundModeCommandService;
+  private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -82,7 +84,8 @@ public class IrcMediator {
       ModeRoutingState modeRoutingState,
       AwayRoutingState awayRoutingState,
       InboundModeEventHandler inboundModeEventHandler,
-      OutboundModeCommandService outboundModeCommandService
+      OutboundModeCommandService outboundModeCommandService,
+      OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService
   ) {
     this.irc = irc;
     this.ui = ui;
@@ -98,6 +101,7 @@ public class IrcMediator {
     this.awayRoutingState = awayRoutingState;
     this.inboundModeEventHandler = inboundModeEventHandler;
     this.outboundModeCommandService = outboundModeCommandService;
+    this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
   }
 
   public void start() {
@@ -376,10 +380,10 @@ public class IrcMediator {
       case ParsedInput.Ignore cmd -> handleIgnore(cmd.maskOrNick());
       case ParsedInput.Unignore cmd -> handleUnignore(cmd.maskOrNick());
       case ParsedInput.IgnoreList cmd -> handleIgnoreList();
-      case ParsedInput.CtcpVersion cmd -> handleCtcpVersion(cmd.nick());
-      case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
-      case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
-      case ParsedInput.Ctcp cmd -> handleCtcp(cmd.nick(), cmd.command(), cmd.args());
+      case ParsedInput.CtcpVersion cmd -> outboundCtcpWhoisCommandService.handleCtcpVersion(disposables, cmd.nick());
+      case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
+      case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
+      case ParsedInput.Ctcp cmd -> outboundCtcpWhoisCommandService.handleCtcp(disposables, cmd.nick(), cmd.command(), cmd.args());
       case ParsedInput.Quote cmd -> handleQuote(cmd.rawLine());
       case ParsedInput.Say cmd -> handleSay(cmd.text());
       case ParsedInput.Unknown cmd ->
@@ -703,120 +707,6 @@ public class IrcMediator {
     for (String m : masks) {
       ui.appendStatus(status, "(ignore)", "  - " + m);
     }
-  }
-
-  private void handleCtcpVersion(String nick) {
-    sendCtcpSlash("VERSION", nick, "", false);
-  }
-
-  private void handleCtcpPing(String nick) {
-    // Token lets us compute RTT when the reply comes back.
-    String token = Long.toString(System.currentTimeMillis());
-    sendCtcpSlash("PING", nick, token, true);
-  }
-
-  private void handleCtcpTime(String nick) {
-    sendCtcpSlash("TIME", nick, "", false);
-  }
-
-  private void handleCtcp(String nick, String command, String args) {
-    String n = nick == null ? "" : nick.trim();
-    String cmd = command == null ? "" : command.trim();
-    String a = args == null ? "" : args.trim();
-
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ctcp)", "Select a server first.");
-      return;
-    }
-
-    TargetRef ctx = at;
-    if (!java.util.Objects.equals(ctx.serverId(), at.serverId())) {
-      ctx = new TargetRef(at.serverId(), "status");
-    }
-
-    if (n.isEmpty() || cmd.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /ctcp <nick> <command> [args...]");
-      return;
-    }
-
-    String cmdU = cmd.toUpperCase(java.util.Locale.ROOT);
-
-    // Convenience: treat /ctcp nick PING [token] as RTT-measurable.
-    if ("PING".equals(cmdU)) {
-      final String payload;
-      final String tokenKey;
-      if (a.isEmpty()) {
-        payload = Long.toString(System.currentTimeMillis());
-        tokenKey = payload;
-      } else {
-        payload = a;
-        int sp = a.indexOf(' ');
-        tokenKey = (sp >= 0) ? a.substring(0, sp) : a;
-      }
-      sendCtcp(at, ctx, n, "PING", payload, tokenKey);
-      return;
-    }
-
-    // If you want /ctcp nick ACTION ... use /me instead.
-    if ("ACTION".equals(cmdU)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Use /me for ACTION.");
-      return;
-    }
-
-    sendCtcp(at, ctx, n, cmdU, a, null);
-  }
-
-  private void sendCtcpSlash(String cmdUpper, String nick, String args, boolean expectsReply) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ctcp)", "Select a server first.");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    String a = args == null ? "" : args.trim();
-    if (n.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /" + cmdUpper.toLowerCase(java.util.Locale.ROOT) + " <nick>");
-      return;
-    }
-
-    sendCtcp(at, at, n, cmdUpper, a, expectsReply ? a : null);
-  }
-
-  private void sendCtcp(TargetRef serverCtx, TargetRef outputCtx, String nick, String cmdUpper, String args, String tokenKey) {
-    if (serverCtx == null) return;
-    String sid = serverCtx.serverId();
-
-    if (!connectionCoordinator.isConnected(sid)) {
-      ui.appendStatus(new TargetRef(sid, "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    if (n.isEmpty()) return;
-
-    String cmd = cmdUpper == null ? "" : cmdUpper.trim().toUpperCase(java.util.Locale.ROOT);
-    String a = args == null ? "" : args.trim();
-
-    TargetRef ctx = outputCtx != null ? outputCtx : new TargetRef(sid, "status");
-
-    StringBuilder inner = new StringBuilder(cmd);
-    if (!a.isEmpty()) inner.append(' ').append(a);
-    String ctcp = "\u0001" + inner + "\u0001";
-
-    // Track pending so replies can be routed back to the current context.
-    ctcpRoutingState.put(sid, n, cmd, tokenKey, ctx);
-
-    String display = "→ " + n + " " + cmd + (a.isEmpty() ? "" : " " + a);
-    ui.appendStatus(ctx, "(ctcp)", display);
-
-    disposables.add(
-        irc.sendPrivateMessage(sid, n, ctcp).subscribe(
-            () -> {},
-            err -> ui.appendError(safeStatusTarget(), "(ctcp-error)", String.valueOf(err))
-        )
-    );
   }
 
   private void handleSay(String msg) {
