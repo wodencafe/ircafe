@@ -5,6 +5,8 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -24,6 +26,8 @@ import java.awt.event.KeyEvent;
 @Component
 @Lazy
 public class MainFrame extends JFrame {
+
+  private static final Logger log = LoggerFactory.getLogger(MainFrame.class);
 
   // Default side-dock sizes on first open. These are only applied once (best-effort)
   // and then preserved by the split-pane "lock" logic.
@@ -102,6 +106,12 @@ public class MainFrame extends JFrame {
     final java.util.concurrent.atomic.AtomicBoolean initialSideSizesApplied =
         new java.util.concurrent.atomic.AtomicBoolean(false);
 
+    // Startup stabilization: during the first ~1s, ModernDocking may perform additional layout
+    // passes that can override divider locations. We allow "initial size nudging" only during
+    // this short window to avoid oscillation/jitter during user-driven resize.
+    final long startupStabilizationDeadlineNanos =
+        System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(900);
+
     Runnable applyDockLocks = () -> {
       int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
       int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
@@ -115,23 +125,54 @@ public class MainFrame extends JFrame {
       // On first open, ModernDocking can initially lay out side docks wider than desired.
       // Nudge them to a reasonable default once split panes exist, then lock those sizes.
       //
-      // We also retry if a split gets rebuilt and the side docks become comically large again.
       int frameW = Math.max(1, getWidth());
       boolean sideDocksAreHuge = serverTree.getWidth() > (int) (frameW * 0.45)
           || users.getWidth() > (int) (frameW * 0.45);
-      if (!initialSideSizesApplied.get() || sideDocksAreHuge) {
+      boolean inStartupStabilization = System.nanoTime() < startupStabilizationDeadlineNanos;
+      boolean shouldNudge = !initialSideSizesApplied.get() || (inStartupStabilization && sideDocksAreHuge);
+      if (shouldNudge) {
+        log.info(
+            "dock-size: apply initial sizes? initialApplied={} huge={} targets(server={}, users={}, input={}) current(server={}, chat={}, users={}, input={}) frame={}x{}",
+            initialSideSizesApplied.get(),
+            sideDocksAreHuge,
+            serverPx,
+            usersPx,
+            inputPx,
+            serverTree.getWidth(),
+            chat.getWidth(),
+            users.getWidth(),
+            input.getHeight(),
+            getWidth(),
+            getHeight()
+        );
+
         boolean west = DockingTuner.applyInitialWestDockWidth(this, serverTree, serverPx);
         boolean east = DockingTuner.applyInitialEastDockWidth(this, users, usersPx);
-        DockingTuner.applyInitialSouthDockHeight(this, input, inputPx);
+        boolean south = DockingTuner.applyInitialSouthDockHeight(this, input, inputPx);
+
         if (west && east) {
           initialSideSizesApplied.set(true);
         }
+
+        log.info(
+            "dock-size: init apply results west={} east={} south={} -> now(initialApplied={}) current(server={}, chat={}, users={}, input={})",
+            west,
+            east,
+            south,
+            initialSideSizesApplied.get(),
+            serverTree.getWidth(),
+            chat.getWidth(),
+            users.getWidth(),
+            input.getHeight()
+        );
       }
 
       DockingTuner.lockSouthDockHeight(this, input);
       // Give horizontal growth to the chat transcript instead of the side docks.
-      DockingTuner.lockWestDockWidth(this, serverTree);
-      DockingTuner.lockEastDockWidth(this, users);
+      // Seed the WEST lock with the configured server dock width so it doesn't "capture" a transient
+      // (often too-wide) startup layout and then fight our initial sizing.
+      DockingTuner.lockWestDockWidth(this, serverTree, serverPx);
+      DockingTuner.lockEastDockWidth(this, users, usersPx);
     };
 
     // Apply once after the initial docking layout.

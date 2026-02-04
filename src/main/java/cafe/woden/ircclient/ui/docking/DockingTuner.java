@@ -1,5 +1,8 @@
 package cafe.woden.ircclient.ui.docking;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
@@ -26,6 +29,8 @@ public final class DockingTuner {
   private static final String CLIENT_PROP_WEST_LOCKED = "ircafe.lockWestDockWidth";
   private static final String CLIENT_PROP_EAST_LOCKED = "ircafe.lockEastDockWidth";
   private static final String CLIENT_PROP_ADJUSTING = "ircafe.splitAdjusting";
+
+  private static final Logger log = LoggerFactory.getLogger(DockingTuner.class);
 
   private DockingTuner() {}
 
@@ -64,8 +69,19 @@ public final class DockingTuner {
       desiredLoc = clampDivider(split, desiredDividerForRightWidth(split, targetWidthPx));
     }
 
-    if (Math.abs(split.getDividerLocation() - desiredLoc) > 2) {
+    int before = split.getDividerLocation();
+    if (Math.abs(before - desiredLoc) > 2) {
       setDividerLocationSafely(split, desiredLoc);
+      log.info(
+          "dock-size: init WEST targetPx={} split#{} side={} divider {} -> {} (splitW={}, dividerSize={})",
+          targetWidthPx,
+          System.identityHashCode(split),
+          best.side(),
+          before,
+          desiredLoc,
+          split.getWidth(),
+          split.getDividerSize()
+      );
     }
     return true;
   }
@@ -91,8 +107,19 @@ public final class DockingTuner {
       desiredLoc = clampDivider(split, targetWidthPx);
     }
 
-    if (Math.abs(split.getDividerLocation() - desiredLoc) > 2) {
+    int before = split.getDividerLocation();
+    if (Math.abs(before - desiredLoc) > 2) {
       setDividerLocationSafely(split, desiredLoc);
+      log.info(
+          "dock-size: init EAST targetPx={} split#{} side={} divider {} -> {} (splitW={}, dividerSize={})",
+          targetWidthPx,
+          System.identityHashCode(split),
+          best.side(),
+          before,
+          desiredLoc,
+          split.getWidth(),
+          split.getDividerSize()
+      );
     }
     return true;
   }
@@ -118,8 +145,19 @@ public final class DockingTuner {
       desiredLoc = clampDivider(split, targetHeightPx);
     }
 
-    if (Math.abs(split.getDividerLocation() - desiredLoc) > 2) {
+    int before = split.getDividerLocation();
+    if (Math.abs(before - desiredLoc) > 2) {
       setDividerLocationSafely(split, desiredLoc);
+      log.info(
+          "dock-size: init SOUTH targetPx={} split#{} side={} divider {} -> {} (splitH={}, dividerSize={})",
+          targetHeightPx,
+          System.identityHashCode(split),
+          best.side(),
+          before,
+          desiredLoc,
+          split.getHeight(),
+          split.getDividerSize()
+      );
     }
     return true;
   }
@@ -153,10 +191,35 @@ public final class DockingTuner {
     if (best == null) return;
 
     if (best.side() == Side.LEFT) {
-      installWestWidthLock(best.split());
+      installWestWidthLock(best.split(), null);
     } else if (best.side() == Side.RIGHT) {
       // Inverted split: dockable is on the RIGHT, but we still want it to keep its width.
-      installEastWidthLock(best.split());
+      installEastWidthLock(best.split(), null);
+    }
+  }
+
+  /**
+   * Like {@link #lockWestDockWidth(Window, Component)} but seeds the lock with a specific width.
+   *
+   * <p>This is useful during startup: ModernDocking may briefly lay out side docks too wide, and a
+   * naive "capture current width" can lock in that transient value and fight later nudges.
+   * Seeding ensures the dock starts (and stays) at the configured width unless the user drags.
+   */
+  public static void lockWestDockWidth(Window window, Component dockable, int seedWidthPx) {
+    if (window == null || dockable == null) return;
+    if (seedWidthPx <= 0) {
+      lockWestDockWidth(window, dockable);
+      return;
+    }
+
+    SplitCandidate best = findBestSplitPane(window, dockable, JSplitPane.HORIZONTAL_SPLIT);
+    if (best == null) return;
+
+    if (best.side() == Side.LEFT) {
+      installWestWidthLock(best.split(), seedWidthPx);
+    } else if (best.side() == Side.RIGHT) {
+      // Inverted split: dockable is on the RIGHT; seed as a right-width lock.
+      installEastWidthLock(best.split(), seedWidthPx);
     }
   }
 
@@ -171,10 +234,36 @@ public final class DockingTuner {
     if (best == null) return;
 
     if (best.side() == Side.RIGHT) {
-      installEastWidthLock(best.split());
+      installEastWidthLock(best.split(), null);
     } else if (best.side() == Side.LEFT) {
       // Inverted split: dockable is on the LEFT, but we still want it to keep its width.
-      installWestWidthLock(best.split());
+      installWestWidthLock(best.split(), null);
+    }
+  }
+
+
+  /**
+   * Like {@link #lockEastDockWidth(Window, Component)} but seeds the lock with a specific width.
+   *
+   * <p>This is useful during startup or when ModernDocking rebuilds split panes: a naive "capture current width"
+   * can lock in a transient value and ignore configuration changes. Seeding ensures the dock starts (and stays)
+   * at the configured width unless the user drags the divider.
+   */
+  public static void lockEastDockWidth(Window window, Component dockable, int seedWidthPx) {
+    if (window == null || dockable == null) return;
+    if (seedWidthPx <= 0) {
+      lockEastDockWidth(window, dockable);
+      return;
+    }
+
+    SplitCandidate best = findBestSplitPane(window, dockable, JSplitPane.HORIZONTAL_SPLIT);
+    if (best == null) return;
+
+    if (best.side() == Side.RIGHT) {
+      installEastWidthLock(best.split(), seedWidthPx);
+    } else if (best.side() == Side.LEFT) {
+      // Inverted split: dockable is on the LEFT; seed as a left-width lock.
+      installWestWidthLock(best.split(), seedWidthPx);
     }
   }
 
@@ -259,6 +348,8 @@ public final class DockingTuner {
     if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_SOUTH_LOCKED))) return;
     split.putClientProperty(CLIENT_PROP_SOUTH_LOCKED, Boolean.TRUE);
 
+    log.info("dock-lock: install NORTH (top-locked) split#{}", System.identityHashCode(split));
+
     // Give all future extra space to the bottom component.
     split.setResizeWeight(0.0);
 
@@ -271,6 +362,14 @@ public final class DockingTuner {
       if (h > 0) {
         lockedTopHeight[0] = h;
         setDividerLocationSafely(split, h);
+
+        log.info(
+            "dock-lock: captured NORTH topHeightPx={} split#{} (splitH={}, dividerSize={})",
+            h,
+            System.identityHashCode(split),
+            split.getHeight(),
+            split.getDividerSize()
+        );
       }
     });
 
@@ -309,6 +408,8 @@ public final class DockingTuner {
     if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_SOUTH_LOCKED))) return;
     split.putClientProperty(CLIENT_PROP_SOUTH_LOCKED, Boolean.TRUE);
 
+    log.info("dock-lock: install SOUTH (bottom-locked) split#{}", System.identityHashCode(split));
+
     // Give all future extra space to the top component.
     split.setResizeWeight(1.0);
 
@@ -325,6 +426,15 @@ public final class DockingTuner {
         int total = split.getHeight();
         int newDividerLocation = Math.max(0, total - h - divider);
         setDividerLocationSafely(split, newDividerLocation);
+
+        log.info(
+            "dock-lock: captured SOUTH bottomHeightPx={} split#{} -> dividerLoc={} (splitH={}, dividerSize={})",
+            h,
+            System.identityHashCode(split),
+            newDividerLocation,
+            total,
+            divider
+        );
       }
     });
 
@@ -352,23 +462,47 @@ public final class DockingTuner {
     });
   }
 
-  private static void installWestWidthLock(JSplitPane split) {
+  private static void installWestWidthLock(JSplitPane split, Integer seedLeftWidthPx) {
     if (split == null) return;
     if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_WEST_LOCKED))) return;
     split.putClientProperty(CLIENT_PROP_WEST_LOCKED, Boolean.TRUE);
 
+    log.info("dock-lock: install WEST (left-locked) split#{}", System.identityHashCode(split));
+
     // Give all future extra horizontal space to the right component.
     split.setResizeWeight(0.0);
 
-    final int[] lockedLeftWidth = new int[] { -1 };
+    final int[] lockedLeftWidth = new int[] { seedLeftWidthPx != null && seedLeftWidthPx > 0 ? seedLeftWidthPx : -1 };
 
     SwingUtilities.invokeLater(() -> {
+      if (lockedLeftWidth[0] > 0) {
+        int desired = clampDivider(split, lockedLeftWidth[0]);
+        setDividerLocationSafely(split, desired);
+        log.info(
+            "dock-lock: seeded WEST leftWidthPx={} split#{} -> dividerLoc={} (splitW={}, dividerSize={})",
+            lockedLeftWidth[0],
+            System.identityHashCode(split),
+            desired,
+            split.getWidth(),
+            split.getDividerSize()
+        );
+        return;
+      }
+
       Component left = split.getLeftComponent();
       if (left == null) return;
       int w = left.getWidth();
       if (w > 0) {
         lockedLeftWidth[0] = w;
         setDividerLocationSafely(split, w);
+
+        log.info(
+            "dock-lock: captured WEST leftWidthPx={} split#{} (splitW={}, dividerSize={})",
+            w,
+            System.identityHashCode(split),
+            split.getWidth(),
+            split.getDividerSize()
+        );
       }
     });
 
@@ -402,17 +536,34 @@ public final class DockingTuner {
     });
   }
 
-  private static void installEastWidthLock(JSplitPane split) {
+  private static void installEastWidthLock(JSplitPane split, Integer seedRightWidthPx) {
     if (split == null) return;
     if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_EAST_LOCKED))) return;
     split.putClientProperty(CLIENT_PROP_EAST_LOCKED, Boolean.TRUE);
 
+    log.info("dock-lock: install EAST (right-locked) split#{}", System.identityHashCode(split));
+
     // Give all future extra horizontal space to the left component.
     split.setResizeWeight(1.0);
 
-    final int[] lockedRightWidth = new int[] { -1 };
+    final int[] lockedRightWidth = new int[] { seedRightWidthPx != null && seedRightWidthPx > 0 ? seedRightWidthPx : -1 };
 
     SwingUtilities.invokeLater(() -> {
+      if (lockedRightWidth[0] > 0) {
+        int desiredLoc = desiredDividerForRightWidth(split, lockedRightWidth[0]);
+        setDividerLocationSafely(split, clampDivider(split, desiredLoc));
+
+        log.info(
+            "dock-lock: seeded EAST rightWidthPx={} split#{} -> dividerLoc={} (splitW={}, dividerSize={})",
+            lockedRightWidth[0],
+            System.identityHashCode(split),
+            desiredLoc,
+            split.getWidth(),
+            split.getDividerSize()
+        );
+        return;
+      }
+
       Component right = split.getRightComponent();
       if (right == null) return;
       int w = right.getWidth();
@@ -420,6 +571,15 @@ public final class DockingTuner {
         lockedRightWidth[0] = w;
         int desiredLoc = desiredDividerForRightWidth(split, w);
         setDividerLocationSafely(split, desiredLoc);
+
+        log.info(
+            "dock-lock: captured EAST rightWidthPx={} split#{} -> dividerLoc={} (splitW={}, dividerSize={})",
+            w,
+            System.identityHashCode(split),
+            desiredLoc,
+            split.getWidth(),
+            split.getDividerSize()
+        );
       }
     });
 

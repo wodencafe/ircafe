@@ -39,6 +39,17 @@ public class UserListDockable extends JPanel implements Dockable {
    */
   private final DefaultListModel<NickInfo> model = new DefaultListModel<>();
   private final JList<NickInfo> list = new JList<>(model) {
+    /**
+     * The nick list should never require horizontal scrolling.
+     *
+     * Some Look-and-Feels can briefly show a horizontal scrollbar while the list is empty
+     * during the first layout pass. Tracking the viewport width prevents that.
+     */
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+      return true;
+    }
+
     @Override
     public String getToolTipText(MouseEvent e) {
       if (e == null) return null;
@@ -205,7 +216,24 @@ public class UserListDockable extends JPanel implements Dockable {
 
       return c;
     });
-    add(new JScrollPane(list), BorderLayout.CENTER);
+    // Nick lists should never horizontally scroll; long nicks can clip (tooltips show full data).
+    JScrollPane scroll = new JScrollPane(
+        list,
+        ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    // Belt-and-suspenders: ensure the horizontal scrollbar doesn't reserve height even if a LAF
+    // briefly toggles its visibility during early layout.
+    JScrollBar hbar = scroll.getHorizontalScrollBar();
+    if (hbar != null) {
+      hbar.setVisible(false);
+      Dimension zero = new Dimension(0, 0);
+      hbar.setPreferredSize(zero);
+      hbar.setMinimumSize(zero);
+      hbar.setMaximumSize(zero);
+    }
+
+    add(scroll, BorderLayout.CENTER);
 
     // Repaint the list when ignore/soft-ignore lists change for the active server.
     if (ignoreListService != null) {
