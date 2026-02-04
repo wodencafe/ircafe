@@ -20,9 +20,6 @@ import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * App-wide menu bar.
- */
 @Component
 @Lazy
 public class AppMenuBar extends JMenuBar {

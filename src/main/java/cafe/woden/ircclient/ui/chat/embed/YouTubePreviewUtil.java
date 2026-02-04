@@ -12,7 +12,6 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
-/** Best-effort YouTube video enrichment using the public oEmbed endpoint. */
 final class YouTubePreviewUtil {
 
   private YouTubePreviewUtil() {}
@@ -115,13 +114,8 @@ final class YouTubePreviewUtil {
     return new LinkPreview(url, title, desc, provider, thumb, thumb != null ? 1 : 0);
   }
 
-  /**
-   * Attempt to enrich via yt-dlp if it is installed on PATH.
-   *
-   * <p>This is optional and best-effort: if yt-dlp isn't present or times out,
-   * the caller should fall back to oEmbed-only metadata.
-   */
-  static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
+  /** Attempt to enrich via yt-dlp if it is installed on PATH. */
+static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
     if (url == null || url.isBlank()) return null;
 
     // Try common executable names.
@@ -277,7 +271,6 @@ final class YouTubePreviewUtil {
     return sb.toString().strip();
   }
 
-  /** Minimal, optional metadata from yt-dlp. */
   record YtMeta(Integer durationSeconds, Long viewCount, Long likeCount, String description) {}
 
   private static String hostLower(URI uri) {
@@ -361,7 +354,6 @@ final class YouTubePreviewUtil {
     return t;
   }
 
-  /** Minimal JSON string lookup helper (not a general JSON parser). */
   static final class MiniJson {
     private MiniJson() {}
 

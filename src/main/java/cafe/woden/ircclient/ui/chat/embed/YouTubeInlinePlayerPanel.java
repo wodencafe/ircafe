@@ -9,13 +9,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 
-/**
- * Optional inline YouTube playback via JavaFX WebView.
- *
- * <p>This class uses reflection so the project can compile/run without JavaFX.
- * If JavaFX is present at runtime, video get an embedded player.  Otherwise,
- * fall back to opening the video in the system browser.
- */
+/** Optional inline YouTube playback via JavaFX WebView. */
 final class YouTubeInlinePlayerPanel extends JPanel {
 
   private final String videoId;

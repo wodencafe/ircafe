@@ -8,9 +8,6 @@ import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Entry point for server configuration dialogs.
- */
 @Component
 @Lazy
 public class ServerDialogs {

@@ -6,9 +6,6 @@ import java.beans.PropertyChangeSupport;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Lightweight event hub for UI settings (font size, theme, etc.).
- */
 @Component
 @Lazy
 public class UiSettingsBus {
@@ -52,18 +49,14 @@ public class UiSettingsBus {
     return current;
   }
 
-  /**
-   * Set and notify listeners.
-   */
+  
   public void set(UiSettings next) {
     UiSettings prev = this.current;
     this.current = next;
     pcs.firePropertyChange(PROP_UI_SETTINGS, prev, next);
   }
 
-  /**
-   * Re-fire the current value (useful after Look & Feel updates).
-   */
+  
   public void refresh() {
     UiSettings cur = this.current;
     pcs.firePropertyChange(PROP_UI_SETTINGS, cur, cur);

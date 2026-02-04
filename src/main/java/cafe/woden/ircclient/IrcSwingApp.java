@@ -32,10 +32,19 @@ public class IrcSwingApp {
                                ThemeManager themeManager,
                                UiSettingsBus settingsBus) {
     return args -> SwingUtilities.invokeLater(() -> {
-      // Install the desired theme BEFORE creating any UI beans.
-      themeManager.installLookAndFeel(settingsBus.get().theme());
+      // Install the desired theme before showing the UI.
+      // Note: Spring may instantiate some Swing beans during context refresh.
+      // Updating the frame's component tree ensures any pre-created components
+      // rebind to the correct Look & Feel defaults.
+      String theme = settingsBus.get().theme();
+      themeManager.installLookAndFeel(theme);
 
-      frames.getObject().setVisible(true);
+      MainFrame frame = frames.getObject();
+      SwingUtilities.updateComponentTreeUI(frame);
+      frame.invalidate();
+      frame.validate();
+      frame.repaint();
+      frame.setVisible(true);
 
       IrcMediator mediator = mediatorProvider.getObject();
       if (settingsBus.get().autoConnectOnStart()) {

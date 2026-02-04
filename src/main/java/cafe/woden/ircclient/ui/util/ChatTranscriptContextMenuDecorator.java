@@ -114,6 +114,12 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
           }
           if (nickMenu != null && nickMenu.getComponentCount() > 0) {
             currentPopupUrl = null;
+            // If the menu instance was created before the Look & Feel was applied, it may appear unstyled.
+            // Refresh UI delegates at show time to match the current FlatLaf theme.
+            try {
+              SwingUtilities.updateComponentTreeUI(nickMenu);
+            } catch (Exception ignored) {
+            }
             nickMenu.show(transcript, e.getX(), e.getY());
             return;
           }
@@ -123,6 +129,13 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         currentPopupUrl = url;
         rebuildMenu(url);
         updateEnabledState(url);
+
+        // This popup menu is constructed once and reused; refresh UI delegates at show time so it
+        // matches the current Look & Feel (e.g., FlatLaf).
+        try {
+          SwingUtilities.updateComponentTreeUI(menu);
+        } catch (Exception ignored) {
+        }
         menu.show(transcript, e.getX(), e.getY());
       }
     };
@@ -130,9 +143,6 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     transcript.addMouseListener(this.mouse);
   }
 
-  /**
-   * Backward-compatible overload: installs the default Copy / Select All / Find menu.
-   */
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(transcript, null, null, null, null, openFind);
   }
@@ -352,8 +362,6 @@ private void downloadToFile(String url, Path out) {
     ));
   }
 }
-
-
 
   @Override
   public void close() {

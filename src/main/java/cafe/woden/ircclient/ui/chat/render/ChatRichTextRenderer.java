@@ -49,9 +49,6 @@ public class ChatRichTextRenderer {
     this.nickColors = nickColors;
   }
 
-  /**
-   * Inserts text that may contain URLs and mentions.
-   */
   public void insertRichText(StyledDocument doc, TargetRef ref, String text, AttributeSet baseStyle)
       throws BadLocationException {
     insertRichTextAt(doc, ref, text, baseStyle, doc != null ? doc.getLength() : 0);
@@ -339,9 +336,6 @@ public class ChatRichTextRenderer {
     return url;
   }
 
-  /**
-   * Strip common trailing punctuation that tends to cling to URLs in chat.
-   */
   private static UrlParts splitUrlTrailingPunct(String raw) {
     if (raw == null || raw.isEmpty()) return new UrlParts("", "");
     int end = raw.length();

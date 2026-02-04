@@ -6,12 +6,11 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Small helpers for recognizing and canonicalizing IMDb title links. */
 final class ImdbPreviewUtil {
 
   private ImdbPreviewUtil() {}
 
-  /** IMDb title IDs look like tt1234567. */
+  
   private static final Pattern TITLE_ID = Pattern.compile("\\b(tt\\d{5,12})\\b", Pattern.CASE_INSENSITIVE);
 
   static boolean isImdbTitleUrl(String url) {

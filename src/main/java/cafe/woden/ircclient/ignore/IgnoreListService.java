@@ -14,27 +14,17 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks ignore masks per server.
- *
- * <p>This service ONLY tracks and persists ignore masks. It does not apply ignoring
- * to incoming/outgoing messages (that comes later).
- */
 @Component
 public class IgnoreListService {
 
   private final RuntimeConfigStore runtimeConfig;
 
-  /** Whether hard ignore masks should also apply to CTCP messages. */
   private volatile boolean hardIgnoreIncludesCtcp;
 
-  /** In-memory copy of ignore masks (serverId -> ordered list of masks). */
   private final ConcurrentHashMap<String, List<String>> masksByServer = new ConcurrentHashMap<>();
 
-  /** In-memory copy of soft-ignore masks (serverId -> ordered list of masks). */
   private final ConcurrentHashMap<String, List<String>> softMasksByServer = new ConcurrentHashMap<>();
 
-  /** Emits when an ignore list changes (for UI repainting, etc.). */
   public enum ListKind { IGNORE, SOFT_IGNORE }
 
   public record Change(String serverId, ListKind kind) {}
@@ -94,7 +84,6 @@ public class IgnoreListService {
     return cleaned;
   }
 
-  /** List current ignore masks for a server (stable order). */
   public List<String> listMasks(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
@@ -105,7 +94,6 @@ public class IgnoreListService {
     }
   }
 
-  /** List current soft-ignore masks for a server (stable order). */
   public List<String> listSoftMasks(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
@@ -116,7 +104,7 @@ public class IgnoreListService {
     }
   }
 
-  /** Add an ignore mask (case-insensitive uniqueness). Returns true if newly added. */
+  
   public boolean addMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -137,7 +125,7 @@ public class IgnoreListService {
     return true;
   }
 
-  /** Add a soft-ignore mask (case-insensitive uniqueness). Returns true if newly added. */
+  
   public boolean addSoftMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -158,7 +146,7 @@ public class IgnoreListService {
     return true;
   }
 
-  /** Remove an ignore mask (case-insensitive). Returns true if removed. */
+  
   public boolean removeMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -182,7 +170,7 @@ public class IgnoreListService {
     return removed;
   }
 
-  /** Remove a soft-ignore mask (case-insensitive). Returns true if removed. */
+  
   public boolean removeSoftMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -206,13 +194,11 @@ public class IgnoreListService {
     return removed;
   }
 
-  // ----------------- normalization helpers -----------------
-
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }
 
-  /** Trim + collapse whitespace. */
+  
   private static String normalizeMask(String raw) {
     String s = Objects.toString(raw, "").trim();
     // no internal whitespace in masks
@@ -221,14 +207,7 @@ public class IgnoreListService {
   }
 
   /**
-   * Convert user input to a hostmask pattern.
-   *
-   * <p>We do NOT resolve nicks to actual hostmasks yet. For now:
-   * <ul>
-   *   <li>If input contains '!' and '@', we treat it as a full hostmask/pattern and store it.</li>
-   *   <li>If input contains '@' but not '!', we treat it as "*!user@host" (or "*!*@host").</li>
-   *   <li>If input contains neither, we treat it as a nick pattern: "nick!*@*".</li>
-   * </ul>
+   * Convert user input to a hostmask pattern (full mask, user@host, host-only, or nick pattern).
    */
   public static String normalizeMaskOrNickToHostmask(String rawMaskOrNick) {
     String s = normalizeMask(rawMaskOrNick);
@@ -263,15 +242,6 @@ public class IgnoreListService {
     return lower.contains(".") || lower.contains(":") || lower.endsWith("/");
   }
 
-  // ----------------- matching (hard ignore) -----------------
-
-  /**
-   * Returns true if the given hostmask matches any hard-ignore mask for this server.
-   *
-   * <p>Matching supports "*" (any sequence) and "?" (single char) wildcards and is case-insensitive.
-   *
-   * <p>NOTE: Hard-ignore matching is separate from soft-ignore matching.
-   */
   public boolean isHardIgnored(String serverId, String fromHostmask) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -282,20 +252,9 @@ public class IgnoreListService {
     List<String> masks = listMasks(sid);
     if (masks.isEmpty()) return false;
 
-    for (String m : masks) {
-      if (m == null || m.isBlank()) continue;
-      if (globMatchIgnoreMask(m, hm)) return true;
-    }
-    return false;
+    return IgnoreMaskMatcher.hostmaskTargetedByAny(masks, hm);
   }
 
-
-
-  /**
-   * Returns true if the given hostmask matches any soft-ignore mask for this server.
-   *
-   * <p>Matching supports "*" (any sequence) and "?" (single char) wildcards and is case-insensitive.
-   */
   public boolean isSoftIgnored(String serverId, String fromHostmask) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -306,11 +265,7 @@ public class IgnoreListService {
     List<String> masks = listSoftMasks(sid);
     if (masks.isEmpty()) return false;
 
-    for (String m : masks) {
-      if (m == null || m.isBlank()) continue;
-      if (globMatchIgnoreMask(m, hm)) return true;
-    }
-    return false;
+    return IgnoreMaskMatcher.hostmaskTargetedByAny(masks, hm);
   }
 
   private static boolean globMatchIgnoreMask(String pattern, String text) {

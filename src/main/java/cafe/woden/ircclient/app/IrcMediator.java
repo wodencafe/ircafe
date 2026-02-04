@@ -3,20 +3,28 @@ package cafe.woden.ircclient.app;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.app.state.AwayRoutingState;
+import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
+import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
+import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
+import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
+import cafe.woden.ircclient.app.state.CtcpRoutingState;
+import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
+import cafe.woden.ircclient.app.state.ModeRoutingState;
+import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -34,39 +42,23 @@ public class IrcMediator {
   private final CommandParser commandParser;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
-  private final IgnoreListService ignoreListService;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
-  // Pending action routing: ensure WHOIS/CTCP responses print into the chat where the request originated.
-  private final ConcurrentHashMap<WhoisKey, TargetRef> pendingWhoisTargets = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<CtcpKey, PendingCtcp> pendingCtcp = new ConcurrentHashMap<>();
+  // Routing/correlation state extracted from IrcMediator.
+  private final WhoisRoutingState whoisRoutingState;
+  private final CtcpRoutingState ctcpRoutingState;
+  private final ModeRoutingState modeRoutingState;
+  private final AwayRoutingState awayRoutingState;
 
-  // Pending MODE queries: route numeric 324 output back to the requesting tab.
-  private final ConcurrentHashMap<ModeKey, TargetRef> pendingModeTargets = new ConcurrentHashMap<>();
-
-  // Join-burst mode suppression: buffer simple channel-state modes and print once after join completes.
-  private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers = new ConcurrentHashMap<>();
-
-  // If we already printed a join-burst mode summary, suppress a near-immediate 324 summary to avoid duplicates.
-  private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs = new ConcurrentHashMap<>();
-
-  // Away state tracking (per server) so bare `/away` can toggle between set/clear.
-  private final ConcurrentHashMap<String, Boolean> awayByServer = new ConcurrentHashMap<>();
-
-  // Last away reason (per server). Used to decorate server confirmation numerics (306) with the
-  // reason the user supplied (or the default).
-  private final ConcurrentHashMap<String, String> awayReasonByServer = new ConcurrentHashMap<>();
-
-  // Route away confirmations back to where the user initiated the /away command.
-  // This avoids dumping 305/306 into the status tab when the user expected to see it
-  // in the chat buffer they were typing in.
-  private final ConcurrentHashMap<String, RecentTarget> recentAwayTargets = new ConcurrentHashMap<>();
-
-  private record RecentTarget(TargetRef target, Instant at) {}
-
-
+  // Inbound MODE-related event handler (join-burst buffering + MODE pretty printing + 324 routing).
+  private final InboundModeEventHandler inboundModeEventHandler;
+  private final OutboundModeCommandService outboundModeCommandService;
+  private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
+  private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundIgnoreCommandService outboundIgnoreCommandService;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -88,18 +80,37 @@ public class IrcMediator {
       CommandParser commandParser,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
-      IgnoreListService ignoreListService,
       ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator
+      TargetCoordinator targetCoordinator,
+      WhoisRoutingState whoisRoutingState,
+      CtcpRoutingState ctcpRoutingState,
+      ModeRoutingState modeRoutingState,
+      AwayRoutingState awayRoutingState,
+      InboundModeEventHandler inboundModeEventHandler,
+      OutboundModeCommandService outboundModeCommandService,
+      OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
+      OutboundChatCommandService outboundChatCommandService,
+      OutboundIgnoreCommandService outboundIgnoreCommandService,
+      InboundIgnorePolicy inboundIgnorePolicy
   ) {
+
     this.irc = irc;
     this.ui = ui;
     this.commandParser = commandParser;
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
-    this.ignoreListService = ignoreListService;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
+    this.whoisRoutingState = whoisRoutingState;
+    this.ctcpRoutingState = ctcpRoutingState;
+    this.modeRoutingState = modeRoutingState;
+    this.awayRoutingState = awayRoutingState;
+    this.inboundModeEventHandler = inboundModeEventHandler;
+    this.outboundModeCommandService = outboundModeCommandService;
+    this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
+    this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundIgnoreCommandService = outboundIgnoreCommandService;
+    this.inboundIgnorePolicy = inboundIgnorePolicy;
   }
 
   public void start() {
@@ -214,7 +225,7 @@ public class IrcMediator {
       case OPEN_QUERY -> targetCoordinator.openPrivateConversation(new PrivateMessageRequest(sid, nick));
 
       case WHOIS -> {
-        pendingWhoisTargets.put(new WhoisKey(sid, nick), ctx);
+        whoisRoutingState.put(sid, nick, ctx);
         ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + nick + "...");
         Disposable d = irc.whois(sid, nick)
             .subscribe(
@@ -225,7 +236,7 @@ public class IrcMediator {
       }
 
       case CTCP_VERSION -> {
-        pendingCtcp.put(new CtcpKey(sid, nick, "VERSION", null), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ctcpRoutingState.put(sid, nick, "VERSION", null, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " VERSION");
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001VERSION\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
@@ -233,115 +244,20 @@ public class IrcMediator {
 
       case CTCP_PING -> {
         String token = Long.toString(System.currentTimeMillis());
-        pendingCtcp.put(new CtcpKey(sid, nick, "PING", token), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ctcpRoutingState.put(sid, nick, "PING", token, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " PING");
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
 
       case CTCP_TIME -> {
-        pendingCtcp.put(new CtcpKey(sid, nick, "TIME", null), new PendingCtcp(ctx, System.currentTimeMillis()));
+        ctcpRoutingState.put(sid, nick, "TIME", null, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " TIME");
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
     }
   }
-
-  private record WhoisKey(String serverId, String nickLower) {
-    // Compact canonical constructor: normalize inputs before field assignment.
-    WhoisKey {
-      serverId = (serverId == null) ? "" : serverId.trim();
-      nickLower = (nickLower == null) ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
-    }
-  }
-
-  private record CtcpKey(String serverId, String nickLower, String commandUpper, String token) {
-    // Compact canonical constructor: normalize inputs before field assignment.
-    CtcpKey {
-      serverId = (serverId == null) ? "" : serverId.trim();
-      nickLower = (nickLower == null) ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
-      commandUpper = (commandUpper == null) ? "" : commandUpper.trim().toUpperCase(Locale.ROOT);
-      token = (token == null) ? null : token.trim();
-    }
-  }
-
-  private record PendingCtcp(TargetRef target, long startedMs) {}
-
-  private record ModeKey(String serverId, String channelLower) {
-    ModeKey {
-      serverId = (serverId == null) ? "" : serverId.trim();
-      channelLower = (channelLower == null) ? "" : channelLower.trim().toLowerCase(Locale.ROOT);
-    }
-
-    static ModeKey of(String serverId, String channel) {
-      return new ModeKey(serverId, channel);
-    }
-  }
-
-  /**
-   * Buffers the initial "join burst" of simple channel-state modes (like +ntspimrC) so we can print
-   * a single summary line after the join feels complete.
-   */
-  private static final class JoinModeBuffer {
-    private final java.util.LinkedHashSet<Character> plus = new java.util.LinkedHashSet<>();
-    private final java.util.LinkedHashSet<Character> minus = new java.util.LinkedHashSet<>();
-
-
-    // Debounce flush so we print once shortly after the join-mode burst settles.
-    private javax.swing.Timer flushTimer;
-
-    void bumpFlush(Runnable flush) {
-      if (flush == null) return;
-      if (flushTimer != null) flushTimer.stop();
-      flushTimer = new javax.swing.Timer(200, e -> flush.run());
-      flushTimer.setRepeats(false);
-      flushTimer.start();
-    }
-
-    void cancelFlushTimer() {
-      if (flushTimer != null) {
-        flushTimer.stop();
-        flushTimer = null;
-      }
-    }
-
-    boolean tryAdd(String details) {
-      if (details == null) return false;
-      String d = details.trim();
-      if (d.isEmpty()) return false;
-
-      // Only accept simple flag sets with no args (no spaces).
-      int sp = d.indexOf(' ');
-      if (sp >= 0) return false;
-
-      char sign = d.charAt(0);
-      if (sign != '+' && sign != '-') return false;
-
-      for (int i = 1; i < d.length(); i++) {
-        char c = d.charAt(i);
-        // Accept any simple flag (no args) during the join burst.
-        // We'll render known ones as phrases and unknowns as +x/-x.
-        if (!Character.isLetterOrDigit(c)) return false;
-      }
-
-      java.util.LinkedHashSet<Character> target = (sign == '+') ? plus : minus;
-      for (int i = 1; i < d.length(); i++) {
-        target.add(d.charAt(i));
-      }
-
-      return true;
-    }
-
-    boolean isEmpty() {
-      return plus.isEmpty() && minus.isEmpty();
-    }
-
-    String summarize() {
-      return ModeSummary.describeBufferedJoinModes(plus, minus);
-    }
-  }
-
 
   private record ParsedCtcp(String commandUpper, String arg) {}
 
@@ -357,9 +273,16 @@ public class IrcMediator {
     return new ParsedCtcp(cmd, arg);
   }
 
+private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
+    if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
+    String f = Objects.toString(from, "").trim();
+    if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
+    // PircBotX uses "server" when no user prefix is present; don't apply user ignore rules to that.
+    if ("server".equalsIgnoreCase(f)) return InboundIgnorePolicy.Decision.ALLOW;
+    return inboundIgnorePolicy.decide(sid, f, null, isCtcp);
+  }
 
-
-  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler) {
+  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler, boolean suppressOutput) {
     // CTCP replies come back as NOTICE with 0x01-wrapped payload.
     // Route them to the chat target where the request originated.
     ParsedCtcp ctcp = parseCtcp(text);
@@ -371,7 +294,7 @@ public class IrcMediator {
       String rendered = null;
 
       if ("VERSION".equals(cmd)) {
-        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, null);
         if (p != null) {
           dest = p.target();
           rendered = from + " VERSION: " + (arg.isBlank() ? "(no version)" : arg);
@@ -380,14 +303,14 @@ public class IrcMediator {
         String token = arg;
         int sp = token.indexOf(' ');
         if (sp >= 0) token = token.substring(0, sp);
-        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, token));
+        PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, token);
         if (p != null) {
           dest = p.target();
           long rtt = Math.max(0L, System.currentTimeMillis() - p.startedMs());
           rendered = from + " PING reply: " + rtt + "ms";
         }
       } else if ("TIME".equals(cmd)) {
-        PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+        PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, null);
         if (p != null) {
           dest = p.target();
           rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
@@ -407,13 +330,14 @@ public class IrcMediator {
           dest = status;
           rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
         } else {
-          PendingCtcp p = pendingCtcp.remove(new CtcpKey(sid, from, cmd, null));
+          PendingCtcp p = ctcpRoutingState.remove(sid, from, cmd, null);
           dest = (p != null) ? p.target() : status;
           rendered = from + " " + cmd + (arg.isBlank() ? "" : ": " + arg);
         }
       }
 
       if (dest != null && rendered != null) {
+        if (suppressOutput) return;
         ensureTargetExists(dest);
         if (spoiler) {
           ui.appendSpoilerChat(dest, "(ctcp)", rendered);
@@ -424,6 +348,8 @@ public class IrcMediator {
         return;
       }
     }
+
+    if (suppressOutput) return;
 
     if (spoiler) {
       ui.appendSpoilerChat(status, "(notice) " + from, text);
@@ -438,16 +364,10 @@ public class IrcMediator {
     disposables.dispose();
   }
 
-  /**
-   * Connect to all configured servers.
-   *
-   * <p>Safe to call multiple times; connection attempts are idempotent per server.
-   */
   public void connectAll() {
     connectionCoordinator.connectAll();
   }
 
-  /** Disconnect from all configured servers. */
   public void disconnectAll() {
     connectionCoordinator.disconnectAll();
   }
@@ -455,645 +375,39 @@ public class IrcMediator {
   private void handleOutgoingLine(String raw) {
     ParsedInput in = commandParser.parse(raw);
     switch (in) {
-      case ParsedInput.Join cmd -> handleJoin(cmd.channel());
-      case ParsedInput.Nick cmd -> handleNick(cmd.newNick());
-      case ParsedInput.Away cmd -> handleAway(cmd.message());
-      case ParsedInput.Query cmd -> handleQuery(cmd.nick());
-      case ParsedInput.Msg cmd -> handleMsg(cmd.nick(), cmd.body());
-      case ParsedInput.Me cmd -> handleMe(cmd.action());
-      case ParsedInput.Mode cmd -> handleMode(cmd.first(), cmd.rest());
-      case ParsedInput.Op cmd -> handleOp(cmd.channel(), cmd.nicks());
-      case ParsedInput.Deop cmd -> handleDeop(cmd.channel(), cmd.nicks());
-      case ParsedInput.Voice cmd -> handleVoice(cmd.channel(), cmd.nicks());
-      case ParsedInput.Devoice cmd -> handleDevoice(cmd.channel(), cmd.nicks());
-      case ParsedInput.Ban cmd -> handleBan(cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Unban cmd -> handleUnban(cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Ignore cmd -> handleIgnore(cmd.maskOrNick());
-      case ParsedInput.Unignore cmd -> handleUnignore(cmd.maskOrNick());
-      case ParsedInput.IgnoreList cmd -> handleIgnoreList();
-      case ParsedInput.CtcpVersion cmd -> handleCtcpVersion(cmd.nick());
-      case ParsedInput.CtcpPing cmd -> handleCtcpPing(cmd.nick());
-      case ParsedInput.CtcpTime cmd -> handleCtcpTime(cmd.nick());
-      case ParsedInput.Ctcp cmd -> handleCtcp(cmd.nick(), cmd.command(), cmd.args());
-      case ParsedInput.Quote cmd -> handleQuote(cmd.rawLine());
-      case ParsedInput.Say cmd -> handleSay(cmd.text());
+      case ParsedInput.Join cmd -> outboundChatCommandService.handleJoin(disposables, cmd.channel());
+      case ParsedInput.Nick cmd -> outboundChatCommandService.handleNick(disposables, cmd.newNick());
+      case ParsedInput.Away cmd -> outboundChatCommandService.handleAway(disposables, cmd.message());
+      case ParsedInput.Query cmd -> outboundChatCommandService.handleQuery(cmd.nick());
+      case ParsedInput.Msg cmd -> outboundChatCommandService.handleMsg(disposables, cmd.nick(), cmd.body());
+      case ParsedInput.Me cmd -> outboundChatCommandService.handleMe(disposables, cmd.action());
+      case ParsedInput.Mode cmd -> outboundModeCommandService.handleMode(disposables, cmd.first(), cmd.rest());
+      case ParsedInput.Op cmd -> outboundModeCommandService.handleOp(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Deop cmd -> outboundModeCommandService.handleDeop(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Voice cmd -> outboundModeCommandService.handleVoice(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Devoice cmd -> outboundModeCommandService.handleDevoice(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Ban cmd -> outboundModeCommandService.handleBan(disposables, cmd.channel(), cmd.masksOrNicks());
+      case ParsedInput.Unban cmd -> outboundModeCommandService.handleUnban(disposables, cmd.channel(), cmd.masksOrNicks());
+      case ParsedInput.Ignore cmd -> outboundIgnoreCommandService.handleIgnore(cmd.maskOrNick());
+      case ParsedInput.Unignore cmd -> outboundIgnoreCommandService.handleUnignore(cmd.maskOrNick());
+      case ParsedInput.IgnoreList cmd -> outboundIgnoreCommandService.handleIgnoreList();
+      case ParsedInput.SoftIgnore cmd -> outboundIgnoreCommandService.handleSoftIgnore(cmd.maskOrNick());
+      case ParsedInput.UnsoftIgnore cmd -> outboundIgnoreCommandService.handleUnsoftIgnore(cmd.maskOrNick());
+      case ParsedInput.SoftIgnoreList cmd -> outboundIgnoreCommandService.handleSoftIgnoreList();
+      case ParsedInput.CtcpVersion cmd -> outboundCtcpWhoisCommandService.handleCtcpVersion(disposables, cmd.nick());
+      case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
+      case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
+      case ParsedInput.Ctcp cmd -> outboundCtcpWhoisCommandService.handleCtcp(disposables, cmd.nick(), cmd.command(), cmd.args());
+      case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
+      case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
       case ParsedInput.Unknown cmd ->
           ui.appendStatus(safeStatusTarget(), "(system)", "Unknown command: " + cmd.raw());
     }
   }
 
-  private void handleQuote(String rawLine) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(quote)", "Select a server first.");
-      return;
-    }
+  // --- Chatty slash commands extracted to OutboundChatCommandService --------------------
 
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    ensureTargetExists(status);
-
-    String line = rawLine == null ? "" : rawLine.trim();
-    if (line.isEmpty()) {
-      ui.appendStatus(status, "(quote)", "Usage: /quote <RAW IRC LINE>");
-      ui.appendStatus(status, "(quote)", "Example: /quote MONITOR +nick");
-      ui.appendStatus(status, "(quote)", "Alias: /raw <RAW IRC LINE>");
-      return;
-    }
-
-    // Prevent accidental multi-line injection.
-    if (line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) {
-      ui.appendStatus(status, "(quote)", "Refusing to send multi-line /quote input.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    // Echo a safe preview of what we are sending (avoid leaking secrets).
-    String echo = redactIfSensitive(line);
-    ui.appendStatus(status, "(quote)", "→ " + echo);
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), line).subscribe(
-            () -> {},
-            err -> ui.appendError(status, "(quote-error)", String.valueOf(err))
-        )
-    );
-  }
-
-  private static String redactIfSensitive(String raw) {
-    String s = raw == null ? "" : raw.trim();
-    if (s.isEmpty()) return s;
-
-    int sp = s.indexOf(' ');
-    String head = (sp < 0 ? s : s.substring(0, sp)).trim();
-    String upper = head.toUpperCase(java.util.Locale.ROOT);
-    if (upper.equals("PASS") || upper.equals("OPER") || upper.equals("AUTHENTICATE")) {
-      return upper + (sp < 0 ? "" : " <redacted>");
-    }
-    return s;
-  }
-
-  private void handleJoin(String channel) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(join)", "Select a server first.");
-      return;
-    }
-
-    String chan = channel == null ? "" : channel.trim();
-    if (chan.isEmpty()) {
-      ui.appendStatus(safeStatusTarget(), "(join)", "Usage: /join <#channel>");
-      return;
-    }
-
-    // Persist for auto-join next time.
-    runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected (join queued in config only)");
-      return;
-    }
-
-    disposables.add(
-        irc.joinChannel(at.serverId(), chan).subscribe(
-            () -> {},
-            err -> ui.appendError(safeStatusTarget(), "(join-error)", String.valueOf(err))
-        )
-    );
-  }
-
-  private void handleNick(String newNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(nick)", "Select a server first.");
-      return;
-    }
-
-    String nick = newNick == null ? "" : newNick.trim();
-    if (nick.isEmpty()) {
-      ui.appendStatus(safeStatusTarget(), "(nick)", "Usage: /nick <newNick>");
-      return;
-    }
-
-    // Persist the preferred nick for next time.
-    runtimeConfig.rememberNick(at.serverId(), nick);
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    disposables.add(
-        irc.changeNick(at.serverId(), nick).subscribe(
-            () -> ui.appendStatus(new TargetRef(at.serverId(), "status"), "(nick)", "Requested nick change to " + nick),
-            err -> ui.appendError(safeStatusTarget(), "(nick-error)", String.valueOf(err))
-        )
-    );
-  }
-
-  private void handleAway(String message) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(away)", "Select a server first.");
-      return;
-    }
-
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
-    String msg = message == null ? "" : message.trim();
-
-    boolean explicitClear = "-".equals(msg)
-        || "off".equalsIgnoreCase(msg)
-        || "clear".equalsIgnoreCase(msg);
-
-    boolean clear;
-    String toSend;
-
-    // Bare /away toggles: if not away, set a default; if already away, clear it.
-    if (msg.isEmpty()) {
-      boolean currentlyAway = Boolean.TRUE.equals(awayByServer.get(at.serverId()));
-      if (currentlyAway) {
-        clear = true;
-        toSend = "";
-      } else {
-        clear = false;
-        toSend = "Gone for now.";
-      }
-    } else if (explicitClear) {
-      clear = true;
-      toSend = "";
-    } else {
-      clear = false;
-      toSend = msg;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    // Remember where the user initiated /away so the server confirmation (305/306)
-    // can be printed into the same buffer.
-    recentAwayTargets.put(at.serverId(), new RecentTarget(at, Instant.now()));
-
-    // Store the requested reason immediately so the upcoming 306 confirmation can
-    // include it, even if the numeric arrives before the Completable callback runs.
-    // If the request fails, we restore the previous value in the error handler.
-    String prevReason = awayReasonByServer.get(at.serverId());
-    if (clear) awayReasonByServer.remove(at.serverId());
-    else awayReasonByServer.put(at.serverId(), toSend);
-
-
-    disposables.add(
-        irc.setAway(at.serverId(), toSend).subscribe(
-            () -> {
-              awayByServer.put(at.serverId(), !clear);
-              ui.appendStatus(status, "(away)", clear ? "Away cleared" : ("Away set: " + toSend));
-            },
-            err -> {
-              if (prevReason == null) awayReasonByServer.remove(at.serverId());
-              else awayReasonByServer.put(at.serverId(), prevReason);
-              ui.appendError(status, "(away-error)", String.valueOf(err));
-            }
-        )
-    );
-  }
-
-  private void handleQuery(String nick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(query)", "Select a server first.");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    if (n.isEmpty()) {
-      ui.appendStatus(safeStatusTarget(), "(query)", "Usage: /query <nick>");
-      return;
-    }
-
-    TargetRef pm = new TargetRef(at.serverId(), n);
-    ensureTargetExists(pm);
-    ui.selectTarget(pm);
-  }
-
-  private void handleMsg(String nick, String body) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(msg)", "Select a server first.");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    String m = body == null ? "" : body.trim();
-    if (n.isEmpty() || m.isEmpty()) {
-      ui.appendStatus(safeStatusTarget(), "(msg)", "Usage: /msg <nick> <message>");
-      return;
-    }
-
-    TargetRef pm = new TargetRef(at.serverId(), n);
-    ensureTargetExists(pm);
-    ui.selectTarget(pm);
-    sendMessage(pm, m);
-  }
-
-  private void handleMe(String action) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(me)", "Select a server first.");
-      return;
-    }
-
-    String a = action == null ? "" : action.trim();
-    if (a.isEmpty()) {
-      ui.appendStatus(safeStatusTarget(), "(me)", "Usage: /me <action>");
-      return;
-    }
-
-    if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(me)", "Select a channel or PM first.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String me = irc.currentNick(at.serverId()).orElse("me");
-    ui.appendAction(at, me, a, true);
-
-    disposables.add(
-        irc.sendAction(at.serverId(), at.target(), a).subscribe(
-            () -> {},
-            err -> ui.appendError(safeStatusTarget(), "(send-error)", String.valueOf(err))
-        )
-    );
-  }
-
-
-  private void handleMode(String first, String rest) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
-      return;
-    }
-
-    String f = first == null ? "" : first.trim();
-    String r = rest == null ? "" : rest.trim();
-
-    // Determine target channel + mode string.
-    String channel;
-    String modeSpec;
-
-    if (f.startsWith("#") || f.startsWith("&")) {
-      channel = f;
-      modeSpec = r;
-    } else if (at.isChannel()) {
-      channel = at.target();
-      modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
-    } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: /mode <#channel> [modes] [args...]");
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can use /mode +o nick");
-      return;
-    }
-
-    if (channel == null || channel.isBlank()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: /mode <#channel> [modes] [args...]");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String line = "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
-    TargetRef out = at.isChannel() ? new TargetRef(at.serverId(), channel) : new TargetRef(at.serverId(), "status");
-    if (modeSpec == null || modeSpec.isBlank()) {
-      pendingModeTargets.put(ModeKey.of(at.serverId(), channel), out);
-    }
-    ensureTargetExists(out);
-    ui.appendStatus(out, "(mode)", "→ " + line);
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), line).subscribe(
-            () -> {},
-            err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
-        )
-    );
-  }
-
-  // --- CTCP slash commands --------------------------------------------------
-
-
-  private void handleOp(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "+o", "Usage: /op [#channel] <nick> [nick...]");
-  }
-
-  private void handleDeop(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "-o", "Usage: /deop [#channel] <nick> [nick...]");
-  }
-
-  private void handleVoice(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "+v", "Usage: /voice [#channel] <nick> [nick...]");
-  }
-
-  private void handleDevoice(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "-v", "Usage: /devoice [#channel] <nick> [nick...]");
-  }
-
-  private void handleBan(String channel, java.util.List<String> masksOrNicks) {
-    handleBanMode(channel, masksOrNicks, true);
-  }
-
-  private void handleUnban(String channel, java.util.List<String> masksOrNicks) {
-    handleBanMode(channel, masksOrNicks, false);
-  }
-
-  private void handleSimpleNickMode(String channel, java.util.List<String> nicks, String mode, String usage) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
-      return;
-    }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String ch = resolveChannelOrNull(at, channel);
-    if (ch == null) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", usage);
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (nicks == null || nicks.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", usage);
-      return;
-    }
-
-    TargetRef out = new TargetRef(at.serverId(), ch);
-    ensureTargetExists(out);
-
-    for (String nick : nicks) {
-      String n = nick == null ? "" : nick.trim();
-      if (n.isEmpty()) continue;
-
-      String line = "MODE " + ch + " " + mode + " " + n;
-      ui.appendStatus(out, "(mode)", "→ " + line);
-
-      disposables.add(
-          irc.sendRaw(at.serverId(), line).subscribe(
-              () -> {},
-              err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
-          )
-      );
-    }
-  }
-
-  private void handleBanMode(String channel, java.util.List<String> masksOrNicks, boolean add) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
-      return;
-    }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String ch = resolveChannelOrNull(at, channel);
-    if (ch == null) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (masksOrNicks == null || masksOrNicks.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      return;
-    }
-
-    TargetRef out = new TargetRef(at.serverId(), ch);
-    ensureTargetExists(out);
-
-    String mode = add ? "+b" : "-b";
-
-    for (String item : masksOrNicks) {
-      String raw = item == null ? "" : item.trim();
-      if (raw.isEmpty()) continue;
-
-      String mask = looksLikeMask(raw) ? raw : (raw + "!*@*");
-
-      String line = "MODE " + ch + " " + mode + " " + mask;
-      ui.appendStatus(out, "(mode)", "→ " + line);
-
-      disposables.add(
-          irc.sendRaw(at.serverId(), line).subscribe(
-              () -> {},
-              err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
-          )
-      );
-    }
-  }
-
-  private static boolean looksLikeMask(String s) {
-    if (s == null) return false;
-    return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
-  }
-
-  private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
-    String ch = explicitChannel == null ? "" : explicitChannel.trim();
-    if (!ch.isEmpty()) return ch;
-    if (active != null && active.isChannel()) return active.target();
-    return null;
-  }
-
-
-
-  private void handleIgnore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
-      return;
-    }
-
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Usage: /ignore <maskOrNick>");
-      return;
-    }
-
-    boolean added = ignoreListService.addMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
-    if (added) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Ignoring: " + stored);
-    } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
-    }
-  }
-
-  private void handleUnignore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(unignore)", "Select a server first.");
-      return;
-    }
-
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Usage: /unignore <maskOrNick>");
-      return;
-    }
-
-    boolean removed = ignoreListService.removeMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
-    if (removed) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
-    } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
-    }
-  }
-
-  private void handleIgnoreList() {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ignore)", "Select a server first.");
-      return;
-    }
-
-    java.util.List<String> masks = ignoreListService.listMasks(at.serverId());
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    if (masks.isEmpty()) {
-      ui.appendStatus(status, "(ignore)", "Ignore list is empty.");
-      return;
-    }
-
-    ui.appendStatus(status, "(ignore)", "Ignore masks (" + masks.size() + "): ");
-    for (String m : masks) {
-      ui.appendStatus(status, "(ignore)", "  - " + m);
-    }
-  }
-
-  private void handleCtcpVersion(String nick) {
-    sendCtcpSlash("VERSION", nick, "", false);
-  }
-
-  private void handleCtcpPing(String nick) {
-    // Token lets us compute RTT when the reply comes back.
-    String token = Long.toString(System.currentTimeMillis());
-    sendCtcpSlash("PING", nick, token, true);
-  }
-
-  private void handleCtcpTime(String nick) {
-    sendCtcpSlash("TIME", nick, "", false);
-  }
-
-  private void handleCtcp(String nick, String command, String args) {
-    String n = nick == null ? "" : nick.trim();
-    String cmd = command == null ? "" : command.trim();
-    String a = args == null ? "" : args.trim();
-
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ctcp)", "Select a server first.");
-      return;
-    }
-
-    TargetRef ctx = at;
-    if (!java.util.Objects.equals(ctx.serverId(), at.serverId())) {
-      ctx = new TargetRef(at.serverId(), "status");
-    }
-
-    if (n.isEmpty() || cmd.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /ctcp <nick> <command> [args...]");
-      return;
-    }
-
-    String cmdU = cmd.toUpperCase(java.util.Locale.ROOT);
-
-    // Convenience: treat /ctcp nick PING [token] as RTT-measurable.
-    if ("PING".equals(cmdU)) {
-      final String payload;
-      final String tokenKey;
-      if (a.isEmpty()) {
-        payload = Long.toString(System.currentTimeMillis());
-        tokenKey = payload;
-      } else {
-        payload = a;
-        int sp = a.indexOf(' ');
-        tokenKey = (sp >= 0) ? a.substring(0, sp) : a;
-      }
-      sendCtcp(at, ctx, n, "PING", payload, tokenKey);
-      return;
-    }
-
-    // If you want /ctcp nick ACTION ... use /me instead.
-    if ("ACTION".equals(cmdU)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Use /me for ACTION.");
-      return;
-    }
-
-    sendCtcp(at, ctx, n, cmdU, a, null);
-  }
-
-  private void sendCtcpSlash(String cmdUpper, String nick, String args, boolean expectsReply) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(ctcp)", "Select a server first.");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    String a = args == null ? "" : args.trim();
-    if (n.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /" + cmdUpper.toLowerCase(java.util.Locale.ROOT) + " <nick>");
-      return;
-    }
-
-    sendCtcp(at, at, n, cmdUpper, a, expectsReply ? a : null);
-  }
-
-  private void sendCtcp(TargetRef serverCtx, TargetRef outputCtx, String nick, String cmdUpper, String args, String tokenKey) {
-    if (serverCtx == null) return;
-    String sid = serverCtx.serverId();
-
-    if (!connectionCoordinator.isConnected(sid)) {
-      ui.appendStatus(new TargetRef(sid, "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    if (n.isEmpty()) return;
-
-    String cmd = cmdUpper == null ? "" : cmdUpper.trim().toUpperCase(java.util.Locale.ROOT);
-    String a = args == null ? "" : args.trim();
-
-    TargetRef ctx = outputCtx != null ? outputCtx : new TargetRef(sid, "status");
-
-    StringBuilder inner = new StringBuilder(cmd);
-    if (!a.isEmpty()) inner.append(' ').append(a);
-    String ctcp = "\u0001" + inner + "\u0001";
-
-    // Track pending so replies can be routed back to the current context.
-    String nickLower = n.toLowerCase(java.util.Locale.ROOT);
-    pendingCtcp.put(new CtcpKey(sid, nickLower, cmd, tokenKey), new PendingCtcp(ctx, System.currentTimeMillis()));
-
-    String display = "→ " + n + " " + cmd + (a.isEmpty() ? "" : " " + a);
-    ui.appendStatus(ctx, "(ctcp)", display);
-
-    disposables.add(
-        irc.sendPrivateMessage(sid, n, ctcp).subscribe(
-            () -> {},
-            err -> ui.appendError(safeStatusTarget(), "(ctcp-error)", String.valueOf(err))
-        )
-    );
-  }
+  // --- MODE slash commands extracted to OutboundModeCommandService --------------------
 
   private void handleSay(String msg) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -1154,6 +468,12 @@ public class IrcMediator {
       connectionCoordinator.handleConnectivityEvent(sid, e, targetCoordinator.getActiveTarget());
       if (e instanceof IrcEvent.Disconnected) {
         targetCoordinator.onServerDisconnected(sid);
+        // Drop any per-server correlation state so it doesn't stick across reconnects.
+        whoisRoutingState.clearServer(sid);
+        ctcpRoutingState.clearServer(sid);
+        modeRoutingState.clearServer(sid);
+        awayRoutingState.clearServer(sid);
+        inboundModeEventHandler.clearServer(sid);
       }
       targetCoordinator.refreshInputEnabledForActiveTarget();
       return;
@@ -1170,214 +490,142 @@ public class IrcMediator {
           }
         });
       }
-
       case IrcEvent.ChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
-        }
-      }
+        TargetRef active = targetCoordinator.getActiveTarget();
 
-      case IrcEvent.SoftChannelMessage ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendSpoilerChat(chan, ev.from(), ev.text());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
-        }
-      }
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+        } else {
+          postTo(chan, active, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+        }
+
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
+      }
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendAction(chan, ev.from(), ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
+        TargetRef active = targetCoordinator.getActiveTarget();
+
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+        } else {
+          postTo(chan, active, true, d -> ui.appendAction(d, ev.from(), ev.action()));
         }
+
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
       }
-
-      case IrcEvent.SoftChannelAction ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-        ui.appendSpoilerChat(chan, ev.from(), "* " + ev.action());
-        if (!chan.equals(targetCoordinator.getActiveTarget())) {
-          ui.markUnread(chan);
-          if (containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
-        }
-      }
-
-
       case IrcEvent.ChannelModeChanged ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-
-        String byRaw = ev.by();
-        String details = ev.details();
-
-        // Suppress the initial burst of simple channel-flag modes right after joining.
-        JoinModeBuffer joinBuf = joinModeBuffers.get(ModeKey.of(sid, ev.channel()));
-        if (joinBuf != null) {
-          if (joinBuf.tryAdd(details)) {
-            // Print quickly (debounced) instead of waiting for TOPIC/NAMES.
-            joinBuf.bumpFlush(() -> flushJoinModesIfAny(sid, ev.channel(), true));
-            return;
-          }
-          // As soon as we see something else, flush the buffered summary so the join feels complete.
-          flushJoinModesIfAny(sid, ev.channel(), true);
-        }
-
-        // Make MODE output human-friendly (e.g. +b mask -> "ban added").
-        for (String line : ModePrettyPrinter.pretty(byRaw, ev.channel(), details)) {
-          ui.appendNotice(chan, "(mode)", line);
-        }
+        inboundModeEventHandler.handleChannelModeChanged(sid, ev);
       }
 
       case IrcEvent.ChannelModesListed ev -> {
-        TargetRef chan = new TargetRef(sid, ev.channel());
-        ensureTargetExists(chan);
-
-        ModeKey key = ModeKey.of(sid, ev.channel());
-
-        // If this arrived during join, prefer the authoritative 324 summary and discard any buffered noise.
-        JoinModeBuffer removed = joinModeBuffers.remove(key);
-        if (removed != null) removed.cancelFlushTimer();
-
-        TargetRef out = pendingModeTargets.remove(key);
-        if (out == null) out = chan;
-
-        String summary = ModeSummary.describeCurrentChannelModes(ev.details());
-        if (summary != null && !summary.isBlank()) {
-          // If we already printed a join-burst summary, don't immediately duplicate it with 324.
-          if (out.equals(chan)) {
-            Long printedMs = joinModeSummaryPrintedMs.remove(key);
-            if (printedMs != null && (System.currentTimeMillis() - printedMs) < 4000L) {
-              return;
-            }
-          } else {
-            // Clean up any stale marker.
-            joinModeSummaryPrintedMs.remove(key);
-          }
-
-          ui.appendNotice(out, "(mode)", summary);
-        }
-
+        inboundModeEventHandler.handleChannelModesListed(sid, ev);
       }
 
       case IrcEvent.ChannelTopicUpdated ev -> {
-        flushJoinModesIfAny(sid, ev.channel(), false);
+        inboundModeEventHandler.onChannelTopicUpdated(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.setChannelTopic(chan, ev.topic());
       }
-
       case IrcEvent.PrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendChat(pm, ev.from(), ev.text());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
-      }
 
-      case IrcEvent.SoftPrivateMessage ev -> {
-        TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendSpoilerChat(pm, ev.from(), ev.text());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
-      }
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+        } else {
+          postTo(pm, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+        }
+      }
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendAction(pm, ev.from(), ev.action());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
-      }
 
-      case IrcEvent.SoftPrivateAction ev -> {
-        TargetRef pm = new TargetRef(sid, ev.from());
-        ensureTargetExists(pm);
-        ui.appendSpoilerChat(pm, ev.from(), "* " + ev.action());
-        if (!pm.equals(targetCoordinator.getActiveTarget())) ui.markUnread(pm);
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+        } else {
+          postTo(pm, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+        }
       }
       case IrcEvent.Notice ev -> {
-        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), false);
+        boolean isCtcp = parseCtcp(ev.text()) != null;
+        InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
+        boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
+        boolean suppress = d == InboundIgnorePolicy.Decision.HARD_DROP;
+        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), spoiler, suppress);
       }
+      case IrcEvent.CtcpRequestReceived ev -> {
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-	      case IrcEvent.CtcpRequestReceived ev -> {
-	        // Requested behavior: show inbound CTCP requests in the currently active chat target.
-	        // (If the active target is on a different server, fall back to status.)
-	        TargetRef active = targetCoordinator.getActiveTarget();
-	        TargetRef dest = (active != null && Objects.equals(active.serverId(), sid)) ? active : status;
-	        ensureTargetExists(dest);
+        // Requested behavior: show inbound CTCP requests in the currently active chat target.
+        // (If the active target is on a different server, fall back to status.)
+        TargetRef dest = resolveActiveOrStatus(sid, status);
 
-	        String rendered = "\u2190 " + ev.from() + " CTCP " + ev.command();
-	        if (ev.argument() != null && !ev.argument().isBlank()) rendered += " " + ev.argument();
-	        if (ev.channel() != null && !ev.channel().isBlank()) rendered += " in " + ev.channel();
-	        ui.appendStatus(dest, "(ctcp)", rendered);
-	        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
-	      }
+        StringBuilder sb = new StringBuilder()
+            .append("\u2190 ")
+            .append(ev.from())
+            .append(" CTCP ")
+            .append(ev.command());
+        if (ev.argument() != null && !ev.argument().isBlank()) sb.append(' ').append(ev.argument());
+        if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
+        final String rendered = sb.toString();
 
-	      case IrcEvent.SoftCtcpRequestReceived ev -> {
-	        TargetRef active = targetCoordinator.getActiveTarget();
-	        TargetRef dest = (active != null && Objects.equals(active.serverId(), sid)) ? active : status;
-	        ensureTargetExists(dest);
-
-	        String rendered = "\u2190 " + ev.from() + " CTCP " + ev.command();
-	        if (ev.argument() != null && !ev.argument().isBlank()) rendered += " " + ev.argument();
-	        if (ev.channel() != null && !ev.channel().isBlank()) rendered += " in " + ev.channel();
-	        ui.appendSpoilerChat(dest, "(ctcp)", rendered);
-	        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
-	      }
-
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          postTo(dest, true, d -> ui.appendSpoilerChat(d, "(ctcp)", rendered));
+        } else {
+          postTo(dest, true, d -> ui.appendStatus(d, "(ctcp)", rendered));
+        }
+      }
       case IrcEvent.AwayStatusChanged ev -> {
-        awayByServer.put(sid, ev.away());
-        if (!ev.away()) awayReasonByServer.remove(sid);
+        awayRoutingState.setAway(sid, ev.away());
+        if (!ev.away()) awayRoutingState.setLastReason(sid, null);
         TargetRef dest = null;
 
         // Prefer routing back to where the user initiated /away (if recent), otherwise
         // fall back to the currently active target on the same server.
-        RecentTarget rt = recentAwayTargets.get(sid);
-        if (rt != null && rt.target() != null) {
-          long ageMs = Math.abs(Duration.between(rt.at(), ev.at()).toMillis());
-          if (ageMs <= 15_000L && Objects.equals(rt.target().serverId(), sid)) {
-            dest = rt.target();
-          }
+        TargetRef origin = awayRoutingState.recentOriginIfFresh(sid, Duration.ofSeconds(15));
+        if (origin != null && Objects.equals(origin.serverId(), sid)) {
+          dest = origin;
         }
 
         if (dest == null) {
-          dest = targetCoordinator.getActiveTarget();
-          if (dest == null || !Objects.equals(dest.serverId(), sid)) dest = status;
+          dest = resolveActiveOrStatus(sid, status);
         }
-        ensureTargetExists(dest);
 
-        String rendered;
+        final String rendered;
         if (ev.away()) {
-          String reason = awayReasonByServer.get(sid);
-          rendered = "You are now marked as being away";
-          if (reason != null && !reason.isBlank()) rendered += " (Reason: " + reason + ")";
-          else rendered = ev.message();
+          String reason = awayRoutingState.getLastReason(sid);
+          if (reason != null && !reason.isBlank()) {
+            rendered = "You are now marked as being away (Reason: " + reason + ")";
+          } else {
+            rendered = ev.message();
+          }
         } else {
           rendered = "You are no longer marked as being away";
         }
 
-        ui.appendStatus(dest, "(away)", rendered);
-        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        TargetRef finalDest = dest;
+        postTo(finalDest, true, d -> ui.appendStatus(d, "(away)", rendered));
       }
-
-      case IrcEvent.SoftNotice ev -> {
-        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), true);
-      }
-
       case IrcEvent.WhoisResult ev -> {
-        TargetRef dest = pendingWhoisTargets.remove(new WhoisKey(sid, ev.nick()));
+        TargetRef dest = whoisRoutingState.remove(sid, ev.nick());
         if (dest == null) dest = status;
-        ensureTargetExists(dest);
-        ui.appendStatus(dest, "(whois)", "WHOIS for " + ev.nick());
-        for (String line : ev.lines()) ui.appendStatus(dest, "(whois)", line);
-        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        postTo(dest, true, d -> {
+          ui.appendStatus(d, "(whois)", "WHOIS for " + ev.nick());
+          for (String line : ev.lines()) ui.appendStatus(d, "(whois)", line);
+        });
       }
 
       case IrcEvent.UserJoinedChannel ev -> {
@@ -1409,7 +657,7 @@ public class IrcMediator {
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
 
         // Buffer the initial channel-flag modes so the join doesn't spam the view.
-        startJoinModeBuffer(sid, ev.channel());
+        inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
 
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
@@ -1417,7 +665,7 @@ public class IrcMediator {
       }
 
       case IrcEvent.NickListUpdated ev -> {
-        flushJoinModesIfAny(sid, ev.channel(), false);
+        inboundModeEventHandler.onNickListUpdated(sid, ev.channel());
         targetCoordinator.onNickListUpdated(sid, ev);
       }
 
@@ -1436,60 +684,6 @@ public class IrcMediator {
       default -> {
       }
     }
-  }
-
-
-  private void startJoinModeBuffer(String serverId, String channel) {
-    if (channel == null || channel.isBlank()) return;
-
-    ModeKey key = ModeKey.of(serverId, channel);
-
-    // Always overwrite: the latest join wins.
-    joinModeSummaryPrintedMs.remove(key);
-
-    joinModeBuffers.put(key, new JoinModeBuffer());
-
-    // Fallback flush: if we already collected any join-burst flags, print soon after join.
-    // IMPORTANT: do NOT discard an empty buffer here; some networks delay MODE for a couple seconds.
-    javax.swing.Timer t = new javax.swing.Timer(1500, e -> flushJoinModesIfAny(serverId, channel, false));
-    t.setRepeats(false);
-    t.start();
-
-    // Cleanup: if we never receive join-burst modes, don't keep the empty buffer forever.
-    javax.swing.Timer cleanup = new javax.swing.Timer(15000, e -> flushJoinModesIfAny(serverId, channel, true));
-    cleanup.setRepeats(false);
-    cleanup.start();
-  }
-
-  private void flushJoinModesIfAny(String serverId, String channel, boolean finalizeIfEmpty) {
-    if (channel == null || channel.isBlank()) return;
-
-    ModeKey key = ModeKey.of(serverId, channel);
-
-    JoinModeBuffer buf = joinModeBuffers.get(key);
-    if (buf == null) return;
-
-    // Don't finalize early when we haven't seen any join-burst modes yet (topic/NAMES can arrive first).
-    if (buf.isEmpty()) {
-      if (finalizeIfEmpty) {
-        joinModeBuffers.remove(key, buf);
-        buf.cancelFlushTimer();
-      }
-      return;
-    }
-
-    // We have something to print; finalize this join-burst.
-    joinModeBuffers.remove(key, buf);
-    buf.cancelFlushTimer();
-
-    TargetRef chan = new TargetRef(serverId, channel);
-    ensureTargetExists(chan);
-
-    String summary = buf.summarize();
-    if (summary == null || summary.isBlank()) return;
-
-    joinModeSummaryPrintedMs.put(key, System.currentTimeMillis());
-    ui.appendNotice(chan, "(mode)", summary);
   }
 
   private boolean containsSelfMention(String serverId, String from, String message) {
@@ -1554,6 +748,30 @@ public class IrcMediator {
     if (ch >= 'A' && ch <= 'Z') return true;
     if (ch >= 'a' && ch <= 'z') return true;
     return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
+  }
+
+  private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
+    postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
+  }
+
+  /** Prefer the active target for {@code sid}, otherwise fall back to {@code status}. */
+  private TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
+    TargetRef active = targetCoordinator.getActiveTarget();
+    if (active != null && Objects.equals(active.serverId(), sid)) return active;
+    return status != null ? status : safeStatusTarget();
+  }
+
+  private void postTo(TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
+    if (dest == null) dest = safeStatusTarget();
+    ensureTargetExists(dest);
+
+    if (write != null) {
+      write.accept(dest);
+    }
+
+    if (markUnreadIfNotActive && active != null && !dest.equals(active)) {
+      ui.markUnread(dest);
+    }
   }
 
   private void ensureTargetExists(TargetRef target) {

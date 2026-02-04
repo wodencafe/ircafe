@@ -6,12 +6,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
-/**
- * Best-effort Wikipedia article enrichment.
- *
- * <p>We call Wikipedia's REST Summary endpoint to get a longer extract than OG tags typically provide.
- * This keeps previews compact while still feeling "Wikipedia-aware".
- */
 final class WikipediaPreviewUtil {
 
   private WikipediaPreviewUtil() {}
@@ -115,11 +109,6 @@ final class WikipediaPreviewUtil {
     return t.isEmpty() ? null : t.toLowerCase(Locale.ROOT);
   }
 
-  /**
-   * Tiny JSON helper for Wikipedia's predictable summary payload.
-   *
-   * <p>This is intentionally minimal (no arrays, no numbers) because we only need a few string keys.
-   */
   static final class MiniJson {
 
     private MiniJson() {}

@@ -22,9 +22,6 @@ import javax.swing.SwingUtilities;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Owns dynamically-created pinned chat dockables.
- */
 @Component
 @Lazy
 public class ChatDockManager {

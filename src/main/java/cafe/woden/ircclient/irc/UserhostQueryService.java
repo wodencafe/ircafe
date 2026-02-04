@@ -27,16 +27,8 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 /**
  * Low-traffic hostmask resolution using the IRC USERHOST command.
  *
- * <p>This service is intentionally conservative:
- * <ul>
- *   <li>Batches up to 5 nicks per USERHOST command.</li>
- *   <li>Rate-limits per server (min interval between commands).</li>
- *   <li>Applies per-nick cooldown to avoid repeatedly querying the same users.</li>
- *   <li>Applies a max commands-per-minute cap to avoid accidental flooding.</li>
- * </ul>
- *
- * <p>It does not parse responses; parsing is handled by the IRC event layer (RPL 302),
- * which enriches the user cache with both hostmask and (best-effort) away state.
+ * <p>Batches and rate-limits requests (with per-nick cooldown) to avoid flooding.
+ * Responses are parsed by the IRC event layer (RPL 302) and used to enrich cached user info.
  */
 @Component
 public class UserhostQueryService {
@@ -73,18 +65,12 @@ public class UserhostQueryService {
     exec.shutdownNow();
   }
 
-  /** Clear all queued state for a server (e.g., on disconnect). */
   public void clearServer(String serverId) {
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
     stateByServer.remove(sid);
   }
 
-  /**
-   * Enqueue nicks for hostmask resolution via USERHOST.
-   *
-   * <p>Nicks are de-duplicated and applied with per-nick cooldown.
-   */
   public void enqueue(String serverId, Collection<String> nicks) {
     if (!config().enabled) return;
     String sid = norm(serverId);

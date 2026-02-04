@@ -33,16 +33,12 @@ import javax.swing.text.Position;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Loads recent log lines from the database and replays them into the transcript when a target is selected.
- *
- * <p>History replay deliberately does NOT trigger image embeds or link previews, and uses the persisted timestamps.
- */
+/** Loads recent log lines from the database and replays them into the transcript when a target is selected. */
 public final class DbChatHistoryService implements ChatHistoryService {
 
   private static final Logger log = LoggerFactory.getLogger(DbChatHistoryService.class);
 
-  /** Default page size for the in-transcript "Load older messages…" control. */
+  
   private static final int DEFAULT_PAGE_SIZE = 200;
 
   private static final DateTimeFormatter HISTORY_DIVIDER_DATE_FMT =
@@ -53,11 +49,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private final ChatTranscriptStore transcripts;
   private final UiSettingsBus settingsBus;
 
-  /** Oldest loaded cursor per target (ts,id). */
+  
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
-  /** Targets for which we have determined there are no more older rows. */
+  
   private final ConcurrentHashMap<TargetRef, Boolean> noMoreOlder = new ConcurrentHashMap<>();
-  /** Prevent concurrent loads per target. */
+  
   private final Set<TargetRef> loading = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
   private final ExecutorService exec = Executors.newSingleThreadExecutor(r -> {
@@ -294,7 +290,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
               transcripts.ensureLoadOlderMessagesControl(target);
               installLoadOlderHandler(target);
             } catch (Exception ignored) {
-              // ignore
             }
           }
 
@@ -312,7 +307,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
             try {
               transcripts.ensureHistoryDivider(target, pos, historyDividerLabel(newestHistoryTs));
             } catch (Exception ignored) {
-              // ignore
             }
           }
 
@@ -389,17 +383,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
     });
   }
 
-  /**
-   * Holds a scroll anchor based on the transcript viewport before we prepend history.
-   *
-   * <p>When older lines are inserted at the top, the transcript view grows upward, which would
-   * normally "jump" the user's viewport. We counteract that by anchoring on the first visible
-   * document position (a live {@link Position} that automatically shifts as text is inserted above
-   * it), then restoring the viewport so that same content remains at the same pixel offset.
-   *
-   * <p>If the user was already pinned at y=0, we do nothing so they can immediately see the newly
-   * loaded older messages.
-   */
   private static final class ScrollAnchor {
     private final JViewport viewport;
     private final Point beforePos;
@@ -496,7 +479,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
     }
   }
 
-  /** Insert a single history line at the given document offset (used for paging/prepend). */
+  
   private int insertLineFromHistoryAt(TargetRef target, int insertAt, LogLine line) {
     if (line == null) return insertAt;
     if (target == null) return insertAt;

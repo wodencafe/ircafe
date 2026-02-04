@@ -19,10 +19,6 @@ public class ChatImageEmbedder {
   private final ChatStyles styles;
   private final ImageFetchService fetch;
 
-  /**
-   * Per-document state (weakly keyed to avoid leaks): assigns insertion sequence numbers and
-   * coordinates GIF animation (only newest GIF animates per document).
-   */
   private final java.util.Map<StyledDocument, DocState> perDocState =
       java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 

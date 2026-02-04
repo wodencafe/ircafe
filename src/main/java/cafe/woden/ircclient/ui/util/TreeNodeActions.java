@@ -109,7 +109,6 @@ public final class TreeNodeActions<T> implements AutoCloseable {
     closeImpl();
   }
 
-  /** Refresh the enabled state of the exposed actions. */
   public void refreshEnabledState() {
     moveUpAction.setEnabled(canMoveUp());
     moveDownAction.setEnabled(canMoveDown());

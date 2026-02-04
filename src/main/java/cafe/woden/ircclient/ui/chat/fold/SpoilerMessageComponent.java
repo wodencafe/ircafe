@@ -14,13 +14,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-/**
- * A single-line "spoiler" placeholder for soft-ignored messages.
- *
- * <p>We intentionally keep this component to ONE visual line so it aligns with normal transcript
- * lines. When clicked, it triggers an in-place replacement in the transcript document (the component
- * is removed and replaced with the original rendered line).</p>
- */
+/** A single-line "spoiler" placeholder for soft-ignored messages. */
 public class SpoilerMessageComponent extends JPanel {
 
   // IMPORTANT: FlowLayout's hgap is also used as the *leading* left padding.
@@ -89,10 +83,6 @@ public class SpoilerMessageComponent extends JPanel {
     setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
   }
 
-  /**
-   * Apply the chat transcript font (typically the JTextPane font). The "from" prefix is styled as bold
-   * to match the regular transcript rendering.
-   */
   public void setTranscriptFont(Font base) {
     if (base == null) return;
     ts.setFont(base);
@@ -100,11 +90,7 @@ public class SpoilerMessageComponent extends JPanel {
     pill.setFont(base);
   }
 
-  /**
-   * JTextPane embeds Swing components using a baseline-aware view. JPanel has no baseline by default,
-   * which can create a subtle "north" padding above the component. Provide a stable baseline derived
-   * from our prefix/pill labels so the spoiler row aligns with normal text.
-   */
+  /** JTextPane embeds Swing components using a baseline-aware view. JPanel has no baseline by default, which can create a subtle "north" padding above the component. */
   @Override
   public int getBaseline(int width, int height) {
     Insets in = getInsets();
@@ -115,7 +101,6 @@ public class SpoilerMessageComponent extends JPanel {
       if (from.getFont() != null) ascent = Math.max(ascent, getFontMetrics(from.getFont()).getAscent());
       if (pill.getFont() != null) ascent = Math.max(ascent, getFontMetrics(pill.getFont()).getAscent());
     } catch (Exception ignored) {
-      // ignore
     }
 
     if (ascent <= 0) return -1;
@@ -126,7 +111,6 @@ public class SpoilerMessageComponent extends JPanel {
   public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
     return java.awt.Component.BaselineResizeBehavior.CONSTANT_ASCENT;
   }
-
 
   /** Set the reveal handler. Must be safe to call from the EDT. */
   public void setOnReveal(BooleanSupplier onReveal) {

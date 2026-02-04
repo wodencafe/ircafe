@@ -6,9 +6,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.plaf.basic.BasicTextUI;
 import javax.swing.text.View;
 
-/**
- * Utility methods for sizing and reflow of Swing components embedded inside a JTextPane StyledDocument.
- */
 final class EmbedHostLayoutUtil {
 
   private EmbedHostLayoutUtil() {}

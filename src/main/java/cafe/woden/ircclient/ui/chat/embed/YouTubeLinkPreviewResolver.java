@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui.chat.embed;
 import java.net.URI;
 import java.time.Duration;
 
-/** Best-effort resolver for YouTube video URLs using oEmbed plus optional yt-dlp enrichment. */
 final class YouTubeLinkPreviewResolver implements LinkPreviewResolver {
 
   @Override

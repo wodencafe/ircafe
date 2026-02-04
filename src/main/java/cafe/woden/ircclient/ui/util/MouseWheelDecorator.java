@@ -11,7 +11,7 @@ public final class MouseWheelDecorator {
 
   private MouseWheelDecorator() {}
 
-  /** Installs mousewheel support on a numeric JSpinner (and its child components). */
+  
   public static AutoCloseable decorateNumberSpinner(JSpinner spinner) {
     MouseWheelListener listener = new NumericSpinnerWheelListener(spinner);
 

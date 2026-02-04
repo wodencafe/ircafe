@@ -28,9 +28,6 @@ import javax.swing.text.StyleConstants;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Holds the StyledDocument transcripts for each (serverId, target) pair.
- */
 @Component
 @Lazy
 public class ChatTranscriptStore {
@@ -74,12 +71,6 @@ public class ChatTranscriptStore {
     return docs.get(ref);
   }
 
-  /**
-   * Ensure the in-transcript "Load older messages…" control exists at the very top of the transcript.
-   *
-   * <p>This is a purely-visual control embedded as a Swing component inside the document. Paging
-   * behavior (DB fetch + prepend) is handled elsewhere.
-   */
   public synchronized LoadOlderMessagesComponent ensureLoadOlderMessagesControl(TargetRef ref) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
@@ -103,7 +94,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     try {
@@ -117,7 +107,6 @@ public class ChatTranscriptStore {
         st.loadOlderControl = new LoadOlderControl(pos, comp);
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -125,12 +114,6 @@ public class ChatTranscriptStore {
     return comp;
   }
 
-  /**
-   * Ensure a single visual divider exists in the transcript to separate loaded history from live
-   * messages.
-   *
-   * <p>This is inserted as an embedded Swing component inside the document.
-   */
   public synchronized HistoryDividerComponent ensureHistoryDivider(TargetRef ref,
                                                                    int insertAt,
                                                                    String labelText) {
@@ -143,7 +126,6 @@ public class ChatTranscriptStore {
       try {
         st.historyDivider.component.setText(labelText);
       } catch (Exception ignored) {
-        // ignore
       }
       return st.historyDivider.component;
     }
@@ -163,7 +145,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     try {
@@ -177,7 +158,6 @@ public class ChatTranscriptStore {
         st.historyDivider = new HistoryDividerControl(p, comp);
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -185,10 +165,6 @@ public class ChatTranscriptStore {
     return comp;
   }
 
-  /**
-   * Returns the insertion offset immediately after the "Load older messages…" control line.
-   * If the control is not present, this returns 0.
-   */
   public synchronized int loadOlderInsertOffset(TargetRef ref) {
     if (ref == null) return 0;
     TranscriptState st = stateByTarget.get(ref);
@@ -201,7 +177,7 @@ public class ChatTranscriptStore {
     return Math.max(0, Math.min(off, doc.getLength()));
   }
 
-  /** Update the visual state of the load-older control (if present). */
+
   public synchronized void setLoadOlderMessagesControlState(TargetRef ref, LoadOlderMessagesComponent.State s) {
     if (ref == null) return;
     TranscriptState st = stateByTarget.get(ref);
@@ -209,11 +185,10 @@ public class ChatTranscriptStore {
     try {
       st.loadOlderControl.component.setState(s);
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
-  /** Set the click handler for the load-older control (if present). */
+
   public synchronized void setLoadOlderMessagesControlHandler(TargetRef ref, java.util.function.BooleanSupplier onLoad) {
     if (ref == null) return;
     TranscriptState st = stateByTarget.get(ref);
@@ -221,7 +196,6 @@ public class ChatTranscriptStore {
     try {
       st.loadOlderControl.component.setOnLoadRequested(onLoad);
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -241,11 +215,6 @@ public class ChatTranscriptStore {
     stateByTarget.remove(ref);
   }
 
-  /**
-   * Clear the in-memory transcript for a target.
-   *
-   * <p>This does not touch any persisted history store; it's strictly a UI reset.
-   */
   public synchronized void clearTarget(TargetRef ref) {
     if (ref == null) return;
     ensureTargetExists(ref);
@@ -256,17 +225,12 @@ public class ChatTranscriptStore {
     try {
       doc.remove(0, doc.getLength());
     } catch (Exception ignored) {
-      // ignore
     }
 
     // Reset per-target control state (presence folds, load-older controls, dividers, etc.).
     stateByTarget.put(ref, new TranscriptState());
   }
 
-  /**
-   * Append a foldable presence/system event (join/part/quit/nick) in a channel transcript.
-   *
-   */
   public synchronized void appendPresence(TargetRef ref, PresenceEvent event) {
     if (ref == null || event == null) return;
     ensureTargetExists(ref);
@@ -297,11 +261,9 @@ public class ChatTranscriptStore {
         renderer.insertRichText(doc, ref, event.displayText(), base);
         doc.insertString(doc.getLength(), "\n", styles.timestamp());
       } catch (Exception ignored2) {
-        // ignore
       }
       return;
     }
-
 
     // If the current run is already folded, just extend the component live.
     if (st.currentPresenceBlock != null && st.currentPresenceBlock.folded
@@ -356,13 +318,7 @@ public class ChatTranscriptStore {
     appendLineInternal(ref, from, text, fromStyle, msgStyle, true, null);
   }
 
-  /**
-   * Internal line appender that supports history replay.
-   *
-   * @param allowEmbeds if true, append inline image embeds and link previews (if enabled)
-   * @param epochMs if non-null, use this timestamp for the line (instead of "now")
-   */
-  private synchronized void appendLineInternal(TargetRef ref,
+    private synchronized void appendLineInternal(TargetRef ref,
                                   String from,
                                   String text,
                                   AttributeSet fromStyle,
@@ -424,7 +380,6 @@ public class ChatTranscriptStore {
         linkPreviews.appendPreviews(doc, text);
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -432,11 +387,6 @@ public class ChatTranscriptStore {
     appendChat(ref, from, text, false);
   }
 
-  /**
-   * Append a chat message line.
-   *
-   * @param outgoingLocalEcho true for locally-echoed lines you just sent
-   */
   public void appendChat(TargetRef ref, String from, String text, boolean outgoingLocalEcho) {
     // Chat message, start a new run
     breakPresenceRun(ref);
@@ -453,11 +403,6 @@ public class ChatTranscriptStore {
     appendLine(ref, from, text, fs, ms);
   }
 
-  /**
-   * Append a chat message line from history (no embeds; uses the persisted timestamp).
-   *
-   * <p>Note: this does not trigger image embeds or link previews when replaying history.
-   */
   public void appendChatFromHistory(TargetRef ref,
                                     String from,
                                     String text,
@@ -478,12 +423,6 @@ public class ChatTranscriptStore {
     appendLineInternal(ref, from, text, fs, ms, false, tsEpochMs);
   }
 
-  /**
-   * Insert a chat message line from history at a specific document offset.
-   *
-   *
-   * @return the next insertion offset after the inserted line
-   */
   public synchronized int insertChatFromHistoryAt(TargetRef ref,
                                                   int insertAt,
                                                   String from,
@@ -506,9 +445,7 @@ public class ChatTranscriptStore {
     return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, tsEpochMs);
   }
 
-  /**
-   * Prepend a chat message line from history (insert at offset 0).
-   */
+
   public synchronized int prependChatFromHistory(TargetRef ref,
                                                  String from,
                                                  String text,
@@ -517,11 +454,6 @@ public class ChatTranscriptStore {
     return insertChatFromHistoryAt(ref, 0, from, text, outgoingLocalEcho, tsEpochMs);
   }
 
-  /**
-   * Insert a CTCP ACTION (/me) line from history at a specific document offset.
-   *
-   * @return the next insertion offset after the inserted line
-   */
   public synchronized int insertActionFromHistoryAt(TargetRef ref,
                                                     int insertAt,
                                                     String from,
@@ -585,7 +517,6 @@ public class ChatTranscriptStore {
       doc.insertString(pos, "\n", styles.timestamp());
       pos += 1;
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -649,9 +580,7 @@ public class ChatTranscriptStore {
     return insertErrorFromHistoryAt(ref, 0, from, text, tsEpochMs);
   }
 
-  /**
-   * Insert a presence-style line from history (stored as display text) at a specific offset.
-   */
+
   public synchronized int insertPresenceFromHistoryAt(TargetRef ref,
                                                       int insertAt,
                                                       String displayText,
@@ -666,9 +595,7 @@ public class ChatTranscriptStore {
     return insertPresenceFromHistoryAt(ref, 0, displayText, tsEpochMs);
   }
 
-  /**
-   * Insert a spoiler (soft-ignored) message from history at a specific offset.
-   */
+
   public synchronized int insertSpoilerChatFromHistoryAt(TargetRef ref,
                                                          int insertAt,
                                                          String from,
@@ -721,7 +648,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     try {
@@ -731,7 +657,6 @@ public class ChatTranscriptStore {
         comp.setFromColor(nickColors.colorForNick(from, bg, fg));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
@@ -744,7 +669,6 @@ public class ChatTranscriptStore {
       doc.insertString(offFinal + 1, "\n", styles.timestamp());
       pos = offFinal + 2;
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -823,7 +747,6 @@ public class ChatTranscriptStore {
         // no-op
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     int delta = doc.getLength() - beforeLen;
@@ -863,7 +786,6 @@ public class ChatTranscriptStore {
         return p + 1;
       }
     } catch (Exception ignored) {
-      // ignore
     }
     return p;
   }
@@ -930,13 +852,6 @@ public class ChatTranscriptStore {
     }
   }
 
-  /**
-   * Append a message as a collapsible "spoiler" (click-to-reveal) block.
-   *
-   * <p>This is UI plumbing for the upcoming soft-ignore feature. It does not
-   * perform any matching or apply soft-ignore rules by itself; call-sites will
-   * decide when to use it.
-   */
   public void appendSpoilerChat(TargetRef ref, String from, String text) {
     breakPresenceRun(ref);
     ensureTargetExists(ref);
@@ -1000,7 +915,6 @@ public class ChatTranscriptStore {
         comp.setFromColor(nickColors.colorForNick(from, bg, fg));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
@@ -1020,15 +934,9 @@ public class ChatTranscriptStore {
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
-  /**
-   * Append a message as a collapsible "spoiler" (click-to-reveal) block from history.
-   *
-   * <p>This behaves like {@link #appendSpoilerChat(TargetRef, String, String)} but uses the persisted timestamp.
-   */
   public void appendSpoilerChatFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
     breakPresenceRun(ref);
     ensureTargetExists(ref);
@@ -1087,7 +995,6 @@ public class ChatTranscriptStore {
         comp.setFromColor(nickColors.colorForNick(from, bg, fg));
       }
     } catch (Exception ignored) {
-      // ignore
     }
 
     SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
@@ -1102,16 +1009,9 @@ public class ChatTranscriptStore {
 
       doc.insertString(doc.getLength(), "\n", styles.timestamp());
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
-  /**
-   * Replace a spoiler placeholder (embedded component) with the original message line in-place.
-   *
-   * <p>This avoids JTextPane embedded-component resizing issues by swapping the component out
-   * entirely once the user clicks reveal.
-   */
   private boolean revealSpoilerInPlace(TargetRef ref,
                                     StyledDocument doc,
                                     Position anchor,
@@ -1160,7 +1060,6 @@ public class ChatTranscriptStore {
           String next = doc.getText(off + 1, 1);
           if ("\n".equals(next)) removeLen = 2;
         } catch (Exception ignored2) {
-          // ignore
         }
       }
       doc.remove(off, removeLen);
@@ -1198,7 +1097,6 @@ public class ChatTranscriptStore {
           inner.remove(0, inner.getLength());
           inner.insertString(0, msg, styles.message());
         } catch (Exception ignored3) {
-          // ignore
         }
       }
 
@@ -1211,12 +1109,6 @@ public class ChatTranscriptStore {
   }
 }
 
-/**
- * Find the offset for a spoiler embedded component near a guessed offset.
- *
- * <p>This exists because transcript edits (like folding) can shift offsets after the spoiler was
- * inserted. We search a small window around the anchor to find the actual component char.</p>
- */
 private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessageComponent expected) {
   if (doc == null) return -1;
   int len = doc.getLength();
@@ -1234,16 +1126,10 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         if (expected == null || comp == expected) return i;
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
   return -1;
 }
-  /**
-   * Inserts styled content from src into dest at position pos.
-   *
-   * <p>This is used to reveal spoiler messages in-place while preserving URL/mention/channel metadata.</p>
-   */
   private static int insertStyled(StyledDocument src, StyledDocument dest, int pos) {
     if (src == null || dest == null) return pos;
     try {
@@ -1273,25 +1159,14 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     return pos;
   }
 
-    /**
-   * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
-   */
   public void appendAction(TargetRef ref, String from, String action) {
     appendAction(ref, from, action, false);
   }
 
-  /**
-   * Append a CTCP ACTION (/me) line. Rendered as: "* nick action".
-   *
-   * @param outgoingLocalEcho true for locally-echoed lines you just sent
-   */
   public void appendAction(TargetRef ref, String from, String action, boolean outgoingLocalEcho) {
     appendActionInternal(ref, from, action, outgoingLocalEcho, true, null);
   }
 
-  /**
-   * Append a CTCP ACTION (/me) line from history (no embeds; uses the persisted timestamp).
-   */
   public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
     appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs);
   }
@@ -1359,7 +1234,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         linkPreviews.appendPreviews(doc, a);
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
 
@@ -1396,11 +1270,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     appendLineInternal(ref, from, text, styles.error(), styles.error(), false, tsEpochMs);
   }
 
-  /**
-   * Presence-style line from history.
-   *
-   * <p>We store presence entries as display text (not the raw event), so we replay them as status lines.
-   */
   public void appendPresenceFromHistory(TargetRef ref, String displayText, long tsEpochMs) {
     breakPresenceRun(ref);
     appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, tsEpochMs);
@@ -1412,10 +1281,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     if (st != null) st.currentPresenceBlock = null;
   }
 
-  /**
-   * Swing acts weird about this so make sure it's on a new line
-   */
-  private void ensureAtLineStart(StyledDocument doc) {
+    private void ensureAtLineStart(StyledDocument doc) {
     if (doc == null) return;
     int len = doc.getLength();
     if (len <= 0) return;
@@ -1425,10 +1291,8 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         doc.insertString(len, "\n", styles.timestamp());
       }
     } catch (Exception ignored) {
-      // ignore
     }
   }
-
 
   private void foldBlock(StyledDocument doc, TargetRef ref, PresenceBlock block) {
     if (doc == null || block == null) return;
@@ -1461,7 +1325,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
             insertPos++;
           }
         } catch (Exception ignored2) {
-          // ignore
         }
       }
 
@@ -1520,11 +1383,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     }
   }
 
-  /**
-   * Restyle all open transcripts using the current {@link ChatStyles}.
-   *
-   * <p>This relies on {@link ChatStyles#ATTR_STYLE} markers that are attached to inserted segments.
-   */
   public synchronized void restyleAllDocuments() {
     for (StyledDocument doc : docs.values()) {
       restyle(doc);

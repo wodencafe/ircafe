@@ -31,12 +31,7 @@ import javax.swing.text.DefaultHighlighter;
 import javax.swing.text.Highlighter;
 import javax.swing.text.StyledDocument;
 
-/**
- * Adds an in-panel Find UI (Ctrl+F) to a chat transcript component.
- *
- * <p>This is intentionally implemented as an AutoCloseable decorator so it can be
- * installed/uninstalled cleanly without leaving keybindings or highlights behind.
- */
+/** Adds an in-panel Find UI (Ctrl+F) to a chat transcript component. */
 public final class ChatFindBarDecorator implements AutoCloseable {
 
   private static final String ACTION_FIND_TOGGLE = "cafe.woden.find.toggle";
@@ -149,9 +144,6 @@ public final class ChatFindBarDecorator implements AutoCloseable {
     }
   }
 
-  /**
-   * Simple in-panel find UI (hidden by default; opened via Ctrl+F).
-   */
   private final class FindBar extends JPanel {
 
     private final JTextField field = new JTextField(28);

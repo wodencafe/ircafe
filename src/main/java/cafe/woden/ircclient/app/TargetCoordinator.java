@@ -22,10 +22,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Coordinates target lifecycle (active target context, users panel, and per-target UI wiring).
- *
- */
 @Component
 @Lazy
 public class TargetCoordinator {
@@ -204,10 +200,6 @@ public class TargetCoordinator {
     }
   }
 
-  /**
-   * Passive away-state capture (currently via WHOIS): enrich cached roster so the user list can
-   * eventually show away markers.
-   */
   public void onUserAwayStateObserved(String serverId, IrcEvent.UserAwayStateObserved ev) {
     if (ev == null) return;
     String sid = Objects.toString(serverId, "").trim();
@@ -233,7 +225,6 @@ public class TargetCoordinator {
       ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
     }
   }
-
 
   public void refreshInputEnabledForActiveTarget() {
     if (activeTarget == null) {

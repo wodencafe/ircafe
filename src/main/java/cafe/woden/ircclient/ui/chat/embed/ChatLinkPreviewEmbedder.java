@@ -9,9 +9,6 @@ import javax.swing.text.StyledDocument;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Appends link preview cards beneath messages that contain URLs.
- */
 @Component
 @Lazy
 public class ChatLinkPreviewEmbedder {

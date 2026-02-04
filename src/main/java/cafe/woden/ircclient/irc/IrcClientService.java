@@ -32,13 +32,11 @@ public interface IrcClientService {
   /** Request WHOIS info for a nick (results will be emitted on {@link #events()}). */
   Completable whois(String serverId, String nick);
 
-
-  /** Leave a channel (PART). */
+  
   default Completable partChannel(String serverId, String channel) {
     return partChannel(serverId, channel, null);
   }
 
-  /** Leave a channel (PART) with an optional reason. */
   Completable partChannel(String serverId, String channel, String reason);
   Completable sendToChannel(String serverId, String channel, String message);
 
@@ -47,12 +45,6 @@ public interface IrcClientService {
   /** Send a raw IRC line (advanced). */
   Completable sendRaw(String serverId, String rawLine);
 
-  /**
-   * Send a CTCP ACTION (/me).
-   *
-   * <p>Implementations may choose to use a native library API (preferred) instead of manually
-   * wrapping the message in 0x01 delimiters.
-   */
   default Completable sendAction(String serverId, String target, String action) {
     String a = action == null ? "" : action;
     // Fallback implementation: manual CTCP wrapper.

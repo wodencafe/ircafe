@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Enumeration;
 import javax.swing.JMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -41,6 +42,7 @@ import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.Action;
 import javax.swing.SwingUtilities;
+import javax.swing.JViewport;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -54,10 +56,6 @@ import org.springframework.context.annotation.Lazy;
 
 import jakarta.annotation.PreDestroy;
 
-/**
- * Server/channel tree.
- *
- */
 @org.springframework.stereotype.Component
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable {
@@ -68,7 +66,6 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private AutoCloseable treeWheelSelectionDecorator;
 
-  /** Generic move/close behavior (used by the Window menu actions). */
   private final TreeNodeActions<TargetRef> nodeActions;
 
   private final FlowableProcessor<TargetRef> selections =
@@ -100,15 +97,8 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
-  /** Optional insertion line shown during middle-click drag reorder. */
   private volatile InsertionLine insertionLine;
 
-
-
-/**
- * Simple geometry for a horizontal insertion indicator shown while dragging.
- * Coordinates are in the tree's coordinate space.
- */
 private static final class InsertionLine {
   final int x1;
   final int x2;
@@ -135,7 +125,21 @@ private static final class InsertionLine {
       super.paintComponent(g);
       ServerTreeDockable.this.paintInsertionLine(g);
     }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+      // Avoid FlatLaf/renderer text truncation ("...") when the tree's width
+      // does not track the viewport width. Track width when the viewport is
+      // wider than the preferred content, otherwise allow horizontal scrolling.
+      // NOTE: Some docking containers may insert wrappers between the tree and the viewport.
+      // Use ancestor lookup rather than assuming the direct parent is the viewport.
+      JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+      if (vp == null) return false;
+      return vp.getWidth() > getPreferredSize().width;
+    }
   };
+
+  private final ServerTreeCellRenderer treeCellRenderer = new ServerTreeCellRenderer();
 
   private final JLabel statusLabel = new JLabel("Disconnected");
 
@@ -145,11 +149,9 @@ private static final class InsertionLine {
   private final Map<String, ServerNodes> servers = new HashMap<>();
   private final Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
 
-  /** Per-server connection state for context menu enabling/disabling. */
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
 
   private final ServerRegistry serverRegistry;
-
 
   public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
     super(new BorderLayout());
@@ -158,7 +160,6 @@ private static final class InsertionLine {
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
-
 
     // Header
     JPanel header = new JPanel();
@@ -182,7 +183,13 @@ private static final class InsertionLine {
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
 
-    tree.setCellRenderer(new ServerTreeCellRenderer());
+    tree.setCellRenderer(treeCellRenderer);
+
+    // After LAF/theme changes, JTree's layout cache can keep stale (often tiny)
+    // row widths from before UI defaults/fonts were fully applied. That can make
+    // FlatLaf render "..." even when there's plenty of room. Force a layout
+    // refresh after UI changes.
+    tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
 
     // Reuse generic helpers for move/close behavior.
     // This keeps all rules in one place (ServerTreeNodeReorderPolicy) and avoids duplicating tree math.
@@ -200,12 +207,12 @@ private static final class InsertionLine {
 
     JScrollPane scroll = new JScrollPane(tree);
     scroll.setPreferredSize(new Dimension(260, 400));
+    // Ensure long node labels can be fully viewed by allowing horizontal scrolling when needed.
+    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
     // Some docking layouts (and some Linux/WM combos) can intercept the wheel events.
     // Make sure the tree always scrolls when the pointer is over it.
     treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
     add(scroll, BorderLayout.CENTER);
-
-    // Build server roots + status nodes
     if (serverRegistry != null) {
       for (IrcProperties.Server s : serverRegistry.servers()) {
         if (s == null) continue;
@@ -219,8 +226,6 @@ private static final class InsertionLine {
                   err -> log.error("[ircafe] server registry stream error", err))
       );
     }
-
-    // Selection stream
     TreeSelectionListener tsl = e -> {
       if (suppressSelectionBroadcast) return;
       DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
@@ -231,8 +236,6 @@ private static final class InsertionLine {
       }
     };
     tree.addTreeSelectionListener(tsl);
-
-    // Right-click context menu
     MouseAdapter popupListener = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
@@ -253,9 +256,7 @@ private static final class InsertionLine {
         if (path == null) {
           return;
         }
-
-        // Select the node under the cursor so move/close actions reflect the clicked node,
-        // but suppress selection broadcast so the main chat dock does not switch.
+        // Select node under cursor, but suppress broadcast so the chat doesn't switch.
         suppressSelectionBroadcast = true;
         try {
           tree.setSelectionPath(path);
@@ -270,10 +271,7 @@ private static final class InsertionLine {
       }
     };
     tree.addMouseListener(popupListener);
-    // Middle-button drag-to-reorder for channels only.
-    //
-    // We intentionally avoid changing tree selection during drag so the active chat dock
-    // does not switch while the user is reordering the channel list.
+    // Middle-button drag-to-reorder; keep selection stable so chat doesn't switch.
     MouseAdapter middleDragReorder = new MouseAdapter() {
       private DefaultMutableTreeNode dragNode;
       private DefaultMutableTreeNode dragParent;
@@ -599,7 +597,6 @@ private static final class InsertionLine {
     return parent != null && isServerNode(parent);
   }
 
-  /** Minimum allowed insertion index for channel nodes under a server node. */
   private int minInsertIndex(DefaultMutableTreeNode serverNode) {
     if (serverNode == null) return 0;
 
@@ -613,7 +610,6 @@ private static final class InsertionLine {
     return 0;
   }
 
-  /** Maximum allowed insertion index for channel nodes under a server node. */
   private int maxInsertIndex(DefaultMutableTreeNode serverNode) {
     if (serverNode == null) return 0;
     int count = serverNode.getChildCount();
@@ -626,7 +622,6 @@ private static final class InsertionLine {
     }
     return count;
   }
-
 
 private void setInsertionLine(InsertionLine line) {
   InsertionLine old = this.insertionLine;
@@ -692,8 +687,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   return new InsertionLine(x1, y, x2);
 }
 
-
-
   private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
     if (node == null) return false;
     Object uo = node.getUserObject();
@@ -736,11 +729,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return openPinnedChatRequests.onBackpressureLatest();
   }
 
-  /**
-   * Actions for the Window menu (and any other UI that wants to expose node movement/closure).
-   *
-   * Enabled/disabled state updates automatically based on the tree selection.
-   */
   public Action moveNodeUpAction() {
     return nodeActions.moveUpAction();
   }
@@ -767,7 +755,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     statusLabel.setText(Objects.toString(text, ""));
   }
 
-  /** Enable/disable the global Connect/Disconnect buttons independently. */
+  
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
     connectBtn.setEnabled(connectEnabled);
     disconnectBtn.setEnabled(disconnectEnabled);
@@ -861,7 +849,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     nd.highlightUnread++;
     model.nodeChanged(node);
   }
-
 
   public void clearUnread(TargetRef ref) {
     DefaultMutableTreeNode node = leaves.get(ref);
@@ -963,6 +950,43 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return sn;
   }
 
+  private void refreshTreeLayoutAfterUiChange() {
+    try {
+      TreePath rootPath = new TreePath(root.getPath());
+      Set<TreePath> expanded = new HashSet<>();
+      Enumeration<TreePath> en = tree.getExpandedDescendants(rootPath);
+      if (en != null) {
+        while (en.hasMoreElements()) {
+          expanded.add(en.nextElement());
+        }
+      }
+
+      // Re-apply these to ensure UI defaults don't override the intended behavior.
+      tree.setRowHeight(0);
+      // Refresh renderer UI defaults (icons/colors) after LAF/theme switches.
+      try {
+        treeCellRenderer.updateUI();
+        treeCellRenderer.setOpenIcon(UIManager.getIcon("Tree.openIcon"));
+        treeCellRenderer.setClosedIcon(UIManager.getIcon("Tree.closedIcon"));
+        treeCellRenderer.setLeafIcon(UIManager.getIcon("Tree.leafIcon"));
+      } catch (Exception ignored) {
+      }
+      tree.setCellRenderer(treeCellRenderer);
+
+      // This triggers the UI/layout cache to recompute row sizes.
+      model.reload(root);
+
+      for (TreePath p : expanded) {
+        tree.expandPath(p);
+      }
+
+      tree.revalidate();
+      tree.repaint();
+    } catch (Exception ignored) {
+      // best-effort; UI should still remain functional
+    }
+  }
+
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
@@ -990,7 +1014,9 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     java.awt.Component c = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
 
-    Font base = UIManager.getFont("Tree.font");
+    // Prefer the tree's current font (tracks LAF changes and any runtime overrides).
+    Font base = tree.getFont();
+    if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
 
     if (value instanceof DefaultMutableTreeNode node) {

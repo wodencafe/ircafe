@@ -23,7 +23,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
-/** Dialog for adding/editing a single per-nick color override. */
 final class NickColorOverrideEntryDialog {
 
   record Entry(String nickLower, String hex) {
@@ -188,7 +187,6 @@ final class NickColorOverrideEntryDialog {
       return null;
     }
   }
-
 
   private static final class SimpleDocListener implements DocumentListener {
     private final Runnable onChange;

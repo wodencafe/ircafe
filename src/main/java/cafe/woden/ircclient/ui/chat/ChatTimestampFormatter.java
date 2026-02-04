@@ -11,9 +11,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Formats timestamps for chat/status lines.
- */
 @Component
 @Lazy
 public class ChatTimestampFormatter {

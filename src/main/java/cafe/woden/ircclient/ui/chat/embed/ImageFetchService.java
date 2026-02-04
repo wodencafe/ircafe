@@ -20,10 +20,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Fetches remote image bytes for inline transcript embeds.
- *
- */
 @Component
 @Lazy
 public class ImageFetchService {

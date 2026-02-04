@@ -4,7 +4,6 @@ import cafe.woden.ircclient.app.TargetRef;
 import java.util.List;
 import java.util.function.Consumer;
 
-/** No-op implementation used when logging is disabled. */
 public final class NoOpChatHistoryService implements ChatHistoryService {
   @Override
   public void onTargetSelected(TargetRef target) {

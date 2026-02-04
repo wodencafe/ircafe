@@ -13,24 +13,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Fetch and parse link preview metadata.
- *
- * <p>Implementation strategy:
- * <ul>
- *   <li>GET the URL (http/https) with a small timeout</li>
- *   <li>Read up to {@link #MAX_BYTES} of HTML</li>
- *   <li>Parse OpenGraph/Twitter tags with jsoup</li>
- *   <li>Cache results and de-dupe inflight fetches</li>
- * </ul>
- */
 @Component
 @Lazy
 public class LinkPreviewFetchService {
 
   private static final Logger log = LoggerFactory.getLogger(LinkPreviewFetchService.class);
 
-  /** Avoid downloading giant pages just to find OG tags. */
+  
   private static final int MAX_BYTES = 1024 * 1024; // 1 MiB
 
   private final PreviewHttp http = new PreviewHttp();

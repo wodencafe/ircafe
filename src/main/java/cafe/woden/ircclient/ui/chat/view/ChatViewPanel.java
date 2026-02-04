@@ -32,12 +32,7 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
 import javax.swing.text.Element;
- 
 
-/**
- * Reusable chat transcript view: shows a StyledDocument, clickable links,
- * and smart "follow tail" scrolling.
- */
 public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   protected final WrapTextPane chat = new WrapTextPane();
@@ -58,7 +53,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private final Cursor textCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
   private final Cursor handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
 
-
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
 
   protected ChatViewPanel(UiSettingsBus settingsBus) {
@@ -66,24 +60,14 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     this.settingsBus = settingsBus;
 
     chat.setEditable(false);
-
-    // We always want wrapping; never show a horizontal scrollbar in the transcript view.
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    // Force a re-layout on resize so wrapping recalculates immediately when the window shrinks/grows.
     decorators.add(ViewportWrapRevalidateDecorator.decorate(scroll.getViewport(), chat));
-
-    // Apply initial font if settings bus is present.
     if (this.settingsBus != null) {
       applySettings(this.settingsBus.get());
     } else {
       chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
     }
-
-    // In-panel find UI + keybindings (Ctrl+F).
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
-
-    // Right-click context menu: default Copy / Select All / Find Text; URL-specific options on links.
     decorators.add(ChatTranscriptContextMenuDecorator.decorate(
         chat,
         this::urlAt,
@@ -92,8 +76,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::openUrl,
         this::openFindBar
     ));
-
-    // Follow-tail scroll behavior is implemented as a decorator so the view stays lean.
     this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
         scroll,
         this::isFollowTail,
@@ -103,9 +85,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     ));
 
     add(scroll, BorderLayout.CENTER);
-
-
-    // Hover + click behavior extracted into a decorator.
     this.transcriptMouse = decorators.add(ChatTranscriptMouseDecorator.decorate(
         chat,
         handCursor,
@@ -136,16 +115,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     super.removeNotify();
   }
 
-  /**
-   * Shows the find bar and focuses it.
-   */
   public void openFindBar() {
     findBar.open();
   }
 
-  /**
-   * Toggles the find bar. If already visible, hide it.
-   */
   public void toggleFindBar() {
     findBar.toggle();
   }
@@ -169,9 +142,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     chat.repaint();
   }
 
-  /**
-   * Called on non-link clicks. Subclasses can use this to "activate" a target.
-   */
   protected void onTranscriptClicked() {
     // default: no-op
   }
@@ -215,8 +185,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     findBar.onDocumentSwapped();
   }
 
-
-
   protected void scrollToBottom() {
     followTailScroll.scrollToBottom();
   }
@@ -228,7 +196,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   protected void restoreScrollState() {
     followTailScroll.restoreScrollState();
   }
-
 
   /**
    * Close any installed decorators/listeners owned by this view.

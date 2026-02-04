@@ -10,12 +10,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Best-effort URL extraction tuned for chat messages.
- *
- * <p>We intentionally keep this permissive: the transcript already shows the raw URL text,
- * and we only add embeds if the URL <em>looks like</em> a direct image link.
- */
 final class ImageUrlExtractor {
 
   // Keep in sync with ChatRichTextRenderer.
@@ -64,9 +58,6 @@ final class ImageUrlExtractor {
     }
   }
 
-  /**
-   * Strip common trailing punctuation that tends to cling to URLs in chat.
-   */
   private static UrlParts splitUrlTrailingPunct(String raw) {
     if (raw == null || raw.isEmpty()) return new UrlParts("", "");
     int end = raw.length();

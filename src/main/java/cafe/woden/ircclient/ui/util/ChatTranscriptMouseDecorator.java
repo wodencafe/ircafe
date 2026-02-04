@@ -11,21 +11,7 @@ import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 
 /**
- * Adds consistent hover + click behavior to a chat transcript {@link JTextPane}.
- *
- * <p>Hover behavior:
- * <ul>
- *   <li>Sets hand cursor when the mouse is over a URL, channel token, or nick token</li>
- *   <li>Otherwise uses the provided text cursor</li>
- * </ul>
- *
- * <p>Click behavior (left click):
- * <ol>
- *   <li>If over URL: openUrl.accept(url)</li>
- *   <li>If over channel: onChannelClicked.test(channel) (if true, consume)</li>
- *   <li>If over nick: onNickClicked.test(nick) (if true, consume)</li>
- *   <li>Else: onTranscriptClicked.run()</li>
- * </ol>
+ * Adds hover/click behavior to a chat transcript {@link JTextPane} (hand cursor + token click handling).
  */
 public final class ChatTranscriptMouseDecorator implements AutoCloseable {
 

@@ -8,9 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.function.Consumer;
 
-/**
- * One dockable = one pinned target transcript.
- */
 public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoCloseable {
 
   private final TargetRef target;

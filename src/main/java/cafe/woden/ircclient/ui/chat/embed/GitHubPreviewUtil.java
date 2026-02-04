@@ -7,7 +7,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-/** Best-effort enrichment for common GitHub links using the public GitHub REST API (no auth). */
 final class GitHubPreviewUtil {
 
   private GitHubPreviewUtil() {}
@@ -313,7 +312,6 @@ final class GitHubPreviewUtil {
     return t.isEmpty() ? null : t.toLowerCase(Locale.ROOT);
   }
 
-  /** Tiny JSON scanner for predictable GitHub REST payloads. */
   static final class MiniJson {
     private MiniJson() {}
 

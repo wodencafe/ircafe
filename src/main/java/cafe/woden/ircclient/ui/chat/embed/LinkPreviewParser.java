@@ -5,9 +5,6 @@ import java.util.Objects;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-/**
- * Best-effort OpenGraph / Twitter Card parser.
- */
 final class LinkPreviewParser {
 
   private LinkPreviewParser() {}
@@ -86,7 +83,6 @@ final class LinkPreviewParser {
         return base.resolve(maybeUrl).toString();
       }
     } catch (Exception ignored) {
-      // ignore
     }
     return maybeUrl;
   }

@@ -13,7 +13,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-/** Best-effort resolver for IMDb title URLs by parsing embedded JSON-LD metadata. */
 final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
 
   private static final Logger log = LoggerFactory.getLogger(ImdbLinkPreviewResolver.class);

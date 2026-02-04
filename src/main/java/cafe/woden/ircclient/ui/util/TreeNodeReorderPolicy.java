@@ -2,13 +2,9 @@ package cafe.woden.ircclient.ui.util;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 
-/**
- * Policy interface for determining whether a tree node may be moved or closed,
- * and if moved, where it should be re-inserted.
- */
 public interface TreeNodeReorderPolicy {
 
-  /** A planned move for a node within its current parent. */
+  
   record MovePlan(DefaultMutableTreeNode parent, int fromIndex, int toIndex) {}
 
   /**
@@ -20,6 +16,5 @@ public interface TreeNodeReorderPolicy {
    */
   MovePlan planMove(DefaultMutableTreeNode node, int dir);
 
-  /** Whether the given node may be closed (removed / closed in UI). */
   boolean canClose(DefaultMutableTreeNode node);
 }

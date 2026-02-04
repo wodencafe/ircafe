@@ -6,19 +6,14 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Per-transcript coordinator that enforces: only the most-recent animated GIF in a chat animates.
- *
- * <p>"Most recent" is based on insertion order into the transcript (not network load completion),
- * so late-arriving older GIF decodes will not steal the animation slot from a newer GIF.
+ * Per-transcript coordinator to ensure only the most-recent GIF animates (based on transcript insertion order).
  *
  * <p>All calls are expected to happen on the Swing EDT.
  */
 final class GifAnimationCoordinator {
 
-  /** Confirmed animated GIF components, keyed by per-doc insertion sequence. */
   private final NavigableMap<Long, WeakReference<ChatImageComponent>> gifsBySeq = new TreeMap<>();
 
-  /** "Likely GIF" placeholders (e.g., .gif URLs) so we can stop older animations immediately. */
   private final TreeSet<Long> hintedGifSeqs = new TreeSet<>();
 
   private long activeSeq = -1;

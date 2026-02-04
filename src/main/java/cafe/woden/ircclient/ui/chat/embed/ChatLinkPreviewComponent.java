@@ -27,9 +27,6 @@ import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Inline link preview component inserted into the chat transcript StyledDocument.
- */
 final class ChatLinkPreviewComponent extends JPanel {
 
   private static final Logger log = LoggerFactory.getLogger(ChatLinkPreviewComponent.class);
@@ -94,7 +91,6 @@ final class ChatLinkPreviewComponent extends JPanel {
   private JSeparator imdbSeparator;
   private JTextArea imdbSummary;
   private String imdbCreditsText;
-
 
   private String fullDescText;
 
@@ -420,7 +416,7 @@ final class ChatLinkPreviewComponent extends JPanel {
         );
   }
 
-  /** If a thumbnail fails to load/decode, don't reserve empty space for it. */
+  
   private void dropThumbnailPlaceholder() {
     try {
       if (body == null || thumbHost == null) return;
@@ -685,7 +681,6 @@ final class ChatLinkPreviewComponent extends JPanel {
       return u;
     }
   }
-
 
   private void applyBordersForState() {
     Insets outer = collapsed ? OUTER_PAD_COLLAPSED : OUTER_PAD_EXPANDED;

@@ -20,11 +20,6 @@ import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
-/**
- * Persists runtime state (nick + auto-join channels + server list edits) to a YAML file.
- *
- * <p>This file is also imported via spring.config.import (optional) so it overrides defaults on the next run.
- */
 @Component
 public class RuntimeConfigStore {
 
@@ -54,25 +49,9 @@ public class RuntimeConfigStore {
     ensureFileExistsWithServers();
   }
 
-  /**
-   * Returns the resolved runtime config YAML path.
-   *
-   * <p>Used by optional subsystems (e.g. chat logging) that want to store
-   * their own files next to the runtime config.
-   */
   public Path runtimeConfigPath() {
     return file;
   }
-
-  /**
-   * Ensure the file exists.
-   *
-   * <p>Important behavior:
-   * <ul>
-   *   <li>If {@code irc.servers} is missing, we seed it from defaults.</li>
-   *   <li>If {@code irc.servers} exists (even empty), we treat it as authoritative and do NOT re-add defaults.</li>
-   * </ul>
-   */
   public synchronized void ensureFileExistsWithServers() {
     try {
       if (file.toString().isBlank()) return;
@@ -104,7 +83,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Overwrite the full {@code irc.servers} list (used by the servers UI / registry). */
   public synchronized void writeServers(List<IrcProperties.Server> servers) {
     try {
       if (file.toString().isBlank()) return;
@@ -177,7 +155,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether IRCafe should auto-connect on startup (stored under ircafe.ui.autoConnectOnStart). */
   public synchronized void rememberAutoConnectOnStart(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -194,10 +171,8 @@ public class RuntimeConfigStore {
     }
   }
 
-
   // --- Chat logging / history persistence (ircafe.logging.*) ---
 
-  /** Persist the master chat logging toggle (stored under ircafe.logging.enabled). */
   public synchronized void rememberChatLoggingEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -214,7 +189,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether soft-ignored (spoiler) lines should be logged (stored under ircafe.logging.logSoftIgnoredLines). */
   public synchronized void rememberChatLoggingLogSoftIgnoredLines(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -231,7 +205,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist the HSQLDB file base name (stored under ircafe.logging.hsqldb.fileBaseName). */
   public synchronized void rememberChatLoggingDbFileBaseName(String fileBaseName) {
     try {
       if (file.toString().isBlank()) return;
@@ -252,7 +225,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether the HSQLDB files should live next to the runtime YAML (stored under ircafe.logging.hsqldb.nextToRuntimeConfig). */
   public synchronized void rememberChatLoggingDbNextToRuntimeConfig(boolean nextToRuntimeConfig) {
     try {
       if (file.toString().isBlank()) return;
@@ -270,8 +242,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
-  /** Persist whether inline image embeds are enabled (stored under ircafe.ui.imageEmbedsEnabled). */
   public synchronized void rememberImageEmbedsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -290,7 +260,6 @@ public class RuntimeConfigStore {
 
   
 
-  /** Persist whether inline image embeds should start collapsed (stored under ircafe.ui.imageEmbedsCollapsedByDefault). */
   public synchronized void rememberImageEmbedsCollapsedByDefault(boolean collapsed) {
     try {
       if (file.toString().isBlank()) return;
@@ -307,8 +276,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
-  /** Persist max width cap for inline image embeds (stored under ircafe.ui.imageEmbedsMaxWidthPx). */
   public synchronized void rememberImageEmbedsMaxWidthPx(int maxWidthPx) {
     try {
       if (file.toString().isBlank()) return;
@@ -325,8 +292,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
-  /** Persist max height cap for inline image embeds (stored under ircafe.ui.imageEmbedsMaxHeightPx). */
   public synchronized void rememberImageEmbedsMaxHeightPx(int maxHeightPx) {
     try {
       if (file.toString().isBlank()) return;
@@ -343,7 +308,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether animated GIFs should play for inline image embeds (stored under ircafe.ui.imageEmbedsAnimateGifs). */
   public synchronized void rememberImageEmbedsAnimateGifs(boolean animate) {
     try {
       if (file.toString().isBlank()) return;
@@ -360,9 +324,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
-
-  /** Persist whether link previews are enabled (stored under ircafe.ui.linkPreviewsEnabled). */
   public synchronized void rememberLinkPreviewsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -381,7 +342,6 @@ public class RuntimeConfigStore {
 
   
 
-  /** Persist whether link previews should start collapsed (stored under ircafe.ui.linkPreviewsCollapsedByDefault). */
   public synchronized void rememberLinkPreviewsCollapsedByDefault(boolean collapsed) {
     try {
       if (file.toString().isBlank()) return;
@@ -398,7 +358,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist whether chat messages should be prefixed with timestamps (stored under ircafe.ui.chatMessageTimestampsEnabled). */
   public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -415,10 +374,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /**
-   * Persist how many history lines should be prefetched into a transcript when selecting a target
-   * (stored under ircafe.ui.chatHistoryInitialLoadLines).
-   */
   public synchronized void rememberChatHistoryInitialLoadLines(int lines) {
     try {
       if (file.toString().isBlank()) return;
@@ -435,10 +390,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /**
-   * Persist the paging size for "Load older messages…" inside the transcript
-   * (stored under ircafe.ui.chatHistoryPageSize).
-   */
   public synchronized void rememberChatHistoryPageSize(int pageSize) {
     try {
       if (file.toString().isBlank()) return;
@@ -455,9 +406,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
-
-  /** Persist whether outgoing messages should use a custom color (stored under ircafe.ui.clientLineColorEnabled). */
   public synchronized void rememberClientLineColorEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -474,7 +422,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist the outgoing message color (stored under ircafe.ui.clientLineColor). */
   public synchronized void rememberClientLineColor(String hex) {
     try {
       if (file.toString().isBlank()) return;
@@ -491,9 +438,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  // ---------------- hostmask discovery ----------------
-
-  /** Persist whether USERHOST-based hostmask discovery is enabled (stored under {@code ircafe.ui.hostmaskDiscovery.userhostEnabled}). */
   public synchronized void rememberUserhostDiscoveryEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -511,7 +455,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist the minimum interval (seconds) between USERHOST commands (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMinIntervalSeconds}). */
   public synchronized void rememberUserhostMinIntervalSeconds(int seconds) {
     try {
       if (file.toString().isBlank()) return;
@@ -529,7 +472,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist the max USERHOST commands per minute (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMaxCommandsPerMinute}). */
   public synchronized void rememberUserhostMaxCommandsPerMinute(int maxPerMinute) {
     try {
       if (file.toString().isBlank()) return;
@@ -547,7 +489,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist the per-nick cooldown (minutes) before re-querying USERHOST (stored under {@code ircafe.ui.hostmaskDiscovery.userhostNickCooldownMinutes}). */
   public synchronized void rememberUserhostNickCooldownMinutes(int minutes) {
     try {
       if (file.toString().isBlank()) return;
@@ -565,7 +506,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persist the max nicks to include per USERHOST command (stored under {@code ircafe.ui.hostmaskDiscovery.userhostMaxNicksPerCommand}). */
   public synchronized void rememberUserhostMaxNicksPerCommand(int maxNicks) {
     try {
       if (file.toString().isBlank()) return;
@@ -584,9 +524,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  // ---------------- ignore masks ----------------
-
-  /** Persist an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
   public synchronized void rememberIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -615,7 +552,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Remove an ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.masks}). */
   public synchronized void forgetIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -660,14 +596,6 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not remove ignore mask from '{}'", file, e);
     }
   }
-
-  // ---------------- soft ignore masks ----------------
-
-  /**
-   * Persist a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}).
-   *
-   * <p>Soft ignores are reserved for a future feature; they are tracked/persisted but not yet applied.
-   */
   public synchronized void rememberSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -696,7 +624,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Remove a soft-ignore mask for a server (stored under {@code ircafe.ignore.servers.<id>.softMasks}). */
   public synchronized void forgetSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -742,8 +669,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
-  /** Persist whether hard ignores should also apply to CTCP (stored under ircafe.ignore.hardIgnoreIncludesCtcp). */
   public synchronized void rememberHardIgnoreIncludesCtcp(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -759,11 +684,6 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist hard-ignore CTCP setting to '{}'", file, e);
     }
   }
-
-
-  /**
-   * Persist per-nick color overrides (stored under {@code ircafe.ui.nickColorOverrides}).
-   */
   public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {
     try {
       if (file.toString().isBlank()) return;
@@ -790,8 +710,6 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist nick color overrides to '{}'", file, e);
     }
   }
-
-  // ---------------- internals ----------------
 
   private interface ServerUpdater {
     void update(Map<String, Object> serverMap);

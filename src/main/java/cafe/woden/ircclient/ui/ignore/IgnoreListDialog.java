@@ -26,9 +26,6 @@ import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * UI for managing per-server ignore masks and soft-ignore masks.
- */
 @Component
 @Lazy
 public class IgnoreListDialog {
