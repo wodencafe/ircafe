@@ -9,6 +9,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
+import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
@@ -51,6 +52,7 @@ public class IrcMediator {
 
   // Inbound MODE-related event handler (join-burst buffering + MODE pretty printing + 324 routing).
   private final InboundModeEventHandler inboundModeEventHandler;
+  private final OutboundModeCommandService outboundModeCommandService;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -79,7 +81,8 @@ public class IrcMediator {
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
       AwayRoutingState awayRoutingState,
-      InboundModeEventHandler inboundModeEventHandler
+      InboundModeEventHandler inboundModeEventHandler,
+      OutboundModeCommandService outboundModeCommandService
   ) {
     this.irc = irc;
     this.ui = ui;
@@ -94,6 +97,7 @@ public class IrcMediator {
     this.modeRoutingState = modeRoutingState;
     this.awayRoutingState = awayRoutingState;
     this.inboundModeEventHandler = inboundModeEventHandler;
+    this.outboundModeCommandService = outboundModeCommandService;
   }
 
   public void start() {
@@ -362,13 +366,13 @@ public class IrcMediator {
       case ParsedInput.Query cmd -> handleQuery(cmd.nick());
       case ParsedInput.Msg cmd -> handleMsg(cmd.nick(), cmd.body());
       case ParsedInput.Me cmd -> handleMe(cmd.action());
-      case ParsedInput.Mode cmd -> handleMode(cmd.first(), cmd.rest());
-      case ParsedInput.Op cmd -> handleOp(cmd.channel(), cmd.nicks());
-      case ParsedInput.Deop cmd -> handleDeop(cmd.channel(), cmd.nicks());
-      case ParsedInput.Voice cmd -> handleVoice(cmd.channel(), cmd.nicks());
-      case ParsedInput.Devoice cmd -> handleDevoice(cmd.channel(), cmd.nicks());
-      case ParsedInput.Ban cmd -> handleBan(cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Unban cmd -> handleUnban(cmd.channel(), cmd.masksOrNicks());
+      case ParsedInput.Mode cmd -> outboundModeCommandService.handleMode(disposables, cmd.first(), cmd.rest());
+      case ParsedInput.Op cmd -> outboundModeCommandService.handleOp(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Deop cmd -> outboundModeCommandService.handleDeop(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Voice cmd -> outboundModeCommandService.handleVoice(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Devoice cmd -> outboundModeCommandService.handleDevoice(disposables, cmd.channel(), cmd.nicks());
+      case ParsedInput.Ban cmd -> outboundModeCommandService.handleBan(disposables, cmd.channel(), cmd.masksOrNicks());
+      case ParsedInput.Unban cmd -> outboundModeCommandService.handleUnban(disposables, cmd.channel(), cmd.masksOrNicks());
       case ParsedInput.Ignore cmd -> handleIgnore(cmd.maskOrNick());
       case ParsedInput.Unignore cmd -> handleUnignore(cmd.maskOrNick());
       case ParsedInput.IgnoreList cmd -> handleIgnoreList();
@@ -635,186 +639,7 @@ public class IrcMediator {
   }
 
 
-  private void handleMode(String first, String rest) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
-      return;
-    }
-
-    String f = first == null ? "" : first.trim();
-    String r = rest == null ? "" : rest.trim();
-
-    // Determine target channel + mode string.
-    String channel;
-    String modeSpec;
-
-    if (f.startsWith("#") || f.startsWith("&")) {
-      channel = f;
-      modeSpec = r;
-    } else if (at.isChannel()) {
-      channel = at.target();
-      modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
-    } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: /mode <#channel> [modes] [args...]");
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can use /mode +o nick");
-      return;
-    }
-
-    if (channel == null || channel.isBlank()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: /mode <#channel> [modes] [args...]");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String line = "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
-    TargetRef out = at.isChannel() ? new TargetRef(at.serverId(), channel) : new TargetRef(at.serverId(), "status");
-    if (modeSpec == null || modeSpec.isBlank()) {
-      modeRoutingState.putPendingModeTarget(at.serverId(), channel, out);
-    }
-    ensureTargetExists(out);
-    ui.appendStatus(out, "(mode)", "→ " + line);
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), line).subscribe(
-            () -> {},
-            err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
-        )
-    );
-  }
-
-  // --- CTCP slash commands --------------------------------------------------
-
-
-  private void handleOp(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "+o", "Usage: /op [#channel] <nick> [nick...]");
-  }
-
-  private void handleDeop(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "-o", "Usage: /deop [#channel] <nick> [nick...]");
-  }
-
-  private void handleVoice(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "+v", "Usage: /voice [#channel] <nick> [nick...]");
-  }
-
-  private void handleDevoice(String channel, java.util.List<String> nicks) {
-    handleSimpleNickMode(channel, nicks, "-v", "Usage: /devoice [#channel] <nick> [nick...]");
-  }
-
-  private void handleBan(String channel, java.util.List<String> masksOrNicks) {
-    handleBanMode(channel, masksOrNicks, true);
-  }
-
-  private void handleUnban(String channel, java.util.List<String> masksOrNicks) {
-    handleBanMode(channel, masksOrNicks, false);
-  }
-
-  private void handleSimpleNickMode(String channel, java.util.List<String> nicks, String mode, String usage) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
-      return;
-    }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String ch = resolveChannelOrNull(at, channel);
-    if (ch == null) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", usage);
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (nicks == null || nicks.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", usage);
-      return;
-    }
-
-    TargetRef out = new TargetRef(at.serverId(), ch);
-    ensureTargetExists(out);
-
-    for (String nick : nicks) {
-      String n = nick == null ? "" : nick.trim();
-      if (n.isEmpty()) continue;
-
-      String line = "MODE " + ch + " " + mode + " " + n;
-      ui.appendStatus(out, "(mode)", "→ " + line);
-
-      disposables.add(
-          irc.sendRaw(at.serverId(), line).subscribe(
-              () -> {},
-              err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
-          )
-      );
-    }
-  }
-
-  private void handleBanMode(String channel, java.util.List<String> masksOrNicks, boolean add) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(mode)", "Select a server first.");
-      return;
-    }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    String ch = resolveChannelOrNull(at, channel);
-    if (ch == null) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (masksOrNicks == null || masksOrNicks.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      return;
-    }
-
-    TargetRef out = new TargetRef(at.serverId(), ch);
-    ensureTargetExists(out);
-
-    String mode = add ? "+b" : "-b";
-
-    for (String item : masksOrNicks) {
-      String raw = item == null ? "" : item.trim();
-      if (raw.isEmpty()) continue;
-
-      String mask = looksLikeMask(raw) ? raw : (raw + "!*@*");
-
-      String line = "MODE " + ch + " " + mode + " " + mask;
-      ui.appendStatus(out, "(mode)", "→ " + line);
-
-      disposables.add(
-          irc.sendRaw(at.serverId(), line).subscribe(
-              () -> {},
-              err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))
-          )
-      );
-    }
-  }
-
-  private static boolean looksLikeMask(String s) {
-    if (s == null) return false;
-    return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
-  }
-
-  private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
-    String ch = explicitChannel == null ? "" : explicitChannel.trim();
-    if (!ch.isEmpty()) return ch;
-    if (active != null && active.isChannel()) return active.target();
-    return null;
-  }
-
-
+  // --- MODE slash commands extracted to OutboundModeCommandService --------------------
 
   private void handleIgnore(String maskOrNick) {
     TargetRef at = targetCoordinator.getActiveTarget();

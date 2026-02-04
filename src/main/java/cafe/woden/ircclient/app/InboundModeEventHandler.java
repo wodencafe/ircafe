@@ -54,7 +54,7 @@ public class InboundModeEventHandler {
     TargetRef chan = new TargetRef(serverId, ev.channel());
     ui.ensureTargetExists(chan);
 
-    ModeSummary.Details details = ev.details();
+    String details = ev.details();
 
     // Suppress the initial burst of simple channel-flag modes right after joining.
     if (joinModeBurstService.handleChannelModeChanged(serverId, ev.channel(), details)) {
@@ -62,7 +62,7 @@ public class InboundModeEventHandler {
     }
 
     // Make MODE output human-friendly (e.g. +b mask -> "ban added").
-    String byRaw = ev.by().orElse(null);
+    String byRaw = ev.by();
     for (String line : modeFormattingService.prettyModeChange(byRaw, ev.channel(), details)) {
       ui.appendNotice(chan, "(mode)", line);
     }

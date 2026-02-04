@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Enumeration;
 import javax.swing.JMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -41,6 +42,7 @@ import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.Action;
 import javax.swing.SwingUtilities;
+import javax.swing.JViewport;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -135,7 +137,21 @@ private static final class InsertionLine {
       super.paintComponent(g);
       ServerTreeDockable.this.paintInsertionLine(g);
     }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+      // Avoid FlatLaf/renderer text truncation ("...") when the tree's width
+      // does not track the viewport width. Track width when the viewport is
+      // wider than the preferred content, otherwise allow horizontal scrolling.
+      // NOTE: Some docking containers may insert wrappers between the tree and the viewport.
+      // Use ancestor lookup rather than assuming the direct parent is the viewport.
+      JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+      if (vp == null) return false;
+      return vp.getWidth() > getPreferredSize().width;
+    }
   };
+
+  private final ServerTreeCellRenderer treeCellRenderer = new ServerTreeCellRenderer();
 
   private final JLabel statusLabel = new JLabel("Disconnected");
 
@@ -182,7 +198,13 @@ private static final class InsertionLine {
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
 
-    tree.setCellRenderer(new ServerTreeCellRenderer());
+    tree.setCellRenderer(treeCellRenderer);
+
+    // After LAF/theme changes, JTree's layout cache can keep stale (often tiny)
+    // row widths from before UI defaults/fonts were fully applied. That can make
+    // FlatLaf render "..." even when there's plenty of room. Force a layout
+    // refresh after UI changes.
+    tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
 
     // Reuse generic helpers for move/close behavior.
     // This keeps all rules in one place (ServerTreeNodeReorderPolicy) and avoids duplicating tree math.
@@ -200,6 +222,8 @@ private static final class InsertionLine {
 
     JScrollPane scroll = new JScrollPane(tree);
     scroll.setPreferredSize(new Dimension(260, 400));
+    // Ensure long node labels can be fully viewed by allowing horizontal scrolling when needed.
+    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
     // Some docking layouts (and some Linux/WM combos) can intercept the wheel events.
     // Make sure the tree always scrolls when the pointer is over it.
     treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
@@ -963,6 +987,51 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return sn;
   }
 
+  /**
+   * Forces the tree's internal layout cache to recompute row bounds after a
+   * Look & Feel / theme switch.
+   *
+   * <p>When Swing switches LAF, JTree's UI and layout cache can keep stale row
+   * widths computed before fonts/UI defaults were fully applied, which in FlatLaf
+   * can show up as renderer text being truncated with "..." despite plenty of space.
+   */
+  private void refreshTreeLayoutAfterUiChange() {
+    try {
+      TreePath rootPath = new TreePath(root.getPath());
+      Set<TreePath> expanded = new HashSet<>();
+      Enumeration<TreePath> en = tree.getExpandedDescendants(rootPath);
+      if (en != null) {
+        while (en.hasMoreElements()) {
+          expanded.add(en.nextElement());
+        }
+      }
+
+      // Re-apply these to ensure UI defaults don't override the intended behavior.
+      tree.setRowHeight(0);
+      // Refresh renderer UI defaults (icons/colors) after LAF/theme switches.
+      try {
+        treeCellRenderer.updateUI();
+        treeCellRenderer.setOpenIcon(UIManager.getIcon("Tree.openIcon"));
+        treeCellRenderer.setClosedIcon(UIManager.getIcon("Tree.closedIcon"));
+        treeCellRenderer.setLeafIcon(UIManager.getIcon("Tree.leafIcon"));
+      } catch (Exception ignored) {
+      }
+      tree.setCellRenderer(treeCellRenderer);
+
+      // This triggers the UI/layout cache to recompute row sizes.
+      model.reload(root);
+
+      for (TreePath p : expanded) {
+        tree.expandPath(p);
+      }
+
+      tree.revalidate();
+      tree.repaint();
+    } catch (Exception ignored) {
+      // best-effort; UI should still remain functional
+    }
+  }
+
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
@@ -990,7 +1059,9 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     java.awt.Component c = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
 
-    Font base = UIManager.getFont("Tree.font");
+    // Prefer the tree's current font (tracks LAF changes and any runtime overrides).
+    Font base = tree.getFont();
+    if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
 
     if (value instanceof DefaultMutableTreeNode node) {
