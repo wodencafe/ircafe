@@ -79,8 +79,8 @@ ircafe:
     # Docking/layout defaults (best-effort "first open" sizes). After you drag split dividers,
     # those sizes are preserved by IRCafe's split-pane lock logic.
     layout:
-      serverDockWidthPx: 280
-      userDockWidthPx: 240
+      serverDockWidthPx: 240
+      userDockWidthPx: 140
       inputDockHeightPx: 140
     # Optional: custom palette (hex strings). If omitted, uses built-in 32-color palette.
     # nickColors:
