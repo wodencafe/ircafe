@@ -26,6 +26,7 @@ public sealed interface IrcEvent permits
     IrcEvent.UserQuitChannel,
     IrcEvent.UserNickChangedChannel,
     IrcEvent.JoinedChannel,
+    IrcEvent.JoinFailed,
     IrcEvent.NickListUpdated,
     IrcEvent.UserHostmaskObserved,
     IrcEvent.UserAwayStateObserved,
@@ -85,6 +86,15 @@ public sealed interface IrcEvent permits
   record UserNickChangedChannel(Instant at, String channel, String oldNick, String newNick) implements IrcEvent {}
 
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
+
+  /**
+   * Server rejected a join attempt (e.g. +r requires NickServ auth).
+   *
+   * <p>Most servers respond to /JOIN failures using numerics (e.g. 471-477).
+   * We surface those as an event so the UI can route the message back to where
+   * the user initiated the join (and also to the server status window).
+   */
+  record JoinFailed(Instant at, String channel, int code, String message) implements IrcEvent {}
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
 
   record NickInfo(String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) { // prefix like "@", "+", "~", etc.

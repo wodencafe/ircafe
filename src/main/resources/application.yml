@@ -154,6 +154,10 @@ irc:
         username: "${IRCAFE_SASL_USERNAME:}"
         password: "${IRCAFE_SASL_PASSWORD:}"
         mechanism: "PLAIN"
+        # If true (default when SASL is enabled), a SASL auth failure will immediately disconnect
+        # and surface the error to the UI. Set false if SASL is optional and you want to stay
+        # connected even when SASL fails.
+        # disconnectOnFailure: true
 
       autoJoin:
         - "#test"

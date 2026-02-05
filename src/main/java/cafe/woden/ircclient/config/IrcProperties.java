@@ -79,8 +79,26 @@ public record IrcProperties(Client client, List<Server> servers) {
         boolean enabled,
         String username,
         String password,
-        String mechanism
-    ) {}
+        String mechanism,
+        /**
+         * If true, a SASL failure (e.g. wrong password) is treated as a hard connect failure.
+         * The client will disconnect and surface the error. If false, the client may remain
+         * connected without SASL (useful for networks where SASL is optional).
+         *
+         * <p>If omitted, defaults to {@code true} when {@code enabled} is true.
+         */
+        Boolean disconnectOnFailure
+    ) {
+      public Sasl {
+        if (mechanism == null || mechanism.isBlank()) {
+          mechanism = "PLAIN";
+        }
+        if (disconnectOnFailure == null) {
+          // Strict default when SASL is in use.
+          disconnectOnFailure = enabled;
+        }
+      }
+    }
 
     public Server {
       if (id == null || id.isBlank()) {
@@ -90,7 +108,7 @@ public record IrcProperties(Client client, List<Server> servers) {
         serverPassword = "";
       }
       if (sasl == null) {
-        sasl = new Sasl(false, "", "", "PLAIN");
+        sasl = new Sasl(false, "", "", "PLAIN", null);
       }
       if (autoJoin == null) {
         autoJoin = List.of();

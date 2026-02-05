@@ -24,6 +24,13 @@ final class PircbotxConnectionState {
   final AtomicReference<Disposable> heartbeatDisposable = new AtomicReference<>();
 
   final AtomicBoolean manualDisconnect = new AtomicBoolean(false);
+
+  /**
+   * Some failures are not transient (e.g. authentication failures). When we detect those we want to
+   * avoid an auto-reconnect loop and instead require user intervention.
+   */
+  final AtomicBoolean suppressAutoReconnectOnce = new AtomicBoolean(false);
+
   final AtomicLong reconnectAttempts = new AtomicLong(0);
   final AtomicReference<Disposable> reconnectDisposable = new AtomicReference<>();
   final AtomicReference<String> disconnectReasonOverride = new AtomicReference<>();

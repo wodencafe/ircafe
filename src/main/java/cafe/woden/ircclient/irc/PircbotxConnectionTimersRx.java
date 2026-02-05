@@ -10,10 +10,15 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.pircbotx.PircBotX;
@@ -39,7 +44,9 @@ final class PircbotxConnectionTimersRx {
   private final ScheduledExecutorService heartbeatExec;
   private final ScheduledExecutorService reconnectExec;
   private final Scheduler heartbeatScheduler;
-  private final Scheduler reconnectScheduler;
+
+  // Prevent scheduling (and noisy UndeliverableException logs) during JVM/app shutdown.
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
   PircbotxConnectionTimersRx(IrcProperties props, ServerRegistry serverRegistry) {
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
@@ -58,11 +65,11 @@ final class PircbotxConnectionTimersRx {
       return t;
     });
     this.heartbeatScheduler = Schedulers.from(heartbeatExec);
-    this.reconnectScheduler = Schedulers.from(reconnectExec);
   }
 
   void startHeartbeat(PircbotxConnectionState c) {
     if (c == null) return;
+    if (shuttingDown.get() || heartbeatExec.isShutdown() || heartbeatExec.isTerminated()) return;
 
     c.lastInboundMs.set(System.currentTimeMillis());
     c.localTimeoutEmitted.set(false);
@@ -124,6 +131,7 @@ final class PircbotxConnectionTimersRx {
       Consumer<ServerIrcEvent> emit
   ) {
     if (c == null) return;
+    if (shuttingDown.get() || reconnectExec.isShutdown() || reconnectExec.isTerminated()) return;
     IrcProperties.Reconnect p = reconnectPolicy;
     if (p == null || !p.enabled()) return;
     if (c.manualDisconnect.get()) return;
@@ -147,39 +155,45 @@ final class PircbotxConnectionTimersRx {
     )));
 
     // Replace any existing scheduled reconnect.
-    Disposable next = Completable
-        .timer(delayMs, TimeUnit.MILLISECONDS, reconnectScheduler)
-        .andThen(Completable.defer(() -> {
-          if (c.manualDisconnect.get()) return Completable.complete();
+    final Disposable next;
+    try {
+      final ScheduledFuture<?> future = reconnectExec.schedule(() -> {
+        if (shuttingDown.get() || c.manualDisconnect.get()) return;
 
-          // If the server was removed while waiting, abort.
-          if (!serverRegistry.containsId(c.serverId)) {
-            emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
-                Instant.now(),
-                "Reconnect cancelled (server removed)",
-                null
-            )));
-            return Completable.complete();
-          }
+        // If the server was removed while waiting, abort.
+        if (!serverRegistry.containsId(c.serverId)) {
+          emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
+              Instant.now(),
+              "Reconnect cancelled (server removed)",
+              null
+          )));
+          return;
+        }
 
-          // Connect is idempotent per-server; it will no-op if already connected.
-          return connectFn.apply(c.serverId)
-              .doOnError(err -> {
-                emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
-                    Instant.now(),
-                    "Reconnect attempt failed",
-                    err
-                )));
-                // Backoff again.
-                scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
-              })
-              // We reschedule ourselves on error; swallow it here.
-              .onErrorComplete();
-        }))
-        .subscribe(
-            () -> {},
-            err -> log.debug("[ircafe] Reconnect timer error for {}", c.serverId, err)
-        );
+        // Connect is idempotent per-server; it will no-op if already connected.
+        connectFn.apply(c.serverId)
+            .subscribe(
+                () -> {},
+                err -> {
+                  emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
+                      Instant.now(),
+                      "Reconnect attempt failed",
+                      err
+                  )));
+                  // Backoff again.
+                  scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
+                }
+            );
+      }, delayMs, TimeUnit.MILLISECONDS);
+
+      // RxJava's Disposables helper isn't present in some older RxJava 3 minor lines.
+      // Wrap the ScheduledFuture into a lightweight Disposable.
+      next = futureDisposable(future);
+    } catch (RejectedExecutionException rejected) {
+      // Common during shutdown: executor already terminated.
+      log.debug("[ircafe] Reconnect scheduling rejected for {} (likely shutdown)", c.serverId);
+      return;
+    }
 
     Disposable prev = c.reconnectDisposable.getAndSet(next);
     if (prev != null && !prev.isDisposed()) prev.dispose();
@@ -199,8 +213,31 @@ final class PircbotxConnectionTimersRx {
     return Math.max(250, withJitter);
   }
 
+  private static Disposable futureDisposable(Future<?> f) {
+    AtomicReference<Future<?>> ref = new AtomicReference<>(f);
+    return new Disposable() {
+      private final AtomicBoolean disposed = new AtomicBoolean(false);
+
+      @Override
+      public void dispose() {
+        if (disposed.compareAndSet(false, true)) {
+          Future<?> fx = ref.getAndSet(null);
+          if (fx != null) fx.cancel(true);
+        }
+      }
+
+      @Override
+      public boolean isDisposed() {
+        if (disposed.get()) return true;
+        Future<?> fx = ref.get();
+        return fx == null || fx.isCancelled() || fx.isDone();
+      }
+    };
+  }
+
   @PreDestroy
   void shutdown() {
+    shuttingDown.set(true);
     try {
       heartbeatExec.shutdownNow();
     } catch (Exception ignored) {}
