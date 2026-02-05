@@ -17,6 +17,12 @@ public class UiSettingsBus {
 
   public UiSettingsBus(UiProperties props) {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
+    UiProperties.Timestamps ts = props.timestamps();
+
+    boolean timestampsEnabled = ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
+    String timestampFormat = ts != null ? ts.format() : "HH:mm:ss";
+    boolean timestampsIncludeChatMessages = ts != null && Boolean.TRUE.equals(ts.includeChatMessages());
+
     this.current = new UiSettings(
         props.theme(),
         props.chatFontFamily(),
@@ -30,7 +36,10 @@ public class UiSettingsBus {
         props.linkPreviewsEnabled(),
         props.linkPreviewsCollapsedByDefault(),
         props.presenceFoldsEnabled(),
-        props.chatMessageTimestampsEnabled(),
+        props.ctcpRequestsInActiveTargetEnabled() == null || Boolean.TRUE.equals(props.ctcpRequestsInActiveTargetEnabled()),
+        timestampsEnabled,
+        timestampFormat,
+        timestampsIncludeChatMessages,
         props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
         props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
         props.clientLineColorEnabled(),

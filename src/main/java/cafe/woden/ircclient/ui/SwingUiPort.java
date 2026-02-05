@@ -7,6 +7,7 @@ import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.List;
@@ -26,12 +27,13 @@ public class SwingUiPort implements UiPort {
   private final ChatTranscriptStore transcripts;
   private final MentionPatternRegistry mentions;
   private final UserListDockable users;
-  private final MessageInputDockable input;
   private final StatusBar statusBar;
   private final ConnectButton connectBtn;
   private final DisconnectButton disconnectBtn;
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
+  private final ChatDockManager chatDockManager;
+  private final ActiveInputRouter activeInputRouter;
 
 
   private void onEdt(Runnable r) {
@@ -48,24 +50,26 @@ public class SwingUiPort implements UiPort {
       ChatTranscriptStore transcripts,
       MentionPatternRegistry mentions,
       UserListDockable users,
-      MessageInputDockable input,
       StatusBar statusBar,
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
       TargetActivationBus activationBus,
-      OutboundLineBus outboundBus
+      OutboundLineBus outboundBus,
+      ChatDockManager chatDockManager,
+      ActiveInputRouter activeInputRouter
   ) {
     this.serverTree = serverTree;
     this.chat = chat;
     this.transcripts = transcripts;
     this.mentions = mentions;
     this.users = users;
-    this.input = input;
     this.statusBar = statusBar;
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
+    this.chatDockManager = chatDockManager;
+    this.activeInputRouter = activeInputRouter;
   }
 
   @Override
@@ -97,11 +101,9 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public Flowable<String> outboundLines() {
-    // Merge the normal input stream with other UI-originated command sources.
-    return Flowable.merge(
-        input.outboundMessages(),
-        outboundBus.stream()
-    );
+    // The main chat dock forwards its embedded input into the outbound bus.
+    // Other UI-originated command sources (e.g. transcript clicks) also flow through the bus.
+    return outboundBus.stream();
   }
 
   @Override
@@ -200,10 +202,13 @@ public class SwingUiPort implements UiPort {
   public void setUsersNicks(List<NickInfo> nicks) {
     onEdt(() -> {
       users.setNicks(nicks);
-      // Keep the message input's nick completions in-sync with the active channel's user list.
-      input.setNickCompletions(
-          nicks == null ? List.of() : nicks.stream().map(NickInfo::nick).toList()
-      );
+      java.util.List<String> names = (nicks == null) ? java.util.List.of() : nicks.stream().map(NickInfo::nick).toList();
+      // Route nick completions to whichever input surface is currently active (main chat or pinned).
+      if (activeInputRouter != null && activeInputRouter.active() != null) {
+        activeInputRouter.setNickCompletionsForActive(names);
+      } else {
+        chat.setNickCompletions(names);
+      }
     });
   }
 
@@ -239,7 +244,12 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setInputEnabled(boolean enabled) {
-    onEdt(() -> input.setInputEnabled(enabled));
+    onEdt(() -> {
+      chat.setInputEnabled(enabled);
+      if (chatDockManager != null) {
+        chatDockManager.setPinnedInputsEnabled(enabled);
+      }
+    });
   }
 
   @Override

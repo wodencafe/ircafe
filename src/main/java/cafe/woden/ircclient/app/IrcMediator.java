@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
@@ -44,6 +45,7 @@ public class IrcMediator {
   private final RuntimeConfigStore runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final UiSettingsBus uiSettingsBus;
   private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -82,6 +84,7 @@ public class IrcMediator {
       RuntimeConfigStore runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
+      UiSettingsBus uiSettingsBus,
       WhoisRoutingState whoisRoutingState,
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
@@ -101,6 +104,7 @@ public class IrcMediator {
     this.runtimeConfig = runtimeConfig;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
+    this.uiSettingsBus = uiSettingsBus;
     this.whoisRoutingState = whoisRoutingState;
     this.ctcpRoutingState = ctcpRoutingState;
     this.modeRoutingState = modeRoutingState;
@@ -509,7 +513,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
 
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
@@ -549,7 +553,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
 
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
@@ -569,9 +573,20 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-        // Requested behavior: show inbound CTCP requests in the currently active chat target.
-        // (If the active target is on a different server, fall back to status.)
-        TargetRef dest = resolveActiveOrStatus(sid, status);
+        TargetRef dest;
+        if (uiSettingsBus.get().ctcpRequestsInActiveTargetEnabled()) {
+          // Prefer the currently active target on the same server, otherwise fall back to status.
+          dest = resolveActiveOrStatus(sid, status);
+        } else {
+          // Route to the origin target instead (channel/PM), falling back to status.
+          if (ev.channel() != null && !ev.channel().isBlank()) {
+            dest = new TargetRef(sid, ev.channel());
+          } else if (ev.from() != null && !ev.from().isBlank()) {
+            dest = new TargetRef(sid, ev.from());
+          } else {
+            dest = status != null ? status : safeStatusTarget();
+          }
+        }
 
         StringBuilder sb = new StringBuilder()
             .append("\u2190 ")

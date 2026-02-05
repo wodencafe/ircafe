@@ -242,6 +242,41 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberChatLoggingKeepForever(boolean keepForever) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("keepForever", keepForever);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging keepForever setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatLoggingRetentionDays(int retentionDays) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int days = Math.max(0, retentionDays);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("retentionDays", days);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging retentionDays setting to '{}'", file, e);
+    }
+  }
+
+
   public synchronized void rememberImageEmbedsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -358,7 +393,8 @@ public class RuntimeConfigStore {
     }
   }
 
-  public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
+
+  public synchronized void rememberPresenceFoldsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -366,12 +402,129 @@ public class RuntimeConfigStore {
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
-      ui.put("chatMessageTimestampsEnabled", enabled);
+      ui.put("presenceFoldsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist presence folds setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberCtcpRequestsInActiveTargetEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("ctcpRequestsInActiveTargetEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist CTCP request routing setting to '{}'", file, e);
+    }
+  }
+
+
+
+  public synchronized void rememberNickColoringEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("nickColoringEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist nick coloring enabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberNickColorMinContrast(double minContrast) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      double mc = (minContrast > 0) ? minContrast : 3.0;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("nickColorMinContrast", mc);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist nick color contrast setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTimestampsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> timestamps = getOrCreateMap(ui, "timestamps");
+
+      timestamps.put("enabled", enabled);
+      // Clean up legacy flat key.
+      ui.remove("chatMessageTimestampsEnabled");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist timestamp enable setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTimestampFormat(String format) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String fmt = (format == null || format.isBlank()) ? "HH:mm:ss" : format.trim();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> timestamps = getOrCreateMap(ui, "timestamps");
+
+      timestamps.put("format", fmt);
+      // Clean up legacy flat key.
+      ui.remove("chatMessageTimestampsEnabled");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist timestamp format setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTimestampsIncludeChatMessages(boolean includeChatMessages) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> timestamps = getOrCreateMap(ui, "timestamps");
+
+      timestamps.put("includeChatMessages", includeChatMessages);
+      // Clean up legacy flat key.
+      ui.remove("chatMessageTimestampsEnabled");
 
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist chat message timestamp setting to '{}'", file, e);
     }
+  }
+
+  @Deprecated
+  public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
+    // Back-compat alias for older callers.
+    rememberTimestampsIncludeChatMessages(enabled);
   }
 
   public synchronized void rememberChatHistoryInitialLoadLines(int lines) {
@@ -682,6 +835,23 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist hard-ignore CTCP setting to '{}'", file, e);
+    }
+  }
+
+
+  public synchronized void rememberSoftIgnoreIncludesCtcp(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+
+      ignore.put("softIgnoreIncludesCtcp", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist soft-ignore CTCP setting to '{}'", file, e);
     }
   }
   public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {

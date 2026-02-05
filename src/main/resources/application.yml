@@ -22,11 +22,8 @@ ircafe:
     timestamps:
       enabled: true
       format: "HH:mm:ss"
-
-    # If enabled, IRCafe will prepend a timestamp to regular user chat message lines.
-    # Default: false (preserve classic IRC look).
-    chatMessageTimestampsEnabled: false
-
+      # If enabled, IRCafe will also prepend a timestamp to regular user chat message lines.
+      includeChatMessages: false
     # Chat history load behavior
     # How many lines to prefill into the transcript when selecting a channel or user.
     # 0 disables prefill.

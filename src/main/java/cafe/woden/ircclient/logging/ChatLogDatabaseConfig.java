@@ -107,6 +107,14 @@ public class ChatLogDatabaseConfig {
     return new ChatLogService(repo, tx, props);
   }
 
+  @Bean(destroyMethod = "close")
+  public ChatLogRetentionPruner chatLogRetentionPruner(ChatLogRepository repo,
+                                                       @Qualifier("chatLogTx") TransactionTemplate tx,
+                                                       LogProperties props,
+                                                       @Qualifier("chatLogFlyway") Flyway flyway) {
+    return new ChatLogRetentionPruner(repo, tx, props, flyway);
+  }
+
   private static Path resolveDbBasePath(LogProperties props, RuntimeConfigStore runtimeConfigStore) {
     String baseName = props.hsqldb() != null ? props.hsqldb().fileBaseName() : "ircafe-chatlog";
 

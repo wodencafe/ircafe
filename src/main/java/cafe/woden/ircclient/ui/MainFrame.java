@@ -41,7 +41,6 @@ public class MainFrame extends JFrame {
   private final ServerTreeDockable serverTree;
   private final ChatDockable chat;
   private final UserListDockable users;
-  private final MessageInputDockable input;
 
   public MainFrame(
       IrcMediator controller,
@@ -50,7 +49,6 @@ public class MainFrame extends JFrame {
       ServerTreeDockable serverTree,
       ChatDockable chat,
       UserListDockable users,
-      MessageInputDockable input,
       ChatDockManager chatDockManager,
       StatusBar statusBar
   ) {
@@ -59,7 +57,6 @@ public class MainFrame extends JFrame {
     this.serverTree = serverTree;
     this.chat = chat;
     this.users = users;
-    this.input = input;
     this.statusBar = statusBar;
 
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -89,7 +86,6 @@ public class MainFrame extends JFrame {
     Docking.registerDockable(chat);
     Docking.registerDockable(serverTree);
     Docking.registerDockable(users);
-    Docking.registerDockable(input);
 
     // First dock must be to an empty root container.
     Docking.dock(chat, this);
@@ -100,9 +96,6 @@ public class MainFrame extends JFrame {
     //   left=18% (chat) / right=82% (users)  -> comically huge user list.
     // We want the *users* panel to be ~18% of the width, so the divider should be at ~82%.
     Docking.dock(users, chat, DockingRegion.EAST, 0.82);
-    Docking.dock(input, chat, DockingRegion.SOUTH, 0.10);
-    // Make the SOUTH "Input" dock keep its original height when the window grows.
-    // (ModernDocking relies on split panes; by default, growth is shared.)
     final java.util.concurrent.atomic.AtomicBoolean initialSideSizesApplied =
         new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -115,11 +108,9 @@ public class MainFrame extends JFrame {
     Runnable applyDockLocks = () -> {
       int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
       int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
-      int inputPx = 140;
       if (uiProps != null && uiProps.layout() != null) {
         serverPx = uiProps.layout().serverDockWidthPx();
         usersPx = uiProps.layout().userDockWidthPx();
-        inputPx = uiProps.layout().inputDockHeightPx();
       }
 
       // On first open, ModernDocking can initially lay out side docks wider than desired.
@@ -132,42 +123,32 @@ public class MainFrame extends JFrame {
       boolean shouldNudge = !initialSideSizesApplied.get() || (inStartupStabilization && sideDocksAreHuge);
       if (shouldNudge) {
         log.info(
-            "dock-size: apply initial sizes? initialApplied={} huge={} targets(server={}, users={}, input={}) current(server={}, chat={}, users={}, input={}) frame={}x{}",
+            "dock-size: apply initial sizes? initialApplied={} huge={} targets(server={}, users={}) current(server={}, chat={}, users={}) frame={}x{}",
             initialSideSizesApplied.get(),
             sideDocksAreHuge,
             serverPx,
             usersPx,
-            inputPx,
             serverTree.getWidth(),
             chat.getWidth(),
             users.getWidth(),
-            input.getHeight(),
             getWidth(),
             getHeight()
-        );
-
-        boolean west = DockingTuner.applyInitialWestDockWidth(this, serverTree, serverPx);
+        );boolean west = DockingTuner.applyInitialWestDockWidth(this, serverTree, serverPx);
         boolean east = DockingTuner.applyInitialEastDockWidth(this, users, usersPx);
-        boolean south = DockingTuner.applyInitialSouthDockHeight(this, input, inputPx);
 
         if (west && east) {
           initialSideSizesApplied.set(true);
         }
 
         log.info(
-            "dock-size: init apply results west={} east={} south={} -> now(initialApplied={}) current(server={}, chat={}, users={}, input={})",
+            "dock-size: init apply results west={} east={} -> now(initialApplied={}) current(server={}, chat={}, users={})",
             west,
             east,
-            south,
             initialSideSizesApplied.get(),
             serverTree.getWidth(),
             chat.getWidth(),
-            users.getWidth(),
-            input.getHeight()
-        );
-      }
-
-      DockingTuner.lockSouthDockHeight(this, input);
+            users.getWidth()
+        );}
       // Give horizontal growth to the chat transcript instead of the side docks.
       // Seed the WEST lock with the configured server dock width so it doesn't "capture" a transient
       // (often too-wide) startup layout and then fight our initial sizing.

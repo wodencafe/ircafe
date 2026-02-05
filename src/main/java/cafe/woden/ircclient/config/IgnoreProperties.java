@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ircafe.ignore")
 public record IgnoreProperties(
     Boolean hardIgnoreIncludesCtcp,
+    Boolean softIgnoreIncludesCtcp,
     Map<String, ServerIgnore> servers
 ) {
 
@@ -21,9 +22,10 @@ public record IgnoreProperties(
    *
    * <p>{@code masks} are traditional (hard) ignore masks.
    *
-   * <p>{@code softMasks} are reserved for a future "soft ignore" feature.
-   * Soft ignores are stored/persisted the same way as hard ignores, but are not
-   * currently applied.
+   * <p>{@code softMasks} are soft-ignore masks. Soft-ignored users have inbound messages
+   * rendered as spoilers rather than fully dropped.
+   *
+   * <p>CTCP handling for soft-ignored users is configurable via {@code softIgnoreIncludesCtcp}.
    */
   public record ServerIgnore(List<String> masks, List<String> softMasks) {
     public ServerIgnore {
@@ -34,6 +36,7 @@ public record IgnoreProperties(
 
   public IgnoreProperties {
     if (hardIgnoreIncludesCtcp == null) hardIgnoreIncludesCtcp = Boolean.TRUE;
+    if (softIgnoreIncludesCtcp == null) softIgnoreIncludesCtcp = Boolean.FALSE;
     if (servers == null) servers = Map.of();
   }
 }

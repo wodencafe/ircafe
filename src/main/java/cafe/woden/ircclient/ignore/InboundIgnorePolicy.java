@@ -51,7 +51,12 @@ public class InboundIgnorePolicy {
         return Decision.HARD_DROP;
       }
     }
-    if (st.soft()) return Decision.SOFT_SPOILER;
+    if (st.soft()) {
+      if (isCtcp && ignoreListService.softIgnoreIncludesCtcp()) {
+        return Decision.HARD_DROP;
+      }
+      return Decision.SOFT_SPOILER;
+    }
     return Decision.ALLOW;
   }
 }
