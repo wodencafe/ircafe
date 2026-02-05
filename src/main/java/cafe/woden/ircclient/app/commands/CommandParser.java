@@ -24,6 +24,34 @@ public class CommandParser {
       return new ParsedInput.Join(chan);
     }
 
+    // Common alias used by many IRC clients.
+    if (matchesCommand(line, "/j")) {
+      String chan = argAfter(line, "/j");
+      return new ParsedInput.Join(chan);
+    }
+
+    if (matchesCommand(line, "/part") || matchesCommand(line, "/leave")) {
+      String rest = matchesCommand(line, "/part") ? argAfter(line, "/part") : argAfter(line, "/leave");
+      String r = rest == null ? "" : rest.trim();
+      if (r.isEmpty()) return new ParsedInput.Part("", "");
+      String first;
+      String tail;
+      int sp = r.indexOf(' ' );
+      if (sp < 0) {
+        first = r;
+        tail = "";
+      } else {
+        first = r.substring(0, sp).trim();
+        tail = r.substring(sp + 1).trim();
+      }
+      // If the first token looks like a channel, treat it as the explicit channel;
+      // otherwise treat the whole rest as a part reason for the current channel.
+      if (first.startsWith("#") || first.startsWith("&")) {
+        return new ParsedInput.Part(first, tail);
+      }
+      return new ParsedInput.Part("", r);
+    }
+
     if (matchesCommand(line, "/nick")) {
       String nick = argAfter(line, "/nick");
       return new ParsedInput.Nick(nick);

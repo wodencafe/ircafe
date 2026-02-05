@@ -12,10 +12,9 @@ import java.util.Deque;
 import java.util.List;
 
 /**
- * Swing/docking helpers for keeping side and input docks at a stable size (nested {@link JSplitPane} tuning).
+ * Swing/docking helpers for keeping side docks at a stable size (nested {@link JSplitPane} tuning).
  */
 public final class DockingTuner {
-  private static final String CLIENT_PROP_SOUTH_LOCKED = "ircafe.lockSouthDockHeight";
   private static final String CLIENT_PROP_WEST_LOCKED = "ircafe.lockWestDockWidth";
   private static final String CLIENT_PROP_EAST_LOCKED = "ircafe.lockEastDockWidth";
   private static final String CLIENT_PROP_ADJUSTING = "ircafe.splitAdjusting";
@@ -103,58 +102,11 @@ public final class DockingTuner {
     return true;
   }
 
-  public static boolean applyInitialSouthDockHeight(Window window, Component dockable, int targetHeightPx) {
-    if (window == null || dockable == null) return false;
-    if (targetHeightPx <= 0) return false;
-
-    SplitCandidate best = findBestSplitPane(window, dockable, JSplitPane.VERTICAL_SPLIT);
-    if (best == null) return false;
-
-    JSplitPane split = best.split();
-    int desiredLoc;
-
-    if (best.side() == Side.BOTTOM) {
-      if (split.getHeight() <= 0) return false;
-      desiredLoc = clampDivider(split, desiredDividerForBottomHeight(split, targetHeightPx));
-    } else {
-      // Inverted split; dockable is on the TOP.
-      desiredLoc = clampDivider(split, targetHeightPx);
-    }
-
-    int before = split.getDividerLocation();
-    if (Math.abs(before - desiredLoc) > 2) {
-      setDividerLocationSafely(split, desiredLoc);
-      log.info(
-          "dock-size: init SOUTH targetPx={} split#{} side={} divider {} -> {} (splitH={}, dividerSize={})",
-          targetHeightPx,
-          System.identityHashCode(split),
-          best.side(),
-          before,
-          desiredLoc,
-          split.getHeight(),
-          split.getDividerSize()
-      );
-    }
-    return true;
-  }
 
   /**
    * Finds the vertical {@link JSplitPane} that separates {@code dockable} and makes the dock's region
    * keep its captured height on window resize.
    */
-  public static void lockSouthDockHeight(Window window, Component dockable) {
-    if (window == null || dockable == null) return;
-
-    SplitCandidate best = findBestSplitPane(window, dockable, JSplitPane.VERTICAL_SPLIT);
-    if (best == null) return;
-
-    if (best.side() == Side.BOTTOM) {
-      installSouthHeightLock(best.split());
-    } else if (best.side() == Side.TOP) {
-      // Some layouts invert the split; handle it by locking the TOP height instead.
-      installNorthHeightLock(best.split());
-    }
-  }
 
   /**
    * Finds the horizontal {@link JSplitPane} that separates {@code dockable} and makes the dock's region
@@ -312,124 +264,6 @@ private static SplitCandidate findBestSplitPane(Component root, Component dockab
     return count;
   }
 
-  private static void installNorthHeightLock(JSplitPane split) {
-    if (split == null) return;
-    if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_SOUTH_LOCKED))) return;
-    split.putClientProperty(CLIENT_PROP_SOUTH_LOCKED, Boolean.TRUE);
-
-    log.info("dock-lock: install NORTH (top-locked) split#{}", System.identityHashCode(split));
-
-    // Give all future extra space to the bottom component.
-    split.setResizeWeight(0.0);
-
-    final int[] lockedTopHeight = new int[] { -1 };
-
-    SwingUtilities.invokeLater(() -> {
-      Component top = split.getTopComponent();
-      if (top == null) return;
-      int h = top.getHeight();
-      if (h > 0) {
-        lockedTopHeight[0] = h;
-        setDividerLocationSafely(split, h);
-
-        log.info(
-            "dock-lock: captured NORTH topHeightPx={} split#{} (splitH={}, dividerSize={})",
-            h,
-            System.identityHashCode(split),
-            split.getHeight(),
-            split.getDividerSize()
-        );
-      }
-    });
-
-    // If the user drags the divider, treat that as the new locked height.
-    split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-      if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_ADJUSTING))) return;
-      int loc = split.getDividerLocation();
-      if (loc > 0) lockedTopHeight[0] = loc;
-    });
-
-    split.addComponentListener(new ComponentAdapter() {
-      @Override
-      public void componentResized(ComponentEvent e) {
-        if (lockedTopHeight[0] < 0) {
-          Component top = split.getTopComponent();
-          if (top == null) return;
-          int h = top.getHeight();
-          if (h <= 0) return;
-          lockedTopHeight[0] = h;
-        }
-
-        int desired = lockedTopHeight[0];
-        int min = split.getMinimumDividerLocation();
-        int max = split.getMaximumDividerLocation();
-        desired = Math.max(min, Math.min(max, desired));
-
-        if (Math.abs(split.getDividerLocation() - desired) > 2) {
-          setDividerLocationSafely(split, desired);
-        }
-      }
-    });
-  }
-
-  private static void installSouthHeightLock(JSplitPane split) {
-    if (split == null) return;
-    if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_SOUTH_LOCKED))) return;
-    split.putClientProperty(CLIENT_PROP_SOUTH_LOCKED, Boolean.TRUE);
-
-    log.info("dock-lock: install SOUTH (bottom-locked) split#{}", System.identityHashCode(split));
-
-    // Give all future extra space to the top component.
-    split.setResizeWeight(1.0);
-
-    final int[] lockedBottomHeight = new int[] { -1 };
-
-    // Try once immediately after layout.
-    SwingUtilities.invokeLater(() -> {
-      Component bottom = split.getBottomComponent();
-      if (bottom == null) return;
-      int h = bottom.getHeight();
-      if (h > 0) {
-        lockedBottomHeight[0] = h;
-        int divider = split.getDividerSize();
-        int total = split.getHeight();
-        int newDividerLocation = Math.max(0, total - h - divider);
-        setDividerLocationSafely(split, newDividerLocation);
-
-        log.info(
-            "dock-lock: captured SOUTH bottomHeightPx={} split#{} -> dividerLoc={} (splitH={}, dividerSize={})",
-            h,
-            System.identityHashCode(split),
-            newDividerLocation,
-            total,
-            divider
-        );
-      }
-    });
-
-    split.addComponentListener(new ComponentAdapter() {
-      @Override
-      public void componentResized(ComponentEvent e) {
-        Component bottom = split.getBottomComponent();
-        if (bottom == null) return;
-
-        if (lockedBottomHeight[0] < 0) {
-          int h = bottom.getHeight();
-          if (h <= 0) return; // not laid out yet
-          lockedBottomHeight[0] = h;
-        }
-
-        int desiredBottom = lockedBottomHeight[0];
-        int divider = split.getDividerSize();
-        int total = split.getHeight();
-        int newDividerLocation = Math.max(0, total - desiredBottom - divider);
-
-        if (Math.abs(split.getDividerLocation() - newDividerLocation) > 2) {
-          setDividerLocationSafely(split, newDividerLocation);
-        }
-      }
-    });
-  }
 
   private static void installWestWidthLock(JSplitPane split, Integer seedLeftWidthPx) {
     if (split == null) return;
@@ -593,12 +427,6 @@ private static SplitCandidate findBestSplitPane(Component root, Component dockab
     return Math.max(0, total - divider - Math.max(0, rightWidth));
   }
 
-  private static int desiredDividerForBottomHeight(JSplitPane split, int bottomHeight) {
-    int total = split.getHeight();
-    int divider = split.getDividerSize();
-    // DividerLocation is measured from the top edge.
-    return Math.max(0, total - divider - Math.max(0, bottomHeight));
-  }
 
   private static int clampDivider(JSplitPane split, int desired) {
     if (desired < 0) desired = 0;

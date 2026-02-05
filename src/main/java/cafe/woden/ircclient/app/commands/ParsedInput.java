@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.commands;
 
 public sealed interface ParsedInput permits
     ParsedInput.Join,
+    ParsedInput.Part,
     ParsedInput.Nick,
     ParsedInput.Away,
     ParsedInput.Query,
@@ -29,6 +30,13 @@ public sealed interface ParsedInput permits
     ParsedInput.Unknown {
 
   record Join(String channel) implements ParsedInput {}
+
+  /**
+   * /part [#channel] [reason]
+   *
+   * <p>If #channel is omitted, parts the currently active channel.
+   */
+  record Part(String channel, String reason) implements ParsedInput {}
 
   record Nick(String newNick) implements ParsedInput {}
 

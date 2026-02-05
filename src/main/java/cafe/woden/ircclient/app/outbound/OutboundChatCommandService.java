@@ -71,6 +71,58 @@ public class OutboundChatCommandService {
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(join-error)", String.valueOf(err))));
   }
 
+  public void handlePart(CompositeDisposable disposables, String channel, String reason) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(part)", "Select a server first.");
+      return;
+    }
+
+    String chan = channel == null ? "" : channel.trim();
+    String msg = reason == null ? "" : reason.trim();
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+
+    // If no explicit channel was provided, we can only /part if the active target is a channel.
+    TargetRef target;
+    if (chan.isEmpty()) {
+      if (!at.isChannel()) {
+        ui.appendStatus(status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
+        return;
+      }
+      target = at;
+    } else {
+      target = new TargetRef(at.serverId(), chan);
+      if (!target.isChannel()) {
+        ui.appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
+        return;
+      }
+    }
+
+    // Remove from auto-join for next startup.
+    runtimeConfig.forgetJoinedChannel(target.serverId(), target.target());
+
+    if (!connectionCoordinator.isConnected(target.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      // Still close the local buffer so the UX matches normal /part.
+      ui.closeTarget(target);
+      return;
+    }
+
+    // If we're parting the currently active target, switch back to status first.
+    if (target.equals(at)) {
+      ui.selectTarget(status);
+    }
+
+    disposables.add(
+        irc.partChannel(target.serverId(), target.target(), msg.isBlank() ? null : msg)
+            .subscribe(
+                () -> ui.appendStatus(status, "(part)", "Left " + target.target()),
+                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+
+    ui.closeTarget(target);
+  }
+
   public void handleNick(CompositeDisposable disposables, String newNick) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {

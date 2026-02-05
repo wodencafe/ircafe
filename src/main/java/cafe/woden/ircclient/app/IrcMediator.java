@@ -380,6 +380,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     ParsedInput in = commandParser.parse(raw);
     switch (in) {
       case ParsedInput.Join cmd -> outboundChatCommandService.handleJoin(disposables, cmd.channel());
+      case ParsedInput.Part cmd -> outboundChatCommandService.handlePart(disposables, cmd.channel(), cmd.reason());
       case ParsedInput.Nick cmd -> outboundChatCommandService.handleNick(disposables, cmd.newNick());
       case ParsedInput.Away cmd -> outboundChatCommandService.handleAway(disposables, cmd.message());
       case ParsedInput.Query cmd -> outboundChatCommandService.handleQuery(cmd.nick());

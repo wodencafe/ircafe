@@ -78,7 +78,6 @@ ircafe:
     layout:
       serverDockWidthPx: 240
       userDockWidthPx: 140
-      inputDockHeightPx: 140
     # Optional: custom palette (hex strings). If omitted, uses built-in 32-color palette.
     # nickColors:
     #   - "#E57373"
