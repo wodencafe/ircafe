@@ -83,14 +83,11 @@ public record UiProperties(
    */
   public record Layout(
       Integer serverDockWidthPx,
-      Integer userDockWidthPx,
-      Integer inputDockHeightPx
+      Integer userDockWidthPx
   ) {
     public Layout {
       if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
       if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
-      // The input dock is primarily height-locked; keep a reasonable default.
-      if (inputDockHeightPx == null || inputDockHeightPx <= 0) inputDockHeightPx = 140;
     }
   }
 
@@ -188,7 +185,7 @@ public record UiProperties(
     clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
 
     if (layout == null) {
-      layout = new Layout(null, null, null);
+      layout = new Layout(null, null);
     }
 
     // Image embeds default: disabled.

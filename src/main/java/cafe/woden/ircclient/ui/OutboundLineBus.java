@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
  * Shared UI-to-app outbound line stream.
  *
  * <p>This exists so non-input UI surfaces (e.g. clicking a #channel in chat) can emit
- * normal IRC command lines without needing a reference to {@link MessageInputDockable}.
+ * normal IRC command lines.
  */
 @Component
 @Lazy
