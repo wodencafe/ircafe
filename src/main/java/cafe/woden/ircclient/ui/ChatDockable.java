@@ -12,6 +12,7 @@ import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.springframework.context.annotation.Lazy;
@@ -45,6 +46,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
 
+  private final ActiveInputRouter activeInputRouter;
+
+  private final MessageInputPanel inputPanel;
+  private final CompositeDisposable disposables = new CompositeDisposable();
+
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
   private final UserListStore userListStore;
@@ -61,6 +67,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final ViewState fallbackState = new ViewState();
 
   private final Map<TargetRef, String> topicByTarget = new HashMap<>();
+  private final Map<TargetRef, String> draftByTarget = new HashMap<>();
 
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
@@ -74,6 +81,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   public ChatDockable(ChatTranscriptStore transcripts,
                      TargetActivationBus activationBus,
                      OutboundLineBus outboundBus,
+                     ActiveInputRouter activeInputRouter,
                      IgnoreListService ignoreListService,
                      IgnoreStatusService ignoreStatusService,
                      UserListStore userListStore,
@@ -83,6 +91,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.transcripts = transcripts;
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
+    this.activeInputRouter = activeInputRouter;
     this.ignoreListService = ignoreListService;
     this.ignoreStatusService = ignoreStatusService;
     this.userListStore = userListStore;
@@ -136,6 +145,23 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     add(topicSplit, BorderLayout.CENTER);
     hideTopicPanel();
 
+    // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
+    this.inputPanel = new MessageInputPanel(settingsBus);
+    add(inputPanel, BorderLayout.SOUTH);
+    if (this.activeInputRouter != null) {
+      // Default active typing surface is the main chat input.
+      this.activeInputRouter.activate(inputPanel);
+      inputPanel.setOnActivated(() -> {
+        this.activeInputRouter.activate(inputPanel);
+        if (activeTarget != null) {
+          activationBus.activate(activeTarget);
+        }
+      });
+    }
+    disposables.add(inputPanel.outboundMessages().subscribe(outboundBus::emit, err -> {
+      // Never crash the UI because an outbound subscriber failed.
+    }));
+
     // Keep an initial view state so the first auto-scroll behaves.
     this.activeTarget = new TargetRef("default", "status");
     stateByTarget.put(activeTarget, new ViewState());
@@ -143,9 +169,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public void setActiveTarget(TargetRef target) {
     if (target == null) return;
+    if (Objects.equals(activeTarget, target)) return;
 
-    // Persist state of the current target before swapping.
+    // Persist state + draft of the current target before swapping.
     if (activeTarget != null) {
+      draftByTarget.put(activeTarget, inputPanel.getDraftText());
       updateScrollStateFromBar();
     }
 
@@ -153,7 +181,27 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     transcripts.ensureTargetExists(target);
     setDocument(transcripts.document(target));
 
+    // Restore any saved draft for this target.
+    inputPanel.setDraftText(draftByTarget.getOrDefault(target, ""));
+
     updateTopicPanelForActiveTarget();
+  }
+
+  /**
+   * Enable/disable the embedded input bar.
+   *
+   * <p>We intentionally preserve any draft text when disabling so the user
+   * doesn't lose what they were typing during connect/disconnect transitions.
+   */
+  public void setInputEnabled(boolean enabled) {
+    inputPanel.setInputEnabled(enabled);
+  }
+
+  /**
+   * Update the nick completion list used by the embedded input bar.
+   */
+  public void setNickCompletions(java.util.List<String> nicks) {
+    inputPanel.setNickCompletions(nicks);
   }
 
   public void setTopic(TargetRef target, String topic) {
@@ -310,6 +358,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // This does NOT change what the main chat is already displaying.
     if (activeTarget == null) return;
     activationBus.activate(activeTarget);
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    inputPanel.focusInput();
   }
 
   @Override
@@ -457,6 +509,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   @PreDestroy
   void shutdown() {
+    try {
+      disposables.dispose();
+    } catch (Exception ignored) {
+    }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.
     closeDecorators();
   }
