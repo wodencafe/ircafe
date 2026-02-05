@@ -21,6 +21,8 @@ public class IgnoreListService {
 
   private volatile boolean hardIgnoreIncludesCtcp;
 
+  private volatile boolean softIgnoreIncludesCtcp;
+
   private final ConcurrentHashMap<String, List<String>> masksByServer = new ConcurrentHashMap<>();
 
   private final ConcurrentHashMap<String, List<String>> softMasksByServer = new ConcurrentHashMap<>();
@@ -40,15 +42,25 @@ public class IgnoreListService {
     return hardIgnoreIncludesCtcp;
   }
 
+  public boolean softIgnoreIncludesCtcp() {
+    return softIgnoreIncludesCtcp;
+  }
+
   public void setHardIgnoreIncludesCtcp(boolean enabled) {
     this.hardIgnoreIncludesCtcp = enabled;
     runtimeConfig.rememberHardIgnoreIncludesCtcp(enabled);
+  }
+
+  public void setSoftIgnoreIncludesCtcp(boolean enabled) {
+    this.softIgnoreIncludesCtcp = enabled;
+    runtimeConfig.rememberSoftIgnoreIncludesCtcp(enabled);
   }
   public IgnoreListService(IgnoreProperties props, RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
     this.hardIgnoreIncludesCtcp = (props == null)
         ? true
         : Boolean.TRUE.equals(props.hardIgnoreIncludesCtcp());
+    this.softIgnoreIncludesCtcp = (props != null) && Boolean.TRUE.equals(props.softIgnoreIncludesCtcp());
     // Seed from configuration (including runtime YAML import).
     if (props != null && props.servers() != null) {
       for (Map.Entry<String, IgnoreProperties.ServerIgnore> e : props.servers().entrySet()) {

@@ -22,7 +22,7 @@ public record UiProperties(
     Timestamps timestamps,
 
     
-    Boolean chatMessageTimestampsEnabled,
+    @Deprecated Boolean chatMessageTimestampsEnabled,
 
     Integer chatHistoryInitialLoadLines,
 
@@ -60,6 +60,12 @@ public record UiProperties(
 
     Boolean presenceFoldsEnabled,
 
+    /**
+     * If enabled, inbound CTCP requests are rendered into the currently active chat target (same server).
+     * If disabled, they are routed to their origin target (channel/PM) instead.
+     */
+    Boolean ctcpRequestsInActiveTargetEnabled,
+
     double nickColorMinContrast,
 
     List<String> nickColors,
@@ -94,11 +100,15 @@ public record UiProperties(
    * <p>{@code format} uses Java time patterns (same general style as
    * {@link java.text.SimpleDateFormat}, but powered by {@link java.time.format.DateTimeFormatter}).
    */
-  public record Timestamps(boolean enabled, String format) {
+  public record Timestamps(
+      Boolean enabled,
+      String format,
+      Boolean includeChatMessages
+  ) {
     public Timestamps {
-      if (format == null || format.isBlank()) {
-        format = "HH:mm:ss";
-      }
+      if (enabled == null) enabled = true;
+      if (format == null || format.isBlank()) format = "HH:mm:ss";
+      if (includeChatMessages == null) includeChatMessages = false;
     }
   }
 
@@ -147,15 +157,17 @@ public record UiProperties(
       autoConnectOnStart = true;
     }
 
-    if (timestamps == null) {
-      timestamps = new Timestamps(true, "HH:mm:ss");
-    }
-
     // Default: disabled (preserve prior behavior where user messages have no timestamp prefix).
     if (chatMessageTimestampsEnabled == null) {
       chatMessageTimestampsEnabled = false;
     }
 
+    if (timestamps == null) {
+      timestamps = new Timestamps(true, "HH:mm:ss", chatMessageTimestampsEnabled);
+    } else if (timestamps.includeChatMessages() == null) {
+      // Back-compat: if the new nested flag is absent, fall back to the legacy top-level flag.
+      timestamps = new Timestamps(timestamps.enabled(), timestamps.format(), chatMessageTimestampsEnabled);
+    }
     // History defaults: conservative initial load, generous paging.
     if (chatHistoryInitialLoadLines == null) {
       chatHistoryInitialLoadLines = 100;
@@ -230,6 +242,11 @@ public record UiProperties(
     // Presence fold default: enabled.
     if (presenceFoldsEnabled == null) {
       presenceFoldsEnabled = true;
+    }
+
+    // CTCP request routing default: show in the currently active target.
+    if (ctcpRequestsInActiveTargetEnabled == null) {
+      ctcpRequestsInActiveTargetEnabled = true;
     }
     if (nickColors == null) {
       nickColors = List.of();

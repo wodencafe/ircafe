@@ -9,10 +9,13 @@ import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.ComponentCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.ListContextMenuDecorator;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -109,6 +112,9 @@ public class UserListDockable extends JPanel implements Dockable {
       PublishProcessor.<UserActionRequest>create().toSerialized();
 
   private final NickColorService nickColors;
+  private final NickColorSettingsBus nickColorSettingsBus;
+
+  private final PropertyChangeListener nickColorSettingsListener = this::onNickColorSettingsChanged;
 
   private final IgnoreListService ignoreListService;
   private final IgnoreListDialog ignoreDialog;
@@ -119,12 +125,16 @@ public class UserListDockable extends JPanel implements Dockable {
 
   private TargetRef active = new TargetRef("default", "status");
 
-  public UserListDockable(NickColorService nickColors, IgnoreListService ignoreListService, IgnoreListDialog ignoreDialog,
+  public UserListDockable(
+                         NickColorService nickColors,
+                         NickColorSettingsBus nickColorSettingsBus,
+                         IgnoreListService ignoreListService, IgnoreListDialog ignoreDialog,
                          IgnoreStatusService ignoreStatusService,
                          NickContextMenuFactory nickContextMenuFactory) {
     super(new BorderLayout());
 
     this.nickColors = nickColors;
+    this.nickColorSettingsBus = nickColorSettingsBus;
 
     this.ignoreListService = ignoreListService;
     this.ignoreDialog = ignoreDialog;
@@ -444,6 +454,28 @@ public class UserListDockable extends JPanel implements Dockable {
       }
     } catch (Exception ignored) {
     }
+  }
+
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    if (nickColorSettingsBus != null) {
+      nickColorSettingsBus.addListener(nickColorSettingsListener);
+    }
+  }
+
+  @Override
+  public void removeNotify() {
+    if (nickColorSettingsBus != null) {
+      nickColorSettingsBus.removeListener(nickColorSettingsListener);
+    }
+    super.removeNotify();
+  }
+
+  private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
+    if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
+    SwingUtilities.invokeLater(list::repaint);
   }
 
   @Override public String getPersistentID() { return ID; }

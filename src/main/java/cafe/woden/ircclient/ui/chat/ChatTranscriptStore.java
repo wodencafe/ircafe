@@ -12,6 +12,8 @@ import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.awt.Font;
 import java.awt.Color;
 import java.util.ArrayList;
@@ -24,6 +26,7 @@ import javax.swing.text.Element;
 import javax.swing.text.Position;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
+import javax.swing.SwingUtilities;
 import javax.swing.text.StyleConstants;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -39,6 +42,9 @@ public class ChatTranscriptStore {
   private final ChatImageEmbedder imageEmbeds;
   private final ChatLinkPreviewEmbedder linkPreviews;
   private final UiSettingsBus uiSettings;
+  private final NickColorSettingsBus nickColorSettings;
+
+  private final PropertyChangeListener nickColorSettingsListener = this::onNickColorSettingsChanged;
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
   private final Map<TargetRef, TranscriptState> stateByTarget = new HashMap<>();
@@ -48,6 +54,7 @@ public class ChatTranscriptStore {
       ChatRichTextRenderer renderer,
       ChatTimestampFormatter ts,
       NickColorService nickColors,
+      NickColorSettingsBus nickColorSettings,
       ChatImageEmbedder imageEmbeds,
       ChatLinkPreviewEmbedder linkPreviews,
       UiSettingsBus uiSettings
@@ -56,9 +63,14 @@ public class ChatTranscriptStore {
     this.renderer = renderer;
     this.ts = ts;
     this.nickColors = nickColors;
+    this.nickColorSettings = nickColorSettings;
     this.imageEmbeds = imageEmbeds;
     this.linkPreviews = linkPreviews;
     this.uiSettings = uiSettings;
+
+    if (this.nickColorSettings != null) {
+      this.nickColorSettings.addListener(nickColorSettingsListener);
+    }
   }
 
   public synchronized void ensureTargetExists(TargetRef ref) {
@@ -338,20 +350,20 @@ public class ChatTranscriptStore {
 
       // Config: timestamps for regular chat messages are optional (status/error/notice timestamps remain controlled
       // by ircafe.ui.timestamps.enabled).
-      boolean chatMessageTimestampsEnabled = false;
+      boolean timestampsIncludeChatMessages = false;
       try {
-        chatMessageTimestampsEnabled = uiSettings != null
+        timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
-            && uiSettings.get().chatMessageTimestampsEnabled();
+            && uiSettings.get().timestampsIncludeChatMessages();
       } catch (Exception ignored) {
-        chatMessageTimestampsEnabled = false;
+        timestampsIncludeChatMessages = false;
       }
 
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
-          || (chatMessageTimestampsEnabled && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
+          || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(doc.getLength(), prefix, styles.timestamp());
       }
@@ -472,16 +484,16 @@ public class ChatTranscriptStore {
     String a = action == null ? "" : action;
 
     try {
-      boolean chatMessageTimestampsEnabled = false;
+      boolean timestampsIncludeChatMessages = false;
       try {
-        chatMessageTimestampsEnabled = uiSettings != null
+        timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
-            && uiSettings.get().chatMessageTimestampsEnabled();
+            && uiSettings.get().timestampsIncludeChatMessages();
       } catch (Exception ignored) {
-        chatMessageTimestampsEnabled = false;
+        timestampsIncludeChatMessages = false;
       }
 
-      if (ts != null && ts.enabled() && chatMessageTimestampsEnabled) {
+      if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
         String prefix = ts.prefixAt(tsEpochMs);
         doc.insertString(pos, prefix, styles.timestamp());
         pos += prefix.length();
@@ -619,16 +631,16 @@ public class ChatTranscriptStore {
       }
     }
 
-    boolean chatMessageTimestampsEnabled = false;
+    boolean timestampsIncludeChatMessages = false;
     try {
-      chatMessageTimestampsEnabled = uiSettings != null
+      timestampsIncludeChatMessages = uiSettings != null
           && uiSettings.get() != null
-          && uiSettings.get().chatMessageTimestampsEnabled();
+          && uiSettings.get().timestampsIncludeChatMessages();
     } catch (Exception ignored) {
-      chatMessageTimestampsEnabled = false;
+      timestampsIncludeChatMessages = false;
     }
     final String tsPrefixFinal =
-        (ts != null && ts.enabled() && chatMessageTimestampsEnabled) ? ts.prefixAt(tsEpochMs) : "";
+        (ts != null && ts.enabled() && timestampsIncludeChatMessages) ? ts.prefixAt(tsEpochMs) : "";
 
     final int offFinal = pos;
     final TargetRef refFinal = ref;
@@ -705,20 +717,20 @@ public class ChatTranscriptStore {
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
-      boolean chatMessageTimestampsEnabled = false;
+      boolean timestampsIncludeChatMessages = false;
       try {
-        chatMessageTimestampsEnabled = uiSettings != null
+        timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
-            && uiSettings.get().chatMessageTimestampsEnabled();
+            && uiSettings.get().timestampsIncludeChatMessages();
       } catch (Exception ignored) {
-        chatMessageTimestampsEnabled = false;
+        timestampsIncludeChatMessages = false;
       }
 
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
-          || (chatMessageTimestampsEnabled && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
+          || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(pos, prefix, styles.timestamp());
         pos += prefix.length();
@@ -829,6 +841,12 @@ public class ChatTranscriptStore {
     }
   }
 
+  private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
+    if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
+    // StyledDocument mutations should happen on the EDT.
+    SwingUtilities.invokeLater(this::restyleAllDocuments);
+  }
+
   private UiSettings safeSettings() {
     try {
       return uiSettings != null ? uiSettings.get() : null;
@@ -873,16 +891,16 @@ public class ChatTranscriptStore {
       }
     }
 
-    boolean chatMessageTimestampsEnabled = false;
+    boolean timestampsIncludeChatMessages = false;
     try {
-      chatMessageTimestampsEnabled = uiSettings != null
+      timestampsIncludeChatMessages = uiSettings != null
           && uiSettings.get() != null
-          && uiSettings.get().chatMessageTimestampsEnabled();
+          && uiSettings.get().timestampsIncludeChatMessages();
     } catch (Exception ignored) {
-      chatMessageTimestampsEnabled = false;
+      timestampsIncludeChatMessages = false;
     }
     final String tsPrefixFinal =
-        (ts != null && ts.enabled() && chatMessageTimestampsEnabled) ? ts.prefixNow() : "";
+        (ts != null && ts.enabled() && timestampsIncludeChatMessages) ? ts.prefixNow() : "";
 
     final int offFinal = doc.getLength();
     final TargetRef refFinal = ref;
@@ -956,16 +974,16 @@ public class ChatTranscriptStore {
       }
     }
 
-    boolean chatMessageTimestampsEnabled = false;
+    boolean timestampsIncludeChatMessages = false;
     try {
-      chatMessageTimestampsEnabled = uiSettings != null
+      timestampsIncludeChatMessages = uiSettings != null
           && uiSettings.get() != null
-          && uiSettings.get().chatMessageTimestampsEnabled();
+          && uiSettings.get().timestampsIncludeChatMessages();
     } catch (Exception ignored) {
-      chatMessageTimestampsEnabled = false;
+      timestampsIncludeChatMessages = false;
     }
     final String tsPrefixFinal =
-        (ts != null && ts.enabled() && chatMessageTimestampsEnabled) ? ts.prefixAt(tsEpochMs) : "";
+        (ts != null && ts.enabled() && timestampsIncludeChatMessages) ? ts.prefixAt(tsEpochMs) : "";
 
     final int offFinal = doc.getLength();
     final TargetRef refFinal = ref;
@@ -1188,16 +1206,16 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     ensureAtLineStart(doc);
 
     try {
-      boolean chatMessageTimestampsEnabled = false;
+      boolean timestampsIncludeChatMessages = false;
       try {
-        chatMessageTimestampsEnabled = uiSettings != null
+        timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
-            && uiSettings.get().chatMessageTimestampsEnabled();
+            && uiSettings.get().timestampsIncludeChatMessages();
       } catch (Exception ignored) {
-        chatMessageTimestampsEnabled = false;
+        timestampsIncludeChatMessages = false;
       }
 
-      if (ts != null && ts.enabled() && chatMessageTimestampsEnabled) {
+      if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(doc.getLength(), prefix, styles.timestamp());
       }

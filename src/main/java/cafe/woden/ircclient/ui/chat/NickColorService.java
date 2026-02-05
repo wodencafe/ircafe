@@ -31,19 +31,14 @@ public class NickColorService {
       "#D0BFFF", "#FFD8A8", "#FFE066", "#FFB5A7"
   );
 
-  private final boolean enabled;
-  private final double minContrast;
+  private final NickColorSettingsBus settingsBus;
   private final List<Color> palette;
 
   private volatile Map<String, Color> overrides = Map.of();
   private volatile Map<String, String> overridesHex = Map.of();
 
-  public NickColorService(UiProperties props) {
-    Boolean en = props != null ? props.nickColoringEnabled() : null;
-    this.enabled = en == null || en;
-
-    double mc = props != null ? props.nickColorMinContrast() : 3.0;
-    this.minContrast = mc > 0 ? mc : 3.0;
+  public NickColorService(UiProperties props, NickColorSettingsBus settingsBus) {
+    this.settingsBus = settingsBus;
 
     List<String> rawPalette = props != null ? props.nickColors() : null;
     List<String> src = (rawPalette == null || rawPalette.isEmpty()) ? DEFAULT_32 : rawPalette;
@@ -54,11 +49,13 @@ public class NickColorService {
   }
 
   public boolean enabled() {
-    return enabled;
+    NickColorSettings s = (settingsBus != null) ? settingsBus.get() : null;
+    return s == null || s.enabled();
   }
 
   public double minContrast() {
-    return minContrast;
+    NickColorSettings s = (settingsBus != null) ? settingsBus.get() : null;
+    return s != null ? s.minContrast() : 3.0;
   }
 
   public Map<String, String> overridesHex() {
@@ -66,7 +63,7 @@ public class NickColorService {
   }
 
   /** Replace the current per-nick overrides. */
-public synchronized void setOverrides(Map<String, String> rawOverrides) {
+  public synchronized void setOverrides(Map<String, String> rawOverrides) {
     Map<String, String> norm = normalizeRawOverrides(rawOverrides);
     this.overridesHex = Map.copyOf(norm);
     this.overrides = parseOverrides(this.overridesHex);
@@ -84,6 +81,9 @@ public synchronized void setOverrides(Map<String, String> rawOverrides) {
   }
 
   public void applyColor(SimpleAttributeSet attrs, String nickLower) {
+    NickColorSettings s = (settingsBus != null) ? settingsBus.get() : null;
+    boolean enabled = (s == null) || s.enabled();
+    double minContrast = (s != null) ? s.minContrast() : 3.0;
     if (!enabled) return;
     String n = nickLower == null ? "" : nickLower.trim().toLowerCase(Locale.ROOT);
     if (n.isEmpty()) return;
@@ -102,6 +102,9 @@ public synchronized void setOverrides(Map<String, String> rawOverrides) {
   }
 
   public Color colorForNick(String nick, Color background, Color fallbackForeground) {
+    NickColorSettings s = (settingsBus != null) ? settingsBus.get() : null;
+    boolean enabled = (s == null) || s.enabled();
+    double minContrast = (s != null) ? s.minContrast() : 3.0;
     if (!enabled) return fallbackForeground;
     String lower = normalizeNick(nick);
     if (lower.isEmpty()) return fallbackForeground;
@@ -112,6 +115,28 @@ public synchronized void setOverrides(Map<String, String> rawOverrides) {
 
     return adjustedForContrast(baseColor(lower), bg, minContrast, fallbackForeground);
   }
+
+  /**
+   * Compute a nick color for preview purposes using explicit parameters (does not depend on current runtime settings).
+   * This lets the Preferences UI show an immediate preview while the user tweaks controls before pressing Apply.
+   */
+  public Color previewColorForNick(String nick,
+                                  Color background,
+                                  Color fallbackForeground,
+                                  boolean enabled,
+                                  double minContrast) {
+    if (!enabled) return fallbackForeground;
+    String lower = normalizeNick(nick);
+    if (lower.isEmpty()) return fallbackForeground;
+
+    Color bg = background;
+    if (bg == null) bg = UIManager.getColor("TextPane.background");
+    if (bg == null) bg = Color.WHITE;
+
+    double mc = (minContrast > 0) ? minContrast : 3.0;
+    return adjustedForContrast(baseColor(lower), bg, mc, fallbackForeground);
+  }
+
 
   private Color baseColor(String nickLower) {
     Color o = overrides.get(nickLower);

@@ -97,17 +97,33 @@ public class IgnoreListDialog {
     JButton close = new JButton("Close");
     close.addActionListener(e -> dialog.dispose());
 
-    JCheckBox ctcpToggle = new JCheckBox("Hard ignore includes CTCP");
-    ctcpToggle.setSelected(ignores != null && ignores.hardIgnoreIncludesCtcp());
-    ctcpToggle.setToolTipText(
+    JCheckBox hardCtcpToggle = new JCheckBox("Hard ignore includes CTCP");
+    hardCtcpToggle.setSelected(ignores != null && ignores.hardIgnoreIncludesCtcp());
+    hardCtcpToggle.setToolTipText(
         "When enabled, CTCP messages (e.g., VERSION/PING/ACTION) from hard-ignored users are also dropped.");
-    ctcpToggle.addActionListener(e -> {
+    hardCtcpToggle.addActionListener(e -> {
       if (ignores == null) return;
-      ignores.setHardIgnoreIncludesCtcp(ctcpToggle.isSelected());
+      ignores.setHardIgnoreIncludesCtcp(hardCtcpToggle.isSelected());
     });
 
+    JCheckBox softCtcpToggle = new JCheckBox("Soft ignore includes CTCP");
+    softCtcpToggle.setSelected(ignores != null && ignores.softIgnoreIncludesCtcp());
+    softCtcpToggle.setToolTipText("When enabled, CTCP messages from soft-ignored users are fully dropped (not shown as spoilers).\n" +
+        "This applies to CTCP requests/replies and /me actions.");
+    softCtcpToggle.addActionListener(e -> {
+      if (ignores == null) return;
+      ignores.setSoftIgnoreIncludesCtcp(softCtcpToggle.isSelected());
+    });
+
+    JPanel toggles = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+    toggles.setOpaque(false);
+    toggles.add(hardCtcpToggle);
+    toggles.add(softCtcpToggle);
+
+
+
     JPanel footer = new JPanel(new BorderLayout());
-    footer.add(ctcpToggle, BorderLayout.WEST);
+    footer.add(toggles, BorderLayout.WEST);
     footer.add(close, BorderLayout.EAST);
 
     JPanel root = new JPanel(new BorderLayout(10, 10));
