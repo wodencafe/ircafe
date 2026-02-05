@@ -165,13 +165,17 @@ public class UserListStore {
         .put(ch, safe);
 
     // Precompute lowercased nick set for fast mention checking.
-    Set<String> lower = safe.stream()
-        .map(NickInfo::nick)
-        .filter(Objects::nonNull)
-        .map(String::trim)
-        .filter(s -> !s.isEmpty())
-        .map(s -> s.toLowerCase(Locale.ROOT))
-        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    // Note: this can run on the EDT (IRC events are observed on SwingEdt), so keep it lean.
+    java.util.HashSet<String> lowerTmp = new java.util.HashSet<>(Math.max(16, safe.size() * 2));
+    for (NickInfo ni : safe) {
+      if (ni == null) continue;
+      String nick = ni.nick();
+      if (nick == null) continue;
+      String s = nick.trim();
+      if (s.isEmpty()) continue;
+      lowerTmp.add(s.toLowerCase(Locale.ROOT));
+    }
+    Set<String> lower = java.util.Collections.unmodifiableSet(lowerTmp);
 
     lowerNickSetByServerAndChannel
         .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())

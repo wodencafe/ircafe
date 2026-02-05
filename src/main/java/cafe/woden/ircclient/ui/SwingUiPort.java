@@ -202,7 +202,22 @@ public class SwingUiPort implements UiPort {
   public void setUsersNicks(List<NickInfo> nicks) {
     onEdt(() -> {
       users.setNicks(nicks);
-      java.util.List<String> names = (nicks == null) ? java.util.List.of() : nicks.stream().map(NickInfo::nick).toList();
+
+      // Avoid streams here: in very large channels this runs on the EDT and can noticeably stall the UI.
+      java.util.List<String> names;
+      if (nicks == null || nicks.isEmpty()) {
+        names = java.util.List.of();
+      } else {
+        java.util.ArrayList<String> tmp = new java.util.ArrayList<>(nicks.size());
+        for (NickInfo ni : nicks) {
+          if (ni == null) continue;
+          String nick = ni.nick();
+          if (nick == null) continue;
+          tmp.add(nick);
+        }
+        names = java.util.List.copyOf(tmp);
+      }
+
       // Route nick completions to whichever input surface is currently active (main chat or pinned).
       if (activeInputRouter != null && activeInputRouter.active() != null) {
         activeInputRouter.setNickCompletionsForActive(names);

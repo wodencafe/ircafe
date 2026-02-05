@@ -42,6 +42,79 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final Consumer<PircbotxConnectionState> heartbeatStopper;
   private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
   private final CtcpRequestHandler ctcpHandler;
+  private final boolean disconnectOnSaslFailure;
+
+  // SASL-related numerics per IRCv3:
+  // 903 = RPL_SASLSUCCESS
+  // 904 = ERR_SASLFAIL
+  // 905 = ERR_SASLTOOLONG
+  // 906 = ERR_SASLABORTED
+  // 907 = ERR_SASLALREADY
+  private static final int RPL_SASL_SUCCESS = 903;
+  private static final int ERR_SASL_FAIL = 904;
+  private static final int ERR_SASL_TOO_LONG = 905;
+  private static final int ERR_SASL_ABORTED = 906;
+  private static final int ERR_SASL_ALREADY = 907;
+
+  // Join failure numerics (common across networks):
+  // 403 = ERR_NOSUCHCHANNEL
+  // 405 = ERR_TOOMANYCHANNELS
+  // 471 = ERR_CHANNELISFULL
+  // 473 = ERR_INVITEONLYCHAN
+  // 474 = ERR_BANNEDFROMCHAN
+  // 475 = ERR_BADCHANNELKEY
+  // 476 = ERR_BADCHANMASK
+  // 477 = ERR_NEEDREGGEDNICK (often used as "+r" join restriction)
+  private static boolean isJoinFailureNumeric(int code) {
+    return code == 403
+        || code == 405
+        || code == 471
+        || code == 473
+        || code == 474
+        || code == 475
+        || code == 476
+        || code == 477;
+  }
+
+  private record ParsedJoinFailure(String channel, String message) {}
+
+  private static ParsedJoinFailure parseJoinFailure(String rawLine) {
+    if (rawLine == null || rawLine.isBlank()) return null;
+    String s = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+    if (s == null || s.isBlank()) return null;
+
+    String head = s;
+    String trailing = null;
+    int idx = s.indexOf(" :");
+    if (idx >= 0) {
+      head = s.substring(0, idx).trim();
+      trailing = s.substring(idx + 2).trim();
+      if (trailing != null && trailing.isBlank()) trailing = null;
+    }
+
+    String[] parts = head.split("\\s+");
+    if (parts.length < 3) return null;
+
+    int codeIdx = parts[0].startsWith(":") ? 1 : 0;
+    if (parts.length <= codeIdx + 1) return null;
+    if (!PircbotxLineParseUtil.looksNumeric(parts[codeIdx])) return null;
+
+    // The typical numeric shape is:
+    //   :server <code> <yourNick> <channel> :<message>
+    // Be permissive: find the first channel-like token after the nick.
+    int start = Math.min(parts.length, codeIdx + 2);
+    String channel = null;
+    for (int i = start; i < parts.length; i++) {
+      String p = parts[i];
+      if (PircbotxLineParseUtil.looksLikeChannel(p)) {
+        channel = p;
+        break;
+      }
+    }
+    if (channel == null || channel.isBlank()) return null;
+
+    return new ParsedJoinFailure(channel, trailing);
+  }
 
   PircbotxBridgeListener(
       String serverId,
@@ -49,7 +122,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       FlowableProcessor<ServerIrcEvent> bus,
       Consumer<PircbotxConnectionState> heartbeatStopper,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
-      CtcpRequestHandler ctcpHandler
+      CtcpRequestHandler ctcpHandler,
+      boolean disconnectOnSaslFailure
   ) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
@@ -57,6 +131,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.heartbeatStopper = Objects.requireNonNull(heartbeatStopper, "heartbeatStopper");
     this.reconnectScheduler = Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
     this.ctcpHandler = Objects.requireNonNull(ctcpHandler, "ctcpHandler");
+    this.disconnectOnSaslFailure = disconnectOnSaslFailure;
   }
 
     // Parsing helpers have been extracted into small, pure helper classes to keep this listener readable:
@@ -99,8 +174,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
 
+      // Some failures are not transient (e.g. authentication failures). In those cases, do not
+      // enter an auto-reconnect loop.
+      boolean suppressReconnect = conn.suppressAutoReconnectOnce.getAndSet(false);
+
       // Only auto-reconnect on non-manual disconnects.
-      if (!conn.manualDisconnect.get()) {
+      if (!conn.manualDisconnect.get() && !suppressReconnect) {
         reconnectScheduler.accept(conn, reason);
       }
     }
@@ -342,6 +421,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       // - unwrap some toString() formats like "UnknownEvent(line=...)"
       String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
 
+      // Surface SASL login failures (wrong password, etc.). These often arrive as raw numerics and
+      // otherwise look like "nothing happened" to the user.
+      Integer saslCode = parseSaslNumericCode(rawLine);
+      if (saslCode != null) {
+        handleSaslNumeric(saslCode, rawLine);
+        return;
+      }
+
       // Targeted diagnostics: confirm where IRCv3 away-notify lines are landing.
       // (Users broadcast AWAY state changes as raw AWAY commands.)
       if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
@@ -472,6 +559,43 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         code = event.getCode();
       } catch (Exception ex) {
         // Extremely defensive: if we can't get a code, bail.
+        return;
+      }
+
+      // SASL login failures (wrong password, etc.) often arrive as numerics.
+      // Surface them as a user-visible disconnect reason and suppress auto-reconnect loops.
+      if (code == ERR_SASL_FAIL
+          || code == ERR_SASL_TOO_LONG
+          || code == ERR_SASL_ABORTED
+          || code == ERR_SASL_ALREADY) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+        handleSaslNumeric(code, line);
+        return;
+      }
+
+      // Join failures (e.g. +r requires NickServ auth) are typically delivered as numerics.
+      // We surface them so the UI can show the reason in both status and the buffer
+      // where the user initiated /join.
+      if (isJoinFailureNumeric(code)) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        ParsedJoinFailure pj = parseJoinFailure(line);
+        if (pj != null) {
+          bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.JoinFailed(
+              Instant.now(),
+              pj.channel(),
+              code,
+              pj.message()
+          )));
+        }
         return;
       }
 
@@ -642,6 +766,100 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     private void touchInbound() {
       conn.lastInboundMs.set(System.currentTimeMillis());
       conn.localTimeoutEmitted.set(false);
+    }
+
+    private static Integer parseSaslNumericCode(String rawLine) {
+      if (rawLine == null || rawLine.isBlank()) return null;
+
+      // Most numeric lines look like: ":server.name 904 nick :SASL authentication failed"
+      // Be permissive: sometimes the prefix may be missing in stringified forms.
+      String s = rawLine.trim();
+      String[] parts = s.split("\\s+");
+      if (parts.length == 0) return null;
+
+      int codeIdx = (parts[0].startsWith(":")) ? 1 : 0;
+      if (parts.length <= codeIdx) return null;
+
+      String codeStr = parts[codeIdx];
+      if (!PircbotxLineParseUtil.looksNumeric(codeStr)) return null;
+
+      int code;
+      try {
+        code = Integer.parseInt(codeStr);
+      } catch (Exception ignored) {
+        return null;
+      }
+
+      if (code == ERR_SASL_FAIL
+          || code == ERR_SASL_TOO_LONG
+          || code == ERR_SASL_ABORTED
+          || code == ERR_SASL_ALREADY) {
+        return code;
+      }
+      return null;
+    }
+
+    private void handleSaslNumeric(int code, String rawLine) {
+      // Best-effort extract a human message.
+      String msg = extractTrailingMessage(rawLine);
+
+      String base = switch (code) {
+        case ERR_SASL_FAIL -> "SASL authentication failed";
+        case ERR_SASL_TOO_LONG -> "SASL authentication failed (payload too long)";
+        case ERR_SASL_ABORTED -> "SASL authentication aborted";
+        case ERR_SASL_ALREADY -> "SASL authentication already completed";
+        default -> "SASL authentication failed";
+      };
+
+      String detail = base;
+      if (msg != null && !msg.isBlank()) {
+        String m = msg.trim();
+        // Avoid duplicating the same phrase when the server already provided it.
+        if (!m.equalsIgnoreCase(base)) {
+          detail = base + ": " + m;
+        }
+      }
+
+      String reason = "Login failed — " + detail;
+
+      // Avoid spamming duplicate lines if PircBotX delivers the numeric via multiple paths.
+      String existing = conn.disconnectReasonOverride.get();
+      if (existing != null && !existing.isBlank()) {
+        // Still suppress auto-reconnect for auth failures.
+        conn.suppressAutoReconnectOnce.set(true);
+        return;
+      }
+
+      conn.disconnectReasonOverride.set(reason);
+      conn.suppressAutoReconnectOnce.set(true);
+
+      // Also surface an immediate UI-visible error (disconnect will follow soon after).
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), reason, null)));
+
+      // If configured, treat SASL failure as a hard connect failure and disconnect immediately.
+      if (disconnectOnSaslFailure) {
+        PircBotX bot = conn.botRef.get();
+        if (bot != null) {
+          try {
+            bot.stopBotReconnect();
+          } catch (Exception ignored) {}
+          try {
+            bot.sendIRC().quitServer(reason);
+          } catch (Exception ignored) {}
+        }
+      }
+    }
+
+    private static String extractTrailingMessage(String rawLine) {
+      if (rawLine == null) return null;
+      String s = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+      if (s == null) return null;
+      int idx = s.indexOf(" :");
+      if (idx < 0) return null;
+      int start = idx + 2;
+      if (start >= s.length()) return null;
+      String t = s.substring(start).trim();
+      return t.isEmpty() ? null : t;
     }
 
     private void maybeEmitHostmaskObserved(String channel, User user) {

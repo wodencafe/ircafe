@@ -10,6 +10,7 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
+import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
@@ -54,6 +55,7 @@ public class IrcMediator {
   private final CtcpRoutingState ctcpRoutingState;
   private final ModeRoutingState modeRoutingState;
   private final AwayRoutingState awayRoutingState;
+  private final JoinRoutingState joinRoutingState;
 
   // Inbound MODE-related event handler (join-burst buffering + MODE pretty printing + 324 routing).
   private final InboundModeEventHandler inboundModeEventHandler;
@@ -89,6 +91,7 @@ public class IrcMediator {
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
       AwayRoutingState awayRoutingState,
+      JoinRoutingState joinRoutingState,
       InboundModeEventHandler inboundModeEventHandler,
       OutboundModeCommandService outboundModeCommandService,
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
@@ -109,6 +112,7 @@ public class IrcMediator {
     this.ctcpRoutingState = ctcpRoutingState;
     this.modeRoutingState = modeRoutingState;
     this.awayRoutingState = awayRoutingState;
+    this.joinRoutingState = joinRoutingState;
     this.inboundModeEventHandler = inboundModeEventHandler;
     this.outboundModeCommandService = outboundModeCommandService;
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
@@ -478,6 +482,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         ctcpRoutingState.clearServer(sid);
         modeRoutingState.clearServer(sid);
         awayRoutingState.clearServer(sid);
+        joinRoutingState.clearServer(sid);
         inboundModeEventHandler.clearServer(sid);
       }
       targetCoordinator.refreshInputEnabledForActiveTarget();
@@ -672,12 +677,47 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef chan = new TargetRef(sid, ev.channel());
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
 
+        // Clear any pending /join routing state now that we've actually joined.
+        joinRoutingState.clear(sid, ev.channel());
+
         // Buffer the initial channel-flag modes so the join doesn't spam the view.
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
 
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
         ui.selectTarget(chan);
+      }
+
+      case IrcEvent.JoinFailed ev -> {
+        // Prefer routing back to where the user initiated /join (if recent), otherwise fall back
+        // to the currently active target on the same server.
+        TargetRef origin = joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
+        joinRoutingState.clear(sid, ev.channel());
+
+        TargetRef dest = origin;
+        if (dest == null) dest = resolveActiveOrStatus(sid, status);
+        if (dest == null) dest = safeStatusTarget();
+
+        String msg = (ev.message() == null) ? "" : ev.message().trim();
+        if (msg.isEmpty()) {
+          msg = "Join failed";
+        }
+
+        String rendered;
+        String msgLower = msg.toLowerCase(Locale.ROOT);
+        if (msgLower.startsWith("cannot join")) {
+          rendered = msg + " [" + ev.code() + "]";
+        } else {
+          rendered = "Cannot join " + ev.channel() + " [" + ev.code() + "]: " + msg;
+        }
+
+        ensureTargetExists(dest);
+        ui.appendError(dest, "(join)", rendered);
+
+        // Always mirror to status (unless it's the same target).
+        if (!dest.equals(status)) {
+          ui.appendError(status, "(join)", rendered);
+        }
       }
 
       case IrcEvent.NickListUpdated ev -> {

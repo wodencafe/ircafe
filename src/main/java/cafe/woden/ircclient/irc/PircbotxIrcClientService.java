@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Objects;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.reflect.Method;
 
 import jakarta.annotation.PreDestroy;
@@ -31,6 +32,7 @@ public class PircbotxIrcClientService implements IrcClientService {
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
 
   private final Map<String, PircbotxConnectionState> connections = new ConcurrentHashMap<>();
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
   private final ServerRegistry serverRegistry;
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
@@ -62,6 +64,7 @@ public class PircbotxIrcClientService implements IrcClientService {
   @Override
   public Completable connect(String serverId) {
     return Completable.fromAction(() -> {
+          if (shuttingDown.get()) return;
           PircbotxConnectionState c = conn(serverId);
           if (c.botRef.get() != null) return;
 
@@ -71,6 +74,10 @@ public class PircbotxIrcClientService implements IrcClientService {
           c.reconnectAttempts.set(0);
 
           IrcProperties.Server s = serverRegistry.require(serverId);
+
+          boolean disconnectOnSaslFailure = s.sasl() != null
+              && s.sasl().enabled()
+              && Boolean.TRUE.equals(s.sasl().disconnectOnFailure());
 
           // Surface a "connecting" state to the app/UI immediately.
           bus.onNext(new ServerIrcEvent(
@@ -82,7 +89,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               bus,
               timers::stopHeartbeat,
               this::scheduleReconnect,
-              this::handleCtcpIfPresent
+              this::handleCtcpIfPresent,
+              disconnectOnSaslFailure
           );
 
           PircBotX bot = botFactory.build(s, version, listener);
@@ -334,11 +342,15 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   private void scheduleReconnect(PircbotxConnectionState c, String reason) {
+    if (c == null) return;
+    if (shuttingDown.get()) return;
+    if (c.manualDisconnect.get()) return;
     timers.scheduleReconnect(c, reason, this::connect, bus::onNext);
   }
 
 @PreDestroy
   void shutdown() {
+    shuttingDown.set(true);
     // Stop reconnection/heartbeat timers and shut down bots.
     for (PircbotxConnectionState c : connections.values()) {
       if (c == null) continue;

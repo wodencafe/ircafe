@@ -12,7 +12,6 @@ import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.util.CloseableScope;
-import cafe.woden.ircclient.ui.util.ComponentCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.ListContextMenuDecorator;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -103,7 +102,15 @@ public class UserListDockable extends JPanel implements Dockable {
     }
   };
 
-  private final CloseableScope closeables = ComponentCloseableScopeDecorator.install(this);
+  /**
+   * Lifetime-managed resources for this dockable.
+   *
+   * <p>Important: Dockables can be closed/hidden and later re-opened. We therefore must
+   * not auto-dispose listeners/subscriptions just because the component becomes
+   * temporarily non-displayable (that would permanently break behaviors like right-click
+   * menus and double-click actions after reopening the dock).
+   */
+  private final CloseableScope closeables = new CloseableScope();
 
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
@@ -288,8 +295,9 @@ public class UserListDockable extends JPanel implements Dockable {
 
   public void setNicks(List<NickInfo> nicks) {
     model.clear();
-    if (nicks == null) return;
-    for (NickInfo n : nicks) model.addElement(n);
+    if (nicks == null || nicks.isEmpty()) return;
+    // Bulk add to avoid firing an interval-added event per nick (big channels can be thousands).
+    model.addAll(nicks);
   }
 
   public void setPlaceholder(String... nicks) {

@@ -296,9 +296,9 @@ public class ServerEditorDialog extends JDialog {
       String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
       if (u.isEmpty()) throw new IllegalArgumentException("SASL username is required when SASL is enabled");
       if (p.isBlank()) throw new IllegalArgumentException("SASL password is required when SASL is enabled");
-      sasl = new IrcProperties.Server.Sasl(true, u, p, mech);
+      sasl = new IrcProperties.Server.Sasl(true, u, p, mech, null);
     } else {
-      sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN");
+      sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
     }
 
     List<String> autoJoin = new ArrayList<>();

@@ -980,6 +980,11 @@ public class RuntimeConfigStore {
       if (s.sasl().mechanism() != null && !s.sasl().mechanism().isBlank()) {
         sasl.put("mechanism", s.sasl().mechanism());
       }
+      // Persist only when diverging from the default strict behavior.
+      // Default (when omitted) is: disconnectOnFailure = true when enabled.
+      if (s.sasl().disconnectOnFailure() != null && !s.sasl().disconnectOnFailure()) {
+        sasl.put("disconnectOnFailure", false);
+      }
       m.put("sasl", sasl);
     }
     return m;

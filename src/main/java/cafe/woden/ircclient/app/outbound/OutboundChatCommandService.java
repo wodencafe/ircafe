@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
+import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -27,6 +28,7 @@ public class OutboundChatCommandService {
   private final TargetCoordinator targetCoordinator;
   private final RuntimeConfigStore runtimeConfig;
   private final AwayRoutingState awayRoutingState;
+  private final JoinRoutingState joinRoutingState;
 
   public OutboundChatCommandService(
       IrcClientService irc,
@@ -34,13 +36,15 @@ public class OutboundChatCommandService {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       RuntimeConfigStore runtimeConfig,
-      AwayRoutingState awayRoutingState) {
+      AwayRoutingState awayRoutingState,
+      JoinRoutingState joinRoutingState) {
     this.irc = irc;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
     this.runtimeConfig = runtimeConfig;
     this.awayRoutingState = awayRoutingState;
+    this.joinRoutingState = joinRoutingState;
   }
 
   public void handleJoin(CompositeDisposable disposables, String channel) {
@@ -58,6 +62,10 @@ public class OutboundChatCommandService {
 
     // Persist for auto-join next time.
     runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+
+    // Remember where the user initiated the join so join-failure numerics can be routed
+    // back to the correct buffer (and also to status).
+    joinRoutingState.rememberOrigin(at.serverId(), chan, at);
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected (join queued in config only)");
