@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
@@ -28,12 +30,14 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.JSpinner;
@@ -110,14 +114,16 @@ public class PreferencesDialog {
     LoggingControls logging = buildLoggingControls(logProps, closeables);
 
     OutgoingColorControls outgoing = buildOutgoingColorControls(current);
-    UserhostControls userhost = buildUserhostControls(current, closeables);
+    NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
+    ProxyControls proxy = network.proxy;
+    UserhostControls userhost = network.userhost;
 
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
-    JPanel userhostPanel = userhost.panel;
+    JPanel userhostPanel = network.panel;
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
@@ -157,6 +163,43 @@ public class PreferencesDialog {
 
       int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
       int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
+
+      // SOCKS proxy settings.
+      // Note: changing these affects new connections/fetches; existing IRC connections may require reconnect.
+      IrcProperties.Proxy proxyCfg;
+      try {
+        boolean proxyEnabledV = proxy.enabled.isSelected();
+        String proxyHostV = proxy.host.getText() != null ? proxy.host.getText().trim() : "";
+        int proxyPortV = ((Number) proxy.port.getValue()).intValue();
+        String proxyUserV = proxy.username.getText() != null ? proxy.username.getText().trim() : "";
+        String proxyPassV = new String(proxy.password.getPassword());
+        boolean proxyRemoteDnsV = proxy.remoteDns.isSelected();
+
+        int connectTimeoutSecondsV = ((Number) proxy.connectTimeoutSeconds.getValue()).intValue();
+        int readTimeoutSecondsV = ((Number) proxy.readTimeoutSeconds.getValue()).intValue();
+
+        if (proxyEnabledV) {
+          if (proxyHostV.isBlank()) throw new IllegalArgumentException("Proxy host is required when proxy is enabled.");
+          if (proxyPortV <= 0 || proxyPortV > 65535) throw new IllegalArgumentException("Proxy port must be 1..65535.");
+        }
+
+        proxyCfg = new IrcProperties.Proxy(
+            proxyEnabledV,
+            proxyHostV,
+            proxyPortV,
+            proxyUserV,
+            proxyPassV,
+            proxyRemoteDnsV,
+            Math.max(1L, connectTimeoutSecondsV) * 1000L,
+            Math.max(1L, readTimeoutSecondsV) * 1000L
+        );
+      } catch (Exception ex) {
+        javax.swing.JOptionPane.showMessageDialog(dialog,
+            "Invalid SOCKS proxy settings:\n\n" + ex.getMessage(),
+            "Invalid proxy settings",
+            javax.swing.JOptionPane.ERROR_MESSAGE);
+        return;
+      }
 
       boolean userhostEnabledV = userhost.enabled.isSelected();
       int userhostMinIntervalV = ((Number) userhost.minIntervalSeconds.getValue()).intValue();
@@ -242,6 +285,10 @@ public class PreferencesDialog {
       runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
       runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
       runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
+
+      // Proxy settings (take effect immediately for new network operations).
+      runtimeConfig.rememberClientProxy(proxyCfg);
+      NetProxyContext.configure(proxyCfg);
 
       if (themeChanged) {
         themeManager.applyTheme(next.theme());
@@ -759,12 +806,102 @@ public class PreferencesDialog {
     return new OutgoingColorControls(outgoingColorEnabled, outgoingColorHex, outgoingPreview, outgoingColorPanel);
   }
 
-  private UserhostControls buildUserhostControls(UiSettings current, List<AutoCloseable> closeables) {
-    // ---- Hostmask discovery / USERHOST anti-flood settings ----
-    JPanel userhostPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]6[]6[]6[]"));
+  private NetworkAdvancedControls buildNetworkAdvancedControls(UiSettings current, List<AutoCloseable> closeables) {
+    IrcProperties.Proxy p = NetProxyContext.settings();
+    if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
 
-    userhostPanel.add(tabTitle("Network / Advanced"), "span 2, growx, wrap");
-    userhostPanel.add(sectionTitle("Hostmask discovery"), "span 2, growx, wrap");
+    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]6[]6[]6[]10[]6[]6[]6[]6[]"));
+
+    panel.add(tabTitle("Network / Advanced"), "span 2, growx, wrap");
+
+    // ---- SOCKS proxy ----
+    panel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wrap");
+    panel.add(helpText(
+        "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n" +
+            "Heads up: proxy credentials are stored in your runtime config file in plain text."),
+        "span 2, growx, wrap");
+
+    JCheckBox proxyEnabled = new JCheckBox("Use SOCKS5 proxy");
+    proxyEnabled.setSelected(p.enabled());
+
+    JTextField proxyHost = new JTextField(Objects.toString(p.host(), ""));
+    proxyHost.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "127.0.0.1");
+
+    int portDefault = (p.port() > 0 && p.port() <= 65535) ? p.port() : 1080;
+    JSpinner proxyPort = numberSpinner(portDefault, 1, 65535, 1, closeables);
+
+    JCheckBox proxyRemoteDns = new JCheckBox("Proxy resolves DNS (remote DNS)");
+    proxyRemoteDns.setSelected(p.remoteDns());
+    proxyRemoteDns.setToolTipText("When enabled, IRCafe asks the proxy to resolve hostnames. Useful if local DNS is blocked.");
+
+    JTextField proxyUsername = new JTextField(Objects.toString(p.username(), ""));
+    proxyUsername.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "(optional)");
+
+    JPasswordField proxyPassword = new JPasswordField(Objects.toString(p.password(), ""));
+    proxyPassword.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "(optional)");
+    char defaultEcho = proxyPassword.getEchoChar();
+    JCheckBox showPassword = new JCheckBox("Show");
+    JButton clearPassword = new JButton("Clear");
+    showPassword.addActionListener(e -> proxyPassword.setEchoChar(showPassword.isSelected() ? (char) 0 : defaultEcho));
+    clearPassword.addActionListener(e -> proxyPassword.setText(""));
+
+    int connectTimeoutSec = (int) Math.max(1, p.connectTimeoutMs() / 1000L);
+    int readTimeoutSec = (int) Math.max(1, p.readTimeoutMs() / 1000L);
+    JSpinner connectTimeoutSeconds = numberSpinner(connectTimeoutSec, 1, 300, 1, closeables);
+    JSpinner readTimeoutSeconds = numberSpinner(readTimeoutSec, 1, 600, 1, closeables);
+
+    JPanel passwordRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]6[]", "[]"));
+    passwordRow.setOpaque(false);
+    passwordRow.add(proxyPassword, "growx");
+    passwordRow.add(showPassword);
+    passwordRow.add(clearPassword);
+
+    Runnable updateProxyEnabledState = () -> {
+      boolean enabled = proxyEnabled.isSelected();
+      proxyHost.setEnabled(enabled);
+      proxyPort.setEnabled(enabled);
+      proxyRemoteDns.setEnabled(enabled);
+      proxyUsername.setEnabled(enabled);
+      proxyPassword.setEnabled(enabled);
+      showPassword.setEnabled(enabled);
+      clearPassword.setEnabled(enabled);
+      connectTimeoutSeconds.setEnabled(enabled);
+      readTimeoutSeconds.setEnabled(enabled);
+    };
+    proxyEnabled.addActionListener(e -> updateProxyEnabledState.run());
+    updateProxyEnabledState.run();
+
+    panel.add(proxyEnabled, "span 2, wrap");
+    panel.add(new JLabel("Host:"));
+    panel.add(proxyHost, "growx");
+    panel.add(new JLabel("Port:"));
+    panel.add(proxyPort, "w 110!");
+    panel.add(new JLabel(""));
+    panel.add(proxyRemoteDns, "growx");
+    panel.add(new JLabel("Username:"));
+    panel.add(proxyUsername, "growx");
+    panel.add(new JLabel("Password:"));
+    panel.add(passwordRow, "growx");
+    panel.add(new JLabel("Connect timeout (sec):"));
+    panel.add(connectTimeoutSeconds, "w 110!");
+    panel.add(new JLabel("Read timeout (sec):"));
+    panel.add(readTimeoutSeconds, "w 110!");
+
+    ProxyControls proxyControls = new ProxyControls(
+        proxyEnabled,
+        proxyHost,
+        proxyPort,
+        proxyRemoteDns,
+        proxyUsername,
+        proxyPassword,
+        showPassword,
+        clearPassword,
+        connectTimeoutSeconds,
+        readTimeoutSeconds
+    );
+
+    // ---- Hostmask discovery / USERHOST anti-flood settings ----
+    panel.add(sectionTitle("Hostmask discovery"), "span 2, growx, wrap");
 
     JTextArea userhostInfo = new JTextArea(
         "IRCafe prefers IRCv3 userhost-in-names (free). " +
@@ -808,18 +945,26 @@ public class PreferencesDialog {
     userhostEnabled.addActionListener(e -> updateUserhostEnabledState.run());
     updateUserhostEnabledState.run();
 
-    userhostPanel.add(userhostInfo, "span 2, growx, wrap");
-    userhostPanel.add(userhostEnabled, "span 2, wrap");
-    userhostPanel.add(new JLabel("Min interval (sec):"));
-    userhostPanel.add(userhostMinIntervalSeconds, "w 110!");
-    userhostPanel.add(new JLabel("Max commands/min:"));
-    userhostPanel.add(userhostMaxPerMinute, "w 110!");
-    userhostPanel.add(new JLabel("Nick cooldown (min):"));
-    userhostPanel.add(userhostNickCooldownMinutes, "w 110!");
-    userhostPanel.add(new JLabel("Max nicks/command:"));
-    userhostPanel.add(userhostMaxNicksPerCommand, "w 110!");
+    panel.add(userhostInfo, "span 2, growx, wrap");
+    panel.add(userhostEnabled, "span 2, wrap");
+    panel.add(new JLabel("Min interval (sec):"));
+    panel.add(userhostMinIntervalSeconds, "w 110!");
+    panel.add(new JLabel("Max commands/min:"));
+    panel.add(userhostMaxPerMinute, "w 110!");
+    panel.add(new JLabel("Nick cooldown (min):"));
+    panel.add(userhostNickCooldownMinutes, "w 110!");
+    panel.add(new JLabel("Max nicks/command:"));
+    panel.add(userhostMaxNicksPerCommand, "w 110!");
 
-    return new UserhostControls(userhostEnabled, userhostMinIntervalSeconds, userhostMaxPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand, userhostPanel);
+    UserhostControls userhostControls = new UserhostControls(
+        userhostEnabled,
+        userhostMinIntervalSeconds,
+        userhostMaxPerMinute,
+        userhostNickCooldownMinutes,
+        userhostMaxNicksPerCommand
+    );
+
+    return new NetworkAdvancedControls(proxyControls, userhostControls, panel);
   }
 
   private JPanel buildAppearancePanel(ThemeControls theme, FontControls fonts) {
@@ -1005,8 +1150,24 @@ public class PreferencesDialog {
                                  JSpinner minIntervalSeconds,
                                  JSpinner maxPerMinute,
                                  JSpinner nickCooldownMinutes,
-                                 JSpinner maxNicksPerCommand,
-                                 JPanel panel) {
+                                 JSpinner maxNicksPerCommand) {
+  }
+
+  private record ProxyControls(JCheckBox enabled,
+                               JTextField host,
+                               JSpinner port,
+                               JCheckBox remoteDns,
+                               JTextField username,
+                               JPasswordField password,
+                               JCheckBox showPassword,
+                               JButton clearPassword,
+                               JSpinner connectTimeoutSeconds,
+                               JSpinner readTimeoutSeconds) {
+  }
+
+  private record NetworkAdvancedControls(ProxyControls proxy,
+                                         UserhostControls userhost,
+                                         JPanel panel) {
   }
 
 

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import javax.swing.text.SimpleAttributeSet;
@@ -42,8 +43,9 @@ public class ChatImageEmbedder {
    *
    * <p>Must be called on the Swing EDT (the caller in IRCafe already runs on EDT).
    */
-  public void appendEmbeds(StyledDocument doc, String messageText) {
+  public void appendEmbeds(TargetRef ctx, StyledDocument doc, String messageText) {
     if (doc == null) return;
+    String serverId = (ctx != null) ? ctx.serverId() : null;
 
     DocState st = stateFor(doc);
     for (String url : ImageUrlExtractor.extractImageUrls(messageText)) {
@@ -58,6 +60,7 @@ public class ChatImageEmbedder {
 
         // Insert a component as a single "character" in the styled document.
         ChatImageComponent comp = new ChatImageComponent(
+            serverId,
             url,
             fetch,
             uiSettings.get().imageEmbedsCollapsedByDefault(),

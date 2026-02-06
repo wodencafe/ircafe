@@ -1,6 +1,15 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.net.SocksProxySocketFactory;
+import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.Socket;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
@@ -19,8 +28,30 @@ import org.springframework.stereotype.Component;
 @Component
 public class PircbotxBotFactory {
 
+  private final ServerProxyResolver proxyResolver;
+
+  public PircbotxBotFactory(ServerProxyResolver proxyResolver) {
+    this.proxyResolver = proxyResolver;
+  }
+
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
-    SocketFactory socketFactory = s.tls() ? SSLSocketFactory.getDefault() : SocketFactory.getDefault();
+    // Resolve the effective proxy for this server. This honors per-server overrides and
+    // falls back to the default proxy settings when no override is set.
+    ProxyPlan plan = proxyResolver.planForServer(s.id());
+
+    SocketFactory socketFactory;
+    if (plan.enabled()) {
+      // SOCKS proxy enabled for this server.
+      socketFactory = s.tls()
+          ? new SocksProxySslSocketFactory(plan.cfg(), (SSLSocketFactory) SSLSocketFactory.getDefault())
+          : new SocksProxySocketFactory(plan.cfg());
+    } else {
+      // IMPORTANT: Bypass JVM-wide socksProxyHost/socksProxyPort settings (if any) so
+      // servers that explicitly disable proxy actually connect directly.
+      socketFactory = s.tls()
+          ? new DirectTlsSocketFactory((SSLSocketFactory) SSLSocketFactory.getDefault(), plan.connectTimeoutMs(), plan.readTimeoutMs())
+          : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
+    }
 
     Configuration.Builder builder = new Configuration.Builder()
         .setName(s.nick())
@@ -65,5 +96,114 @@ public class PircbotxBotFactory {
     }
 
     return new PircBotX(builder.buildConfiguration());
+  }
+
+  /** Direct socket factory that bypasses any JVM global SOCKS properties. */
+  static final class DirectSocketFactory extends SocketFactory {
+
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+
+    DirectSocketFactory(int connectTimeoutMs, int readTimeoutMs) {
+      this.connectTimeoutMs = Math.max(1, connectTimeoutMs);
+      this.readTimeoutMs = Math.max(0, readTimeoutMs);
+    }
+
+    private Socket base() {
+      return new Socket(Proxy.NO_PROXY);
+    }
+
+    private Socket connect(Socket s, InetSocketAddress addr) throws IOException {
+      s.connect(addr, connectTimeoutMs);
+      s.setSoTimeout(readTimeoutMs);
+      return s;
+    }
+
+    @Override
+    public Socket createSocket() {
+      return base();
+    }
+
+    @Override
+    public Socket createSocket(String host, int port) throws IOException {
+      return connect(base(), new InetSocketAddress(host, port));
+    }
+
+    @Override
+    public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+      Socket s = base();
+      s.bind(new InetSocketAddress(localHost, localPort));
+      return connect(s, new InetSocketAddress(host, port));
+    }
+
+    @Override
+    public Socket createSocket(InetAddress host, int port) throws IOException {
+      return connect(base(), new InetSocketAddress(host, port));
+    }
+
+    @Override
+    public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+      Socket s = base();
+      s.bind(new InetSocketAddress(localAddress, localPort));
+      return connect(s, new InetSocketAddress(address, port));
+    }
+  }
+
+  /** Direct TLS-over-TCP factory that bypasses any JVM global SOCKS properties. */
+  static final class DirectTlsSocketFactory extends SocketFactory {
+
+    private final SSLSocketFactory ssl;
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+
+    DirectTlsSocketFactory(SSLSocketFactory ssl, int connectTimeoutMs, int readTimeoutMs) {
+      this.ssl = ssl;
+      this.connectTimeoutMs = Math.max(1, connectTimeoutMs);
+      this.readTimeoutMs = Math.max(0, readTimeoutMs);
+    }
+
+    private Socket wrap(Socket tcp, String host, int port) throws IOException {
+      Socket tls = ssl.createSocket(tcp, host, port, true);
+      tls.setSoTimeout(readTimeoutMs);
+      return tls;
+    }
+
+    private Socket connectTcp(String host, int port, InetAddress localHost, Integer localPort) throws IOException {
+      Socket tcp = new Socket(Proxy.NO_PROXY);
+      if (localHost != null && localPort != null) {
+        tcp.bind(new InetSocketAddress(localHost, localPort));
+      }
+      tcp.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+      tcp.setSoTimeout(readTimeoutMs);
+      return tcp;
+    }
+
+    @Override
+    public Socket createSocket(String host, int port) throws IOException {
+      return wrap(connectTcp(host, port, null, null), host, port);
+    }
+
+    @Override
+    public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+      return wrap(connectTcp(host, port, localHost, localPort), host, port);
+    }
+
+    @Override
+    public Socket createSocket(InetAddress host, int port) throws IOException {
+      return createSocket(host.getHostName(), port);
+    }
+
+    @Override
+    public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+      return wrap(connectTcp(address.getHostName(), port, localAddress, localPort), address.getHostName(), port);
+    }
+
+    @Override
+    public Socket createSocket() throws IOException {
+      // Not used by PircBotX in the normal code path; provided for completeness.
+      Socket s = ssl.createSocket();
+      s.setSoTimeout(readTimeoutMs);
+      return s;
+    }
   }
 }

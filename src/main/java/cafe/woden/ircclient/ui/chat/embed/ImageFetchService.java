@@ -1,20 +1,22 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import cafe.woden.ircclient.net.HttpLite;
+import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.net.ServerProxyResolver;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.net.Proxy;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.lang.ref.SoftReference;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -31,19 +33,24 @@ public class ImageFetchService {
   // avoid runaway memory usage, but allow larger images.
   public static final int MAX_BYTES = 20 * 1024 * 1024; // 20 MiB
 
-  private final HttpClient client = HttpClient.newBuilder()
-      .followRedirects(HttpClient.Redirect.NORMAL)
-      .connectTimeout(Duration.ofSeconds(10))
-      .build();
-
   private final ConcurrentMap<String, SoftReference<byte[]>> cache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Single<byte[]>> inflight = new ConcurrentHashMap<>();
 
-  public Single<byte[]> fetch(String url) {
-    String key = normalizeKey(url);
-    if (key.isEmpty()) {
+  private final ServerProxyResolver proxyResolver;
+
+  public ImageFetchService(ServerProxyResolver proxyResolver) {
+    this.proxyResolver = proxyResolver;
+  }
+
+  public Single<byte[]> fetch(String serverId, String url) {
+    String base = normalizeKey(url);
+    if (base.isEmpty()) {
       return Single.error(new IllegalArgumentException("Empty URL"));
     }
+
+    String sid = Objects.toString(serverId, "").trim();
+    // Images can vary by proxy (blocked/geo/CDN variants), so isolate cache by server.
+    String key = sid + "|" + base;
 
     byte[] cached = getCached(key);
     if (cached != null) {
@@ -51,12 +58,12 @@ public class ImageFetchService {
     }
 
     // Deduplicate concurrent requests.
-    return inflight.computeIfAbsent(key, u ->
-        Single.fromCallable(() -> download(u))
+    return inflight.computeIfAbsent(key, k ->
+        Single.fromCallable(() -> download(sid, base))
             .subscribeOn(Schedulers.io())
-            .doOnSuccess(bytes -> cache.put(u, new SoftReference<>(bytes)))
-            .doOnError(err -> log.warn("Image fetch failed for {}: {}", safeForLog(u), summarizeErr(err)))
-            .doFinally(() -> inflight.remove(u))
+            .doOnSuccess(bytes -> cache.put(k, new SoftReference<>(bytes)))
+            .doOnError(err -> log.warn("Image fetch failed for {}: {}", safeForLog(base), summarizeErr(err)))
+            .doFinally(() -> inflight.remove(k))
             // cache() turns this into a replaying Single so late subscribers get the same outcome.
             .cache()
     );
@@ -72,11 +79,16 @@ public class ImageFetchService {
     return Objects.toString(url, "").trim();
   }
 
-  private byte[] download(String url) throws IOException, InterruptedException {
-    return download(url, 0);
+  // Back-compat for any callers not yet server-aware.
+  public Single<byte[]> fetch(String url) {
+    return fetch(null, url);
   }
 
-  private byte[] download(String url, int attempt) throws IOException, InterruptedException {
+  private byte[] download(String serverId, String url) throws IOException, InterruptedException {
+    return download(serverId, url, 0);
+  }
+
+  private byte[] download(String serverId, String url, int attempt) throws IOException, InterruptedException {
     URI uri = URI.create(url);
     String scheme = uri.getScheme();
     if (scheme == null) throw new IOException("URL has no scheme: " + url);
@@ -85,28 +97,35 @@ public class ImageFetchService {
       throw new IOException("Unsupported URL scheme for image embed: " + scheme);
     }
 
-    HttpRequest.Builder b = HttpRequest.newBuilder(uri)
-        .timeout(Duration.ofSeconds(20))
-        // Use the same realistic UA/locale as PreviewHttp; some CDNs block unknown clients.
-        .header("User-Agent", PreviewHttp.USER_AGENT)
-        .header("Accept-Language", PreviewHttp.ACCEPT_LANGUAGE)
-        // IMPORTANT: Do NOT advertise AVIF by default.
-        // Some CDNs will pick AVIF whenever it's present in Accept (ignoring q=), and ImageIO
-        // can't decode it without a native/plugin decoder. If you later add AVIF support,
-        // you can add image/avif back into this header.
-        .header("Accept", "image/jpeg,image/png,image/webp,image/gif,image/*;q=0.5,*/*;q=0.4")
-        // Some CDNs are picky; these headers help us look like a browser fetching an image.
-        .header("Sec-Fetch-Dest", "image")
-        .header("Sec-Fetch-Mode", "no-cors");
+    // Use HttpURLConnection (via HttpLite) so SOCKS proxies work.
+    // java.net.http.HttpClient does not support SOCKS proxies.
+    Map<String, String> headers = new HashMap<>();
+    headers.put("User-Agent", PreviewHttp.USER_AGENT);
+    headers.put("Accept-Language", PreviewHttp.ACCEPT_LANGUAGE);
+    headers.put("Accept-Encoding", "gzip");
+    // IMPORTANT: Do NOT advertise AVIF by default.
+    // Some CDNs will pick AVIF whenever it's present in Accept (ignoring q=), and ImageIO
+    // can't decode it without a native/plugin decoder. If you later add AVIF support,
+    // you can add image/avif back into this header.
+    headers.put("Accept", "image/jpeg,image/png,image/webp,image/gif,image/*;q=0.5,*/*;q=0.4");
+    // Some CDNs are picky; these headers help us look like a browser fetching an image.
+    headers.put("Sec-Fetch-Dest", "image");
+    headers.put("Sec-Fetch-Mode", "no-cors");
 
     // Some IMDb/Amazon image endpoints can be picky without a referer.
     if (needsImdbReferer(uri)) {
-      b.header("Referer", "https://www.imdb.com/");
+      headers.put("Referer", "https://www.imdb.com/");
     }
 
-    HttpRequest req = b.GET().build();
-
-    HttpResponse<InputStream> res = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
+    ProxyPlan plan = (proxyResolver != null) ? proxyResolver.planForServer(serverId) : ProxyPlan.direct();
+    Proxy proxy = (plan.proxy() != null) ? plan.proxy() : Proxy.NO_PROXY;
+    HttpLite.Response<InputStream> res = HttpLite.getStream(
+        uri,
+        headers,
+        proxy,
+        plan.connectTimeoutMs(),
+        plan.readTimeoutMs()
+    );
     int code = res.statusCode();
     String contentType = res.headers().firstValue("content-type").orElse("");
     long contentLength = res.headers().firstValueAsLong("content-length").orElse(-1L);
@@ -114,13 +133,18 @@ public class ImageFetchService {
       log.warn("Image fetch HTTP {} for {} (content-type={}, content-length={})",
           code, safeForLog(url), safeForLog(contentType), contentLength);
 
+      // Ensure we don't leak the connection.
+      try (InputStream ignored = res.body()) {
+        // no-op
+      }
+
       // Amazon CDN sometimes doesn't like certain sized variants. If we're on a sized URL and it
       // fails, retry once with the unsized original.
       if (attempt == 0) {
         String fallback = maybeUnsizedAmazonUrl(url);
         if (!fallback.equals(url)) {
           log.warn("Retrying Amazon image without size token after HTTP {}: {}", code, safeForLog(fallback));
-          return download(fallback, attempt + 1);
+          return download(serverId, fallback, attempt + 1);
         }
       }
 
@@ -129,12 +153,16 @@ public class ImageFetchService {
 
     // If the server tells us it's too big, try a sized Amazon variant once (when applicable).
     if (contentLength > MAX_BYTES) {
+      // Ensure we don't leak the connection.
+      try (InputStream ignored = res.body()) {
+        // no-op
+      }
       if (attempt == 0) {
         String sized = maybeSizedAmazonUrl(url, 512);
         if (!sized.equals(url)) {
           log.warn("Image too large by content-length ({} bytes > {}), retrying sized Amazon URL: {}",
               contentLength, MAX_BYTES, safeForLog(sized));
-          return download(sized, attempt + 1);
+          return download(serverId, sized, attempt + 1);
         }
       }
       throw new IOException("Image too large (" + contentLength + " bytes > " + MAX_BYTES + ")");
@@ -156,7 +184,7 @@ public class ImageFetchService {
             if (!sized.equals(url)) {
               log.warn("Image too large while streaming (> {} bytes), retrying sized Amazon URL: {}",
                   MAX_BYTES, safeForLog(sized));
-              return download(sized, attempt + 1);
+              return download(serverId, sized, attempt + 1);
             }
           }
           throw new IOException("Image too large (streamed > " + MAX_BYTES + " bytes)");

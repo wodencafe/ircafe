@@ -28,7 +28,7 @@ final class OpenGraphLinkPreviewResolver implements LinkPreviewResolver {
       throw new IllegalStateException("content-type not html: " + ct);
     }
 
-    byte[] bytes = PreviewHttp.readUpTo(resp.body(), maxHtmlBytes);
+    byte[] bytes = PreviewHttp.readUpToBytes(resp.body(), maxHtmlBytes);
     var doc = org.jsoup.Jsoup.parse(new ByteArrayInputStream(bytes), null, originalUrl);
     return LinkPreviewParser.parse(doc, originalUrl);
   }

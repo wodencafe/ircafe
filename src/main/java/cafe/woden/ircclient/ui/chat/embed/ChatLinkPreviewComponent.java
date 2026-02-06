@@ -58,6 +58,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final Insets CARD_PAD_COLLAPSED = new Insets(4, 10, 4, 10);
 
   private final String url;
+  private final String serverId;
   private final LinkPreviewFetchService fetch;
   private final ImageFetchService imageFetch;
   private final boolean collapsedByDefault;
@@ -111,8 +112,9 @@ final class ChatLinkPreviewComponent extends JPanel {
     }
   };
 
-  ChatLinkPreviewComponent(String url, LinkPreviewFetchService fetch, ImageFetchService imageFetch, boolean collapsedByDefault) {
+  ChatLinkPreviewComponent(String serverId, String url, LinkPreviewFetchService fetch, ImageFetchService imageFetch, boolean collapsedByDefault) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    this.serverId = serverId;
     this.url = url;
     this.fetch = fetch;
     this.imageFetch = imageFetch;
@@ -137,7 +139,7 @@ final class ChatLinkPreviewComponent extends JPanel {
       return;
     }
 
-    sub = fetch.fetch(url)
+    sub = fetch.fetch(serverId, url)
         .observeOn(SwingEdt.scheduler())
         .subscribe(
             this::renderPreview,
@@ -378,7 +380,7 @@ final class ChatLinkPreviewComponent extends JPanel {
       thumbSub = null;
     }
 
-    thumbSub = imageFetch.fetch(imageUrl)
+    thumbSub = imageFetch.fetch(serverId, imageUrl)
         .observeOn(SwingEdt.scheduler())
         .subscribe(
             bytes -> {

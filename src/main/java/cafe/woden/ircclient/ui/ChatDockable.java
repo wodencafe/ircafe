@@ -6,6 +6,8 @@ import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
+import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
@@ -60,6 +62,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final NickContextMenuFactory.NickContextMenu nickContextMenu;
 
+  private final ServerProxyResolver proxyResolver;
+
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
 
@@ -86,6 +90,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      IgnoreStatusService ignoreStatusService,
                      UserListStore userListStore,
                      NickContextMenuFactory nickContextMenuFactory,
+                     ServerProxyResolver proxyResolver,
                      UiSettingsBus settingsBus) {
     super(settingsBus);
     this.transcripts = transcripts;
@@ -95,6 +100,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.ignoreListService = ignoreListService;
     this.ignoreStatusService = ignoreStatusService;
     this.userListStore = userListStore;
+    this.proxyResolver = proxyResolver;
 
     this.nickContextMenu = nickContextMenuFactory.create(new NickContextMenuFactory.Callbacks() {
       @Override
@@ -165,6 +171,17 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Keep an initial view state so the first auto-scroll behaves.
     this.activeTarget = new TargetRef("default", "status");
     stateByTarget.put(activeTarget, new ViewState());
+  }
+
+  @Override
+  protected ProxyPlan currentProxyPlan() {
+    try {
+      if (proxyResolver == null) return null;
+      if (activeTarget == null) return null;
+      return proxyResolver.planForServer(activeTarget.serverId());
+    } catch (Exception ignored) {
+      return null;
+    }
   }
 
   public void setActiveTarget(TargetRef target) {
@@ -415,7 +432,6 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   protected void setSavedScrollValue(int value) {
     state().scrollValue = value;
   }
-
   private ViewState state() {
     if (activeTarget == null) return fallbackState;
     return stateByTarget.computeIfAbsent(activeTarget, t -> new ViewState());

@@ -677,6 +677,32 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberClientProxy(IrcProperties.Proxy proxy) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      IrcProperties.Proxy p = (proxy != null) ? proxy : new IrcProperties.Proxy(false, "", 0, "", "", true, 20_000, 30_000);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      Map<String, Object> client = getOrCreateMap(irc, "client");
+      Map<String, Object> proxyMap = getOrCreateMap(client, "proxy");
+
+      proxyMap.put("enabled", p.enabled());
+      proxyMap.put("host", Objects.toString(p.host(), "").trim());
+      proxyMap.put("port", Math.max(0, p.port()));
+      proxyMap.put("username", Objects.toString(p.username(), "").trim());
+      proxyMap.put("password", Objects.toString(p.password(), ""));
+      proxyMap.put("remoteDns", p.remoteDns());
+      proxyMap.put("connectTimeoutMs", Math.max(0L, p.connectTimeoutMs()));
+      proxyMap.put("readTimeoutMs", Math.max(0L, p.readTimeoutMs()));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist SOCKS proxy settings to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -986,6 +1012,22 @@ public class RuntimeConfigStore {
         sasl.put("disconnectOnFailure", false);
       }
       m.put("sasl", sasl);
+    }
+
+    // Optional per-server SOCKS5 proxy override.
+    // If present with enabled=false, this represents an explicit "disable proxy" for this server.
+    if (s.proxy() != null) {
+      IrcProperties.Proxy p = s.proxy();
+      Map<String, Object> proxy = new LinkedHashMap<>();
+      proxy.put("enabled", p.enabled());
+      proxy.put("host", Objects.toString(p.host(), "").trim());
+      proxy.put("port", Math.max(0, p.port()));
+      proxy.put("username", Objects.toString(p.username(), "").trim());
+      proxy.put("password", Objects.toString(p.password(), ""));
+      proxy.put("remoteDns", p.remoteDns());
+      proxy.put("connectTimeoutMs", Math.max(0L, p.connectTimeoutMs()));
+      proxy.put("readTimeoutMs", Math.max(0L, p.readTimeoutMs()));
+      m.put("proxy", proxy);
     }
     return m;
   }

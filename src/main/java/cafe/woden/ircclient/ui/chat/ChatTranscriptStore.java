@@ -384,12 +384,12 @@ public class ChatTranscriptStore {
       // After the line, optionally embed any image URLs found in the message.
       // This keeps the raw URL text visible but also shows a thumbnail block.
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
-        imageEmbeds.appendEmbeds(doc, text);
+        imageEmbeds.appendEmbeds(ref, doc, text);
       }
 
       // Optionally embed OpenGraph/Twitter-card style previews for non-image URLs.
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
-        linkPreviews.appendPreviews(doc, text);
+        linkPreviews.appendPreviews(ref, doc, text);
       }
     } catch (Exception ignored) {
     }
@@ -1245,11 +1245,11 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       }
 
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
-        imageEmbeds.appendEmbeds(doc, a);
+        imageEmbeds.appendEmbeds(ref, doc, a);
       }
 
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
-        linkPreviews.appendPreviews(doc, a);
+        linkPreviews.appendPreviews(ref, doc, a);
       }
     } catch (Exception ignored) {
     }

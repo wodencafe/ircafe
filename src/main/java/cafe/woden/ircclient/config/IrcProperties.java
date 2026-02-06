@@ -14,10 +14,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "irc")
 public record IrcProperties(Client client, List<Server> servers) {
 
-
-  /** Global IRC client identity/settings. <p>Example YAML: <pre> irc: client: version: "IRCafe 1.2.3" </pre>. */
-
-  public record Client(String version, Reconnect reconnect, Heartbeat heartbeat) {
+  /**
+   * Global IRC client identity/settings.
+   *
+   * <p>Example YAML:
+   * <pre>
+   * irc:
+   *   client:
+   *     version: "IRCafe 1.2.3"
+   * </pre>
+   */
+  public record Client(String version, Reconnect reconnect, Heartbeat heartbeat, Proxy proxy) {
     public Client {
       if (version == null || version.isBlank()) {
         version = "IRCafe";
@@ -28,6 +35,42 @@ public record IrcProperties(Client client, List<Server> servers) {
       if (heartbeat == null) {
         heartbeat = new Heartbeat(true, 15_000, 360_000);
       }
+      if (proxy == null) {
+        proxy = new Proxy(false, "", 0, "", "", true, 20_000, 30_000);
+      }
+    }
+  }
+
+  /** SOCKS5 proxy settings used for IRC connections and outbound HTTP fetching (link previews, image embeds, etc.). */
+  public record Proxy(
+      boolean enabled,
+      String host,
+      int port,
+      String username,
+      String password,
+      boolean remoteDns,
+      long connectTimeoutMs,
+      long readTimeoutMs
+  ) {
+    public Proxy {
+      if (host == null) host = "";
+      if (username == null) username = "";
+      if (password == null) password = "";
+      if (connectTimeoutMs <= 0) connectTimeoutMs = 20_000;
+      if (readTimeoutMs <= 0) readTimeoutMs = 30_000;
+
+      if (enabled) {
+        if (host.isBlank()) {
+          throw new IllegalArgumentException("irc.client.proxy.enabled=true but host is blank");
+        }
+        if (port <= 0 || port > 65535) {
+          throw new IllegalArgumentException("irc.client.proxy.enabled=true but port is invalid: " + port);
+        }
+      }
+    }
+
+    public boolean hasAuth() {
+      return username != null && !username.isBlank();
     }
   }
 
@@ -73,7 +116,14 @@ public record IrcProperties(Client client, List<Server> servers) {
       String login,
       String realName,
       Sasl sasl,
-      List<String> autoJoin
+      List<String> autoJoin,
+      /**
+       * Optional per-server proxy override.
+       *
+       * <p>If {@code null}, the server inherits {@code irc.client.proxy}.
+       * If non-null and {@code enabled} is {@code false}, the server explicitly disables proxying.
+       */
+      Proxy proxy
   ) {
     public record Sasl(
         boolean enabled,
@@ -118,7 +168,7 @@ public record IrcProperties(Client client, List<Server> servers) {
 
   public IrcProperties {
     if (client == null) {
-      client = new Client("IRCafe", null, null);
+      client = new Client("IRCafe", null, null, null);
     }
     if (servers == null) {
       servers = List.of();

@@ -67,7 +67,7 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
       String ct = resp.headers().firstValue("content-type").orElse(null);
       if (!PreviewHttp.looksLikeHtml(ct)) return null;
 
-      byte[] bytes = PreviewHttp.readUpTo(resp.body(), MAX_BYTES);
+      byte[] bytes = PreviewHttp.readUpToBytes(resp.body(), MAX_BYTES);
       if (bytes.length == 0) return null;
 
       // jsoup will sniff charset when charsetName is null.
