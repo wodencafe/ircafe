@@ -11,6 +11,7 @@ import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
 import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.net.ProxyPlan;
 import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Font;
@@ -74,7 +75,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::nickAt,
         this::nickContextMenuFor,
         this::openUrl,
-        this::openFindBar
+        this::openFindBar,
+        this::currentProxyPlan
     ));
     this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
         scroll,
@@ -170,6 +172,16 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    * transcript context menu.
    */
   protected JPopupMenu nickContextMenuFor(String nick) {
+    return null;
+  }
+
+  /**
+   * Optional hook: return the proxy plan for network operations initiated from this view
+   * (e.g., "Save Link As...").
+   *
+   * <p>Return {@code null} to fall back to the global proxy settings.
+   */
+  protected ProxyPlan currentProxyPlan() {
     return null;
   }
 

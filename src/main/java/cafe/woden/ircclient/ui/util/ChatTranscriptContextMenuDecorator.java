@@ -1,21 +1,26 @@
 package cafe.woden.ircclient.ui.util;
 
+import cafe.woden.ircclient.net.HttpLite;
+import cafe.woden.ircclient.net.NetProxyContext;
+import cafe.woden.ircclient.net.ProxyPlan;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.datatransfer.StringSelection;
 import java.io.InputStream;
+import java.net.Proxy;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JFileChooser;
@@ -23,7 +28,6 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 import java.awt.Point;
-import java.time.Duration;
 
 /**
  * Decorates a chat transcript {@link JTextComponent} with a right-click context menu.
@@ -41,6 +45,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final Function<String, JPopupMenu> nickMenuFor;
   private final Consumer<String> openUrl;
   private final MouseAdapter mouse;
+
+  // Optional: allow the caller to provide a per-view proxy plan (e.g., per server).
+  // If null, fall back to the global NetProxyContext proxy.
+  private final Supplier<ProxyPlan> proxyPlanSupplier;
 
   private final JPopupMenu menu = new JPopupMenu();
   private final JMenuItem copyItem = new JMenuItem("Copy");
@@ -65,7 +73,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Function<Point, String> nickAt,
       Function<String, JPopupMenu> nickMenuFor,
       Consumer<String> openUrl,
-      Runnable openFind
+      Runnable openFind,
+      Supplier<ProxyPlan> proxyPlanSupplier
   ) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
     this.urlAt = urlAt;
@@ -73,6 +82,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.nickMenuFor = nickMenuFor;
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
+    this.proxyPlanSupplier = proxyPlanSupplier;
 
     copyItem.addActionListener(this::onCopy);
     selectAllItem.addActionListener(this::onSelectAll);
@@ -144,7 +154,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
-    return new ChatTranscriptContextMenuDecorator(transcript, null, null, null, null, openFind);
+    return new ChatTranscriptContextMenuDecorator(transcript, null, null, null, null, openFind, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -153,7 +163,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind
   ) {
-    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, null, null, openUrl, openFind);
+    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, null, null, openUrl, openFind, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -164,7 +174,19 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind
   ) {
-    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind);
+    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null);
+  }
+
+  public static ChatTranscriptContextMenuDecorator decorate(
+      JTextComponent transcript,
+      Function<Point, String> urlAt,
+      Function<Point, String> nickAt,
+      Function<String, JPopupMenu> nickMenuFor,
+      Consumer<String> openUrl,
+      Runnable openFind,
+      Supplier<ProxyPlan> proxyPlanSupplier
+  ) {
+    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier);
   }
 
   private void rebuildMenu(String url) {
@@ -300,33 +322,50 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
 private void downloadToFile(String url, Path out) {
-  HttpClient client = HttpClient.newBuilder()
-      .followRedirects(HttpClient.Redirect.NORMAL)
-      .connectTimeout(Duration.ofSeconds(20))
-      .build();
-
   try {
     URI uri = URI.create(url);
 
-    // First attempt: "browser-ish" headers (many hosts 403 Java defaults).
-    HttpRequest.Builder b = HttpRequest.newBuilder(uri)
-        .timeout(Duration.ofMinutes(2))
-        .header("User-Agent", DEFAULT_UA)
-        .header("Accept", "*/*")
-        .header("Accept-Language", "en-US,en;q=0.9")
-        .GET();
+    // Use HttpURLConnection (via HttpLite) so SOCKS proxies work.
+    // java.net.http.HttpClient does not support SOCKS proxies.
+    ProxyPlan plan = null;
+    try {
+      if (proxyPlanSupplier != null) {
+        plan = proxyPlanSupplier.get();
+      }
+    } catch (Exception ignored) {
+    }
 
-    HttpResponse<InputStream> resp = client.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+    if (plan == null) {
+      plan = ProxyPlan.from(NetProxyContext.settings());
+    }
+    Proxy proxy = (plan.proxy() != null) ? plan.proxy() : Proxy.NO_PROXY;
+
+    Map<String, String> headers = new HashMap<>();
+    headers.put("User-Agent", DEFAULT_UA);
+    headers.put("Accept", "*/*");
+    headers.put("Accept-Language", "en-US,en;q=0.9");
+
+    int connectTimeoutMs = Math.max(1, plan.connectTimeoutMs());
+    int readTimeoutMs = Math.max(Math.max(1, plan.readTimeoutMs()), 120_000);
+
+    HttpLite.Response<InputStream> resp = HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
     int code = resp.statusCode();
 
     // Second attempt: some hosts require a plausible Referer (anti-hotlinking).
     if (code == 403 && uri.getHost() != null) {
+      try (InputStream ignored = resp.body()) {
+        // ensure we don't leak the first connection
+      }
       String origin = uri.getScheme() + "://" + uri.getHost() + "/";
-      resp = client.send(b.header("Referer", origin).build(), HttpResponse.BodyHandlers.ofInputStream());
+      headers.put("Referer", origin);
+      resp = HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
       code = resp.statusCode();
     }
 
     if (code < 200 || code >= 300) {
+      try (InputStream ignored = resp.body()) {
+        // ensure we don't leak the connection
+      }
       int finalCode = code;
       SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
           transcript,

@@ -72,7 +72,7 @@ final class XLinkPreviewResolver implements LinkPreviewResolver {
             null);
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) continue;
 
-        byte[] bytes = PreviewHttp.readUpTo(resp.body(), maxHtmlBytes);
+        byte[] bytes = PreviewHttp.readUpToBytes(resp.body(), maxHtmlBytes);
         var doc = org.jsoup.Jsoup.parse(new ByteArrayInputStream(bytes), null, proxy.toString());
         LinkPreview p = LinkPreviewParser.parse(doc, proxy.toString());
         if (p == null) continue;

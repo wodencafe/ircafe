@@ -1,115 +1,160 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import cafe.woden.ircclient.net.HttpLite;
+import cafe.woden.ircclient.net.ProxyPlan;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.Proxy;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.Locale;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
+/**
+ * HTTP helper used by link preview resolvers.
+ *
+ * <p>Uses {@link java.net.HttpURLConnection} via {@link HttpLite} so that SOCKS proxies
+ * can be applied (the JDK {@code java.net.http.HttpClient} does not support SOCKS).
+ */
 final class PreviewHttp {
 
-  static final Duration TIMEOUT = Duration.ofSeconds(8);
-
-  // Keep UA realistic; some sites block unknown UAs.
-  static final String USER_AGENT =
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-          + "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  // Package-visible so other embed helpers (e.g., ImageFetchService) can share the same headers.
+  static final String USER_AGENT = "ircafe-link-preview/1.0";
   static final String ACCEPT_LANGUAGE = "en-US,en;q=0.9";
+  private static final Map<String, String> BASE_HEADERS = Map.of(
+      "User-Agent", USER_AGENT,
+      "Accept-Language", ACCEPT_LANGUAGE,
+      "Accept-Encoding", "gzip"
+  );
 
-  private final HttpClient client;
+  private final Proxy proxy;
+  private final int connectTimeoutMs;
+  private final int readTimeoutMs;
 
-  PreviewHttp() {
-    this(HttpClient.newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .connectTimeout(TIMEOUT)
-        .build());
+  PreviewHttp(ProxyPlan plan) {
+    ProxyPlan p = plan != null ? plan : ProxyPlan.direct();
+    this.proxy = (p.proxy() != null) ? p.proxy() : Proxy.NO_PROXY;
+    this.connectTimeoutMs = Math.max(1, p.connectTimeoutMs());
+    this.readTimeoutMs = Math.max(1, p.readTimeoutMs());
   }
 
-  PreviewHttp(HttpClient client) {
-    this.client = client;
+  public HttpLite.Response<InputStream> getStream(URI uri, String accept) throws IOException {
+    return getStream(uri, accept, Map.of());
   }
 
-  HttpResponse<InputStream> getStream(URI uri, String accept, Map<String, String> extraHeaders)
-      throws Exception {
-    HttpRequest req = request(uri, accept, extraHeaders).GET().build();
-    return client.send(req, HttpResponse.BodyHandlers.ofInputStream());
+  public HttpLite.Response<InputStream> getStream(URI uri, String accept, Map<String, String> extraHeaders) throws IOException {
+    Map<String, String> headers = new HashMap<>(BASE_HEADERS);
+    headers.put("Accept", accept);
+    if (extraHeaders != null) headers.putAll(extraHeaders);
+
+    return HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
   }
 
-  HttpResponse<String> getString(URI uri, String accept, Map<String, String> extraHeaders)
-      throws Exception {
-    HttpRequest req = request(uri, accept, extraHeaders).GET().build();
-    return client.send(req, HttpResponse.BodyHandlers.ofString());
+  public HttpLite.Response<String> getString(URI uri) throws IOException {
+    return getString(uri, Map.of());
   }
 
-  HttpRequest.Builder request(URI uri, String accept, Map<String, String> extraHeaders) {
-    HttpRequest.Builder b = HttpRequest.newBuilder(uri)
-        .timeout(TIMEOUT)
-        .header("User-Agent", USER_AGENT)
-        .header("Accept-Language", ACCEPT_LANGUAGE);
+  public HttpLite.Response<String> getString(URI uri, Map<String, String> extraHeaders) throws IOException {
+    return getString(
+        uri,
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        extraHeaders);
+  }
 
+  /**
+   * Legacy-compatible overload used by many preview resolvers.
+   *
+   * @param uri target URI
+   * @param accept explicit Accept header (e.g. application/json)
+   * @param extraHeaders optional extra headers (may be null)
+   */
+  public HttpLite.Response<String> getString(URI uri, String accept, Map<String, String> extraHeaders) throws IOException {
+    Map<String, String> headers = new HashMap<>(BASE_HEADERS);
     if (accept != null && !accept.isBlank()) {
-      b.header("Accept", accept);
+      headers.put("Accept", accept);
+    } else {
+      headers.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     }
+    if (extraHeaders != null) headers.putAll(extraHeaders);
 
-    if (extraHeaders != null && !extraHeaders.isEmpty()) {
-      for (Map.Entry<String, String> e : extraHeaders.entrySet()) {
-        if (e.getKey() == null || e.getKey().isBlank()) continue;
-        if (e.getValue() == null) continue;
-        b.header(e.getKey(), e.getValue());
+    return HttpLite.getString(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
+  }
+
+  public static Optional<String> header(HttpLite.Response<?> response, String name) {
+    return response.headers().firstValue(name);
+  }
+
+  public static Map<String, String> headers(Object... keyValues) {
+    Map<String, String> m = new HashMap<>();
+    for (int i = 0; i + 1 < keyValues.length; i += 2) {
+      Object k = keyValues[i];
+      Object v = keyValues[i + 1];
+      if (k instanceof String ks && v instanceof String vs) {
+        m.put(ks, vs);
       }
     }
-    return b;
-  }
-
-  static Map<String, String> headers(String k1, String v1) {
-    Map<String, String> m = new LinkedHashMap<>();
-    if (k1 != null && v1 != null) m.put(k1, v1);
     return m;
   }
 
-  static Map<String, String> headers(String k1, String v1, String k2, String v2) {
-    Map<String, String> m = new LinkedHashMap<>();
-    if (k1 != null && v1 != null) m.put(k1, v1);
-    if (k2 != null && v2 != null) m.put(k2, v2);
-    return m;
+  public static boolean looksLikeHtml(String contentType) {
+    if (contentType == null) return false;
+    String ct = contentType.toLowerCase();
+    return ct.contains("text/html") || ct.contains("application/xhtml+xml");
   }
 
-  static Map<String, String> headers(String k1, String v1, String k2, String v2, String k3, String v3) {
-    Map<String, String> m = new LinkedHashMap<>();
-    if (k1 != null && v1 != null) m.put(k1, v1);
-    if (k2 != null && v2 != null) m.put(k2, v2);
-    if (k3 != null && v3 != null) m.put(k3, v3);
-    return m;
-  }
-
-  static byte[] readUpTo(InputStream in, int maxBytes) throws Exception {
-    if (in == null) return new byte[0];
-    byte[] buf = new byte[Math.min(8192, Math.max(1024, maxBytes))];
-    int total = 0;
+  public static String readUpTo(InputStream in, int maxBytes) throws IOException {
     try (in) {
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      while (true) {
-        int toRead = Math.min(buf.length, maxBytes - total);
-        if (toRead <= 0) break;
-        int n = in.read(buf, 0, toRead);
-        if (n < 0) break;
-        out.write(buf, 0, n);
-        total += n;
+      ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 16 * 1024));
+      byte[] buf = new byte[8 * 1024];
+      int remaining = maxBytes;
+      while (remaining > 0) {
+        int read = in.read(buf, 0, Math.min(buf.length, remaining));
+        if (read < 0) break;
+        out.write(buf, 0, read);
+        remaining -= read;
       }
-      return out.toByteArray();
+      return out.toString(StandardCharsets.UTF_8);
     }
   }
 
-  static boolean looksLikeHtml(String contentType) {
-    if (contentType == null || contentType.isBlank()) return true; // missing -> allow
-    String lower = contentType.toLowerCase(Locale.ROOT);
-    return lower.contains("text/html")
-        || lower.contains("application/xhtml")
-        || lower.contains("xml");
+/**
+ * Read up to {@code maxBytes} bytes from a stream, returning raw bytes.
+ * <p>
+ * This is used by HTML-based resolvers that want to hand a byte-limited body to jsoup.
+ * We intentionally swallow IO failures and return an empty array to keep resolvers robust.
+ */
+public static byte[] readUpToBytes(InputStream in, int maxBytes) {
+  if (in == null || maxBytes <= 0) return new byte[0];
+  try (in) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 16 * 1024));
+    byte[] buf = new byte[8 * 1024];
+    int remaining = maxBytes;
+    while (remaining > 0) {
+      int n = in.read(buf, 0, Math.min(buf.length, remaining));
+      if (n < 0) break;
+      out.write(buf, 0, n);
+      remaining -= n;
+    }
+    return out.toByteArray();
+  } catch (IOException e) {
+    return new byte[0];
+  }
+}
+
+
+
+  /**
+   * Read up to {@code maxBytes} bytes from a previously fetched String body.
+   * This keeps older resolvers that expect a byte-limited body working.
+   */
+  public static byte[] readUpToBytes(String body, int maxBytes) {
+    if (body == null || maxBytes <= 0) return new byte[0];
+    byte[] all = body.getBytes(StandardCharsets.UTF_8);
+    if (all.length <= maxBytes) return all;
+    byte[] out = new byte[maxBytes];
+    System.arraycopy(all, 0, out, 0, maxBytes);
+    return out;
   }
 }

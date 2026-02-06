@@ -30,6 +30,7 @@ final class ChatImageComponent extends JPanel {
   private static final int WIDTH_MARGIN_PX = 32;
 
   private final String url;
+  private final String serverId;
   private final ImageFetchService fetch;
   private final UiSettingsBus uiSettingsBus;
 
@@ -84,6 +85,7 @@ final class ChatImageComponent extends JPanel {
   private int[] gifDelaysMs = new int[0];
 
   ChatImageComponent(
+      String serverId,
       String url,
       ImageFetchService fetch,
       boolean collapsedByDefault,
@@ -91,6 +93,7 @@ final class ChatImageComponent extends JPanel {
       GifAnimationCoordinator gifCoordinator,
       long embedSeq) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    this.serverId = serverId;
     this.url = url;
     this.fetch = fetch;
     this.uiSettingsBus = uiSettingsBus;
@@ -235,7 +238,7 @@ final class ChatImageComponent extends JPanel {
       return;
     }
 
-    sub = fetch.fetch(url)
+    sub = fetch.fetch(serverId, url)
         .observeOn(SwingEdt.scheduler())
         .subscribe(
             b -> {

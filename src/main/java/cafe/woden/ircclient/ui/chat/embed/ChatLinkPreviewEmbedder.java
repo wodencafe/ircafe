@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.List;
@@ -32,10 +33,11 @@ public class ChatLinkPreviewEmbedder {
     this.imageFetch = imageFetch;
   }
 
-  public void appendPreviews(StyledDocument doc, String messageText) {
+  public void appendPreviews(TargetRef ctx, StyledDocument doc, String messageText) {
     if (doc == null || messageText == null || messageText.isBlank()) return;
     if (!uiSettings.get().linkPreviewsEnabled()) return;
 
+    String serverId = (ctx != null) ? ctx.serverId() : null;
     List<String> urls = LinkUrlExtractor.extractUrls(messageText);
     if (urls.isEmpty()) return;
 
@@ -43,7 +45,7 @@ public class ChatLinkPreviewEmbedder {
     for (String url : urls) {
       if (count >= MAX_PREVIEWS_PER_MESSAGE) break;
       try {
-        ChatLinkPreviewComponent comp = new ChatLinkPreviewComponent(url, fetch, imageFetch, uiSettings.get().linkPreviewsCollapsedByDefault());
+        ChatLinkPreviewComponent comp = new ChatLinkPreviewComponent(serverId, url, fetch, imageFetch, uiSettings.get().linkPreviewsCollapsedByDefault());
 
         SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
         a.addAttribute(ChatStyles.ATTR_URL, url);

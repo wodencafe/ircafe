@@ -1,11 +1,13 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.net.URI;
 import java.util.Locale;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
@@ -22,7 +24,8 @@ public class LinkPreviewFetchService {
   
   private static final int MAX_BYTES = 1024 * 1024; // 1 MiB
 
-  private final PreviewHttp http = new PreviewHttp();
+  private final ServerProxyResolver proxyResolver;
+
   private final List<LinkPreviewResolver> resolvers = List.of(
       new WikipediaLinkPreviewResolver(),
       new YouTubeLinkPreviewResolver(),
@@ -39,7 +42,11 @@ public class LinkPreviewFetchService {
   private final ConcurrentMap<String, java.lang.ref.SoftReference<LinkPreview>> cache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Single<LinkPreview>> inflight = new ConcurrentHashMap<>();
 
-  public Single<LinkPreview> fetch(String url) {
+  public LinkPreviewFetchService(ServerProxyResolver proxyResolver) {
+    this.proxyResolver = proxyResolver;
+  }
+
+  public Single<LinkPreview> fetch(String serverId, String url) {
     if (url == null || url.isBlank()) {
       return Single.error(new IllegalArgumentException("url is blank"));
     }
@@ -47,25 +54,34 @@ public class LinkPreviewFetchService {
     // Normalize early so cache keys are stable.
     final String normalized = ChatRichTextRenderer.normalizeUrl(url.trim());
 
+    // Per-server cache key. Previews can vary by proxy (geo/CDN/bot pages), so we isolate.
+    final String sid = Objects.toString(serverId, "").trim();
+    final String key = sid + "|" + normalized;
+
     // Cache hit
-    var ref = cache.get(normalized);
+    var ref = cache.get(key);
     if (ref != null) {
       var v = ref.get();
       if (v != null) return Single.just(v);
-      cache.remove(normalized, ref);
+      cache.remove(key, ref);
     }
 
     // Inflight de-dupe: computeIfAbsent + cache() so multiple subscribers share the same work.
-    return inflight.computeIfAbsent(normalized, key ->
-        Single.fromCallable(() -> load(key))
+    return inflight.computeIfAbsent(key, k ->
+        Single.fromCallable(() -> load(sid, normalized))
             .subscribeOn(Schedulers.io())
-            .doOnSuccess(p -> cache.put(key, new java.lang.ref.SoftReference<>(p)))
-            .doFinally(() -> inflight.remove(key))
+            .doOnSuccess(p -> cache.put(k, new java.lang.ref.SoftReference<>(p)))
+            .doFinally(() -> inflight.remove(k))
             .cache()
     );
   }
 
-  private LinkPreview load(String url) throws Exception {
+  // Back-compat for any callers not yet server-aware.
+  public Single<LinkPreview> fetch(String url) {
+    return fetch(null, url);
+  }
+
+  private LinkPreview load(String serverId, String url) throws Exception {
     URI uri = URI.create(url);
     String scheme = String.valueOf(uri.getScheme()).toLowerCase(Locale.ROOT);
     if (!scheme.equals("http") && !scheme.equals("https")) {
@@ -74,6 +90,8 @@ public class LinkPreviewFetchService {
     if (isDefinitelyLocalOrPrivateHost(uri.getHost())) {
       throw new IllegalArgumentException("refusing to fetch local/private host: " + uri.getHost());
     }
+
+    PreviewHttp http = new PreviewHttp(proxyResolver != null ? proxyResolver.planForServer(serverId) : null);
 
     for (LinkPreviewResolver r : resolvers) {
       try {
