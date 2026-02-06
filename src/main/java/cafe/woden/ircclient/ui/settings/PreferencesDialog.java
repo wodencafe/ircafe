@@ -4,6 +4,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.net.NetProxyContext;
+import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
@@ -117,6 +118,7 @@ public class PreferencesDialog {
     NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
     ProxyControls proxy = network.proxy;
     UserhostControls userhost = network.userhost;
+    JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates;
 
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
@@ -289,6 +291,11 @@ public class PreferencesDialog {
       // Proxy settings (take effect immediately for new network operations).
       runtimeConfig.rememberClientProxy(proxyCfg);
       NetProxyContext.configure(proxyCfg);
+
+      // TLS trust-all setting (takes effect immediately for new TLS sockets / HTTPS fetches).
+      boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
+      runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
+      NetTlsContext.configure(trustAllTlsV);
 
       if (themeChanged) {
         themeManager.applyTheme(next.theme());
@@ -887,6 +894,18 @@ public class PreferencesDialog {
     panel.add(new JLabel("Read timeout (sec):"));
     panel.add(readTimeoutSeconds, "w 110!");
 
+    // ---- TLS / SSL ----
+    panel.add(sectionTitle("TLS / SSL"), "span 2, growx, wrap");
+    panel.add(helpText(
+        "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n" +
+            "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n" +
+            "Only enable this if you understand the risk (MITM becomes trivial)."),
+        "span 2, growx, wrap");
+
+    JCheckBox trustAllTlsCertificates = new JCheckBox("Trust all TLS/SSL certificates (insecure)");
+    trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
+    panel.add(trustAllTlsCertificates, "span 2, wrap");
+
     ProxyControls proxyControls = new ProxyControls(
         proxyEnabled,
         proxyHost,
@@ -964,7 +983,7 @@ public class PreferencesDialog {
         userhostMaxNicksPerCommand
     );
 
-    return new NetworkAdvancedControls(proxyControls, userhostControls, panel);
+    return new NetworkAdvancedControls(proxyControls, userhostControls, trustAllTlsCertificates, panel);
   }
 
   private JPanel buildAppearancePanel(ThemeControls theme, FontControls fonts) {
@@ -1167,6 +1186,7 @@ public class PreferencesDialog {
 
   private record NetworkAdvancedControls(ProxyControls proxy,
                                          UserhostControls userhost,
+                                         JCheckBox trustAllTlsCertificates,
                                          JPanel panel) {
   }
 

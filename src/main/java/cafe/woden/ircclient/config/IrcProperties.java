@@ -24,7 +24,15 @@ public record IrcProperties(Client client, List<Server> servers) {
    *     version: "IRCafe 1.2.3"
    * </pre>
    */
-  public record Client(String version, Reconnect reconnect, Heartbeat heartbeat, Proxy proxy) {
+  public record Client(String version, Reconnect reconnect, Heartbeat heartbeat, Proxy proxy, Tls tls) {
+
+    /** TLS settings for outbound connections (IRC-over-TLS and HTTPS fetching). */
+    public record Tls(boolean trustAllCertificates) {
+      public Tls {
+        // default false
+      }
+    }
+
     public Client {
       if (version == null || version.isBlank()) {
         version = "IRCafe";
@@ -37,6 +45,9 @@ public record IrcProperties(Client client, List<Server> servers) {
       }
       if (proxy == null) {
         proxy = new Proxy(false, "", 0, "", "", true, 20_000, 30_000);
+      }
+      if (tls == null) {
+        tls = new Tls(false);
       }
     }
   }
@@ -73,6 +84,7 @@ public record IrcProperties(Client client, List<Server> servers) {
       return username != null && !username.isBlank();
     }
   }
+
 
   public record Reconnect(
       boolean enabled,
@@ -168,7 +180,7 @@ public record IrcProperties(Client client, List<Server> servers) {
 
   public IrcProperties {
     if (client == null) {
-      client = new Client("IRCafe", null, null, null);
+      client = new Client("IRCafe", null, null, null, null);
     }
     if (servers == null) {
       servers = List.of();

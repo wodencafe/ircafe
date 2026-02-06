@@ -5,6 +5,7 @@ import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
+import cafe.woden.ircclient.net.NetTlsContext;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -39,17 +40,19 @@ public class PircbotxBotFactory {
     // falls back to the default proxy settings when no override is set.
     ProxyPlan plan = proxyResolver.planForServer(s.id());
 
+    SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
+
     SocketFactory socketFactory;
     if (plan.enabled()) {
       // SOCKS proxy enabled for this server.
       socketFactory = s.tls()
-          ? new SocksProxySslSocketFactory(plan.cfg(), (SSLSocketFactory) SSLSocketFactory.getDefault())
+          ? new SocksProxySslSocketFactory(plan.cfg(), ssl)
           : new SocksProxySocketFactory(plan.cfg());
     } else {
       // IMPORTANT: Bypass JVM-wide socksProxyHost/socksProxyPort settings (if any) so
       // servers that explicitly disable proxy actually connect directly.
       socketFactory = s.tls()
-          ? new DirectTlsSocketFactory((SSLSocketFactory) SSLSocketFactory.getDefault(), plan.connectTimeoutMs(), plan.readTimeoutMs())
+          ? new DirectTlsSocketFactory(ssl, plan.connectTimeoutMs(), plan.readTimeoutMs())
           : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
     }
 

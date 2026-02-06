@@ -23,7 +23,7 @@ public final class SslOverSocksSocketFactory extends SocketFactory {
 
   public SslOverSocksSocketFactory(IrcProperties.Proxy cfg, SSLSocketFactory ssl) {
     this.cfg = (cfg != null) ? cfg : new IrcProperties.Proxy(false, "", 0, null, null, true, 10_000, 30_000);
-    this.ssl = (ssl != null) ? ssl : (SSLSocketFactory) SSLSocketFactory.getDefault();
+    this.ssl = (ssl != null) ? ssl : NetTlsContext.sslSocketFactory();
 
     // Use an explicit Proxy to support per-server overrides.
     // Do NOT rely on JVM-global socksProxyHost/socksProxyPort system properties.

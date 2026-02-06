@@ -677,6 +677,15 @@ public class RuntimeConfigStore {
     }
   }
 
+
+  public synchronized void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates) {
+    Map<String, Object> irc = getOrCreateMap(doc, "irc");
+    Map<String, Object> client = getOrCreateMap(irc, "client");
+    Map<String, Object> tls = getOrCreateMap(client, "tls");
+    tls.put("trustAllCertificates", trustAllCertificates);
+    save();
+  }
+
   public synchronized void rememberClientProxy(IrcProperties.Proxy proxy) {
     try {
       if (file.toString().isBlank()) return;
