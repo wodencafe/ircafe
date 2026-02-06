@@ -679,11 +679,20 @@ public class RuntimeConfigStore {
 
 
   public synchronized void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates) {
-    Map<String, Object> irc = getOrCreateMap(doc, "irc");
-    Map<String, Object> client = getOrCreateMap(irc, "client");
-    Map<String, Object> tls = getOrCreateMap(client, "tls");
-    tls.put("trustAllCertificates", trustAllCertificates);
-    save();
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      Map<String, Object> client = getOrCreateMap(irc, "client");
+      Map<String, Object> tls = getOrCreateMap(client, "tls");
+
+      tls.put("trustAllCertificates", trustAllCertificates);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist TLS trust-all setting to '{}'", file, e);
+    }
   }
 
   public synchronized void rememberClientProxy(IrcProperties.Proxy proxy) {
