@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
+import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,7 @@ public class MainFrame extends JFrame {
   private final ServerTreeDockable serverTree;
   private final ChatDockable chat;
   private final UserListDockable users;
+  private final TerminalDockable terminal;
 
   public MainFrame(
       IrcMediator controller,
@@ -49,6 +51,7 @@ public class MainFrame extends JFrame {
       ServerTreeDockable serverTree,
       ChatDockable chat,
       UserListDockable users,
+      TerminalDockable terminal,
       ChatDockManager chatDockManager,
       StatusBar statusBar
   ) {
@@ -57,6 +60,7 @@ public class MainFrame extends JFrame {
     this.serverTree = serverTree;
     this.chat = chat;
     this.users = users;
+    this.terminal = terminal;
     this.statusBar = statusBar;
 
     setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -86,6 +90,7 @@ public class MainFrame extends JFrame {
     Docking.registerDockable(chat);
     Docking.registerDockable(serverTree);
     Docking.registerDockable(users);
+    Docking.registerDockable(terminal);
 
     // First dock must be to an empty root container.
     Docking.dock(chat, this);
