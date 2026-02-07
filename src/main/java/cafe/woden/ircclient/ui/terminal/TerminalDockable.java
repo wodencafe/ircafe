@@ -5,15 +5,28 @@ import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JFileChooser;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import org.springframework.context.annotation.Lazy;
@@ -34,6 +47,8 @@ public class TerminalDockable extends JPanel implements Dockable {
   private final JTextArea area = new JTextArea();
   private final JCheckBox followTail = new JCheckBox("Follow", true);
 
+  private JMenuItem copyItem;
+
   private volatile AutoCloseable subscription;
 
   public TerminalDockable(ConsoleTeeService console) {
@@ -44,6 +59,7 @@ public class TerminalDockable extends JPanel implements Dockable {
     area.setLineWrap(false);
     area.setWrapStyleWord(false);
     area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+    installContextMenu();
 
     JScrollPane scroll = new JScrollPane(area);
     scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -73,6 +89,94 @@ public class TerminalDockable extends JPanel implements Dockable {
       area.setText(initial);
       area.setCaretPosition(area.getDocument().getLength());
     }
+  }
+
+  private void installContextMenu() {
+    JPopupMenu menu = new JPopupMenu();
+
+    copyItem = new JMenuItem("Copy");
+    copyItem.addActionListener(e -> area.copy());
+    copyItem.setEnabled(false);
+
+    JMenuItem selectAll = new JMenuItem("Select All");
+    selectAll.addActionListener(e -> area.selectAll());
+
+    JMenuItem clear = new JMenuItem("Clear");
+    clear.addActionListener(e -> area.setText(""));
+
+    JMenuItem save = new JMenuItem("Save to file...");
+    save.addActionListener(e -> saveToFile());
+
+    menu.add(copyItem);
+    menu.add(selectAll);
+    menu.addSeparator();
+    menu.add(clear);
+    menu.add(save);
+
+    // Keep "Copy" enabled only when there is a selection.
+    menu.addPopupMenuListener(new PopupMenuListener() {
+      @Override
+      public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+        boolean hasSelection = area.getSelectionStart() != area.getSelectionEnd();
+        copyItem.setEnabled(hasSelection);
+      }
+
+      @Override
+      public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+      }
+
+      @Override
+      public void popupMenuCanceled(PopupMenuEvent e) {
+      }
+    });
+
+    area.setComponentPopupMenu(menu);
+  }
+
+  private void saveToFile() {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Save terminal output");
+    chooser.setSelectedFile(new File(System.getProperty("user.home"), defaultFileName()));
+
+    int result = chooser.showSaveDialog(SwingUtilities.getWindowAncestor(this));
+    if (result != JFileChooser.APPROVE_OPTION) return;
+
+    File file = chooser.getSelectedFile();
+    if (file == null) return;
+
+    // If the user didn't specify an extension, default to .log.
+    String name = file.getName();
+    if (!name.contains(".")) {
+      File parent = file.getParentFile();
+      file = (parent != null) ? new File(parent, name + ".log") : new File(name + ".log");
+    }
+
+    try {
+      Files.writeString(
+          file.toPath(),
+          area.getText(),
+          StandardCharsets.UTF_8,
+          StandardOpenOption.CREATE,
+          StandardOpenOption.TRUNCATE_EXISTING,
+          StandardOpenOption.WRITE);
+
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Saved terminal output to:\n" + file.getAbsolutePath(),
+          "Saved",
+          JOptionPane.INFORMATION_MESSAGE);
+    } catch (IOException ex) {
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Failed to save terminal output:\n" + ex.getMessage(),
+          "Save failed",
+          JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private String defaultFileName() {
+    String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+    return "ircafe-terminal-" + ts + ".log";
   }
 
   @Override
