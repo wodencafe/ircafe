@@ -168,6 +168,12 @@ public final class HttpLite {
   private static HttpURLConnection open(URI uri, Proxy proxy, int connectTimeoutMs, int readTimeoutMs) throws IOException {
     URL url = uri.toURL();
     URLConnection uc = (proxy == null || proxy == Proxy.NO_PROXY) ? url.openConnection() : url.openConnection(proxy);
+    // If the user has enabled \"trust all certificates\", apply the relaxed TLS settings
+    // for HTTPS connections (used by link previews, image embeds, etc).
+    if (NetTlsContext.trustAllCertificates() && uc instanceof javax.net.ssl.HttpsURLConnection https) {
+      https.setSSLSocketFactory(NetTlsContext.sslSocketFactory());
+      https.setHostnameVerifier(NetTlsContext.hostnameVerifier());
+    }
     if (!(uc instanceof HttpURLConnection conn)) {
       throw new IOException("Not an HTTP URL: " + uri);
     }

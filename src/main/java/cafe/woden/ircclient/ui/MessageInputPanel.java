@@ -6,8 +6,10 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.fife.ui.autocomplete.AutoCompletion;
 import org.fife.ui.autocomplete.BasicCompletion;
+import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
 import javax.swing.*;
+import java.lang.reflect.Field;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -32,7 +34,13 @@ public class MessageInputPanel extends JPanel {
   private final JTextField input = new JTextField();
   private final JButton send = new JButton("Send");
   private final JLabel completionHint = new JLabel();
-  private final DefaultCompletionProvider completionProvider = new DefaultCompletionProvider();
+  /**
+   * Completion provider for nick auto-complete.
+   *
+   * NOTE: DefaultCompletionProvider sorts its list on every addCompletion(), which becomes
+   * catastrophically slow when we rebuild completions for large channels.
+   */
+  private final FastCompletionProvider completionProvider = new FastCompletionProvider();
   private final AutoCompletion autoCompletion = new AutoCompletion(completionProvider);
   private volatile List<String> nickSnapshot = List.of();
   private final FlowableProcessor<String> outbound = PublishProcessor.<String>create().toSerialized();
@@ -210,13 +218,113 @@ public class MessageInputPanel extends JPanel {
     } catch (Exception ignored) {
     }
   }
+
+  /**
+   * Fast-ish completion provider that supports bulk replace.
+   *
+   * The upstream provider sorts on every insertion; we instead replace the internal
+   * list in one shot and sort once.
+   */
+  private static final class FastCompletionProvider extends DefaultCompletionProvider {
+    private static final Field COMPLETIONS_FIELD = findCompletionsField();
+
+    private static Field findCompletionsField() {
+      // Prefer the historical field name first.
+      Class<?> c = DefaultCompletionProvider.class;
+      while (c != null && c != Object.class) {
+        try {
+          Field f = c.getDeclaredField("completions");
+          f.setAccessible(true);
+          return f;
+        } catch (NoSuchFieldException ignored) {
+          c = c.getSuperclass();
+        } catch (Throwable t) {
+          // InaccessibleObjectException or similar.
+          return null;
+        }
+      }
+
+      // If the field name changes, fall back to a heuristic: first List field whose name
+      // contains "completion" (case-insensitive).
+      c = DefaultCompletionProvider.class;
+      while (c != null && c != Object.class) {
+        try {
+          for (Field f : c.getDeclaredFields()) {
+            if (!java.util.List.class.isAssignableFrom(f.getType())) continue;
+            String n = f.getName();
+            if (n == null) continue;
+            String lower = n.toLowerCase(java.util.Locale.ROOT);
+            if (!lower.contains("completion")) continue;
+            f.setAccessible(true);
+            return f;
+          }
+          c = c.getSuperclass();
+        } catch (Throwable t) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    void replaceCompletions(List<? extends Completion> replacements) {
+      // Best-effort: if we cannot access the field, fall back to slow path.
+      if (COMPLETIONS_FIELD == null) {
+        clear();
+        if (replacements != null) {
+          for (Completion c : replacements) {
+            if (c != null) addCompletion(c);
+          }
+        }
+        return;
+      }
+
+      try {
+        Object v = COMPLETIONS_FIELD.get(this);
+        if (v instanceof List<?> raw) {
+          List<Completion> list = (List<Completion>) raw;
+          list.clear();
+          if (replacements != null && !replacements.isEmpty()) {
+            list.addAll((List<? extends Completion>) replacements);
+            // Sort once (Completion is Comparable).
+            Collections.sort(list);
+          }
+        } else {
+          // Unexpected shape; fall back.
+          clear();
+          if (replacements != null) {
+            for (Completion c : replacements) {
+              if (c != null) addCompletion(c);
+            }
+          }
+        }
+      } catch (Throwable t) {
+        // Reflection failed; fall back.
+        clear();
+        if (replacements != null) {
+          for (Completion c : replacements) {
+            if (c != null) addCompletion(c);
+          }
+        }
+      }
+    }
+  }
+
   public void setNickCompletions(List<String> nicks) {
     List<String> cleaned = cleanNickList(nicks);
     nickSnapshot = cleaned;
-    completionProvider.clear();
-    for (String nick : cleaned) {
-      completionProvider.addCompletion(new BasicCompletion(completionProvider, nick, "IRC nick"));
+
+    // Build completions once and install in one shot; avoids O(n^2) sort churn.
+    if (cleaned.isEmpty()) {
+      completionProvider.replaceCompletions(List.of());
+      updateHint();
+      return;
     }
+    ArrayList<Completion> completions = new ArrayList<>(cleaned.size());
+    for (String nick : cleaned) {
+      completions.add(new BasicCompletion(completionProvider, nick, "IRC nick"));
+    }
+    completionProvider.replaceCompletions(completions);
     updateHint();
   }
   private static List<String> cleanNickList(List<String> nicks) {

@@ -277,6 +277,9 @@ public class PircbotxIrcClientService implements IrcClientService {
           // Track this WHOIS so we can infer HERE on 318 if no 301 is received.
           conn(serverId).whoisSawAwayByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
 
+          // Track this WHOIS so we can (optionally) infer LOGGED_OUT on 318 if no 330 is received.
+          conn(serverId).whoisSawAccountByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
+
           requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
         })
         .subscribeOn(Schedulers.io());

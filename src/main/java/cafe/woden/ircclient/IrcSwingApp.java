@@ -6,12 +6,12 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import javax.swing.SwingUtilities;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -21,6 +21,8 @@ import org.springframework.context.annotation.Bean;
 @EnableConfigurationProperties({IrcProperties.class, UiProperties.class, IgnoreProperties.class, LogProperties.class})
 public class IrcSwingApp {
   public static void main(String[] args) {
+    // Install stdout/stderr mirroring early so we capture Spring Boot startup logs too.
+    ConsoleTeeHub.install();
     new SpringApplicationBuilder(IrcSwingApp.class)
         .headless(false)
         .run(args);

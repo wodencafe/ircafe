@@ -12,6 +12,7 @@ import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
+import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -42,11 +43,13 @@ public class AppMenuBar extends JMenuBar {
 
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
+  private static final int DEFAULT_TERMINAL_DOCK_HEIGHT_PX = 220;
 
   private final UiProperties uiProps;
   private final ChatDockable chat;
   private final ServerTreeDockable serverTree;
   private final UserListDockable users;
+  private final TerminalDockable terminal;
 
   public AppMenuBar(PreferencesDialog preferencesDialog,
                     NickColorOverridesDialog nickColorOverridesDialog,
@@ -59,12 +62,14 @@ public class AppMenuBar extends JMenuBar {
                     ChatDockable chat,
                     ServerTreeDockable serverTree,
                     UserListDockable users,
+                    TerminalDockable terminal,
                     TargetCoordinator targetCoordinator) {
 
     this.uiProps = uiProps;
     this.chat = chat;
     this.serverTree = serverTree;
     this.users = users;
+    this.terminal = terminal;
 
     // File
     JMenu file = new JMenu("File");
@@ -148,6 +153,12 @@ public class AppMenuBar extends JMenuBar {
     reopenUsersDock.addActionListener(e -> ensureSideDockVisible(
         users, DockingRegion.EAST));
 
+    JMenuItem reopenTerminalDock = new JMenuItem("Open Terminal Dock");
+    reopenTerminalDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_3,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    reopenTerminalDock.addActionListener(e -> ensureBottomDockVisible(
+        terminal, DockingRegion.SOUTH));
+
     JMenuItem resetLayout = new JMenuItem("Reset Dock Layout");
     resetLayout.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
@@ -155,6 +166,7 @@ public class AppMenuBar extends JMenuBar {
 
     window.add(reopenServersDock);
     window.add(reopenUsersDock);
+    window.add(reopenTerminalDock);
     window.addSeparator();
     window.add(resetLayout);
     window.addSeparator();
@@ -231,6 +243,31 @@ public class AppMenuBar extends JMenuBar {
 
     // After docking, apply our split-pane sizing/lock logic.
     SwingUtilities.invokeLater(() -> applySideDockLocks(root));
+  }
+
+  private void ensureBottomDockVisible(Dockable dockable, DockingRegion region) {
+    Window root = SwingUtilities.getWindowAncestor(this);
+    if (root == null) return;
+
+    if (!isDetached(dockable)) {
+      bringToFront(dockable);
+      return;
+    }
+
+    if (isDetached(chat)) {
+      dockSafe(chat, root);
+    }
+
+    dockSafe(dockable, chat, region, proportionForBottomDock(root));
+  }
+
+  private double proportionForBottomDock(Window root) {
+    int base = Math.max(1, root.getHeight());
+    if (base <= 1) {
+      return 0.25;
+    }
+    double p = (double) DEFAULT_TERMINAL_DOCK_HEIGHT_PX / (double) base;
+    return Math.max(0.12, Math.min(0.60, p));
   }
 
   private double proportionForSideDock(Window root, Dockable dockable, DockingRegion region) {

@@ -52,6 +52,18 @@ public record UiProperties(
      */
     HostmaskDiscovery hostmaskDiscovery,
 
+    /**
+     * General user info enrichment (fallback) settings.
+     *
+     * <p>IRCafe prefers IRCv3 (account-notify, extended-join, account-tag, userhost-in-names) because
+     * it is accurate and does not require extra traffic.
+     *
+     * <p>When IRCv3 support is missing, IRCafe can optionally and conservatively enrich user metadata
+     * using {@code USERHOST} (hostmask + away flag) and, if explicitly enabled, {@code WHOIS}
+     * (account name + away message). These are rate-limited and disabled by default.
+     */
+    UserInfoEnrichment userInfoEnrichment,
+
     Boolean linkPreviewsEnabled,
 
     Boolean linkPreviewsCollapsedByDefault,
@@ -138,6 +150,62 @@ public record UiProperties(
     }
   }
 
+  /**
+   * General user info enrichment configuration.
+   *
+   * <p>This is a best-effort fallback used when IRCv3 capabilities are unavailable or disabled.
+   * Defaults are intentionally conservative and disabled by default:
+   * <ul>
+   *   <li>{@code enabled=false}
+   *   <li>{@code userhostMinIntervalSeconds=15}
+   *   <li>{@code userhostMaxCommandsPerMinute=3}
+   *   <li>{@code userhostNickCooldownMinutes=60}
+   *   <li>{@code userhostMaxNicksPerCommand=5}
+   *   <li>{@code whoisFallbackEnabled=false}
+   *   <li>{@code whoisMinIntervalSeconds=45}
+   *   <li>{@code whoisNickCooldownMinutes=120}
+   *   <li>{@code periodicRefreshEnabled=false}
+   *   <li>{@code periodicRefreshIntervalSeconds=300}
+   *   <li>{@code periodicRefreshNicksPerTick=2}
+   * </ul>
+   */
+  public record UserInfoEnrichment(
+      Boolean enabled,
+      Integer userhostMinIntervalSeconds,
+      Integer userhostMaxCommandsPerMinute,
+      Integer userhostNickCooldownMinutes,
+      Integer userhostMaxNicksPerCommand,
+
+      Boolean whoisFallbackEnabled,
+      Integer whoisMinIntervalSeconds,
+      Integer whoisNickCooldownMinutes,
+
+      Boolean periodicRefreshEnabled,
+      Integer periodicRefreshIntervalSeconds,
+      Integer periodicRefreshNicksPerTick
+  ) {
+    public UserInfoEnrichment {
+      if (enabled == null) enabled = false;
+
+      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0) userhostMinIntervalSeconds = 15;
+      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0) userhostMaxCommandsPerMinute = 3;
+      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0) userhostNickCooldownMinutes = 60;
+      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0) userhostMaxNicksPerCommand = 5;
+      if (userhostMaxNicksPerCommand > 5) userhostMaxNicksPerCommand = 5;
+
+      // Must be explicitly enabled (off by default).
+      if (whoisFallbackEnabled == null) whoisFallbackEnabled = false;
+
+      if (whoisMinIntervalSeconds == null || whoisMinIntervalSeconds <= 0) whoisMinIntervalSeconds = 45;
+      if (whoisNickCooldownMinutes == null || whoisNickCooldownMinutes <= 0) whoisNickCooldownMinutes = 120;
+
+      if (periodicRefreshEnabled == null) periodicRefreshEnabled = false;
+      if (periodicRefreshIntervalSeconds == null || periodicRefreshIntervalSeconds <= 0) periodicRefreshIntervalSeconds = 300;
+      if (periodicRefreshNicksPerTick == null || periodicRefreshNicksPerTick <= 0) periodicRefreshNicksPerTick = 2;
+      if (periodicRefreshNicksPerTick > 10) periodicRefreshNicksPerTick = 10;
+    }
+  }
+
   public UiProperties {
     if (theme == null || theme.isBlank()) {
       theme = "dark";
@@ -216,6 +284,11 @@ public record UiProperties(
     // Hostmask discovery defaults.
     if (hostmaskDiscovery == null) {
       hostmaskDiscovery = new HostmaskDiscovery(true, 7, 6, 30, 5);
+    }
+
+    // User info enrichment defaults (disabled by default).
+    if (userInfoEnrichment == null) {
+      userInfoEnrichment = new UserInfoEnrichment(false, 15, 3, 60, 5, false, 45, 120, false, 300, 2);
     }
 
     // Link previews default: disabled (privacy + extra network traffic).

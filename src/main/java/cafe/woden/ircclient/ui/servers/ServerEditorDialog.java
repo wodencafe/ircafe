@@ -4,6 +4,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
+import cafe.woden.ircclient.net.NetTlsContext;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -408,7 +409,7 @@ public class ServerEditorDialog extends JDialog {
       // Proxy path
       Socket s;
       if (tls) {
-        s = new SocksProxySslSocketFactory(cfg, (SSLSocketFactory) SSLSocketFactory.getDefault())
+        s = new SocksProxySslSocketFactory(cfg, NetTlsContext.sslSocketFactory())
             .createSocket(host, port);
       } else {
         s = new SocksProxySocketFactory(cfg).createSocket(host, port);
@@ -431,7 +432,7 @@ public class ServerEditorDialog extends JDialog {
       return;
     }
 
-    SSLSocketFactory ssl = (SSLSocketFactory) SSLSocketFactory.getDefault();
+    SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
     try (SSLSocket sock = (SSLSocket) ssl.createSocket(tcp, host, port, true)) {
       sock.setSoTimeout(readTimeoutMs);
       sock.startHandshake();

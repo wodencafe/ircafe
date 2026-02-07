@@ -677,6 +677,216 @@ public class RuntimeConfigStore {
     }
   }
 
+
+  // --- User info enrichment fallback (ircafe.ui.userInfoEnrichment.*) ---
+
+  public synchronized void rememberUserInfoEnrichmentEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment enabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentWhoisFallbackEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("whoisFallbackEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment WHOIS fallback enabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentUserhostMinIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("userhostMinIntervalSeconds", Math.max(1, seconds));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment USERHOST min interval setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(int maxPerMinute) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("userhostMaxCommandsPerMinute", Math.max(1, maxPerMinute));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment USERHOST max commands/min setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentUserhostNickCooldownMinutes(int minutes) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("userhostNickCooldownMinutes", Math.max(1, minutes));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment USERHOST nick cooldown setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentUserhostMaxNicksPerCommand(int maxNicks) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      int capped = Math.max(1, Math.min(5, maxNicks));
+      enrich.put("userhostMaxNicksPerCommand", capped);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment USERHOST max nicks/command setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentWhoisMinIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("whoisMinIntervalSeconds", Math.max(1, seconds));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment WHOIS min interval setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentWhoisNickCooldownMinutes(int minutes) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("whoisNickCooldownMinutes", Math.max(1, minutes));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment WHOIS nick cooldown setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentPeriodicRefreshEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("periodicRefreshEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment periodic refresh enabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      enrich.put("periodicRefreshIntervalSeconds", Math.max(5, seconds));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment periodic refresh interval setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(int nicksPerTick) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> enrich = getOrCreateMap(ui, "userInfoEnrichment");
+
+      int capped = Math.max(1, Math.min(20, nicksPerTick));
+      enrich.put("periodicRefreshNicksPerTick", capped);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user info enrichment periodic refresh nicks/tick setting to '{}'", file, e);
+    }
+  }
+
+
+  public synchronized void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      Map<String, Object> client = getOrCreateMap(irc, "client");
+      Map<String, Object> tls = getOrCreateMap(client, "tls");
+
+      tls.put("trustAllCertificates", trustAllCertificates);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist TLS trust-all setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberClientProxy(IrcProperties.Proxy proxy) {
     try {
       if (file.toString().isBlank()) return;

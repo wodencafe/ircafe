@@ -13,6 +13,8 @@ final class PircbotxWhoisParsers {
 
   static record ParsedWhoisAway(String nick, String message) {}
 
+  static record ParsedWhoisAccount(String nick, String account) {}
+
   static ParsedWhoisUser parseRpl311WhoisUser(String line) {
     if (line == null) return null;
     String s = line.trim();
@@ -107,5 +109,35 @@ final class PircbotxWhoisParsers {
     String nick = toks[2];
     if (nick == null || nick.isBlank()) return null;
     return nick;
+  }
+
+  /**
+   * Parse RPL_WHOISACCOUNT (330) lines.
+   *
+   * <p>Common format: ":server 330 <me> <nick> <account> :is logged in as"
+   */
+  static ParsedWhoisAccount parseRpl330WhoisAccount(String line) {
+    if (line == null) return null;
+    String s = line.trim();
+    if (s.isEmpty()) return null;
+
+    // Drop prefix (e.g., ":server ")
+    if (s.startsWith(":")) {
+      int sp = s.indexOf(' ');
+      if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
+    }
+
+    String[] toks = s.split("\\s+");
+    if (toks.length < 4) return null;
+    if (!"330".equals(toks[0])) return null;
+
+    // 330 <me> <nick> <account> ...
+    String nick = toks[2];
+    String acct = toks[3];
+    if (nick == null || nick.isBlank()) return null;
+    if (acct != null) acct = acct.trim();
+    if (acct == null || acct.isEmpty() || "*".equals(acct) || "0".equals(acct)) return null;
+
+    return new ParsedWhoisAccount(nick, acct);
   }
 }

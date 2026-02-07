@@ -30,7 +30,11 @@ public sealed interface IrcEvent permits
     IrcEvent.NickListUpdated,
     IrcEvent.UserHostmaskObserved,
     IrcEvent.UserAwayStateObserved,
+    IrcEvent.UserAccountStateObserved,
     IrcEvent.WhoisResult,
+    IrcEvent.WhoisProbeCompleted,
+    IrcEvent.WhoxSupportObserved,
+    IrcEvent.WhoxSchemaCompatibleObserved,
     IrcEvent.Error,
     IrcEvent.CtcpRequestReceived
  {
@@ -46,6 +50,18 @@ public sealed interface IrcEvent permits
     UNKNOWN,
     HERE,
     AWAY
+  }
+
+  /**
+   * Best-effort account/login status for a user.
+   *
+   * <p>This is primarily populated via IRCv3 {@code account-notify} and
+   * IRCv3 {@code extended-join}.
+   */
+  enum AccountState {
+    UNKNOWN,
+    LOGGED_OUT,
+    LOGGED_IN
   }
 
   record Connected(Instant at, String serverHost, int serverPort, String nick) implements IrcEvent {}
@@ -97,24 +113,44 @@ public sealed interface IrcEvent permits
   record JoinFailed(Instant at, String channel, int code, String message) implements IrcEvent {}
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
 
-  record NickInfo(String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) { // prefix like "@", "+", "~", etc.
-    public NickInfo {
-      // Normalize null to UNKNOWN to keep downstream UI / stores simple.
-      if (awayState == null) awayState = AwayState.UNKNOWN;
-      // Keep empty/blank away messages as null (we use this for tooltip display).
-      if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
-    }
+    record NickInfo(
+        String nick,
+        String prefix,
+        String hostmask,
+        AwayState awayState,
+        String awayMessage,
+        AccountState accountState,
+        String accountName
+    ) { // prefix like "@", "+", "~", etc.
+      public NickInfo {
+        // Normalize null to UNKNOWN to keep downstream UI / stores simple.
+        if (awayState == null) awayState = AwayState.UNKNOWN;
+        // Keep empty/blank away messages as null (we use this for tooltip display).
+        if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
+        // If the user is not away, we don't keep a reason.
+        if (awayState != AwayState.AWAY) awayMessage = null;
 
-    
-    public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
-      this(nick, prefix, hostmask, awayState, null);
-    }
+        if (accountState == null) accountState = AccountState.UNKNOWN;
+        if (accountName != null) {
+          accountName = accountName.trim();
+          if (accountName.isEmpty() || "*".equals(accountName) || "0".equals(accountName)) accountName = null;
+        }
+        // Only keep an account name if we are sure they're logged in.
+        if (accountState != AccountState.LOGGED_IN) accountName = null;
+      }
 
-    
-    public NickInfo(String nick, String prefix, String hostmask) {
-      this(nick, prefix, hostmask, AwayState.UNKNOWN, null);
+      public NickInfo(String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) {
+        this(nick, prefix, hostmask, awayState, awayMessage, AccountState.UNKNOWN, null);
+      }
+
+      public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
+        this(nick, prefix, hostmask, awayState, null, AccountState.UNKNOWN, null);
+      }
+
+      public NickInfo(String nick, String prefix, String hostmask) {
+        this(nick, prefix, hostmask, AwayState.UNKNOWN, null, AccountState.UNKNOWN, null);
+      }
     }
-  }
 
   record NickListUpdated(
       Instant at,
@@ -142,5 +178,56 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
     }
   }
 
+  /** Opportunistically observed a user's account state (IRCv3 account-notify / extended-join). */
+  record UserAccountStateObserved(Instant at, String nick, AccountState accountState, String accountName) implements IrcEvent {
+    public UserAccountStateObserved {
+      if (accountState == null) accountState = AccountState.UNKNOWN;
+      if (accountName != null && accountName.isBlank()) accountName = null;
+      if ("*".equals(accountName) || "0".equals(accountName)) accountName = null;
+      if (accountState != AccountState.LOGGED_IN) accountName = null;
+    }
+
+    public UserAccountStateObserved(Instant at, String nick, AccountState accountState) {
+      this(at, nick, accountState, null);
+    }
+  }
+
   record WhoisResult(Instant at, String nick, List<String> lines) implements IrcEvent {}
+
+  /**
+   * Indicates a WHOIS probe initiated by the client has completed (RPL_ENDOFWHOIS 318).
+   *
+   * <p>This is used internally for conservative rate limiting / backoff when WHOIS-based enrichment
+   * does not yield useful account info (e.g. network does not surface RPL_WHOISACCOUNT 330).
+   */
+  record WhoisProbeCompleted(
+      Instant at,
+      String nick,
+      boolean sawAwayNumeric,
+      boolean sawAccountNumeric,
+      boolean whoisAccountNumericSupported
+  ) implements IrcEvent {}
+
+
+  /**
+   * Indicates the server supports WHOX (RPL_WHOSPCRPL 354 with extended WHO fields).
+   *
+   * <p>This is observed via RPL_ISUPPORT (005) token "WHOX". Used internally to decide whether
+   * channel-wide enrichment can use WHOX instead of WHOIS for account info.
+   */
+  record WhoxSupportObserved(Instant at, boolean supported) implements IrcEvent {}
+
+  /**
+   * Indicates whether IRCafe's expected WHOX reply schema appears compatible.
+   *
+   * <p>Some networks advertise WHOX but return a 354 field layout that does not match the fields
+   * IRCafe requests (or omits account/flags). When we detect a schema mismatch for IRCafe's
+   * channel-scan WHOX token, enrichment can fall back to plain WHO/USERHOST to avoid silently
+   * "working" while not actually producing account updates.
+   */
+  record WhoxSchemaCompatibleObserved(Instant at, boolean compatible, String detail) implements IrcEvent {
+    public WhoxSchemaCompatibleObserved {
+      if (detail != null && detail.isBlank()) detail = null;
+    }
+  }
 }

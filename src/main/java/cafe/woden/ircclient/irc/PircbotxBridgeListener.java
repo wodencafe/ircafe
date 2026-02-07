@@ -65,6 +65,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   // 475 = ERR_BADCHANNELKEY
   // 476 = ERR_BADCHANMASK
   // 477 = ERR_NEEDREGGEDNICK (often used as "+r" join restriction)
+  private static final String IRCafe_WHOX_TOKEN = "1";
+
   private static boolean isJoinFailureNumeric(int code) {
     return code == 403
         || code == 405
@@ -429,6 +431,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         return;
       }
 
+      // RPL_ISUPPORT (005): detect WHOX support.
+      if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
+      }
+
       // Targeted diagnostics: confirm where IRCv3 away-notify lines are landing.
       // (Users broadcast AWAY state changes as raw AWAY commands.)
       if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
@@ -501,6 +509,20 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.AWAY, whoisAway.message())));
       }
 
+      // WHOIS account capture: parse RPL_WHOISACCOUNT (330) so WHOIS fallback can populate
+      // account status on networks that don't support IRCv3 account-notify / extended-join.
+      PircbotxWhoisParsers.ParsedWhoisAccount whoisAcct = PircbotxWhoisParsers.parseRpl330WhoisAccount(rawLine);
+      if (whoisAcct != null && whoisAcct.nick() != null && !whoisAcct.nick().isBlank()) {
+        String nk = whoisAcct.nick().trim();
+        String k = nk.toLowerCase(Locale.ROOT);
+        // Only mark the WHOIS probe as "saw account" if we actually initiated a WHOIS for this nick.
+        conn.whoisSawAccountByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
+        // Record that this connection surfaces 330 numerics, so inferring LOGGED_OUT later is safer.
+        conn.whoisAccountNumericSupported.set(true);
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_IN, whoisAcct.account())));
+      }
+
       String endWhoisNick = PircbotxWhoisParsers.parseRpl318EndOfWhoisNick(rawLine);
       if (endWhoisNick != null && !endWhoisNick.isBlank()) {
         String nk = endWhoisNick.trim();
@@ -510,6 +532,24 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.HERE)));
         }
+
+        Boolean sawAcct = conn.whoisSawAccountByNickLower.remove(nk.toLowerCase(Locale.ROOT));
+        // Only infer LOGGED_OUT when this 318 completes a WHOIS probe we initiated AND we've seen
+        // at least one 330 on this connection (otherwise the absence of 330 is ambiguous).
+        if (sawAcct != null && !sawAcct.booleanValue() && conn.whoisAccountNumericSupported.get()) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_OUT)));
+        }
+
+        // Notify internal subsystems that a WHOIS probe has completed (for backoff / staleness).
+        if (sawAway != null || sawAcct != null) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.WhoisProbeCompleted(Instant.now(), nk,
+                  sawAway != null && sawAway.booleanValue(),
+                  sawAcct != null && sawAcct.booleanValue(),
+                  conn.whoisAccountNumericSupported.get())));
+        }
+
       }
 
       PircbotxWhoisParsers.ParsedWhoisUser whoisUser = PircbotxWhoisParsers.parseRpl311WhoisUser(rawLine);
@@ -520,30 +560,90 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             new IrcEvent.UserHostmaskObserved(Instant.now(), "", whoisUser.nick(), hm)));
       }
 
-      // WHO fallback: parse WHOREPLY (352) lines. We don't actively issue WHO queries by default
-      // (to keep traffic low), but if a user runs WHO manually, or a future resolver uses WHO/WHOX,
-      // we can still learn hostmasks from the replies.
+      // WHO fallback: parse WHOREPLY (352) lines.
+      // These can arrive either when the user runs WHO manually or when an enrichment strategy
+      // chooses to use WHO as a low-traffic way to learn user/host (and away state via flags).
       PircbotxWhoUserhostParsers.ParsedWhoReply whoReply = PircbotxWhoUserhostParsers.parseRpl352WhoReply(rawLine);
       if (whoReply != null
           && !whoReply.channel().isBlank()
           && !whoReply.nick().isBlank()
           && !whoReply.user().isBlank()
           && !whoReply.host().isBlank()) {
+        Instant now = Instant.now();
         String hm = whoReply.nick() + "!" + whoReply.user() + "@" + whoReply.host();
         bus.onNext(new ServerIrcEvent(serverId,
-            new IrcEvent.UserHostmaskObserved(Instant.now(), whoReply.channel(), whoReply.nick(), hm)));
+            new IrcEvent.UserHostmaskObserved(now, whoReply.channel(), whoReply.nick(), hm)));
+
+        // WHOREPLY flags: H=here, G=gone (away). Not all networks include these, so be conservative.
+        String flags = whoReply.flags();
+        if (flags != null) {
+          IrcEvent.AwayState as = flags.indexOf('G') >= 0
+              ? IrcEvent.AwayState.AWAY
+              : (flags.indexOf('H') >= 0 ? IrcEvent.AwayState.HERE : IrcEvent.AwayState.UNKNOWN);
+          if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
+            bus.onNext(new ServerIrcEvent(serverId,
+                new IrcEvent.UserAwayStateObserved(now, whoReply.nick(), as)));
+          }
+        }
       }
-      // WHOX fallback: parse RPL_WHOSPCRPL (354) lines (WHOX). Format varies based on requested fields,
-      // so we apply a conservative heuristic to extract channel/user/host/nick when present.
-      PircbotxWhoUserhostParsers.ParsedWhoxReply whox = PircbotxWhoUserhostParsers.parseRpl354WhoxReply(rawLine);
-      if (whox != null
-          && !whox.nick().isBlank()
-          && !whox.user().isBlank()
-          && !whox.host().isBlank()) {
-        String hm = whox.nick() + "!" + whox.user() + "@" + whox.host();
-        String ch = (whox.channel() == null) ? "" : whox.channel();
+
+      // WHOX: prefer strict parsing for the field set IRCafe issues (%tcuhnaf,<token>),
+      // which can carry account + away info; otherwise fall back to a conservative heuristic.
+      PircbotxWhoUserhostParsers.ParsedWhoxTcuhnaf whoxStrict =
+          PircbotxWhoUserhostParsers.parseRpl354WhoxTcuhnaf(rawLine, IRCafe_WHOX_TOKEN);
+      if (whoxStrict != null) {
+        // Confirm schema compatibility once we've successfully parsed our expected WHOX layout.
+        if (conn.whoxSchemaCompatibleEmitted.compareAndSet(false, true)) {
+          conn.whoxSchemaCompatible.set(true);
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.WhoxSchemaCompatibleObserved(Instant.now(), true, "strict-parse-ok")));
+        }
+        Instant now = Instant.now();
+        String hm = whoxStrict.nick() + "!" + whoxStrict.user() + "@" + whoxStrict.host();
         bus.onNext(new ServerIrcEvent(serverId,
-            new IrcEvent.UserHostmaskObserved(Instant.now(), ch, whox.nick(), hm)));
+            new IrcEvent.UserHostmaskObserved(now, whoxStrict.channel(), whoxStrict.nick(), hm)));
+
+        String flags = whoxStrict.flags();
+        if (flags != null) {
+          IrcEvent.AwayState as = flags.indexOf('G') >= 0
+              ? IrcEvent.AwayState.AWAY
+              : (flags.indexOf('H') >= 0 ? IrcEvent.AwayState.HERE : IrcEvent.AwayState.UNKNOWN);
+          if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
+            bus.onNext(new ServerIrcEvent(serverId,
+                new IrcEvent.UserAwayStateObserved(now, whoxStrict.nick(), as)));
+          }
+        }
+
+        String acct = whoxStrict.account();
+        IrcEvent.AccountState ast = acct == null
+            ? IrcEvent.AccountState.UNKNOWN
+            : (("*".equals(acct) || "0".equals(acct))
+                ? IrcEvent.AccountState.LOGGED_OUT
+                : IrcEvent.AccountState.LOGGED_IN);
+        if (ast != IrcEvent.AccountState.UNKNOWN) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.UserAccountStateObserved(now, whoxStrict.nick(), ast, acct)));
+        }
+      } else {
+        // If this looks like one of OUR WHOX replies (token match) but strict parsing failed,
+        // consider the schema incompatible and let enrichment fall back to plain WHO/USERHOST.
+        if (PircbotxWhoUserhostParsers.seemsRpl354WhoxWithToken(rawLine, IRCafe_WHOX_TOKEN)
+            && conn.whoxSchemaIncompatibleEmitted.compareAndSet(false, true)) {
+          conn.whoxSchemaCompatible.set(false);
+          log.debug("[{}] WHOX schema mismatch: strict parse failed for token {}: {}", serverId, IRCafe_WHOX_TOKEN, rawLine);
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.WhoxSchemaCompatibleObserved(Instant.now(), false, "strict-parse-failed")));
+        }
+        PircbotxWhoUserhostParsers.ParsedWhoxReply whox = PircbotxWhoUserhostParsers.parseRpl354WhoxReply(rawLine);
+        if (whox != null
+            && !whox.nick().isBlank()
+            && !whox.user().isBlank()
+            && !whox.host().isBlank()) {
+          String hm = whox.nick() + "!" + whox.user() + "@" + whox.host();
+          String ch = (whox.channel() == null) ? "" : whox.channel();
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.UserHostmaskObserved(Instant.now(), ch, whox.nick(), hm)));
+        }
       }
 
     }
@@ -599,6 +699,149 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         return;
       }
 
+
+      
+      // RPL_ISUPPORT (005) can be delivered as ServerResponseEvent on some networks.
+      // Detect WHOX support here as well as in onUnknown.
+      if (code == 5) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+        if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
+        }
+        return;
+      }
+
+if (code == 302 || code == 352 || code == 354) {
+        // USERHOST (302) and WHO/WHOX (352/354) can be delivered as ServerResponseEvent on some networks.
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        Instant now = Instant.now();
+        if (code == 302) {
+          java.util.List<PircbotxWhoUserhostParsers.UserhostEntry> uh = PircbotxWhoUserhostParsers.parseRpl302Userhost(line);
+          if (uh != null && !uh.isEmpty()) {
+            for (PircbotxWhoUserhostParsers.UserhostEntry e : uh) {
+              if (e == null) continue;
+              bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(now, "", e.nick(), e.hostmask())));
+              IrcEvent.AwayState as = (e.awayState() == null) ? IrcEvent.AwayState.UNKNOWN : e.awayState();
+              if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
+                bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserAwayStateObserved(now, e.nick(), as)));
+              }
+            }
+          }
+        } else if (code == 352) {
+          PircbotxWhoUserhostParsers.ParsedWhoReply whoReply = PircbotxWhoUserhostParsers.parseRpl352WhoReply(line);
+          if (whoReply != null
+              && !whoReply.channel().isBlank()
+              && !whoReply.nick().isBlank()
+              && !whoReply.user().isBlank()
+              && !whoReply.host().isBlank()) {
+            String hm = whoReply.nick() + "!" + whoReply.user() + "@" + whoReply.host();
+            bus.onNext(new ServerIrcEvent(serverId,
+                new IrcEvent.UserHostmaskObserved(now, whoReply.channel(), whoReply.nick(), hm)));
+
+            String flags = whoReply.flags();
+            if (flags != null) {
+              IrcEvent.AwayState as = flags.indexOf('G') >= 0
+                  ? IrcEvent.AwayState.AWAY
+                  : (flags.indexOf('H') >= 0 ? IrcEvent.AwayState.HERE : IrcEvent.AwayState.UNKNOWN);
+              if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
+                bus.onNext(new ServerIrcEvent(serverId,
+                    new IrcEvent.UserAwayStateObserved(now, whoReply.nick(), as)));
+              }
+            }
+          }
+        } else {
+          PircbotxWhoUserhostParsers.ParsedWhoxTcuhnaf whoxStrict =
+              PircbotxWhoUserhostParsers.parseRpl354WhoxTcuhnaf(line, IRCafe_WHOX_TOKEN);
+          if (whoxStrict != null) {
+            // Confirm schema compatibility once we've successfully parsed our expected WHOX layout.
+            if (conn.whoxSchemaCompatibleEmitted.compareAndSet(false, true)) {
+              conn.whoxSchemaCompatible.set(true);
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.WhoxSchemaCompatibleObserved(now, true, "strict-parse-ok")));
+            }
+            String hm = whoxStrict.nick() + "!" + whoxStrict.user() + "@" + whoxStrict.host();
+            bus.onNext(new ServerIrcEvent(serverId,
+                new IrcEvent.UserHostmaskObserved(now, whoxStrict.channel(), whoxStrict.nick(), hm)));
+
+            String flags = whoxStrict.flags();
+            if (flags != null) {
+              IrcEvent.AwayState as = flags.indexOf('G') >= 0
+                  ? IrcEvent.AwayState.AWAY
+                  : (flags.indexOf('H') >= 0 ? IrcEvent.AwayState.HERE : IrcEvent.AwayState.UNKNOWN);
+              if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
+                bus.onNext(new ServerIrcEvent(serverId,
+                    new IrcEvent.UserAwayStateObserved(now, whoxStrict.nick(), as)));
+              }
+            }
+
+            String acct = whoxStrict.account();
+            IrcEvent.AccountState ast = acct == null
+                ? IrcEvent.AccountState.UNKNOWN
+                : (("*".equals(acct) || "0".equals(acct))
+                    ? IrcEvent.AccountState.LOGGED_OUT
+                    : IrcEvent.AccountState.LOGGED_IN);
+            if (ast != IrcEvent.AccountState.UNKNOWN) {
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.UserAccountStateObserved(now, whoxStrict.nick(), ast, acct)));
+            }
+          } else {
+            // If this looks like one of OUR WHOX replies (token match) but strict parsing failed,
+            // consider the schema incompatible and let enrichment fall back to plain WHO/USERHOST.
+            if (PircbotxWhoUserhostParsers.seemsRpl354WhoxWithToken(line, IRCafe_WHOX_TOKEN)
+                && conn.whoxSchemaIncompatibleEmitted.compareAndSet(false, true)) {
+              conn.whoxSchemaCompatible.set(false);
+              log.debug("[{}] WHOX schema mismatch: strict parse failed for token {}: {}", serverId, IRCafe_WHOX_TOKEN, line);
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.WhoxSchemaCompatibleObserved(now, false, "strict-parse-failed")));
+            }
+            PircbotxWhoUserhostParsers.ParsedWhoxReply whox = PircbotxWhoUserhostParsers.parseRpl354WhoxReply(line);
+            if (whox != null
+                && !whox.nick().isBlank()
+                && !whox.user().isBlank()
+                && !whox.host().isBlank()) {
+              String hm = whox.nick() + "!" + whox.user() + "@" + whox.host();
+              String ch = (whox.channel() == null) ? "" : whox.channel();
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.UserHostmaskObserved(now, ch, whox.nick(), hm)));
+            }
+          }
+        }
+        return;
+      }
+      if (code == 330) {
+        // WHOIS account capture: some networks deliver RPL_WHOISACCOUNT (330) as ServerResponseEvent.
+
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        PircbotxWhoisParsers.ParsedWhoisAccount whoisAcct = PircbotxWhoisParsers.parseRpl330WhoisAccount(line);
+        if (whoisAcct != null && whoisAcct.nick() != null && !whoisAcct.nick().isBlank()) {
+          String nk = whoisAcct.nick().trim();
+          String k = nk.toLowerCase(Locale.ROOT);
+          // Only mark the WHOIS probe as "saw account" if we actually initiated a WHOIS for this nick.
+          conn.whoisSawAccountByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
+          // Record that this connection surfaces 330 numerics, so inferring LOGGED_OUT later is safer.
+          conn.whoisAccountNumericSupported.set(true);
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_IN, whoisAcct.account())));
+        }
+        return;
+      }
       if (code == 301 || code == 318) {
         // WHOIS away-state capture:
         // - 301 indicates the user is AWAY
@@ -623,10 +866,29 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           String nk = PircbotxWhoisParsers.parseRpl318EndOfWhoisNick(line);
           if (nk != null && !nk.isBlank()) {
             nk = nk.trim();
-            Boolean sawAway = conn.whoisSawAwayByNickLower.remove(nk.toLowerCase(Locale.ROOT));
+            String k = nk.toLowerCase(Locale.ROOT);
+
+            Boolean sawAway = conn.whoisSawAwayByNickLower.remove(k);
             if (sawAway != null && !sawAway.booleanValue()) {
               bus.onNext(new ServerIrcEvent(serverId,
                   new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.HERE)));
+            }
+
+            Boolean sawAcct = conn.whoisSawAccountByNickLower.remove(k);
+            // Only infer LOGGED_OUT when this 318 completes a WHOIS probe we initiated AND we've seen
+            // at least one 330 on this connection (otherwise the absence of 330 is ambiguous).
+            if (sawAcct != null && !sawAcct.booleanValue() && conn.whoisAccountNumericSupported.get()) {
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_OUT)));
+            }
+
+            // Notify internal subsystems that a WHOIS probe has completed (for backoff / staleness).
+            if (sawAway != null || sawAcct != null) {
+              bus.onNext(new ServerIrcEvent(serverId,
+                  new IrcEvent.WhoisProbeCompleted(Instant.now(), nk,
+                      sawAway != null && sawAway.booleanValue(),
+                      sawAcct != null && sawAcct.booleanValue(),
+                      conn.whoisAccountNumericSupported.get())));
             }
           }
         }
@@ -1101,7 +1363,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return null;
     }
 
-    private static Object reflectCall(Object target, String method) {
+  
+
+  private static IrcEvent.AwayState awayFromWhoFlags(String flags) {
+    String f = (flags == null) ? "" : flags;
+    // On most networks, WHOREPLY flags contain H (here) or G (gone/away).
+    if (f.indexOf('G') >= 0 || f.indexOf('g') >= 0) return IrcEvent.AwayState.AWAY;
+    if (f.indexOf('H') >= 0 || f.indexOf('h') >= 0) return IrcEvent.AwayState.HERE;
+    return IrcEvent.AwayState.UNKNOWN;
+  }
+  private static Object reflectCall(Object target, String method) {
       if (target == null || method == null) return null;
       try {
         java.lang.reflect.Method m = target.getClass().getMethod(method);

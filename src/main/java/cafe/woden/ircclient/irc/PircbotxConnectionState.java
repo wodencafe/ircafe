@@ -39,6 +39,36 @@ final class PircbotxConnectionState {
 
   final Map<String, Boolean> whoisSawAwayByNickLower = new ConcurrentHashMap<>();
 
+  /**
+   * Tracks WHOIS probes we initiated so we can (optionally) infer LOGGED_OUT when a WHOIS completes
+   * without a 330 (account) numeric.
+   */
+  final Map<String, Boolean> whoisSawAccountByNickLower = new ConcurrentHashMap<>();
+
+  /**
+   * Be conservative: some networks do not expose WHOIS account info at all. We only infer LOGGED_OUT
+   * from a missing 330 after we've observed at least one 330 on this connection.
+   */
+  final AtomicBoolean whoisAccountNumericSupported = new AtomicBoolean(false);
+
+  /**
+   * Tracks whether IRCafe's expected WHOX reply schema appears compatible on this connection.
+   *
+   * <p>Some networks advertise WHOX but return 354 fields in a different order or omit account/flags.
+   * We use this to avoid repeatedly issuing WHOX channel scans that will never yield account state.
+   */
+  final AtomicBoolean whoxSchemaCompatible = new AtomicBoolean(true);
+
+  /**
+   * Ensures we only emit a single "schema incompatible" signal per connection.
+   */
+  final AtomicBoolean whoxSchemaIncompatibleEmitted = new AtomicBoolean(false);
+
+  /**
+   * Ensures we only emit a single "schema compatible" confirmation per connection.
+   */
+  final AtomicBoolean whoxSchemaCompatibleEmitted = new AtomicBoolean(false);
+
   PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
   }

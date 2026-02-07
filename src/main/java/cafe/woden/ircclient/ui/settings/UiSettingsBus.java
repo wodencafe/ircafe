@@ -17,11 +17,16 @@ public class UiSettingsBus {
 
   public UiSettingsBus(UiProperties props) {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
+    UiProperties.UserInfoEnrichment ue = props.userInfoEnrichment();
     UiProperties.Timestamps ts = props.timestamps();
 
     boolean timestampsEnabled = ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
     String timestampFormat = ts != null ? ts.format() : "HH:mm:ss";
     boolean timestampsIncludeChatMessages = ts != null && Boolean.TRUE.equals(ts.includeChatMessages());
+
+    boolean enrichmentEnabled = ue != null && Boolean.TRUE.equals(ue.enabled());
+    boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
+    boolean periodicRefreshEnabled = ue != null && Boolean.TRUE.equals(ue.periodicRefreshEnabled());
 
     this.current = new UiSettings(
         props.theme(),
@@ -47,10 +52,25 @@ public class UiSettingsBus {
 
         // Hostmask discovery / USERHOST
         hm == null || Boolean.TRUE.equals(hm.userhostEnabled()),
-        hm != null ? hm.userhostMinIntervalSeconds() : 7,
-        hm != null ? hm.userhostMaxCommandsPerMinute() : 6,
-        hm != null ? hm.userhostNickCooldownMinutes() : 30,
-        hm != null ? hm.userhostMaxNicksPerCommand() : 5
+        hm != null && hm.userhostMinIntervalSeconds() != null ? hm.userhostMinIntervalSeconds() : 7,
+        hm != null && hm.userhostMaxCommandsPerMinute() != null ? hm.userhostMaxCommandsPerMinute() : 6,
+        hm != null && hm.userhostNickCooldownMinutes() != null ? hm.userhostNickCooldownMinutes() : 30,
+        hm != null && hm.userhostMaxNicksPerCommand() != null ? hm.userhostMaxNicksPerCommand() : 5,
+
+        // User info enrichment (fallback)
+        enrichmentEnabled,
+        ue != null && ue.userhostMinIntervalSeconds() != null ? ue.userhostMinIntervalSeconds() : 15,
+        ue != null && ue.userhostMaxCommandsPerMinute() != null ? ue.userhostMaxCommandsPerMinute() : 3,
+        ue != null && ue.userhostNickCooldownMinutes() != null ? ue.userhostNickCooldownMinutes() : 60,
+        ue != null && ue.userhostMaxNicksPerCommand() != null ? ue.userhostMaxNicksPerCommand() : 5,
+
+        whoisFallbackEnabled,
+        ue != null && ue.whoisMinIntervalSeconds() != null ? ue.whoisMinIntervalSeconds() : 45,
+        ue != null && ue.whoisNickCooldownMinutes() != null ? ue.whoisNickCooldownMinutes() : 120,
+
+        periodicRefreshEnabled,
+        ue != null && ue.periodicRefreshIntervalSeconds() != null ? ue.periodicRefreshIntervalSeconds() : 300,
+        ue != null && ue.periodicRefreshNicksPerTick() != null ? ue.periodicRefreshNicksPerTick() : 2
     );
   }
 
@@ -58,14 +78,12 @@ public class UiSettingsBus {
     return current;
   }
 
-  
   public void set(UiSettings next) {
     UiSettings prev = this.current;
     this.current = next;
     pcs.firePropertyChange(PROP_UI_SETTINGS, prev, next);
   }
 
-  
   public void refresh() {
     UiSettings cur = this.current;
     pcs.firePropertyChange(PROP_UI_SETTINGS, cur, cur);

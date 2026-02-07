@@ -139,6 +139,10 @@ irc:
       # If no inbound traffic is seen for this long, close the bot (ms).
       timeoutMs: 360000
 
+    tls:
+      # INSECURE: if true, IRCafe will accept any TLS certificate (expired/self-signed/etc).
+      trustAllCertificates: false
+
   servers:
     - id: "libera"
       host: "irc.libera.chat"
