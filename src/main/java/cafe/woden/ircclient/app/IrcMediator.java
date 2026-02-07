@@ -437,11 +437,17 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       return;
     }
 
+    if (at.isUiOnly()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(system)", "That view does not accept chat input.");
+      return;
+    }
+
     sendMessage(at, m);
   }
 
   private void sendMessage(TargetRef target, String message) {
     if (target == null) return;
+    if (target.isUiOnly()) return;
     String m = message == null ? "" : message.trim();
     if (m.isEmpty()) return;
 
@@ -520,7 +526,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           postTo(chan, active, true, d -> ui.appendChat(d, ev.from(), ev.text()));
         }
 
-        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) ui.markHighlight(chan);
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) {
+          ui.markHighlight(chan);
+          ui.recordHighlight(chan, ev.from());
+        }
       }
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
@@ -538,7 +547,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           postTo(chan, active, true, d -> ui.appendAction(d, ev.from(), ev.action()));
         }
 
-        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) ui.markHighlight(chan);
+        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) {
+          ui.markHighlight(chan);
+          ui.recordHighlight(chan, ev.from());
+        }
       }
       case IrcEvent.ChannelModeChanged ev -> {
         inboundModeEventHandler.handleChannelModeChanged(sid, ev);

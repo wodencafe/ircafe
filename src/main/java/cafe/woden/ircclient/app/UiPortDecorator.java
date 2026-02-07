@@ -98,6 +98,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void recordHighlight(TargetRef target, String fromNick) {
+    delegate.recordHighlight(target, fromNick);
+  }
+
+  @Override
   public void clearUnread(TargetRef target) {
     delegate.clearUnread(target);
   }

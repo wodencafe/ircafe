@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.ConnectionState;
+import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
@@ -153,10 +154,17 @@ private static final class InsertionLine {
 
   private final ServerRegistry serverRegistry;
 
-  public ServerTreeDockable(ServerRegistry serverRegistry, ConnectButton connectBtn, DisconnectButton disconnectBtn) {
+  private final NotificationStore notificationStore;
+
+  public ServerTreeDockable(
+      ServerRegistry serverRegistry,
+      ConnectButton connectBtn,
+      DisconnectButton disconnectBtn,
+      NotificationStore notificationStore) {
     super(new BorderLayout());
 
     this.serverRegistry = serverRegistry;
+    this.notificationStore = notificationStore;
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -224,6 +232,17 @@ private static final class InsertionLine {
               .observeOn(SwingEdt.scheduler())
               .subscribe(this::syncServers,
                   err -> log.error("[ircafe] server registry stream error", err))
+      );
+    }
+
+    // Keep per-server Notifications node counts in sync with the NotificationStore.
+    if (notificationStore != null) {
+      disposables.add(
+          notificationStore.changes()
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(
+                  ch -> refreshNotificationsCount(ch.serverId()),
+                  err -> log.error("[ircafe] notification store stream error", err))
       );
     }
     TreeSelectionListener tsl = e -> {
@@ -534,7 +553,7 @@ private static final class InsertionLine {
           menu.add(clearLog);
         }
 
-        if (!nd.ref.isStatus()) {
+        if (!nd.ref.isStatus() && !nd.ref.isUiOnly()) {
           menu.addSeparator();
           if (nd.ref.isChannel()) {
             JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
@@ -600,14 +619,21 @@ private static final class InsertionLine {
   private int minInsertIndex(DefaultMutableTreeNode serverNode) {
     if (serverNode == null) return 0;
 
-    // Keep status (index 0) fixed, if present.
-    if (serverNode.getChildCount() > 0) {
-      Object first = ((DefaultMutableTreeNode) serverNode.getChildAt(0)).getUserObject();
-      if (first instanceof NodeData nd && nd.ref != null && nd.ref.isStatus()) {
-        return 1;
+    // Keep fixed leaves at the top of the server node, if present.
+    // Today that's: status (index 0) and notifications (index 1).
+    int min = 0;
+    int count = serverNode.getChildCount();
+    while (min < count) {
+      Object uo = ((DefaultMutableTreeNode) serverNode.getChildAt(min)).getUserObject();
+      if (uo instanceof NodeData nd && nd.ref != null) {
+        if (nd.ref.isStatus() || nd.ref.isNotifications()) {
+          min++;
+          continue;
+        }
       }
+      break;
     }
-    return 0;
+    return min;
   }
 
   private int maxInsertIndex(DefaultMutableTreeNode serverNode) {
@@ -789,6 +815,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     DefaultMutableTreeNode parent;
     if (ref.isStatus()) {
       parent = sn.serverNode;
+    } else if (ref.isNotifications()) {
+      parent = sn.serverNode;
     } else if (ref.isChannel()) {
       parent = sn.serverNode;
     } else {
@@ -798,11 +826,18 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, ref.target()));
     leaves.put(ref, leaf);
 
-    // Insert with simple ordering: status first; channels before the PM group.
+    // Insert with simple ordering: fixed leaves first; channels before the PM group.
     int idx;
     if (ref.isChannel() && parent == sn.serverNode) {
-      // Keep the "Private messages" group as the last child.
-      idx = Math.max(1, sn.serverNode.getChildCount() - 1);
+      int beforePm = sn.serverNode.getChildCount();
+      if (beforePm > 0) {
+        DefaultMutableTreeNode last = (DefaultMutableTreeNode) sn.serverNode.getChildAt(beforePm - 1);
+        if (isPrivateMessagesGroupNode(last)) {
+          beforePm = beforePm - 1;
+        }
+      }
+      // Channels may not be inserted above fixed leaves (status/notifications).
+      idx = Math.max(minInsertIndex(sn.serverNode), beforePm);
     } else {
       idx = parent.getChildCount();
     }
@@ -822,7 +857,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   public void removeTarget(TargetRef ref) {
-    if (ref == null || ref.isStatus()) return;
+    if (ref == null || ref.isStatus() || ref.isUiOnly()) return;
     DefaultMutableTreeNode node = leaves.remove(ref);
     if (node == null) return;
 
@@ -935,19 +970,51 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
     root.add(serverNode);
-    serverNode.add(pmNode);
 
+    // Fixed leaves at the top of each server: status and notifications.
     TargetRef statusRef = new TargetRef(id, "status");
     DefaultMutableTreeNode statusLeaf = new DefaultMutableTreeNode(new NodeData(statusRef, "status"));
     serverNode.insert(statusLeaf, 0);
     leaves.put(statusRef, statusLeaf);
 
-    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef);
+    TargetRef notificationsRef = TargetRef.notifications(id);
+    NodeData notificationsData = new NodeData(notificationsRef, "Notifications");
+    if (notificationStore != null) {
+      // Show count of stored highlight events as a bold "highlight" counter.
+      notificationsData.highlightUnread = notificationStore.count(id);
+    }
+    DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
+    serverNode.insert(notificationsLeaf, 1);
+    leaves.put(notificationsRef, notificationsLeaf);
+
+    // Keep the PM group as the last child.
+    serverNode.add(pmNode);
+
+    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef);
     servers.put(id, sn);
 
     model.reload(root);
     tree.expandPath(new TreePath(serverNode.getPath()));
+
+    // Ensure notifications count is correct even if events arrived before the server node was created.
+    refreshNotificationsCount(id);
     return sn;
+  }
+
+  private void refreshNotificationsCount(String serverId) {
+    if (notificationStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    TargetRef ref = TargetRef.notifications(sid);
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd)) return;
+    int count = notificationStore.count(sid);
+    if (nd.unread == 0 && nd.highlightUnread == count) return;
+    nd.unread = 0;
+    nd.highlightUnread = count;
+    model.nodeChanged(node);
   }
 
   private void refreshTreeLayoutAfterUiChange() {
@@ -991,11 +1058,16 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
     final TargetRef statusRef;
+    final TargetRef notificationsRef;
 
-    ServerNodes(DefaultMutableTreeNode serverNode, DefaultMutableTreeNode pmNode, TargetRef statusRef) {
+    ServerNodes(DefaultMutableTreeNode serverNode,
+        DefaultMutableTreeNode pmNode,
+        TargetRef statusRef,
+        TargetRef notificationsRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
       this.statusRef = statusRef;
+      this.notificationsRef = notificationsRef;
     }
   }
 

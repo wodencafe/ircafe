@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ignore.IgnoreListService;
@@ -11,6 +12,7 @@ import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -45,6 +47,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   public static final String ID = "chat";
 
   private final ChatTranscriptStore transcripts;
+  private final ServerTreeDockable serverTree;
+  private final NotificationStore notificationStore;
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
 
@@ -76,6 +80,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
 
+  // Center content swaps between the normal transcript view and the per-server notifications view.
+  private static final String CARD_TRANSCRIPT = "transcript";
+  private static final String CARD_NOTIFICATIONS = "notifications";
+  private final JPanel centerCards = new JPanel(new CardLayout());
+  private final NotificationsPanel notificationsPanel;
+
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private int lastTopicHeightPx = 58;
   private boolean topicVisible = false;
@@ -83,6 +93,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private TargetRef activeTarget;
 
   public ChatDockable(ChatTranscriptStore transcripts,
+                     ServerTreeDockable serverTree,
+                     NotificationStore notificationStore,
                      TargetActivationBus activationBus,
                      OutboundLineBus outboundBus,
                      ActiveInputRouter activeInputRouter,
@@ -94,6 +106,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      UiSettingsBus settingsBus) {
     super(settingsBus);
     this.transcripts = transcripts;
+    this.serverTree = serverTree;
+    this.notificationStore = notificationStore;
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
     this.activeInputRouter = activeInputRouter;
@@ -148,7 +162,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       }
     });
 
-    add(topicSplit, BorderLayout.CENTER);
+    // Notifications panel is a UI-only target view (selected from the server tree).
+    this.notificationsPanel = new NotificationsPanel(
+        java.util.Objects.requireNonNull(notificationStore, "notificationStore"));
+    this.notificationsPanel.setOnSelectTarget(ref -> {
+      // Clickable channel names in the notifications list should navigate like a tree selection.
+      if (ChatDockable.this.serverTree != null) {
+        ChatDockable.this.serverTree.selectTarget(ref);
+      }
+    });
+
+    centerCards.add(topicSplit, CARD_TRANSCRIPT);
+    centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
+    add(centerCards, BorderLayout.CENTER);
+    showTranscriptCard();
     hideTopicPanel();
 
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
@@ -195,6 +222,17 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
 
     activeTarget = target;
+
+    // UI-only targets (e.g. Notifications) do not have a transcript.
+    if (target.isNotifications()) {
+      showNotificationsCard(target.serverId());
+      // Notifications doesn't accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+
+    showTranscriptCard();
     transcripts.ensureTargetExists(target);
     setDocument(transcripts.document(target));
 
@@ -202,6 +240,23 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     inputPanel.setDraftText(draftByTarget.getOrDefault(target, ""));
 
     updateTopicPanelForActiveTarget();
+  }
+
+  private void showTranscriptCard() {
+    try {
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_TRANSCRIPT);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showNotificationsCard(String serverId) {
+    try {
+      notificationsPanel.setServerId(serverId);
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_NOTIFICATIONS);
+    } catch (Exception ignored) {
+    }
   }
 
   /**
@@ -527,6 +582,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   void shutdown() {
     try {
       disposables.dispose();
+    } catch (Exception ignored) {
+    }
+    try {
+      notificationsPanel.close();
     } catch (Exception ignored) {
     }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.

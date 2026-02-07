@@ -27,7 +27,7 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     // Only allow moving leaf nodes (channels / PMs). Never move root/server/group/status.
     Object uo = node.getUserObject();
     if (!(uo instanceof ServerTreeDockable.NodeData nd)) return null;
-    if (nd.ref == null || nd.ref.isStatus()) return null;
+    if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) return null;
 
     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
     if (parent == null) return null;
@@ -54,19 +54,26 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     Object uo = node.getUserObject();
     if (!(uo instanceof ServerTreeDockable.NodeData nd)) return false;
     if (nd.ref == null) return false;
-    return !nd.ref.isStatus();
+    return !nd.ref.isStatus() && !nd.ref.isUiOnly();
   }
 
   private int minMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
     if (!parentIsServer) return 0;
-    // Keep status (index 0) fixed, if present.
-    if (parent.getChildCount() > 0) {
-      Object first = ((DefaultMutableTreeNode) parent.getChildAt(0)).getUserObject();
-      if (first instanceof ServerTreeDockable.NodeData nd && nd.ref != null && nd.ref.isStatus()) {
-        return 1;
+    // Keep fixed leaves at the top of the server node, if present.
+    // Today that's: status (index 0) and notifications (index 1).
+    int min = 0;
+    int count = parent.getChildCount();
+    while (min < count) {
+      Object uo = ((DefaultMutableTreeNode) parent.getChildAt(min)).getUserObject();
+      if (uo instanceof ServerTreeDockable.NodeData nd && nd.ref != null) {
+        if (nd.ref.isStatus() || nd.ref.isNotifications()) {
+          min++;
+          continue;
+        }
       }
+      break;
     }
-    return 0;
+    return min;
   }
 
   private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {

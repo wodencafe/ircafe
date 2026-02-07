@@ -35,6 +35,15 @@ Flowable<TargetRef> targetActivations();
   void closeTarget(TargetRef target);
   void markUnread(TargetRef target);
   void markHighlight(TargetRef target);
+
+  /**
+   * Record a highlight notification (for the per-server Notifications view).
+   *
+   * <p>This should be called when the user is mentioned in a channel message/action and that
+   * highlight is considered unread (e.g. the channel is not currently active).</p>
+   */
+  void recordHighlight(TargetRef target, String fromNick);
+
   void clearUnread(TargetRef target);
 
   void clearTranscript(TargetRef target);

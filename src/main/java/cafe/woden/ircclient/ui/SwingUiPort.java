@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
@@ -27,6 +28,7 @@ public class SwingUiPort implements UiPort {
   private final ChatDockable chat;
   private final ChatTranscriptStore transcripts;
   private final MentionPatternRegistry mentions;
+  private final NotificationStore notificationStore;
   private final UserListDockable users;
   private final StatusBar statusBar;
   private final ConnectButton connectBtn;
@@ -54,6 +56,7 @@ public class SwingUiPort implements UiPort {
       ChatDockable chat,
       ChatTranscriptStore transcripts,
       MentionPatternRegistry mentions,
+      NotificationStore notificationStore,
       UserListDockable users,
       StatusBar statusBar,
       ConnectButton connectBtn,
@@ -67,6 +70,7 @@ public class SwingUiPort implements UiPort {
     this.chat = chat;
     this.transcripts = transcripts;
     this.mentions = mentions;
+    this.notificationStore = notificationStore;
     this.users = users;
     this.statusBar = statusBar;
     this.connectBtn = connectBtn;
@@ -174,7 +178,18 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void recordHighlight(TargetRef target, String fromNick) {
+    // Not a UI action; no need to marshal to the EDT.
+    notificationStore.recordHighlight(target, fromNick);
+  }
+
+  @Override
   public void clearUnread(TargetRef target) {
+    // Visiting a channel clears any stored highlight notifications for that channel.
+    if (target != null && target.isChannel()) {
+      // Not a UI action; no need to marshal to the EDT.
+      notificationStore.clearChannel(target);
+    }
     onEdt(() -> serverTree.clearUnread(target));
   }
 

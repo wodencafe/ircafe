@@ -278,6 +278,11 @@ public class TargetCoordinator {
       ui.setInputEnabled(false);
       return;
     }
+    // UI-only pseudo-targets (e.g. notifications) should never accept chat input.
+    if (activeTarget.isUiOnly()) {
+      ui.setInputEnabled(false);
+      return;
+    }
     ui.setInputEnabled(connectionCoordinator.isConnected(activeTarget.serverId()));
   }
 
@@ -288,7 +293,7 @@ public class TargetCoordinator {
   }
 
   public void closeTarget(TargetRef target) {
-    if (target == null || target.isStatus()) return;
+    if (target == null || target.isStatus() || target.isUiOnly()) return;
 
     String sid = Objects.toString(target.serverId(), "").trim();
     if (sid.isEmpty()) return;
