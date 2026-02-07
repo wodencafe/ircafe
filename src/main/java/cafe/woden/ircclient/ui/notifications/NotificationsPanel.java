@@ -23,8 +23,6 @@ import java.util.function.Consumer;
 /**
  * Swing panel that displays per-server highlight notifications.
  *
- * <p>This is a UI building block (Step 6) used later when the user selects the
- * Notifications node in the server tree. Each highlight event is shown as its own row.
  */
 public class NotificationsPanel extends JPanel implements AutoCloseable {
 
@@ -140,7 +138,6 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
       return;
     }
     List<HighlightEvent> events = store.listAll(sid);
-    // Show newest first (more useful for an inbox-like view).
     if (!events.isEmpty()) {
       List<HighlightEvent> copy = new ArrayList<>(events);
       Collections.reverse(copy);
