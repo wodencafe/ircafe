@@ -25,6 +25,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -118,14 +120,18 @@ public class PreferencesDialog {
     NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
     ProxyControls proxy = network.proxy;
     UserhostControls userhost = network.userhost;
+    UserInfoEnrichmentControls enrichment = network.enrichment;
     JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates;
+
+    JPanel networkPanel = network.networkPanel;
+    JPanel userLookupsPanel = network.userLookupsPanel;
 
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
-    JPanel userhostPanel = network.panel;
+    // Network settings are split into two separate tabs: one for proxy/TLS and one for user lookups/enrichment.
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
@@ -209,6 +215,24 @@ public class PreferencesDialog {
       int userhostNickCooldownV = ((Number) userhost.nickCooldownMinutes.getValue()).intValue();
       int userhostMaxNicksV = ((Number) userhost.maxNicksPerCommand.getValue()).intValue();
 
+      boolean userInfoEnrichmentEnabledV = enrichment.enabled.isSelected();
+      int uieUserhostMinIntervalV = ((Number) enrichment.userhostMinIntervalSeconds.getValue()).intValue();
+      int uieUserhostMaxPerMinuteV = ((Number) enrichment.userhostMaxPerMinute.getValue()).intValue();
+      int uieUserhostNickCooldownV = ((Number) enrichment.userhostNickCooldownMinutes.getValue()).intValue();
+      int uieUserhostMaxNicksV = ((Number) enrichment.userhostMaxNicksPerCommand.getValue()).intValue();
+
+      boolean uieWhoisFallbackEnabledRawV = enrichment.whoisFallbackEnabled.isSelected();
+      int uieWhoisMinIntervalV = ((Number) enrichment.whoisMinIntervalSeconds.getValue()).intValue();
+      int uieWhoisNickCooldownV = ((Number) enrichment.whoisNickCooldownMinutes.getValue()).intValue();
+
+      boolean uiePeriodicRefreshEnabledRawV = enrichment.periodicRefreshEnabled.isSelected();
+      int uiePeriodicRefreshIntervalV = ((Number) enrichment.periodicRefreshIntervalSeconds.getValue()).intValue();
+      int uiePeriodicRefreshNicksPerTickV = ((Number) enrichment.periodicRefreshNicksPerTick.getValue()).intValue();
+
+      // If enrichment is disabled, dependent options should behave as disabled even if checked.
+      boolean uieWhoisFallbackEnabledV = userInfoEnrichmentEnabledV && uieWhoisFallbackEnabledRawV;
+      boolean uiePeriodicRefreshEnabledV = userInfoEnrichmentEnabledV && uiePeriodicRefreshEnabledRawV;
+
       UiSettings prev = settingsBus.get();
       boolean outgoingColorEnabledV = outgoing.enabled.isSelected();
       String outgoingHexV = UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
@@ -240,7 +264,20 @@ public class PreferencesDialog {
           userhostMinIntervalV,
           userhostMaxPerMinuteV,
           userhostNickCooldownV,
-          userhostMaxNicksV
+          userhostMaxNicksV,
+
+          // User info enrichment (fallback)
+          userInfoEnrichmentEnabledV,
+          uieUserhostMinIntervalV,
+          uieUserhostMaxPerMinuteV,
+          uieUserhostNickCooldownV,
+          uieUserhostMaxNicksV,
+          uieWhoisFallbackEnabledV,
+          uieWhoisMinIntervalV,
+          uieWhoisNickCooldownV,
+          uiePeriodicRefreshEnabledV,
+          uiePeriodicRefreshIntervalV,
+          uiePeriodicRefreshNicksPerTickV
       );
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
@@ -287,6 +324,22 @@ public class PreferencesDialog {
       runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
       runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
       runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
+
+      // User info enrichment (fallback).
+      runtimeConfig.rememberUserInfoEnrichmentEnabled(next.userInfoEnrichmentEnabled());
+      runtimeConfig.rememberUserInfoEnrichmentWhoisFallbackEnabled(next.userInfoEnrichmentWhoisFallbackEnabled());
+
+      runtimeConfig.rememberUserInfoEnrichmentUserhostMinIntervalSeconds(next.userInfoEnrichmentUserhostMinIntervalSeconds());
+      runtimeConfig.rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(next.userInfoEnrichmentUserhostMaxCommandsPerMinute());
+      runtimeConfig.rememberUserInfoEnrichmentUserhostNickCooldownMinutes(next.userInfoEnrichmentUserhostNickCooldownMinutes());
+      runtimeConfig.rememberUserInfoEnrichmentUserhostMaxNicksPerCommand(next.userInfoEnrichmentUserhostMaxNicksPerCommand());
+
+      runtimeConfig.rememberUserInfoEnrichmentWhoisMinIntervalSeconds(next.userInfoEnrichmentWhoisMinIntervalSeconds());
+      runtimeConfig.rememberUserInfoEnrichmentWhoisNickCooldownMinutes(next.userInfoEnrichmentWhoisNickCooldownMinutes());
+
+      runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(next.userInfoEnrichmentPeriodicRefreshEnabled());
+      runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
+      runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
 
       // Proxy settings (take effect immediately for new network operations).
       runtimeConfig.rememberClientProxy(proxyCfg);
@@ -336,7 +389,8 @@ public class PreferencesDialog {
     tabs.addTab("Chat", wrapTab(chatPanel));
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
-    tabs.addTab("Network / Advanced", wrapTab(userhostPanel));
+    tabs.addTab("Network", wrapTab(networkPanel));
+    tabs.addTab("User lookups", wrapTab(userLookupsPanel));
 
     d.setLayout(new BorderLayout());
     d.add(tabs, BorderLayout.CENTER);
@@ -400,6 +454,40 @@ public class PreferencesDialog {
     t.setForeground(UIManager.getColor("Label.foreground"));
     t.setColumns(48);
     return t;
+  }
+
+  private static JLabel subtleInfoLabel() {
+    JLabel l = new JLabel();
+    l.setFont(l.getFont().deriveFont(Font.ITALIC));
+    Color hintColor = UIManager.getColor("Label.disabledForeground");
+    if (hintColor != null) l.setForeground(hintColor);
+    return l;
+  }
+
+  private static void showHelpDialog(java.awt.Component parent, String title, String message) {
+    JTextArea area = new JTextArea(message);
+    area.setEditable(false);
+    area.setLineWrap(true);
+    area.setWrapStyleWord(true);
+    area.setOpaque(false);
+    area.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+    area.setFont(UIManager.getFont("Label.font"));
+
+    JScrollPane scroll = new JScrollPane(area);
+    scroll.setBorder(BorderFactory.createEmptyBorder());
+    scroll.setPreferredSize(new Dimension(460, 240));
+
+    javax.swing.JOptionPane.showMessageDialog(parent, scroll, title, javax.swing.JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private static JButton whyHelpButton(String title, String message) {
+    JButton b = new JButton("?");
+    b.putClientProperty("JButton.buttonType", "help");
+    b.setFocusable(false);
+    b.setMargin(new Insets(0, 8, 0, 8));
+    b.setToolTipText("Why do I need this?");
+    b.addActionListener(e -> showHelpDialog(SwingUtilities.getWindowAncestor(b), title, message));
+    return b;
   }
 
   private void addPlaceholderTab(JTabbedPane tabs, String title, String message) {
@@ -813,17 +901,24 @@ public class PreferencesDialog {
     return new OutgoingColorControls(outgoingColorEnabled, outgoingColorHex, outgoingPreview, outgoingColorPanel);
   }
 
+  
+  
   private NetworkAdvancedControls buildNetworkAdvancedControls(UiSettings current, List<AutoCloseable> closeables) {
     IrcProperties.Proxy p = NetProxyContext.settings();
     if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
 
-    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]6[]6[]6[]10[]6[]6[]6[]6[]"));
+    // Split the old "Network / Advanced" tab into:
+    //   - Network: Proxy + TLS
+    //   - User lookups: Hostmask discovery + roster enrichment
+    JPanel networkPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]6[]6[]6[]"));
+    // hidemode=3 ensures invisible components don't reserve layout space.
+    JPanel userLookupsPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
 
-    panel.add(tabTitle("Network / Advanced"), "span 2, growx, wrap");
+    networkPanel.add(tabTitle("Network"), "span 2, growx, wrap");
 
     // ---- SOCKS proxy ----
-    panel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wrap");
-    panel.add(helpText(
+    networkPanel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wrap");
+    networkPanel.add(helpText(
         "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n" +
             "Heads up: proxy credentials are stored in your runtime config file in plain text."),
         "span 2, growx, wrap");
@@ -878,25 +973,25 @@ public class PreferencesDialog {
     proxyEnabled.addActionListener(e -> updateProxyEnabledState.run());
     updateProxyEnabledState.run();
 
-    panel.add(proxyEnabled, "span 2, wrap");
-    panel.add(new JLabel("Host:"));
-    panel.add(proxyHost, "growx");
-    panel.add(new JLabel("Port:"));
-    panel.add(proxyPort, "w 110!");
-    panel.add(new JLabel(""));
-    panel.add(proxyRemoteDns, "growx");
-    panel.add(new JLabel("Username:"));
-    panel.add(proxyUsername, "growx");
-    panel.add(new JLabel("Password:"));
-    panel.add(passwordRow, "growx");
-    panel.add(new JLabel("Connect timeout (sec):"));
-    panel.add(connectTimeoutSeconds, "w 110!");
-    panel.add(new JLabel("Read timeout (sec):"));
-    panel.add(readTimeoutSeconds, "w 110!");
+    networkPanel.add(proxyEnabled, "span 2, wrap");
+    networkPanel.add(new JLabel("Host:"));
+    networkPanel.add(proxyHost, "growx");
+    networkPanel.add(new JLabel("Port:"));
+    networkPanel.add(proxyPort, "w 110!");
+    networkPanel.add(new JLabel(""));
+    networkPanel.add(proxyRemoteDns, "growx");
+    networkPanel.add(new JLabel("Username:"));
+    networkPanel.add(proxyUsername, "growx");
+    networkPanel.add(new JLabel("Password:"));
+    networkPanel.add(passwordRow, "growx");
+    networkPanel.add(new JLabel("Connect timeout (sec):"));
+    networkPanel.add(connectTimeoutSeconds, "w 110!");
+    networkPanel.add(new JLabel("Read timeout (sec):"));
+    networkPanel.add(readTimeoutSeconds, "w 110!");
 
     // ---- TLS / SSL ----
-    panel.add(sectionTitle("TLS / SSL"), "span 2, growx, wrap");
-    panel.add(helpText(
+    networkPanel.add(sectionTitle("TLS / SSL"), "span 2, growx, wrap");
+    networkPanel.add(helpText(
         "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n" +
             "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n" +
             "Only enable this if you understand the risk (MITM becomes trivial)."),
@@ -904,7 +999,7 @@ public class PreferencesDialog {
 
     JCheckBox trustAllTlsCertificates = new JCheckBox("Trust all TLS/SSL certificates (insecure)");
     trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
-    panel.add(trustAllTlsCertificates, "span 2, wrap");
+    networkPanel.add(trustAllTlsCertificates, "span 2, wrap");
 
     ProxyControls proxyControls = new ProxyControls(
         proxyEnabled,
@@ -919,28 +1014,84 @@ public class PreferencesDialog {
         readTimeoutSeconds
     );
 
-    // ---- Hostmask discovery / USERHOST anti-flood settings ----
-    panel.add(sectionTitle("Hostmask discovery"), "span 2, growx, wrap");
+    // -------------------------
+    // User lookups (cleaner UI)
+    // -------------------------
+    userLookupsPanel.add(tabTitle("User lookups"), "growx, wrap");
 
-    JTextArea userhostInfo = new JTextArea(
-        "IRCafe prefers IRCv3 userhost-in-names (free). " +
-            "If hostmasks are still missing and you have hostmask-based ignore rules, IRCafe can " +
-            "use USERHOST carefully with conservative rate limits."
+    JPanel userLookupsIntro = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    userLookupsIntro.setOpaque(false);
+    JLabel userLookupsBlurb = new JLabel(
+        "<html>Optional fallbacks for account/away/host info (USERHOST / WHOIS), with conservative rate limits.</html>"
     );
-    userhostInfo.setEditable(false);
-    userhostInfo.setLineWrap(true);
-    userhostInfo.setWrapStyleWord(true);
-    userhostInfo.setOpaque(false);
-    userhostInfo.setFocusable(false);
-    userhostInfo.setBorder(null);
-    userhostInfo.setFont(UIManager.getFont("Label.font"));
-    userhostInfo.setForeground(UIManager.getColor("Label.foreground"));
-    // Keep the dialog from packing excessively wide; MigLayout will allow it to grow if needed.
-    userhostInfo.setColumns(48);
+    JButton userLookupsHelp = whyHelpButton(
+        "Why do I need user lookups?",
+        "Most modern IRC networks provide account and presence information via IRCv3 (e.g., account-tag, account-notify, away-notify, extended-join).\n\n" +
+            "However, some networks (or some pieces of data) still require fallback lookups. IRCafe can optionally use USERHOST and (as a last resort) WHOIS to fill missing metadata.\n\n" +
+            "If you're on an IRCv3-capable network and don't use hostmask-based ignore rules, you can usually leave these disabled."
+    );
+    userLookupsIntro.add(userLookupsBlurb, "growx");
+    userLookupsIntro.add(userLookupsHelp, "align right");
+    userLookupsPanel.add(userLookupsIntro, "growx, wrap");
 
-    JCheckBox userhostEnabled = new JCheckBox("Resolve missing hostmasks using USERHOST (rate-limited)");
+    // ---- Rate limit presets ----
+    JPanel lookupPresetPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    lookupPresetPanel.setOpaque(false);
+
+    JComboBox<LookupRatePreset> lookupPreset = new JComboBox<>(LookupRatePreset.values());
+    lookupPreset.setSelectedItem(detectLookupRatePreset(current));
+
+    JLabel lookupPresetHint = new JLabel();
+    lookupPresetHint.setFont(lookupPresetHint.getFont().deriveFont(Font.ITALIC));
+    Color hintColor = UIManager.getColor("Label.disabledForeground");
+    if (hintColor != null) lookupPresetHint.setForeground(hintColor);
+
+    Runnable updateLookupPresetHint = () -> {
+      LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
+      if (psel == null) psel = LookupRatePreset.CUSTOM;
+
+      String msg;
+      if (psel == LookupRatePreset.CONSERVATIVE) {
+        msg = "Lowest traffic. Best for huge channels or strict networks.";
+      } else if (psel == LookupRatePreset.BALANCED) {
+        msg = "Recommended default. Good fill-in speed with low risk.";
+      } else if (psel == LookupRatePreset.RAPID) {
+        msg = "Faster fill-in. More commands on the wire (use with caution).";
+      } else {
+        msg = "Custom shows the tuning controls below.";
+      }
+      lookupPresetHint.setText(msg);
+    };
+    updateLookupPresetHint.run();
+
+    lookupPresetPanel.add(new JLabel("Rate limit preset:"));
+    lookupPresetPanel.add(lookupPreset, "w 220!");
+    lookupPresetPanel.add(lookupPresetHint, "span 2, growx, wrap");
+    userLookupsPanel.add(lookupPresetPanel, "growx, wrap");
+
+    // ---- Hostmask discovery (USERHOST) ----
+    // hidemode=3 ensures that when we hide advanced controls (non-Custom presets), the section shrinks.
+    JPanel hostmaskPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
+    hostmaskPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createTitledBorder("Hostmask discovery"),
+        BorderFactory.createEmptyBorder(6, 6, 6, 6)
+    ));
+    hostmaskPanel.setOpaque(false);
+
+    JCheckBox userhostEnabled = new JCheckBox("Fill missing hostmasks using USERHOST (rate-limited)");
     userhostEnabled.setSelected(current.userhostDiscoveryEnabled());
     userhostEnabled.setToolTipText("When enabled, IRCafe may send USERHOST only when hostmask-based ignore rules exist and some nicks are missing hostmasks.");
+
+    JButton hostmaskHelp = whyHelpButton(
+        "Why do I need hostmask discovery?",
+        "Some ignore rules rely on hostmasks (nick!user@host).\n\n" +
+            "On many networks, the full hostmask isn't included in NAMES and might not be available until additional lookups happen.\n\n" +
+            "If you use hostmask-based ignore rules and some users show up without hostmasks, IRCafe can send rate-limited USERHOST commands to fill them in.\n\n" +
+            "If you don't use hostmask-based ignores, you can usually leave this off."
+    );
+
+    JLabel hostmaskSummary = subtleInfoLabel();
+    hostmaskSummary.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
 
     JSpinner userhostMinIntervalSeconds = numberSpinner(current.userhostMinIntervalSeconds(), 1, 60, 1, closeables);
     userhostMinIntervalSeconds.setToolTipText("Minimum seconds between USERHOST commands per server.");
@@ -954,26 +1105,385 @@ public class PreferencesDialog {
     JSpinner userhostMaxNicksPerCommand = numberSpinner(current.userhostMaxNicksPerCommand(), 1, 5, 1, closeables);
     userhostMaxNicksPerCommand.setToolTipText("How many nicks to include per USERHOST command (servers typically allow up to 5).");
 
-    Runnable updateUserhostEnabledState = () -> {
-      boolean enabled = userhostEnabled.isSelected();
-      userhostMinIntervalSeconds.setEnabled(enabled);
-      userhostMaxPerMinute.setEnabled(enabled);
-      userhostNickCooldownMinutes.setEnabled(enabled);
-      userhostMaxNicksPerCommand.setEnabled(enabled);
-    };
-    userhostEnabled.addActionListener(e -> updateUserhostEnabledState.run());
-    updateUserhostEnabledState.run();
+    JPanel hostmaskAdvanced = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
+    hostmaskAdvanced.setOpaque(false);
+    hostmaskAdvanced.add(new JLabel("Min interval (sec):"));
+    hostmaskAdvanced.add(userhostMinIntervalSeconds, "w 110!");
+    hostmaskAdvanced.add(new JLabel("Max commands/min:"));
+    hostmaskAdvanced.add(userhostMaxPerMinute, "w 110!");
+    hostmaskAdvanced.add(new JLabel("Nick cooldown (min):"));
+    hostmaskAdvanced.add(userhostNickCooldownMinutes, "w 110!");
+    hostmaskAdvanced.add(new JLabel("Max nicks/command:"));
+    hostmaskAdvanced.add(userhostMaxNicksPerCommand, "w 110!");
 
-    panel.add(userhostInfo, "span 2, growx, wrap");
-    panel.add(userhostEnabled, "span 2, wrap");
-    panel.add(new JLabel("Min interval (sec):"));
-    panel.add(userhostMinIntervalSeconds, "w 110!");
-    panel.add(new JLabel("Max commands/min:"));
-    panel.add(userhostMaxPerMinute, "w 110!");
-    panel.add(new JLabel("Nick cooldown (min):"));
-    panel.add(userhostNickCooldownMinutes, "w 110!");
-    panel.add(new JLabel("Max nicks/command:"));
-    panel.add(userhostMaxNicksPerCommand, "w 110!");
+    // ---- User info enrichment (fallback) ----
+    // hidemode=3 ensures that when we hide advanced controls (non-Custom presets), the section shrinks.
+    JPanel enrichmentPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
+    enrichmentPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createTitledBorder("Roster enrichment (fallback)"),
+        BorderFactory.createEmptyBorder(6, 6, 6, 6)
+    ));
+    enrichmentPanel.setOpaque(false);
+
+    JCheckBox enrichmentEnabled = new JCheckBox("Best-effort roster enrichment using USERHOST (rate-limited)");
+    enrichmentEnabled.setSelected(current.userInfoEnrichmentEnabled());
+    enrichmentEnabled.setToolTipText("When enabled, IRCafe may send USERHOST occasionally to enrich user info even when you don't have hostmask-based ignore rules.\n" +
+        "This is a best-effort fallback for older networks.");
+
+    JCheckBox enrichmentWhoisFallbackEnabled = new JCheckBox("Also use WHOIS fallback for account info (very slow)");
+    enrichmentWhoisFallbackEnabled.setSelected(current.userInfoEnrichmentWhoisFallbackEnabled());
+    enrichmentWhoisFallbackEnabled.setToolTipText("When enabled, IRCafe may occasionally send WHOIS to learn account login state/name and away message.\n" +
+        "This is slower and more likely to hit server rate limits. Recommended OFF by default.");
+
+    JCheckBox enrichmentPeriodicRefreshEnabled = new JCheckBox("Periodic background refresh (slow scan)");
+    enrichmentPeriodicRefreshEnabled.setSelected(current.userInfoEnrichmentPeriodicRefreshEnabled());
+    enrichmentPeriodicRefreshEnabled.setToolTipText("When enabled, IRCafe will periodically re-check a small number of nicks to detect changes.\n" +
+        "Use conservative intervals to avoid extra network load.");
+
+    JButton enrichmentHelp = whyHelpButton(
+        "Why do I need roster enrichment?",
+        "This is a best-effort fallback for older networks or edge cases where IRCv3 metadata isn't available.\n\n" +
+            "IRCafe can use rate-limited USERHOST to fill missing user info. Optionally it can also use WHOIS (much slower) to learn account/away details.\n\n" +
+            "On modern IRCv3 networks, you typically don't need this. Leave it OFF unless you have a specific reason."
+    );
+
+    JButton whoisHelp = whyHelpButton(
+        "WHOIS fallback",
+        "WHOIS is the slowest and noisiest fallback. It can provide account and away information when IRCv3 isn't available, but it is easy to hit server throttles.\n\n" +
+            "Keep this OFF unless you're on a network that doesn't provide account info via IRCv3."
+    );
+
+    JButton refreshHelp = whyHelpButton(
+        "Periodic background refresh",
+        "This periodically re-probes a small number of users to detect changes (e.g., account/away state) on networks that don't push updates.\n\n" +
+            "It's a slow scan by design: use high intervals and small batch sizes to avoid extra network load."
+    );
+
+    JLabel enrichmentSummary = subtleInfoLabel();
+    enrichmentSummary.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
+
+    JSpinner enrichmentUserhostMinIntervalSeconds = numberSpinner(current.userInfoEnrichmentUserhostMinIntervalSeconds(), 1, 300, 1, closeables);
+    enrichmentUserhostMinIntervalSeconds.setToolTipText("Minimum seconds between USERHOST commands per server for enrichment.");
+
+    JSpinner enrichmentUserhostMaxPerMinute = numberSpinner(current.userInfoEnrichmentUserhostMaxCommandsPerMinute(), 1, 60, 1, closeables);
+    enrichmentUserhostMaxPerMinute.setToolTipText("Maximum USERHOST commands per minute per server for enrichment.");
+
+    JSpinner enrichmentUserhostNickCooldownMinutes = numberSpinner(current.userInfoEnrichmentUserhostNickCooldownMinutes(), 1, 1440, 1, closeables);
+    enrichmentUserhostNickCooldownMinutes.setToolTipText("Cooldown in minutes before re-querying the same nick via USERHOST (enrichment).\n" +
+        "Higher values reduce network load.");
+
+    JSpinner enrichmentUserhostMaxNicksPerCommand = numberSpinner(current.userInfoEnrichmentUserhostMaxNicksPerCommand(), 1, 5, 1, closeables);
+    enrichmentUserhostMaxNicksPerCommand.setToolTipText("How many nicks to include per USERHOST command (servers typically allow up to 5).\n" +
+        "This applies to enrichment mode, separate from hostmask discovery.");
+
+    JSpinner enrichmentWhoisMinIntervalSeconds = numberSpinner(current.userInfoEnrichmentWhoisMinIntervalSeconds(), 5, 600, 5, closeables);
+    enrichmentWhoisMinIntervalSeconds.setToolTipText("Minimum seconds between WHOIS commands per server (enrichment).\n" +
+        "Keep this high to avoid throttling.");
+
+    JSpinner enrichmentWhoisNickCooldownMinutes = numberSpinner(current.userInfoEnrichmentWhoisNickCooldownMinutes(), 1, 1440, 1, closeables);
+    enrichmentWhoisNickCooldownMinutes.setToolTipText("Cooldown in minutes before re-WHOIS'ing the same nick.");
+
+    JSpinner enrichmentPeriodicRefreshIntervalSeconds = numberSpinner(current.userInfoEnrichmentPeriodicRefreshIntervalSeconds(), 30, 3600, 30, closeables);
+    enrichmentPeriodicRefreshIntervalSeconds.setToolTipText("How often to run a slow scan tick (seconds).\n" +
+        "Higher values are safer. Example: 300 seconds (5 minutes).");
+
+    JSpinner enrichmentPeriodicRefreshNicksPerTick = numberSpinner(current.userInfoEnrichmentPeriodicRefreshNicksPerTick(), 1, 20, 1, closeables);
+    enrichmentPeriodicRefreshNicksPerTick.setToolTipText("How many nicks to probe per periodic tick.\n" +
+        "Keep this small (e.g., 1-3).");
+
+    JPanel enrichmentAdvanced = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]10[]6[]6[]10[]6[]6[]"));
+    enrichmentAdvanced.setOpaque(false);
+
+    // USERHOST tuning
+    JLabel userhostHdr = new JLabel("USERHOST tuning");
+    userhostHdr.setFont(userhostHdr.getFont().deriveFont(Font.BOLD));
+    enrichmentAdvanced.add(userhostHdr, "span 2, growx, wrap");
+    enrichmentAdvanced.add(new JLabel("Min interval (sec):"));
+    enrichmentAdvanced.add(enrichmentUserhostMinIntervalSeconds, "w 110!");
+    enrichmentAdvanced.add(new JLabel("Max cmd/min:"));
+    enrichmentAdvanced.add(enrichmentUserhostMaxPerMinute, "w 110!");
+    enrichmentAdvanced.add(new JLabel("Nick cooldown (min):"));
+    enrichmentAdvanced.add(enrichmentUserhostNickCooldownMinutes, "w 110!");
+    enrichmentAdvanced.add(new JLabel("Max nicks/cmd:"));
+    enrichmentAdvanced.add(enrichmentUserhostMaxNicksPerCommand, "w 110!");
+
+    // WHOIS tuning
+    JLabel whoisHdr = new JLabel("WHOIS tuning");
+    whoisHdr.setFont(whoisHdr.getFont().deriveFont(Font.BOLD));
+    enrichmentAdvanced.add(whoisHdr, "span 2, growx, wrap");
+    enrichmentAdvanced.add(new JLabel("Min interval (sec):"));
+    enrichmentAdvanced.add(enrichmentWhoisMinIntervalSeconds, "w 110!");
+    enrichmentAdvanced.add(new JLabel("Nick cooldown (min):"));
+    enrichmentAdvanced.add(enrichmentWhoisNickCooldownMinutes, "w 110!");
+
+    // Periodic refresh tuning
+    JLabel refreshHdr = new JLabel("Periodic refresh tuning");
+    refreshHdr.setFont(refreshHdr.getFont().deriveFont(Font.BOLD));
+    enrichmentAdvanced.add(refreshHdr, "span 2, growx, wrap");
+    enrichmentAdvanced.add(new JLabel("Interval (sec):"));
+    enrichmentAdvanced.add(enrichmentPeriodicRefreshIntervalSeconds, "w 110!");
+    enrichmentAdvanced.add(new JLabel("Nicks per tick:"));
+    enrichmentAdvanced.add(enrichmentPeriodicRefreshNicksPerTick, "w 110!");
+
+    // Apply a preset to all numeric tuning knobs.
+    Consumer<LookupRatePreset> applyLookupPreset = preset -> {
+      if (preset == null || preset == LookupRatePreset.CUSTOM) return;
+
+      switch (preset) {
+        case CONSERVATIVE -> {
+          // Hostmask discovery
+          userhostMinIntervalSeconds.setValue(10);
+          userhostMaxPerMinute.setValue(2);
+          userhostNickCooldownMinutes.setValue(60);
+          userhostMaxNicksPerCommand.setValue(5);
+
+          // Enrichment USERHOST
+          enrichmentUserhostMinIntervalSeconds.setValue(30);
+          enrichmentUserhostMaxPerMinute.setValue(2);
+          enrichmentUserhostNickCooldownMinutes.setValue(180);
+          enrichmentUserhostMaxNicksPerCommand.setValue(5);
+
+          // Enrichment WHOIS
+          enrichmentWhoisMinIntervalSeconds.setValue(120);
+          enrichmentWhoisNickCooldownMinutes.setValue(240);
+
+          // Periodic refresh
+          enrichmentPeriodicRefreshIntervalSeconds.setValue(600);
+          enrichmentPeriodicRefreshNicksPerTick.setValue(1);
+        }
+        case BALANCED -> {
+          // Hostmask discovery
+          userhostMinIntervalSeconds.setValue(5);
+          userhostMaxPerMinute.setValue(6);
+          userhostNickCooldownMinutes.setValue(30);
+          userhostMaxNicksPerCommand.setValue(5);
+
+          // Enrichment USERHOST
+          enrichmentUserhostMinIntervalSeconds.setValue(15);
+          enrichmentUserhostMaxPerMinute.setValue(4);
+          enrichmentUserhostNickCooldownMinutes.setValue(60);
+          enrichmentUserhostMaxNicksPerCommand.setValue(5);
+
+          // Enrichment WHOIS
+          enrichmentWhoisMinIntervalSeconds.setValue(60);
+          enrichmentWhoisNickCooldownMinutes.setValue(120);
+
+          // Periodic refresh
+          enrichmentPeriodicRefreshIntervalSeconds.setValue(300);
+          enrichmentPeriodicRefreshNicksPerTick.setValue(2);
+        }
+        case RAPID -> {
+          // Hostmask discovery
+          userhostMinIntervalSeconds.setValue(2);
+          userhostMaxPerMinute.setValue(15);
+          userhostNickCooldownMinutes.setValue(10);
+          userhostMaxNicksPerCommand.setValue(5);
+
+          // Enrichment USERHOST
+          enrichmentUserhostMinIntervalSeconds.setValue(5);
+          enrichmentUserhostMaxPerMinute.setValue(10);
+          enrichmentUserhostNickCooldownMinutes.setValue(15);
+          enrichmentUserhostMaxNicksPerCommand.setValue(5);
+
+          // Enrichment WHOIS
+          enrichmentWhoisMinIntervalSeconds.setValue(15);
+          enrichmentWhoisNickCooldownMinutes.setValue(30);
+
+          // Periodic refresh
+          enrichmentPeriodicRefreshIntervalSeconds.setValue(60);
+          enrichmentPeriodicRefreshNicksPerTick.setValue(3);
+        }
+        default -> { /* no-op */ }
+      }
+    };
+
+    // ---- Simple-mode summary lines (always reflect the effective values) ----
+    Runnable updateHostmaskSummary = () -> {
+      if (!userhostEnabled.isSelected()) {
+        hostmaskSummary.setText("Disabled");
+        return;
+      }
+      int minI = ((Number) userhostMinIntervalSeconds.getValue()).intValue();
+      int maxM = ((Number) userhostMaxPerMinute.getValue()).intValue();
+      int cdM = ((Number) userhostNickCooldownMinutes.getValue()).intValue();
+      int maxN = ((Number) userhostMaxNicksPerCommand.getValue()).intValue();
+      hostmaskSummary.setText(String.format("USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd", maxM, minI, cdM, maxN));
+    };
+
+    Runnable updateEnrichmentSummary = () -> {
+      if (!enrichmentEnabled.isSelected()) {
+        enrichmentSummary.setText("Disabled");
+        return;
+      }
+
+      int minI = ((Number) enrichmentUserhostMinIntervalSeconds.getValue()).intValue();
+      int maxM = ((Number) enrichmentUserhostMaxPerMinute.getValue()).intValue();
+      int cdM = ((Number) enrichmentUserhostNickCooldownMinutes.getValue()).intValue();
+      int maxN = ((Number) enrichmentUserhostMaxNicksPerCommand.getValue()).intValue();
+
+      String whois;
+      if (enrichmentWhoisFallbackEnabled.isSelected()) {
+        int whoisMin = ((Number) enrichmentWhoisMinIntervalSeconds.getValue()).intValue();
+        int whoisCd = ((Number) enrichmentWhoisNickCooldownMinutes.getValue()).intValue();
+        whois = String.format("WHOIS min %ds, cooldown %dm", whoisMin, whoisCd);
+      } else {
+        whois = "WHOIS off";
+      }
+
+      String refresh;
+      if (enrichmentPeriodicRefreshEnabled.isSelected()) {
+        int interval = ((Number) enrichmentPeriodicRefreshIntervalSeconds.getValue()).intValue();
+        int nicks = ((Number) enrichmentPeriodicRefreshNicksPerTick.getValue()).intValue();
+        refresh = String.format("Refresh %ds ×%d", interval, nicks);
+      } else {
+        refresh = "Refresh off";
+      }
+
+      enrichmentSummary.setText(
+          String.format("<html>USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd<br>%s • %s</html>",
+              maxM, minI, cdM, maxN, whois, refresh)
+      );
+    };
+
+    Runnable updateAllSummaries = () -> {
+      updateHostmaskSummary.run();
+      updateEnrichmentSummary.run();
+    };
+
+    Runnable updateHostmaskState = () -> {
+      boolean enabled = userhostEnabled.isSelected();
+      LookupRatePreset preset = (LookupRatePreset) lookupPreset.getSelectedItem();
+      boolean custom = preset == LookupRatePreset.CUSTOM;
+
+      boolean show = enabled && custom;
+      hostmaskAdvanced.setVisible(show);
+
+      userhostMinIntervalSeconds.setEnabled(show);
+      userhostMaxPerMinute.setEnabled(show);
+      userhostNickCooldownMinutes.setEnabled(show);
+      userhostMaxNicksPerCommand.setEnabled(show);
+
+      updateHostmaskSummary.run();
+    };
+
+    Runnable updateEnrichmentState = () -> {
+      boolean enabled = enrichmentEnabled.isSelected();
+      LookupRatePreset preset = (LookupRatePreset) lookupPreset.getSelectedItem();
+      boolean custom = preset == LookupRatePreset.CUSTOM;
+
+      enrichmentWhoisFallbackEnabled.setEnabled(enabled);
+      enrichmentPeriodicRefreshEnabled.setEnabled(enabled);
+
+      boolean showAdv = enabled && custom;
+      enrichmentAdvanced.setVisible(showAdv);
+
+      enrichmentUserhostMinIntervalSeconds.setEnabled(showAdv);
+      enrichmentUserhostMaxPerMinute.setEnabled(showAdv);
+      enrichmentUserhostNickCooldownMinutes.setEnabled(showAdv);
+      enrichmentUserhostMaxNicksPerCommand.setEnabled(showAdv);
+
+      boolean whoisEnabled = showAdv && enrichmentWhoisFallbackEnabled.isSelected();
+      enrichmentWhoisMinIntervalSeconds.setEnabled(whoisEnabled);
+      enrichmentWhoisNickCooldownMinutes.setEnabled(whoisEnabled);
+
+      boolean periodicEnabled = showAdv && enrichmentPeriodicRefreshEnabled.isSelected();
+      enrichmentPeriodicRefreshIntervalSeconds.setEnabled(periodicEnabled);
+      enrichmentPeriodicRefreshNicksPerTick.setEnabled(periodicEnabled);
+
+      updateEnrichmentSummary.run();
+    };
+
+    // Wire listeners
+    userhostEnabled.addActionListener(e -> {
+      updateHostmaskState.run();
+      updateAllSummaries.run();
+      hostmaskPanel.revalidate();
+      hostmaskPanel.repaint();
+      userLookupsPanel.revalidate();
+      userLookupsPanel.repaint();
+    });
+
+    enrichmentEnabled.addActionListener(e -> {
+      updateEnrichmentState.run();
+      updateAllSummaries.run();
+      enrichmentPanel.revalidate();
+      enrichmentPanel.repaint();
+      userLookupsPanel.revalidate();
+      userLookupsPanel.repaint();
+    });
+
+    enrichmentWhoisFallbackEnabled.addActionListener(e -> {
+      updateEnrichmentState.run();
+      updateAllSummaries.run();
+    });
+    enrichmentPeriodicRefreshEnabled.addActionListener(e -> {
+      updateEnrichmentState.run();
+      updateAllSummaries.run();
+    });
+
+    lookupPreset.addActionListener(e -> {
+      LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
+      if (psel != null && psel != LookupRatePreset.CUSTOM) {
+        applyLookupPreset.accept(psel);
+      }
+      updateLookupPresetHint.run();
+      updateHostmaskState.run();
+      updateEnrichmentState.run();
+      updateAllSummaries.run();
+      hostmaskPanel.revalidate();
+      hostmaskPanel.repaint();
+      enrichmentPanel.revalidate();
+      enrichmentPanel.repaint();
+      userLookupsPanel.revalidate();
+      userLookupsPanel.repaint();
+    });
+
+    javax.swing.event.ChangeListener summaryChange = e -> updateAllSummaries.run();
+    userhostMinIntervalSeconds.addChangeListener(summaryChange);
+    userhostMaxPerMinute.addChangeListener(summaryChange);
+    userhostNickCooldownMinutes.addChangeListener(summaryChange);
+    userhostMaxNicksPerCommand.addChangeListener(summaryChange);
+    enrichmentUserhostMinIntervalSeconds.addChangeListener(summaryChange);
+    enrichmentUserhostMaxPerMinute.addChangeListener(summaryChange);
+    enrichmentUserhostNickCooldownMinutes.addChangeListener(summaryChange);
+    enrichmentUserhostMaxNicksPerCommand.addChangeListener(summaryChange);
+    enrichmentWhoisMinIntervalSeconds.addChangeListener(summaryChange);
+    enrichmentWhoisNickCooldownMinutes.addChangeListener(summaryChange);
+    enrichmentPeriodicRefreshIntervalSeconds.addChangeListener(summaryChange);
+    enrichmentPeriodicRefreshNicksPerTick.addChangeListener(summaryChange);
+
+    // Inline "Why do I need this?" help buttons for sub-options
+    JPanel enrichmentWhoisRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    enrichmentWhoisRow.setOpaque(false);
+    enrichmentWhoisRow.add(enrichmentWhoisFallbackEnabled, "growx");
+    enrichmentWhoisRow.add(whoisHelp, "align right");
+
+    JPanel enrichmentRefreshRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    enrichmentRefreshRow.setOpaque(false);
+    enrichmentRefreshRow.add(enrichmentPeriodicRefreshEnabled, "growx");
+    enrichmentRefreshRow.add(refreshHelp, "align right");
+
+    // Layout content
+    hostmaskPanel.add(userhostEnabled, "growx");
+    hostmaskPanel.add(hostmaskHelp, "align right, wrap");
+    hostmaskPanel.add(hostmaskSummary, "span 2, growx, wrap");
+    hostmaskPanel.add(hostmaskAdvanced, "span 2, growx, wrap, hidemode 3");
+
+    enrichmentPanel.add(enrichmentEnabled, "growx");
+    enrichmentPanel.add(enrichmentHelp, "align right, wrap");
+    enrichmentPanel.add(enrichmentSummary, "span 2, growx, wrap");
+    enrichmentPanel.add(enrichmentWhoisRow, "span 2, gapleft 18, growx, wrap");
+    enrichmentPanel.add(enrichmentRefreshRow, "span 2, gapleft 18, growx, wrap");
+    enrichmentPanel.add(enrichmentAdvanced, "span 2, growx, wrap, hidemode 3");
+
+    // Initialize UI state after wiring listeners.
+    hostmaskAdvanced.setVisible(false);
+    enrichmentAdvanced.setVisible(false);
+    updateHostmaskState.run();
+    updateEnrichmentState.run();
+
+    userLookupsPanel.add(hostmaskPanel, "growx, wrap");
+    userLookupsPanel.add(enrichmentPanel, "growx, wrap");
 
     UserhostControls userhostControls = new UserhostControls(
         userhostEnabled,
@@ -983,8 +1493,23 @@ public class PreferencesDialog {
         userhostMaxNicksPerCommand
     );
 
-    return new NetworkAdvancedControls(proxyControls, userhostControls, trustAllTlsCertificates, panel);
+    UserInfoEnrichmentControls enrichmentControls = new UserInfoEnrichmentControls(
+        enrichmentEnabled,
+        enrichmentUserhostMinIntervalSeconds,
+        enrichmentUserhostMaxPerMinute,
+        enrichmentUserhostNickCooldownMinutes,
+        enrichmentUserhostMaxNicksPerCommand,
+        enrichmentWhoisFallbackEnabled,
+        enrichmentWhoisMinIntervalSeconds,
+        enrichmentWhoisNickCooldownMinutes,
+        enrichmentPeriodicRefreshEnabled,
+        enrichmentPeriodicRefreshIntervalSeconds,
+        enrichmentPeriodicRefreshNicksPerTick
+    );
+
+    return new NetworkAdvancedControls(proxyControls, userhostControls, enrichmentControls, trustAllTlsCertificates, networkPanel, userLookupsPanel);
   }
+
 
   private JPanel buildAppearancePanel(ThemeControls theme, FontControls fonts) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
@@ -1121,6 +1646,89 @@ public class PreferencesDialog {
     }
   }
 
+
+
+  private enum LookupRatePreset {
+    CONSERVATIVE("Conservative"),
+    BALANCED("Balanced"),
+    RAPID("Rapid"),
+    CUSTOM("Custom");
+
+    private final String label;
+
+    LookupRatePreset(String label) {
+      this.label = label;
+    }
+
+    @Override public String toString() {
+      return label;
+    }
+  }
+
+  private static LookupRatePreset detectLookupRatePreset(UiSettings s) {
+    if (matchesLookupRatePreset(s, LookupRatePreset.BALANCED)) return LookupRatePreset.BALANCED;
+    if (matchesLookupRatePreset(s, LookupRatePreset.CONSERVATIVE)) return LookupRatePreset.CONSERVATIVE;
+    if (matchesLookupRatePreset(s, LookupRatePreset.RAPID)) return LookupRatePreset.RAPID;
+    return LookupRatePreset.CUSTOM;
+  }
+
+  private static boolean matchesLookupRatePreset(UiSettings s, LookupRatePreset preset) {
+    return switch (preset) {
+      case CONSERVATIVE -> (
+          s.userhostMinIntervalSeconds() == 10 &&
+              s.userhostMaxCommandsPerMinute() == 2 &&
+              s.userhostNickCooldownMinutes() == 60 &&
+              s.userhostMaxNicksPerCommand() == 5 &&
+
+              s.userInfoEnrichmentUserhostMinIntervalSeconds() == 30 &&
+              s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 2 &&
+              s.userInfoEnrichmentUserhostNickCooldownMinutes() == 180 &&
+              s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5 &&
+
+              s.userInfoEnrichmentWhoisMinIntervalSeconds() == 120 &&
+              s.userInfoEnrichmentWhoisNickCooldownMinutes() == 240 &&
+
+              s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 600 &&
+              s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 1
+      );
+      case BALANCED -> (
+          s.userhostMinIntervalSeconds() == 5 &&
+              s.userhostMaxCommandsPerMinute() == 6 &&
+              s.userhostNickCooldownMinutes() == 30 &&
+              s.userhostMaxNicksPerCommand() == 5 &&
+
+              s.userInfoEnrichmentUserhostMinIntervalSeconds() == 15 &&
+              s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 4 &&
+              s.userInfoEnrichmentUserhostNickCooldownMinutes() == 60 &&
+              s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5 &&
+
+              s.userInfoEnrichmentWhoisMinIntervalSeconds() == 60 &&
+              s.userInfoEnrichmentWhoisNickCooldownMinutes() == 120 &&
+
+              s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 300 &&
+              s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 2
+      );
+      case RAPID -> (
+          s.userhostMinIntervalSeconds() == 2 &&
+              s.userhostMaxCommandsPerMinute() == 15 &&
+              s.userhostNickCooldownMinutes() == 10 &&
+              s.userhostMaxNicksPerCommand() == 5 &&
+
+              s.userInfoEnrichmentUserhostMinIntervalSeconds() == 5 &&
+              s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 10 &&
+              s.userInfoEnrichmentUserhostNickCooldownMinutes() == 15 &&
+              s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5 &&
+
+              s.userInfoEnrichmentWhoisMinIntervalSeconds() == 15 &&
+              s.userInfoEnrichmentWhoisNickCooldownMinutes() == 30 &&
+
+              s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 60 &&
+              s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 3
+      );
+      default -> false;
+    };
+  }
+
   private record ThemeControls(JComboBox<String> combo) {
   }
 
@@ -1172,6 +1780,21 @@ public class PreferencesDialog {
                                  JSpinner maxNicksPerCommand) {
   }
 
+  private record UserInfoEnrichmentControls(
+      JCheckBox enabled,
+      JSpinner userhostMinIntervalSeconds,
+      JSpinner userhostMaxPerMinute,
+      JSpinner userhostNickCooldownMinutes,
+      JSpinner userhostMaxNicksPerCommand,
+      JCheckBox whoisFallbackEnabled,
+      JSpinner whoisMinIntervalSeconds,
+      JSpinner whoisNickCooldownMinutes,
+      JCheckBox periodicRefreshEnabled,
+      JSpinner periodicRefreshIntervalSeconds,
+      JSpinner periodicRefreshNicksPerTick
+  ) {
+  }
+
   private record ProxyControls(JCheckBox enabled,
                                JTextField host,
                                JSpinner port,
@@ -1186,8 +1809,10 @@ public class PreferencesDialog {
 
   private record NetworkAdvancedControls(ProxyControls proxy,
                                          UserhostControls userhost,
+                                         UserInfoEnrichmentControls enrichment,
                                          JCheckBox trustAllTlsCertificates,
-                                         JPanel panel) {
+                                         JPanel networkPanel,
+                                         JPanel userLookupsPanel) {
   }
 
 

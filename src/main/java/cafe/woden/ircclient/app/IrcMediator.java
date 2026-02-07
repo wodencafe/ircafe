@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
@@ -47,6 +48,7 @@ public class IrcMediator {
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final UiSettingsBus uiSettingsBus;
+  private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -87,6 +89,7 @@ public class IrcMediator {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       UiSettingsBus uiSettingsBus,
+      UserInfoEnrichmentService userInfoEnrichmentService,
       WhoisRoutingState whoisRoutingState,
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
@@ -108,6 +111,7 @@ public class IrcMediator {
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
     this.uiSettingsBus = uiSettingsBus;
+    this.userInfoEnrichmentService = userInfoEnrichmentService;
     this.whoisRoutingState = whoisRoutingState;
     this.ctcpRoutingState = ctcpRoutingState;
     this.modeRoutingState = modeRoutingState;
@@ -504,6 +508,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
 
+        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
+        userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
@@ -518,6 +525,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
+
+        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
+        userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
@@ -547,6 +557,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.PrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
 
+        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
+        userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
@@ -558,6 +571,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       }
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
+
+        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
+        userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
@@ -683,6 +699,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         // Buffer the initial channel-flag modes so the join doesn't spam the view.
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
 
+        // Join-time roster enrichment (rate limited): populate away/account/hostmask quickly.
+        userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, ev.channel());
+
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
         ui.selectTarget(chan);
@@ -731,6 +750,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
       case IrcEvent.UserAwayStateObserved ev -> {
         targetCoordinator.onUserAwayStateObserved(sid, ev);
+      }
+
+      case IrcEvent.UserAccountStateObserved ev -> {
+        targetCoordinator.onUserAccountStateObserved(sid, ev);
       }
 
       case IrcEvent.Error ev -> {

@@ -7,6 +7,7 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreMaskMatcher;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.irc.IrcEvent.AwayState;
+import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
@@ -36,6 +37,110 @@ import java.util.Objects;
 public class UserListDockable extends JPanel implements Dockable {
   public static final String ID = "users";
 
+  // Subtle account indicator icons for the user list.
+  // ● filled dot = logged in; ○ hollow dot = logged out; ◌ dotted circle = unknown.
+  private static final Icon ACCOUNT_LOGGED_IN_ICON = new AccountDotIcon(true, false);
+  private static final Icon ACCOUNT_LOGGED_OUT_ICON = new AccountDotIcon(false, false);
+  private static final Icon ACCOUNT_UNKNOWN_ICON = new AccountGlyphIcon("◌");
+
+  private static final class AccountDotIcon implements Icon {
+    private final boolean filled;
+    private final boolean innerDot;
+
+    private AccountDotIcon(boolean filled, boolean innerDot) {
+      this.filled = filled;
+      this.innerDot = innerDot;
+    }
+
+    @Override public int getIconWidth() { return 10; }
+    @Override public int getIconHeight() { return 10; }
+
+    @Override
+    public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+      java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+      try {
+        g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
+        java.awt.Color fg = null;
+        if (c instanceof javax.swing.JLabel lbl) {
+          fg = lbl.getForeground();
+        }
+        if (fg == null) fg = g2.getColor();
+        if (fg == null) fg = java.awt.Color.GRAY;
+
+        // Use the label foreground but slightly transparent so it stays "quiet".
+        java.awt.Color dot = new java.awt.Color(fg.getRed(), fg.getGreen(), fg.getBlue(), 170);
+        g2.setColor(dot);
+
+        int d = 6;
+        int xx = x + 2;
+        int yy = y + 2;
+        if (filled) {
+          g2.fillOval(xx, yy, d, d);
+        } else {
+          g2.setStroke(new java.awt.BasicStroke(1.2f));
+          g2.drawOval(xx, yy, d, d);
+        }
+
+        // For UNKNOWN state, draw a small center dot inside the hollow circle.
+        if (innerDot) {
+          int d2 = 2;
+          int cx = xx + (d - d2) / 2;
+          int cy = yy + (d - d2) / 2;
+          g2.fillOval(cx, cy, d2, d2);
+        }
+      } finally {
+        g2.dispose();
+      }
+    }
+  }
+
+
+  private static final class AccountGlyphIcon implements Icon {
+    private final String glyph;
+
+    private AccountGlyphIcon(String glyph) {
+      this.glyph = glyph;
+    }
+
+    @Override public int getIconWidth() { return 10; }
+    @Override public int getIconHeight() { return 10; }
+
+    @Override
+    public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
+      java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+      try {
+        java.awt.Color fg = null;
+        java.awt.Font font = null;
+        if (c instanceof javax.swing.JLabel lbl) {
+          fg = lbl.getForeground();
+          font = lbl.getFont();
+        }
+        if (fg == null) fg = g2.getColor();
+        if (fg == null) fg = java.awt.Color.GRAY;
+        if (font == null) font = g2.getFont();
+        if (font == null) font = new java.awt.Font("Dialog", java.awt.Font.PLAIN, 10);
+
+        // Use the label foreground but slightly transparent so it stays "quiet".
+        java.awt.Color quiet = new java.awt.Color(fg.getRed(), fg.getGreen(), fg.getBlue(), 170);
+        g2.setColor(quiet);
+
+        float size = Math.min(10f, font.getSize2D());
+        java.awt.Font f2 = font.deriveFont(java.awt.Font.PLAIN, size);
+        g2.setFont(f2);
+        java.awt.FontMetrics fm = g2.getFontMetrics(f2);
+
+        int w = fm.stringWidth(glyph);
+        int xx = x + (getIconWidth() - w) / 2;
+        int yy = y + (getIconHeight() - fm.getHeight()) / 2 + fm.getAscent();
+        g2.drawString(glyph, xx, yy);
+      } finally {
+        g2.dispose();
+      }
+    }
+  }
+
+
   private final DefaultListModel<NickInfo> model = new DefaultListModel<>();
   private final JList<NickInfo> list = new JList<>(model) {
 
@@ -61,6 +166,7 @@ public class UserListDockable extends JPanel implements Dockable {
       String nick = Objects.toString(ni.nick(), "").trim();
       String hostmask = Objects.toString(ni.hostmask(), "").trim();
       AwayState away = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
+      AccountState acct = (ni.accountState() == null) ? AccountState.UNKNOWN : ni.accountState();
 
       boolean hasHostmask = IgnoreMaskMatcher.isUsefulHostmask(hostmask);
       if (nick.isEmpty()) return null;
@@ -88,6 +194,22 @@ public class UserListDockable extends JPanel implements Dockable {
           sb.append("<br>").append("<i>Away</i>");
         }
       }
+
+
+
+      if (acct == AccountState.LOGGED_IN) {
+        String account = ni.accountName();
+        if (account != null && !account.isBlank()) {
+          sb.append("<br>").append("<i>Account</i>: ").append(escapeHtml(account.trim()));
+        } else {
+          sb.append("<br>").append("<i>Account</i>: ").append("<i>logged in</i>");
+        }
+      } else if (acct == AccountState.LOGGED_OUT) {
+        sb.append("<br>").append("<i>Account</i>: ").append("<i>logged out</i>");
+      } else {
+        sb.append("<br>").append("<i>Account</i>: ").append("<i>unknown</i>");
+      }
+
 
       if (mark.ignore && mark.softIgnore) {
         sb.append("<br>").append("Ignored + soft ignored");
@@ -195,6 +317,17 @@ public class UserListDockable extends JPanel implements Dockable {
       IgnoreMark mark = ignoreMark(value);
       String display = raw;
       AwayState away = (value == null || value.awayState() == null) ? AwayState.UNKNOWN : value.awayState();
+      AccountState acct = (value == null || value.accountState() == null) ? AccountState.UNKNOWN : value.accountState();
+
+      // Account indicator (logged in/out/unknown).
+      if (acct == AccountState.LOGGED_IN) {
+        lbl.setIcon(ACCOUNT_LOGGED_IN_ICON);
+      } else if (acct == AccountState.LOGGED_OUT) {
+        lbl.setIcon(ACCOUNT_LOGGED_OUT_ICON);
+      } else {
+        lbl.setIcon(ACCOUNT_UNKNOWN_ICON);
+      }
+      lbl.setIconTextGap(6);
       if (mark.ignore) display += "  [IGN]";
       if (mark.softIgnore) display += "  [SOFT]";
       lbl.setText(display);

@@ -10,6 +10,7 @@ import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
+import java.util.Locale;
 import java.util.List;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -35,6 +36,10 @@ public class SwingUiPort implements UiPort {
   private final ChatDockManager chatDockManager;
   private final ActiveInputRouter activeInputRouter;
 
+  // Avoid rebuilding nick completions on every metadata refresh (away/account/hostmask) by
+  // skipping completion updates if the nick *set* hasn't changed.
+  private int lastNickCompletionSize = -1;
+  private int lastNickCompletionHash = 0;
 
   private void onEdt(Runnable r) {
     if (SwingUtilities.isEventDispatchThread()) {
@@ -204,7 +209,10 @@ public class SwingUiPort implements UiPort {
       users.setNicks(nicks);
 
       // Avoid streams here: in very large channels this runs on the EDT and can noticeably stall the UI.
+      // Also: rebuilding nick-completions is expensive, so skip that step if the nick set hasn't changed.
       java.util.List<String> names;
+      int hash = 1;
+      int size = 0;
       if (nicks == null || nicks.isEmpty()) {
         names = java.util.List.of();
       } else {
@@ -214,15 +222,24 @@ public class SwingUiPort implements UiPort {
           String nick = ni.nick();
           if (nick == null) continue;
           tmp.add(nick);
+          String lower = nick.toLowerCase(Locale.ROOT);
+          hash = 31 * hash + lower.hashCode();
+          size++;
         }
         names = java.util.List.copyOf(tmp);
       }
 
-      // Route nick completions to whichever input surface is currently active (main chat or pinned).
-      if (activeInputRouter != null && activeInputRouter.active() != null) {
-        activeInputRouter.setNickCompletionsForActive(names);
-      } else {
-        chat.setNickCompletions(names);
+      boolean sameNickSet = (size == lastNickCompletionSize) && (hash == lastNickCompletionHash);
+      if (!sameNickSet) {
+        lastNickCompletionSize = size;
+        lastNickCompletionHash = hash;
+
+        // Route nick completions to whichever input surface is currently active (main chat or pinned).
+        if (activeInputRouter != null && activeInputRouter.active() != null) {
+          activeInputRouter.setNickCompletionsForActive(names);
+        } else {
+          chat.setNickCompletions(names);
+        }
       }
     });
   }

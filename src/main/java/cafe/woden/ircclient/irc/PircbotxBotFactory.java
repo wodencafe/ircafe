@@ -69,6 +69,14 @@ public class PircbotxBotFactory {
         .addCapHandler(new EnableCapHandler("userhost-in-names", true))
         // IRCv3 away-notify: server will send user AWAY state changes as raw AWAY commands.
         .addCapHandler(new EnableCapHandler("away-notify", true))
+        // IRCv3 account-notify: server will send ACCOUNT updates when users log in/out.
+        .addCapHandler(new EnableCapHandler("account-notify", true))
+        // IRCv3 extended-join: JOIN includes account name + realname (when supported).
+        .addCapHandler(new EnableCapHandler("extended-join", true))
+        // IRCv3 message-tags: enables tagged messages (required for account-tag on some networks).
+        .addCapHandler(new EnableCapHandler("message-tags", true))
+        // IRCv3 account-tag: messages will include @account=... tags when supported.
+        .addCapHandler(new EnableCapHandler("account-tag", true))
         .setAutoNickChange(true)
         // We manage reconnects ourselves so we can surface status + use backoff.
         .setAutoReconnect(false)
