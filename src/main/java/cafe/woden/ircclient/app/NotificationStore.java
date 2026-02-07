@@ -14,8 +14,6 @@ import org.springframework.stereotype.Component;
 /**
  * In-memory store of per-server "highlight" notifications.
  *
- * <p>Step 2 foundation for a server-scoped Notifications view. This intentionally stores
- * every highlight event as its own row (channel + who + time), per the UX goal.</p>
  */
 @Component
 public class NotificationStore {
@@ -36,7 +34,6 @@ public class NotificationStore {
   /**
    * Hard cap to prevent unbounded memory growth.
    *
-   * <p>Oldest events are dropped first when the cap is exceeded.</p>
    */
   public static final int DEFAULT_MAX_EVENTS_PER_SERVER = 2000;
 
@@ -63,7 +60,6 @@ public class NotificationStore {
   /**
    * Record a new highlight event.
    *
-   * <p>Only channel targets are recorded; UI-only targets are ignored.</p>
    */
   public void recordHighlight(TargetRef channelTarget, String fromNick) {
     if (channelTarget == null) return;
