@@ -887,6 +887,29 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberClientHeartbeat(IrcProperties.Heartbeat heartbeat) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      IrcProperties.Heartbeat hb = (heartbeat != null)
+          ? heartbeat
+          : new IrcProperties.Heartbeat(true, 15_000, 360_000);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      Map<String, Object> client = getOrCreateMap(irc, "client");
+      Map<String, Object> hbMap = getOrCreateMap(client, "heartbeat");
+
+      hbMap.put("enabled", hb.enabled());
+      hbMap.put("checkPeriodMs", Math.max(1_000L, hb.checkPeriodMs()));
+      hbMap.put("timeoutMs", Math.max(1_000L, hb.timeoutMs()));
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist heartbeat settings to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberClientProxy(IrcProperties.Proxy proxy) {
     try {
       if (file.toString().isBlank()) return;

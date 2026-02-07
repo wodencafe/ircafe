@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.net.NetHeartbeatContext;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -68,13 +69,31 @@ final class PircbotxConnectionTimersRx {
   }
 
   void startHeartbeat(PircbotxConnectionState c) {
+    startHeartbeatInternal(c, true);
+  }
+
+  /**
+   * Rebuilds the active heartbeat ticker using the latest settings (e.g. after Preferences Apply).
+   *
+   * <p>Unlike {@link #startHeartbeat(PircbotxConnectionState)}, this does <b>not</b> reset the
+   * inbound-idle clock (last inbound timestamp). That avoids masking a connection that is already
+   * stuck/silent at the moment the user tweaks heartbeat settings.
+   */
+  void rescheduleHeartbeat(PircbotxConnectionState c) {
+    startHeartbeatInternal(c, false);
+  }
+
+  private void startHeartbeatInternal(PircbotxConnectionState c, boolean resetIdleClock) {
     if (c == null) return;
     if (shuttingDown.get() || heartbeatExec.isShutdown() || heartbeatExec.isTerminated()) return;
 
-    c.lastInboundMs.set(System.currentTimeMillis());
+    if (resetIdleClock || c.lastInboundMs.get() <= 0) {
+      c.lastInboundMs.set(System.currentTimeMillis());
+    }
     c.localTimeoutEmitted.set(false);
 
-    IrcProperties.Heartbeat hb = heartbeatPolicy;
+    IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
+    if (hb == null) hb = heartbeatPolicy;
     if (hb == null || !hb.enabled()) {
       stopHeartbeat(c);
       return;
@@ -106,7 +125,8 @@ final class PircbotxConnectionTimersRx {
     if (bot == null) return;
 
     long idleMs = System.currentTimeMillis() - c.lastInboundMs.get();
-    IrcProperties.Heartbeat hb = heartbeatPolicy;
+    IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
+    if (hb == null) hb = heartbeatPolicy;
     if (hb == null || !hb.enabled()) return;
 
     if (idleMs > hb.timeoutMs() && c.localTimeoutEmitted.compareAndSet(false, true)) {
