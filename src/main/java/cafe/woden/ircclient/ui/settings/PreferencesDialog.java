@@ -3,8 +3,10 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.irc.PircbotxIrcClientService;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
+import cafe.woden.ircclient.net.NetHeartbeatContext;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
@@ -17,6 +19,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.time.format.DateTimeFormatter;
 import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import javax.swing.JColorChooser;
 import javax.swing.JTextField;
 import javax.swing.event.DocumentEvent;
@@ -26,6 +29,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
+import java.awt.LayoutManager;
+import java.awt.Rectangle;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,11 +47,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
+import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import net.miginfocom.swing.MigLayout;
@@ -64,6 +71,7 @@ public class PreferencesDialog {
   private final NickColorSettingsBus nickColorSettingsBus;
   private final NickColorService nickColorService;
   private final NickColorOverridesDialog nickColorOverridesDialog;
+  private final PircbotxIrcClientService ircClientService;
 
   private JDialog dialog;
 
@@ -73,7 +81,8 @@ public class PreferencesDialog {
                            LogProperties logProps,
                            NickColorSettingsBus nickColorSettingsBus,
                            NickColorService nickColorService,
-                           NickColorOverridesDialog nickColorOverridesDialog) {
+                           NickColorOverridesDialog nickColorOverridesDialog,
+                           PircbotxIrcClientService ircClientService) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.runtimeConfig = runtimeConfig;
@@ -81,6 +90,7 @@ public class PreferencesDialog {
     this.nickColorSettingsBus = nickColorSettingsBus;
     this.nickColorService = nickColorService;
     this.nickColorOverridesDialog = nickColorOverridesDialog;
+    this.ircClientService = ircClientService;
   }
 
   public void open(Window owner) {
@@ -121,6 +131,7 @@ public class PreferencesDialog {
     ProxyControls proxy = network.proxy;
     UserhostControls userhost = network.userhost;
     UserInfoEnrichmentControls enrichment = network.enrichment;
+    HeartbeatControls heartbeat = network.heartbeat;
     JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates;
 
     JPanel networkPanel = network.networkPanel;
@@ -205,6 +216,32 @@ public class PreferencesDialog {
         javax.swing.JOptionPane.showMessageDialog(dialog,
             "Invalid SOCKS proxy settings:\n\n" + ex.getMessage(),
             "Invalid proxy settings",
+            javax.swing.JOptionPane.ERROR_MESSAGE);
+        return;
+      }
+
+      // Heartbeat / idle timeout detection.
+      IrcProperties.Heartbeat heartbeatCfg;
+      try {
+        boolean hbEnabledV = heartbeat.enabled.isSelected();
+        int hbCheckSecondsV = ((Number) heartbeat.checkPeriodSeconds.getValue()).intValue();
+        int hbTimeoutSecondsV = ((Number) heartbeat.timeoutSeconds.getValue()).intValue();
+
+        hbCheckSecondsV = Math.max(1, hbCheckSecondsV);
+        hbTimeoutSecondsV = Math.max(1, hbTimeoutSecondsV);
+        if (hbEnabledV && hbTimeoutSecondsV <= hbCheckSecondsV) {
+          throw new IllegalArgumentException("Timeout must be greater than check period.");
+        }
+
+        heartbeatCfg = new IrcProperties.Heartbeat(
+            hbEnabledV,
+            hbCheckSecondsV * 1000L,
+            hbTimeoutSecondsV * 1000L
+        );
+      } catch (Exception ex) {
+        javax.swing.JOptionPane.showMessageDialog(dialog,
+            "Invalid heartbeat settings:\n\n" + ex.getMessage(),
+            "Invalid heartbeat settings",
             javax.swing.JOptionPane.ERROR_MESSAGE);
         return;
       }
@@ -345,6 +382,15 @@ public class PreferencesDialog {
       runtimeConfig.rememberClientProxy(proxyCfg);
       NetProxyContext.configure(proxyCfg);
 
+      // Heartbeat settings (take effect immediately; active timers are rescheduled below).
+      runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
+      NetHeartbeatContext.configure(heartbeatCfg);
+
+      // Reschedule active heartbeat timers immediately so check period changes apply without reconnect.
+      if (ircClientService != null) {
+        ircClientService.rescheduleActiveHeartbeats();
+      }
+
       // TLS trust-all setting (takes effect immediately for new TLS sockets / HTTPS fetches).
       boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
       runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
@@ -409,15 +455,74 @@ public class PreferencesDialog {
     return themeLabelById;
   }
 
+  /**
+   * Wrap a settings tab inside a scroll pane.
+   *
+   * <p>Important: we use a Scrollable wrapper that tracks the viewport width.
+   * Without this, when the dialog is resized larger and then smaller again,
+   * Swing can keep the tab view at the larger width (no horizontal scrollbar),
+   * making controls appear to "stick" expanded instead of shrinking.
+   */
   private static JScrollPane wrapTab(JPanel panel) {
+    // Top-align content and ensure it reflows with the viewport width.
+    ScrollableViewportWidthPanel wrapper = new ScrollableViewportWidthPanel(new BorderLayout());
+    wrapper.add(panel, BorderLayout.NORTH);
+
     JScrollPane scroll = new JScrollPane(
-        panel,
+        wrapper,
         ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
         ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
     );
     scroll.setBorder(null);
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     return scroll;
+  }
+
+  /**
+   * A lightweight view wrapper for JScrollPane that always tracks viewport width.
+   * This prevents "expanded" components from not shrinking back down when the
+   * parent dialog is resized smaller.
+   */
+  private static final class ScrollableViewportWidthPanel extends JPanel implements Scrollable {
+    private ScrollableViewportWidthPanel(LayoutManager layout) {
+      super(layout);
+    }
+    @Override
+    public Dimension getMinimumSize() {
+      Dimension d = super.getMinimumSize();
+      // Allow the scrollpane viewport to shrink the view horizontally.
+      // Without this, a large minimum width from child components can
+      // cause the tab to "stick" wide after resizing larger.
+      return new Dimension(0, d != null ? d.height : 0);
+    }
+
+    @Override
+    public Dimension getPreferredScrollableViewportSize() {
+      return getPreferredSize();
+    }
+
+    @Override
+    public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+      return 16;
+    }
+
+    @Override
+    public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+      if (orientation == SwingConstants.VERTICAL) {
+        return Math.max(32, visibleRect.height - 32);
+      }
+      return Math.max(32, visibleRect.width - 32);
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+      return true;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportHeight() {
+      return false;
+    }
   }
 
   private static JLabel tabTitle(String text) {
@@ -452,9 +557,80 @@ public class PreferencesDialog {
     t.setBorder(null);
     t.setFont(UIManager.getFont("Label.font"));
     t.setForeground(UIManager.getColor("Label.foreground"));
-    t.setColumns(48);
+    Dimension pref = t.getPreferredSize();
+    // Allow wrapping/shrinking in MigLayout + scrollpane viewport.
+    t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
     return t;
   }
+
+
+private static JTextArea subtleInfoText() {
+  JTextArea t = new JTextArea();
+  t.setEditable(false);
+  t.setLineWrap(true);
+  t.setWrapStyleWord(true);
+  t.setOpaque(false);
+  t.setFocusable(false);
+  t.setBorder(null);
+
+  Font f = UIManager.getFont("Label.font");
+  if (f != null) {
+    t.setFont(f.deriveFont(Font.ITALIC));
+  } else {
+    t.setFont(t.getFont().deriveFont(Font.ITALIC));
+  }
+
+  Color hintColor = UIManager.getColor("Label.disabledForeground");
+  if (hintColor != null) t.setForeground(hintColor);
+
+  Dimension pref = t.getPreferredSize();
+  t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
+  return t;
+}
+
+private static JTextArea buttonWrapText(String text) {
+  JTextArea t = new JTextArea(text);
+  t.setEditable(false);
+  t.setLineWrap(true);
+  t.setWrapStyleWord(true);
+  t.setOpaque(false);
+  t.setFocusable(false);
+  t.setBorder(null);
+
+  Font f = UIManager.getFont("CheckBox.font");
+  if (f == null) f = UIManager.getFont("Button.font");
+  if (f == null) f = UIManager.getFont("Label.font");
+  if (f != null) t.setFont(f);
+
+  Color c = UIManager.getColor("CheckBox.foreground");
+  if (c == null) c = UIManager.getColor("Label.foreground");
+  if (c != null) t.setForeground(c);
+
+  Dimension pref = t.getPreferredSize();
+  t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
+  return t;
+}
+
+private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
+  // Make long checkbox text wrap nicely and shrink with the dialog.
+  box.setText("");
+  JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[]6[grow,fill]", "[]"));
+  row.setOpaque(false);
+
+  JTextArea label = buttonWrapText(labelText);
+  // Clicking the label toggles the checkbox (behaves like a normal checkbox label).
+  label.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+  label.addMouseListener(new java.awt.event.MouseAdapter() {
+    @Override
+    public void mouseClicked(java.awt.event.MouseEvent e) {
+      if (box.isEnabled()) box.doClick();
+    }
+  });
+
+  row.add(box, "aligny top");
+  row.add(label, "growx, pushx, wmin 0");
+  return row;
+}
 
   private static JLabel subtleInfoLabel() {
     JLabel l = new JLabel();
@@ -615,7 +791,7 @@ public class PreferencesDialog {
     panel.add(minContrast, "w 110!, wrap");
     panel.add(overrides, "span 2, alignx left, wrap");
     panel.add(helpText("Tip: If nick colors look too similar to the background, increase the contrast ratio.\n" +
-        "Overrides always win over the palette."), "span 2, growx, wrap");
+        "Overrides always win over the palette."), "span 2, growx, wmin 0, wrap");
     panel.add(new JLabel("Preview:"), "span 2, wrap");
     panel.add(preview, "span 2, growx");
 
@@ -750,7 +926,7 @@ public class PreferencesDialog {
 
     JPanel historyPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]"));
     historyPanel.setOpaque(false);
-    historyPanel.add(historyInfo, "span 2, growx, wrap");
+    historyPanel.add(historyInfo, "span 2, growx, wmin 0, wrap");
     historyPanel.add(new JLabel("Initial load (lines):"));
     historyPanel.add(historyInitialLoadLines, "w 110!");
     historyPanel.add(new JLabel("Page size (Load older):"));
@@ -914,14 +1090,14 @@ public class PreferencesDialog {
     // hidemode=3 ensures invisible components don't reserve layout space.
     JPanel userLookupsPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
 
-    networkPanel.add(tabTitle("Network"), "span 2, growx, wrap");
+    networkPanel.add(tabTitle("Network"), "span 2, growx, wmin 0, wrap");
 
     // ---- SOCKS proxy ----
-    networkPanel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wrap");
+    networkPanel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wmin 0, wrap");
     networkPanel.add(helpText(
         "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n" +
             "Heads up: proxy credentials are stored in your runtime config file in plain text."),
-        "span 2, growx, wrap");
+        "span 2, growx, wmin 0, wrap");
 
     JCheckBox proxyEnabled = new JCheckBox("Use SOCKS5 proxy");
     proxyEnabled.setSelected(p.enabled());
@@ -932,9 +1108,10 @@ public class PreferencesDialog {
     int portDefault = (p.port() > 0 && p.port() <= 65535) ? p.port() : 1080;
     JSpinner proxyPort = numberSpinner(portDefault, 1, 65535, 1, closeables);
 
-    JCheckBox proxyRemoteDns = new JCheckBox("Proxy resolves DNS (remote DNS)");
+    JCheckBox proxyRemoteDns = new JCheckBox();
     proxyRemoteDns.setSelected(p.remoteDns());
     proxyRemoteDns.setToolTipText("When enabled, IRCafe asks the proxy to resolve hostnames. Useful if local DNS is blocked.");
+    JComponent proxyRemoteDnsRow = wrapCheckBox(proxyRemoteDns, "Proxy resolves DNS (remote DNS)");
 
     JTextField proxyUsername = new JTextField(Objects.toString(p.username(), ""));
     proxyUsername.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "(optional)");
@@ -954,7 +1131,7 @@ public class PreferencesDialog {
 
     JPanel passwordRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]6[]", "[]"));
     passwordRow.setOpaque(false);
-    passwordRow.add(proxyPassword, "growx");
+    passwordRow.add(proxyPassword, "growx, pushx, wmin 0");
     passwordRow.add(showPassword);
     passwordRow.add(clearPassword);
 
@@ -975,31 +1152,67 @@ public class PreferencesDialog {
 
     networkPanel.add(proxyEnabled, "span 2, wrap");
     networkPanel.add(new JLabel("Host:"));
-    networkPanel.add(proxyHost, "growx");
+    networkPanel.add(proxyHost, "growx, wmin 0");
     networkPanel.add(new JLabel("Port:"));
     networkPanel.add(proxyPort, "w 110!");
     networkPanel.add(new JLabel(""));
-    networkPanel.add(proxyRemoteDns, "growx");
+    networkPanel.add(proxyRemoteDnsRow, "growx, wmin 0");
     networkPanel.add(new JLabel("Username:"));
-    networkPanel.add(proxyUsername, "growx");
+    networkPanel.add(proxyUsername, "growx, wmin 0");
     networkPanel.add(new JLabel("Password:"));
-    networkPanel.add(passwordRow, "growx");
+    networkPanel.add(passwordRow, "growx, wmin 0");
     networkPanel.add(new JLabel("Connect timeout (sec):"));
     networkPanel.add(connectTimeoutSeconds, "w 110!");
     networkPanel.add(new JLabel("Read timeout (sec):"));
     networkPanel.add(readTimeoutSeconds, "w 110!");
 
     // ---- TLS / SSL ----
-    networkPanel.add(sectionTitle("TLS / SSL"), "span 2, growx, wrap");
+    networkPanel.add(sectionTitle("TLS / SSL"), "span 2, growx, wmin 0, wrap");
     networkPanel.add(helpText(
         "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n" +
             "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n" +
             "Only enable this if you understand the risk (MITM becomes trivial)."),
-        "span 2, growx, wrap");
+        "span 2, growx, wmin 0, wrap");
 
-    JCheckBox trustAllTlsCertificates = new JCheckBox("Trust all TLS/SSL certificates (insecure)");
+    JCheckBox trustAllTlsCertificates = new JCheckBox();
     trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
-    networkPanel.add(trustAllTlsCertificates, "span 2, wrap");
+    JComponent trustAllTlsRow = wrapCheckBox(trustAllTlsCertificates, "Trust all TLS/SSL certificates (insecure)");
+    networkPanel.add(trustAllTlsRow, "span 2, growx, wmin 0, wrap");
+
+    // ---- Heartbeat / idle timeout ----
+    networkPanel.add(sectionTitle("Connection heartbeat"), "span 2, growx, wmin 0, wrap");
+    networkPanel.add(helpText(
+        "IRCafe can detect 'silent' disconnects by monitoring inbound traffic.\n" +
+            "If no IRC messages are received for the configured timeout, IRCafe will close the socket\n" +
+            "and let the reconnect logic take over (if enabled).\n\n" +
+            "Tip: If your network is very quiet, increase the timeout."
+    ), "span 2, growx, wmin 0, wrap");
+
+    IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
+    if (hb == null) hb = new IrcProperties.Heartbeat(true, 15_000, 360_000);
+
+    JCheckBox heartbeatEnabled = new JCheckBox();
+    heartbeatEnabled.setSelected(hb.enabled());
+    JComponent heartbeatEnabledRow = wrapCheckBox(heartbeatEnabled, "Enable heartbeat / idle timeout detection");
+
+    int hbCheckSec = (int) Math.max(1, hb.checkPeriodMs() / 1000L);
+    int hbTimeoutSec = (int) Math.max(1, hb.timeoutMs() / 1000L);
+    JSpinner heartbeatCheckPeriodSeconds = numberSpinner(hbCheckSec, 1, 600, 1, closeables);
+    JSpinner heartbeatTimeoutSeconds = numberSpinner(hbTimeoutSec, 5, 7200, 5, closeables);
+
+    Runnable updateHeartbeatEnabledState = () -> {
+      boolean enabled = heartbeatEnabled.isSelected();
+      heartbeatCheckPeriodSeconds.setEnabled(enabled);
+      heartbeatTimeoutSeconds.setEnabled(enabled);
+    };
+    heartbeatEnabled.addActionListener(e -> updateHeartbeatEnabledState.run());
+    updateHeartbeatEnabledState.run();
+
+    networkPanel.add(heartbeatEnabledRow, "span 2, growx, wmin 0, wrap");
+    networkPanel.add(new JLabel("Check period (sec):"));
+    networkPanel.add(heartbeatCheckPeriodSeconds, "w 110!");
+    networkPanel.add(new JLabel("Timeout (sec):"));
+    networkPanel.add(heartbeatTimeoutSeconds, "w 110!");
 
     ProxyControls proxyControls = new ProxyControls(
         proxyEnabled,
@@ -1014,6 +1227,12 @@ public class PreferencesDialog {
         readTimeoutSeconds
     );
 
+    HeartbeatControls heartbeatControls = new HeartbeatControls(
+        heartbeatEnabled,
+        heartbeatCheckPeriodSeconds,
+        heartbeatTimeoutSeconds
+    );
+
     // -------------------------
     // User lookups (cleaner UI)
     // -------------------------
@@ -1021,8 +1240,8 @@ public class PreferencesDialog {
 
     JPanel userLookupsIntro = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     userLookupsIntro.setOpaque(false);
-    JLabel userLookupsBlurb = new JLabel(
-        "<html>Optional fallbacks for account/away/host info (USERHOST / WHOIS), with conservative rate limits.</html>"
+    JTextArea userLookupsBlurb = helpText(
+        "Optional fallbacks for account/away/host info (USERHOST / WHOIS), with conservative rate limits."
     );
     JButton userLookupsHelp = whyHelpButton(
         "Why do I need user lookups?",
@@ -1030,7 +1249,7 @@ public class PreferencesDialog {
             "However, some networks (or some pieces of data) still require fallback lookups. IRCafe can optionally use USERHOST and (as a last resort) WHOIS to fill missing metadata.\n\n" +
             "If you're on an IRCv3-capable network and don't use hostmask-based ignore rules, you can usually leave these disabled."
     );
-    userLookupsIntro.add(userLookupsBlurb, "growx");
+    userLookupsIntro.add(userLookupsBlurb, "growx, wmin 0");
     userLookupsIntro.add(userLookupsHelp, "align right");
     userLookupsPanel.add(userLookupsIntro, "growx, wrap");
 
@@ -1041,10 +1260,7 @@ public class PreferencesDialog {
     JComboBox<LookupRatePreset> lookupPreset = new JComboBox<>(LookupRatePreset.values());
     lookupPreset.setSelectedItem(detectLookupRatePreset(current));
 
-    JLabel lookupPresetHint = new JLabel();
-    lookupPresetHint.setFont(lookupPresetHint.getFont().deriveFont(Font.ITALIC));
-    Color hintColor = UIManager.getColor("Label.disabledForeground");
-    if (hintColor != null) lookupPresetHint.setForeground(hintColor);
+    JTextArea lookupPresetHint = subtleInfoText();
 
     Runnable updateLookupPresetHint = () -> {
       LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
@@ -1066,7 +1282,7 @@ public class PreferencesDialog {
 
     lookupPresetPanel.add(new JLabel("Rate limit preset:"));
     lookupPresetPanel.add(lookupPreset, "w 220!");
-    lookupPresetPanel.add(lookupPresetHint, "span 2, growx, wrap");
+    lookupPresetPanel.add(lookupPresetHint, "span 2, growx, wmin 0, wrap");
     userLookupsPanel.add(lookupPresetPanel, "growx, wrap");
 
     // ---- Hostmask discovery (USERHOST) ----
@@ -1090,7 +1306,7 @@ public class PreferencesDialog {
             "If you don't use hostmask-based ignores, you can usually leave this off."
     );
 
-    JLabel hostmaskSummary = subtleInfoLabel();
+    JTextArea hostmaskSummary = subtleInfoText();
     hostmaskSummary.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
 
     JSpinner userhostMinIntervalSeconds = numberSpinner(current.userhostMinIntervalSeconds(), 1, 60, 1, closeables);
@@ -1159,7 +1375,7 @@ public class PreferencesDialog {
             "It's a slow scan by design: use high intervals and small batch sizes to avoid extra network load."
     );
 
-    JLabel enrichmentSummary = subtleInfoLabel();
+    JTextArea enrichmentSummary = subtleInfoText();
     enrichmentSummary.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
 
     JSpinner enrichmentUserhostMinIntervalSeconds = numberSpinner(current.userInfoEnrichmentUserhostMinIntervalSeconds(), 1, 300, 1, closeables);
@@ -1197,7 +1413,7 @@ public class PreferencesDialog {
     // USERHOST tuning
     JLabel userhostHdr = new JLabel("USERHOST tuning");
     userhostHdr.setFont(userhostHdr.getFont().deriveFont(Font.BOLD));
-    enrichmentAdvanced.add(userhostHdr, "span 2, growx, wrap");
+    enrichmentAdvanced.add(userhostHdr, "span 2, growx, wmin 0, wrap");
     enrichmentAdvanced.add(new JLabel("Min interval (sec):"));
     enrichmentAdvanced.add(enrichmentUserhostMinIntervalSeconds, "w 110!");
     enrichmentAdvanced.add(new JLabel("Max cmd/min:"));
@@ -1210,7 +1426,7 @@ public class PreferencesDialog {
     // WHOIS tuning
     JLabel whoisHdr = new JLabel("WHOIS tuning");
     whoisHdr.setFont(whoisHdr.getFont().deriveFont(Font.BOLD));
-    enrichmentAdvanced.add(whoisHdr, "span 2, growx, wrap");
+    enrichmentAdvanced.add(whoisHdr, "span 2, growx, wmin 0, wrap");
     enrichmentAdvanced.add(new JLabel("Min interval (sec):"));
     enrichmentAdvanced.add(enrichmentWhoisMinIntervalSeconds, "w 110!");
     enrichmentAdvanced.add(new JLabel("Nick cooldown (min):"));
@@ -1219,7 +1435,7 @@ public class PreferencesDialog {
     // Periodic refresh tuning
     JLabel refreshHdr = new JLabel("Periodic refresh tuning");
     refreshHdr.setFont(refreshHdr.getFont().deriveFont(Font.BOLD));
-    enrichmentAdvanced.add(refreshHdr, "span 2, growx, wrap");
+    enrichmentAdvanced.add(refreshHdr, "span 2, growx, wmin 0, wrap");
     enrichmentAdvanced.add(new JLabel("Interval (sec):"));
     enrichmentAdvanced.add(enrichmentPeriodicRefreshIntervalSeconds, "w 110!");
     enrichmentAdvanced.add(new JLabel("Nicks per tick:"));
@@ -1340,7 +1556,7 @@ public class PreferencesDialog {
       }
 
       enrichmentSummary.setText(
-          String.format("<html>USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd<br>%s • %s</html>",
+          String.format("USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd\n%s • %s",
               maxM, minI, cdM, maxN, whois, refresh)
       );
     };
@@ -1466,12 +1682,12 @@ public class PreferencesDialog {
     // Layout content
     hostmaskPanel.add(userhostEnabled, "growx");
     hostmaskPanel.add(hostmaskHelp, "align right, wrap");
-    hostmaskPanel.add(hostmaskSummary, "span 2, growx, wrap");
+    hostmaskPanel.add(hostmaskSummary, "span 2, growx, wmin 0, wrap");
     hostmaskPanel.add(hostmaskAdvanced, "span 2, growx, wrap, hidemode 3");
 
     enrichmentPanel.add(enrichmentEnabled, "growx");
     enrichmentPanel.add(enrichmentHelp, "align right, wrap");
-    enrichmentPanel.add(enrichmentSummary, "span 2, growx, wrap");
+    enrichmentPanel.add(enrichmentSummary, "span 2, growx, wmin 0, wrap");
     enrichmentPanel.add(enrichmentWhoisRow, "span 2, gapleft 18, growx, wrap");
     enrichmentPanel.add(enrichmentRefreshRow, "span 2, gapleft 18, growx, wrap");
     enrichmentPanel.add(enrichmentAdvanced, "span 2, growx, wrap, hidemode 3");
@@ -1507,19 +1723,19 @@ public class PreferencesDialog {
         enrichmentPeriodicRefreshNicksPerTick
     );
 
-    return new NetworkAdvancedControls(proxyControls, userhostControls, enrichmentControls, trustAllTlsCertificates, networkPanel, userLookupsPanel);
+    return new NetworkAdvancedControls(proxyControls, userhostControls, enrichmentControls, heartbeatControls, trustAllTlsCertificates, networkPanel, userLookupsPanel);
   }
 
 
   private JPanel buildAppearancePanel(ThemeControls theme, FontControls fonts) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
 
-    form.add(tabTitle("Appearance"), "span 2, growx, wrap");
-    form.add(sectionTitle("Look & feel"), "span 2, growx, wrap");
+    form.add(tabTitle("Appearance"), "span 2, growx, wmin 0, wrap");
+    form.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Theme"));
     form.add(theme.combo, "growx");
 
-    form.add(sectionTitle("Chat text"), "span 2, growx, wrap");
+    form.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Font family"));
     form.add(fonts.fontFamily, "growx");
     form.add(new JLabel("Font size"));
@@ -1544,8 +1760,8 @@ public class PreferencesDialog {
                                OutgoingColorControls outgoing) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
 
-    form.add(tabTitle("Chat"), "span 2, growx, wrap");
-    form.add(sectionTitle("Display"), "span 2, growx, wrap");
+    form.add(tabTitle("Chat"), "span 2, growx, wmin 0, wrap");
+    form.add(sectionTitle("Display"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Presence events"), "aligny top");
     form.add(presenceFolds, "alignx left");
 
@@ -1558,7 +1774,7 @@ public class PreferencesDialog {
     form.add(new JLabel("Timestamps"), "aligny top");
     form.add(timestamps.panel, "growx");
 
-    form.add(sectionTitle("Your messages"), "span 2, growx, wrap");
+    form.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Outgoing messages"), "aligny top");
     form.add(outgoing.panel, "growx");
 
@@ -1569,12 +1785,12 @@ public class PreferencesDialog {
                                             LinkPreviewControls links) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
 
-    form.add(tabTitle("Embeds & Previews"), "span 2, growx, wrap");
-    form.add(sectionTitle("Inline images"), "span 2, growx, wrap");
+    form.add(tabTitle("Embeds & Previews"), "span 2, growx, wmin 0, wrap");
+    form.add(sectionTitle("Inline images"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Direct image links"), "aligny top");
     form.add(image.panel, "growx");
 
-    form.add(sectionTitle("Link previews"), "span 2, growx, wrap");
+    form.add(sectionTitle("Link previews"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("OpenGraph cards"), "aligny top");
     form.add(links.panel, "growx");
 
@@ -1586,10 +1802,10 @@ public class PreferencesDialog {
     // Keep labels right-aligned (common form pattern), but ensure checkboxes spanning both columns are left-aligned.
     JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]6[]6[]10[]6[]"));
 
-    panel.add(tabTitle("History & Storage"), "span 2, growx, wrap");
+    panel.add(tabTitle("History & Storage"), "span 2, growx, wmin 0, wrap");
 
-    panel.add(sectionTitle("Logging"), "span 2, growx, wrap");
-    panel.add(logging.info, "span 2, growx, wrap");
+    panel.add(sectionTitle("Logging"), "span 2, growx, wmin 0, wrap");
+    panel.add(logging.info, "span 2, growx, wmin 0, wrap");
     panel.add(logging.enabled, "span 2, alignx left, wrap");
     panel.add(logging.logSoftIgnored, "span 2, alignx left, wrap");
     panel.add(logging.keepForever, "span 2, alignx left, wrap");
@@ -1600,7 +1816,7 @@ public class PreferencesDialog {
     panel.add(new JLabel("DB location"));
     panel.add(logging.dbNextToConfig, "alignx left, wrap");
 
-    panel.add(sectionTitle("History paging"), "span 2, growx, wrap");
+    panel.add(sectionTitle("History paging"), "span 2, growx, wmin 0, wrap");
     panel.add(history.panel, "span 2, growx");
 
     return panel;
@@ -1807,9 +2023,15 @@ public class PreferencesDialog {
                                JSpinner readTimeoutSeconds) {
   }
 
+  private record HeartbeatControls(JCheckBox enabled,
+                                  JSpinner checkPeriodSeconds,
+                                  JSpinner timeoutSeconds) {
+  }
+
   private record NetworkAdvancedControls(ProxyControls proxy,
                                          UserhostControls userhost,
                                          UserInfoEnrichmentControls enrichment,
+                                         HeartbeatControls heartbeat,
                                          JCheckBox trustAllTlsCertificates,
                                          JPanel networkPanel,
                                          JPanel userLookupsPanel) {

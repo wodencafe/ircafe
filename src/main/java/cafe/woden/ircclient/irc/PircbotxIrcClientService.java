@@ -50,6 +50,27 @@ public class PircbotxIrcClientService implements IrcClientService {
     this.timers = timers;
   }
 
+  /**
+   * Reschedules heartbeat tickers for all currently-active connections.
+   *
+   * <p>This is used when the user changes heartbeat settings in Preferences and clicks Apply.
+   * We rebuild the Rx interval so the new check period/timeout takes effect immediately.
+   */
+  public void rescheduleActiveHeartbeats() {
+    if (shuttingDown.get()) return;
+
+    // Only reschedule connections that actually have a live bot.
+    for (PircbotxConnectionState c : connections.values()) {
+      try {
+        if (c != null && c.botRef.get() != null) {
+          timers.rescheduleHeartbeat(c);
+        }
+      } catch (Exception ignored) {
+        // Best-effort: don't let one bad state prevent rescheduling others.
+      }
+    }
+  }
+
   @Override
   public Flowable<ServerIrcEvent> events() {
     return bus.onBackpressureBuffer();
