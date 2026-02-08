@@ -25,22 +25,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Factory for building a configured {@link PircBotX} instance for a given server.
- * <p>
- * This keeps {@link PircbotxIrcClientService} focused on orchestration (connect/disconnect),
- * and isolates the PircbotX configuration details.
  */
 @Component
 public class PircbotxBotFactory {
 
-  /**
-   * PircbotX applies an outgoing-queue throttle ("message delay") to prevent flooding.
-   * <p>
-   * The historical default in the PircBot/PircBotX family is 1000ms, which can make
-   * CAP negotiation + multi-channel JOIN feel sluggish (especially with bouncers).
-   * <p>
-   * We pick a smaller delay to keep the UI snappy while still providing basic flood
-   * protection. If we later add a user-facing knob, this becomes the default.
-   */
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
 
   private final ServerProxyResolver proxyResolver;
@@ -111,12 +99,6 @@ public class PircbotxBotFactory {
     return new PircBotX(builder.buildConfiguration());
   }
 
-  /**
-   * Best-effort apply of PircBotX output throttle.
-   * <p>
-   * Older PircBotX versions have setMessageDelay(long). Newer versions use setMessageDelay(Delay).
-   * We don't want to hard-pin to a specific minor API, so we do a reflective "try both".
-   */
   private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {
     try {
       Method m = builder.getClass().getMethod("setMessageDelay", long.class);
