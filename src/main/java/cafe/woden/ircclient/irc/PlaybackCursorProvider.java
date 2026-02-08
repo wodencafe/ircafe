@@ -5,8 +5,6 @@ import java.util.OptionalLong;
 /**
  * Provides a "resume cursor" for bouncer playback.
  *
- * <p>Implementations should return the last message timestamp (epoch seconds) that the client has
- * already persisted for the given server/network.
  */
 public interface PlaybackCursorProvider {
 
