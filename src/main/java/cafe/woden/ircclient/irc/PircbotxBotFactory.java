@@ -1,16 +1,19 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
-import cafe.woden.ircclient.net.NetTlsContext;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
+import java.time.Duration;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
@@ -74,8 +77,6 @@ public class PircbotxBotFactory {
         .setVersion(version)
         .addServer(s.host(), s.port())
         .setSocketFactory(socketFactory)
-        // Reduce output throttling so CAP/JOIN sequences don't take forever.
-        .setMessageDelay(DEFAULT_MESSAGE_DELAY_MS)
         // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
         .setCapEnabled(true)
         // Prefer hostmasks in the initial NAMES list (when supported). If unsupported, ignore.
@@ -102,6 +103,11 @@ public class PircbotxBotFactory {
         .setAutoReconnect(false)
         .addListener(listener);
 
+    // Reduce output throttling so CAP/JOIN sequences don't take forever.
+    // PircBotX 2.x changed this API from setMessageDelay(long) to setMessageDelay(Delay).
+    // To keep us compatible across minor versions, we set this via reflection.
+    applyMessageDelay(builder, DEFAULT_MESSAGE_DELAY_MS);
+
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
       builder.setServerPassword(s.serverPassword());
     }
@@ -127,6 +133,94 @@ public class PircbotxBotFactory {
     }
 
     return new PircBotX(builder.buildConfiguration());
+  }
+
+  /**
+   * Best-effort apply of PircBotX output throttle.
+   * <p>
+   * Older PircBotX versions have setMessageDelay(long). Newer versions use setMessageDelay(Delay).
+   * We don't want to hard-pin to a specific minor API, so we do a reflective "try both".
+   */
+  private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {
+    // 1) Try the legacy signature: setMessageDelay(long)
+    try {
+      Method m = builder.getClass().getMethod("setMessageDelay", long.class);
+      m.invoke(builder, delayMs);
+      return;
+    } catch (ReflectiveOperationException ignored) {
+      // continue
+    }
+
+    // 2) Try the new signature: setMessageDelay(org.pircbotx.delay.Delay)
+    try {
+      Class<?> delayIface = Class.forName("org.pircbotx.delay.Delay");
+      Method m = builder.getClass().getMethod("setMessageDelay", delayIface);
+
+      // If Delay is an interface, a proxy is the most version-resilient way to return a constant delay.
+      Object delayObj;
+      if (delayIface.isInterface()) {
+        delayObj = java.lang.reflect.Proxy.newProxyInstance(
+            delayIface.getClassLoader(),
+            new Class<?>[] { delayIface },
+            constantDelayHandler(delayMs)
+        );
+      } else {
+        // As a fallback, try common concrete implementations (best-effort).
+        delayObj = tryConstructDelay(delayMs, delayIface);
+      }
+
+      if (delayObj != null) m.invoke(builder, delayObj);
+    } catch (ReflectiveOperationException ignored) {
+      // If this fails, we keep PircBotX defaults.
+    }
+  }
+
+  private static InvocationHandler constantDelayHandler(long delayMs) {
+    return (proxy, method, args) -> {
+      // Common Object methods
+      if (method.getDeclaringClass() == Object.class) {
+        return switch (method.getName()) {
+          case "toString" -> "ConstantDelay(" + delayMs + "ms)";
+          case "hashCode" -> System.identityHashCode(proxy);
+          case "equals" -> proxy == (args != null && args.length > 0 ? args[0] : null);
+          default -> null;
+        };
+      }
+
+      Class<?> rt = method.getReturnType();
+      if (rt == long.class || rt == Long.class) return delayMs;
+      if (rt == int.class || rt == Integer.class) return (int) Math.min(Integer.MAX_VALUE, delayMs);
+      if (rt == Duration.class) return Duration.ofMillis(delayMs);
+
+      // If Delay has a void method (unlikely) or something else, just no-op.
+      return null;
+    };
+  }
+
+  private static Object tryConstructDelay(long delayMs, Class<?> delayType) {
+    // Try common constructor shapes: (long), (int), (Duration)
+    try {
+      return delayType.getConstructor(long.class).newInstance(delayMs);
+    } catch (ReflectiveOperationException ignored) {
+    }
+    try {
+      return delayType.getConstructor(int.class).newInstance((int) Math.min(Integer.MAX_VALUE, delayMs));
+    } catch (ReflectiveOperationException ignored) {
+    }
+    try {
+      return delayType.getConstructor(Duration.class).newInstance(Duration.ofMillis(delayMs));
+    } catch (ReflectiveOperationException ignored) {
+    }
+
+    // As a last resort, see if there's a static factory method we can call.
+    for (String name : new String[] { "ofMillis", "millis", "fixed", "constant" }) {
+      try {
+        Method m = delayType.getMethod(name, long.class);
+        return m.invoke(null, delayMs);
+      } catch (ReflectiveOperationException ignored) {
+      }
+    }
+    return null;
   }
 
   /** Direct socket factory that bypasses any JVM global SOCKS properties. */
