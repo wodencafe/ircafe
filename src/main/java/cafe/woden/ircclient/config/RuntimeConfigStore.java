@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.config;
 
+import cafe.woden.ircclient.ui.settings.NotificationRule;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -168,6 +170,57 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist autoConnectOnStart setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberNotificationRuleCooldownSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = seconds;
+      if (v < 0) v = 15;
+      if (v > 3600) v = 3600;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("notificationRuleCooldownSeconds", v);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist notificationRuleCooldownSeconds setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberNotificationRules(List<NotificationRule> rules) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      List<Map<String, Object>> out = new ArrayList<>();
+      if (rules != null) {
+        for (NotificationRule r : rules) {
+          if (r == null) continue;
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("enabled", r.enabled());
+          m.put("label", Objects.toString(r.label(), "").trim());
+          m.put("type", r.type() != null ? r.type().name() : "WORD");
+          m.put("pattern", Objects.toString(r.pattern(), "").trim());
+          m.put("caseSensitive", r.caseSensitive());
+          m.put("wholeWord", r.wholeWord());
+          String fg = Objects.toString(r.highlightFg(), "").trim();
+          if (!fg.isEmpty()) m.put("highlightFg", fg);
+          out.add(m);
+        }
+      }
+
+      ui.put("notificationRules", out);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist notificationRules to '{}'", file, e);
     }
   }
 

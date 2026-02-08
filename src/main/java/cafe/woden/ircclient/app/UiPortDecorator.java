@@ -104,6 +104,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet) {
+    delegate.recordRuleMatch(target, fromNick, ruleLabel, snippet);
+  }
+
+  @Override
   public void clearUnread(TargetRef target) {
     delegate.clearUnread(target);
   }

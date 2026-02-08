@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.notifications;
 
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.NotificationStore.HighlightEvent;
+import cafe.woden.ircclient.app.NotificationStore.RuleMatchEvent;
 import cafe.woden.ircclient.app.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 
@@ -15,7 +16,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -29,6 +29,8 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
   private static final int COL_TIME = 0;
   private static final int COL_CHANNEL = 1;
   private static final int COL_FROM = 2;
+  private static final int COL_MATCH = 3;
+  private static final int COL_SNIPPET = 4;
 
   private final NotificationStore store;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -62,8 +64,10 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     table.setAutoCreateRowSorter(false);
     table.getTableHeader().setReorderingAllowed(false);
     table.getColumnModel().getColumn(COL_TIME).setPreferredWidth(150);
-    table.getColumnModel().getColumn(COL_CHANNEL).setPreferredWidth(220);
-    table.getColumnModel().getColumn(COL_FROM).setPreferredWidth(220);
+    table.getColumnModel().getColumn(COL_CHANNEL).setPreferredWidth(180);
+    table.getColumnModel().getColumn(COL_FROM).setPreferredWidth(160);
+    table.getColumnModel().getColumn(COL_MATCH).setPreferredWidth(200);
+    table.getColumnModel().getColumn(COL_SNIPPET).setPreferredWidth(600);
 
     // Render channel names as "link-like" text.
     table.getColumnModel().getColumn(COL_CHANNEL).setCellRenderer(new LinkCellRenderer());
@@ -137,11 +141,30 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
       model.setRows(List.of());
       return;
     }
-    List<HighlightEvent> events = store.listAll(sid);
-    if (!events.isEmpty()) {
-      List<HighlightEvent> copy = new ArrayList<>(events);
-      Collections.reverse(copy);
-      model.setRows(copy);
+    List<Row> rows = new ArrayList<>();
+
+    List<HighlightEvent> highlights = store.listAll(sid);
+    for (HighlightEvent ev : highlights) {
+      if (ev == null) continue;
+      rows.add(new Row(ev.at(), ev.channel(), ev.fromNick(), "(mention)", ""));
+    }
+
+    List<RuleMatchEvent> rules = store.listAllRuleMatches(sid);
+    for (RuleMatchEvent ev : rules) {
+      if (ev == null) continue;
+      rows.add(new Row(ev.at(), ev.channel(), ev.fromNick(), ev.ruleLabel(), ev.snippet()));
+    }
+
+    if (!rows.isEmpty()) {
+      rows.sort((a, b) -> {
+        Instant aa = a.at();
+        Instant bb = b.at();
+        if (aa == null && bb == null) return 0;
+        if (aa == null) return 1;
+        if (bb == null) return -1;
+        return bb.compareTo(aa);
+      });
+      model.setRows(rows);
     } else {
       model.setRows(List.of());
     }
@@ -154,22 +177,22 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
 
   private static final class NotificationsTableModel extends AbstractTableModel {
 
-    private static final String[] COLS = {"Time", "Channel", "From"};
+    private static final String[] COLS = {"Time", "Channel", "From", "Match", "Snippet"};
 
     private static final DateTimeFormatter TIME_FMT =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
 
-    private List<HighlightEvent> rows = List.of();
+    private List<Row> rows = List.of();
 
-    public void setRows(List<HighlightEvent> rows) {
+    public void setRows(List<Row> rows) {
       this.rows = rows == null ? List.of() : List.copyOf(rows);
       fireTableDataChanged();
     }
 
     public String channelAt(int row) {
       if (row < 0 || row >= rows.size()) return null;
-      HighlightEvent ev = rows.get(row);
+      Row ev = rows.get(row);
       return ev == null ? null : ev.channel();
     }
 
@@ -191,12 +214,14 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
       if (rowIndex < 0 || rowIndex >= rows.size()) return "";
-      HighlightEvent ev = rows.get(rowIndex);
+      Row ev = rows.get(rowIndex);
       if (ev == null) return "";
       return switch (columnIndex) {
         case COL_TIME -> formatTime(ev.at());
         case COL_CHANNEL -> Objects.toString(ev.channel(), "");
-        case COL_FROM -> Objects.toString(ev.fromNick(), "");
+        case COL_FROM -> Objects.toString(ev.from(), "");
+        case COL_MATCH -> Objects.toString(ev.match(), "");
+        case COL_SNIPPET -> Objects.toString(ev.snippet(), "");
         default -> "";
       };
     }
@@ -210,6 +235,8 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
       }
     }
   }
+
+  private record Row(Instant at, String channel, String from, String match, String snippet) {}
 
   /** Renderer that draws the channel column as underlined text to suggest it's clickable. */
   private static final class LinkCellRenderer extends DefaultTableCellRenderer {

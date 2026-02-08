@@ -2,6 +2,8 @@ package cafe.woden.ircclient.app;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Pretty-prints IRC MODE changes into human-friendly sentences.
@@ -11,11 +13,23 @@ import java.util.List;
  */
 final class ModePrettyPrinter {
 
+  private static final Logger log = LoggerFactory.getLogger(ModePrettyPrinter.class);
+
   private ModePrettyPrinter() {}
 
   public static List<String> pretty(String actor, String channel, String details) {
     String a = normalizeActor(actor, details);
     String d = normalizeDetails(channel, details);
+
+    if (log.isDebugEnabled()) {
+      log.debug(
+          "MODEDBG pretty actor={} channel={} details={} -> normalizedActor={} normalizedDetails={} ",
+          clip(actor),
+          clip(channel),
+          clip(details),
+          clip(a),
+          clip(d));
+    }
 
     if (d == null || d.isBlank()) {
       return List.of(a + " sets mode.");
@@ -117,6 +131,10 @@ final class ModePrettyPrinter {
     List<String> args = new ArrayList<>();
     for (int i = 1; i < parts.length; i++) args.add(parts[i]);
 
+    if (log.isDebugEnabled()) {
+      log.debug("MODEDBG parse details={} modeSeq={} args={}", clip(details), clip(modeSeq), args);
+    }
+
     List<ModeChange> changes = new ArrayList<>();
     boolean adding = true;
     int argIdx = 0;
@@ -140,15 +158,106 @@ final class ModePrettyPrinter {
       changes.add(new ModeChange(adding, c, arg));
     }
 
-    // If there are leftover args, attach them to the last mode (best-effort)
-    if (argIdx < args.size() && !changes.isEmpty()) {
-      ModeChange last = changes.get(changes.size() - 1);
-      if (last.arg == null) {
-        last.arg = String.join(" ", args.subList(argIdx, args.size()));
+    if (argIdx < args.size() && changes.size() == 1) {
+      ModeChange only = changes.get(0);
+      if (only.arg == null && wantsArgument(only.mode, only.add)) {
+        only.arg = String.join(" ", args.subList(argIdx, args.size()));
       }
     }
 
-    return new ParsedModes(changes);
+    if (log.isDebugEnabled()) {
+      log.debug("MODEDBG parse changes(beforeSuppress)={}", changesToString(changes));
+    }
+
+    List<ModeChange> suppressed = suppressEchoedChannelModes(modeSeq, args, changes);
+
+    if (log.isDebugEnabled()) {
+      if (suppressed != changes) {
+        log.debug("MODEDBG parse changes(afterSuppress)={}", changesToString(suppressed));
+      } else {
+        log.debug("MODEDBG parse suppress not applied");
+      }
+    }
+
+    return new ParsedModes(suppressed);
+  }
+
+  private static String changesToString(List<ModeChange> changes) {
+    if (changes == null) return "<null>";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < changes.size(); i++) {
+      ModeChange c = changes.get(i);
+      if (i > 0) sb.append(", ");
+      sb.append(c.add ? "+" : "-").append(c.mode);
+      if (c.arg != null) sb.append("(").append(c.arg).append(")");
+    }
+    return sb.toString();
+  }
+
+  private static String clip(Object v) {
+    if (v == null) return "<null>";
+    String s = String.valueOf(v);
+    if (s == null) return "<null>";
+    s = s.replace('\n', ' ').replace('\r', ' ');
+    if (s.length() > 240) return s.substring(0, 237) + "...";
+    return s;
+  }
+
+  private static List<ModeChange> suppressEchoedChannelModes(
+      String modeSeq, List<String> args, List<ModeChange> changes) {
+    if (modeSeq == null || changes == null || changes.isEmpty()) return changes;
+
+    int privilegeCount = 0;
+    int otherArgCount = 0;
+    boolean adding = true;
+    for (int i = 0; i < modeSeq.length(); i++) {
+      char c = modeSeq.charAt(i);
+      if (c == '+') {
+        adding = true;
+        continue;
+      }
+      if (c == '-') {
+        adding = false;
+        continue;
+      }
+
+      if (isPrivilegeMode(c)) privilegeCount++;
+      else if (wantsArgument(c, adding)) otherArgCount++;
+    }
+
+    if (privilegeCount == 0) return changes;
+    if (otherArgCount != 0) return changes;
+    if (args == null || args.size() != privilegeCount) return changes;
+
+    boolean hasEcho = false;
+    for (ModeChange c : changes) {
+      if (c.add && c.arg == null && isEchoCandidateMode(c.mode)) {
+        hasEcho = true;
+        break;
+      }
+    }
+    if (!hasEcho) return changes;
+
+    List<ModeChange> out = new ArrayList<>(changes.size());
+    for (ModeChange c : changes) {
+      if (c.add && c.arg == null && isEchoCandidateMode(c.mode)) continue;
+      out.add(c);
+    }
+    return out;
+  }
+
+  private static boolean isPrivilegeMode(char mode) {
+    return switch (mode) {
+      case 'o', 'v', 'h', 'a', 'q', 'y' -> true;
+      default -> false;
+    };
+  }
+
+  private static boolean isEchoCandidateMode(char mode) {
+    return switch (mode) {
+      case 'n', 't', 'C', 'g' -> true;
+      default -> false;
+    };
   }
 
   private static boolean wantsArgument(char mode, boolean adding) {
