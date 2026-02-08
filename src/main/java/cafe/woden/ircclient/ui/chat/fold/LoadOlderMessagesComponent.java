@@ -26,7 +26,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     EXHAUSTED
   }
 
-  // Keep FlowLayout hgap at 0 so the control aligns with normal transcript lines.
   private final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
   private final JButton button = new JButton();
 
@@ -46,7 +45,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     button.setFocusPainted(false);
     button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-    // Match transcript fonts as closely as we can.
     Font base = UIManager.getFont("TextPane.font");
     if (base == null) base = UIManager.getFont("Label.font");
     setTranscriptFont(base);
@@ -56,7 +54,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
 
     button.addActionListener(e -> {
       if (state != State.READY) return;
-      // Defensive: ignore non-left clicks or if disabled.
       if (!button.isEnabled()) return;
       requestLoadOnce();
     });
@@ -73,7 +70,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     button.setFont(base);
   }
 
-  /** Set the load handler. Must be safe to call from the EDT. */
   public void setOnLoadRequested(BooleanSupplier onLoadRequested) {
     this.onLoadRequested = Objects.requireNonNullElse(onLoadRequested, () -> false);
   }
@@ -107,10 +103,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     repaint();
   }
 
-  /**
-   * JTextPane embeds Swing components using a baseline-aware view. Provide a stable baseline derived
-   * from our button so the control aligns with normal text.
-   */
   @Override
   public int getBaseline(int width, int height) {
     Insets in = getInsets();
@@ -129,7 +121,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
   }
 
   private void requestLoadOnce() {
-    // Ensure this runs on EDT (the transcript click will already be EDT, but be safe).
     if (!SwingUtilities.isEventDispatchThread()) {
       SwingUtilities.invokeLater(this::requestLoadOnce);
       return;
@@ -137,7 +128,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     try {
       boolean accepted = onLoadRequested != null && onLoadRequested.getAsBoolean();
       if (!accepted) {
-        // If the handler declined (e.g., already loading), keep READY.
         setState(State.READY);
       }
     } catch (Exception ignored) {
@@ -148,8 +138,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
   /**
    * Programmatically request a load as if the user clicked the control.
    *
-   * <p>This intentionally uses the same handler as the button click so all existing safeguards
-   * (READY/LOADING state, handler decline, etc.) remain in one place.
    */
   public void requestLoad() {
     if (state != State.READY) return;
