@@ -6,10 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Hard fallback for {@link PlaybackCursorProvider}.
- *
- * <p>Some environments may not component-scan optional providers (or may be running an older
- * build). This ensures the app always has a safe default provider so Spring Boot can start.
+ * Ensures the app always has a safe default provider so Spring Boot can start.
  */
 @Configuration
 public class PlaybackCursorProviderConfig {
