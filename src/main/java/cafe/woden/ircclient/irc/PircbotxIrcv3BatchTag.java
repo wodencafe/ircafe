@@ -2,18 +2,10 @@ package cafe.woden.ircclient.irc;
 
 import java.util.Optional;
 
-/**
- * Best-effort extraction of the IRCv3 {@code batch} message tag.
- *
- * <p>We use this to collect CHATHISTORY responses framed by IRCv3 {@code BATCH}.
- */
 final class PircbotxIrcv3BatchTag {
 
   private PircbotxIrcv3BatchTag() {}
 
-  /**
-   * Attempt to read {@code @batch=} from a PircbotX event by reflection.
-   */
   static Optional<String> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();
 
