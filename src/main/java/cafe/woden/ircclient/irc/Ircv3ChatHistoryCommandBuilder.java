@@ -8,8 +8,6 @@ import java.util.Objects;
 /**
  * Small helper for building IRCv3 CHATHISTORY commands.
  *
- * <p>This is intentionally a tiny, mostly-pure builder so later steps (4C/4D)
- * can reuse it without coupling to UI or DB.
  */
 final class Ircv3ChatHistoryCommandBuilder {
 
@@ -24,13 +22,11 @@ final class Ircv3ChatHistoryCommandBuilder {
     Instant ts = Objects.requireNonNull(beforeExclusive, "beforeExclusive");
     int lim = clampLimit(limit);
 
-    // Spec requires the selector to be either "timestamp=..." or "msgid=...".
     String selector = "timestamp=" + TS_FMT.format(ts);
     return "CHATHISTORY BEFORE " + t + " " + selector + " " + lim;
   }
 
   static int clampLimit(int limit) {
-    // Be conservative by default to avoid flooding; callers can request bigger later.
     int lim = limit;
     if (lim <= 0) lim = 50;
     if (lim > 200) lim = 200;
