@@ -14,13 +14,6 @@ import javax.swing.SwingUtilities;
 /**
  * "Infinite scroll" helper for chat transcripts.
  *
- * <p>When the user attempts to scroll up beyond the top of the transcript and a
- * {@link LoadOlderMessagesComponent} is present, this triggers the same load action
- * as clicking "Load older messages…".
- *
- * <p>This is intentionally conservative: it only fires on an explicit user scroll-up
- * gesture while already at the very top, and it applies a small cooldown to avoid
- * repeated triggers from high-resolution wheel events.
  */
 public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
 
@@ -47,15 +40,12 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
   private void onWheel(MouseWheelEvent e) {
     try {
       if (e == null) return;
-      // Only consider "scroll up" gestures.
       if (e.getWheelRotation() >= 0) return;
 
-      // Must be at (or extremely near) the top already.
       JScrollBar bar = scroll.getVerticalScrollBar();
       if (bar == null) return;
       if (bar.getValue() > 0) return;
 
-      // Cooldown to prevent duplicate triggers from smooth/hi-res wheel events.
       long now = System.currentTimeMillis();
       if (now - lastTriggeredAtMs < DEFAULT_COOLDOWN_MS) return;
 
@@ -65,17 +55,14 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
 
       lastTriggeredAtMs = now;
 
-      // Trigger on EDT.
       if (SwingUtilities.isEventDispatchThread()) {
         comp.requestLoad();
       } else {
         SwingUtilities.invokeLater(comp::requestLoad);
       }
 
-      // We're at the top; consume to avoid any weird "bounce" behaviors.
       e.consume();
     } catch (Exception ignored) {
-      // Best-effort only.
     }
   }
 
@@ -84,7 +71,6 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
     if (root instanceof LoadOlderMessagesComponent l) return l;
     if (!(root instanceof Container c)) return null;
 
-    // BFS to avoid deep recursion in complex transcript component trees.
     Deque<Component> q = new ArrayDeque<>();
     for (Component child : c.getComponents()) {
       if (child != null) q.add(child);
