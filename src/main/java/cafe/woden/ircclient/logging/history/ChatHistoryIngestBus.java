@@ -14,12 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Small in-memory coordination bus used to bridge "request history" -> "history ingested".
- *
- * <p>Step 4E uses this to wait for the next CHATHISTORY ingest completion for a given
- * (serverId,target) before re-querying the local DB.
- */
+/** In-memory bus for coordinating CHATHISTORY requests with DB ingest. */
 @Component
 public final class ChatHistoryIngestBus {
 
@@ -45,8 +40,6 @@ public final class ChatHistoryIngestBus {
     t.setDaemon(true);
     return t;
   });
-
-  /** Await the next ingest event for this (serverId,target). */
   public CompletableFuture<IngestEvent> awaitNext(String serverId, String target, Duration timeout) {
     String sid = serverId == null ? "" : serverId;
     String tgt = target == null ? "" : target;
@@ -73,8 +66,6 @@ public final class ChatHistoryIngestBus {
 
     return f;
   }
-
-  /** Publish an ingest event, completing any awaiting futures for this (serverId,target). */
   public void publish(IngestEvent event) {
     if (event == null) return;
     Key key = new Key(Objects.toString(event.serverId(), ""), Objects.toString(event.target(), ""));

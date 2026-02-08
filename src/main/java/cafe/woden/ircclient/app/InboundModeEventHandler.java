@@ -33,13 +33,11 @@ public class InboundModeEventHandler {
 
   public void onChannelTopicUpdated(String serverId, String channel) {
     if (serverId == null || channel == null) return;
-    // Let any buffered join-mode output flush before we print topic / names, so output ordering stays sane.
     joinModeBurstService.flushJoinModesIfAny(serverId, channel, false);
   }
 
   public void onNickListUpdated(String serverId, String channel) {
     if (serverId == null || channel == null) return;
-    // Same rationale as topic updates.
     joinModeBurstService.flushJoinModesIfAny(serverId, channel, false);
   }
 
@@ -55,13 +53,9 @@ public class InboundModeEventHandler {
     ui.ensureTargetExists(chan);
 
     String details = ev.details();
-
-    // Suppress the initial burst of simple channel-flag modes right after joining.
     if (joinModeBurstService.handleChannelModeChanged(serverId, ev.channel(), details)) {
       return;
     }
-
-    // Make MODE output human-friendly (e.g. +b mask -> "ban added").
     String byRaw = ev.by();
     for (String line : modeFormattingService.prettyModeChange(byRaw, ev.channel(), details)) {
       ui.appendNotice(chan, "(mode)", line);
@@ -73,8 +67,6 @@ public class InboundModeEventHandler {
 
     TargetRef chan = new TargetRef(serverId, ev.channel());
     ui.ensureTargetExists(chan);
-
-    // If this arrived during join, prefer the authoritative 324 summary and discard any buffered noise.
     joinModeBurstService.discardJoinModeBuffer(serverId, ev.channel());
 
     TargetRef out = modeRoutingState.removePendingModeTarget(serverId, ev.channel());
@@ -83,7 +75,6 @@ public class InboundModeEventHandler {
 
     String summary = modeFormattingService.describeCurrentChannelModes(ev.details());
     if (summary != null && !summary.isBlank()) {
-      // If we already printed a join-burst summary, don't immediately duplicate it with 324.
       if (joinModeBurstService.shouldSuppressModesListedSummary(serverId, ev.channel(), out.equals(chan))) {
         return;
       }

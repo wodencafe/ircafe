@@ -184,11 +184,9 @@ public class ChatTranscriptStore {
     StyledDocument doc = docs.get(ref);
     if (doc == null) return 0;
     int base = st.loadOlderControl.pos.getOffset();
-    // We insert exactly two characters for the control: component marker + newline.
     int off = base + 2;
     return Math.max(0, Math.min(off, doc.getLength()));
   }
-
 
   public synchronized void setLoadOlderMessagesControlState(TargetRef ref, LoadOlderMessagesComponent.State s) {
     if (ref == null) return;
@@ -199,7 +197,6 @@ public class ChatTranscriptStore {
     } catch (Exception ignored) {
     }
   }
-
 
   public synchronized void setLoadOlderMessagesControlHandler(TargetRef ref, java.util.function.BooleanSupplier onLoad) {
     if (ref == null) return;
@@ -238,8 +235,6 @@ public class ChatTranscriptStore {
       doc.remove(0, doc.getLength());
     } catch (Exception ignored) {
     }
-
-    // Reset per-target control state (presence folds, load-older controls, dividers, etc.).
     stateByTarget.put(ref, new TranscriptState());
   }
 
@@ -250,8 +245,6 @@ public class ChatTranscriptStore {
     StyledDocument doc = docs.get(ref);
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
-
-    // Config: allow presence folding to be disabled (render as plain status lines).
     boolean foldsEnabled = true;
     try {
       foldsEnabled = uiSettings == null || uiSettings.get() == null || uiSettings.get().presenceFoldsEnabled();
@@ -260,10 +253,7 @@ public class ChatTranscriptStore {
     }
 
     if (!foldsEnabled) {
-      // End any active presence run.
       st.currentPresenceBlock = null;
-
-      // Append as a normal status line (with timestamp like other status lines).
       ensureAtLineStart(doc);
       try {
         if (ts != null && ts.enabled()) {
@@ -276,22 +266,16 @@ public class ChatTranscriptStore {
       }
       return;
     }
-
-    // If the current run is already folded, just extend the component live.
     if (st.currentPresenceBlock != null && st.currentPresenceBlock.folded
         && st.currentPresenceBlock.component != null) {
-      // Keep the backing list consistent even though the component owns its own list.
       st.currentPresenceBlock.entries.add(event);
       st.currentPresenceBlock.component.addEntry(event);
       return;
     }
-
-    // New line
     ensureAtLineStart(doc);
     int startOffset = doc.getLength();
 
     try {
-      // Presence lines are rendered like status lines.
       if (ts != null && ts.enabled()) {
         doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
       }
@@ -304,8 +288,6 @@ public class ChatTranscriptStore {
     }
 
     int endOffset = doc.getLength();
-
-    // Start a new consecutive run if needed.
     PresenceBlock block = st.currentPresenceBlock;
     if (block == null || block.endOffset != startOffset) {
       block = new PresenceBlock(startOffset, endOffset);
@@ -315,8 +297,6 @@ public class ChatTranscriptStore {
     }
 
     block.entries.add(event);
-
-    // Fold immediately once the run reaches 2+.
     if (!block.folded && block.entries.size() == 2) {
       foldBlock(doc, ref, block);
     }
@@ -339,17 +319,12 @@ public class ChatTranscriptStore {
                                   Long epochMs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
-
-    // New line
     ensureAtLineStart(doc);
 
     try {
       AttributeSet baseForId = msgStyle != null ? msgStyle : styles.message();
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
-
-      // Config: timestamps for regular chat messages are optional (status/error/notice timestamps remain controlled
-      // by ircafe.ui.timestamps.enabled).
       boolean timestampsIncludeChatMessages = false;
       try {
         timestampsIncludeChatMessages = uiSettings != null
@@ -380,14 +355,9 @@ public class ChatTranscriptStore {
       if (!allowEmbeds) {
         return;
       }
-
-      // After the line, optionally embed any image URLs found in the message.
-      // This keeps the raw URL text visible but also shows a thumbnail block.
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
         imageEmbeds.appendEmbeds(ref, doc, text);
       }
-
-      // Optionally embed OpenGraph/Twitter-card style previews for non-image URLs.
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
         linkPreviews.appendPreviews(ref, doc, text);
       }
@@ -400,7 +370,6 @@ public class ChatTranscriptStore {
   }
 
   public void appendChat(TargetRef ref, String from, String text, boolean outgoingLocalEcho) {
-    // Chat message, start a new run
     breakPresenceRun(ref);
 
     AttributeSet fromStyle = styles.from();
@@ -420,7 +389,6 @@ public class ChatTranscriptStore {
                                     String text,
                                     boolean outgoingLocalEcho,
                                     long tsEpochMs) {
-    // Chat message, start a new run
     breakPresenceRun(ref);
 
     AttributeSet fromStyle = styles.from();
@@ -456,7 +424,6 @@ public class ChatTranscriptStore {
 
     return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, tsEpochMs);
   }
-
 
   public synchronized int prependChatFromHistory(TargetRef ref,
                                                  String from,
@@ -592,7 +559,6 @@ public class ChatTranscriptStore {
     return insertErrorFromHistoryAt(ref, 0, from, text, tsEpochMs);
   }
 
-
   public synchronized int insertPresenceFromHistoryAt(TargetRef ref,
                                                       int insertAt,
                                                       String displayText,
@@ -606,7 +572,6 @@ public class ChatTranscriptStore {
                                                      long tsEpochMs) {
     return insertPresenceFromHistoryAt(ref, 0, displayText, tsEpochMs);
   }
-
 
   public synchronized int insertSpoilerChatFromHistoryAt(TargetRef ref,
                                                          int insertAt,
@@ -753,10 +718,7 @@ public class ChatTranscriptStore {
 
       doc.insertString(pos, "\n", styles.timestamp());
       pos += 1;
-
-      // Embeds are intentionally not supported for non-append insertions.
       if (allowEmbeds) {
-        // no-op
       }
     } catch (Exception ignored) {
     }
@@ -807,8 +769,6 @@ public class ChatTranscriptStore {
     TranscriptState st = stateByTarget.get(ref);
     if (st == null || st.currentPresenceBlock == null) return;
     PresenceBlock b = st.currentPresenceBlock;
-
-    // If the insertion occurs before the block, shift its tracked offsets so live folding continues to work.
     if (insertAt <= b.startOffset) {
       b.startOffset += delta;
       b.endOffset += delta;
@@ -819,8 +779,6 @@ public class ChatTranscriptStore {
                                       SimpleAttributeSet msgStyle,
                                       boolean outgoingLocalEcho) {
     if (!outgoingLocalEcho) return;
-
-    // Always mark outgoing lines so we can recolor them later when the user toggles the setting.
     if (fromStyle != null) fromStyle.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
     if (msgStyle != null) msgStyle.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
 
@@ -843,7 +801,6 @@ public class ChatTranscriptStore {
 
   private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
     if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
-    // StyledDocument mutations should happen on the EDT.
     SwingUtilities.invokeLater(this::restyleAllDocuments);
   }
 
@@ -875,13 +832,9 @@ public class ChatTranscriptStore {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
-
-    // New line
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
-    // Match the normal transcript prefix formatting exactly: "nick: " (including trailing space).
-    // Using the same punctuation/spacing keeps the spoiler line aligned with regular lines.
     String fromLabel = from == null ? "" : from;
     if (!fromLabel.isBlank()) {
       if (fromLabel.endsWith(":")) {
@@ -910,9 +863,6 @@ public class ChatTranscriptStore {
     final String fromLabelFinal = fromLabel;
 
     final SpoilerMessageComponent comp = new SpoilerMessageComponent(tsPrefixFinal, fromLabelFinal);
-
-    // Ensure the embedded spoiler component uses the same font as the transcript JTextPane.
-    // (Embedded Swing components do not automatically inherit the text pane's font.)
     try {
       if (uiSettings != null && uiSettings.get() != null) {
         comp.setTranscriptFont(new Font(
@@ -922,10 +872,7 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // fall back to UI defaults
     }
-
-    // If nick coloring is enabled, apply it to the visible prefix label.
     try {
       if (nickColors != null && nickColors.enabled() && from != null && !from.isBlank()) {
         Color bg = javax.swing.UIManager.getColor("TextPane.background");
@@ -939,14 +886,7 @@ public class ChatTranscriptStore {
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
-
-      // Anchor the spoiler component location with a live Position so later transcript edits
-      // (e.g., presence folding) don't break reveal.
       final Position spoilerPos = doc.createPosition(offFinal);
-
-      // IMPORTANT: pass the exact component instance we inserted. The transcript may contain
-      // multiple spoiler components close together; searching by type alone can reveal/remove
-      // the wrong one, leaving the clicked component stuck in "revealing...".
       comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
           tsPrefixFinal, fromFinal, msgFinal));
 
@@ -960,8 +900,6 @@ public class ChatTranscriptStore {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
-
-    // New line
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
@@ -1003,7 +941,6 @@ public class ChatTranscriptStore {
         ));
       }
     } catch (Exception ignored) {
-      // fall back to UI defaults
     }
 
     try {
@@ -1038,8 +975,6 @@ public class ChatTranscriptStore {
                                     String from,
                                     String msg) {
   if (doc == null || anchor == null) return false;
-
-  // We must mutate the transcript on the EDT so the JTextPane updates reliably.
   if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
     final boolean[] ok = new boolean[] {false};
     try {
@@ -1062,16 +997,12 @@ public class ChatTranscriptStore {
 
       int off = findSpoilerOffset(doc, guess, expected);
       if (off < 0) return false;
-
-      // Only proceed if the character at 'off' is still our embedded component.
       Element el = doc.getCharacterElement(off);
       if (el == null) return false;
       AttributeSet as = el.getAttributes();
       Object comp = as != null ? StyleConstants.getComponent(as) : null;
       if (!(comp instanceof SpoilerMessageComponent)) return false;
       if (expected != null && comp != expected) return false;
-
-      // Remove the component char and its newline (if present).
       int removeLen = 1;
       if (off + 1 < doc.getLength()) {
         try {
@@ -1083,14 +1014,10 @@ public class ChatTranscriptStore {
       doc.remove(off, removeLen);
 
       int pos = off;
-
-      // Timestamp (only if enabled when the spoiler was created)
       if (tsPrefix != null && !tsPrefix.isBlank()) {
         doc.insertString(pos, tsPrefix, styles.timestamp());
         pos += tsPrefix.length();
       }
-
-      // Nick prefix
       if (from != null && !from.isBlank()) {
         AttributeSet fromStyle = styles.from();
         if (nickColors != null && nickColors.enabled()) {
@@ -1100,9 +1027,6 @@ public class ChatTranscriptStore {
         doc.insertString(pos, prefix, fromStyle);
         pos += prefix.length();
       }
-
-      // Message body, inserted as rich text so URLs/mentions/channel-links retain metadata.
-      // (We intentionally do not create inline image/link-preview blocks when revealing.)
       DefaultStyledDocument inner = new DefaultStyledDocument();
       try {
         if (renderer != null) {
@@ -1172,7 +1096,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         i = end;
       }
     } catch (Exception ignored) {
-      // best-effort
     }
     return pos;
   }
@@ -1201,8 +1124,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     if (doc == null) return;
 
     String a = action == null ? "" : action;
-
-    // New line
     ensureAtLineStart(doc);
 
     try {
@@ -1262,7 +1183,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
 
   public void appendStatus(TargetRef ref, String from, String text) {
     breakPresenceRun(ref);
-    // Status messages are dim/italic; apply the same style to the prefix and body.
     appendLine(ref, from, text, styles.status(), styles.status());
   }
 
@@ -1270,8 +1190,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     breakPresenceRun(ref);
     appendLine(ref, from, text, styles.error(), styles.error());
   }
-
-  // --- History replay variants (no embeds; use persisted timestamps) ---
 
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
     breakPresenceRun(ref);
@@ -1320,20 +1238,12 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     if (end <= start) return;
 
     try {
-      // Remove the raw presence lines (including their timestamps).
       doc.remove(start, end - start);
-
-      // Insert a single embedded component line in their place.
       PresenceFoldComponent comp = new PresenceFoldComponent(block.entries);
 
       SimpleAttributeSet attrs = new SimpleAttributeSet(styles.status());
       StyleConstants.setComponent(attrs, comp);
-
-      // Ensure the style marker survives restyles.
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
-
-      // IMPORTANT: do NOT prepend a timestamp on the folded line (user preference).
-      // Ensure the embedded fold starts on its own line.
       int insertPos = start;
       if (insertPos > 0) {
         try {
@@ -1351,13 +1261,9 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
 
       block.folded = true;
       block.component = comp;
-
-      // After folding, this block is now represented by the embedded component.
-      // We keep the block active so later presence events can update it live.
       block.startOffset = insertPos;
       block.endOffset = insertPos + 2;
     } catch (Exception ignored) {
-      // no-op
     }
   }
 
@@ -1433,26 +1339,18 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
       SimpleAttributeSet fresh = new SimpleAttributeSet(styles.byStyleId(styleId));
-
-      // Preserve URL metadata used for clickable links.
       Object url = old.getAttribute(ChatStyles.ATTR_URL);
       if (url != null) {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);
       }
-
-      // Preserve channel-link metadata.
       Object chan = old.getAttribute(ChatStyles.ATTR_CHANNEL);
       if (chan != null) {
         fresh.addAttribute(ChatStyles.ATTR_CHANNEL, chan);
       }
-
-      // Preserve embedded Swing components (e.g., inline image previews, fold components).
       java.awt.Component comp = StyleConstants.getComponent(old);
       if (comp != null) {
         StyleConstants.setComponent(fresh, comp);
       }
-
-      // Preserve per-nick marker and re-apply a theme-correct nick color.
       Object nickLower = old.getAttribute(NickColorService.ATTR_NICK);
       if (nickLower != null) {
         String n = String.valueOf(nickLower);
@@ -1461,9 +1359,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
           nickColors.applyColor(fresh, n);
         }
       }
-
-      // Preserve and re-apply mIRC formatting (bold/italic/underline/colors) across theme changes.
-      // The mIRC metadata attributes are set during insertion by {@link IrcFormatting}.
       Object ircBold = old.getAttribute(ChatStyles.ATTR_IRC_BOLD);
       Object ircItalic = old.getAttribute(ChatStyles.ATTR_IRC_ITALIC);
       Object ircUnderline = old.getAttribute(ChatStyles.ATTR_IRC_UNDERLINE);
@@ -1482,7 +1377,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       if (ircUnderline != null) {
         fresh.addAttribute(ChatStyles.ATTR_IRC_UNDERLINE, ircUnderline);
         if (ircUnderline instanceof Boolean b) {
-          // Always keep links underlined for click affordance.
           if (!ChatStyles.STYLE_LINK.equals(styleId) || b) {
             StyleConstants.setUnderline(fresh, b);
           }
@@ -1497,8 +1391,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       if (ircBg != null) {
         fresh.addAttribute(ChatStyles.ATTR_IRC_BG, ircBg);
       }
-
-      // Preserve locally-echoed "outgoing" marker and apply (or remove) its optional override color.
       boolean outgoing = Boolean.TRUE.equals(old.getAttribute(ChatStyles.ATTR_OUTGOING));
       if (outgoing) {
         fresh.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
@@ -1507,8 +1399,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
           StyleConstants.setForeground(fresh, outgoingColor);
         }
       }
-
-      // Apply palette colors (if any) and reverse.
       boolean rev = Boolean.TRUE.equals(ircReverse);
       Color fgColor = (ircFg instanceof Integer i) ? IrcFormatting.colorForCode(i) : null;
       Color bgColor = (ircBg instanceof Integer i) ? IrcFormatting.colorForCode(i) : null;
@@ -1522,8 +1412,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       }
       if (finalFg != null) StyleConstants.setForeground(fresh, finalFg);
       if (finalBg != null) StyleConstants.setBackground(fresh, finalBg);
-
-      // Ensure the style marker survives replacements.
       if (styleId != null) {
         fresh.addAttribute(ChatStyles.ATTR_STYLE, styleId);
       }

@@ -50,21 +50,16 @@ public class PircbotxBotFactory {
   }
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
-    // Resolve the effective proxy for this server. This honors per-server overrides and
-    // falls back to the default proxy settings when no override is set.
     ProxyPlan plan = proxyResolver.planForServer(s.id());
 
     SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
 
     SocketFactory socketFactory;
     if (plan.enabled()) {
-      // SOCKS proxy enabled for this server.
       socketFactory = s.tls()
           ? new SocksProxySslSocketFactory(plan.cfg(), ssl)
           : new SocksProxySocketFactory(plan.cfg());
     } else {
-      // IMPORTANT: Bypass JVM-wide socksProxyHost/socksProxyPort settings (if any) so
-      // servers that explicitly disable proxy actually connect directly.
       socketFactory = s.tls()
           ? new DirectTlsSocketFactory(ssl, plan.connectTimeoutMs(), plan.readTimeoutMs())
           : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
@@ -77,48 +72,29 @@ public class PircbotxBotFactory {
         .setVersion(version)
         .addServer(s.host(), s.port())
         .setSocketFactory(socketFactory)
-        // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
         .setCapEnabled(true)
-        // Prefer hostmasks in the initial NAMES list (when supported). If unsupported, ignore.
         .addCapHandler(new EnableCapHandler("userhost-in-names", true))
-        // IRCv3 away-notify: server will send user AWAY state changes as raw AWAY commands.
         .addCapHandler(new EnableCapHandler("away-notify", true))
-        // IRCv3 account-notify: server will send ACCOUNT updates when users log in/out.
         .addCapHandler(new EnableCapHandler("account-notify", true))
-        // IRCv3 extended-join: JOIN includes account name + realname (when supported).
         .addCapHandler(new EnableCapHandler("extended-join", true))
-        // IRCv3 message-tags: enables tagged messages (required for account-tag on some networks).
         .addCapHandler(new EnableCapHandler("message-tags", true))
-        // IRCv3 server-time: tagged messages include @time=... so backlog/playback keeps real ordering.
         .addCapHandler(new EnableCapHandler("server-time", true))
-        // IRCv3 batch: used to group history/playback into batches (required for chathistory).
         .addCapHandler(new EnableCapHandler("batch", true))
-        // IRCv3 chathistory (draft): bouncers like soju can serve scrollback for infinite scroll.
         .addCapHandler(new EnableCapHandler("draft/chathistory", true))
         .addCapHandler(new EnableCapHandler("znc.in/playback", true))
-        // IRCv3 account-tag: messages will include @account=... tags when supported.
         .addCapHandler(new EnableCapHandler("account-tag", true))
         .setAutoNickChange(true)
-        // We manage reconnects ourselves so we can surface status + use backoff.
         .setAutoReconnect(false)
         .addListener(listener);
-
-    // Reduce output throttling so CAP/JOIN sequences don't take forever.
-    // PircBotX 2.x changed this API from setMessageDelay(long) to setMessageDelay(Delay).
-    // To keep us compatible across minor versions, we set this via reflection.
     applyMessageDelay(builder, DEFAULT_MESSAGE_DELAY_MS);
 
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
       builder.setServerPassword(s.serverPassword());
     }
-
-    // Auto-join channels from config
     for (String chan : s.autoJoin()) {
       String ch = chan == null ? "" : chan.trim();
       if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
     }
-
-    // SASL (PLAIN)
     if (s.sasl() != null && s.sasl().enabled()) {
       if (!"PLAIN".equalsIgnoreCase(s.sasl().mechanism())) {
         throw new IllegalStateException(
@@ -142,21 +118,15 @@ public class PircbotxBotFactory {
    * We don't want to hard-pin to a specific minor API, so we do a reflective "try both".
    */
   private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {
-    // 1) Try the legacy signature: setMessageDelay(long)
     try {
       Method m = builder.getClass().getMethod("setMessageDelay", long.class);
       m.invoke(builder, delayMs);
       return;
     } catch (ReflectiveOperationException ignored) {
-      // continue
     }
-
-    // 2) Try the new signature: setMessageDelay(org.pircbotx.delay.Delay)
     try {
       Class<?> delayIface = Class.forName("org.pircbotx.delay.Delay");
       Method m = builder.getClass().getMethod("setMessageDelay", delayIface);
-
-      // If Delay is an interface, a proxy is the most version-resilient way to return a constant delay.
       Object delayObj;
       if (delayIface.isInterface()) {
         delayObj = java.lang.reflect.Proxy.newProxyInstance(
@@ -165,19 +135,16 @@ public class PircbotxBotFactory {
             constantDelayHandler(delayMs)
         );
       } else {
-        // As a fallback, try common concrete implementations (best-effort).
         delayObj = tryConstructDelay(delayMs, delayIface);
       }
 
       if (delayObj != null) m.invoke(builder, delayObj);
     } catch (ReflectiveOperationException ignored) {
-      // If this fails, we keep PircBotX defaults.
     }
   }
 
   private static InvocationHandler constantDelayHandler(long delayMs) {
     return (proxy, method, args) -> {
-      // Common Object methods
       if (method.getDeclaringClass() == Object.class) {
         return switch (method.getName()) {
           case "toString" -> "ConstantDelay(" + delayMs + "ms)";
@@ -191,14 +158,11 @@ public class PircbotxBotFactory {
       if (rt == long.class || rt == Long.class) return delayMs;
       if (rt == int.class || rt == Integer.class) return (int) Math.min(Integer.MAX_VALUE, delayMs);
       if (rt == Duration.class) return Duration.ofMillis(delayMs);
-
-      // If Delay has a void method (unlikely) or something else, just no-op.
       return null;
     };
   }
 
   private static Object tryConstructDelay(long delayMs, Class<?> delayType) {
-    // Try common constructor shapes: (long), (int), (Duration)
     try {
       return delayType.getConstructor(long.class).newInstance(delayMs);
     } catch (ReflectiveOperationException ignored) {
@@ -211,8 +175,6 @@ public class PircbotxBotFactory {
       return delayType.getConstructor(Duration.class).newInstance(Duration.ofMillis(delayMs));
     } catch (ReflectiveOperationException ignored) {
     }
-
-    // As a last resort, see if there's a static factory method we can call.
     for (String name : new String[] { "ofMillis", "millis", "fixed", "constant" }) {
       try {
         Method m = delayType.getMethod(name, long.class);
@@ -325,7 +287,6 @@ public class PircbotxBotFactory {
 
     @Override
     public Socket createSocket() throws IOException {
-      // Not used by PircBotX in the normal code path; provided for completeness.
       Socket s = ssl.createSocket();
       s.setSoTimeout(readTimeoutMs);
       return s;

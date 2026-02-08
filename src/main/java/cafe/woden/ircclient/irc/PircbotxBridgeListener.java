@@ -26,12 +26,7 @@ import org.pircbotx.snapshot.ChannelSnapshot;
 import org.pircbotx.snapshot.UserChannelDaoSnapshot;
 import org.pircbotx.snapshot.UserSnapshot;
 
-/**
- * PircBotX listener that translates raw events into IRCafe's {@link ServerIrcEvent} stream.
- *
- * <p>Extracted from {@link PircbotxIrcClientService} to keep the service focused on connection lifecycle
- * and configuration.
- */
+/** Translates PircBotX events into ServerIrcEvent. */
 final class PircbotxBridgeListener extends ListenerAdapter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxBridgeListener.class);
 
@@ -49,8 +44,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final CtcpRequestHandler ctcpHandler;
   private final boolean disconnectOnSaslFailure;
 
-  // Step 4C: Collect IRCv3 CHATHISTORY lines framed by BATCH.
-  // We suppress rendering of those lines until Step 4D.
   private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
 
   private static final class ChatHistoryBatchBuffer {
@@ -63,28 +56,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       this.target = target == null ? "" : target;
     }
   }
-
-  // SASL-related numerics per IRCv3:
-  // 903 = RPL_SASLSUCCESS
-  // 904 = ERR_SASLFAIL
-  // 905 = ERR_SASLTOOLONG
-  // 906 = ERR_SASLABORTED
-  // 907 = ERR_SASLALREADY
   private static final int RPL_SASL_SUCCESS = 903;
   private static final int ERR_SASL_FAIL = 904;
   private static final int ERR_SASL_TOO_LONG = 905;
   private static final int ERR_SASL_ABORTED = 906;
   private static final int ERR_SASL_ALREADY = 907;
-
-  // Join failure numerics (common across networks):
-  // 403 = ERR_NOSUCHCHANNEL
-  // 405 = ERR_TOOMANYCHANNELS
-  // 471 = ERR_CHANNELISFULL
-  // 473 = ERR_INVITEONLYCHAN
-  // 474 = ERR_BANNEDFROMCHAN
-  // 475 = ERR_BADCHANNELKEY
-  // 476 = ERR_BADCHANMASK
-  // 477 = ERR_NEEDREGGEDNICK (often used as "+r" join restriction)
   private static final String IRCafe_WHOX_TOKEN = "1";
 
   private static boolean isJoinFailureNumeric(int code) {
@@ -100,7 +76,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   private record ParsedJoinFailure(String channel, String message) {}
 
-  // --- Step 4C: IRCv3 BATCH/CHATHISTORY collection helpers ---
 
   private record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
 
@@ -162,20 +137,17 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     java.util.List<String> params = pl.params();
     String trailing = pl.trailing();
     if (params == null || params.isEmpty()) {
-      return true; // swallow BATCH even if malformed
+      return true;
     }
 
     String first = params.get(0);
     if (first == null || first.isBlank()) return true;
-
-    // START: BATCH +id <type> [args...] [:trailing]
     if (first.startsWith("+")) {
       String id = first.substring(1);
       String type = (params.size() >= 2) ? params.get(1) : "";
 
       if (isChatHistoryBatchType(type)) {
         String target = (params.size() >= 3) ? params.get(2) : "";
-        // Some servers may use the trailing as the target; if we can't infer, keep blank.
         if ((target == null || target.isBlank()) && trailing != null && !trailing.isBlank()) {
           target = trailing;
         }
@@ -185,8 +157,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
       return true;
     }
-
-    // END: BATCH -id
     if (first.startsWith("-")) {
       String id = first.substring(1);
       ChatHistoryBatchBuffer buf = activeChatHistoryBatches.remove(id);
@@ -254,10 +224,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     int codeIdx = parts[0].startsWith(":") ? 1 : 0;
     if (parts.length <= codeIdx + 1) return null;
     if (!PircbotxLineParseUtil.looksNumeric(parts[codeIdx])) return null;
-
-    // The typical numeric shape is:
-    //   :server <code> <yourNick> <channel> :<message>
-    // Be permissive: find the first channel-like token after the nick.
     int start = Math.min(parts.length, codeIdx + 2);
     String channel = null;
     for (int i = start; i < parts.length; i++) {
@@ -293,25 +259,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   }
 
   private Instant inboundAt(Object pircbotxEvent) {
-    // Use a single fallback Instant so every event emitted from this callback shares the same time
-    // when server-time isn't available.
     Instant now = Instant.now();
     return PircbotxIrcv3ServerTime.orNow(PircbotxIrcv3ServerTime.fromEvent(pircbotxEvent), now);
   }
-
-    // Parsing helpers have been extracted into small, pure helper classes to keep this listener readable:
-    // - PircbotxLineParseUtil: normalization + token heuristics
-    // - PircbotxAwayParsers: IRCv3 away-notify + 305/306 confirmations
-    // - PircbotxWhoisParsers: WHOIS/WHOWAS numerics (311/314/301/318)
-    // - PircbotxWhoUserhostParsers: WHO/WHOX + USERHOST numerics (352/354/302)
-    // - PircbotxChannelModeParsers: channel mode listings (324)
 
     @Override
     public void onConnect(ConnectEvent event) {
       touchInbound();
       PircBotX bot = event.getBot();
-
-      // Successful reconnect resets counters.
       conn.reconnectAttempts.set(0);
       conn.manualDisconnect.set(false);
 
@@ -325,25 +280,17 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
     @Override
     public void onDisconnect(DisconnectEvent event) {
-      // Prefer any locally-detected reason (e.g., heartbeat timeout).
       String override = conn.disconnectReasonOverride.getAndSet(null);
       Exception ex = event.getDisconnectException();
       String reason = (override != null && !override.isBlank())
           ? override
           : (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Disconnected";
-
-      // Clear the bot reference if this disconnect belongs to the current bot.
       if (conn.botRef.compareAndSet(event.getBot(), null)) {
         heartbeatStopper.accept(conn);
       }
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
-
-      // Some failures are not transient (e.g. authentication failures). In those cases, do not
-      // enter an auto-reconnect loop.
       boolean suppressReconnect = conn.suppressAutoReconnectOnce.getAndSet(false);
-
-      // Only auto-reconnect on non-manual disconnects.
       if (!conn.manualDisconnect.get() && !suppressReconnect) {
         reconnectScheduler.accept(conn, reason);
       }
@@ -353,9 +300,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onMessage(MessageEvent event) {
       touchInbound();
-
-      // Step 4C: if this message is tagged as belonging to an active CHATHISTORY batch,
-      // collect it and suppress live rendering.
       Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
       if (batchId.isPresent()) {
         ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
@@ -380,11 +324,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       Instant at = inboundAt(event);
       String channel = event.getChannel().getName();
-      // Passive capture: learn hostmask for userlist/ignore visualization.
       maybeEmitHostmaskObserved(channel, event.getUser());
       String msg = event.getMessage();
-
-      // No ignore filtering here (handled centrally in the app layer).
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
@@ -402,11 +343,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
     @Override
     public void onAction(ActionEvent event) {
-      // PircBotX parses CTCP ACTION (/me) into ActionEvent for us.
       touchInbound();
-
-      // Step 4C: if this action is tagged as belonging to an active CHATHISTORY batch,
-      // collect it and suppress live rendering.
       Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
       if (batchId.isPresent()) {
         ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
@@ -425,8 +362,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
-
-      // No ignore filtering here (handled centrally in the app layer).
 
       if (event.getChannel() != null) {
         String channel = event.getChannel().getName();
@@ -455,9 +390,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       touchInbound();
-
-      // Step 4C: if this PM is tagged as belonging to an active CHATHISTORY batch,
-      // collect it and suppress live rendering.
       Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
       if (batchId.isPresent()) {
         ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
@@ -479,10 +411,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = event.getUser().getNick();
       String msg = event.getMessage();
-
-      // Passive capture: learn hostmask even for PMs (channel may be blank).
       maybeEmitHostmaskObserved("", event.getUser());
-      // No ignore filtering here (handled centrally in the app layer).
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
@@ -498,9 +427,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onNotice(NoticeEvent event) {
       touchInbound();
-
-      // Step 4C: if this NOTICE is tagged as belonging to an active CHATHISTORY batch,
-      // collect it and suppress live rendering.
       Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
       if (batchId.isPresent()) {
         ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
@@ -518,10 +444,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String notice = event.getNotice();
 
       if (event.getUser() != null) {
-        // Passive capture: learn hostmask from NOTICE prefixes (incl. CTCP replies).
         maybeEmitHostmaskObserved("", event.getUser());
       }
-      // No ignore filtering here (handled centrally in the app layer).
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(at, from, notice)));
     }
@@ -537,26 +461,19 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       if (event != null && event.getUser() != null) {
         String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
-        // Passive capture: learn hostmask from CTCP request prefixes.
         maybeEmitHostmaskObserved(ch, event.getUser());
       }
-      // No ignore filtering here (handled centrally in the app layer).
 
       String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-
-      // In PircBotX, the CTCP command is implied by the event type (PingEvent, VersionEvent, TimeEvent, etc).
       String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
       String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
       cmd = cmd.toUpperCase(Locale.ROOT);
-
-      // Some CTCP types carry a value (e.g. PING has a ping value).
       String arg = null;
       try {
         java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
         Object v = m.invoke(event);
         if (v != null) arg = v.toString();
       } catch (Exception ignored) {
-        // Ignore: not all CTCP events expose a value.
       }
 
       bus.onNext(new ServerIrcEvent(serverId,
@@ -565,8 +482,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       super.onGenericCTCP(event);
     }
-
-    // FingerEvent is a CTCP request, but in PircBotX it is not part of the GenericCTCPEvent hierarchy.
     @Override
     public void onFinger(FingerEvent event) throws Exception {
       touchInbound();
@@ -578,10 +493,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       if (event != null && event.getUser() != null) {
         String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
-        // Passive capture: learn hostmask from CTCP request prefixes.
         maybeEmitHostmaskObserved(ch, event.getUser());
       }
-      // No ignore filtering here (handled centrally in the app layer).
 
       String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
       bus.onNext(new ServerIrcEvent(serverId,
@@ -609,8 +522,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         long idleSeconds = PircbotxUtil.safeLong(() -> event.getIdleSeconds(), -1);
         long signOnTime = PircbotxUtil.safeLong(() -> event.getSignOnTime(), -1);
         String registeredAs = PircbotxUtil.safeStr(() -> event.getRegisteredAs(), "");
-
-        // Pre-format into nice, compact lines so the app layer can just print them.
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
 
         String ident = login.isBlank() ? "" : login;
@@ -618,10 +529,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         String userHost = (!ident.isBlank() || !hostPart.isBlank())
             ? (ident + "@" + hostPart).replaceAll("^@|@$", "")
             : "";
-
-        // Passive hostmask enrichment from WHOIS results.
-        // WHOIS is user-initiated, so this generates no additional IRC traffic.
-        // If we have a useful user@host, treat it as authoritative and push it into the roster cache.
         if (!nick.isBlank() && !userHost.isBlank() && userHost.contains("@")) {
           String observed = nick + "!" + userHost;
           bus.onNext(new ServerIrcEvent(serverId,
@@ -638,8 +545,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         if (idleSeconds >= 0) lines.add("Idle: " + idleSeconds + "s");
         if (signOnTime > 0) lines.add("Sign-on: " + signOnTime);
         if (channels != null && !channels.isEmpty()) lines.add("Channels: " + String.join(" ", channels));
-
-        // Even if we couldn't collect much, still emit something.
         if (lines.isEmpty()) lines.add("(no WHOIS details)");
 
         String n = nick == null || nick.isBlank() ? "(unknown)" : nick;
@@ -662,22 +567,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Object l = reflectCall(event, "getLine");
       if (l == null) l = reflectCall(event, "getRawLine");
       if (l != null) line = String.valueOf(l);
-
-      // If we can't fetch the raw line, fall back to toString().
       if (line == null || line.isBlank()) line = String.valueOf(event);
-
-      // Normalize for parsing:
-      // - strip IRCv3 message tags ("@tag=value ... ")
-      // - unwrap some toString() formats like "UnknownEvent(line=...)"
       String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
 
-      // Step 4C: handle IRCv3 BATCH start/end framing (including CHATHISTORY).
       if (handleBatchControlLine(line, rawLine)) {
         return;
       }
-
-      // Step 4C: some servers/bots may deliver tagged history messages as UnknownEvent instead of
-      // MessageEvent/ActionEvent. If so, collect them here as a fallback.
       Optional<String> maybeBatchId = PircbotxIrcv3BatchTag.fromRawLine(line);
       if (maybeBatchId.isPresent()) {
         ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(maybeBatchId.get());
@@ -685,30 +580,18 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           return;
         }
       }
-
-      // Surface SASL login failures (wrong password, etc.). These often arrive as raw numerics and
-      // otherwise look like "nothing happened" to the user.
       Integer saslCode = parseSaslNumericCode(rawLine);
       if (saslCode != null) {
         handleSaslNumeric(saslCode, rawLine);
         return;
       }
-
-      // RPL_ISUPPORT (005): detect WHOX support.
       if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
       }
-
-      // Targeted diagnostics: confirm where IRCv3 away-notify lines are landing.
-      // (Users broadcast AWAY state changes as raw AWAY commands.)
       if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
         log.debug("[{}] inbound AWAY-ish line received in onUnknown: {}", serverId, rawLine);
       }
-
-      // IRCv3 away-notify: users broadcast AWAY state changes as raw AWAY commands.
-      // Example: ":nick!user@host AWAY :Gone away for now"  (sets AWAY)
-      //          ":nick!user@host AWAY"                    (clears AWAY)
       PircbotxAwayParsers.ParsedAwayNotify awayNotify = PircbotxAwayParsers.parseAwayNotify(rawLine);
       if (awayNotify != null && awayNotify.nick() != null && !awayNotify.nick().isBlank()) {
         log.debug("[{}] parsed away-notify: nick={} state={} msg={}", serverId, awayNotify.nick(), awayNotify.awayState(), awayNotify.message());
@@ -716,7 +599,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             new IrcEvent.UserAwayStateObserved(Instant.now(), awayNotify.nick(), awayNotify.awayState(), awayNotify.message())));
         return;
       } else if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
-        // If we see an AWAY-ish line here but fail to parse it, that's the smoking gun.
         log.debug("[{}] inbound AWAY-ish line did NOT parse as away-notify: {}", serverId, rawLine);
       }
 
@@ -729,7 +611,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       PircbotxAwayParsers.ParsedAwayConfirmation away = PircbotxAwayParsers.parseRpl305or306Away(rawLine);
       if (away != null) {
-        // RPL_UNAWAY (305), RPL_NOWAWAY (306)
         String msg = away.message();
         if (msg == null || msg.isBlank()) {
           msg = away.away() ? "You have been marked as being away" : "You are no longer marked as being away";
@@ -738,49 +619,31 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             new IrcEvent.AwayStatusChanged(Instant.now(), away.away(), msg)));
         return;
       }
-
-      // RPL_USERHOST (302): used by our low-traffic hostmask resolver.
       List<PircbotxWhoUserhostParsers.UserhostEntry> uh = PircbotxWhoUserhostParsers.parseRpl302Userhost(rawLine);
       if (uh != null && !uh.isEmpty()) {
         Instant now = Instant.now();
         for (PircbotxWhoUserhostParsers.UserhostEntry e : uh) {
           if (e == null) continue;
-          // Channel-agnostic; TargetCoordinator will propagate across channels.
           bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(now, "", e.nick(), e.hostmask())));
-
-          // USERHOST also carries an away marker (+/-). Opportunistically propagate away state too,
-          // so a hostmask lookup can update the roster state without requiring WHOIS.
           IrcEvent.AwayState as = (e.awayState() == null) ? IrcEvent.AwayState.UNKNOWN : e.awayState();
           if (as == IrcEvent.AwayState.AWAY || as == IrcEvent.AwayState.HERE) {
             bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserAwayStateObserved(now, e.nick(), as)));
           }
         }
       }
-
-      // WHOIS fallback: some networks/bots may not surface a complete WhoisEvent through PircBotX,
-      // but the numerics still arrive. Parse the key ones here so manual WHOIS can still populate
-      // the user list hostmask cache.
-      // WHOIS away-state capture: parse RPL_AWAY (301) and RPL_ENDOFWHOIS (318) so a manual WHOIS
-      // can enrich the user list with best-effort away markers.
       PircbotxWhoisParsers.ParsedWhoisAway whoisAway = PircbotxWhoisParsers.parseRpl301WhoisAway(rawLine);
       if (whoisAway != null && whoisAway.nick() != null && !whoisAway.nick().isBlank()) {
         String nk = whoisAway.nick().trim();
         String k = nk.toLowerCase(Locale.ROOT);
-        // Only mark the WHOIS probe as "saw away" if we actually initiated a WHOIS for this nick.
         conn.whoisSawAwayByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.AWAY, whoisAway.message())));
       }
-
-      // WHOIS account capture: parse RPL_WHOISACCOUNT (330) so WHOIS fallback can populate
-      // account status on networks that don't support IRCv3 account-notify / extended-join.
       PircbotxWhoisParsers.ParsedWhoisAccount whoisAcct = PircbotxWhoisParsers.parseRpl330WhoisAccount(rawLine);
       if (whoisAcct != null && whoisAcct.nick() != null && !whoisAcct.nick().isBlank()) {
         String nk = whoisAcct.nick().trim();
         String k = nk.toLowerCase(Locale.ROOT);
-        // Only mark the WHOIS probe as "saw account" if we actually initiated a WHOIS for this nick.
         conn.whoisSawAccountByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
-        // Record that this connection surfaces 330 numerics, so inferring LOGGED_OUT later is safer.
         conn.whoisAccountNumericSupported.set(true);
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_IN, whoisAcct.account())));
@@ -790,21 +653,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (endWhoisNick != null && !endWhoisNick.isBlank()) {
         String nk = endWhoisNick.trim();
         Boolean sawAway = conn.whoisSawAwayByNickLower.remove(nk.toLowerCase(Locale.ROOT));
-        // Only infer HERE when this 318 completes a WHOIS probe we initiated.
         if (sawAway != null && !sawAway.booleanValue()) {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.UserAwayStateObserved(Instant.now(), nk, IrcEvent.AwayState.HERE)));
         }
 
         Boolean sawAcct = conn.whoisSawAccountByNickLower.remove(nk.toLowerCase(Locale.ROOT));
-        // Only infer LOGGED_OUT when this 318 completes a WHOIS probe we initiated AND we've seen
-        // at least one 330 on this connection (otherwise the absence of 330 is ambiguous).
         if (sawAcct != null && !sawAcct.booleanValue() && conn.whoisAccountNumericSupported.get()) {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_OUT)));
         }
-
-        // Notify internal subsystems that a WHOIS probe has completed (for backoff / staleness).
         if (sawAway != null || sawAcct != null) {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.WhoisProbeCompleted(Instant.now(), nk,
@@ -822,10 +680,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.UserHostmaskObserved(Instant.now(), "", whoisUser.nick(), hm)));
       }
-
-      // WHO fallback: parse WHOREPLY (352) lines.
-      // These can arrive either when the user runs WHO manually or when an enrichment strategy
-      // chooses to use WHO as a low-traffic way to learn user/host (and away state via flags).
       PircbotxWhoUserhostParsers.ParsedWhoReply whoReply = PircbotxWhoUserhostParsers.parseRpl352WhoReply(rawLine);
       if (whoReply != null
           && !whoReply.channel().isBlank()
@@ -836,8 +690,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         String hm = whoReply.nick() + "!" + whoReply.user() + "@" + whoReply.host();
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.UserHostmaskObserved(now, whoReply.channel(), whoReply.nick(), hm)));
-
-        // WHOREPLY flags: H=here, G=gone (away). Not all networks include these, so be conservative.
         String flags = whoReply.flags();
         if (flags != null) {
           IrcEvent.AwayState as = flags.indexOf('G') >= 0
@@ -849,13 +701,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           }
         }
       }
-
-      // WHOX: prefer strict parsing for the field set IRCafe issues (%tcuhnaf,<token>),
-      // which can carry account + away info; otherwise fall back to a conservative heuristic.
       PircbotxWhoUserhostParsers.ParsedWhoxTcuhnaf whoxStrict =
           PircbotxWhoUserhostParsers.parseRpl354WhoxTcuhnaf(rawLine, IRCafe_WHOX_TOKEN);
       if (whoxStrict != null) {
-        // Confirm schema compatibility once we've successfully parsed our expected WHOX layout.
         if (conn.whoxSchemaCompatibleEmitted.compareAndSet(false, true)) {
           conn.whoxSchemaCompatible.set(true);
           bus.onNext(new ServerIrcEvent(serverId,
@@ -888,8 +736,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
               new IrcEvent.UserAccountStateObserved(now, whoxStrict.nick(), ast, acct)));
         }
       } else {
-        // If this looks like one of OUR WHOX replies (token match) but strict parsing failed,
-        // consider the schema incompatible and let enrichment fall back to plain WHO/USERHOST.
         if (PircbotxWhoUserhostParsers.seemsRpl354WhoxWithToken(rawLine, IRCafe_WHOX_TOKEN)
             && conn.whoxSchemaIncompatibleEmitted.compareAndSet(false, true)) {
           conn.whoxSchemaCompatible.set(false);
@@ -937,14 +783,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (conn.zncPlaybackRequestedThisSession.getAndSet(true)) return;
 
       long cursor = playbackCursorProvider.lastSeenEpochSeconds(serverId).orElse(0L);
-      // Be a tiny bit forgiving so we don't accidentally miss a message around the boundary.
       long request = Math.max(0L, cursor - 1L);
 
       try {
         bot.sendIRC().message("*playback", "play * " + request);
         log.info("[{}] requested ZNC playback since {} (epoch seconds)", serverId, request);
       } catch (Exception ex) {
-        // Allow a future retry if we failed to send the request.
         conn.zncPlaybackRequestedThisSession.set(false);
         log.warn("[{}] failed to request ZNC playback", serverId, ex);
       }
@@ -952,20 +796,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
     @Override
     public void onServerResponse(ServerResponseEvent event) {
-      // Some numerics are handled by PircBotX as ServerResponseEvent (not UnknownEvent).
-      // We specifically care about away confirmations (305/306).
       touchInbound();
 
       int code;
       try {
         code = event.getCode();
       } catch (Exception ex) {
-        // Extremely defensive: if we can't get a code, bail.
         return;
       }
-
-      // SASL login failures (wrong password, etc.) often arrive as numerics.
-      // Surface them as a user-visible disconnect reason and suppress auto-reconnect loops.
       if (code == ERR_SASL_FAIL
           || code == ERR_SASL_TOO_LONG
           || code == ERR_SASL_ABORTED
@@ -978,10 +816,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         handleSaslNumeric(code, line);
         return;
       }
-
-      // Join failures (e.g. +r requires NickServ auth) are typically delivered as numerics.
-      // We surface them so the UI can show the reason in both status and the buffer
-      // where the user initiated /join.
       if (isJoinFailureNumeric(code)) {
         String line = null;
         Object l = reflectCall(event, "getLine");
@@ -1000,19 +834,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         }
         return;
       }
-
-      // If we negotiated znc.in/playback, ZNC will not automatically send buffered backlog.
-      // Request bounded playback once registration completes (end of MOTD).
       if (code == 376 || code == 422) {
         maybeLogNegotiatedCaps();
         maybeRequestZncPlayback(event.getBot());
         return;
       }
-
-
-      
-      // RPL_ISUPPORT (005) can be delivered as ServerResponseEvent on some networks.
-      // Detect WHOX support here as well as in onUnknown.
       if (code == 5) {
         String line = null;
         Object l = reflectCall(event, "getLine");
@@ -1029,7 +855,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
 
 if (code == 302 || code == 352 || code == 354) {
-        // USERHOST (302) and WHO/WHOX (352/354) can be delivered as ServerResponseEvent on some networks.
         String line = null;
         Object l = reflectCall(event, "getLine");
         if (l == null) l = reflectCall(event, "getRawLine");
@@ -1075,7 +900,6 @@ if (code == 302 || code == 352 || code == 354) {
           PircbotxWhoUserhostParsers.ParsedWhoxTcuhnaf whoxStrict =
               PircbotxWhoUserhostParsers.parseRpl354WhoxTcuhnaf(line, IRCafe_WHOX_TOKEN);
           if (whoxStrict != null) {
-            // Confirm schema compatibility once we've successfully parsed our expected WHOX layout.
             if (conn.whoxSchemaCompatibleEmitted.compareAndSet(false, true)) {
               conn.whoxSchemaCompatible.set(true);
               bus.onNext(new ServerIrcEvent(serverId,
@@ -1107,8 +931,6 @@ if (code == 302 || code == 352 || code == 354) {
                   new IrcEvent.UserAccountStateObserved(now, whoxStrict.nick(), ast, acct)));
             }
           } else {
-            // If this looks like one of OUR WHOX replies (token match) but strict parsing failed,
-            // consider the schema incompatible and let enrichment fall back to plain WHO/USERHOST.
             if (PircbotxWhoUserhostParsers.seemsRpl354WhoxWithToken(line, IRCafe_WHOX_TOKEN)
                 && conn.whoxSchemaIncompatibleEmitted.compareAndSet(false, true)) {
               conn.whoxSchemaCompatible.set(false);
@@ -1131,7 +953,6 @@ if (code == 302 || code == 352 || code == 354) {
         return;
       }
       if (code == 330) {
-        // WHOIS account capture: some networks deliver RPL_WHOISACCOUNT (330) as ServerResponseEvent.
 
         String line = null;
         Object l = reflectCall(event, "getLine");
@@ -1143,9 +964,7 @@ if (code == 302 || code == 352 || code == 354) {
         if (whoisAcct != null && whoisAcct.nick() != null && !whoisAcct.nick().isBlank()) {
           String nk = whoisAcct.nick().trim();
           String k = nk.toLowerCase(Locale.ROOT);
-          // Only mark the WHOIS probe as "saw account" if we actually initiated a WHOIS for this nick.
           conn.whoisSawAccountByNickLower.computeIfPresent(k, (kk, vv) -> Boolean.TRUE);
-          // Record that this connection surfaces 330 numerics, so inferring LOGGED_OUT later is safer.
           conn.whoisAccountNumericSupported.set(true);
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_IN, whoisAcct.account())));
@@ -1153,9 +972,6 @@ if (code == 302 || code == 352 || code == 354) {
         return;
       }
       if (code == 301 || code == 318) {
-        // WHOIS away-state capture:
-        // - 301 indicates the user is AWAY
-        // - 318 indicates end-of-WHOIS; if we never saw 301 for this nick, infer HERE
 
         String line = null;
         Object l = reflectCall(event, "getLine");
@@ -1185,14 +1001,10 @@ if (code == 302 || code == 352 || code == 354) {
             }
 
             Boolean sawAcct = conn.whoisSawAccountByNickLower.remove(k);
-            // Only infer LOGGED_OUT when this 318 completes a WHOIS probe we initiated AND we've seen
-            // at least one 330 on this connection (otherwise the absence of 330 is ambiguous).
             if (sawAcct != null && !sawAcct.booleanValue() && conn.whoisAccountNumericSupported.get()) {
               bus.onNext(new ServerIrcEvent(serverId,
                   new IrcEvent.UserAccountStateObserved(Instant.now(), nk, IrcEvent.AccountState.LOGGED_OUT)));
             }
-
-            // Notify internal subsystems that a WHOIS probe has completed (for backoff / staleness).
             if (sawAway != null || sawAcct != null) {
               bus.onNext(new ServerIrcEvent(serverId,
                   new IrcEvent.WhoisProbeCompleted(Instant.now(), nk,
@@ -1206,8 +1018,6 @@ if (code == 302 || code == 352 || code == 354) {
       }
 
       if (code != 305 && code != 306) return;
-
-      // Prefer a raw line when available so we can reuse the same parser.
       String line = null;
       Object l = reflectCall(event, "getLine");
       if (l == null) l = reflectCall(event, "getRawLine");
@@ -1240,7 +1050,6 @@ if (code == 302 || code == 352 || code == 354) {
       if (isSelf(event.getBot(), nick)) {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.JoinedChannel(Instant.now(), channel.getName())));
       } else {
-        // Show other users joining inline in the channel transcript.
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserJoinedChannel(
             Instant.now(),
             channel.getName(),
@@ -1314,7 +1123,6 @@ if (code == 302 || code == 352 || code == 354) {
 
       if (!refreshedSome) {
         try {
-          // Best-effort: if we can still see the user's channels in the DAO, emit per-channel quit events.
           try {
             if (event.getUser() != null) {
               for (Channel ch : bot.getUserChannelDao().getChannels(event.getUser())) {
@@ -1342,9 +1150,6 @@ if (code == 302 || code == 352 || code == 354) {
 
     private static Integer parseSaslNumericCode(String rawLine) {
       if (rawLine == null || rawLine.isBlank()) return null;
-
-      // Most numeric lines look like: ":server.name 904 nick :SASL authentication failed"
-      // Be permissive: sometimes the prefix may be missing in stringified forms.
       String s = rawLine.trim();
       String[] parts = s.split("\\s+");
       if (parts.length == 0) return null;
@@ -1372,7 +1177,6 @@ if (code == 302 || code == 352 || code == 354) {
     }
 
     private void handleSaslNumeric(int code, String rawLine) {
-      // Best-effort extract a human message.
       String msg = extractTrailingMessage(rawLine);
 
       String base = switch (code) {
@@ -1386,29 +1190,21 @@ if (code == 302 || code == 352 || code == 354) {
       String detail = base;
       if (msg != null && !msg.isBlank()) {
         String m = msg.trim();
-        // Avoid duplicating the same phrase when the server already provided it.
         if (!m.equalsIgnoreCase(base)) {
           detail = base + ": " + m;
         }
       }
 
       String reason = "Login failed — " + detail;
-
-      // Avoid spamming duplicate lines if PircBotX delivers the numeric via multiple paths.
       String existing = conn.disconnectReasonOverride.get();
       if (existing != null && !existing.isBlank()) {
-        // Still suppress auto-reconnect for auth failures.
         conn.suppressAutoReconnectOnce.set(true);
         return;
       }
 
       conn.disconnectReasonOverride.set(reason);
       conn.suppressAutoReconnectOnce.set(true);
-
-      // Also surface an immediate UI-visible error (disconnect will follow soon after).
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), reason, null)));
-
-      // If configured, treat SASL failure as a hard connect failure and disconnect immediately.
       if (disconnectOnSaslFailure) {
         PircBotX bot = conn.botRef.get();
         if (bot != null) {
@@ -1444,7 +1240,7 @@ if (code == 302 || code == 352 || code == 354) {
 
       String key = nick.trim().toLowerCase(Locale.ROOT);
       String prev = conn.lastHostmaskByNickLower.put(key, hm);
-      if (Objects.equals(prev, hm)) return; // no change
+      if (Objects.equals(prev, hm)) return;
 
       String ch = (channel == null) ? "" : channel;
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(
@@ -1480,7 +1276,6 @@ if (code == 302 || code == 352 || code == 354) {
 
       try {
         for (Channel ch : event.getBot().getUserChannelDao().getChannels(event.getUser())) {
-          // Emit per-channel nick-change lines so the transcript can fold them.
           try {
             bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserNickChangedChannel(
                 Instant.now(),
@@ -1587,8 +1382,6 @@ if (code == 302 || code == 352 || code == 354) {
         Object nick = reflectCall(user, "getNick");
         if (nick != null) return String.valueOf(nick);
       }
-
-      // Some services (e.g. ChanServ) may not be represented as a User; recover from raw line.
       String rawNick = nickFromRawLine(event);
       if (rawNick != null && !rawNick.isBlank()) return rawNick;
 
@@ -1616,22 +1409,16 @@ if (code == 302 || code == 352 || code == 354) {
 
     private static String modeDetailsFromEvent(Object event, String channelName) {
       if (event == null) return null;
-
-      // Common method names across libraries/versions.
       Object mode = reflectCall(event, "getMode");
       if (mode == null) mode = reflectCall(event, "getModeLine");
       if (mode == null) mode = reflectCall(event, "getModeString");
       String s = (mode != null) ? String.valueOf(mode) : null;
-
-      // Last-resort: try raw line.
       if (s == null) {
         Object raw = reflectCall(event, "getRawLine");
         if (raw != null) s = String.valueOf(raw);
       }
 
       if (s == null) return null;
-
-      // If this is a raw MODE line, reduce it to just "<modes> [args...]"
       String reduced = extractModeDetails(s, channelName);
       return (reduced != null) ? reduced : s;
     }
@@ -1650,7 +1437,7 @@ if (code == 302 || code == 352 || code == 354) {
       String[] toks = l.split("\s+");
       for (int i = 0; i < toks.length; i++) {
         if ("MODE".equalsIgnoreCase(toks[i])) {
-          int idx = i + 2; // MODE <chan> <modes...>
+          int idx = i + 2;
           if (idx <= toks.length - 1) {
             StringBuilder sb = new StringBuilder();
             for (int j = idx; j < toks.length; j++) {
@@ -1663,8 +1450,6 @@ if (code == 302 || code == 352 || code == 354) {
           return null;
         }
       }
-
-      // Sometimes the library returns "<chan> <modes...>"
       if (channelName != null && !channelName.isBlank()) {
         String ch = channelName.trim();
         if (line.startsWith(ch + " ")) return line.substring(ch.length()).trim();
@@ -1677,7 +1462,6 @@ if (code == 302 || code == 352 || code == 354) {
 
   private static IrcEvent.AwayState awayFromWhoFlags(String flags) {
     String f = (flags == null) ? "" : flags;
-    // On most networks, WHOREPLY flags contain H (here) or G (gone/away).
     if (f.indexOf('G') >= 0 || f.indexOf('g') >= 0) return IrcEvent.AwayState.AWAY;
     if (f.indexOf('H') >= 0 || f.indexOf('h') >= 0) return IrcEvent.AwayState.HERE;
     return IrcEvent.AwayState.UNKNOWN;
@@ -1696,8 +1480,6 @@ if (code == 302 || code == 352 || code == 354) {
       if (channel == null) return;
 
       String channelName = channel.getName();
-
-      // Try to gather privilege sets via reflection so we support multiple pircbotx versions gracefully.
       java.util.Set<?> owners = setOrEmpty(channel, "getOwners");
       java.util.Set<?> admins = setOrEmpty(channel, "getSuperOps");
       java.util.Set<?> ops = setOrEmpty(channel, "getOps");

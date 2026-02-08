@@ -225,7 +225,6 @@ public class SwingUiPort implements UiPort {
       users.setNicks(nicks);
 
       // Avoid streams here: in very large channels this runs on the EDT and can noticeably stall the UI.
-      // Also: rebuilding nick-completions is expensive, so skip that step if the nick set hasn't changed.
       java.util.List<String> names;
       int hash = 1;
       int size = 0;

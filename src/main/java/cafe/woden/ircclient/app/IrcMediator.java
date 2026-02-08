@@ -34,12 +34,7 @@ import java.util.function.Consumer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Mediator.
- *
- * <p>Multi-server support:
- * targets are scoped to a server id via {@link TargetRef}.
- */
+/** App mediator. */
 @Component
 @Lazy
 public class IrcMediator {
@@ -54,30 +49,22 @@ public class IrcMediator {
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
-
-  // Routing/correlation state extracted from IrcMediator.
   private final WhoisRoutingState whoisRoutingState;
   private final CtcpRoutingState ctcpRoutingState;
   private final ModeRoutingState modeRoutingState;
   private final AwayRoutingState awayRoutingState;
   private final JoinRoutingState joinRoutingState;
-
-  // Inbound MODE-related event handler (join-burst buffering + MODE pretty printing + 324 routing).
   private final InboundModeEventHandler inboundModeEventHandler;
   private final OutboundModeCommandService outboundModeCommandService;
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
 
-  // Step 4D: persist collected CHATHISTORY batches into the chat log DB (when enabled).
   private final ChatHistoryIngestor chatHistoryIngestor;
 
-  // Step 4E: coordinate remote-history requests with DB paging.
   private final ChatHistoryIngestBus chatHistoryIngestBus;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
-
-  // Active target state is owned by TargetCoordinator.
 
   @PostConstruct
   void init() {
@@ -224,8 +211,6 @@ public class IrcMediator {
             .subscribe(targetCoordinator::clearLog,
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
     );
-
-    // React to runtime server list edits.
     disposables.add(
         serverRegistry.updates()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
@@ -302,14 +287,11 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
     String f = Objects.toString(from, "").trim();
     if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
-    // PircBotX uses "server" when no user prefix is present; don't apply user ignore rules to that.
     if ("server".equalsIgnoreCase(f)) return InboundIgnorePolicy.Decision.ALLOW;
     return inboundIgnorePolicy.decide(sid, f, null, isCtcp);
   }
 
   private void handleNoticeOrSpoiler(String sid, TargetRef status, Instant at, String from, String text, boolean spoiler, boolean suppressOutput) {
-    // CTCP replies come back as NOTICE with 0x01-wrapped payload.
-    // Route them to the chat target where the request originated.
     ParsedCtcp ctcp = parseCtcp(text);
     if (ctcp != null) {
       String cmd = ctcp.commandUpper();
@@ -341,9 +323,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           rendered = from + " TIME: " + (arg.isBlank() ? "(no time)" : arg);
         }
       }
-
-      // If we received a CTCP reply we recognize but didn't have a pending request for,
-      // still render a clean status line to the server status window (better than raw 0x01).
       if (dest == null && rendered == null) {
         if ("VERSION".equals(cmd)) {
           dest = status;
@@ -432,10 +411,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     }
   }
 
-  // --- Chatty slash commands extracted to OutboundChatCommandService --------------------
-
-  // --- MODE slash commands extracted to OutboundModeCommandService --------------------
-
   private void handleSay(String msg) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
@@ -492,8 +467,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     IrcEvent e = se.event();
 
     TargetRef status = new TargetRef(sid, "status");
-
-    // Delegate connectivity state changes.
     if (e instanceof IrcEvent.Connected
         || e instanceof IrcEvent.Connecting
         || e instanceof IrcEvent.Reconnecting
@@ -501,7 +474,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       connectionCoordinator.handleConnectivityEvent(sid, e, targetCoordinator.getActiveTarget());
       if (e instanceof IrcEvent.Disconnected) {
         targetCoordinator.onServerDisconnected(sid);
-        // Drop any per-server correlation state so it doesn't stick across reconnects.
         whoisRoutingState.clearServer(sid);
         ctcpRoutingState.clearServer(sid);
         modeRoutingState.clearServer(sid);
@@ -528,7 +500,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
 
-        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
@@ -549,7 +520,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
 
-        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
@@ -583,7 +553,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.PrivateMessage ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
 
-        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
@@ -598,7 +567,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
 
-        // Step 3B: track recent activity to prioritize optional WHOIS fallback.
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
@@ -618,12 +586,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         handleNoticeOrSpoiler(sid, status, ev.at(), ev.from(), ev.text(), spoiler, suppress);
       }
       case IrcEvent.ServerTimeNotNegotiated ev -> {
-        // Warn once per application run for this server (emitted from the IRC layer).
         ui.appendStatus(status, "(ircv3)", ev.message());
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
-        // Step 4D: persist the collected batch into the local chat log DB (if enabled),
-        // but still do not render it to the transcript yet.
         String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();
         final TargetRef dest = new TargetRef(sid, target);
         ensureTargetExists(dest);
@@ -646,7 +611,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           }
           postTo(dest, false, d -> ui.appendStatus(d, "(chathistory)", msg));
 
-          // Signal any waiters (Step 4E) that a history batch for this target completed.
           try {
             if (chatHistoryIngestBus != null) {
               chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
@@ -669,10 +633,8 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
         TargetRef dest;
         if (uiSettingsBus.get().ctcpRequestsInActiveTargetEnabled()) {
-          // Prefer the currently active target on the same server, otherwise fall back to status.
           dest = resolveActiveOrStatus(sid, status);
         } else {
-          // Route to the origin target instead (channel/PM), falling back to status.
           if (ev.channel() != null && !ev.channel().isBlank()) {
             dest = new TargetRef(sid, ev.channel());
           } else if (ev.from() != null && !ev.from().isBlank()) {
@@ -701,9 +663,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         awayRoutingState.setAway(sid, ev.away());
         if (!ev.away()) awayRoutingState.setLastReason(sid, null);
         TargetRef dest = null;
-
-        // Prefer routing back to where the user initiated /away (if recent), otherwise
-        // fall back to the currently active target on the same server.
         TargetRef origin = awayRoutingState.recentOriginIfFresh(sid, Duration.ofSeconds(15));
         if (origin != null && Objects.equals(origin.serverId(), sid)) {
           dest = origin;
@@ -764,14 +723,8 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.JoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
-
-        // Clear any pending /join routing state now that we've actually joined.
         joinRoutingState.clear(sid, ev.channel());
-
-        // Buffer the initial channel-flag modes so the join doesn't spam the view.
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
-
-        // Join-time roster enrichment (rate limited): populate away/account/hostmask quickly.
         userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, ev.channel());
 
         ensureTargetExists(chan);
@@ -780,8 +733,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       }
 
       case IrcEvent.JoinFailed ev -> {
-        // Prefer routing back to where the user initiated /join (if recent), otherwise fall back
-        // to the currently active target on the same server.
         TargetRef origin = joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         joinRoutingState.clear(sid, ev.channel());
 
@@ -804,8 +755,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
         ensureTargetExists(dest);
         ui.appendError(dest, "(join)", rendered);
-
-        // Always mirror to status (unless it's the same target).
         if (!dest.equals(status)) {
           ui.appendError(status, "(join)", rendered);
         }
@@ -852,13 +801,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     if (raw == null) return null;
     String s = raw.trim();
     if (s.isEmpty()) return s;
-
-    // Some UI paths wrap self-nick in parentheses.
     if (s.startsWith("(") && s.endsWith(")") && s.length() > 2) {
       s = s.substring(1, s.length() - 1).trim();
     }
-
-    // Strip common IRC user-mode prefixes if they appear.
     while (!s.isEmpty()) {
       char c = s.charAt(0);
       if (c == '@' || c == '+' || c == '%' || c == '~' || c == '&') {
@@ -879,7 +824,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     int i = 0;
     final int len = message.length();
     while (i < len) {
-      // Skip non-nick chars.
       while (i < len && !isNickChar(message.charAt(i))) i++;
       if (i >= len) break;
       int start = i;

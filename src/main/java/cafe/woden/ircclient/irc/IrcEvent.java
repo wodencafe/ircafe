@@ -95,8 +95,6 @@ public sealed interface IrcEvent permits
   /**
    * A collected IRCv3 {@code CHATHISTORY} batch.
    *
-   * <p>Step 4C: we only collect messages framed by IRCv3 {@code BATCH} and surface a summary.
-   * We do not render or persist these lines until Step 4D.
    */
   record ChatHistoryBatchReceived(
       Instant at,

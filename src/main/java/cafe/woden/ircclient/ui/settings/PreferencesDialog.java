@@ -142,7 +142,6 @@ public class PreferencesDialog {
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
-    // Network settings are split into two separate tabs: one for proxy/TLS and one for user lookups/enrichment.
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
@@ -167,7 +166,6 @@ public class PreferencesDialog {
             javax.swing.JOptionPane.ERROR_MESSAGE);
         return;
       }
-      // Normalize what we persist (trimmed + non-blank default)
       timestamps.format.setText(timestampFormatV);
 
       boolean presenceFoldsV = presenceFolds.isSelected();
@@ -182,9 +180,6 @@ public class PreferencesDialog {
 
       int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
       int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
-
-      // SOCKS proxy settings.
-      // Note: changing these affects new connections/fetches; existing IRC connections may require reconnect.
       IrcProperties.Proxy proxyCfg;
       try {
         boolean proxyEnabledV = proxy.enabled.isSelected();
@@ -219,8 +214,6 @@ public class PreferencesDialog {
             javax.swing.JOptionPane.ERROR_MESSAGE);
         return;
       }
-
-      // Heartbeat / idle timeout detection.
       IrcProperties.Heartbeat heartbeatCfg;
       try {
         boolean hbEnabledV = heartbeat.enabled.isSelected();
@@ -265,15 +258,12 @@ public class PreferencesDialog {
       boolean uiePeriodicRefreshEnabledRawV = enrichment.periodicRefreshEnabled.isSelected();
       int uiePeriodicRefreshIntervalV = ((Number) enrichment.periodicRefreshIntervalSeconds.getValue()).intValue();
       int uiePeriodicRefreshNicksPerTickV = ((Number) enrichment.periodicRefreshNicksPerTick.getValue()).intValue();
-
-      // If enrichment is disabled, dependent options should behave as disabled even if checked.
       boolean uieWhoisFallbackEnabledV = userInfoEnrichmentEnabledV && uieWhoisFallbackEnabledRawV;
       boolean uiePeriodicRefreshEnabledV = userInfoEnrichmentEnabledV && uiePeriodicRefreshEnabledRawV;
 
       UiSettings prev = settingsBus.get();
       boolean outgoingColorEnabledV = outgoing.enabled.isSelected();
       String outgoingHexV = UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
-      // Normalize the text field to a canonical #RRGGBB form.
       outgoing.hex.setText(outgoingHexV);
 
       UiSettings next = new UiSettings(
@@ -302,8 +292,6 @@ public class PreferencesDialog {
           userhostMaxPerMinuteV,
           userhostNickCooldownV,
           userhostMaxNicksV,
-
-          // User info enrichment (fallback)
           userInfoEnrichmentEnabledV,
           uieUserhostMinIntervalV,
           uieUserhostMaxPerMinuteV,
@@ -343,8 +331,6 @@ public class PreferencesDialog {
 
       runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
       runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
-
-      // Logging settings (take effect on next restart)
       runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
       runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
       runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
@@ -361,8 +347,6 @@ public class PreferencesDialog {
       runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
       runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
       runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
-
-      // User info enrichment (fallback).
       runtimeConfig.rememberUserInfoEnrichmentEnabled(next.userInfoEnrichmentEnabled());
       runtimeConfig.rememberUserInfoEnrichmentWhoisFallbackEnabled(next.userInfoEnrichmentWhoisFallbackEnabled());
 
@@ -377,21 +361,13 @@ public class PreferencesDialog {
       runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(next.userInfoEnrichmentPeriodicRefreshEnabled());
       runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
       runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
-
-      // Proxy settings (take effect immediately for new network operations).
       runtimeConfig.rememberClientProxy(proxyCfg);
       NetProxyContext.configure(proxyCfg);
-
-      // Heartbeat settings (take effect immediately; active timers are rescheduled below).
       runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
       NetHeartbeatContext.configure(heartbeatCfg);
-
-      // Reschedule active heartbeat timers immediately so check period changes apply without reconnect.
       if (ircClientService != null) {
         ircClientService.rescheduleActiveHeartbeats();
       }
-
-      // TLS trust-all setting (takes effect immediately for new TLS sockets / HTTPS fetches).
       boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
       runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
       NetTlsContext.configure(trustAllTlsV);
@@ -402,9 +378,6 @@ public class PreferencesDialog {
     };
 
     apply.addActionListener(e -> doApply.run());
-
-    // Construct dialog early so we can attach a CloseableScope that cleans up decorators/listeners
-    // regardless of exit path (OK, Cancel, window close).
     final JDialog d = createDialog(owner);
     this.dialog = d;
 
@@ -424,12 +397,8 @@ public class PreferencesDialog {
     buttons.add(apply);
     buttons.add(ok);
     buttons.add(cancel);
-
-    // Tabs
     JTabbedPane tabs = new JTabbedPane();
 
-    // Step 2 scaffolding: add the future tab layout, while leaving the current tabs intact.
-    // We'll migrate settings into these tabs step-by-step.
     tabs.addTab("Appearance", wrapTab(appearancePanel));
     tabs.addTab("Startup & Connection", wrapTab(startupPanel));
     tabs.addTab("Chat", wrapTab(chatPanel));
@@ -464,7 +433,6 @@ public class PreferencesDialog {
    * making controls appear to "stick" expanded instead of shrinking.
    */
   private static JScrollPane wrapTab(JPanel panel) {
-    // Top-align content and ensure it reflows with the viewport width.
     ScrollableViewportWidthPanel wrapper = new ScrollableViewportWidthPanel(new BorderLayout());
     wrapper.add(panel, BorderLayout.NORTH);
 
@@ -490,9 +458,6 @@ public class PreferencesDialog {
     @Override
     public Dimension getMinimumSize() {
       Dimension d = super.getMinimumSize();
-      // Allow the scrollpane viewport to shrink the view horizontally.
-      // Without this, a large minimum width from child components can
-      // cause the tab to "stick" wide after resizing larger.
       return new Dimension(0, d != null ? d.height : 0);
     }
 
@@ -558,11 +523,9 @@ public class PreferencesDialog {
     t.setFont(UIManager.getFont("Label.font"));
     t.setForeground(UIManager.getColor("Label.foreground"));
     Dimension pref = t.getPreferredSize();
-    // Allow wrapping/shrinking in MigLayout + scrollpane viewport.
     t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
     return t;
   }
-
 
 private static JTextArea subtleInfoText() {
   JTextArea t = new JTextArea();
@@ -612,13 +575,11 @@ private static JTextArea buttonWrapText(String text) {
 }
 
 private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
-  // Make long checkbox text wrap nicely and shrink with the dialog.
   box.setText("");
   JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[]6[grow,fill]", "[]"));
   row.setOpaque(false);
 
   JTextArea label = buttonWrapText(labelText);
-  // Clicking the label toggles the checkbox (behaves like a normal checkbox label).
   label.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
   label.addMouseListener(new java.awt.event.MouseAdapter() {
     @Override
@@ -673,7 +634,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     header.putClientProperty(FlatClientProperties.STYLE, "font:+4");
 
     JTextArea body = new JTextArea(message + "\n\n" +
-        "This tab is a placeholder (Step 2). We'll move the actual controls here in later steps.");
+        "This tab is a placeholder. Controls will move here later.");
     body.setLineWrap(true);
     body.setWrapStyleWord(true);
     body.setEditable(false);
@@ -780,7 +741,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       if (nickColorOverridesDialog != null) {
         nickColorOverridesDialog.open(owner);
       }
-      // If overrides were changed, refresh the preview (even though samples may not be overridden).
       updatePreview.run();
     });
 
@@ -794,8 +754,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         "Overrides always win over the palette."), "span 2, growx, wmin 0, wrap");
     panel.add(new JLabel("Preview:"), "span 2, wrap");
     panel.add(preview, "span 2, growx");
-
-    // Seed preview + enabled state.
     updatePreview.run();
 
     return new NickColorControls(enabled, minContrast, overrides, preview, panel);
@@ -810,14 +768,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     imageEmbedsCollapsed.setSelected(current.imageEmbedsCollapsedByDefault());
     imageEmbedsCollapsed.setToolTipText("If enabled, newly inserted inline images start collapsed (header shown; click to expand).");
     imageEmbedsCollapsed.setEnabled(imageEmbeds.isSelected());
-
-    // Max width cap (0 = no extra cap; images still scale to fit the viewport).
     JSpinner imageMaxWidth = numberSpinner(current.imageEmbedsMaxWidthPx(), 0, 4096, 10, closeables);
     imageMaxWidth.setToolTipText("Maximum width for inline images (pixels).\n" +
         "If 0, IRCafe will only scale images down to fit the chat viewport.");
     imageMaxWidth.setEnabled(imageEmbeds.isSelected());
-
-    // Max height cap (0 = no extra cap; images still scale to fit the viewport / max-width cap).
     JSpinner imageMaxHeight = numberSpinner(current.imageEmbedsMaxHeightPx(), 0, 4096, 10, closeables);
     imageMaxHeight.setToolTipText("Maximum height for inline images (pixels).\n" +
         "If 0, IRCafe will only scale images down based on viewport width (and max width cap, if set).");
@@ -936,7 +890,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private LoggingControls buildLoggingControls(LogProperties logProps, List<AutoCloseable> closeables) {
-    // ---- Logging (persisted under ircafe.logging.*; takes effect on next restart) ----
     boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
     boolean logSoftIgnoredCurrent = logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
 
@@ -965,7 +918,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     retentionDays.setToolTipText("Retention window in days (0 disables retention).\n" +
         "Only used when Keep forever is unchecked.\n\n" +
         "Note: applied on next restart.");
-
 
     String dbBaseNameCurrent = (logProps != null && logProps.hsqldb() != null) ? logProps.hsqldb().fileBaseName() : "ircafe-chatlog";
     boolean dbNextToConfigCurrent = logProps == null || (logProps.hsqldb() != null && Boolean.TRUE.equals(logProps.hsqldb().nextToRuntimeConfig()));
@@ -1001,12 +953,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     Runnable updateLoggingEnabledState = () -> {
       boolean en = loggingEnabled.isSelected();
       loggingSoftIgnore.setEnabled(en);
-      // The history settings are meaningful only when logging is enabled, but users may want to pre-configure.
-      // We leave them enabled; the info text communicates that logging must be enabled.
       dbBaseName.setEnabled(true);
       dbNextToConfig.setEnabled(true);
-
-      // Retention UI state
       updateRetentionUi.run();
     };
     loggingEnabled.addActionListener(e -> updateLoggingEnabledState.run());
@@ -1082,17 +1030,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   private NetworkAdvancedControls buildNetworkAdvancedControls(UiSettings current, List<AutoCloseable> closeables) {
     IrcProperties.Proxy p = NetProxyContext.settings();
     if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
-
-    // Split the old "Network / Advanced" tab into:
-    //   - Network: Proxy + TLS
-    //   - User lookups: Hostmask discovery + roster enrichment
     JPanel networkPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]6[]6[]6[]"));
-    // hidemode=3 ensures invisible components don't reserve layout space.
     JPanel userLookupsPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
 
     networkPanel.add(tabTitle("Network"), "span 2, growx, wmin 0, wrap");
-
-    // ---- SOCKS proxy ----
     networkPanel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wmin 0, wrap");
     networkPanel.add(helpText(
         "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n" +
@@ -1165,8 +1106,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     networkPanel.add(connectTimeoutSeconds, "w 110!");
     networkPanel.add(new JLabel("Read timeout (sec):"));
     networkPanel.add(readTimeoutSeconds, "w 110!");
-
-    // ---- TLS / SSL ----
     networkPanel.add(sectionTitle("TLS / SSL"), "span 2, growx, wmin 0, wrap");
     networkPanel.add(helpText(
         "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n" +
@@ -1178,8 +1117,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
     JComponent trustAllTlsRow = wrapCheckBox(trustAllTlsCertificates, "Trust all TLS/SSL certificates (insecure)");
     networkPanel.add(trustAllTlsRow, "span 2, growx, wmin 0, wrap");
-
-    // ---- Heartbeat / idle timeout ----
     networkPanel.add(sectionTitle("Connection heartbeat"), "span 2, growx, wmin 0, wrap");
     networkPanel.add(helpText(
         "IRCafe can detect 'silent' disconnects by monitoring inbound traffic.\n" +
@@ -1232,10 +1169,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         heartbeatCheckPeriodSeconds,
         heartbeatTimeoutSeconds
     );
-
-    // -------------------------
-    // User lookups (cleaner UI)
-    // -------------------------
     userLookupsPanel.add(tabTitle("User lookups"), "growx, wrap");
 
     JPanel userLookupsIntro = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
@@ -1252,8 +1185,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     userLookupsIntro.add(userLookupsBlurb, "growx, wmin 0");
     userLookupsIntro.add(userLookupsHelp, "align right");
     userLookupsPanel.add(userLookupsIntro, "growx, wrap");
-
-    // ---- Rate limit presets ----
     JPanel lookupPresetPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
     lookupPresetPanel.setOpaque(false);
 
@@ -1284,9 +1215,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     lookupPresetPanel.add(lookupPreset, "w 220!");
     lookupPresetPanel.add(lookupPresetHint, "span 2, growx, wmin 0, wrap");
     userLookupsPanel.add(lookupPresetPanel, "growx, wrap");
-
-    // ---- Hostmask discovery (USERHOST) ----
-    // hidemode=3 ensures that when we hide advanced controls (non-Custom presets), the section shrinks.
     JPanel hostmaskPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
     hostmaskPanel.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createTitledBorder("Hostmask discovery"),
@@ -1331,9 +1259,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     hostmaskAdvanced.add(userhostNickCooldownMinutes, "w 110!");
     hostmaskAdvanced.add(new JLabel("Max nicks/command:"));
     hostmaskAdvanced.add(userhostMaxNicksPerCommand, "w 110!");
-
-    // ---- User info enrichment (fallback) ----
-    // hidemode=3 ensures that when we hide advanced controls (non-Custom presets), the section shrinks.
     JPanel enrichmentPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
     enrichmentPanel.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createTitledBorder("Roster enrichment (fallback)"),
@@ -1409,8 +1334,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
     JPanel enrichmentAdvanced = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]10[]6[]6[]10[]6[]6[]"));
     enrichmentAdvanced.setOpaque(false);
-
-    // USERHOST tuning
     JLabel userhostHdr = new JLabel("USERHOST tuning");
     userhostHdr.setFont(userhostHdr.getFont().deriveFont(Font.BOLD));
     enrichmentAdvanced.add(userhostHdr, "span 2, growx, wmin 0, wrap");
@@ -1422,8 +1345,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     enrichmentAdvanced.add(enrichmentUserhostNickCooldownMinutes, "w 110!");
     enrichmentAdvanced.add(new JLabel("Max nicks/cmd:"));
     enrichmentAdvanced.add(enrichmentUserhostMaxNicksPerCommand, "w 110!");
-
-    // WHOIS tuning
     JLabel whoisHdr = new JLabel("WHOIS tuning");
     whoisHdr.setFont(whoisHdr.getFont().deriveFont(Font.BOLD));
     enrichmentAdvanced.add(whoisHdr, "span 2, growx, wmin 0, wrap");
@@ -1431,8 +1352,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     enrichmentAdvanced.add(enrichmentWhoisMinIntervalSeconds, "w 110!");
     enrichmentAdvanced.add(new JLabel("Nick cooldown (min):"));
     enrichmentAdvanced.add(enrichmentWhoisNickCooldownMinutes, "w 110!");
-
-    // Periodic refresh tuning
     JLabel refreshHdr = new JLabel("Periodic refresh tuning");
     refreshHdr.setFont(refreshHdr.getFont().deriveFont(Font.BOLD));
     enrichmentAdvanced.add(refreshHdr, "span 2, growx, wmin 0, wrap");
@@ -1440,80 +1359,55 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     enrichmentAdvanced.add(enrichmentPeriodicRefreshIntervalSeconds, "w 110!");
     enrichmentAdvanced.add(new JLabel("Nicks per tick:"));
     enrichmentAdvanced.add(enrichmentPeriodicRefreshNicksPerTick, "w 110!");
-
-    // Apply a preset to all numeric tuning knobs.
     Consumer<LookupRatePreset> applyLookupPreset = preset -> {
       if (preset == null || preset == LookupRatePreset.CUSTOM) return;
 
       switch (preset) {
         case CONSERVATIVE -> {
-          // Hostmask discovery
           userhostMinIntervalSeconds.setValue(10);
           userhostMaxPerMinute.setValue(2);
           userhostNickCooldownMinutes.setValue(60);
           userhostMaxNicksPerCommand.setValue(5);
-
-          // Enrichment USERHOST
           enrichmentUserhostMinIntervalSeconds.setValue(30);
           enrichmentUserhostMaxPerMinute.setValue(2);
           enrichmentUserhostNickCooldownMinutes.setValue(180);
           enrichmentUserhostMaxNicksPerCommand.setValue(5);
-
-          // Enrichment WHOIS
           enrichmentWhoisMinIntervalSeconds.setValue(120);
           enrichmentWhoisNickCooldownMinutes.setValue(240);
-
-          // Periodic refresh
           enrichmentPeriodicRefreshIntervalSeconds.setValue(600);
           enrichmentPeriodicRefreshNicksPerTick.setValue(1);
         }
         case BALANCED -> {
-          // Hostmask discovery
           userhostMinIntervalSeconds.setValue(5);
           userhostMaxPerMinute.setValue(6);
           userhostNickCooldownMinutes.setValue(30);
           userhostMaxNicksPerCommand.setValue(5);
-
-          // Enrichment USERHOST
           enrichmentUserhostMinIntervalSeconds.setValue(15);
           enrichmentUserhostMaxPerMinute.setValue(4);
           enrichmentUserhostNickCooldownMinutes.setValue(60);
           enrichmentUserhostMaxNicksPerCommand.setValue(5);
-
-          // Enrichment WHOIS
           enrichmentWhoisMinIntervalSeconds.setValue(60);
           enrichmentWhoisNickCooldownMinutes.setValue(120);
-
-          // Periodic refresh
           enrichmentPeriodicRefreshIntervalSeconds.setValue(300);
           enrichmentPeriodicRefreshNicksPerTick.setValue(2);
         }
         case RAPID -> {
-          // Hostmask discovery
           userhostMinIntervalSeconds.setValue(2);
           userhostMaxPerMinute.setValue(15);
           userhostNickCooldownMinutes.setValue(10);
           userhostMaxNicksPerCommand.setValue(5);
-
-          // Enrichment USERHOST
           enrichmentUserhostMinIntervalSeconds.setValue(5);
           enrichmentUserhostMaxPerMinute.setValue(10);
           enrichmentUserhostNickCooldownMinutes.setValue(15);
           enrichmentUserhostMaxNicksPerCommand.setValue(5);
-
-          // Enrichment WHOIS
           enrichmentWhoisMinIntervalSeconds.setValue(15);
           enrichmentWhoisNickCooldownMinutes.setValue(30);
-
-          // Periodic refresh
           enrichmentPeriodicRefreshIntervalSeconds.setValue(60);
           enrichmentPeriodicRefreshNicksPerTick.setValue(3);
         }
         default -> { /* no-op */ }
       }
     };
-
-    // ---- Simple-mode summary lines (always reflect the effective values) ----
     Runnable updateHostmaskSummary = () -> {
       if (!userhostEnabled.isSelected()) {
         hostmaskSummary.setText("Disabled");
@@ -1608,8 +1502,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
       updateEnrichmentSummary.run();
     };
-
-    // Wire listeners
     userhostEnabled.addActionListener(e -> {
       updateHostmaskState.run();
       updateAllSummaries.run();
@@ -1667,8 +1559,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     enrichmentWhoisNickCooldownMinutes.addChangeListener(summaryChange);
     enrichmentPeriodicRefreshIntervalSeconds.addChangeListener(summaryChange);
     enrichmentPeriodicRefreshNicksPerTick.addChangeListener(summaryChange);
-
-    // Inline "Why do I need this?" help buttons for sub-options
     JPanel enrichmentWhoisRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     enrichmentWhoisRow.setOpaque(false);
     enrichmentWhoisRow.add(enrichmentWhoisFallbackEnabled, "growx");
@@ -1678,8 +1568,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     enrichmentRefreshRow.setOpaque(false);
     enrichmentRefreshRow.add(enrichmentPeriodicRefreshEnabled, "growx");
     enrichmentRefreshRow.add(refreshHelp, "align right");
-
-    // Layout content
     hostmaskPanel.add(userhostEnabled, "growx");
     hostmaskPanel.add(hostmaskHelp, "align right, wrap");
     hostmaskPanel.add(hostmaskSummary, "span 2, growx, wmin 0, wrap");
@@ -1691,8 +1579,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     enrichmentPanel.add(enrichmentWhoisRow, "span 2, gapleft 18, growx, wrap");
     enrichmentPanel.add(enrichmentRefreshRow, "span 2, gapleft 18, growx, wrap");
     enrichmentPanel.add(enrichmentAdvanced, "span 2, growx, wrap, hidemode 3");
-
-    // Initialize UI state after wiring listeners.
     hostmaskAdvanced.setVisible(false);
     enrichmentAdvanced.setVisible(false);
     updateHostmaskState.run();
@@ -1725,7 +1611,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
     return new NetworkAdvancedControls(proxyControls, userhostControls, enrichmentControls, heartbeatControls, trustAllTlsCertificates, networkPanel, userLookupsPanel);
   }
-
 
   private JPanel buildAppearancePanel(ThemeControls theme, FontControls fonts) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
@@ -1798,8 +1683,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private JPanel buildHistoryAndStoragePanel(LoggingControls logging, HistoryControls history) {
-    // History & Storage tab panel (history paging + logging/DB settings)
-    // Keep labels right-aligned (common form pattern), but ensure checkboxes spanning both columns are left-aligned.
     JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]6[]6[]10[]6[]"));
 
     panel.add(tabTitle("History & Storage"), "span 2, growx, wmin 0, wrap");
@@ -1861,8 +1744,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       return null;
     }
   }
-
-
 
   private enum LookupRatePreset {
     CONSERVATIVE("Conservative"),
@@ -2036,7 +1917,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
                                          JPanel networkPanel,
                                          JPanel userLookupsPanel) {
   }
-
 
   private static final class NickColorPreviewPanel extends JPanel {
     private static final String[] SAMPLE_NICKS = new String[] {

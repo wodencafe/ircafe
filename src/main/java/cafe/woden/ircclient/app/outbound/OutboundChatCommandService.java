@@ -322,7 +322,6 @@ public class OutboundChatCommandService {
   }
 
 
-
   public void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
@@ -348,18 +347,12 @@ public class OutboundChatCommandService {
       ui.appendStatus(status, "(chathistory)", "Example: /chathistory 100");
       return;
     }
-
-    // Keep this conservative for now (avoid accidental flooding).
     if (lim > 200) lim = 200;
-
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
-
-    // Step 4B: for now, we request BEFORE now. Later steps will use the client-side watermark
-    // to request BEFORE the oldest loaded message.
     Instant before = Instant.now();
 
     String ts = CHATHISTORY_TS_FMT.format(before);

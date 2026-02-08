@@ -92,16 +92,12 @@ public final class DbChatHistoryService implements ChatHistoryService {
    */
   private boolean shouldIncludeInHistory(LogLine line) {
     if (line == null) return false;
-
-    // Respect soft-ignore visibility (hard-ignore lines should never reach the DB).
     if (line.softIgnored() && props != null && !props.logSoftIgnoredLines()) {
       return false;
     }
 
     LogKind kind = line.kind();
     if (kind == null) kind = LogKind.STATUS;
-
-    // Skip noisy session boilerplate in history.
     if (kind == LogKind.STATUS) {
       String from = line.fromNick();
       if (from != null) {
@@ -171,7 +167,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     exec.execute(() -> {
       try {
-        // Step 4E: DB-first; if DB is exhausted, try remote CHATHISTORY to backfill.
         ArrayList<LogRow> rows = new ArrayList<>();
         List<LogRow> first = repo.fetchOlderRows(serverId, tgt, beforeTs, beforeId, limitFinal);
         if (first != null && !first.isEmpty()) rows.addAll(first);
@@ -263,7 +258,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
   }
 
   /**
-   * Step 4E: try to request remote history via CHATHISTORY and wait for the next ingest completion.
    *
    * <p>This is best-effort: if the server doesn't support chathistory or no response arrives,
    * we fail open (return false) and let DB-only behavior continue.

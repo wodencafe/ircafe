@@ -20,7 +20,6 @@ import java.util.function.Consumer;
  * A pinned chat view which shares the transcript document with the main chat,
  * but can be split/undocked into its own window.
  *
- * <p>Step 4: embed a MessageInputPanel so the pinned view has its own input bar.
  *
  * <p>We are intentionally NOT doing the "context-aware outbound" refactor yet.
  * For now, sending from a pinned dock activates the target first, then emits

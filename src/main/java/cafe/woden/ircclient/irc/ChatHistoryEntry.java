@@ -5,7 +5,6 @@ import java.time.Instant;
 /**
  * A single line returned as part of an IRCv3 {@code CHATHISTORY} batch.
  *
- * <p>Step 4C: this is collected in-memory only (not displayed or persisted) until Step 4D.
  */
 public record ChatHistoryEntry(
     Instant at,

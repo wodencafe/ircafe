@@ -3,7 +3,6 @@ package cafe.woden.ircclient.irc;
 final class PircbotxWhoUserhostParsers {
   private PircbotxWhoUserhostParsers() {}
 
-
   /**
    * Parse RPL_ISUPPORT (005) and return true if WHOX token is present.
    *
@@ -14,8 +13,6 @@ final class PircbotxWhoUserhostParsers {
     if (line == null) return false;
     String s = line.trim();
     if (s.isEmpty()) return false;
-
-    // Drop prefix (e.g., ":server ")
     if (s.startsWith(":")) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
@@ -23,8 +20,6 @@ final class PircbotxWhoUserhostParsers {
 
     String[] toks = s.split("\\s+");
     if (toks.length < 3) return false;
-
-    // 005 <me> <tokens...> :are supported by this server
     if (!"005".equals(toks[0])) return false;
 
     for (int i = 2; i < toks.length; i++) {
@@ -59,8 +54,6 @@ final class PircbotxWhoUserhostParsers {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
-
-    // Drop prefix (e.g., ":server ")
     if (s.startsWith(":")) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
@@ -69,8 +62,6 @@ final class PircbotxWhoUserhostParsers {
     String[] toks = s.split("\\s+");
     if (toks.length < 8) return null;
     if (!"352".equals(toks[0])) return null;
-
-    // 352 <me> <channel> <user> <host> <server> <nick> <flags> ...
     String channel = toks[2];
     String user = toks[3];
     String host = toks[4];
@@ -87,7 +78,6 @@ final class PircbotxWhoUserhostParsers {
     return new ParsedWhoReply(channel, nick, user, host, flags);
   }
 
-
   /**
    * Strict parse for WHOX results for the IRCafe-issued field set: %tcuhnaf
    *
@@ -101,23 +91,14 @@ final class PircbotxWhoUserhostParsers {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
-
-    // Drop prefix (e.g., ":server ")
     if (s.startsWith(":")) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
     }
-
-    // Remove trailing ":" parameter (usually realname)
     int colon = s.indexOf(" :");
     String head = colon >= 0 ? s.substring(0, colon).trim() : s;
 
     String[] toks = head.split("\\s+");
-    // Typical shape for the IRCafe-issued field set (%tcuhnaf or equivalent):
-    //   354 <me> <token> <channel> <user> <host> <nick> <flags> <account>
-    // However, some networks honor the requested field order strictly and will return:
-    //   354 <me> <token> <channel> <user> <host> <nick> <account> <flags>
-    // And a few omit account/flags entirely.
     if (toks.length < 7) return null;
     if (!"354".equals(toks[0])) return null;
 
@@ -136,7 +117,6 @@ final class PircbotxWhoUserhostParsers {
     String flags = null;
     String account = null;
     if (f2 == null) {
-      // Only one extra field present.
       if (looksLikeWhoxFlags(f1)) flags = f1;
       else account = f1;
     } else {
@@ -144,8 +124,6 @@ final class PircbotxWhoUserhostParsers {
       boolean f2Flags = looksLikeWhoxFlags(f2);
       boolean f1Acct = looksLikeAccountToken(f1);
       boolean f2Acct = looksLikeAccountToken(f2);
-
-      // Prefer the most "obvious" assignment.
       if (f1Flags && f2Acct && !f2Flags) {
         flags = f1;
         account = f2;
@@ -153,7 +131,6 @@ final class PircbotxWhoUserhostParsers {
         flags = f2;
         account = f1;
       } else {
-        // Fall back to the historical interpretation (flags then account).
         flags = f1;
         account = f2;
       }
@@ -163,8 +140,6 @@ final class PircbotxWhoUserhostParsers {
     if (nick == null || nick.isBlank() || !PircbotxLineParseUtil.looksLikeNick(nick)) return null;
     if (user == null || user.isBlank() || !PircbotxLineParseUtil.looksLikeUser(user)) return null;
     if (host == null || host.isBlank() || !PircbotxLineParseUtil.looksLikeHost(host)) return null;
-
-    // Some servers send "*" / "0" for logged-out; normalize blanks to null here.
     if (account != null && account.isBlank()) account = null;
 
     String hm = nick + "!" + user + "@" + host;
@@ -185,8 +160,6 @@ final class PircbotxWhoUserhostParsers {
     if (line == null || expectedToken == null || expectedToken.isBlank()) return false;
     String s = line.trim();
     if (s.isEmpty()) return false;
-
-    // Drop prefix (e.g., ":server ")
     if (s.startsWith(":")) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
@@ -197,8 +170,6 @@ final class PircbotxWhoUserhostParsers {
     String[] toks = head.split("\\s+");
     if (toks.length < 4) return false;
     if (!"354".equals(toks[0])) return false;
-
-    // Common shape: 354 <me> <token> <channel> ...
     if (!expectedToken.equals(toks[2])) return false;
     return PircbotxLineParseUtil.looksLikeChannel(toks[3]);
   }
@@ -206,7 +177,6 @@ final class PircbotxWhoUserhostParsers {
   private static boolean looksLikeWhoxFlags(String s) {
     if (s == null || s.isBlank()) return false;
     if (s.length() > 32) return false;
-    // Common away markers (H/G) and user status prefixes (@/+/%/~/&).* may also appear.
     return s.indexOf('H') >= 0
         || s.indexOf('G') >= 0
         || s.indexOf('@') >= 0
@@ -219,11 +189,8 @@ final class PircbotxWhoUserhostParsers {
 
   private static boolean looksLikeAccountToken(String s) {
     if (s == null || s.isBlank()) return false;
-    // Logged-out markers commonly seen in WHOX.
     if ("*".equals(s) || "0".equals(s)) return true;
-    // Avoid treating obvious flags as accounts.
     if (looksLikeWhoxFlags(s) && s.length() <= 3) return false;
-    // Account names are typically nick-ish; be permissive.
     return s.matches("[A-Za-z0-9_\\-\\.\\[\\]\\\\`\\^\\{\\|\\}]+");
   }
 
@@ -232,22 +199,16 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
-
-    // Drop prefix (e.g., ":server ")
     if (s.startsWith(":")) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
     }
-
-    // Remove trailing ":" parameter (usually realname)
     int colon = s.indexOf(" :");
     String head = colon >= 0 ? s.substring(0, colon).trim() : s;
 
     String[] toks = head.split("\\s+");
     if (toks.length < 3) return null;
     if (!"354".equals(toks[0])) return null;
-
-    // toks: 354 <me> <fields...>
     java.util.List<String> fields = new java.util.ArrayList<>();
     for (int i = 2; i < toks.length; i++) {
       String t = toks[i];
@@ -255,8 +216,6 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
       fields.add(t);
     }
     if (fields.isEmpty()) return null;
-
-    // Optional querytype at start
     int idx = 0;
     if (PircbotxLineParseUtil.looksNumeric(fields.get(0))) idx++;
 
@@ -264,7 +223,6 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (idx < fields.size() && PircbotxLineParseUtil.looksLikeChannel(fields.get(idx))) {
       channel = fields.get(idx);
     } else {
-      // Channel might appear later depending on requested fields.
       for (String f : fields) {
         if (PircbotxLineParseUtil.looksLikeChannel(f)) {
           channel = f;
@@ -272,8 +230,6 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
         }
       }
     }
-
-    // Find a user/host pair.
     int userIdx = -1;
     int hostIdx = -1;
     for (int i = 0; i < fields.size(); i++) {
@@ -308,8 +264,6 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     String user = fields.get(userIdx);
     String host = fields.get(hostIdx);
     if (user == null || user.isBlank() || host == null || host.isBlank()) return null;
-
-    // Find nick after host, skipping server/host-like tokens, flags/hops, etc.
     String nick = null;
     for (int j = hostIdx + 1; j < fields.size(); j++) {
       String t = fields.get(j);
@@ -338,16 +292,11 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
-
-    // Drop prefix (e.g., ":server ")
     if (s.startsWith(":")) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
     }
-
-    // Quick check
     if (!s.startsWith("302 ") && !s.startsWith("302\t") && !s.startsWith("302\n")) {
-      // Sometimes the numeric is not at offset 0 due to stray formatting; fall back to token check.
     }
 
     String[] toks = s.split("\\s+");
@@ -375,9 +324,6 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
 
       String rhs = p.substring(eq + 1).trim();
       if (rhs.isEmpty()) continue;
-
-      // Strip away/available marker.
-      // Per RPL_USERHOST (302), '+' means not away and '-' means away.
       IrcEvent.AwayState as = IrcEvent.AwayState.UNKNOWN;
       if (rhs.charAt(0) == '+' || rhs.charAt(0) == '-') {
         as = (rhs.charAt(0) == '-') ? IrcEvent.AwayState.AWAY : IrcEvent.AwayState.HERE;

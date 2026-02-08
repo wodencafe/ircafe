@@ -25,7 +25,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * DB-backed {@link ChatHistoryIngestor}.
  *
- * <p>Step 4D: take collected CHATHISTORY batches and persist them into the embedded chat log DB
  * without rendering them to the transcript (rendering comes in later steps).
  */
 @Component
@@ -91,8 +90,6 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     if (total == 0) {
       return new ChatHistoryIngestResult(true, 0, 0, 0, 0L, 0L, "No history entries");
     }
-
-    // Convert entries -> candidates.
     ArrayList<LogLine> candidates = new ArrayList<>(total);
     for (ChatHistoryEntry e : entries) {
       if (e == null) continue;
@@ -106,8 +103,6 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
         case NOTICE -> LogKind.NOTICE;
         case PRIVMSG -> LogKind.CHAT;
       };
-
-      // CHATHISTORY is always "inbound" from the server perspective.
       candidates.add(new LogLine(
           serverId,
           tgt,
@@ -125,15 +120,11 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     if (candidates.isEmpty()) {
       return new ChatHistoryIngestResult(true, total, 0, total, 0L, 0L, "No parseable history entries");
     }
-
-    // Sort so inserted timestamps are stable (helps debug + later paging heuristics).
     candidates.sort(Comparator
         .comparingLong(LogLine::tsEpochMs)
         .thenComparing(LogLine::target)
         .thenComparing(l -> safe(l.fromNick()))
         .thenComparing(LogLine::text));
-
-    // De-dupe within the batch first.
     record Key(String serverId, String target, long ts, LogDirection dir, LogKind kind, String from, String text) {}
     LinkedHashMap<Key, LogLine> uniq = new LinkedHashMap<>();
     for (LogLine l : candidates) {
