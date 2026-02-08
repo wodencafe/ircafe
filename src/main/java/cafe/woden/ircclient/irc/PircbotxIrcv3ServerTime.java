@@ -3,29 +3,14 @@ package cafe.woden.ircclient.irc;
 import java.time.Instant;
 import java.util.Optional;
 
-/**
- * Best-effort extraction of IRCv3 {@code server-time} timestamps.
- *
- * <p>When {@code server-time} is negotiated, servers/bouncers will prefix inbound lines with IRCv3
- * message tags like {@code @time=2026-02-07T12:34:56.789Z}. Using that timestamp lets the client
- * correctly order/play back backlog, and prevents local-clock jitter from corrupting history.
- */
 final class PircbotxIrcv3ServerTime {
 
   private PircbotxIrcv3ServerTime() {
   }
-
-  /**
-   * Attempt to read {@code @time=} from a PircbotX event by reflection.
-   *
-   * <p>We avoid a hard compile-time dependency on any particular PircBotX event API for tags and
-   * instead fall back to parsing the raw line if available.
-   */
+  
   static Optional<Instant> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();
 
-    // 1) If the event exposes tags, try that first.
-    //    Many libraries use Map<String, String> or similar for IRCv3 message tags.
     Object tags = reflectCall(pircbotxEvent, "getTags");
     if (tags instanceof java.util.Map<?, ?> map && !map.isEmpty()) {
       Object v = map.get("time");
@@ -36,7 +21,6 @@ final class PircbotxIrcv3ServerTime {
       }
     }
 
-    // 2) Fall back to parsing raw line (preferred, since it works even if tags aren't mapped).
     Object raw = reflectCall(pircbotxEvent, "getRawLine");
     if (raw == null) raw = reflectCall(pircbotxEvent, "getLine");
     if (raw == null) raw = reflectCall(pircbotxEvent, "getRaw");
@@ -79,11 +63,6 @@ final class PircbotxIrcv3ServerTime {
     return Optional.empty();
   }
 
-  /**
-   * Backwards-compatible helper used by older call sites.
-   *
-   * <p>Returns {@code null} when no {@code @time=} tag is present or parsing fails.
-   */
   static Instant parseServerTimeFromRawLine(String rawLine) {
     return fromRawLine(rawLine).orElse(null);
   }
@@ -99,7 +78,6 @@ final class PircbotxIrcv3ServerTime {
     try {
       return Optional.of(Instant.parse(v));
     } catch (Exception ignored) {
-      // Some servers may emit non-ISO formats; ignore and fall back.
       return Optional.empty();
     }
   }
