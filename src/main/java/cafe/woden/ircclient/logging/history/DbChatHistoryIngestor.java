@@ -25,7 +25,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * DB-backed {@link ChatHistoryIngestor}.
  *
- * without rendering them to the transcript (rendering comes in later steps).
  */
 @Component
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")
