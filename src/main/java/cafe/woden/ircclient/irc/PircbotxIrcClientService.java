@@ -15,12 +15,14 @@ import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.reflect.Method;
+import java.util.OptionalLong;
 
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.pircbotx.PircBotX;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -43,13 +45,19 @@ public class PircbotxIrcClientService implements IrcClientService {
                                  ServerRegistry serverRegistry,
                                  PircbotxInputParserHookInstaller inputParserHookInstaller,
                                  PircbotxBotFactory botFactory,
-                                 PircbotxConnectionTimersRx timers, PlaybackCursorProvider playbackCursorProvider) {
+                                 PircbotxConnectionTimersRx timers,
+                                 ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
     this.serverRegistry = serverRegistry;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
     this.timers = timers;
-    this.playbackCursorProvider = playbackCursorProvider;
+
+    // Be robust: some deployments may not include logging, or may not component-scan the
+    // optional cursor provider. Fall back to a no-op provider instead of failing startup.
+    this.playbackCursorProvider = playbackCursorProviderProvider.getIfAvailable(
+        () -> (String sid) -> OptionalLong.empty()
+    );
   }
 
   /**
