@@ -37,8 +37,32 @@ public final class LogLineFactory {
         .build();
   }
 
+  /** Same as {@link #chat(TargetRef, String, String, boolean)} but with an explicit epoch timestamp. */
+  public LogLine chatAt(TargetRef target, String from, String text, boolean outgoingLocalEcho, long tsEpochMs) {
+    return baseAt(target, tsEpochMs)
+        .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
+        .kind(LogKind.CHAT)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(outgoingLocalEcho)
+        .softIgnored(false)
+        .build();
+  }
+
   public LogLine softIgnoredSpoiler(TargetRef target, String from, String text) {
     return base(target)
+        .direction(LogDirection.IN)
+        .kind(LogKind.SPOILER)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(true)
+        .build();
+  }
+
+  /** Same as {@link #softIgnoredSpoiler(TargetRef, String, String)} but with an explicit epoch timestamp. */
+  public LogLine softIgnoredSpoilerAt(TargetRef target, String from, String text, long tsEpochMs) {
+    return baseAt(target, tsEpochMs)
         .direction(LogDirection.IN)
         .kind(LogKind.SPOILER)
         .fromNick(normNick(from))
@@ -59,8 +83,32 @@ public final class LogLineFactory {
         .build();
   }
 
+  /** Same as {@link #action(TargetRef, String, String, boolean)} but with an explicit epoch timestamp. */
+  public LogLine actionAt(TargetRef target, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
+    return baseAt(target, tsEpochMs)
+        .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
+        .kind(LogKind.ACTION)
+        .fromNick(normNick(from))
+        .text(normText(action))
+        .outgoingLocalEcho(outgoingLocalEcho)
+        .softIgnored(false)
+        .build();
+  }
+
   public LogLine notice(TargetRef target, String from, String text) {
     return base(target)
+        .direction(LogDirection.IN)
+        .kind(LogKind.NOTICE)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(false)
+        .build();
+  }
+
+  /** Same as {@link #notice(TargetRef, String, String)} but with an explicit epoch timestamp. */
+  public LogLine noticeAt(TargetRef target, String from, String text, long tsEpochMs) {
+    return baseAt(target, tsEpochMs)
         .direction(LogDirection.IN)
         .kind(LogKind.NOTICE)
         .fromNick(normNick(from))
@@ -81,8 +129,32 @@ public final class LogLineFactory {
         .build();
   }
 
+  /** Same as {@link #status(TargetRef, String, String)} but with an explicit epoch timestamp. */
+  public LogLine statusAt(TargetRef target, String from, String text, long tsEpochMs) {
+    return baseAt(target, tsEpochMs)
+        .direction(LogDirection.SYSTEM)
+        .kind(LogKind.STATUS)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(false)
+        .build();
+  }
+
   public LogLine error(TargetRef target, String from, String text) {
     return base(target)
+        .direction(LogDirection.SYSTEM)
+        .kind(LogKind.ERROR)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(false)
+        .build();
+  }
+
+  /** Same as {@link #error(TargetRef, String, String)} but with an explicit epoch timestamp. */
+  public LogLine errorAt(TargetRef target, String from, String text, long tsEpochMs) {
+    return baseAt(target, tsEpochMs)
         .direction(LogDirection.SYSTEM)
         .kind(LogKind.ERROR)
         .fromNick(normNick(from))
@@ -112,6 +184,12 @@ public final class LogLineFactory {
   private Builder base(TargetRef target) {
     Objects.requireNonNull(target, "target");
     return new Builder(target.serverId(), target.target(), clock.millis());
+  }
+
+  private Builder baseAt(TargetRef target, long tsEpochMs) {
+    Objects.requireNonNull(target, "target");
+    long ts = (tsEpochMs > 0L) ? tsEpochMs : clock.millis();
+    return new Builder(target.serverId(), target.target(), ts);
   }
 
   private static String normNick(String s) {

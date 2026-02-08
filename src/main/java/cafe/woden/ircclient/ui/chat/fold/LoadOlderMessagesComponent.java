@@ -145,6 +145,17 @@ public final class LoadOlderMessagesComponent extends JPanel {
     }
   }
 
+  /**
+   * Programmatically request a load as if the user clicked the control.
+   *
+   * <p>This intentionally uses the same handler as the button click so all existing safeguards
+   * (READY/LOADING state, handler decline, etc.) remain in one place.
+   */
+  public void requestLoad() {
+    if (state != State.READY) return;
+    requestLoadOnce();
+  }
+
   private void applyTheme() {
     Color fg = UIManager.getColor("TextPane.foreground");
     Color link = UIManager.getColor("Component.linkColor");

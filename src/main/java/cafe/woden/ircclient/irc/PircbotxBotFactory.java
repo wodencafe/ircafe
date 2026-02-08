@@ -29,6 +29,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class PircbotxBotFactory {
 
+  /**
+   * PircbotX applies an outgoing-queue throttle ("message delay") to prevent flooding.
+   * <p>
+   * The historical default in the PircBot/PircBotX family is 1000ms, which can make
+   * CAP negotiation + multi-channel JOIN feel sluggish (especially with bouncers).
+   * <p>
+   * We pick a smaller delay to keep the UI snappy while still providing basic flood
+   * protection. If we later add a user-facing knob, this becomes the default.
+   */
+  private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
+
   private final ServerProxyResolver proxyResolver;
 
   public PircbotxBotFactory(ServerProxyResolver proxyResolver) {
@@ -63,6 +74,8 @@ public class PircbotxBotFactory {
         .setVersion(version)
         .addServer(s.host(), s.port())
         .setSocketFactory(socketFactory)
+        // Reduce output throttling so CAP/JOIN sequences don't take forever.
+        .setMessageDelay(DEFAULT_MESSAGE_DELAY_MS)
         // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
         .setCapEnabled(true)
         // Prefer hostmasks in the initial NAMES list (when supported). If unsupported, ignore.
@@ -75,6 +88,13 @@ public class PircbotxBotFactory {
         .addCapHandler(new EnableCapHandler("extended-join", true))
         // IRCv3 message-tags: enables tagged messages (required for account-tag on some networks).
         .addCapHandler(new EnableCapHandler("message-tags", true))
+        // IRCv3 server-time: tagged messages include @time=... so backlog/playback keeps real ordering.
+        .addCapHandler(new EnableCapHandler("server-time", true))
+        // IRCv3 batch: used to group history/playback into batches (required for chathistory).
+        .addCapHandler(new EnableCapHandler("batch", true))
+        // IRCv3 chathistory (draft): bouncers like soju can serve scrollback for infinite scroll.
+        .addCapHandler(new EnableCapHandler("draft/chathistory", true))
+        .addCapHandler(new EnableCapHandler("znc.in/playback", true))
         // IRCv3 account-tag: messages will include @account=... tags when supported.
         .addCapHandler(new EnableCapHandler("account-tag", true))
         .setAutoNickChange(true)

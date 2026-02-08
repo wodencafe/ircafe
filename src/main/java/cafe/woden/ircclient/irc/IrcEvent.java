@@ -35,6 +35,8 @@ public sealed interface IrcEvent permits
     IrcEvent.WhoisProbeCompleted,
     IrcEvent.WhoxSupportObserved,
     IrcEvent.WhoxSchemaCompatibleObserved,
+    IrcEvent.ServerTimeNotNegotiated,
+    IrcEvent.ChatHistoryBatchReceived,
     IrcEvent.Error,
     IrcEvent.CtcpRequestReceived
  {
@@ -86,6 +88,22 @@ public sealed interface IrcEvent permits
   record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
 
   record Notice(Instant at, String from, String text) implements IrcEvent {}
+
+  /** Warns the UI once when IRCv3 {@code server-time} is not negotiated on this connection. */
+  record ServerTimeNotNegotiated(Instant at, String message) implements IrcEvent {}
+
+  /**
+   * A collected IRCv3 {@code CHATHISTORY} batch.
+   *
+   * <p>Step 4C: we only collect messages framed by IRCv3 {@code BATCH} and surface a summary.
+   * We do not render or persist these lines until Step 4D.
+   */
+  record ChatHistoryBatchReceived(
+      Instant at,
+      String target,
+      String batchId,
+      List<ChatHistoryEntry> entries
+  ) implements IrcEvent {}
   record CtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
 
   record AwayStatusChanged(Instant at, boolean away, String message) implements IrcEvent {}

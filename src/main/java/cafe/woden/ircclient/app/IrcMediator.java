@@ -9,6 +9,8 @@ import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
+import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
@@ -25,6 +27,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -66,6 +69,12 @@ public class IrcMediator {
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
 
+  // Step 4D: persist collected CHATHISTORY batches into the chat log DB (when enabled).
+  private final ChatHistoryIngestor chatHistoryIngestor;
+
+  // Step 4E: coordinate remote-history requests with DB paging.
+  private final ChatHistoryIngestBus chatHistoryIngestBus;
+
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
   // Active target state is owned by TargetCoordinator.
@@ -100,7 +109,9 @@ public class IrcMediator {
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundChatCommandService outboundChatCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
-      InboundIgnorePolicy inboundIgnorePolicy
+      InboundIgnorePolicy inboundIgnorePolicy,
+      ChatHistoryIngestor chatHistoryIngestor,
+      ChatHistoryIngestBus chatHistoryIngestBus
   ) {
 
     this.irc = irc;
@@ -123,6 +134,8 @@ public class IrcMediator {
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
+    this.chatHistoryIngestor = chatHistoryIngestor;
+    this.chatHistoryIngestBus = chatHistoryIngestBus;
   }
 
   public void start() {
@@ -294,7 +307,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     return inboundIgnorePolicy.decide(sid, f, null, isCtcp);
   }
 
-  private void handleNoticeOrSpoiler(String sid, TargetRef status, String from, String text, boolean spoiler, boolean suppressOutput) {
+  private void handleNoticeOrSpoiler(String sid, TargetRef status, Instant at, String from, String text, boolean spoiler, boolean suppressOutput) {
     // CTCP replies come back as NOTICE with 0x01-wrapped payload.
     // Route them to the chat target where the request originated.
     ParsedCtcp ctcp = parseCtcp(text);
@@ -352,9 +365,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (suppressOutput) return;
         ensureTargetExists(dest);
         if (spoiler) {
-          ui.appendSpoilerChat(dest, "(ctcp)", rendered);
+          ui.appendSpoilerChatAt(dest, at, "(ctcp)", rendered);
         } else {
-          ui.appendStatus(dest, "(ctcp)", rendered);
+          ui.appendStatusAt(dest, at, "(ctcp)", rendered);
         }
         if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
         return;
@@ -364,9 +377,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     if (suppressOutput) return;
 
     if (spoiler) {
-      ui.appendSpoilerChat(status, "(notice) " + from, text);
+      ui.appendSpoilerChatAt(status, at, "(notice) " + from, text);
     } else {
-      ui.appendNotice(status, "(notice) " + from, text);
+      ui.appendNoticeAt(status, at, "(notice) " + from, text);
     }
   }
   public void stop() {
@@ -411,6 +424,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
       case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
       case ParsedInput.Ctcp cmd -> outboundCtcpWhoisCommandService.handleCtcp(disposables, cmd.nick(), cmd.command(), cmd.args());
+      case ParsedInput.ChatHistoryBefore cmd -> outboundChatCommandService.handleChatHistoryBefore(disposables, cmd.limit());
       case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
       case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
       case ParsedInput.Unknown cmd ->
@@ -521,9 +535,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+          postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
         } else {
-          postTo(chan, active, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+          postTo(chan, active, true, d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), false));
         }
 
         if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) {
@@ -542,9 +556,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(chan, active, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+          postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
         } else {
-          postTo(chan, active, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+          postTo(chan, active, true, d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), false));
         }
 
         if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) {
@@ -576,9 +590,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), ev.text()));
+          postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
         } else {
-          postTo(pm, true, d -> ui.appendChat(d, ev.from(), ev.text()));
+          postTo(pm, true, d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), false));
         }
       }
       case IrcEvent.PrivateAction ev -> {
@@ -591,9 +605,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(pm, true, d -> ui.appendSpoilerChat(d, ev.from(), "* " + ev.action()));
+          postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
         } else {
-          postTo(pm, true, d -> ui.appendAction(d, ev.from(), ev.action()));
+          postTo(pm, true, d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), false));
         }
       }
       case IrcEvent.Notice ev -> {
@@ -601,7 +615,53 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
         boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
         boolean suppress = d == InboundIgnorePolicy.Decision.HARD_DROP;
-        handleNoticeOrSpoiler(sid, status, ev.from(), ev.text(), spoiler, suppress);
+        handleNoticeOrSpoiler(sid, status, ev.at(), ev.from(), ev.text(), spoiler, suppress);
+      }
+      case IrcEvent.ServerTimeNotNegotiated ev -> {
+        // Warn once per application run for this server (emitted from the IRC layer).
+        ui.appendStatus(status, "(ircv3)", ev.message());
+      }
+      case IrcEvent.ChatHistoryBatchReceived ev -> {
+        // Step 4D: persist the collected batch into the local chat log DB (if enabled),
+        // but still do not render it to the transcript yet.
+        String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();
+        final TargetRef dest = new TargetRef(sid, target);
+        ensureTargetExists(dest);
+
+        int n = (ev.entries() == null) ? 0 : ev.entries().size();
+        ui.appendStatus(dest, "(chathistory)", "Received " + n + " history lines (batch " + ev.batchId() + "). Persisting… (still not displayed)");
+
+        chatHistoryIngestor.ingestAsync(sid, target, ev.batchId(), ev.entries(), result -> {
+          if (result == null) {
+            postTo(dest, false, d -> ui.appendStatus(d, "(chathistory)", "Persist finished (no details)."));
+            return;
+          }
+          String msg;
+          if (!result.enabled()) {
+            msg = "History batch not persisted: chat logging is disabled.";
+          } else if (result.message() != null) {
+            msg = result.message();
+          } else {
+            msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
+          }
+          postTo(dest, false, d -> ui.appendStatus(d, "(chathistory)", msg));
+
+          // Signal any waiters (Step 4E) that a history batch for this target completed.
+          try {
+            if (chatHistoryIngestBus != null) {
+              chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
+                  sid,
+                  target,
+                  ev.batchId(),
+                  result.total(),
+                  result.inserted(),
+                  result.earliestInsertedEpochMs(),
+                  result.latestInsertedEpochMs()
+              ));
+            }
+          } catch (Exception ignored) {
+          }
+        });
       }
       case IrcEvent.CtcpRequestReceived ev -> {
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
@@ -632,9 +692,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         final String rendered = sb.toString();
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(dest, true, d -> ui.appendSpoilerChat(d, "(ctcp)", rendered));
+          postTo(dest, true, d -> ui.appendSpoilerChatAt(d, ev.at(), "(ctcp)", rendered));
         } else {
-          postTo(dest, true, d -> ui.appendStatus(d, "(ctcp)", rendered));
+          postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(ctcp)", rendered));
         }
       }
       case IrcEvent.AwayStatusChanged ev -> {

@@ -192,6 +192,22 @@ public class CommandParser {
       return new ParsedInput.Ctcp(nick, cmd, args);
     }
 
+
+
+    // IRCv3 CHATHISTORY (debug/developer helper)
+    if (matchesCommand(line, "/chathistory") || matchesCommand(line, "/history")) {
+      String rest = matchesCommand(line, "/chathistory") ? argAfter(line, "/chathistory") : argAfter(line, "/history");
+      String r = rest == null ? "" : rest.trim();
+      int lim = 50;
+      if (!r.isEmpty()) {
+        try {
+          lim = Integer.parseInt(r);
+        } catch (NumberFormatException ignored) {
+          lim = 0;
+        }
+      }
+      return new ParsedInput.ChatHistoryBefore(lim);
+    }
     // Raw IRC line escape hatch.
     if (matchesCommand(line, "/quote")) {
       String rawLine = argAfter(line, "/quote");

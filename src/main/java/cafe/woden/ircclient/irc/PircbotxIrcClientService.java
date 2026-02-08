@@ -37,17 +37,19 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
   private final PircbotxConnectionTimersRx timers;
+  private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
                                  ServerRegistry serverRegistry,
                                  PircbotxInputParserHookInstaller inputParserHookInstaller,
                                  PircbotxBotFactory botFactory,
-                                 PircbotxConnectionTimersRx timers) {
+                                 PircbotxConnectionTimersRx timers, PlaybackCursorProvider playbackCursorProvider) {
     this.serverRegistry = serverRegistry;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
     this.timers = timers;
+    this.playbackCursorProvider = playbackCursorProvider;
   }
 
   /**
@@ -111,7 +113,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               timers::stopHeartbeat,
               this::scheduleReconnect,
               this::handleCtcpIfPresent,
-              disconnectOnSaslFailure
+              disconnectOnSaslFailure,
+              playbackCursorProvider
           );
 
           PircBotX bot = botFactory.build(s, version, listener);
@@ -119,7 +122,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
           // PircBotX tracks away-notify on the User model but doesn't publish a dedicated event.
           // We install a tiny InputParser hook so we can surface AWAY state changes into our own event bus.
-          inputParserHookInstaller.installAwayNotifyHook(bot, serverId, bus::onNext);
+          inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
 
           timers.startHeartbeat(c);
           // Run bot on IO thread; connect() completes immediately
@@ -244,6 +247,27 @@ public class PircbotxIrcClientService implements IrcClientService {
         })
         .subscribeOn(Schedulers.io());
   }
+
+  @Override
+  public Completable requestChatHistoryBefore(String serverId, String target, java.time.Instant beforeExclusive, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
+          PircbotxConnectionState c = conn(serverId);
+          if (!c.chatHistoryCapAcked.get()) {
+            throw new IllegalStateException("CHATHISTORY not negotiated (draft/chathistory): " + serverId);
+          }
+          // batch isn't strictly required by the draft spec, but soju relies on it and
+          // we will rely on batch framing in Step 4C.
+          if (!c.batchCapAcked.get()) {
+            throw new IllegalStateException("CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
+          }
+
+          java.time.Instant before = beforeExclusive == null ? java.time.Instant.now() : beforeExclusive;
+          String line = Ircv3ChatHistoryCommandBuilder.buildBeforeByTimestamp(target, before, limit);
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+  }
+
 
   @Override
   public Completable sendAction(String serverId, String target, String action) {

@@ -3,9 +3,13 @@ package cafe.woden.ircclient.irc;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.ArrayList;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -39,10 +43,26 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final String serverId;
   private final PircbotxConnectionState conn;
   private final FlowableProcessor<ServerIrcEvent> bus;
+  private final PlaybackCursorProvider playbackCursorProvider;
   private final Consumer<PircbotxConnectionState> heartbeatStopper;
   private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
   private final CtcpRequestHandler ctcpHandler;
   private final boolean disconnectOnSaslFailure;
+
+  // Step 4C: Collect IRCv3 CHATHISTORY lines framed by BATCH.
+  // We suppress rendering of those lines until Step 4D.
+  private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
+
+  private static final class ChatHistoryBatchBuffer {
+    final String batchId;
+    final String target;
+    final ArrayList<ChatHistoryEntry> entries = new ArrayList<>();
+
+    ChatHistoryBatchBuffer(String batchId, String target) {
+      this.batchId = batchId == null ? "" : batchId;
+      this.target = target == null ? "" : target;
+    }
+  }
 
   // SASL-related numerics per IRCv3:
   // 903 = RPL_SASLSUCCESS
@@ -79,6 +99,140 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   }
 
   private record ParsedJoinFailure(String channel, String message) {}
+
+  // --- Step 4C: IRCv3 BATCH/CHATHISTORY collection helpers ---
+
+  private record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
+
+  private static ParsedIrcLine parseIrcLine(String normalizedLine) {
+    if (normalizedLine == null) return null;
+    String s = normalizedLine.trim();
+    if (s.isEmpty()) return null;
+
+    String prefix = null;
+    if (s.startsWith(":")) {
+      int sp = s.indexOf(' ');
+      if (sp > 1) {
+        prefix = s.substring(1, sp);
+        s = s.substring(sp + 1).trim();
+      }
+    }
+
+    String trailing = null;
+    int idx = s.indexOf(" :");
+    if (idx >= 0) {
+      trailing = s.substring(idx + 2);
+      s = s.substring(0, idx).trim();
+    }
+
+    if (s.isEmpty()) return null;
+
+    String[] parts = s.split("\\s+");
+    if (parts.length == 0) return null;
+    String cmd = parts[0];
+    java.util.ArrayList<String> params = new java.util.ArrayList<>();
+    for (int i = 1; i < parts.length; i++) {
+      if (!parts[i].isBlank()) params.add(parts[i]);
+    }
+
+    return new ParsedIrcLine(prefix, cmd, params, trailing);
+  }
+
+  private static String nickFromPrefix(String prefix) {
+    if (prefix == null || prefix.isBlank()) return "";
+    String p = prefix;
+    int bang = p.indexOf('!');
+    if (bang > 0) p = p.substring(0, bang);
+    int at = p.indexOf('@');
+    if (at > 0) p = p.substring(0, at);
+    return p;
+  }
+
+  private static boolean isChatHistoryBatchType(String type) {
+    if (type == null) return false;
+    String t = type.toLowerCase(java.util.Locale.ROOT);
+    return t.contains("chathistory");
+  }
+
+  private boolean handleBatchControlLine(String originalLineWithTags, String normalizedLine) {
+    ParsedIrcLine pl = parseIrcLine(normalizedLine);
+    if (pl == null || pl.command() == null) return false;
+    if (!"BATCH".equalsIgnoreCase(pl.command())) return false;
+
+    java.util.List<String> params = pl.params();
+    String trailing = pl.trailing();
+    if (params == null || params.isEmpty()) {
+      return true; // swallow BATCH even if malformed
+    }
+
+    String first = params.get(0);
+    if (first == null || first.isBlank()) return true;
+
+    // START: BATCH +id <type> [args...] [:trailing]
+    if (first.startsWith("+")) {
+      String id = first.substring(1);
+      String type = (params.size() >= 2) ? params.get(1) : "";
+
+      if (isChatHistoryBatchType(type)) {
+        String target = (params.size() >= 3) ? params.get(2) : "";
+        // Some servers may use the trailing as the target; if we can't infer, keep blank.
+        if ((target == null || target.isBlank()) && trailing != null && !trailing.isBlank()) {
+          target = trailing;
+        }
+
+        activeChatHistoryBatches.put(id, new ChatHistoryBatchBuffer(id, target));
+        log.debug("[{}] CHATHISTORY BATCH start id={} target={} raw={}", serverId, id, target, normalizedLine);
+      }
+      return true;
+    }
+
+    // END: BATCH -id
+    if (first.startsWith("-")) {
+      String id = first.substring(1);
+      ChatHistoryBatchBuffer buf = activeChatHistoryBatches.remove(id);
+      if (buf != null) {
+        int n = buf.entries.size();
+        log.info("[{}] CHATHISTORY BATCH end id={} target={} lines={}", serverId, id, buf.target, n);
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.ChatHistoryBatchReceived(Instant.now(), buf.target, id, java.util.List.copyOf(buf.entries))));
+      }
+      return true;
+    }
+
+    return true;
+  }
+
+  private boolean collectChatHistoryFromUnknown(String originalLineWithTags, String normalizedLine, ChatHistoryBatchBuffer buf) {
+    if (buf == null) return false;
+    ParsedIrcLine pl = parseIrcLine(normalizedLine);
+    if (pl == null || pl.command() == null) return false;
+    String cmd = pl.command().toUpperCase(java.util.Locale.ROOT);
+    if (!"PRIVMSG".equals(cmd) && !"NOTICE".equals(cmd)) return false;
+
+    Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(originalLineWithTags);
+    if (at == null) at = Instant.now();
+
+    String from = nickFromPrefix(pl.prefix());
+    String text = pl.trailing();
+    if (text == null) text = "";
+
+    String target = (buf.target == null || buf.target.isBlank())
+        ? (pl.params() != null && !pl.params().isEmpty() ? pl.params().get(0) : "")
+        : buf.target;
+
+    if ("PRIVMSG".equals(cmd)) {
+      String action = PircbotxUtil.parseCtcpAction(text);
+      if (action != null) {
+        buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+        return true;
+      }
+      buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, text));
+      return true;
+    }
+
+    buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.NOTICE, target, from, text));
+    return true;
+  }
 
   private static ParsedJoinFailure parseJoinFailure(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return null;
@@ -125,7 +279,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Consumer<PircbotxConnectionState> heartbeatStopper,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
       CtcpRequestHandler ctcpHandler,
-      boolean disconnectOnSaslFailure
+      boolean disconnectOnSaslFailure,
+      PlaybackCursorProvider playbackCursorProvider
   ) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
@@ -134,6 +289,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.reconnectScheduler = Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
     this.ctcpHandler = Objects.requireNonNull(ctcpHandler, "ctcpHandler");
     this.disconnectOnSaslFailure = disconnectOnSaslFailure;
+    this.playbackCursorProvider = java.util.Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+  }
+
+  private Instant inboundAt(Object pircbotxEvent) {
+    // Use a single fallback Instant so every event emitted from this callback shares the same time
+    // when server-time isn't available.
+    Instant now = Instant.now();
+    return PircbotxIrcv3ServerTime.orNow(PircbotxIrcv3ServerTime.fromEvent(pircbotxEvent), now);
   }
 
     // Parsing helpers have been extracted into small, pure helper classes to keep this listener readable:
@@ -190,6 +353,32 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onMessage(MessageEvent event) {
       touchInbound();
+
+      // Step 4C: if this message is tagged as belonging to an active CHATHISTORY batch,
+      // collect it and suppress live rendering.
+      Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
+      if (batchId.isPresent()) {
+        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
+        if (buf != null) {
+          Instant at = inboundAt(event);
+          String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+          String msg = PircbotxUtil.safeStr(event::getMessage, "");
+          String action = PircbotxUtil.parseCtcpAction(msg);
+
+          String target = (buf.target == null || buf.target.isBlank())
+              ? (event.getChannel() != null ? event.getChannel().getName() : "")
+              : buf.target;
+
+          if (action != null) {
+            buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+          } else {
+            buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg));
+          }
+          return;
+        }
+      }
+
+      Instant at = inboundAt(event);
       String channel = event.getChannel().getName();
       // Passive capture: learn hostmask for userlist/ignore visualization.
       maybeEmitHostmaskObserved(channel, event.getUser());
@@ -200,13 +389,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
         bus.onNext(new ServerIrcEvent(serverId,
-            new IrcEvent.ChannelAction(Instant.now(), channel, event.getUser().getNick(), action)
+            new IrcEvent.ChannelAction(at, channel, event.getUser().getNick(), action)
         ));
         return;
       }
 
       bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.ChannelMessage(Instant.now(), channel, event.getUser().getNick(), msg)
+          new IrcEvent.ChannelMessage(at, channel, event.getUser().getNick(), msg)
       ));
     }
 
@@ -215,6 +404,25 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     public void onAction(ActionEvent event) {
       // PircBotX parses CTCP ACTION (/me) into ActionEvent for us.
       touchInbound();
+
+      // Step 4C: if this action is tagged as belonging to an active CHATHISTORY batch,
+      // collect it and suppress live rendering.
+      Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
+      if (batchId.isPresent()) {
+        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
+        if (buf != null) {
+          Instant at = inboundAt(event);
+          String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+          String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+
+          String fallbackTarget = (event.getChannel() != null) ? event.getChannel().getName() : from;
+          String target = (buf.target == null || buf.target.isBlank()) ? fallbackTarget : buf.target;
+
+          buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+          return;
+        }
+      }
+      Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
 
@@ -223,11 +431,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (event.getChannel() != null) {
         String channel = event.getChannel().getName();
         maybeEmitHostmaskObserved(channel, event.getUser());
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(Instant.now(), channel, from, action)));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(at, channel, from, action)));
       } else {
         maybeEmitHostmaskObserved("", event.getUser());
 
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(Instant.now(), from, action)));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action)));
       }
     }
 
@@ -247,6 +455,28 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onPrivateMessage(PrivateMessageEvent event) {
       touchInbound();
+
+      // Step 4C: if this PM is tagged as belonging to an active CHATHISTORY batch,
+      // collect it and suppress live rendering.
+      Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
+      if (batchId.isPresent()) {
+        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
+        if (buf != null) {
+          Instant at = inboundAt(event);
+          String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+          String msg = PircbotxUtil.safeStr(event::getMessage, "");
+          String action = PircbotxUtil.parseCtcpAction(msg);
+
+          String target = (buf.target == null || buf.target.isBlank()) ? from : buf.target;
+          if (action != null) {
+            buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+          } else {
+            buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg));
+          }
+          return;
+        }
+      }
+      Instant at = inboundAt(event);
       String from = event.getUser().getNick();
       String msg = event.getMessage();
 
@@ -256,18 +486,34 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(Instant.now(), from, action)));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action)));
         return;
       }
 
       if (ctcpHandler.handle(event.getBot(), from, msg)) return;
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(Instant.now(), from, msg)));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg)));
     }
 
     @Override
     public void onNotice(NoticeEvent event) {
       touchInbound();
+
+      // Step 4C: if this NOTICE is tagged as belonging to an active CHATHISTORY batch,
+      // collect it and suppress live rendering.
+      Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
+      if (batchId.isPresent()) {
+        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
+        if (buf != null) {
+          Instant at = inboundAt(event);
+          String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
+          String notice = PircbotxUtil.safeStr(event::getNotice, "");
+          String target = (buf.target == null || buf.target.isBlank()) ? "status" : buf.target;
+          buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.NOTICE, target, from, notice));
+          return;
+        }
+      }
+      Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       String notice = event.getNotice();
 
@@ -277,12 +523,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
       // No ignore filtering here (handled centrally in the app layer).
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(Instant.now(), from, notice)));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(at, from, notice)));
     }
 
     @Override
     public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
       touchInbound();
+      Instant at = inboundAt(event);
       log.info("CTCP: {}", event);
 
       String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
@@ -313,7 +560,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
 
       bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.CtcpRequestReceived(Instant.now(), from, cmd, arg, channel)
+          new IrcEvent.CtcpRequestReceived(at, from, cmd, arg, channel)
       ));
 
       super.onGenericCTCP(event);
@@ -323,6 +570,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     @Override
     public void onFinger(FingerEvent event) throws Exception {
       touchInbound();
+      Instant at = inboundAt(event);
       log.info("CTCP (FINGER): {}", event);
 
       String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
@@ -337,7 +585,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
       bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.CtcpRequestReceived(Instant.now(), from, "FINGER", null, channel)
+          new IrcEvent.CtcpRequestReceived(at, from, "FINGER", null, channel)
       ));
 
       super.onFinger(event);
@@ -422,6 +670,21 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       // - strip IRCv3 message tags ("@tag=value ... ")
       // - unwrap some toString() formats like "UnknownEvent(line=...)"
       String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+
+      // Step 4C: handle IRCv3 BATCH start/end framing (including CHATHISTORY).
+      if (handleBatchControlLine(line, rawLine)) {
+        return;
+      }
+
+      // Step 4C: some servers/bots may deliver tagged history messages as UnknownEvent instead of
+      // MessageEvent/ActionEvent. If so, collect them here as a fallback.
+      Optional<String> maybeBatchId = PircbotxIrcv3BatchTag.fromRawLine(line);
+      if (maybeBatchId.isPresent()) {
+        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(maybeBatchId.get());
+        if (buf != null && collectChatHistoryFromUnknown(line, rawLine, buf)) {
+          return;
+        }
+      }
 
       // Surface SASL login failures (wrong password, etc.). These often arrive as raw numerics and
       // otherwise look like "nothing happened" to the user.
@@ -648,6 +911,45 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
     }
 
+    private void maybeLogNegotiatedCaps() {
+      if (conn.capSummaryLogged.getAndSet(true)) return;
+      boolean ch = conn.chatHistoryCapAcked.get();
+      boolean batch = conn.batchCapAcked.get();
+      boolean znc = conn.zncPlaybackCapAcked.get();
+      boolean st = conn.serverTimeCapAcked.get();
+      log.info("[{}] negotiated caps: server-time={} draft/chathistory={} batch={} znc.in/playback={}",
+          serverId, st, ch, batch, znc);
+
+      if (!st && conn.serverTimeMissingWarned.compareAndSet(false, true)) {
+        String msg = "IRCv3 server-time was not negotiated; message ordering/timestamps may be less accurate (especially on reconnect/backlog).";
+        log.warn("[{}] {}", serverId, msg);
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ServerTimeNotNegotiated(Instant.now(), msg)));
+      }
+    }
+
+
+
+
+
+    private void maybeRequestZncPlayback(PircBotX bot) {
+      if (bot == null) return;
+      if (!conn.zncPlaybackCapAcked.get()) return;
+      if (conn.zncPlaybackRequestedThisSession.getAndSet(true)) return;
+
+      long cursor = playbackCursorProvider.lastSeenEpochSeconds(serverId).orElse(0L);
+      // Be a tiny bit forgiving so we don't accidentally miss a message around the boundary.
+      long request = Math.max(0L, cursor - 1L);
+
+      try {
+        bot.sendIRC().message("*playback", "play * " + request);
+        log.info("[{}] requested ZNC playback since {} (epoch seconds)", serverId, request);
+      } catch (Exception ex) {
+        // Allow a future retry if we failed to send the request.
+        conn.zncPlaybackRequestedThisSession.set(false);
+        log.warn("[{}] failed to request ZNC playback", serverId, ex);
+      }
+    }
+
     @Override
     public void onServerResponse(ServerResponseEvent event) {
       // Some numerics are handled by PircBotX as ServerResponseEvent (not UnknownEvent).
@@ -696,6 +998,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
               pj.message()
           )));
         }
+        return;
+      }
+
+      // If we negotiated znc.in/playback, ZNC will not automatically send buffered backlog.
+      // Request bounded playback once registration completes (end of MOTD).
+      if (code == 376 || code == 422) {
+        maybeLogNegotiatedCaps();
+        maybeRequestZncPlayback(event.getBot());
         return;
       }
 

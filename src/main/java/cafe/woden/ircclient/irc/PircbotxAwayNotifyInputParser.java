@@ -31,13 +31,16 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
 
+  private final PircbotxConnectionState conn;
+
   // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
   private final Map<String, String> lastAccountTagByNickLower = new HashMap<>();
 
-  PircbotxAwayNotifyInputParser(PircBotX bot, String serverId, Consumer<ServerIrcEvent> sink) {
+  PircbotxAwayNotifyInputParser(PircBotX bot, String serverId, PircbotxConnectionState conn, Consumer<ServerIrcEvent> sink) {
     super(bot);
     this.serverId = serverId;
     this.sink = Objects.requireNonNull(sink, "sink");
+    this.conn = Objects.requireNonNull(conn, "conn");
   }
 
   @Override
@@ -51,7 +54,44 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
   ) throws IOException {
     // Preserve default behavior first (this keeps User.isAway()/getAwayMessage() accurate).
     super.processCommand(target, source, command, line, parsedLine, tags);
-    if (source == null || command == null) return;
+    if (command == null) return;
+
+    // Detect CAP ACKs for bouncer-related capabilities (ZNC playback, soju chathistory, IRCv3 batch).
+    if ("CAP".equalsIgnoreCase(command) && parsedLine != null && parsedLine.size() >= 2) {
+      String sub = parsedLine.get(1);
+      if (sub != null && "ACK".equalsIgnoreCase(sub) && parsedLine.size() >= 3) {
+        String capList = parsedLine.get(2);
+        if (capList != null && capList.startsWith(":")) capList = capList.substring(1);
+        if (capList != null) {
+          for (String cap : capList.split("\s+")) {
+            if (cap == null) continue;
+            String c = cap.trim();
+            if (c.isEmpty()) continue;
+
+            if ("znc.in/playback".equalsIgnoreCase(c)) {
+              if (conn.zncPlaybackCapAcked.compareAndSet(false, true)) {
+                log.info("[{}] CAP ACK: znc.in/playback enabled", serverId);
+              }
+            } else if ("batch".equalsIgnoreCase(c)) {
+              if (conn.batchCapAcked.compareAndSet(false, true)) {
+                log.info("[{}] CAP ACK: batch enabled", serverId);
+              }
+            } else if ("draft/chathistory".equalsIgnoreCase(c)) {
+              if (conn.chatHistoryCapAcked.compareAndSet(false, true)) {
+                log.info("[{}] CAP ACK: draft/chathistory enabled", serverId);
+              }
+            } else if ("server-time".equalsIgnoreCase(c)) {
+              if (conn.serverTimeCapAcked.compareAndSet(false, true)) {
+                log.info("[{}] CAP ACK: server-time enabled", serverId);
+              }
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    if (source == null) return;
     String nick = Objects.toString(source.getNick(), "").trim();
     if (nick.isEmpty()) return;
 

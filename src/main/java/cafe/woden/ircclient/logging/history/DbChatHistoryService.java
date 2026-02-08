@@ -7,12 +7,14 @@ import cafe.woden.ircclient.logging.model.LogRow;
 import cafe.woden.ircclient.logging.model.LogDirection;
 import cafe.woden.ircclient.logging.model.LogKind;
 import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
@@ -23,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import jakarta.annotation.PreDestroy;
 import javax.swing.JViewport;
@@ -49,6 +52,12 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private final ChatTranscriptStore transcripts;
   private final UiSettingsBus settingsBus;
 
+  // Step 4E: optional remote fill via IRCv3 CHATHISTORY (soju) when DB runs out.
+  private final IrcClientService irc;
+  private final ChatHistoryIngestBus ingestBus;
+
+  private static final Duration REMOTE_FILL_TIMEOUT = Duration.ofSeconds(4);
+
   
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
   
@@ -62,11 +71,18 @@ public final class DbChatHistoryService implements ChatHistoryService {
     return t;
   });
 
-  public DbChatHistoryService(ChatLogRepository repo, LogProperties props, ChatTranscriptStore transcripts, UiSettingsBus settingsBus) {
+  public DbChatHistoryService(ChatLogRepository repo,
+                              LogProperties props,
+                              ChatTranscriptStore transcripts,
+                              UiSettingsBus settingsBus,
+                              IrcClientService irc,
+                              ChatHistoryIngestBus ingestBus) {
     this.repo = repo;
     this.props = props;
     this.transcripts = transcripts;
     this.settingsBus = settingsBus;
+    this.irc = irc;
+    this.ingestBus = ingestBus;
   }
 
   /**
@@ -155,24 +171,45 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     exec.execute(() -> {
       try {
-        List<LogRow> rows = repo.fetchOlderRows(serverId, tgt, beforeTs, beforeId, limitFinal);
+        // Step 4E: DB-first; if DB is exhausted, try remote CHATHISTORY to backfill.
+        ArrayList<LogRow> rows = new ArrayList<>();
+        List<LogRow> first = repo.fetchOlderRows(serverId, tgt, beforeTs, beforeId, limitFinal);
+        if (first != null && !first.isEmpty()) rows.addAll(first);
 
-        if (rows == null || rows.isEmpty()) {
+        // If nothing local, try a remote fill once, then re-query local.
+        if (rows.isEmpty()) {
+          boolean requested = requestRemoteHistoryAndWait(serverId, tgt, safeInstant(beforeTs), limitFinal);
+          if (requested) {
+            List<LogRow> after = repo.fetchOlderRows(serverId, tgt, beforeTs, beforeId, limitFinal);
+            if (after != null && !after.isEmpty()) rows.addAll(after);
+          }
+        }
+
+        if (rows.isEmpty()) {
           noMoreOlder.put(target, Boolean.TRUE);
           SwingUtilities.invokeLater(() -> callback.accept(new LoadOlderResult(List.of(), cursor, false)));
           return;
         }
 
-        // Rows are newest-first. The oldest in this batch is the last.
+        // Rows are newest-first. The oldest in this combined batch is the last.
         LogRow batchOldest = rows.get(rows.size() - 1);
         LogCursor newCursor = new LogCursor(batchOldest.line().tsEpochMs(), batchOldest.id());
 
-        boolean hasMore;
-        try {
-          hasMore = repo.hasOlderRows(serverId, tgt, newCursor.tsEpochMs(), newCursor.id());
-        } catch (Exception e) {
-          log.debug("Older-history hasMore check failed for {} / {}", serverId, tgt, e);
-          hasMore = true;
+        boolean hasMore = safeHasMore(serverId, tgt, newCursor);
+
+        // If we hit the DB floor and still haven't filled the page, ask the bouncer for more.
+        if (!hasMore && rows.size() < limitFinal) {
+          int missing = Math.max(1, limitFinal - rows.size());
+          boolean requested = requestRemoteHistoryAndWait(serverId, tgt, safeInstant(newCursor.tsEpochMs()), missing);
+          if (requested) {
+            List<LogRow> more = repo.fetchOlderRows(serverId, tgt, newCursor.tsEpochMs(), newCursor.id(), missing);
+            if (more != null && !more.isEmpty()) {
+              rows.addAll(more);
+              LogRow combinedOldest = rows.get(rows.size() - 1);
+              newCursor = new LogCursor(combinedOldest.line().tsEpochMs(), combinedOldest.id());
+            }
+            hasMore = safeHasMore(serverId, tgt, newCursor);
+          }
         }
 
         // Advance cursor regardless of filtering, to avoid infinite loops.
@@ -205,6 +242,64 @@ public final class DbChatHistoryService implements ChatHistoryService {
         loading.remove(target);
       }
     });
+  }
+
+  private boolean safeHasMore(String serverId, String tgt, LogCursor cursor) {
+    try {
+      return repo.hasOlderRows(serverId, tgt, cursor.tsEpochMs(), cursor.id());
+    } catch (Exception e) {
+      log.debug("Older-history hasMore check failed for {} / {}", serverId, tgt, e);
+      return true;
+    }
+  }
+
+  private static Instant safeInstant(long epochMs) {
+    if (epochMs <= 0) return Instant.now();
+    try {
+      return Instant.ofEpochMilli(epochMs);
+    } catch (Exception ignored) {
+      return Instant.now();
+    }
+  }
+
+  /**
+   * Step 4E: try to request remote history via CHATHISTORY and wait for the next ingest completion.
+   *
+   * <p>This is best-effort: if the server doesn't support chathistory or no response arrives,
+   * we fail open (return false) and let DB-only behavior continue.
+   */
+  private boolean requestRemoteHistoryAndWait(String serverId, String target, Instant beforeExclusive, int limit) {
+    if (irc == null || ingestBus == null) return false;
+    if (serverId == null || serverId.isBlank()) return false;
+    if (target == null || target.isBlank()) return false;
+    // CHATHISTORY is defined for channel/query targets; avoid spamming status.
+    if ("status".equalsIgnoreCase(target.trim())) return false;
+    if (limit <= 0) return false;
+
+    try {
+      var waiter = ingestBus.awaitNext(serverId, target, REMOTE_FILL_TIMEOUT);
+
+      try {
+        // Sends the CHATHISTORY request (or throws if caps weren't negotiated).
+        irc.requestChatHistoryBefore(serverId, target, beforeExclusive, limit).blockingAwait();
+      } catch (Exception e) {
+        // Cancel waiter so we don't leak.
+        waiter.cancel(true);
+        log.debug("Remote CHATHISTORY request failed for {} / {}", serverId, target, e);
+        return false;
+      }
+
+      try {
+        waiter.get(REMOTE_FILL_TIMEOUT.toMillis() + 250, TimeUnit.MILLISECONDS);
+      } catch (Exception e) {
+        // Timeout is okay; we'll just re-query DB and return whatever we have.
+        log.debug("Remote CHATHISTORY ingest wait timed out for {} / {}", serverId, target);
+      }
+      return true;
+    } catch (Exception e) {
+      log.debug("Remote CHATHISTORY coordination failed for {} / {}", serverId, target, e);
+      return false;
+    }
   }
 
   @Override

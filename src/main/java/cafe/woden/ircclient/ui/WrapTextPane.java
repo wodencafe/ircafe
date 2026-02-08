@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui;
 
 import javax.swing.*;
+import javax.swing.SwingUtilities;
+import javax.swing.text.Caret;
+import javax.swing.text.DefaultCaret;
 import javax.swing.text.Element;
 import javax.swing.text.ParagraphView;
 import javax.swing.text.StyledEditorKit;
@@ -14,6 +17,41 @@ public class WrapTextPane extends JTextPane {
   public WrapTextPane() {
     // Enable breaking long tokens (URLs, hashes) so text never forces horizontal scrolling.
     setEditorKit(new WrapEditorKit());
+
+    // Important: prevent Swing's caret logic from auto-scrolling the viewport when the document changes.
+    // Some LAF/UI delegate updates will reinstall the caret, so we re-apply this policy in updateUI/addNotify.
+    setAutoscrolls(false);
+    ensureNonAutoScrollingCaret();
+  }
+
+  @Override
+  public void updateUI() {
+    super.updateUI();
+    // UI delegates can replace the caret during updateUI(); re-apply after the delegate settles.
+    SwingUtilities.invokeLater(this::ensureNonAutoScrollingCaret);
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    // Some platforms install the UI delegate/caret during realization.
+    SwingUtilities.invokeLater(this::ensureNonAutoScrollingCaret);
+  }
+
+  private void ensureNonAutoScrollingCaret() {
+    // If the caret is not a DefaultCaret (or gets replaced), install a DefaultCaret with NEVER_UPDATE.
+    Caret c = getCaret();
+    if (c instanceof DefaultCaret dc) {
+      if (dc.getUpdatePolicy() != DefaultCaret.NEVER_UPDATE) {
+        dc.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
+      }
+      return;
+    }
+
+    DefaultCaret dc = new DefaultCaret();
+    dc.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
+    dc.setBlinkRate(0);
+    setCaret(dc);
   }
 
   @Override

@@ -25,6 +25,7 @@ public sealed interface ParsedInput permits
     ParsedInput.SoftIgnore,
     ParsedInput.UnsoftIgnore,
     ParsedInput.SoftIgnoreList,
+    ParsedInput.ChatHistoryBefore,
     ParsedInput.Quote,
     ParsedInput.Say,
     ParsedInput.Unknown {
@@ -90,6 +91,16 @@ public sealed interface ParsedInput permits
 
   
   record SoftIgnoreList() implements ParsedInput {}
+
+  /**
+   * /chathistory [limit]
+   *
+   * <p>Developer/debug helper for requesting IRCv3 CHATHISTORY scrollback.
+   * This will request messages BEFORE the current time for the active target.
+   */
+  record ChatHistoryBefore(int limit) implements ParsedInput {}
+
+
 
   /**
    * /quote <RAW IRC LINE>
