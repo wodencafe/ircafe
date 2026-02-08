@@ -313,7 +313,6 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
       List<String> slice = st.roster.pickNext(cfg.periodicRefreshNicksPerTick);
       if (!slice.isEmpty()) {
         st.userhost.queue.addAll(slice);
-        // WHOIS is intentionally NOT enqueued automatically here. We'll decide that in a later step.
       }
     }
   }

@@ -4,6 +4,7 @@ import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.util.ChatFindBarDecorator;
+import cafe.woden.ircclient.ui.util.ChatAutoLoadOlderScrollDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptContextMenuDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptMouseDecorator;
 import cafe.woden.ircclient.ui.util.CloseableScope;
@@ -85,6 +86,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::getSavedScrollValue,
         this::setSavedScrollValue
     ));
+
+    // "Infinite scroll" helper: if the user tries to wheel-scroll up past the very top,
+    // trigger the embedded "Load older messages…" control (if present).
+    decorators.add(ChatAutoLoadOlderScrollDecorator.decorate(scroll, chat));
 
     add(scroll, BorderLayout.CENTER);
     this.transcriptMouse = decorators.add(ChatTranscriptMouseDecorator.decorate(

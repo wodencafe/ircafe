@@ -21,7 +21,6 @@ import org.springframework.context.annotation.Bean;
 @EnableConfigurationProperties({IrcProperties.class, UiProperties.class, IgnoreProperties.class, LogProperties.class})
 public class IrcSwingApp {
   public static void main(String[] args) {
-    // Install stdout/stderr mirroring early so we capture Spring Boot startup logs too.
     ConsoleTeeHub.install();
     new SpringApplicationBuilder(IrcSwingApp.class)
         .headless(false)
@@ -34,10 +33,7 @@ public class IrcSwingApp {
                                ThemeManager themeManager,
                                UiSettingsBus settingsBus) {
     return args -> SwingUtilities.invokeLater(() -> {
-      // Install the desired theme before showing the UI.
-      // Note: Spring may instantiate some Swing beans during context refresh.
-      // Updating the frame's component tree ensures any pre-created components
-      // rebind to the correct Look & Feel defaults.
+      // Install theme before showing UI.
       String theme = settingsBus.get().theme();
       themeManager.installLookAndFeel(theme);
 

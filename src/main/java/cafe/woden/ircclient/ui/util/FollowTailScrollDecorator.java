@@ -157,12 +157,13 @@ public void onDocumentSwapped(StyledDocument next) {
     boolean atBottomNow = (val + extent) >= (max - 2);
 
     if (atBottomNow) {
+      // When the user reaches the bottom, re-enable follow-tail.
       setFollowTail.accept(true);
     } else if (isFollowTail.getAsBoolean()) {
-      // If follow-tail is on and the user scrolls upward, disable follow-tail.
-      if (val < lastBarValue) {
-        setFollowTail.accept(false);
-      }
+      // If follow-tail is on and the user is no longer at the bottom, disable follow-tail.
+      // This is more robust than only checking scroll direction, because some inputs (trackpad,
+      // page keys, click-on-trough) can jump without a simple "val < lastVal" pattern.
+      setFollowTail.accept(false);
     }
 
     setSavedScrollValue.accept(val);

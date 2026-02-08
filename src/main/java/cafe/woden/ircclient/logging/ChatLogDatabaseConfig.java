@@ -22,6 +22,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
+import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 
@@ -146,8 +148,10 @@ public class ChatLogDatabaseConfig {
   public ChatHistoryService chatHistoryService(ChatLogRepository repo,
                                               LogProperties props,
                                               ChatTranscriptStore transcripts,
-                                              UiSettingsBus settingsBus) {
-    return new DbChatHistoryService(repo, props, transcripts, settingsBus);
+                                              UiSettingsBus settingsBus,
+                                              IrcClientService irc,
+                                              ChatHistoryIngestBus ingestBus) {
+    return new DbChatHistoryService(repo, props, transcripts, settingsBus, irc, ingestBus);
   }
 
   @Bean

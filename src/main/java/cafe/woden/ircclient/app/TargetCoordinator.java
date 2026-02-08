@@ -215,11 +215,8 @@ public class TargetCoordinator {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    // Step 1.5 propagation: update across all cached channels on this server.
     java.util.Set<String> changedChannels = userListStore.updateHostmaskAcrossChannels(sid, ev.nick(), ev.hostmask());
     if (changedChannels.isEmpty()) return;
-
-    // Refresh users panel only if the active target is a channel that was modified.
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
         && activeTarget.isChannel()
@@ -236,14 +233,9 @@ public class TargetCoordinator {
     String msg = ev.awayMessage();
     java.util.Set<String> changedChannels = userListStore.updateAwayStateAcrossChannels(sid, ev.nick(), ev.awayState(), msg);
     if (changedChannels.isEmpty()) {
-      // This is typically a sign that we parsed an away update for a nick that isn't present in any
-      // cached channel rosters (or that the state didn't change). If you're debugging away-notify,
-      // this log helps confirm the event made it to the coordinator even if the UI doesn't change.
       log.debug("Away state observed but no roster entries changed: serverId={} nick={} state={}", sid, ev.nick(), ev.awayState());
       return;
     }
-
-    // Refresh users panel only if the active target is a channel that was modified.
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
         && activeTarget.isChannel()
@@ -278,7 +270,6 @@ public class TargetCoordinator {
       ui.setInputEnabled(false);
       return;
     }
-    // UI-only pseudo-targets (e.g. notifications) should never accept chat input.
     if (activeTarget.isUiOnly()) {
       ui.setInputEnabled(false);
       return;
@@ -300,14 +291,11 @@ public class TargetCoordinator {
 
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
-
-    // If we're closing the currently active target, switch back to status first.
     if (Objects.equals(activeTarget, target)) {
       ui.selectTarget(status);
     }
 
     if (target.isChannel()) {
-      // Remove from auto-join for next startup.
       runtimeConfig.forgetJoinedChannel(sid, target.target());
       userListStore.clear(sid, target.target());
 
@@ -322,7 +310,6 @@ public class TargetCoordinator {
         ui.appendStatus(status, "(ui)", "Closed " + target.target());
       }
     } else {
-      // Private message buffer: local UI-only close.
       ui.appendStatus(status, "(ui)", "Closed " + target.target());
     }
 
@@ -333,26 +320,15 @@ public class TargetCoordinator {
     if (target == null) return;
 
     this.activeTarget = target;
-
-    // Status bar
     ui.setStatusBarChannel(target.target());
     ui.setStatusBarServer(serverDisplay(target.serverId()));
-
-    // Users panel
     ui.setUsersChannel(target);
     if (target.isChannel()) {
       List<IrcEvent.NickInfo> cached = userListStore.get(target.serverId(), target.target());
       ui.setUsersNicks(cached);
       ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
-
-      // Opportunistically resolve missing hostmasks (low traffic).
       maybeRequestMissingHostmasks(target.serverId(), target.target(), cached);
-
-      // User info enrichment (fallback): use the active channel roster as a signal to keep
-      // the enrichment planner fed (snapshot + initial USERHOST candidates).
       updateEnrichmentFromRoster(target.serverId(), target.target(), cached);
-
-      // Request names if cache is empty.
       if (cached.isEmpty() && connectionCoordinator.isConnected(target.serverId())) {
         disposables.add(
             irc.requestNames(target.serverId(), target.target()).subscribe(
@@ -365,8 +341,6 @@ public class TargetCoordinator {
       ui.setStatusBarCounts(0, 0);
       ui.setUsersNicks(List.of());
     }
-
-    // Mention highlighting uses server-scoped nick.
     irc.currentNick(target.serverId()).ifPresent(nick -> ui.setChatCurrentNick(target.serverId(), nick));
 
     ui.clearUnread(target);
@@ -374,12 +348,9 @@ public class TargetCoordinator {
   }
 
 
-private void updateEnrichmentFromRoster(String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
+  private void updateEnrichmentFromRoster(String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
   String sid = Objects.toString(serverId, "").trim();
   if (sid.isEmpty()) return;
-
-  // Always keep a best-effort server-wide roster snapshot so periodic refresh (if enabled)
-  // has something to work with.
   userInfoEnrichmentService.setRosterSnapshot(sid, userListStore.getServerNicks(sid));
 
   if (nicks == null || nicks.isEmpty()) return;
@@ -407,9 +378,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
     if (missingHostmask || missingAway) {
       userhostCandidates.add(nick);
     }
-
-    // WHOIS fallback (optional): only consider WHOIS for the active channel roster, and only in small,
-    // prioritized batches. This keeps WHOIS traffic "surgical" instead of trying to WHOIS the world.
     if (isActiveChannel && missingAccount) {
       whoisUnknownAccountCandidates.add(nick);
     }
@@ -424,8 +392,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
       && shouldWhoChannelScan(nicks.size(), userhostCandidates.size());
 
   if (wantWhoxForAccount || wantWhoChannelForUserhost) {
-    // Channel-wide scan fills many unknowns in one go. If WHOX is enabled + supported, the scan
-    // also carries account state, which can dramatically reduce WHOIS traffic in large channels.
     userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, channel);
   } else if (!userhostCandidates.isEmpty()) {
     userInfoEnrichmentService.enqueueUserhost(sid, userhostCandidates);
@@ -434,9 +400,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
   if (whoisUnknownAccountCandidates.isEmpty()) return;
 
   if (wantWhoxForAccount) return;
-
-  // Step 3B: Prioritize WHOIS candidates by recent activity (recent speakers first), and hard-cap
-  // enqueue size to avoid giant channels ballooning the queue.
   final int MAX_WHOIS_ENQUEUE = 10;
   final int MIN_WHOIS_TRICKLE = 2;
   final java.time.Duration RECENT_WINDOW = java.time.Duration.ofMinutes(30);
@@ -465,8 +428,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
     if (selected.size() >= MAX_WHOIS_ENQUEUE) break;
     selected.add(nick);
   }
-
-  // If nobody has spoken recently, still allow a tiny trickle so the UI can learn over time.
   for (String nick : other) {
     if (selected.size() >= MAX_WHOIS_ENQUEUE) break;
     if (selected.size() >= MIN_WHOIS_TRICKLE && !recent.isEmpty()) break;
@@ -482,9 +443,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
   private static boolean shouldWhoChannelScan(int rosterSize, int missingCount) {
     if (rosterSize <= 0) return false;
     if (missingCount <= 0) return false;
-
-    // WHO is most useful when we have a lot of unknowns; it can fill hostmask + away for the whole channel
-    // in one go. Keep it conservative to avoid unnecessary traffic.
     if (missingCount < 20) return false;
 
     double ratio = (double) missingCount / (double) rosterSize;
@@ -492,7 +450,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
   }
 
   /**
-   * Step 2 (careful): If hostmask-based ignore patterns exist, request missing hostmasks via USERHOST.
    *
    * <p>This is deliberately conservative and relies on {@link UserhostQueryService} for anti-flood behavior.
    */
@@ -501,8 +458,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
     if (sid.isEmpty()) return;
     if (!connectionCoordinator.isConnected(sid)) return;
     if (nicks == null || nicks.isEmpty()) return;
-
-    // Only do this if there is at least one ignore mask that actually depends on user/host.
     if (!hasHostmaskDependentIgnores(sid)) return;
 
     java.util.ArrayList<String> missing = new java.util.ArrayList<>();
@@ -540,8 +495,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
 
     String ident = m.substring(bang + 1, at).trim();
     String host = m.substring(at + 1).trim();
-
-    // Pure nick-based ignore patterns look like "nick!*@*" (ident == "*" and host == "*").
     boolean identUnknown = ident.isEmpty() || "*".equals(ident);
     boolean hostUnknown = host.isEmpty() || "*".equals(host);
     return !(identUnknown && hostUnknown);
@@ -569,8 +522,6 @@ private void updateEnrichmentFromRoster(String serverId, String channel, List<Ir
     if (at == null || !at.isChannel()) return;
     if (!Objects.equals(at.serverId(), serverId)) return;
     if (!Objects.equals(at.target(), channel)) return;
-
-    // Coalesce bursts (WHO/WHOX can emit thousands of per-nick updates).
     if (!usersRefreshScheduled.compareAndSet(false, true)) return;
 
     usersRefreshExec.schedule(() -> {

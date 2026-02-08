@@ -15,12 +15,14 @@ import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.reflect.Method;
+import java.util.OptionalLong;
 
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.pircbotx.PircBotX;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -37,17 +39,22 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
   private final PircbotxConnectionTimersRx timers;
+  private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
                                  ServerRegistry serverRegistry,
                                  PircbotxInputParserHookInstaller inputParserHookInstaller,
                                  PircbotxBotFactory botFactory,
-                                 PircbotxConnectionTimersRx timers) {
+                                 PircbotxConnectionTimersRx timers,
+                                 ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
     this.serverRegistry = serverRegistry;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
     this.timers = timers;
+    this.playbackCursorProvider = playbackCursorProviderProvider.getIfAvailable(
+        () -> (String sid) -> OptionalLong.empty()
+    );
   }
 
   /**
@@ -58,15 +65,12 @@ public class PircbotxIrcClientService implements IrcClientService {
    */
   public void rescheduleActiveHeartbeats() {
     if (shuttingDown.get()) return;
-
-    // Only reschedule connections that actually have a live bot.
     for (PircbotxConnectionState c : connections.values()) {
       try {
         if (c != null && c.botRef.get() != null) {
           timers.rescheduleHeartbeat(c);
         }
       } catch (Exception ignored) {
-        // Best-effort: don't let one bad state prevent rescheduling others.
       }
     }
   }
@@ -88,8 +92,6 @@ public class PircbotxIrcClientService implements IrcClientService {
           if (shuttingDown.get()) return;
           PircbotxConnectionState c = conn(serverId);
           if (c.botRef.get() != null) return;
-
-          // Any explicit connect cancels pending reconnect work and resets attempts.
           cancelReconnect(c);
           c.manualDisconnect.set(false);
           c.reconnectAttempts.set(0);
@@ -99,8 +101,6 @@ public class PircbotxIrcClientService implements IrcClientService {
           boolean disconnectOnSaslFailure = s.sasl() != null
               && s.sasl().enabled()
               && Boolean.TRUE.equals(s.sasl().disconnectOnFailure());
-
-          // Surface a "connecting" state to the app/UI immediately.
           bus.onNext(new ServerIrcEvent(
               serverId, new IrcEvent.Connecting(Instant.now(), s.host(), s.port(), s.nick())));
 
@@ -111,18 +111,15 @@ public class PircbotxIrcClientService implements IrcClientService {
               timers::stopHeartbeat,
               this::scheduleReconnect,
               this::handleCtcpIfPresent,
-              disconnectOnSaslFailure
+              disconnectOnSaslFailure,
+              playbackCursorProvider
           );
 
           PircBotX bot = botFactory.build(s, version, listener);
           c.botRef.set(bot);
-
-          // PircBotX tracks away-notify on the User model but doesn't publish a dedicated event.
-          // We install a tiny InputParser hook so we can surface AWAY state changes into our own event bus.
-          inputParserHookInstaller.installAwayNotifyHook(bot, serverId, bus::onNext);
+          inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
 
           timers.startHeartbeat(c);
-          // Run bot on IO thread; connect() completes immediately
           Schedulers.io().scheduleDirect(() -> {
             boolean crashed = false;
             try {
@@ -131,12 +128,9 @@ public class PircbotxIrcClientService implements IrcClientService {
               crashed = true;
               bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
             } finally {
-              // Only clear state if this is still the current bot (avoid racing a reconnect).
               if (c.botRef.compareAndSet(bot, null)) {
                 timers.stopHeartbeat(c);
               }
-
-              // If the bot thread died unexpectedly, attempt reconnect (if enabled).
               if (crashed && !c.manualDisconnect.get()) {
                 scheduleReconnect(c, "Bot crashed");
               }
@@ -150,13 +144,8 @@ public class PircbotxIrcClientService implements IrcClientService {
   public Completable disconnect(String serverId) {
     return Completable.fromAction(() -> {
           PircbotxConnectionState c = conn(serverId);
-
-          // Mark as intentional and cancel any reconnect.
           c.manualDisconnect.set(true);
           cancelReconnect(c);
-
-          // If we clear botRef here, the DisconnectEvent handler won't see the old bot as "current".
-          // Stop heartbeat explicitly.
           timers.stopHeartbeat(c);
 
           PircBotX bot = c.botRef.getAndSet(null);
@@ -246,13 +235,30 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable requestChatHistoryBefore(String serverId, String target, java.time.Instant beforeExclusive, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
+          PircbotxConnectionState c = conn(serverId);
+          if (!c.chatHistoryCapAcked.get()) {
+            throw new IllegalStateException("CHATHISTORY not negotiated (draft/chathistory): " + serverId);
+          }
+          if (!c.batchCapAcked.get()) {
+            throw new IllegalStateException("CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
+          }
+
+          java.time.Instant before = beforeExclusive == null ? java.time.Instant.now() : beforeExclusive;
+          String line = Ircv3ChatHistoryCommandBuilder.buildBeforeByTimestamp(target, before, limit);
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+  }
+
+
+  @Override
   public Completable sendAction(String serverId, String target, String action) {
     return Completable.fromAction(() -> {
           String t = target == null ? "" : target.trim();
           String a = action == null ? "" : action;
           if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
-
-          // Prefer a native PircBotX action(...) API if present. Fall back to manual CTCP wrapper.
           Object out = requireBot(serverId).sendIRC();
 
           String dest;
@@ -268,9 +274,7 @@ public class PircbotxIrcClientService implements IrcClientService {
             m.invoke(out, dest, a);
             sent = true;
           } catch (NoSuchMethodException ignored) {
-            // Older/newer OutputIRC API shape; we'll fall back.
           } catch (Exception e) {
-            // Reflection failure: fall back to raw CTCP wrapper.
             log.debug("sendAction: native action() invoke failed, falling back to CTCP wrapper", e);
           }
 
@@ -294,11 +298,7 @@ public class PircbotxIrcClientService implements IrcClientService {
   public Completable whois(String serverId, String nick) {
     return Completable.fromAction(() -> {
           String n = PircbotxUtil.sanitizeNick(nick);
-
-          // Track this WHOIS so we can infer HERE on 318 if no 301 is received.
           conn(serverId).whoisSawAwayByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
-
-          // Track this WHOIS so we can (optionally) infer LOGGED_OUT on 318 if no 330 is received.
           conn(serverId).whoisSawAccountByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
 
           requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
@@ -317,10 +317,6 @@ public class PircbotxIrcClientService implements IrcClientService {
     if (bot == null) throw new IllegalStateException("Not connected: " + serverId);
     return bot;
   }
-
-  // (B3.6) Heartbeat + reconnect timers extracted to PircbotxConnectionTimersRx.
-
-  // (B1) Small, mostly-pure helper methods moved into PircbotxUtil.
 
   private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
     if (message == null || message.length() < 2) return false;
@@ -342,7 +338,6 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
 
     if ("PING".equals(cmd)) {
-      // Reply with the same token/payload (if any).
       String payload = "";
       int sp2 = inner.indexOf(' ');
       if (sp2 >= 0 && sp2 + 1 < inner.length()) payload = inner.substring(sp2 + 1).trim();
@@ -352,7 +347,6 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
 
     if ("TIME".equals(cmd)) {
-      // Best-effort local time string; servers/clients vary here.
       String now = java.time.ZonedDateTime.now().toString();
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "\u0001TIME " + now + "\u0001");
       return true;
@@ -375,7 +369,6 @@ public class PircbotxIrcClientService implements IrcClientService {
 @PreDestroy
   void shutdown() {
     shuttingDown.set(true);
-    // Stop reconnection/heartbeat timers and shut down bots.
     for (PircbotxConnectionState c : connections.values()) {
       if (c == null) continue;
       try {

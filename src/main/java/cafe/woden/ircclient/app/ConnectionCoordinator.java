@@ -48,8 +48,6 @@ public class ConnectionCoordinator {
     this.runtimeConfig = runtimeConfig;
 
     configuredServers.addAll(serverRegistry.serverIds());
-
-    // Initialize known servers to DISCONNECTED so server-node context menus are correct from the start.
     for (String sid : configuredServers) {
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
     }
@@ -198,7 +196,6 @@ public class ConnectionCoordinator {
   }
 
   public void onServersUpdated(List<IrcProperties.Server> latest, TargetRef activeTarget) {
-    // Compute current ids.
     Set<String> current = new HashSet<>();
     if (latest != null) {
       for (var s : latest) {
@@ -208,11 +205,9 @@ public class ConnectionCoordinator {
       }
     }
 
-    // Removed
     Set<String> removed = new HashSet<>(configuredServers);
     removed.removeAll(current);
 
-    // Added
     Set<String> added = new HashSet<>(current);
     added.removeAll(configuredServers);
 
@@ -221,16 +216,12 @@ public class ConnectionCoordinator {
 
     for (String sid : removed) {
       if (sid == null || sid.isBlank()) continue;
-
-      // If the active target is on the removed server, switch to a safe target.
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
         TargetRef status = new TargetRef(fallback, "status");
         ui.ensureTargetExists(status);
         ui.selectTarget(status);
       }
-
-      // Request disconnect if it wasn't already disconnected.
       if (stateOf(sid) != ConnectionState.DISCONNECTED) {
         TargetRef status = new TargetRef(sid, "status");
         ui.appendStatus(status, "(servers)", "Server removed from configuration; disconnecting…");
@@ -256,8 +247,6 @@ public class ConnectionCoordinator {
 
     updateConnectionUi();
   }
-
-  /** Handle the subset of IRC events that represent connectivity changes. */
   public ConnectivityChange handleConnectivityEvent(String sid, IrcEvent e, TargetRef activeTarget) {
     TargetRef status = new TargetRef(sid, "status");
 
@@ -358,17 +347,12 @@ public class ConnectionCoordinator {
         case RECONNECTING -> reconnecting++;
         case DISCONNECTING -> disconnecting++;
         case DISCONNECTED -> {
-          // handled via totals
         }
       }
     }
 
     int disconnected = total - (connected + connecting + reconnecting + disconnecting);
-
-    // Allow Connect if there is at least one disconnected server and we are not currently disconnecting.
     boolean connectEnabled = disconnected > 0 && disconnecting == 0;
-
-    // Allow Disconnect if anything is connected/connecting/reconnecting and we are not currently disconnecting.
     boolean disconnectEnabled = (connected + connecting + reconnecting) > 0 && disconnecting == 0;
 
     ui.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);

@@ -1,16 +1,19 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
-import cafe.woden.ircclient.net.NetTlsContext;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
+import java.time.Duration;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
@@ -22,12 +25,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Factory for building a configured {@link PircBotX} instance for a given server.
- * <p>
- * This keeps {@link PircbotxIrcClientService} focused on orchestration (connect/disconnect),
- * and isolates the PircbotX configuration details.
  */
 @Component
 public class PircbotxBotFactory {
+
+  private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
 
   private final ServerProxyResolver proxyResolver;
 
@@ -36,21 +38,16 @@ public class PircbotxBotFactory {
   }
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
-    // Resolve the effective proxy for this server. This honors per-server overrides and
-    // falls back to the default proxy settings when no override is set.
     ProxyPlan plan = proxyResolver.planForServer(s.id());
 
     SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
 
     SocketFactory socketFactory;
     if (plan.enabled()) {
-      // SOCKS proxy enabled for this server.
       socketFactory = s.tls()
           ? new SocksProxySslSocketFactory(plan.cfg(), ssl)
           : new SocksProxySocketFactory(plan.cfg());
     } else {
-      // IMPORTANT: Bypass JVM-wide socksProxyHost/socksProxyPort settings (if any) so
-      // servers that explicitly disable proxy actually connect directly.
       socketFactory = s.tls()
           ? new DirectTlsSocketFactory(ssl, plan.connectTimeoutMs(), plan.readTimeoutMs())
           : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
@@ -63,36 +60,29 @@ public class PircbotxBotFactory {
         .setVersion(version)
         .addServer(s.host(), s.port())
         .setSocketFactory(socketFactory)
-        // Enable CAP so we can request low-cost IRCv3 capabilities (e.g. userhost-in-names).
         .setCapEnabled(true)
-        // Prefer hostmasks in the initial NAMES list (when supported). If unsupported, ignore.
         .addCapHandler(new EnableCapHandler("userhost-in-names", true))
-        // IRCv3 away-notify: server will send user AWAY state changes as raw AWAY commands.
         .addCapHandler(new EnableCapHandler("away-notify", true))
-        // IRCv3 account-notify: server will send ACCOUNT updates when users log in/out.
         .addCapHandler(new EnableCapHandler("account-notify", true))
-        // IRCv3 extended-join: JOIN includes account name + realname (when supported).
         .addCapHandler(new EnableCapHandler("extended-join", true))
-        // IRCv3 message-tags: enables tagged messages (required for account-tag on some networks).
         .addCapHandler(new EnableCapHandler("message-tags", true))
-        // IRCv3 account-tag: messages will include @account=... tags when supported.
+        .addCapHandler(new EnableCapHandler("server-time", true))
+        .addCapHandler(new EnableCapHandler("batch", true))
+        .addCapHandler(new EnableCapHandler("draft/chathistory", true))
+        .addCapHandler(new EnableCapHandler("znc.in/playback", true))
         .addCapHandler(new EnableCapHandler("account-tag", true))
         .setAutoNickChange(true)
-        // We manage reconnects ourselves so we can surface status + use backoff.
         .setAutoReconnect(false)
         .addListener(listener);
+    applyMessageDelay(builder, DEFAULT_MESSAGE_DELAY_MS);
 
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
       builder.setServerPassword(s.serverPassword());
     }
-
-    // Auto-join channels from config
     for (String chan : s.autoJoin()) {
       String ch = chan == null ? "" : chan.trim();
       if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
     }
-
-    // SASL (PLAIN)
     if (s.sasl() != null && s.sasl().enabled()) {
       if (!"PLAIN".equalsIgnoreCase(s.sasl().mechanism())) {
         throw new IllegalStateException(
@@ -107,6 +97,74 @@ public class PircbotxBotFactory {
     }
 
     return new PircBotX(builder.buildConfiguration());
+  }
+
+  private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {
+    try {
+      Method m = builder.getClass().getMethod("setMessageDelay", long.class);
+      m.invoke(builder, delayMs);
+      return;
+    } catch (ReflectiveOperationException ignored) {
+    }
+    try {
+      Class<?> delayIface = Class.forName("org.pircbotx.delay.Delay");
+      Method m = builder.getClass().getMethod("setMessageDelay", delayIface);
+      Object delayObj;
+      if (delayIface.isInterface()) {
+        delayObj = java.lang.reflect.Proxy.newProxyInstance(
+            delayIface.getClassLoader(),
+            new Class<?>[] { delayIface },
+            constantDelayHandler(delayMs)
+        );
+      } else {
+        delayObj = tryConstructDelay(delayMs, delayIface);
+      }
+
+      if (delayObj != null) m.invoke(builder, delayObj);
+    } catch (ReflectiveOperationException ignored) {
+    }
+  }
+
+  private static InvocationHandler constantDelayHandler(long delayMs) {
+    return (proxy, method, args) -> {
+      if (method.getDeclaringClass() == Object.class) {
+        return switch (method.getName()) {
+          case "toString" -> "ConstantDelay(" + delayMs + "ms)";
+          case "hashCode" -> System.identityHashCode(proxy);
+          case "equals" -> proxy == (args != null && args.length > 0 ? args[0] : null);
+          default -> null;
+        };
+      }
+
+      Class<?> rt = method.getReturnType();
+      if (rt == long.class || rt == Long.class) return delayMs;
+      if (rt == int.class || rt == Integer.class) return (int) Math.min(Integer.MAX_VALUE, delayMs);
+      if (rt == Duration.class) return Duration.ofMillis(delayMs);
+      return null;
+    };
+  }
+
+  private static Object tryConstructDelay(long delayMs, Class<?> delayType) {
+    try {
+      return delayType.getConstructor(long.class).newInstance(delayMs);
+    } catch (ReflectiveOperationException ignored) {
+    }
+    try {
+      return delayType.getConstructor(int.class).newInstance((int) Math.min(Integer.MAX_VALUE, delayMs));
+    } catch (ReflectiveOperationException ignored) {
+    }
+    try {
+      return delayType.getConstructor(Duration.class).newInstance(Duration.ofMillis(delayMs));
+    } catch (ReflectiveOperationException ignored) {
+    }
+    for (String name : new String[] { "ofMillis", "millis", "fixed", "constant" }) {
+      try {
+        Method m = delayType.getMethod(name, long.class);
+        return m.invoke(null, delayMs);
+      } catch (ReflectiveOperationException ignored) {
+      }
+    }
+    return null;
   }
 
   /** Direct socket factory that bypasses any JVM global SOCKS properties. */
@@ -211,7 +269,6 @@ public class PircbotxBotFactory {
 
     @Override
     public Socket createSocket() throws IOException {
-      // Not used by PircBotX in the normal code path; provided for completeness.
       Socket s = ssl.createSocket();
       s.setSoTimeout(readTimeoutMs);
       return s;

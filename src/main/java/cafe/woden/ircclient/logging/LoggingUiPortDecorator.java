@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.UiPortDecorator;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.logging.model.LogLine;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -42,6 +43,13 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
   }
 
   @Override
+  public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    tryLog(() -> factory.chatAt(target, from, text, outgoingLocalEcho, ts));
+    super.appendChatAt(target, at, from, text, outgoingLocalEcho);
+  }
+
+  @Override
   public void appendSpoilerChat(TargetRef target, String from, String text) {
     if (Boolean.TRUE.equals(props.logSoftIgnoredLines())) {
       tryLog(() -> factory.softIgnoredSpoiler(target, from, text));
@@ -50,9 +58,25 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
   }
 
   @Override
+  public void appendSpoilerChatAt(TargetRef target, Instant at, String from, String text) {
+    if (Boolean.TRUE.equals(props.logSoftIgnoredLines())) {
+      long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+      tryLog(() -> factory.softIgnoredSpoilerAt(target, from, text, ts));
+    }
+    super.appendSpoilerChatAt(target, at, from, text);
+  }
+
+  @Override
   public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
     tryLog(() -> factory.action(target, from, action, outgoingLocalEcho));
     super.appendAction(target, from, action, outgoingLocalEcho);
+  }
+
+  @Override
+  public void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    tryLog(() -> factory.actionAt(target, from, action, outgoingLocalEcho, ts));
+    super.appendActionAt(target, at, from, action, outgoingLocalEcho);
   }
 
   @Override
@@ -68,15 +92,36 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
   }
 
   @Override
+  public void appendNoticeAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    tryLog(() -> factory.noticeAt(target, from, text, ts));
+    super.appendNoticeAt(target, at, from, text);
+  }
+
+  @Override
   public void appendStatus(TargetRef target, String from, String text) {
     tryLog(() -> factory.status(target, from, text));
     super.appendStatus(target, from, text);
   }
 
   @Override
+  public void appendStatusAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    tryLog(() -> factory.statusAt(target, from, text, ts));
+    super.appendStatusAt(target, at, from, text);
+  }
+
+  @Override
   public void appendError(TargetRef target, String from, String text) {
     tryLog(() -> factory.error(target, from, text));
     super.appendError(target, from, text);
+  }
+
+  @Override
+  public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    tryLog(() -> factory.errorAt(target, from, text, ts));
+    super.appendErrorAt(target, at, from, text);
   }
 
   private void tryLog(Supplier<LogLine> supplier) {

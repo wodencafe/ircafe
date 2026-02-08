@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -178,13 +179,28 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
+    delegate.appendChatAt(target, at, from, text, outgoingLocalEcho);
+  }
+
+  @Override
   public void appendSpoilerChat(TargetRef target, String from, String text) {
     delegate.appendSpoilerChat(target, from, text);
   }
 
   @Override
+  public void appendSpoilerChatAt(TargetRef target, Instant at, String from, String text) {
+    delegate.appendSpoilerChatAt(target, at, from, text);
+  }
+
+  @Override
   public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
     delegate.appendAction(target, from, action, outgoingLocalEcho);
+  }
+
+  @Override
+  public void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
+    delegate.appendActionAt(target, at, from, action, outgoingLocalEcho);
   }
 
   @Override
@@ -198,12 +214,27 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendNoticeAt(TargetRef target, Instant at, String from, String text) {
+    delegate.appendNoticeAt(target, at, from, text);
+  }
+
+  @Override
   public void appendStatus(TargetRef target, String from, String text) {
     delegate.appendStatus(target, from, text);
   }
 
   @Override
+  public void appendStatusAt(TargetRef target, Instant at, String from, String text) {
+    delegate.appendStatusAt(target, at, from, text);
+  }
+
+  @Override
   public void appendError(TargetRef target, String from, String text) {
     delegate.appendError(target, from, text);
+  }
+
+  @Override
+  public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
+    delegate.appendErrorAt(target, at, from, text);
   }
 }

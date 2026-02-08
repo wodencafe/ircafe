@@ -22,13 +22,13 @@ public class PircbotxInputParserHookInstaller {
   private static final Logger log = LoggerFactory.getLogger(PircbotxInputParserHookInstaller.class);
 
   
-  public void installAwayNotifyHook(PircBotX bot, String serverId, Consumer<ServerIrcEvent> sink) {
+  public void installAwayNotifyHook(PircBotX bot, String serverId, PircbotxConnectionState conn, Consumer<ServerIrcEvent> sink) {
     if (bot == null) return;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
     try {
-      InputParser replacement = new PircbotxAwayNotifyInputParser(bot, sid, sink);
+      InputParser replacement = new PircbotxAwayNotifyInputParser(bot, sid, conn, sink);
       boolean swapped = swapInputParser(bot, replacement);
       if (swapped) {
         log.info("[{}] installed IRCv3 InputParser hook (away/account/extended-join/account-tag)", sid);

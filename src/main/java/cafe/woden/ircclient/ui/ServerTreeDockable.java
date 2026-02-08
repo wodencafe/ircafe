@@ -72,13 +72,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final FlowableProcessor<TargetRef> selections =
       PublishProcessor.<TargetRef>create().toSerialized();
 
-  /**
-   * Suppresses broadcasting selection changes into {@link #selections}.
-   *
-   * <p>We intentionally set tree selection on right-click so context menus can
-   * reuse the same enabled/disabled state as the Window menu actions without
-   * switching the active chat dock.
-   */
+  /** Suppress broadcasting selection changes when selection is set for context menus. */
   private boolean suppressSelectionBroadcast = false;
 
   private final FlowableProcessor<String> connectServerRequests =
@@ -115,7 +109,6 @@ private static final class InsertionLine {
     int left = Math.min(x1, x2);
     int right = Math.max(x1, x2);
     int w = Math.max(1, right - left);
-    // Give a little vertical room for stroke thickness.
     return new Rectangle(left, Math.max(0, y - 3), w, 6);
   }
 }
@@ -129,11 +122,6 @@ private static final class InsertionLine {
 
     @Override
     public boolean getScrollableTracksViewportWidth() {
-      // Avoid FlatLaf/renderer text truncation ("...") when the tree's width
-      // does not track the viewport width. Track width when the viewport is
-      // wider than the preferred content, otherwise allow horizontal scrolling.
-      // NOTE: Some docking containers may insert wrappers between the tree and the viewport.
-      // Use ancestor lookup rather than assuming the direct parent is the viewport.
       JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
       if (vp == null) return false;
       return vp.getWidth() > getPreferredSize().width;
@@ -168,8 +156,6 @@ private static final class InsertionLine {
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
-
-    // Header
     JPanel header = new JPanel();
     header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
     header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
@@ -182,25 +168,13 @@ private static final class InsertionLine {
     header.add(Box.createHorizontalGlue());
 
     add(header, BorderLayout.NORTH);
-
-    // Initial UI state
     setConnectionControlsEnabled(true, false);
-
-    // Tree
     tree.setRootVisible(true);
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
 
     tree.setCellRenderer(treeCellRenderer);
-
-    // After LAF/theme changes, JTree's layout cache can keep stale (often tiny)
-    // row widths from before UI defaults/fonts were fully applied. That can make
-    // FlatLaf render "..." even when there's plenty of room. Force a layout
-    // refresh after UI changes.
     tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
-
-    // Reuse generic helpers for move/close behavior.
-    // This keeps all rules in one place (ServerTreeNodeReorderPolicy) and avoids duplicating tree math.
     this.nodeActions = new TreeNodeActions<>(
         tree,
         model,
@@ -215,10 +189,7 @@ private static final class InsertionLine {
 
     JScrollPane scroll = new JScrollPane(tree);
     scroll.setPreferredSize(new Dimension(260, 400));
-    // Ensure long node labels can be fully viewed by allowing horizontal scrolling when needed.
     scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-    // Some docking layouts (and some Linux/WM combos) can intercept the wheel events.
-    // Make sure the tree always scrolls when the pointer is over it.
     treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
     add(scroll, BorderLayout.CENTER);
     if (serverRegistry != null) {
@@ -234,8 +205,6 @@ private static final class InsertionLine {
                   err -> log.error("[ircafe] server registry stream error", err))
       );
     }
-
-    // Keep per-server Notifications node counts in sync with the NotificationStore.
     if (notificationStore != null) {
       disposables.add(
           notificationStore.changes()
@@ -275,7 +244,6 @@ private static final class InsertionLine {
         if (path == null) {
           return;
         }
-        // Select node under cursor, but suppress broadcast so the chat doesn't switch.
         suppressSelectionBroadcast = true;
         try {
           tree.setSelectionPath(path);
@@ -290,7 +258,6 @@ private static final class InsertionLine {
       }
     };
     tree.addMouseListener(popupListener);
-    // Middle-button drag-to-reorder; keep selection stable so chat doesn't switch.
     MouseAdapter middleDragReorder = new MouseAdapter() {
       private DefaultMutableTreeNode dragNode;
       private DefaultMutableTreeNode dragParent;
@@ -331,7 +298,6 @@ private static final class InsertionLine {
         if (!dragging) return;
 
         TreePath p = tree.getClosestPathForLocation(e.getX(), e.getY());
-        // Lead selection gives a visual hint without changing actual selection.
         tree.setLeadSelectionPath(p);
 
         int row = tree.getRowForLocation(e.getX(), e.getY());
@@ -384,13 +350,11 @@ private static final class InsertionLine {
         }
 
         if (targetNode == dragParent) {
-          // Dropping on the server row -> move to the top of the channel block.
           return minInsertIndex(dragParent);
         }
 
         DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
         if (targetParent != dragParent) {
-          // Only reorder within the same server node (same as Move Up/Down).
           return -1;
         }
 
@@ -429,12 +393,10 @@ private static final class InsertionLine {
         } else if (targetNode == dragNode) {
           return;
         } else if (targetNode == dragParent) {
-          // Dropping on the server row -> move to the top of the channel block.
           desiredInsertBeforeRemoval = minInsertIndex(dragParent);
         } else {
           DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
           if (targetParent != dragParent) {
-            // Only reorder within the same server node (same as Move Up/Down).
             return;
           }
 
@@ -443,28 +405,16 @@ private static final class InsertionLine {
           boolean after = r != null && e.getY() > (r.y + (r.height / 2));
           desiredInsertBeforeRemoval = idx + (after ? 1 : 0);
         }
-
-        // Clamp into the allowed insertion range (before removal).
         desiredInsertBeforeRemoval = Math.max(minInsertIndex(dragParent),
             Math.min(maxInsertIndex(dragParent), desiredInsertBeforeRemoval));
-
-        // Translate index to the "after removal" coordinate system.
         int desiredAfterRemoval = desiredInsertBeforeRemoval;
         if (desiredAfterRemoval > dragFromIndex) desiredAfterRemoval--;
-
-        // If we land back where we started, no-op.
         if (desiredAfterRemoval == dragFromIndex) return;
-
-        // Preserve node identity so any external maps that store node instances remain valid.
         model.removeNodeFromParent(dragNode);
-
-        // Clamp again after removal (bounds shift by 1).
         desiredAfterRemoval = Math.max(minInsertIndex(dragParent),
             Math.min(maxInsertIndex(dragParent), desiredAfterRemoval));
 
         model.insertNodeInto(dragNode, dragParent, desiredAfterRemoval);
-
-        // Restore selection if we moved the selected node (without switching active chat).
         if (draggedWasSelected) {
           suppressSelectionBroadcast = true;
           try {
@@ -483,8 +433,6 @@ private static final class InsertionLine {
 
     tree.addMouseListener(middleDragReorder);
     tree.addMouseMotionListener(middleDragReorder);
-
-    // Default selection: first server's status, otherwise root.
     SwingUtilities.invokeLater(() -> {
       TargetRef first = servers.values().stream()
           .findFirst()
@@ -503,16 +451,12 @@ private static final class InsertionLine {
 
     DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
     if (node == null) return null;
-
-    // Only show connect/disconnect on the server nodes (not status/channel/PM/group nodes).
     if (isServerNode(node)) {
       String serverId = Objects.toString(node.getUserObject(), "").trim();
       if (serverId.isEmpty()) return null;
 
       ConnectionState state = serverStates.getOrDefault(serverId, ConnectionState.DISCONNECTED);
       JPopupMenu menu = new JPopupMenu();
-
-      // Keep these visible but disabled when not applicable, same as the Window menu.
       menu.add(new JMenuItem(moveNodeUpAction()));
       menu.add(new JMenuItem(moveNodeDownAction()));
       menu.addSeparator();
@@ -542,7 +486,6 @@ private static final class InsertionLine {
         menu.add(openDock);
 
         menu.addSeparator();
-        // Keep these visible but disabled when not applicable, same as the Window menu.
         menu.add(new JMenuItem(moveNodeUpAction()));
         menu.add(new JMenuItem(moveNodeDownAction()));
 
@@ -575,7 +518,6 @@ private static final class InsertionLine {
 
   private void confirmAndRequestClearLog(TargetRef target, String label) {
     if (target == null) return;
-    // Only channels + status per request.
     if (!(target.isChannel() || target.isStatus())) return;
 
     Window w = SwingUtilities.getWindowAncestor(this);
@@ -618,9 +560,6 @@ private static final class InsertionLine {
 
   private int minInsertIndex(DefaultMutableTreeNode serverNode) {
     if (serverNode == null) return 0;
-
-    // Keep fixed leaves at the top of the server node, if present.
-    // Today that's: status (index 0) and notifications (index 1).
     int min = 0;
     int count = serverNode.getChildCount();
     while (min < count) {
@@ -643,7 +582,6 @@ private static final class InsertionLine {
 
     DefaultMutableTreeNode last = (DefaultMutableTreeNode) serverNode.getChildAt(count - 1);
     if (isPrivateMessagesGroupNode(last)) {
-      // Insert before the group (i.e., at its current index).
       return count - 1;
     }
     return count;
@@ -652,8 +590,6 @@ private static final class InsertionLine {
 private void setInsertionLine(InsertionLine line) {
   InsertionLine old = this.insertionLine;
   this.insertionLine = line;
-
-  // Repaint minimal regions to avoid flicker.
   if (old != null) tree.repaint(old.repaintRect());
   if (line != null) tree.repaint(line.repaintRect());
 }
@@ -803,8 +739,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     ServerNodes sn = servers.get(ref.serverId());
     if (sn == null) {
-      // If a server is unknown (e.g., it was removed), don't resurrect it.
-      // The mediator already attempts to switch away from removed servers.
       if (serverRegistry == null || serverRegistry.containsId(ref.serverId()) || servers.isEmpty()) {
         sn = addServerRoot(ref.serverId());
       } else {
@@ -825,8 +759,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, ref.target()));
     leaves.put(ref, leaf);
-
-    // Insert with simple ordering: fixed leaves first; channels before the PM group.
     int idx;
     if (ref.isChannel() && parent == sn.serverNode) {
       int beforePm = sn.serverNode.getChildCount();
@@ -836,7 +768,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
           beforePm = beforePm - 1;
         }
       }
-      // Channels may not be inserted above fixed leaves (status/notifications).
       idx = Math.max(minInsertIndex(sn.serverNode), beforePm);
     } else {
       idx = parent.getChildCount();
@@ -904,15 +835,11 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
         if (!id.isEmpty()) newIds.add(id);
       }
     }
-
-    // Add missing
     for (String id : newIds) {
       if (!servers.containsKey(id)) {
         addServerRoot(id);
       }
     }
-
-    // Remove no-longer-present
     for (String existing : List.copyOf(servers.keySet())) {
       if (!newIds.contains(existing)) {
         removeServerRoot(existing);
@@ -920,15 +847,12 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
 
     model.reload(root);
-
-    // If the selected path became invalid (e.g., server removed), pick a sensible default.
     SwingUtilities.invokeLater(() -> {
       TreePath sel = tree.getSelectionPath();
       if (sel != null) {
         Object last = sel.getLastPathComponent();
         if (last instanceof DefaultMutableTreeNode n) {
           if (n.getPath() != null && n.getRoot() == root) {
-            // still valid enough
             return;
           }
         }
@@ -951,11 +875,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (sn == null) return;
 
     serverStates.remove(serverId);
-
-    // Remove all leaves for this server.
     leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
-
-    // Remove the root node.
     root.remove(sn.serverNode);
   }
 
@@ -963,15 +883,11 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     String id = Objects.requireNonNull(serverId, "serverId").trim();
     if (id.isEmpty()) id = "(server)";
     if (servers.containsKey(id)) return servers.get(id);
-
-    // Default per-server connection state.
     serverStates.putIfAbsent(id, ConnectionState.DISCONNECTED);
 
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
     root.add(serverNode);
-
-    // Fixed leaves at the top of each server: status and notifications.
     TargetRef statusRef = new TargetRef(id, "status");
     DefaultMutableTreeNode statusLeaf = new DefaultMutableTreeNode(new NodeData(statusRef, "status"));
     serverNode.insert(statusLeaf, 0);
@@ -980,14 +896,11 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     TargetRef notificationsRef = TargetRef.notifications(id);
     NodeData notificationsData = new NodeData(notificationsRef, "Notifications");
     if (notificationStore != null) {
-      // Show count of stored highlight events as a bold "highlight" counter.
       notificationsData.highlightUnread = notificationStore.count(id);
     }
     DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
     serverNode.insert(notificationsLeaf, 1);
     leaves.put(notificationsRef, notificationsLeaf);
-
-    // Keep the PM group as the last child.
     serverNode.add(pmNode);
 
     ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef);
@@ -995,8 +908,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     model.reload(root);
     tree.expandPath(new TreePath(serverNode.getPath()));
-
-    // Ensure notifications count is correct even if events arrived before the server node was created.
     refreshNotificationsCount(id);
     return sn;
   }
@@ -1027,10 +938,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
           expanded.add(en.nextElement());
         }
       }
-
-      // Re-apply these to ensure UI defaults don't override the intended behavior.
       tree.setRowHeight(0);
-      // Refresh renderer UI defaults (icons/colors) after LAF/theme switches.
       try {
         treeCellRenderer.updateUI();
         treeCellRenderer.setOpenIcon(UIManager.getIcon("Tree.openIcon"));
@@ -1039,8 +947,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       } catch (Exception ignored) {
       }
       tree.setCellRenderer(treeCellRenderer);
-
-      // This triggers the UI/layout cache to recompute row sizes.
       model.reload(root);
 
       for (TreePath p : expanded) {
@@ -1050,7 +956,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       tree.revalidate();
       tree.repaint();
     } catch (Exception ignored) {
-      // best-effort; UI should still remain functional
     }
   }
 
@@ -1085,8 +990,6 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       boolean hasFocus) {
 
     java.awt.Component c = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
-
-    // Prefer the tree's current font (tracks LAF changes and any runtime overrides).
     Font base = tree.getFont();
     if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
@@ -1095,7 +998,6 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       Object uo = node.getUserObject();
       if (uo instanceof NodeData nd) {
         setText(nd.toString());
-        // Make highlight-unread visually stronger than normal unread.
         if (nd.highlightUnread > 0) {
           setFont(base.deriveFont(Font.BOLD));
         } else {

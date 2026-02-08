@@ -67,14 +67,12 @@ public class UserInfoEnrichmentService {
    */
   private final ConcurrentHashMap<String, Boolean> whoxSchemaCompatibleByServer = new ConcurrentHashMap<>();
 
-
 /**
  * Best-effort recent activity index (per server), used to prioritize WHOIS fallback for users that
  * the user is actually seeing/interacting with (e.g., recent speakers).
  */
 private static final int MAX_TRACKED_ACTIVE_NICKS_PER_SERVER = 2048;
 private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNickLowerByServer = new ConcurrentHashMap<>();
-
 
   private final Disposable eventsSub;
 
@@ -90,8 +88,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
 
     this.eventsSub = irc.events().subscribe(this::onEvent, err ->
         log.debug("UserInfoEnrichmentService event handler failed", err));
-
-    // One global tick; per-server rate limiting is enforced by the planner.
     exec.scheduleWithFixedDelay(this::tick, 0, 1, TimeUnit.SECONDS);
   }
 
@@ -100,7 +96,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     try {
       if (eventsSub != null && !eventsSub.isDisposed()) eventsSub.dispose();
     } catch (Exception ignored) {
-      // ignore
     }
     exec.shutdownNow();
   }
@@ -114,7 +109,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     whoxSupportedByServer.remove(sid);
     whoxSchemaCompatibleByServer.remove(sid);
   }
-
 
   /**
    * True when WHOX can be used for channel-wide scans on this server.
@@ -132,7 +126,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     UserInfoEnrichmentPlanner.Settings cfg = config();
     if (!cfg.enabled()) return false;
     if (!Boolean.TRUE.equals(whoxSupportedByServer.get(sid))) return false;
-    // If we've observed a schema mismatch for the IRCafe-issued WHOX token, fall back.
     if (Boolean.FALSE.equals(whoxSchemaCompatibleByServer.get(sid))) return false;
     return true;
   }
@@ -159,7 +152,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
 
   /** Enqueue WHOIS probes for these nicks (only executed if WHOIS fallback is enabled). */
   public void enqueueWhois(String serverId, Collection<String> nicks) {
-    // Don't even queue WHOIS unless the user explicitly enabled the fallback.
     UiSettingsBus bus = settingsBusProvider.getIfAvailable();
     UiSettings s = bus != null ? bus.get() : null;
     if (s == null || !s.userInfoEnrichmentEnabled() || !s.userInfoEnrichmentWhoisFallbackEnabled()) return;
@@ -169,7 +161,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     knownServers.add(sid);
     planner.enqueueWhois(sid, nicks);
   }
-
 
   /** Enqueue a channel WHO scan (best-effort, rate limited). */
   public void enqueueWhoChannel(String serverId, String channel) {
@@ -195,11 +186,8 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     planner.enqueueWhoChannelPrioritized(sid, channel);
   }
 
-
-
 /** Enqueue WHOIS probes as high priority (promoted to the front of the queue). */
 public void enqueueWhoisPrioritized(String serverId, List<String> nicks) {
-  // Don't even queue WHOIS unless the user explicitly enabled the fallback.
   UiSettingsBus bus = settingsBusProvider.getIfAvailable();
   UiSettings s = bus != null ? bus.get() : null;
   if (s == null || !s.userInfoEnrichmentEnabled() || !s.userInfoEnrichmentWhoisFallbackEnabled()) return;
@@ -241,11 +229,7 @@ private static Map<String, Instant> newLruInstantMap() {
   });
 }
 
-
-
-
   private void onEvent(ServerIrcEvent ev) {
-    // Track basic connection lifecycle so we can do a one-time self-WHOIS capability probe.
     if (ev.event() instanceof IrcEvent.Connected c) {
       String sid = norm(ev.serverId());
       if (!sid.isEmpty()) {
@@ -255,7 +239,6 @@ private static Map<String, Instant> newLruInstantMap() {
       return;
     }
     if (ev.event() instanceof IrcEvent.Disconnected) {
-      // Reset the per-connection guard so the next connect can probe again.
       String sid = norm(ev.serverId());
       if (!sid.isEmpty()) {
         selfWhoisProbeDone.remove(sid);
@@ -283,8 +266,6 @@ private static Map<String, Instant> newLruInstantMap() {
     }
 
     if (!(ev.event() instanceof IrcEvent.WhoisProbeCompleted wpc)) return;
-
-    // Only relevant when the enrichment feature and WHOIS fallback are enabled.
     UserInfoEnrichmentPlanner.Settings cfg = config();
     if (!cfg.enabled() || !cfg.whoisFallbackEnabled()) return;
 
@@ -299,7 +280,6 @@ private static Map<String, Instant> newLruInstantMap() {
   }
 
   /**
-   * Step 3A: on connect, do a single WHOIS on our own nick to quickly determine whether 330 is supported.
    *
    * <p>This is only done when "User info enrichment" and "WHOIS fallback" are enabled.
    */
@@ -315,11 +295,7 @@ private static Map<String, Instant> newLruInstantMap() {
       nick = norm(nick);
     }
     if (nick.isEmpty()) return;
-
-    // Only one self-probe per connection.
     if (!selfWhoisProbeDone.add(serverId)) return;
-
-    // Enqueue via the planner so the normal WHOIS rate limits apply.
     planner.enqueueWhois(serverId, List.of(nick));
     knownServers.add(serverId);
     log.debug("[{}] Enqueued self WHOIS capability probe for nick {}", serverId, nick);
@@ -328,7 +304,6 @@ private static Map<String, Instant> newLruInstantMap() {
     try {
       UserInfoEnrichmentPlanner.Settings cfg = config();
       if (!cfg.enabled()) {
-        // Clear queued state so enabling later doesn't run stale work.
         for (String sid : List.copyOf(knownServers)) {
           planner.clearServer(sid);
             whoxSupportedByServer.remove(sid);
@@ -340,7 +315,6 @@ private static Map<String, Instant> newLruInstantMap() {
 
       Instant now = Instant.now();
 
-      // Step 3A: if WHOIS fallback gets enabled while already connected, enqueue a one-time self probe.
       if (cfg.whoisFallbackEnabled()) {
         for (String sid : List.copyOf(knownServers)) {
           if (!isConnected(sid)) continue;
@@ -348,16 +322,12 @@ private static Map<String, Instant> newLruInstantMap() {
           maybeEnqueueSelfWhoisProbe(sid, irc.currentNick(sid).orElse(""));
         }
       }
-
-      // Periodic refresh (USERHOST only, by design) — per server.
       if (cfg.periodicRefreshEnabled()) {
         for (String sid : List.copyOf(knownServers)) {
           if (!isConnected(sid)) continue;
           planner.maybeEnqueuePeriodicRefresh(sid, now, cfg);
         }
       }
-
-      // Execute at most one probe per tick.
       for (String sid : List.copyOf(knownServers)) {
         if (!isConnected(sid)) continue;
         Optional<UserInfoEnrichmentPlanner.PlannedCommand> next = planner.pollNext(sid, now, cfg);
@@ -366,7 +336,6 @@ private static Map<String, Instant> newLruInstantMap() {
         break;
       }
     } catch (Exception ex) {
-      // Never allow the scheduler to die.
       log.debug("UserInfoEnrichmentService tick failed", ex);
     }
   }
@@ -386,26 +355,21 @@ private static Map<String, Instant> newLruInstantMap() {
           err -> log.debug("WHO channel enrichment failed for {}: {}", serverId, err.toString())
       );
       if (d.isDisposed()) {
-        // no-op
       }
       return;
     }
 
     if (cmd.kind() == UserInfoEnrichmentPlanner.ProbeKind.USERHOST) {
       String line = cmd.rawLine();
-      // Keep this at debug; enrichment can be chatty by design.
       log.debug("[{}] USERHOST enrichment: {}", serverId, String.join(", ", cmd.nicks()));
       Disposable d = irc.sendRaw(serverId, line).subscribe(
           () -> {},
           err -> log.debug("USERHOST enrichment failed for {}: {}", serverId, err.toString())
       );
       if (d.isDisposed()) {
-        // no-op
       }
       return;
     }
-
-    // WHOIS (only planned when whoisFallbackEnabled is true).
     String nick = cmd.nicks().isEmpty() ? "" : cmd.nicks().getFirst();
     if (nick.isBlank()) return;
     log.debug("[{}] WHOIS enrichment: {}", serverId, nick);
@@ -414,34 +378,24 @@ private static Map<String, Instant> newLruInstantMap() {
         err -> log.debug("WHOIS enrichment failed for {}: {}", serverId, err.toString())
     );
     if (d.isDisposed()) {
-      // no-op
     }
   }
 
   private boolean isConnected(String serverId) {
-    // Best-effort connectivity check: if we have a current nick, we are likely connected.
     return irc.currentNick(serverId).isPresent();
   }
 
   private UserInfoEnrichmentPlanner.Settings config() {
     UiSettingsBus bus = settingsBusProvider.getIfAvailable();
     UiSettings s = bus != null ? bus.get() : null;
-
-    // Safety: off unless explicitly enabled.
     boolean enabled = s != null && s.userInfoEnrichmentEnabled();
-
-    // USERHOST knobs
     Duration uhMinInterval = Duration.ofSeconds(15);
     int uhMaxPerMinute = 3;
     Duration uhNickCooldown = Duration.ofMinutes(60);
     int uhMaxNicksPerCmd = 5;
-
-    // WHOIS knobs (OFF unless explicitly enabled)
     boolean whoisEnabled = false;
     Duration whoisMinInterval = Duration.ofSeconds(45);
     Duration whoisNickCooldown = Duration.ofMinutes(120);
-
-    // Periodic refresh knobs
     boolean periodicEnabled = false;
     Duration periodicInterval = Duration.ofSeconds(300);
     int periodicNicksPerTick = 2;

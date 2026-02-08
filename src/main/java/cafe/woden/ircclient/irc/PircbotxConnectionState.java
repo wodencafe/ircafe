@@ -69,6 +69,22 @@ final class PircbotxConnectionState {
    */
   final AtomicBoolean whoxSchemaCompatibleEmitted = new AtomicBoolean(false);
 
+  // ZNC Playback module support
+  final AtomicBoolean zncPlaybackCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean zncPlaybackRequestedThisSession = new AtomicBoolean(false);
+
+  // IRCv3 history support (soju): detect whether the server accepted these capabilities.
+  final AtomicBoolean batchCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean chatHistoryCapAcked = new AtomicBoolean(false);
+
+  // IRCv3 server-time support (canonical message timestamps).
+  final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);
+  // Warn once per application run if server-time wasn't negotiated on this server.
+  final AtomicBoolean serverTimeMissingWarned = new AtomicBoolean(false);
+
+  // One-time connect log summary of negotiated caps.
+  final AtomicBoolean capSummaryLogged = new AtomicBoolean(false);
+
   PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
   }

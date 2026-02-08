@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui;
 
 import javax.swing.*;
+import javax.swing.SwingUtilities;
+import javax.swing.text.Caret;
+import javax.swing.text.DefaultCaret;
 import javax.swing.text.Element;
 import javax.swing.text.ParagraphView;
 import javax.swing.text.StyledEditorKit;
@@ -12,8 +15,37 @@ import java.awt.*;
 public class WrapTextPane extends JTextPane {
 
   public WrapTextPane() {
-    // Enable breaking long tokens (URLs, hashes) so text never forces horizontal scrolling.
     setEditorKit(new WrapEditorKit());
+
+    setAutoscrolls(false);
+    ensureNonAutoScrollingCaret();
+  }
+
+  @Override
+  public void updateUI() {
+    super.updateUI();
+    SwingUtilities.invokeLater(this::ensureNonAutoScrollingCaret);
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    SwingUtilities.invokeLater(this::ensureNonAutoScrollingCaret);
+  }
+
+  private void ensureNonAutoScrollingCaret() {
+    Caret c = getCaret();
+    if (c instanceof DefaultCaret dc) {
+      if (dc.getUpdatePolicy() != DefaultCaret.NEVER_UPDATE) {
+        dc.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
+      }
+      return;
+    }
+
+    DefaultCaret dc = new DefaultCaret();
+    dc.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
+    dc.setBlinkRate(0);
+    setCaret(dc);
   }
 
   @Override
@@ -54,7 +86,6 @@ public class WrapTextPane extends JTextPane {
     public View create(Element elem) {
       View v = delegate.create(elem);
 
-      // ParagraphView drives line breaking. Lowering minimum span allows breaking long "words".
       if (v instanceof ParagraphView) {
         return new ParagraphView(elem) {
           @Override

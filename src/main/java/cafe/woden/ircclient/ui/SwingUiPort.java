@@ -13,6 +13,7 @@ import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Locale;
 import java.util.List;
+import java.time.Instant;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -224,7 +225,6 @@ public class SwingUiPort implements UiPort {
       users.setNicks(nicks);
 
       // Avoid streams here: in very large channels this runs on the EDT and can noticeably stall the UI.
-      // Also: rebuilding nick-completions is expensive, so skip that step if the nick set hasn't changed.
       java.util.List<String> names;
       int hash = 1;
       int size = 0;
@@ -310,8 +310,20 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendChatFromHistory(target, from, text, outgoingLocalEcho, ts));
+  }
+
+  @Override
   public void appendSpoilerChat(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendSpoilerChat(target, from, text));
+  }
+
+  @Override
+  public void appendSpoilerChatAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendSpoilerChatFromHistory(target, from, text, ts));
   }
 
   @Override
@@ -325,6 +337,12 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendActionFromHistory(target, from, action, outgoingLocalEcho, ts));
+  }
+
+  @Override
   public void appendPresence(TargetRef target, cafe.woden.ircclient.app.PresenceEvent event) {
     onEdt(() -> transcripts.appendPresence(target, event));
   }
@@ -335,12 +353,30 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendNoticeAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendNoticeFromHistory(target, from, text, ts));
+  }
+
+  @Override
   public void appendStatus(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendStatus(target, from, text));
   }
 
   @Override
+  public void appendStatusAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendStatusFromHistory(target, from, text, ts));
+  }
+
+  @Override
   public void appendError(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendError(target, from, text));
+  }
+
+  @Override
+  public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendErrorFromHistory(target, from, text, ts));
   }
 }

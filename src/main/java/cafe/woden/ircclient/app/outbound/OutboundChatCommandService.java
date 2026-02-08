@@ -9,6 +9,9 @@ import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +24,10 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class OutboundChatCommandService {
+
+  private static final DateTimeFormatter CHATHISTORY_TS_FMT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+          .withZone(ZoneOffset.UTC);
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -314,6 +321,51 @@ public class OutboundChatCommandService {
     sendMessage(disposables, at, m);
   }
 
+
+  public void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(chathistory)", "Select a server first.");
+      return;
+    }
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+
+    // Require a real target buffer (channel or query), not status or UI-only.
+    if (at.isStatus()) {
+      ui.appendStatus(status, "(chathistory)", "Select a channel or query first.");
+      return;
+    }
+    if (at.isUiOnly()) {
+      ui.appendStatus(status, "(chathistory)", "That view does not support history requests.");
+      return;
+    }
+
+    int lim = limit;
+    if (lim <= 0) {
+      ui.appendStatus(status, "(chathistory)", "Usage: /chathistory [limit]  (alias: /history)");
+      ui.appendStatus(status, "(chathistory)", "Example: /chathistory 100");
+      return;
+    }
+    if (lim > 200) lim = 200;
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+    Instant before = Instant.now();
+
+    String ts = CHATHISTORY_TS_FMT.format(before);
+    String preview = "CHATHISTORY BEFORE " + at.target() + " timestamp=" + ts + " " + lim;
+    ui.appendStatus(at, "(chathistory)", "Requesting older history… limit=" + lim);
+    ui.appendStatus(at, "(chathistory)", "→ " + preview);
+
+    disposables.add(
+        irc.requestChatHistoryBefore(at.serverId(), at.target(), before, lim)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(chathistory-error)", String.valueOf(err))));
+  }
   public void handleQuote(CompositeDisposable disposables, String rawLine) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {

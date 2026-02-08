@@ -7,6 +7,7 @@ import cafe.woden.ircclient.logging.model.LogRow;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.OptionalLong;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -84,6 +85,28 @@ public class ChatLogRepository {
       DELETE FROM chat_log
        WHERE ts_epoch_ms < ?
       """;
+
+  private static final String SELECT_MAX_TS_FOR_SERVER_SQL = """
+      SELECT MAX(ts_epoch_ms)
+        FROM chat_log
+       WHERE server_id = ?
+      """;
+
+  // Exact-existence check used for remote history ingestion de-duplication.
+  // NOTE: there is no unique constraint in the schema, so we must check before insert.
+  private static final String SELECT_EXISTS_EXACT_SQL = """
+      SELECT 1
+        FROM chat_log
+       WHERE server_id = ?
+         AND target = ?
+         AND ts_epoch_ms = ?
+         AND direction = ?
+         AND kind = ?
+         AND COALESCE(from_nick, '') = ?
+         AND text = ?
+       LIMIT 1
+      """;
+
 
   private static final RowMapper<LogLine> ROW_MAPPER = (rs, rowNum) ->
       new LogLine(
@@ -169,10 +192,52 @@ public class ChatLogRepository {
         });
   }
 
+  /**
+   * Best-effort exact existence check for a persisted line.
+   *
+   * <p>Used by remote-history ingestion to suppress duplicates when the user requests the same
+   * chathistory page multiple times.
+   */
+  public boolean existsExact(LogLine line) {
+    if (line == null) return false;
+    String from = line.fromNick();
+    if (from == null) from = "";
+    String text = truncate(line.text());
+    try {
+      List<Integer> rows = jdbc.query(
+          SELECT_EXISTS_EXACT_SQL,
+          (rs, rowNum) -> rs.getInt(1),
+          line.serverId(),
+          line.target(),
+          line.tsEpochMs(),
+          line.direction().name(),
+          line.kind().name(),
+          from,
+          text
+      );
+      return rows != null && !rows.isEmpty();
+    } catch (Exception ex) {
+      // Fail open: treat as "not present" so ingestion can proceed.
+      return false;
+    }
+  }
+
   /** Fetch the most recent {@code limit} lines for a given server+target (newest-first). */
   public List<LogLine> fetchRecent(String serverId, String target, int limit) {
     if (limit <= 0) return List.of();
     return jdbc.query(SELECT_RECENT_SQL, ROW_MAPPER, serverId, target, limit);
+  }
+
+  /** Fetch the newest persisted timestamp (epoch ms) for a server (if any). */
+  public OptionalLong maxTimestampForServer(String serverId) {
+    if (serverId == null || serverId.isBlank()) return OptionalLong.empty();
+    try {
+      Long v = jdbc.queryForObject(SELECT_MAX_TS_FOR_SERVER_SQL, Long.class, serverId);
+      if (v == null) return OptionalLong.empty();
+      return OptionalLong.of(v);
+    } catch (Exception ex) {
+      return OptionalLong.empty();
+    }
   }
 
   /**

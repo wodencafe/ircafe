@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -89,8 +90,22 @@ Flowable<TargetRef> targetActivations();
    */
   void appendChat(TargetRef target, String from, String text, boolean outgoingLocalEcho);
 
+  /**
+   * Append a chat message line with an explicit timestamp (e.g. IRCv3 server-time).
+   *
+   * <p>Default implementation falls back to {@link #appendChat(TargetRef, String, String, boolean)}.
+   */
+  default void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
+    appendChat(target, from, text, outgoingLocalEcho);
+  }
+
   
   void appendSpoilerChat(TargetRef target, String from, String text);
+
+  /** Append a spoiler chat line with an explicit timestamp. */
+  default void appendSpoilerChatAt(TargetRef target, Instant at, String from, String text) {
+    appendSpoilerChat(target, from, text);
+  }
 
   default void appendAction(TargetRef target, String from, String action) {
     appendAction(target, from, action, false);
@@ -98,9 +113,26 @@ Flowable<TargetRef> targetActivations();
 
   void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho);
 
+  /** Append an action line with an explicit timestamp. */
+  default void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
+    appendAction(target, from, action, outgoingLocalEcho);
+  }
+
   void appendPresence(TargetRef target, PresenceEvent event);
 
   void appendNotice(TargetRef target, String from, String text);
   void appendStatus(TargetRef target, String from, String text);
   void appendError(TargetRef target, String from, String text);
+
+  default void appendNoticeAt(TargetRef target, Instant at, String from, String text) {
+    appendNotice(target, from, text);
+  }
+
+  default void appendStatusAt(TargetRef target, Instant at, String from, String text) {
+    appendStatus(target, from, text);
+  }
+
+  default void appendErrorAt(TargetRef target, Instant at, String from, String text) {
+    appendError(target, from, text);
+  }
 }

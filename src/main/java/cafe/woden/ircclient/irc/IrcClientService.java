@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -44,6 +45,16 @@ public interface IrcClientService {
 
   /** Send a raw IRC line (advanced). */
   Completable sendRaw(String serverId, String rawLine);
+
+  /**
+   * Request chat history from the server/bouncer.
+   *
+   * <p>Requires IRCv3 {@code draft/chathistory} (and typically {@code batch}) to be negotiated.
+   * The returned history will arrive asynchronously on {@link #events()} and will be handled
+   * by later pipeline steps.
+   */
+  Completable requestChatHistoryBefore(String serverId, String target, Instant beforeExclusive, int limit);
+
 
   default Completable sendAction(String serverId, String target, String action) {
     String a = action == null ? "" : action;
