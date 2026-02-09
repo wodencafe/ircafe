@@ -90,6 +90,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     // existing "active target" based app logic continues to work.
     disposables.add(
         inputPanel.outboundMessages().subscribe(line -> {
+          armTailPinOnNextAppendIfAtBottom();
           if (activeInputRouter != null) {
             activeInputRouter.activate(inputPanel);
           }
