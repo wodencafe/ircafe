@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,9 @@ import org.pircbotx.snapshot.UserSnapshot;
 /** Translates PircBotX events into ServerIrcEvent. */
 final class PircbotxBridgeListener extends ListenerAdapter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxBridgeListener.class);
+
+  // Helpful for correlating MODE bursts in logs.
+  private static final AtomicLong MODE_SEQ = new AtomicLong();
 
   @FunctionalInterface
   interface CtcpRequestHandler {
@@ -1295,11 +1299,34 @@ if (code == 302 || code == 352 || code == 354) {
       if (event == null) return;
       if (event.getChannel() == null) return;
 
+      long seq = MODE_SEQ.incrementAndGet();
+
       emitRoster(event.getChannel());
 
       String chan = event.getChannel().getName();
       String by = nickFromEvent(event);
       String details = modeDetailsFromEvent(event, chan);
+
+      if (log.isDebugEnabled()) {
+        Object rawLine = reflectCall(event, "getRawLine");
+        if (rawLine == null) rawLine = reflectCall(event, "getRaw");
+        if (rawLine == null) rawLine = reflectCall(event, "getLine");
+        Object modeLine = reflectCall(event, "getModeLine");
+        if (modeLine == null) modeLine = reflectCall(event, "getModeString");
+        Object mode = reflectCall(event, "getMode");
+
+        log.debug(
+            "[{}] MODEDBG#{} chan={} by={} eventClass={} rawLine={} modeLine={} mode={} details={}",
+            serverId,
+            seq,
+            chan,
+            by,
+            event.getClass().getName(),
+            clip(rawLine),
+            clip(modeLine),
+            clip(mode),
+            clip(details));
+      }
 
       if (details != null && !details.isBlank()) {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelModeChanged(
@@ -1409,16 +1436,33 @@ if (code == 302 || code == 352 || code == 354) {
 
     private static String modeDetailsFromEvent(Object event, String channelName) {
       if (event == null) return null;
-      Object mode = reflectCall(event, "getMode");
-      if (mode == null) mode = reflectCall(event, "getModeLine");
-      if (mode == null) mode = reflectCall(event, "getModeString");
-      String s = (mode != null) ? String.valueOf(mode) : null;
-      if (s == null) {
-        Object raw = reflectCall(event, "getRawLine");
-        if (raw != null) s = String.valueOf(raw);
+
+      // Prefer raw MODE line; getMode can reflect current channel modes.
+      Object raw = reflectCall(event, "getRawLine");
+      if (raw == null) raw = reflectCall(event, "getRaw");
+      if (raw == null) raw = reflectCall(event, "getLine");
+      if (raw != null) {
+        String r = extractModeDetails(String.valueOf(raw), channelName);
+        if (r != null && !r.isBlank()) return r;
       }
 
+      // Next-best accessor that includes args.
+      Object modeLine = reflectCall(event, "getModeLine");
+      if (modeLine == null) modeLine = reflectCall(event, "getModeString");
+      if (modeLine != null) {
+        String s = String.valueOf(modeLine);
+        String reduced = extractModeDetails(s, channelName);
+        if (reduced != null && !reduced.isBlank()) return reduced;
+        if (s != null && !s.isBlank()) return s.trim();
+      }
+
+      // Last resort: getMode() (may be current modes).
+      Object mode = reflectCall(event, "getMode");
+      if (mode == null) return null;
+
+      String s = String.valueOf(mode);
       if (s == null) return null;
+
       String reduced = extractModeDetails(s, channelName);
       return (reduced != null) ? reduced : s;
     }
@@ -1434,7 +1478,7 @@ if (code == 302 || code == 352 || code == 354) {
         if (sp > 0) l = l.substring(sp + 1).trim();
       }
 
-      String[] toks = l.split("\s+");
+      String[] toks = l.split("\\s+");
       for (int i = 0; i < toks.length; i++) {
         if ("MODE".equalsIgnoreCase(toks[i])) {
           int idx = i + 2;
@@ -1474,6 +1518,15 @@ if (code == 302 || code == 352 || code == 354) {
       } catch (Exception ignored) {
         return null;
       }
+    }
+
+    private static String clip(Object v) {
+      if (v == null) return "<null>";
+      String s = String.valueOf(v);
+      if (s == null) return "<null>";
+      s = s.replace('\n', ' ').replace('\r', ' ');
+      if (s.length() > 280) return s.substring(0, 277) + "...";
+      return s;
     }
 
     private void emitRoster(Channel channel) {

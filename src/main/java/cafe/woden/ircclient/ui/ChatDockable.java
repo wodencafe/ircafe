@@ -191,7 +191,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         }
       });
     }
-    disposables.add(inputPanel.outboundMessages().subscribe(outboundBus::emit, err -> {
+    disposables.add(inputPanel.outboundMessages().subscribe(line -> {
+      armTailPinOnNextAppendIfAtBottom();
+      outboundBus.emit(line);
+    }, err -> {
       // Never crash the UI because an outbound subscriber failed.
     }));
 

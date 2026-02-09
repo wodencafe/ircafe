@@ -185,6 +185,12 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet) {
+    // Not a UI action; no need to marshal to the EDT.
+    notificationStore.recordRuleMatch(target, fromNick, ruleLabel, snippet);
+  }
+
+  @Override
   public void clearUnread(TargetRef target) {
     // Visiting a channel clears any stored highlight notifications for that channel.
     if (target != null && target.isChannel()) {

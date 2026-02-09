@@ -45,6 +45,14 @@ Flowable<TargetRef> targetActivations();
    */
   void recordHighlight(TargetRef target, String fromNick);
 
+  /**
+   * Record a notification rule match (for the per-server Notifications view).
+   *
+   * <p>This should be called when an inbound channel message/action matches a user-configured
+   * WORD/REGEX rule and that match is considered unread (e.g. the channel is not currently active).</p>
+   */
+  void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet);
+
   void clearUnread(TargetRef target);
 
   void clearTranscript(TargetRef target);

@@ -206,6 +206,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     followTailScroll.scrollToBottom();
   }
 
+  protected void armTailPinOnNextAppendIfAtBottom() {
+    followTailScroll.armTailPinIfAtBottomNow();
+  }
+
   protected void updateScrollStateFromBar() {
     followTailScroll.updateScrollStateFromBar();
   }

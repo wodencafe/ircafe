@@ -3,6 +3,7 @@ package cafe.woden.ircclient.config;
 import java.awt.Font;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -77,6 +78,17 @@ public record UiProperties(
      * If disabled, they are routed to their origin target (channel/PM) instead.
      */
     Boolean ctcpRequestsInActiveTargetEnabled,
+
+    /**
+     * User-configured keyword / regex notification rules.
+     *
+     * <p>These are evaluated only for channel messages.
+     */
+    List<NotificationRuleProperties> notificationRules,
+
+    /** Cooldown (seconds) to dedupe repeated rule-match notifications per channel + rule. */
+    Integer notificationRuleCooldownSeconds,
+
 
     double nickColorMinContrast,
 
@@ -317,6 +329,12 @@ public record UiProperties(
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
       ctcpRequestsInActiveTargetEnabled = true;
+    }
+
+    if (notificationRules == null) {
+      notificationRules = List.of();
+    } else {
+      notificationRules = notificationRules.stream().filter(Objects::nonNull).toList();
     }
     if (nickColors == null) {
       nickColors = List.of();

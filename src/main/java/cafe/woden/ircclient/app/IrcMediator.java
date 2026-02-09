@@ -2,6 +2,8 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
+import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -28,6 +30,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -60,6 +63,8 @@ public class IrcMediator {
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
 
+  private final NotificationRuleMatcher notificationRuleMatcher;
+
   private final ChatHistoryIngestor chatHistoryIngestor;
 
   private final ChatHistoryIngestBus chatHistoryIngestBus;
@@ -85,6 +90,7 @@ public class IrcMediator {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       UiSettingsBus uiSettingsBus,
+      NotificationRuleMatcher notificationRuleMatcher,
       UserInfoEnrichmentService userInfoEnrichmentService,
       WhoisRoutingState whoisRoutingState,
       CtcpRoutingState ctcpRoutingState,
@@ -109,6 +115,7 @@ public class IrcMediator {
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
     this.uiSettingsBus = uiSettingsBus;
+    this.notificationRuleMatcher = notificationRuleMatcher;
     this.userInfoEnrichmentService = userInfoEnrichmentService;
     this.whoisRoutingState = whoisRoutingState;
     this.ctcpRoutingState = ctcpRoutingState;
@@ -511,6 +518,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           postTo(chan, active, true, d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), false));
         }
 
+        if (!chan.equals(active)) {
+          maybeRecordRuleMatch(sid, chan, active, ev.from(), ev.text());
+        }
+
         if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) {
           ui.markHighlight(chan);
           ui.recordHighlight(chan, ev.from());
@@ -529,6 +540,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
         } else {
           postTo(chan, active, true, d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), false));
+        }
+
+        if (!chan.equals(active)) {
+          maybeRecordRuleMatch(sid, chan, active, ev.from(), ev.action());
         }
 
         if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) {
@@ -784,6 +799,65 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       default -> {
       }
     }
+  }
+
+  private void maybeRecordRuleMatch(String serverId, TargetRef chan, TargetRef active, String from, String text) {
+    if (chan == null || text == null || text.isBlank()) return;
+    if (active != null && chan.equals(active)) return;
+    if (isFromSelf(serverId, from)) return;
+
+    List<NotificationRuleMatch> matches;
+    try {
+      matches = notificationRuleMatcher.matchAll(text);
+    } catch (Exception ignored) {
+      return;
+    }
+
+    if (matches == null || matches.isEmpty()) return;
+    // Record the first match only to avoid spamming notifications.
+    NotificationRuleMatch m = matches.get(0);
+
+    ui.markHighlight(chan);
+
+    ui.recordRuleMatch(chan, from, m.ruleLabel(), snippetAround(text, m.start(), m.end()));
+  }
+
+  private boolean isFromSelf(String serverId, String from) {
+    if (serverId == null || from == null) return false;
+    String me = irc.currentNick(serverId).orElse(null);
+    if (me == null || me.isBlank()) return false;
+    String fromNorm = normalizeNickForCompare(from);
+    return fromNorm != null && fromNorm.equalsIgnoreCase(me);
+  }
+
+  private static String snippetAround(String message, int start, int end) {
+    if (message == null) return "";
+    int len = message.length();
+    if (len == 0) return "";
+
+    int s = Math.max(0, Math.min(start, len));
+    int e = Math.max(0, Math.min(end, len));
+    if (e < s) {
+      int tmp = s;
+      s = e;
+      e = tmp;
+    }
+
+    int ctx = 70;
+    int from = Math.max(0, s - ctx);
+    int to = Math.min(len, e + ctx);
+
+    String snip = message.substring(from, to).trim();
+    snip = snip.replaceAll("\\s+", " ");
+
+    if (from > 0) snip = "…" + snip;
+    if (to < len) snip = snip + "…";
+
+    int max = 200;
+    if (snip.length() > max) {
+      snip = snip.substring(0, max - 1) + "…";
+    }
+    return snip;
   }
 
   private boolean containsSelfMention(String serverId, String from, String message) {

@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
+import java.util.List;
+
 public record UiSettings(
     String theme,
     String chatFontFamily,
@@ -71,7 +73,11 @@ public record UiSettings(
 
     int userInfoEnrichmentPeriodicRefreshIntervalSeconds,
 
-    int userInfoEnrichmentPeriodicRefreshNicksPerTick
+    int userInfoEnrichmentPeriodicRefreshNicksPerTick,
+
+    int notificationRuleCooldownSeconds,
+
+    List<NotificationRule> notificationRules
 ) {
 
   public UiSettings {
@@ -108,6 +114,11 @@ public record UiSettings(
     if (userInfoEnrichmentPeriodicRefreshIntervalSeconds <= 0) userInfoEnrichmentPeriodicRefreshIntervalSeconds = 300;
     if (userInfoEnrichmentPeriodicRefreshNicksPerTick <= 0) userInfoEnrichmentPeriodicRefreshNicksPerTick = 2;
     if (userInfoEnrichmentPeriodicRefreshNicksPerTick > 10) userInfoEnrichmentPeriodicRefreshNicksPerTick = 10;
+
+    if (notificationRuleCooldownSeconds < 0) notificationRuleCooldownSeconds = 15;
+    if (notificationRuleCooldownSeconds > 3600) notificationRuleCooldownSeconds = 3600;
+
+    if (notificationRules == null) notificationRules = List.of();
   }
 
   /**
@@ -174,8 +185,10 @@ public record UiSettings(
         // New fields
         false, 15, 3, 60, 5,
         false, 45, 120,
-        false, 300, 2);
-  }
+        false, 300, 2,
+        15,
+        List.of());
+}
 
   static String normalizeHexOrDefault(String raw, String fallback) {
     String fb = (fallback == null || fallback.isBlank()) ? "#6AA2FF" : fallback.trim();
@@ -210,7 +223,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withChatFontFamily(String family) {
@@ -227,7 +242,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withChatFontSize(int size) {
@@ -244,7 +261,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
@@ -261,7 +280,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withImageEmbedsCollapsedByDefault(boolean collapsed) {
@@ -278,7 +299,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withImageEmbedsMaxWidthPx(int maxWidthPx) {
@@ -295,7 +318,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withImageEmbedsMaxHeightPx(int maxHeightPx) {
@@ -312,7 +337,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withLinkPreviewsEnabled(boolean enabled) {
@@ -329,7 +356,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withLinkPreviewsCollapsedByDefault(boolean collapsed) {
@@ -346,7 +375,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
@@ -363,7 +394,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withTimestampsEnabled(boolean enabled) {
@@ -380,7 +413,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withTimestampFormat(String format) {
@@ -397,7 +432,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   public UiSettings withTimestampsIncludeChatMessages(boolean enabled) {
@@ -414,7 +451,9 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 
   @Deprecated
@@ -436,6 +475,8 @@ public record UiSettings(
         userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
-        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick);
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
   }
 }

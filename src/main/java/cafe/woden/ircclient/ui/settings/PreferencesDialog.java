@@ -20,6 +20,7 @@ import java.awt.Font;
 import java.time.format.DateTimeFormatter;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
+import javax.swing.Icon;
 import javax.swing.JColorChooser;
 import javax.swing.JTextField;
 import javax.swing.event.DocumentEvent;
@@ -28,6 +29,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GraphicsEnvironment;
+import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
@@ -39,9 +41,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.DefaultCellEditor;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -51,11 +60,17 @@ import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.ListSelectionModel;
+import javax.swing.JOptionPane;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -137,15 +152,20 @@ public class PreferencesDialog {
     JPanel networkPanel = network.networkPanel;
     JPanel userLookupsPanel = network.userLookupsPanel;
 
+    NotificationRulesControls notifications = buildNotificationRulesControls(current, closeables);
+
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
+    JPanel notificationsPanel = buildNotificationsPanel(notifications);
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
+
+    attachNotificationRuleValidation(notifications, apply, ok);
 
     Runnable doApply = () -> {
       String t = String.valueOf(theme.combo.getSelectedItem());
@@ -266,6 +286,28 @@ public class PreferencesDialog {
       String outgoingHexV = UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
       outgoing.hex.setText(outgoingHexV);
 
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      ValidationError notifErr = notifications.model.firstValidationError();
+      if (notifErr != null) {
+        refreshNotificationRuleValidation(notifications);
+        JOptionPane.showMessageDialog(dialog,
+            notifErr.formatForDialog(),
+            "Invalid notification rule",
+            JOptionPane.ERROR_MESSAGE);
+        return;
+      }
+
+      int notificationRuleCooldownSecondsV = ((Number) notifications.cooldownSeconds.getValue()).intValue();
+      if (notificationRuleCooldownSecondsV < 0) notificationRuleCooldownSecondsV = 15;
+      if (notificationRuleCooldownSecondsV > 3600) notificationRuleCooldownSecondsV = 3600;
+      List<NotificationRule> notificationRulesV = notifications.model.snapshot();
+
       UiSettings next = new UiSettings(
           t,
           fam,
@@ -302,7 +344,10 @@ public class PreferencesDialog {
           uieWhoisNickCooldownV,
           uiePeriodicRefreshEnabledV,
           uiePeriodicRefreshIntervalV,
-          uiePeriodicRefreshNicksPerTickV
+          uiePeriodicRefreshNicksPerTickV,
+
+          notificationRuleCooldownSecondsV,
+          notificationRulesV
       );
 
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
@@ -341,6 +386,9 @@ public class PreferencesDialog {
 
       runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
       runtimeConfig.rememberClientLineColor(next.clientLineColor());
+
+      runtimeConfig.rememberNotificationRuleCooldownSeconds(next.notificationRuleCooldownSeconds());
+      runtimeConfig.rememberNotificationRules(notificationRulesV);
 
       runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
       runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
@@ -404,6 +452,7 @@ public class PreferencesDialog {
     tabs.addTab("Chat", wrapTab(chatPanel));
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
+    tabs.addTab("Notifications", wrapTab(notificationsPanel));
     tabs.addTab("Network", wrapTab(networkPanel));
     tabs.addTab("User lookups", wrapTab(userLookupsPanel));
 
@@ -1705,6 +1754,571 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return panel;
   }
 
+  private NotificationRulesControls buildNotificationRulesControls(UiSettings current, List<AutoCloseable> closeables) {
+    int cooldown = current != null ? current.notificationRuleCooldownSeconds() : 15;
+    JSpinner cooldownSeconds = numberSpinner(cooldown, 0, 3600, 1, closeables);
+
+    NotificationRulesTableModel model = new NotificationRulesTableModel(current != null ? current.notificationRules() : List.of());
+    JTable table = new JTable(model);
+    table.setFillsViewportHeight(true);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    table.setRowHeight(Math.max(22, table.getRowHeight()));
+
+    // Editors
+    JComboBox<NotificationRule.Type> typeCombo = new JComboBox<>(NotificationRule.Type.values());
+    table.getColumnModel().getColumn(NotificationRulesTableModel.COL_TYPE).setCellEditor(new DefaultCellEditor(typeCombo));
+
+    // Column sizing
+    TableColumn enabledCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_ENABLED);
+    enabledCol.setMaxWidth(80);
+    enabledCol.setPreferredWidth(70);
+
+    TableColumn typeCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_TYPE);
+    typeCol.setMaxWidth(110);
+    typeCol.setPreferredWidth(90);
+
+    TableColumn colorCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_COLOR);
+    colorCol.setMaxWidth(130);
+    colorCol.setPreferredWidth(110);
+    colorCol.setCellRenderer(new RuleColorCellRenderer());
+
+    TableColumn caseCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_CASE);
+    caseCol.setMaxWidth(90);
+    caseCol.setPreferredWidth(80);
+
+    TableColumn wholeCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_WHOLE);
+    wholeCol.setMaxWidth(110);
+    wholeCol.setPreferredWidth(90);
+
+    JLabel validationLabel = new JLabel();
+    validationLabel.setVisible(false);
+    Color err = errorForeground();
+    if (err != null) validationLabel.setForeground(err);
+
+    JTextArea testInput = new JTextArea(4, 40);
+    testInput.setLineWrap(true);
+    testInput.setWrapStyleWord(true);
+
+    JTextArea testOutput = new JTextArea(6, 40);
+    testOutput.setEditable(false);
+    testOutput.setLineWrap(true);
+    testOutput.setWrapStyleWord(true);
+
+    JLabel testStatus = new JLabel(" ");
+    RuleTestRunner testRunner = new RuleTestRunner();
+    closeables.add(testRunner);
+
+    return new NotificationRulesControls(cooldownSeconds, table, model, validationLabel, testInput, testOutput, testStatus, testRunner);
+  }
+
+  private JPanel buildNotificationsPanel(NotificationRulesControls notifications) {
+    JPanel panel = new JPanel(new MigLayout("insets 12, fill, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]0[grow]"));
+
+    panel.add(tabTitle("Notifications"), "span 2, growx, wmin 0, wrap");
+    panel.add(sectionTitle("Rule matches"), "span 2, growx, wmin 0, wrap");
+    panel.add(helpText(
+        "Add custom word/regex rules to create notifications when messages match.\n"
+            + "Rules only trigger for channels (not PMs) and only when the channel isn't the active target."),
+        "span 2, growx, wmin 0, wrap");
+
+    panel.add(new JLabel("Cooldown (sec)"));
+    panel.add(notifications.cooldownSeconds, "w 110!, wrap");
+
+    JButton add = new JButton("Add");
+    JButton edit = new JButton("Edit");
+    JButton duplicate = new JButton("Duplicate");
+    JButton remove = new JButton("Remove");
+    JButton up = new JButton("Up");
+    JButton down = new JButton("Down");
+    JButton pickColor = new JButton("Color…");
+    JButton clearColor = new JButton("Clear color");
+
+    pickColor.setToolTipText("Choose a foreground highlight color for this rule.");
+    clearColor.setToolTipText("Clear the rule's foreground highlight color.");
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    buttons.add(add);
+    buttons.add(edit);
+    buttons.add(duplicate);
+    buttons.add(remove);
+    buttons.add(up);
+    buttons.add(down);
+    buttons.add(pickColor);
+    buttons.add(clearColor);
+
+    add.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.model.addRule(new NotificationRule(
+          "",
+          NotificationRule.Type.WORD,
+          "",
+          true,
+          false,
+          true,
+          null
+      ));
+      if (row >= 0) {
+        notifications.table.getSelectionModel().setSelectionInterval(row, row);
+        notifications.table.scrollRectToVisible(notifications.table.getCellRect(row, 0, true));
+        notifications.table.editCellAt(row, NotificationRulesTableModel.COL_PATTERN);
+        notifications.table.requestFocusInWindow();
+      }
+    });
+
+    edit.addActionListener(e -> {
+      int row = notifications.table.getSelectedRow();
+      if (row < 0) return;
+      notifications.table.editCellAt(row, NotificationRulesTableModel.COL_PATTERN);
+      notifications.table.requestFocusInWindow();
+    });
+
+    duplicate.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.table.getSelectedRow();
+      if (row < 0) return;
+      int dup = notifications.model.duplicateRow(row);
+      if (dup >= 0) {
+        notifications.table.getSelectionModel().setSelectionInterval(dup, dup);
+        notifications.table.scrollRectToVisible(notifications.table.getCellRect(dup, 0, true));
+      }
+    });
+
+    remove.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.table.getSelectedRow();
+      if (row < 0) return;
+      int res = JOptionPane.showConfirmDialog(dialog, "Remove selected rule?", "Remove rule", JOptionPane.OK_CANCEL_OPTION);
+      if (res != JOptionPane.OK_OPTION) return;
+      notifications.model.removeRow(row);
+    });
+
+    up.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.table.getSelectedRow();
+      if (row <= 0) return;
+      int next = notifications.model.moveRow(row, row - 1);
+      if (next >= 0) {
+        notifications.table.getSelectionModel().setSelectionInterval(next, next);
+        notifications.table.scrollRectToVisible(notifications.table.getCellRect(next, 0, true));
+      }
+    });
+
+    down.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.table.getSelectedRow();
+      if (row < 0) return;
+      int next = notifications.model.moveRow(row, row + 1);
+      if (next >= 0) {
+        notifications.table.getSelectionModel().setSelectionInterval(next, next);
+        notifications.table.scrollRectToVisible(notifications.table.getCellRect(next, 0, true));
+      }
+    });
+
+    pickColor.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.table.getSelectedRow();
+      if (row < 0) return;
+
+      String raw = notifications.model.highlightFgAt(row);
+      Color currentColor = parseHexColor(raw);
+      if (currentColor == null && raw != null && raw.trim().startsWith("#") && raw.trim().length() == 4) {
+        String s = raw.trim().substring(1);
+        char r = s.charAt(0), g = s.charAt(1), b = s.charAt(2);
+        currentColor = parseHexColor("#" + r + r + g + g + b + b);
+      }
+      if (currentColor == null) {
+        Color def = UIManager.getColor("TextPane.foreground");
+        if (def == null) def = UIManager.getColor("Label.foreground");
+        currentColor = def != null ? def : Color.WHITE;
+      }
+
+      Color chosen = JColorChooser.showDialog(dialog, "Choose Rule Highlight Color", currentColor);
+      if (chosen != null) {
+        notifications.model.setHighlightFg(row, toHex(chosen));
+      }
+    });
+
+    clearColor.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = notifications.table.getSelectedRow();
+      if (row < 0) return;
+      notifications.model.setHighlightFg(row, null);
+    });
+
+    panel.add(new JLabel("Rules"));
+    panel.add(buttons, "growx, wrap");
+
+    JScrollPane scroll = new JScrollPane(notifications.table);
+    scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    panel.add(scroll, "span 2, grow, push, h 240!, wrap");
+
+    panel.add(notifications.validationLabel, "span 2, growx, wmin 0, wrap");
+
+    panel.add(sectionTitle("Test"), "span 2, growx, wmin 0, wrap");
+    panel.add(helpText(
+        "Paste a sample message to see which rules match. This is just a preview; it won't create real notifications."),
+        "span 2, growx, wmin 0, wrap");
+
+    JScrollPane testInScroll = new JScrollPane(notifications.testInput);
+    testInScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    testInScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    JScrollPane testOutScroll = new JScrollPane(notifications.testOutput);
+    testOutScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    testOutScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    JButton runTest = new JButton("Test");
+    JButton clearTest = new JButton("Clear");
+
+    JPanel testButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    testButtons.add(runTest);
+    testButtons.add(clearTest);
+    testButtons.add(notifications.testStatus);
+
+    runTest.addActionListener(e -> {
+      if (notifications.table.isEditing()) {
+        try {
+          notifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+      refreshNotificationRuleValidation(notifications);
+      notifications.testRunner.runTest(notifications);
+    });
+
+    clearTest.addActionListener(e -> {
+      notifications.testInput.setText("");
+      notifications.testOutput.setText("");
+      notifications.testStatus.setText(" ");
+    });
+
+    panel.add(new JLabel("Sample"), "aligny top");
+    panel.add(testInScroll, "growx, h 90!, wrap");
+
+    panel.add(new JLabel("Matches"), "aligny top");
+    panel.add(testOutScroll, "growx, h 140!, wrap");
+
+    panel.add(new JLabel(""));
+    panel.add(testButtons, "growx, wrap");
+
+    refreshNotificationRuleValidation(notifications);
+
+    return panel;
+  }
+
+  private void attachNotificationRuleValidation(NotificationRulesControls notifications, JButton apply, JButton ok) {
+    Runnable refresh = () -> {
+      boolean valid = refreshNotificationRuleValidation(notifications);
+      apply.setEnabled(valid);
+      ok.setEnabled(valid);
+    };
+
+    notifications.model.addTableModelListener(e -> refresh.run());
+    refresh.run();
+  }
+
+  private boolean refreshNotificationRuleValidation(NotificationRulesControls notifications) {
+    ValidationError err = notifications.model.firstValidationError();
+    if (err == null) {
+      notifications.validationLabel.setText(" ");
+      notifications.validationLabel.setVisible(false);
+      return true;
+    }
+    notifications.validationLabel.setText(err.formatForInline());
+    notifications.validationLabel.setVisible(true);
+    return false;
+  }
+
+  private static Color errorForeground() {
+    Color c = UIManager.getColor("Label.errorForeground");
+    if (c != null) return c;
+    c = UIManager.getColor("Component.error.focusedBorderColor");
+    if (c != null) return c;
+    return new Color(180, 0, 0);
+  }
+
+  private record ValidationError(int rowIndex, String label, String pattern, String message) {
+
+    String effectiveLabel() {
+      String l = label != null ? label.trim() : "";
+      if (!l.isEmpty()) return l;
+      String p = pattern != null ? pattern.trim() : "";
+      return p.isEmpty() ? "(unnamed)" : p;
+    }
+
+    String formatForInline() {
+      String msg = message != null ? message.trim() : "Invalid regex";
+      if (msg.length() > 180) msg = msg.substring(0, 180) + "…";
+      return "Invalid REGEX (row " + (rowIndex + 1) + ", " + effectiveLabel() + "): " + msg;
+    }
+
+    String formatForDialog() {
+      String msg = message != null ? message.trim() : "Invalid regex";
+      return "Row " + (rowIndex + 1) + " (" + effectiveLabel() + "):\n" + msg + "\n\nPattern:\n" + (pattern != null ? pattern : "");
+    }
+  }
+
+  private static final class RuleTestRunner implements AutoCloseable {
+
+    private static final int MAX_TEST_CHARS = 800;
+
+    private final ExecutorService exec;
+    private final AtomicLong seq = new AtomicLong();
+
+    RuleTestRunner() {
+      this.exec = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "ircafe-notification-rule-test");
+        t.setDaemon(true);
+        return t;
+      });
+    }
+
+    void runTest(NotificationRulesControls controls) {
+      if (controls == null) return;
+
+      String sample = controls.testInput.getText();
+      if (sample == null) sample = "";
+      if (sample.length() > MAX_TEST_CHARS) {
+        sample = sample.substring(0, MAX_TEST_CHARS);
+      }
+
+      List<NotificationRule> rules = controls.model.snapshot();
+      List<ValidationError> errors = controls.model.validationErrors();
+
+      long token = seq.incrementAndGet();
+      controls.testStatus.setText("Testing…");
+
+      final String sampleFinal = sample;
+      exec.submit(() -> {
+        String report = buildRuleTestReport(rules, errors, sampleFinal);
+        SwingUtilities.invokeLater(() -> {
+          if (seq.get() != token) return;
+          controls.testOutput.setText(report);
+          controls.testOutput.setCaretPosition(0);
+          controls.testStatus.setText(" ");
+        });
+      });
+    }
+
+    @Override
+    public void close() {
+      exec.shutdownNow();
+    }
+  }
+
+  private static String buildRuleTestReport(List<NotificationRule> rules, List<ValidationError> errors, String sample) {
+    String msg = sample != null ? sample : "";
+    msg = msg.trim();
+    if (msg.isEmpty()) {
+      return "Type a sample message above, then click Test.";
+    }
+
+    StringBuilder out = new StringBuilder();
+
+    if (errors != null && !errors.isEmpty()) {
+      out.append("Invalid REGEX rules (ignored):\n");
+      int shown = 0;
+      for (ValidationError e : errors) {
+        if (e == null) continue;
+        out.append("  - row ").append(e.rowIndex + 1).append(": ").append(e.effectiveLabel()).append("\n");
+        shown++;
+        if (shown >= 5) {
+          int remain = errors.size() - shown;
+          if (remain > 0) out.append("  (").append(remain).append(" more)\n");
+          break;
+        }
+      }
+      out.append("\n");
+    }
+
+    List<String> matches = new ArrayList<>();
+    List<String> invalidRegex = new ArrayList<>();
+
+    for (NotificationRule r : (rules != null ? rules : List.<NotificationRule>of())) {
+      if (r == null) continue;
+      if (!r.enabled()) continue;
+      String pat = r.pattern() != null ? r.pattern().trim() : "";
+      if (pat.isEmpty()) continue;
+
+      if (r.type() == NotificationRule.Type.REGEX) {
+        Pattern p;
+        try {
+          int flags = Pattern.UNICODE_CASE;
+          if (!r.caseSensitive()) flags |= Pattern.CASE_INSENSITIVE;
+          p = Pattern.compile(pat, flags);
+        } catch (Exception ex) {
+          invalidRegex.add(r.label());
+          continue;
+        }
+
+        Matcher m = p.matcher(msg);
+        if (m.find()) {
+          String snip = snippetAround(msg, m.start(), m.end());
+          matches.add(lineFor(r, snip));
+        }
+      } else {
+        RuleMatch m = findWordMatch(msg, pat, r.caseSensitive(), r.wholeWord());
+        if (m != null) {
+          String snip = snippetAround(msg, m.start, m.end);
+          matches.add(lineFor(r, snip));
+        }
+      }
+    }
+
+    if (!invalidRegex.isEmpty() && (errors == null || errors.isEmpty())) {
+      // This can happen if the errors list was stale; include a brief warning anyway.
+      out.append("Some REGEX rules are invalid and were ignored.\n\n");
+    }
+
+    if (matches.isEmpty()) {
+      out.append("No matches.");
+    } else {
+      out.append("Matches (").append(matches.size()).append("):\n");
+      for (String l : matches) {
+        out.append("  ").append(l).append("\n");
+      }
+    }
+
+    return out.toString().trim();
+  }
+
+  private static String lineFor(NotificationRule rule, String snippet) {
+    String label = (rule.label() != null && !rule.label().trim().isEmpty())
+        ? rule.label().trim()
+        : (rule.pattern() != null ? rule.pattern().trim() : "(unnamed)");
+    return "- " + label + " [" + rule.type() + "]: " + snippet;
+  }
+
+  private static String snippetAround(String msg, int start, int end) {
+    if (msg == null) return "";
+    int len = msg.length();
+    if (start < 0) start = 0;
+    if (end < start) end = start;
+    if (end > len) end = len;
+
+    int ctx = 30;
+    int s = Math.max(0, start - ctx);
+    int e = Math.min(len, end + ctx);
+
+    String prefix = s > 0 ? "…" : "";
+    String suffix = e < len ? "…" : "";
+
+    String before = msg.substring(s, start);
+    String mid = msg.substring(start, end);
+    String after = msg.substring(end, e);
+
+    return prefix + collapseWs(before) + "[" + collapseWs(mid) + "]" + collapseWs(after) + suffix;
+  }
+
+  private static String collapseWs(String s) {
+    if (s == null || s.isEmpty()) return "";
+    return s.replaceAll("\\s+", " ");
+  }
+
+  private static RuleMatch findWordMatch(String msg, String pat, boolean caseSensitive, boolean wholeWord) {
+    if (msg == null || pat == null) return null;
+    if (pat.isEmpty()) return null;
+
+    if (wholeWord) {
+      int plen = pat.length();
+      for (Token tok : tokenize(msg)) {
+        int tlen = tok.end - tok.start;
+        if (tlen != plen) continue;
+
+        boolean ok = caseSensitive
+            ? msg.regionMatches(false, tok.start, pat, 0, plen)
+            : msg.regionMatches(true, tok.start, pat, 0, plen);
+
+        if (ok) return new RuleMatch(tok.start, tok.end);
+      }
+      return null;
+    }
+
+    int idx;
+    if (caseSensitive) {
+      idx = msg.indexOf(pat);
+    } else {
+      idx = msg.toLowerCase(Locale.ROOT).indexOf(pat.toLowerCase(Locale.ROOT));
+    }
+    if (idx < 0) return null;
+    return new RuleMatch(idx, idx + pat.length());
+  }
+
+  private static List<Token> tokenize(String message) {
+    int len = message.length();
+    if (len == 0) return List.of();
+
+    List<Token> toks = new ArrayList<>();
+    int i = 0;
+
+    while (i < len) {
+      while (i < len && !isWordChar(message.charAt(i))) i++;
+      if (i >= len) break;
+      int start = i;
+      while (i < len && isWordChar(message.charAt(i))) i++;
+      int end = i;
+      toks.add(new Token(start, end));
+    }
+
+    return toks;
+  }
+
+  private static boolean isWordChar(char ch) {
+    if (ch >= '0' && ch <= '9') return true;
+    if (ch >= 'A' && ch <= 'Z') return true;
+    if (ch >= 'a' && ch <= 'z') return true;
+    return ch == '_' || ch == '-';
+  }
+
+  private record Token(int start, int end) {}
+
+  private record RuleMatch(int start, int end) {}
+
+
   private static JDialog createDialog(Window owner) {
     final JDialog d = new JDialog(owner, "Preferences", JDialog.ModalityType.APPLICATION_MODAL);
     d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
@@ -1824,6 +2438,365 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       );
       default -> false;
     };
+  }
+
+  private record NotificationRulesControls(JSpinner cooldownSeconds,
+                                JTable table,
+                                NotificationRulesTableModel model,
+                                JLabel validationLabel,
+                                JTextArea testInput,
+                                JTextArea testOutput,
+                                JLabel testStatus,
+                                RuleTestRunner testRunner) {
+  }
+
+  private static final class NotificationRulesTableModel extends AbstractTableModel {
+    static final int COL_ENABLED = 0;
+    static final int COL_TYPE = 1;
+    static final int COL_LABEL = 2;
+    static final int COL_PATTERN = 3;
+    static final int COL_COLOR = 4;
+    static final int COL_CASE = 5;
+    static final int COL_WHOLE = 6;
+
+    private static final String[] COLS = new String[] {
+        "Enabled",
+        "Type",
+        "Label",
+        "Pattern",
+        "Color",
+        "Case",
+        "Whole"
+    };
+
+    private final List<MutableRule> rows = new ArrayList<>();
+
+    NotificationRulesTableModel(List<NotificationRule> initial) {
+      if (initial != null) {
+        for (NotificationRule r : initial) {
+          if (r == null) continue;
+          rows.add(MutableRule.from(r));
+        }
+      }
+    }
+
+    List<NotificationRule> snapshot() {
+      return rows.stream().map(MutableRule::toRule).toList();
+    }
+
+    String highlightFgAt(int row) {
+      if (row < 0 || row >= rows.size()) return null;
+      MutableRule r = rows.get(row);
+      return r != null ? r.highlightFg : null;
+    }
+
+    void setHighlightFg(int row, String hex) {
+      if (row < 0 || row >= rows.size()) return;
+      MutableRule r = rows.get(row);
+      if (r == null) return;
+      r.highlightFg = normalizeHexColor(Objects.toString(hex, "").trim());
+      fireTableRowsUpdated(row, row);
+    }
+
+
+    List<ValidationError> validationErrors() {
+      List<ValidationError> out = new ArrayList<>();
+      for (int i = 0; i < rows.size(); i++) {
+        MutableRule r = rows.get(i);
+        if (r == null) continue;
+        if (!r.enabled) continue;
+        if (r.type != NotificationRule.Type.REGEX) continue;
+
+        String pat = r.pattern != null ? r.pattern.trim() : "";
+        if (pat.isEmpty()) continue;
+
+        try {
+          int flags = Pattern.UNICODE_CASE;
+          if (!r.caseSensitive) flags |= Pattern.CASE_INSENSITIVE;
+          Pattern.compile(pat, flags);
+        } catch (Exception ex) {
+          out.add(new ValidationError(i, r.label, pat, ex.getMessage()));
+        }
+      }
+      return out;
+    }
+
+    ValidationError firstValidationError() {
+      List<ValidationError> errs = validationErrors();
+      return errs.isEmpty() ? null : errs.get(0);
+    }
+
+    int addRule(NotificationRule rule) {
+      rows.add(MutableRule.from(rule));
+      int idx = rows.size() - 1;
+      fireTableRowsInserted(idx, idx);
+      return idx;
+    }
+
+    int duplicateRow(int row) {
+      if (row < 0 || row >= rows.size()) return -1;
+      MutableRule src = rows.get(row);
+      MutableRule copy = src.copy();
+      int idx = Math.min(rows.size(), row + 1);
+      rows.add(idx, copy);
+      fireTableRowsInserted(idx, idx);
+      return idx;
+    }
+
+    void removeRow(int row) {
+      if (row < 0 || row >= rows.size()) return;
+      rows.remove(row);
+      fireTableRowsDeleted(row, row);
+    }
+
+    int moveRow(int from, int to) {
+      if (from < 0 || from >= rows.size()) return -1;
+      if (to < 0 || to >= rows.size()) return -1;
+      if (from == to) return from;
+      MutableRule r = rows.remove(from);
+      rows.add(to, r);
+      fireTableDataChanged();
+      return to;
+    }
+
+    @Override
+    public int getRowCount() {
+      return rows.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+      return COLS.length;
+    }
+
+    @Override
+    public String getColumnName(int column) {
+      if (column < 0 || column >= COLS.length) return "";
+      return COLS[column];
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+      return switch (columnIndex) {
+        case COL_ENABLED, COL_CASE, COL_WHOLE -> Boolean.class;
+        case COL_TYPE -> NotificationRule.Type.class;
+        default -> String.class;
+      };
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return false;
+      if (columnIndex == COL_WHOLE) {
+        return rows.get(rowIndex).type == NotificationRule.Type.WORD;
+      }
+      return true;
+    }
+
+    @Override
+    public Object getValueAt(int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+      MutableRule r = rows.get(rowIndex);
+      return switch (columnIndex) {
+        case COL_ENABLED -> r.enabled;
+        case COL_TYPE -> r.type;
+        case COL_LABEL -> r.label;
+        case COL_PATTERN -> r.pattern;
+        case COL_COLOR -> r.highlightFg;
+        case COL_CASE -> r.caseSensitive;
+        case COL_WHOLE -> r.wholeWord;
+        default -> null;
+      };
+    }
+
+    @Override
+    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return;
+      MutableRule r = rows.get(rowIndex);
+
+      switch (columnIndex) {
+        case COL_ENABLED -> r.enabled = asBool(aValue);
+        case COL_TYPE -> {
+          NotificationRule.Type t = asType(aValue);
+          if (t == null) t = NotificationRule.Type.WORD;
+          r.type = t;
+          if (t == NotificationRule.Type.REGEX) {
+            r.wholeWord = false;
+          }
+        }
+        case COL_LABEL -> r.label = asStr(aValue);
+        case COL_PATTERN -> {
+          r.pattern = asStr(aValue);
+          if (r.pattern.isBlank()) {
+            r.enabled = false;
+          }
+        }
+        case COL_COLOR -> r.highlightFg = normalizeHexColor(asStr(aValue));
+        case COL_CASE -> r.caseSensitive = asBool(aValue);
+        case COL_WHOLE -> {
+          if (r.type == NotificationRule.Type.WORD) {
+            r.wholeWord = asBool(aValue);
+          }
+        }
+        default -> {
+        }
+      }
+
+      fireTableRowsUpdated(rowIndex, rowIndex);
+    }
+
+    private static String asStr(Object v) {
+      String s = Objects.toString(v, "");
+      return s.trim();
+    }
+
+    private static boolean asBool(Object v) {
+      if (v instanceof Boolean b) return b;
+      return Boolean.parseBoolean(Objects.toString(v, "false"));
+    }
+
+    private static NotificationRule.Type asType(Object v) {
+      if (v instanceof NotificationRule.Type t) return t;
+      String s = Objects.toString(v, "").trim();
+      if (s.isEmpty()) return null;
+      try {
+        return NotificationRule.Type.valueOf(s);
+      } catch (Exception ignored) {
+        return null;
+      }
+    }
+
+    private static String normalizeHexColor(String raw) {
+      if (raw == null) return null;
+      String s = raw.trim();
+      if (s.isEmpty()) return null;
+
+      if (s.startsWith("#")) s = s.substring(1).trim();
+      if (s.length() == 3) {
+        char r = s.charAt(0);
+        char g = s.charAt(1);
+        char b = s.charAt(2);
+        s = "" + r + r + g + g + b + b;
+      } else if (s.length() != 6) {
+        return null;
+      }
+
+      for (int i = 0; i < s.length(); i++) {
+        char c = s.charAt(i);
+        boolean ok = (c >= '0' && c <= '9')
+            || (c >= 'a' && c <= 'f')
+            || (c >= 'A' && c <= 'F');
+        if (!ok) return null;
+      }
+
+      return "#" + s.toUpperCase(Locale.ROOT);
+    }
+
+
+    private static final class MutableRule {
+      boolean enabled;
+      NotificationRule.Type type;
+      String label;
+      String pattern;
+      boolean caseSensitive;
+      boolean wholeWord;
+      String highlightFg;
+
+      NotificationRule toRule() {
+        boolean ww = (type == NotificationRule.Type.WORD) && wholeWord;
+        return new NotificationRule(label, type, pattern, enabled, caseSensitive, ww, highlightFg);
+      }
+
+      MutableRule copy() {
+        MutableRule m = new MutableRule();
+        m.enabled = enabled;
+        m.type = type;
+        m.label = label;
+        m.pattern = pattern;
+        m.caseSensitive = caseSensitive;
+        m.wholeWord = wholeWord;
+        m.highlightFg = highlightFg;
+        return m;
+      }
+
+      static MutableRule from(NotificationRule r) {
+        MutableRule m = new MutableRule();
+        if (r == null) {
+          m.enabled = false;
+          m.type = NotificationRule.Type.WORD;
+          m.label = "";
+          m.pattern = "";
+          m.caseSensitive = false;
+          m.wholeWord = true;
+          m.highlightFg = null;
+          return m;
+        }
+
+        m.enabled = r.enabled();
+        m.type = r.type();
+        m.label = Objects.toString(r.label(), "");
+        m.pattern = Objects.toString(r.pattern(), "");
+        m.caseSensitive = r.caseSensitive();
+        m.wholeWord = r.wholeWord();
+        m.highlightFg = r.highlightFg();
+        return m;
+      }
+
+
+    }
+  }
+
+  private static final class RuleColorCellRenderer extends DefaultTableCellRenderer {
+    @Override
+    public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+      JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+      String raw = value != null ? value.toString().trim() : "";
+      Color col = parseHexColor(raw);
+      if (col == null && raw != null && raw.startsWith("#") && raw.length() == 4) {
+        // Try #RGB
+        String s = raw.substring(1);
+        char r = s.charAt(0), g = s.charAt(1), b = s.charAt(2);
+        col = parseHexColor("#" + r + r + g + g + b + b);
+      }
+
+      if (col != null) {
+        c.setIcon(new ColorSwatch(col, 12, 12));
+        c.setText(toHex(col));
+      } else {
+        c.setIcon(null);
+        c.setText(raw.isEmpty() ? "" : raw);
+      }
+      return c;
+    }
+  }
+
+  private static final class ColorSwatch implements Icon {
+    private final Color color;
+    private final int w;
+    private final int h;
+
+    ColorSwatch(Color color, int w, int h) {
+      this.color = color != null ? color : Color.GRAY;
+      this.w = Math.max(6, w);
+      this.h = Math.max(6, h);
+    }
+
+    @Override public int getIconWidth() { return w; }
+    @Override public int getIconHeight() { return h; }
+
+    @Override
+    public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
+      Color old = g.getColor();
+      try {
+        g.setColor(color);
+        g.fillRect(x, y, w, h);
+        g.setColor(new Color(0, 0, 0, 80));
+        g.drawRect(x, y, w - 1, h - 1);
+      } finally {
+        g.setColor(old);
+      }
+    }
   }
 
   private record ThemeControls(JComboBox<String> combo) {

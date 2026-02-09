@@ -3,6 +3,8 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.config.UiProperties;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
+import java.util.List;
+import java.util.Objects;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +29,25 @@ public class UiSettingsBus {
     boolean enrichmentEnabled = ue != null && Boolean.TRUE.equals(ue.enabled());
     boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
     boolean periodicRefreshEnabled = ue != null && Boolean.TRUE.equals(ue.periodicRefreshEnabled());
+
+    List<NotificationRule> notificationRules = props.notificationRules() == null
+        ? List.of()
+        : props.notificationRules().stream()
+            .filter(Objects::nonNull)
+            .map(r -> {
+              NotificationRule.Type t = r.type() != null
+                  ? NotificationRule.Type.valueOf(r.type().name())
+                  : NotificationRule.Type.WORD;
+              return new NotificationRule(
+                  r.label(),
+                  t,
+                  r.pattern(),
+                  Boolean.TRUE.equals(r.enabled()),
+                  Boolean.TRUE.equals(r.caseSensitive()),
+                  Boolean.TRUE.equals(r.wholeWord()),
+                  r.highlightFg());
+            })
+            .toList();
 
     this.current = new UiSettings(
         props.theme(),
@@ -70,7 +91,11 @@ public class UiSettingsBus {
 
         periodicRefreshEnabled,
         ue != null && ue.periodicRefreshIntervalSeconds() != null ? ue.periodicRefreshIntervalSeconds() : 300,
-        ue != null && ue.periodicRefreshNicksPerTick() != null ? ue.periodicRefreshNicksPerTick() : 2
+        ue != null && ue.periodicRefreshNicksPerTick() != null ? ue.periodicRefreshNicksPerTick() : 2,
+
+        props.notificationRuleCooldownSeconds() != null ? props.notificationRuleCooldownSeconds() : 15,
+
+        notificationRules
     );
   }
 
