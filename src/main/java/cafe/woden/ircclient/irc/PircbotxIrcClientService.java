@@ -254,6 +254,71 @@ public class PircbotxIrcClientService implements IrcClientService {
 
 
   @Override
+  public boolean isChatHistoryAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.chatHistoryCapAcked.get() && c.batchCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isZncPlaybackAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.zncPlaybackCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public Completable requestZncPlaybackRange(String serverId, String target, Instant fromInclusive, Instant toInclusive) {
+    return Completable.fromAction(() -> {
+          PircbotxConnectionState c = conn(serverId);
+          if (!c.zncPlaybackCapAcked.get()) {
+            throw new IllegalStateException("ZNC playback not negotiated (znc.in/playback): " + serverId);
+          }
+
+          String t = target == null ? "" : target.trim();
+          if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
+
+          // R5.2b: Track an in-flight playback request so we can group replayed lines into a batch.
+          Instant fromCap = (fromInclusive == null ? Instant.EPOCH : fromInclusive);
+          Instant toCap = (toInclusive == null ? Instant.now() : toInclusive);
+          c.zncPlaybackCapture.start(serverId, t, fromCap, toCap, bus::onNext);
+
+          try {
+
+          String buf;
+          if (t.startsWith("#") || t.startsWith("&")) {
+            buf = PircbotxUtil.sanitizeChannel(t);
+          } else {
+            buf = PircbotxUtil.sanitizeNick(t);
+          }
+
+          long from = (fromInclusive == null ? Instant.EPOCH : fromInclusive).getEpochSecond();
+          long to = (toInclusive == null ? 0L : toInclusive.getEpochSecond());
+
+          // ZNC playback module takes epoch-seconds. If 'to' is omitted/0, it replays until now.
+          String cmd;
+          if (to > 0L) {
+            cmd = "play " + buf + " " + from + " " + to;
+          } else {
+            cmd = "play " + buf + " " + from;
+          }
+          requireBot(serverId).sendIRC().message("*playback", cmd);
+          } catch (Exception ex) {
+            c.zncPlaybackCapture.cancelActive("send-failed");
+            throw ex;
+          }
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+
+  @Override
   public Completable sendAction(String serverId, String target, String action) {
     return Completable.fromAction(() -> {
           String t = target == null ? "" : target.trim();

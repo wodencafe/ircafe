@@ -90,6 +90,9 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
       return new ChatHistoryIngestResult(true, 0, 0, 0, 0L, 0L, "No history entries");
     }
     ArrayList<LogLine> candidates = new ArrayList<>(total);
+    // Source is currently inferred from the batchId. This keeps the ChatHistoryIngestor
+    // interface small while still letting us differentiate IRCv3 CHATHISTORY vs ZNC playback.
+    final String source = inferSource(batchId);
     for (ChatHistoryEntry e : entries) {
       if (e == null) continue;
       long ts = e.at() != null ? e.at().toEpochMilli() : System.currentTimeMillis();
@@ -112,7 +115,7 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
           text,
           false,
           false,
-          metaJson("chathistory", batchId)
+          metaJson(source, batchId)
       ));
     }
 
@@ -209,5 +212,13 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
       return "{\"source\":\"" + src + "\"}";
     }
     return "{\"source\":\"" + src + "\",\"batch\":\"" + bid + "\"}";
+  }
+
+  private static String inferSource(String batchId) {
+    String bid = safe(batchId).trim();
+    if (bid.isEmpty()) return "chathistory";
+    String lower = bid.toLowerCase(Locale.ROOT);
+    if (lower.startsWith("znc-playback")) return "znc-playback";
+    return "chathistory";
   }
 }

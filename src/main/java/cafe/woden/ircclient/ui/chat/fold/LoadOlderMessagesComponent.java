@@ -23,7 +23,8 @@ public final class LoadOlderMessagesComponent extends JPanel {
   public enum State {
     READY,
     LOADING,
-    EXHAUSTED
+    EXHAUSTED,
+    UNAVAILABLE
   }
 
   private final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -84,17 +85,26 @@ public final class LoadOlderMessagesComponent extends JPanel {
 
     switch (s) {
       case READY -> {
+        button.setToolTipText(null);
         button.setText("Load older messages…");
         button.setEnabled(true);
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
       }
       case LOADING -> {
+        button.setToolTipText(null);
         button.setText("Loading…");
         button.setEnabled(false);
         button.setCursor(Cursor.getDefaultCursor());
       }
       case EXHAUSTED -> {
+        button.setToolTipText(null);
         button.setText("No older messages");
+        button.setEnabled(false);
+        button.setCursor(Cursor.getDefaultCursor());
+      }
+      case UNAVAILABLE -> {
+        button.setText("History unavailable");
+        button.setToolTipText("Server does not support IRCv3 CHATHISTORY.");
         button.setEnabled(false);
         button.setCursor(Cursor.getDefaultCursor());
       }

@@ -13,6 +13,8 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
+import cafe.woden.ircclient.logging.history.ChatHistoryBatchBus;
+import cafe.woden.ircclient.logging.history.ZncPlaybackBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
@@ -69,6 +71,10 @@ public class IrcMediator {
 
   private final ChatHistoryIngestBus chatHistoryIngestBus;
 
+  private final ChatHistoryBatchBus chatHistoryBatchBus;
+
+  private final ZncPlaybackBus zncPlaybackBus;
+
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
   @PostConstruct
@@ -104,7 +110,9 @@ public class IrcMediator {
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       InboundIgnorePolicy inboundIgnorePolicy,
       ChatHistoryIngestor chatHistoryIngestor,
-      ChatHistoryIngestBus chatHistoryIngestBus
+      ChatHistoryIngestBus chatHistoryIngestBus,
+      ChatHistoryBatchBus chatHistoryBatchBus,
+      ZncPlaybackBus zncPlaybackBus
   ) {
 
     this.irc = irc;
@@ -130,6 +138,8 @@ public class IrcMediator {
     this.inboundIgnorePolicy = inboundIgnorePolicy;
     this.chatHistoryIngestor = chatHistoryIngestor;
     this.chatHistoryIngestBus = chatHistoryIngestBus;
+    this.chatHistoryBatchBus = chatHistoryBatchBus;
+    this.zncPlaybackBus = zncPlaybackBus;
   }
 
   public void start() {
@@ -607,6 +617,25 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();
         final TargetRef dest = new TargetRef(sid, target);
         ensureTargetExists(dest);
+        try {
+          long earliest = 0L;
+          long latest = 0L;
+          if (ev.entries() != null && !ev.entries().isEmpty()) {
+            earliest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).min().orElse(0L);
+            latest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).max().orElse(0L);
+          }
+          if (chatHistoryBatchBus != null) {
+            chatHistoryBatchBus.publish(new ChatHistoryBatchBus.BatchEvent(
+                sid,
+                target,
+                ev.batchId(),
+                ev.entries(),
+                earliest,
+                latest
+            ));
+          }
+        } catch (Exception ignored) {
+        }
 
         int n = (ev.entries() == null) ? 0 : ev.entries().size();
         ui.appendStatus(dest, "(chathistory)", "Received " + n + " history lines (batch " + ev.batchId() + "). Persisting… (still not displayed)");
@@ -632,6 +661,73 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
                   sid,
                   target,
                   ev.batchId(),
+                  result.total(),
+                  result.inserted(),
+                  result.earliestInsertedEpochMs(),
+                  result.latestInsertedEpochMs()
+              ));
+            }
+          } catch (Exception ignored) {
+          }
+        });
+      }
+
+      case IrcEvent.ZncPlaybackBatchReceived ev -> {
+        String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();
+        final TargetRef dest = new TargetRef(sid, target);
+        ensureTargetExists(dest);
+
+        // Deterministic batch id so the DB-backed history service can wait for ingest.
+        final String batchId = "znc-playback:"
+            + (ev.fromInclusive() == null ? 0L : ev.fromInclusive().toEpochMilli())
+            + "-"
+            + (ev.toInclusive() == null ? 0L : ev.toInclusive().toEpochMilli());
+
+        try {
+          long earliest = 0L;
+          long latest = 0L;
+          if (ev.entries() != null && !ev.entries().isEmpty()) {
+            earliest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).min().orElse(0L);
+            latest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).max().orElse(0L);
+          }
+          if (zncPlaybackBus != null) {
+            zncPlaybackBus.publish(new ZncPlaybackBus.PlaybackEvent(
+                sid,
+                target,
+                ev.fromInclusive(),
+                ev.toInclusive(),
+                ev.entries(),
+                earliest,
+                latest
+            ));
+          }
+        } catch (Exception ignored) {
+        }
+
+        int n = (ev.entries() == null) ? 0 : ev.entries().size();
+        ui.appendStatus(dest, "(znc-playback)", "Captured " + n + " playback lines for scrollback. Persisting… (still not displayed)");
+
+        chatHistoryIngestor.ingestAsync(sid, target, batchId, ev.entries(), result -> {
+          if (result == null) {
+            postTo(dest, false, d -> ui.appendStatus(d, "(znc-playback)", "Persist finished (no details)."));
+            return;
+          }
+          String msg;
+          if (!result.enabled()) {
+            msg = "Playback batch not persisted: chat logging is disabled.";
+          } else if (result.message() != null) {
+            msg = result.message();
+          } else {
+            msg = "Persisted " + result.inserted() + "/" + result.total() + " playback lines.";
+          }
+          postTo(dest, false, d -> ui.appendStatus(d, "(znc-playback)", msg));
+
+          try {
+            if (chatHistoryIngestBus != null) {
+              chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
+                  sid,
+                  target,
+                  batchId,
                   result.total(),
                   result.inserted(),
                   result.earliestInsertedEpochMs(),
@@ -769,6 +865,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
 
         ensureTargetExists(dest);
+
         ui.appendError(dest, "(join)", rendered);
         if (!dest.equals(status)) {
           ui.appendError(status, "(join)", rendered);

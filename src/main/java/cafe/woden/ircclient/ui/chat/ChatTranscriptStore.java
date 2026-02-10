@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Element;
@@ -78,9 +79,26 @@ public class ChatTranscriptStore {
     stateByTarget.computeIfAbsent(ref, r -> new TranscriptState());
   }
 
+  private void noteEpochMs(TargetRef ref, Long epochMs) {
+    if (ref == null || epochMs == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return;
+    Long cur = st.earliestEpochMsSeen;
+    if (cur == null || epochMs < cur) {
+      st.earliestEpochMsSeen = epochMs;
+    }
+  }
+
   public synchronized StyledDocument document(TargetRef ref) {
     ensureTargetExists(ref);
     return docs.get(ref);
+  }
+
+  public synchronized OptionalLong earliestTimestampEpochMs(TargetRef ref) {
+    if (ref == null) return OptionalLong.empty();
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || st.earliestEpochMsSeen == null) return OptionalLong.empty();
+    return OptionalLong.of(st.earliestEpochMsSeen);
   }
 
   public synchronized LoadOlderMessagesComponent ensureLoadOlderMessagesControl(TargetRef ref) {
@@ -319,6 +337,7 @@ public class ChatTranscriptStore {
                                   Long epochMs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, epochMs);
     ensureAtLineStart(doc);
 
     try {
@@ -411,6 +430,7 @@ public class ChatTranscriptStore {
                                                   long tsEpochMs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
 
     AttributeSet fromStyle = styles.from();
@@ -440,6 +460,7 @@ public class ChatTranscriptStore {
                                                     boolean outgoingLocalEcho,
                                                     long tsEpochMs) {
     ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return Math.max(0, insertAt);
 
@@ -580,6 +601,7 @@ public class ChatTranscriptStore {
                                                          long tsEpochMs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
 
     int beforeLen = doc.getLength();
@@ -670,6 +692,7 @@ public class ChatTranscriptStore {
                                    Long epochMs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, epochMs);
     if (doc == null) return Math.max(0, insertAt);
 
     int beforeLen = doc.getLength();
@@ -1268,6 +1291,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   }
 
   private static final class TranscriptState {
+    Long earliestEpochMsSeen;
     PresenceBlock currentPresenceBlock;
     LoadOlderControl loadOlderControl;
     HistoryDividerControl historyDivider;

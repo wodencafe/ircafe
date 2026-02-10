@@ -73,6 +73,8 @@ final class PircbotxConnectionState {
   final AtomicBoolean zncPlaybackCapAcked = new AtomicBoolean(false);
   final AtomicBoolean zncPlaybackRequestedThisSession = new AtomicBoolean(false);
 
+  final ZncPlaybackCaptureCoordinator zncPlaybackCapture = new ZncPlaybackCaptureCoordinator();
+
   // IRCv3 history support (soju): detect whether the server accepted these capabilities.
   final AtomicBoolean batchCapAcked = new AtomicBoolean(false);
   final AtomicBoolean chatHistoryCapAcked = new AtomicBoolean(false);

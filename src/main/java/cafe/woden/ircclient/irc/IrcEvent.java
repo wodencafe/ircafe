@@ -37,6 +37,7 @@ public sealed interface IrcEvent permits
     IrcEvent.WhoxSchemaCompatibleObserved,
     IrcEvent.ServerTimeNotNegotiated,
     IrcEvent.ChatHistoryBatchReceived,
+    IrcEvent.ZncPlaybackBatchReceived,
     IrcEvent.Error,
     IrcEvent.CtcpRequestReceived
  {
@@ -100,6 +101,21 @@ public sealed interface IrcEvent permits
       Instant at,
       String target,
       String batchId,
+      List<ChatHistoryEntry> entries
+  ) implements IrcEvent {}
+
+  /**
+   * A collected ZNC playback window.
+   *
+   * <p>ZNC playback replays normal PRIVMSG/NOTICE/ACTION lines. We capture them
+   * into {@link ChatHistoryEntry} records so the scrollback pipeline can treat
+   * them similarly to IRCv3 CHATHISTORY.
+   */
+  record ZncPlaybackBatchReceived(
+      Instant at,
+      String target,
+      Instant fromInclusive,
+      Instant toInclusive,
       List<ChatHistoryEntry> entries
   ) implements IrcEvent {}
   record CtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}

@@ -24,6 +24,7 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
   private final MouseWheelListener listener;
 
   private volatile long lastTriggeredAtMs = 0L;
+  private volatile boolean waitingForScrollAway = false;
 
   private ChatAutoLoadOlderScrollDecorator(JScrollPane scroll, Component transcriptRoot) {
     this.scroll = scroll;
@@ -44,6 +45,17 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
 
       JScrollBar bar = scroll.getVerticalScrollBar();
       if (bar == null) return;
+
+      // If we already triggered at the very top, don't trigger again until the view moves away
+      // from y=0 (which will naturally happen if we preserve scroll anchor during prepend).
+      if (waitingForScrollAway) {
+        if (bar.getValue() > 0) {
+          waitingForScrollAway = false;
+        } else {
+          return;
+        }
+      }
+
       if (bar.getValue() > 0) return;
 
       long now = System.currentTimeMillis();
@@ -54,6 +66,7 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
       if (comp.state() != LoadOlderMessagesComponent.State.READY) return;
 
       lastTriggeredAtMs = now;
+      waitingForScrollAway = true;
 
       if (SwingUtilities.isEventDispatchThread()) {
         comp.requestLoad();
