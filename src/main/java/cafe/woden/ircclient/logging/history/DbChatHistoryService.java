@@ -474,10 +474,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
       // Flip to LOADING immediately.
       transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.LOADING);
 
-      // Preserve viewport anchor while we prepend lines above.
-      // If the user is at the very top (infinite scroll), anchor to the first line *after* the embedded control.
-      final int anchorModelOffsetIfAtTop = transcripts.loadOlderInsertOffset(target);
-      final ScrollAnchor anchor = ScrollAnchor.capture(control, anchorModelOffsetIfAtTop);
+      // If the user isn't pinned to y=0, preserve their viewport anchor while we prepend lines above.
+      final ScrollAnchor anchor = ScrollAnchor.capture(control);
 
       int pageSize = DEFAULT_PAGE_SIZE;
       try {
@@ -488,71 +486,31 @@ public final class DbChatHistoryService implements ChatHistoryService {
       final int limit = Math.max(1, pageSize);
 
       loadOlder(target, limit, res -> {
-        // Insert in small chunks so the EDT stays responsive while we prepend lots of styled lines.
-        // This dramatically reduces "UI hang" when users scroll back through large local histories.
-        insertOlderLinesChunked(target, res, anchor);
-      });
+        try {
+          int insertAt = transcripts.loadOlderInsertOffset(target);
+          int pos = insertAt;
+          for (LogLine line : res.linesOldestFirst()) {
+            pos = insertLineFromHistoryAt(target, pos, line);
+          }
 
-      return true;
-    });
-  }
-
-  private void insertOlderLinesChunked(TargetRef target, LoadOlderResult res, ScrollAnchor anchor) {
-    if (target == null || res == null) {
-      transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
-      return;
-    }
-
-    final java.util.List<LogLine> lines = new java.util.ArrayList<>(res.linesOldestFirst());
-    final boolean hasMore = res.hasMore();
-
-    if (lines.isEmpty()) {
-      // Nothing to insert, but still update state.
-      transcripts.setLoadOlderMessagesControlState(
-          target,
-          hasMore ? LoadOlderMessagesComponent.State.READY : LoadOlderMessagesComponent.State.EXHAUSTED
-      );
-      if (anchor != null) SwingUtilities.invokeLater(anchor::restoreIfNeeded);
-      return;
-    }
-
-    final int[] pos = new int[] { transcripts.loadOlderInsertOffset(target) };
-    final int[] idx = new int[] { 0 };
-
-    // Tuned to keep each EDT slice short. Bigger = faster, smaller = smoother.
-    final int CHUNK = 30;
-
-    javax.swing.Timer t = new javax.swing.Timer(0, null);
-    t.setRepeats(true);
-    t.addActionListener(ev -> {
-      try {
-        int inserted = 0;
-        while (idx[0] < lines.size() && inserted < CHUNK) {
-          pos[0] = insertLineFromHistoryAt(target, pos[0], lines.get(idx[0]++));
-          inserted++;
-        }
-
-        if (idx[0] >= lines.size()) {
-          t.stop();
-
-          transcripts.setLoadOlderMessagesControlState(
-              target,
-              hasMore ? LoadOlderMessagesComponent.State.READY : LoadOlderMessagesComponent.State.EXHAUSTED
-          );
-
+          if (res.hasMore()) {
+            transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
+          } else {
+            transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.EXHAUSTED);
+          }
+        } catch (Exception e) {
+          // Fail open: allow retry.
+          transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
+        } finally {
           if (anchor != null) {
             // Run after document/layout updates so preferred size reflects the inserted content.
             SwingUtilities.invokeLater(anchor::restoreIfNeeded);
           }
         }
-      } catch (Exception e) {
-        t.stop();
-        // Fail open: allow retry.
-        transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
-        if (anchor != null) SwingUtilities.invokeLater(anchor::restoreIfNeeded);
-      }
+      });
+
+      return true;
     });
-    t.start();
   }
 
   private static final class ScrollAnchor {
@@ -560,21 +518,15 @@ public final class DbChatHistoryService implements ChatHistoryService {
     private final Point beforePos;
     private final Position anchor;
     private final int intraLineDeltaY;
-    private final boolean restoreEvenIfAtTop;
 
-    private ScrollAnchor(JViewport viewport,
-                         Point beforePos,
-                         Position anchor,
-                         int intraLineDeltaY,
-                         boolean restoreEvenIfAtTop) {
+    private ScrollAnchor(JViewport viewport, Point beforePos, Position anchor, int intraLineDeltaY) {
       this.viewport = viewport;
       this.beforePos = beforePos;
       this.anchor = anchor;
       this.intraLineDeltaY = intraLineDeltaY;
-      this.restoreEvenIfAtTop = restoreEvenIfAtTop;
     }
 
-    static ScrollAnchor capture(LoadOlderMessagesComponent control, int preferModelOffsetIfAtTop) {
+    static ScrollAnchor capture(LoadOlderMessagesComponent control) {
       if (control == null) return null;
       try {
         JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, control);
@@ -588,20 +540,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
         Point p = vp.getViewPosition();
         if (p == null) p = new Point(0, 0);
 
-        boolean restoreWhenAtTop = false;
-
-        // Find a stable anchor model position for the top-left of the viewport.
-        // If we're pinned at y=0 (common with infinite scroll), anchoring to viewToModel2D() often
-        // resolves to the embedded control itself, which keeps us pinned at y=0 after prepends.
-        // Instead, anchor to the first content line after the control so the viewport doesn't
-        // repeatedly auto-trigger additional loads.
-        int anchorOffset;
-        if (p.y <= 0 && preferModelOffsetIfAtTop > 0) {
-          anchorOffset = Math.min(preferModelOffsetIfAtTop, doc.getLength());
-          restoreWhenAtTop = true;
-        } else {
-          anchorOffset = text.viewToModel2D(new Point(p));
-        }
+        // Find the first visible model position for the top-left of the viewport.
+        int anchorOffset = text.viewToModel2D(new Point(p));
         if (anchorOffset < 0) anchorOffset = 0;
         if (anchorOffset > doc.getLength()) anchorOffset = doc.getLength();
 
@@ -623,7 +563,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
         int deltaY = p.y - rectY;
         if (deltaY < 0) deltaY = 0;
 
-        return new ScrollAnchor(vp, new Point(p), pos, deltaY, restoreWhenAtTop);
+        return new ScrollAnchor(vp, new Point(p), pos, deltaY);
       } catch (Exception ignored) {
         return null;
       }
@@ -636,10 +576,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
         if (view == null) return;
         if (!(view instanceof javax.swing.text.JTextComponent text)) return;
 
-        // In infinite-scroll mode we may have triggered from y=0; in that case, we still want to
-        // restore to a stable anchor to prevent repeated auto-loads.
-        if (beforePos == null) return;
-        if (beforePos.y <= 0 && !restoreEvenIfAtTop) return;
+        // If the user was pinned at the very top (y=0), keep them there so they can see newly loaded lines.
+        if (beforePos == null || beforePos.y <= 0) return;
 
         if (anchor == null) return;
 
