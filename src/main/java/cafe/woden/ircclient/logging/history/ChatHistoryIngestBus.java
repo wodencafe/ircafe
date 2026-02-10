@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.logging.history;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,10 @@ public final class ChatHistoryIngestBus {
 
   private record Key(String serverId, String target) {}
 
+  private static String foldTarget(String target) {
+    return (target == null ? "" : target).toLowerCase(Locale.ROOT);
+  }
+
   private final ConcurrentHashMap<Key, CopyOnWriteArrayList<CompletableFuture<IngestEvent>>> waiters =
       new ConcurrentHashMap<>();
 
@@ -42,7 +47,7 @@ public final class ChatHistoryIngestBus {
   });
   public CompletableFuture<IngestEvent> awaitNext(String serverId, String target, Duration timeout) {
     String sid = serverId == null ? "" : serverId;
-    String tgt = target == null ? "" : target;
+    String tgt = foldTarget(target);
     if (timeout == null || timeout.isNegative() || timeout.isZero()) timeout = Duration.ofSeconds(5);
 
     Key key = new Key(sid, tgt);
@@ -68,7 +73,10 @@ public final class ChatHistoryIngestBus {
   }
   public void publish(IngestEvent event) {
     if (event == null) return;
-    Key key = new Key(Objects.toString(event.serverId(), ""), Objects.toString(event.target(), ""));
+    Key key = new Key(
+        Objects.toString(event.serverId(), ""),
+        foldTarget(Objects.toString(event.target(), ""))
+    );
     CopyOnWriteArrayList<CompletableFuture<IngestEvent>> list = waiters.remove(key);
     if (list == null || list.isEmpty()) return;
 
