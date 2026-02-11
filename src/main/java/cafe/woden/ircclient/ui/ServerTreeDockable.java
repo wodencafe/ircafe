@@ -3,8 +3,8 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -61,6 +61,9 @@ import jakarta.annotation.PreDestroy;
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable {
   private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
+
+  private static final String STATUS_LABEL = "status";
+  private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
@@ -140,18 +143,22 @@ private static final class InsertionLine {
 
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
 
-  private final ServerRegistry serverRegistry;
+  private final ServerCatalog serverCatalog;
+
+  private final Map<String, String> serverDisplayNames = new HashMap<>();
+  private final Set<String> ephemeralServerIds = new HashSet<>();
+  private final Set<String> sojuBouncerControlServerIds = new HashSet<>();
 
   private final NotificationStore notificationStore;
 
   public ServerTreeDockable(
-      ServerRegistry serverRegistry,
+      ServerCatalog serverCatalog,
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
       NotificationStore notificationStore) {
     super(new BorderLayout());
 
-    this.serverRegistry = serverRegistry;
+    this.serverCatalog = serverCatalog;
     this.notificationStore = notificationStore;
 
     this.connectBtn = connectBtn;
@@ -192,17 +199,14 @@ private static final class InsertionLine {
     scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
     treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
     add(scroll, BorderLayout.CENTER);
-    if (serverRegistry != null) {
-      for (IrcProperties.Server s : serverRegistry.servers()) {
-        if (s == null) continue;
-        addServerRoot(s.id());
-      }
+    if (serverCatalog != null) {
+      syncServers(serverCatalog.entries());
 
       disposables.add(
-          serverRegistry.updates()
+          serverCatalog.updates()
               .observeOn(SwingEdt.scheduler())
               .subscribe(this::syncServers,
-                  err -> log.error("[ircafe] server registry stream error", err))
+                  err -> log.error("[ircafe] server catalog stream error", err))
       );
     }
     if (notificationStore != null) {
@@ -455,18 +459,20 @@ private static final class InsertionLine {
       String serverId = Objects.toString(node.getUserObject(), "").trim();
       if (serverId.isEmpty()) return null;
 
+      String pretty = prettyServerLabel(serverId);
+
       ConnectionState state = serverStates.getOrDefault(serverId, ConnectionState.DISCONNECTED);
       JPopupMenu menu = new JPopupMenu();
       menu.add(new JMenuItem(moveNodeUpAction()));
       menu.add(new JMenuItem(moveNodeDownAction()));
       menu.addSeparator();
 
-      JMenuItem connectOne = new JMenuItem("Connect \"" + serverId + "\"");
+      JMenuItem connectOne = new JMenuItem("Connect \"" + pretty + "\"");
       connectOne.setEnabled(state == ConnectionState.DISCONNECTED);
       connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
       menu.add(connectOne);
 
-      JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + serverId + "\"");
+      JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + pretty + "\"");
       disconnectOne.setEnabled(state == ConnectionState.CONNECTING
           || state == ConnectionState.CONNECTED
           || state == ConnectionState.RECONNECTING);
@@ -739,7 +745,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     ServerNodes sn = servers.get(ref.serverId());
     if (sn == null) {
-      if (serverRegistry == null || serverRegistry.containsId(ref.serverId()) || servers.isEmpty()) {
+      if (serverCatalog == null || serverCatalog.containsId(ref.serverId()) || servers.isEmpty()) {
         sn = addServerRoot(ref.serverId());
       } else {
         return;
@@ -825,24 +831,58 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     nd.highlightUnread = 0;
     model.nodeChanged(node);
   }
-
-  private void syncServers(List<IrcProperties.Server> latest) {
+  private void syncServers(List<ServerEntry> latest) {
     Set<String> newIds = new HashSet<>();
+    Map<String, String> nextDisplay = new HashMap<>();
+    Set<String> nextEphemeral = new HashSet<>();
+    Set<String> nextSojuBouncerControl = new HashSet<>();
+
     if (latest != null) {
-      for (IrcProperties.Server s : latest) {
-        if (s == null) continue;
-        String id = Objects.toString(s.id(), "").trim();
-        if (!id.isEmpty()) newIds.add(id);
+      for (ServerEntry e : latest) {
+        if (e == null || e.server() == null) continue;
+        String id = Objects.toString(e.server().id(), "").trim();
+        if (id.isEmpty()) continue;
+        newIds.add(id);
+        nextDisplay.put(id, computeServerDisplayName(e));
+        if (e.ephemeral()) nextEphemeral.add(id);
+
+        // If a soju network was discovered from a configured bouncer server, label that server's
+        // status tab as "Bouncer Control" for clarity.
+        if (e.ephemeral() && id.startsWith("soju:")) {
+          String origin = Objects.toString(e.originId(), "").trim();
+          if (!origin.isEmpty()) nextSojuBouncerControl.add(origin);
+        }
       }
     }
+
     for (String id : newIds) {
       if (!servers.containsKey(id)) {
         addServerRoot(id);
       }
     }
+
     for (String existing : List.copyOf(servers.keySet())) {
       if (!newIds.contains(existing)) {
         removeServerRoot(existing);
+        serverDisplayNames.remove(existing);
+        ephemeralServerIds.remove(existing);
+        sojuBouncerControlServerIds.remove(existing);
+      }
+    }
+
+    updateSojuBouncerControlLabels(nextSojuBouncerControl);
+
+    for (String id : newIds) {
+      String next = nextDisplay.getOrDefault(id, id);
+      String prev = serverDisplayNames.put(id, next);
+
+      boolean eph = nextEphemeral.contains(id);
+      boolean prevEph = ephemeralServerIds.contains(id);
+      if (eph) ephemeralServerIds.add(id); else ephemeralServerIds.remove(id);
+
+      if (!Objects.equals(prev, next) || eph != prevEph) {
+        ServerNodes sn = servers.get(id);
+        if (sn != null) model.nodeChanged(sn.serverNode);
       }
     }
 
@@ -851,8 +891,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       TreePath sel = tree.getSelectionPath();
       if (sel != null) {
         Object last = sel.getLastPathComponent();
-        if (last instanceof DefaultMutableTreeNode n) {
-          if (n.getPath() != null && n.getRoot() == root) {
+        if (last instanceof DefaultMutableTreeNode n1) {
+          if (n1.getPath() != null && n1.getRoot() == root) {
             return;
           }
         }
@@ -868,6 +908,35 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
         tree.setSelectionPath(new TreePath(root.getPath()));
       }
     });
+  }
+
+  private String computeServerDisplayName(ServerEntry e) {
+    if (e == null || e.server() == null) return "";
+    String id = Objects.toString(e.server().id(), "").trim();
+    if (id.isEmpty()) return id;
+    if (!e.ephemeral()) return id;
+
+    String login = Objects.toString(e.server().login(), "").trim();
+    if (!login.isEmpty()) {
+      int slash = login.indexOf('/');
+      if (slash >= 0 && slash + 1 < login.length()) {
+        String after = login.substring(slash + 1);
+        int at = after.indexOf('@');
+        if (at >= 0) after = after.substring(0, at);
+        after = after.trim();
+        if (!after.isEmpty()) return after;
+      }
+    }
+
+    return id;
+  }
+
+  private String prettyServerLabel(String serverId) {
+    String id = Objects.toString(serverId, "").trim();
+    if (id.isEmpty()) return id;
+    String display = serverDisplayNames.getOrDefault(id, id);
+    if (ephemeralServerIds.contains(id)) return display + " (soju)";
+    return display;
   }
 
   private void removeServerRoot(String serverId) {
@@ -889,7 +958,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
     root.add(serverNode);
     TargetRef statusRef = new TargetRef(id, "status");
-    DefaultMutableTreeNode statusLeaf = new DefaultMutableTreeNode(new NodeData(statusRef, "status"));
+    DefaultMutableTreeNode statusLeaf = new DefaultMutableTreeNode(new NodeData(statusRef, statusLeafLabelForServer(id)));
     serverNode.insert(statusLeaf, 0);
     leaves.put(statusRef, statusLeaf);
 
@@ -910,6 +979,41 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     tree.expandPath(new TreePath(serverNode.getPath()));
     refreshNotificationsCount(id);
     return sn;
+  }
+
+  private String statusLeafLabelForServer(String serverId) {
+    String id = Objects.toString(serverId, "").trim();
+    if (id.isEmpty()) return STATUS_LABEL;
+    return sojuBouncerControlServerIds.contains(id) ? BOUNCER_CONTROL_LABEL : STATUS_LABEL;
+  }
+
+  private void updateSojuBouncerControlLabels(Set<String> nextSojuBouncerControl) {
+    Set<String> next = nextSojuBouncerControl == null ? Set.of() : nextSojuBouncerControl;
+    Set<String> all = new HashSet<>(sojuBouncerControlServerIds);
+    all.addAll(next);
+
+    for (String serverId : all) {
+      boolean was = sojuBouncerControlServerIds.contains(serverId);
+      boolean now = next.contains(serverId);
+      if (was == now) continue;
+
+      TargetRef statusRef = new TargetRef(serverId, "status");
+      DefaultMutableTreeNode node = leaves.get(statusRef);
+      if (node == null) continue;
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData old)) continue;
+
+      String label = now ? BOUNCER_CONTROL_LABEL : STATUS_LABEL;
+      if (Objects.equals(old.label, label)) continue;
+      NodeData nd = new NodeData(statusRef, label);
+      nd.unread = old.unread;
+      nd.highlightUnread = old.highlightUnread;
+      node.setUserObject(nd);
+      model.nodeChanged(node);
+    }
+
+    sojuBouncerControlServerIds.clear();
+    sojuBouncerControlServerIds.addAll(next);
   }
 
   private void refreshNotificationsCount(String serverId) {
@@ -1001,6 +1105,24 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         if (nd.highlightUnread > 0) {
           setFont(base.deriveFont(Font.BOLD));
         } else {
+          setFont(base.deriveFont(Font.PLAIN));
+        }
+      } else if (uo instanceof String id && node.getParent() == root) {
+        String display = serverDisplayNames.getOrDefault(id, id);
+        if (ephemeralServerIds.contains(id)) {
+          setText(display + " (soju)");
+          setFont(base.deriveFont(Font.ITALIC));
+        } else {
+          setText(display);
+          setFont(base.deriveFont(Font.PLAIN));
+        }
+      } else if (uo instanceof String id && node.getParent() == root) {
+        String display = serverDisplayNames.getOrDefault(id, id);
+        if (ephemeralServerIds.contains(id)) {
+          setText(display + " (soju)");
+          setFont(base.deriveFont(Font.ITALIC));
+        } else {
+          setText(display);
           setFont(base.deriveFont(Font.PLAIN));
         }
       } else {

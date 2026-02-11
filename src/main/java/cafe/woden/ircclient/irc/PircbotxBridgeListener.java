@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.irc.soju.PircbotxSojuParsers;
+import cafe.woden.ircclient.irc.soju.SojuNetwork;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.Comparator;
@@ -47,6 +49,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
   private final CtcpRequestHandler ctcpHandler;
   private final boolean disconnectOnSaslFailure;
+
+  private final Consumer<SojuNetwork> sojuNetworkDiscovered;
+
+  private final Consumer<String> sojuOriginDisconnected;
 
   private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
 
@@ -250,6 +256,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
       CtcpRequestHandler ctcpHandler,
       boolean disconnectOnSaslFailure,
+      Consumer<SojuNetwork> sojuNetworkDiscovered,
+      Consumer<String> sojuOriginDisconnected,
       PlaybackCursorProvider playbackCursorProvider
   ) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
@@ -259,6 +267,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.reconnectScheduler = Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
     this.ctcpHandler = Objects.requireNonNull(ctcpHandler, "ctcpHandler");
     this.disconnectOnSaslFailure = disconnectOnSaslFailure;
+    this.sojuNetworkDiscovered = (sojuNetworkDiscovered == null) ? (n) -> {} : sojuNetworkDiscovered;
+    this.sojuOriginDisconnected = (sojuOriginDisconnected == null) ? (id) -> {} : sojuOriginDisconnected;
     this.playbackCursorProvider = java.util.Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
   }
 
@@ -318,6 +328,20 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           : (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Disconnected";
       if (conn.botRef.compareAndSet(event.getBot(), null)) {
         heartbeatStopper.accept(conn);
+      }
+
+      try {
+        sojuOriginDisconnected.accept(serverId);
+      } catch (Exception e2) {
+        log.debug("[{}] soju disconnect cleanup failed: {}", serverId, e2.toString());
+      }
+
+      try {
+        conn.sojuNetworksByNetId.clear();
+        conn.sojuListNetworksRequestedThisSession.set(false);
+        conn.sojuBouncerNetId.set("");
+        conn.sojuBouncerNetworksCapAcked.set(false);
+      } catch (Exception ignored) {
       }
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
@@ -713,6 +737,41 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         handleSaslNumeric(saslCode, rawLine);
         return;
       }
+
+      // soju bouncer network discovery: parse BOUNCER NETWORK entries.
+      PircbotxSojuParsers.ParsedBouncerNetwork bn = PircbotxSojuParsers.parseBouncerNetworkLine(rawLine);
+      if (bn != null) {
+        SojuNetwork network = new SojuNetwork(serverId, bn.netId(), bn.name(), bn.attrs());
+        SojuNetwork prev = conn.sojuNetworksByNetId.putIfAbsent(bn.netId(), network);
+        if (prev == null) {
+          log.info("[{}] soju: discovered network netId={} name={}", serverId, network.netId(), network.name());
+        } else if (!prev.equals(network)) {
+          conn.sojuNetworksByNetId.put(bn.netId(), network);
+          log.info("[{}] soju: updated network netId={} name={} (attrs changed)", serverId, network.netId(), network.name());
+        }
+        boolean changed = (prev == null) || !prev.equals(network);
+        if (changed) {
+          try {
+            sojuNetworkDiscovered.accept(network);
+          } catch (Exception e) {
+            log.debug("[{}] soju: network discovered handler threw", serverId, e);
+          }
+        }
+        return;
+      }
+
+      String maybeSojuNetId = PircbotxSojuParsers.parseRpl005BouncerNetId(rawLine);
+      if (maybeSojuNetId != null && !maybeSojuNetId.isBlank()) {
+        String prev = conn.sojuBouncerNetId.get();
+        if (prev == null || prev.isBlank()) {
+          conn.sojuBouncerNetId.set(maybeSojuNetId);
+          log.info("[{}] soju: BOUNCER_NETID={} (connection is bound to a bouncer network)", serverId, maybeSojuNetId);
+        } else if (!java.util.Objects.equals(prev, maybeSojuNetId)) {
+          conn.sojuBouncerNetId.set(maybeSojuNetId);
+          log.info("[{}] soju: BOUNCER_NETID changed {} -> {}", serverId, prev, maybeSojuNetId);
+        }
+      }
+
       if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
@@ -922,6 +981,24 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
     }
 
+    private void maybeRequestSojuNetworks(PircBotX bot) {
+      if (bot == null) return;
+      if (!conn.sojuBouncerNetworksCapAcked.get()) return;
+
+      String netId = conn.sojuBouncerNetId.get();
+      if (netId != null && !netId.isBlank()) return; // Not the bouncer-control session.
+
+      if (conn.sojuListNetworksRequestedThisSession.getAndSet(true)) return;
+
+      try {
+        bot.sendRaw().rawLine("BOUNCER LISTNETWORKS");
+        log.info("[{}] soju: requested bouncer network list (BOUNCER LISTNETWORKS)", serverId);
+      } catch (Exception ex) {
+        conn.sojuListNetworksRequestedThisSession.set(false);
+        log.warn("[{}] soju: failed to request bouncer network list", serverId, ex);
+      }
+    }
+
     @Override
     public void onServerResponse(ServerResponseEvent event) {
       touchInbound();
@@ -965,6 +1042,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (code == 376 || code == 422) {
         maybeLogNegotiatedCaps();
         maybeRequestZncPlayback(event.getBot());
+        maybeRequestSojuNetworks(event.getBot());
         return;
       }
       if (code == 5) {
@@ -975,6 +1053,19 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         if (line == null || line.isBlank()) line = String.valueOf(event);
 
         String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+
+        String netId = PircbotxSojuParsers.parseRpl005BouncerNetId(rawLine);
+        if (netId != null && !netId.isBlank()) {
+          String prev = conn.sojuBouncerNetId.get();
+          if (prev == null || prev.isBlank()) {
+            conn.sojuBouncerNetId.set(netId);
+            log.info("[{}] soju: BOUNCER_NETID={} (connection is bound to a bouncer network)", serverId, netId);
+          } else if (!java.util.Objects.equals(prev, netId)) {
+            conn.sojuBouncerNetId.set(netId);
+            log.info("[{}] soju: BOUNCER_NETID changed {} -> {}", serverId, prev, netId);
+          }
+        }
+
         if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.WhoxSupportObserved(Instant.now(), true)));

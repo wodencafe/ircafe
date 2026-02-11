@@ -1,7 +1,8 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -35,22 +36,25 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private final Map<String, PircbotxConnectionState> connections = new ConcurrentHashMap<>();
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
-  private final ServerRegistry serverRegistry;
+  private final ServerCatalog serverCatalog;
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
   private final PircbotxConnectionTimersRx timers;
+  private final SojuEphemeralNetworkImporter sojuImporter;
   private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
-                                 ServerRegistry serverRegistry,
+                                 ServerCatalog serverCatalog,
                                  PircbotxInputParserHookInstaller inputParserHookInstaller,
                                  PircbotxBotFactory botFactory,
+                                 SojuEphemeralNetworkImporter sojuImporter,
                                  PircbotxConnectionTimersRx timers,
                                  ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
-    this.serverRegistry = serverRegistry;
+    this.serverCatalog = serverCatalog;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
+    this.sojuImporter = Objects.requireNonNull(sojuImporter, "sojuImporter");
     this.timers = timers;
     this.playbackCursorProvider = playbackCursorProviderProvider.getIfAvailable(
         () -> (String sid) -> OptionalLong.empty()
@@ -92,11 +96,18 @@ public class PircbotxIrcClientService implements IrcClientService {
           if (shuttingDown.get()) return;
           PircbotxConnectionState c = conn(serverId);
           if (c.botRef.get() != null) return;
+          // soju discovery state is per-session; reset before starting a new connection.
+          try {
+            c.sojuNetworksByNetId.clear();
+            c.sojuListNetworksRequestedThisSession.set(false);
+            c.sojuBouncerNetId.set("");
+            c.sojuBouncerNetworksCapAcked.set(false);
+          } catch (Exception ignored) {}
           cancelReconnect(c);
           c.manualDisconnect.set(false);
           c.reconnectAttempts.set(0);
 
-          IrcProperties.Server s = serverRegistry.require(serverId);
+          IrcProperties.Server s = serverCatalog.require(serverId);
 
           boolean disconnectOnSaslFailure = s.sasl() != null
               && s.sasl().enabled()
@@ -112,6 +123,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               this::scheduleReconnect,
               this::handleCtcpIfPresent,
               disconnectOnSaslFailure,
+              sojuImporter::onNetworkDiscovered,
+              sojuImporter::onOriginDisconnected,
               playbackCursorProvider
           );
 
@@ -147,6 +160,11 @@ public class PircbotxIrcClientService implements IrcClientService {
           c.manualDisconnect.set(true);
           cancelReconnect(c);
           timers.stopHeartbeat(c);
+
+          // If this server was acting as a soju origin, drop any discovered ephemeral networks.
+          try {
+            sojuImporter.onOriginDisconnected(serverId);
+          } catch (Exception ignored) {}
 
           PircBotX bot = c.botRef.getAndSet(null);
           if (bot == null) return;
