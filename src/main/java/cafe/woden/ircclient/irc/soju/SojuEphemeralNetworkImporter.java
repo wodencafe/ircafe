@@ -3,11 +3,15 @@ package cafe.woden.ircclient.irc.soju;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.irc.IrcClientService;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,10 +27,22 @@ public class SojuEphemeralNetworkImporter {
 
   private final ServerRegistry serverRegistry;
   private final EphemeralServerRegistry ephemeralServers;
+  private final SojuAutoConnectStore autoConnect;
+  private final IrcClientService irc;
 
-  public SojuEphemeralNetworkImporter(ServerRegistry serverRegistry, EphemeralServerRegistry ephemeralServers) {
+  /** Guard against repeated connect() calls when the bouncer repeats NETWORK lines. */
+  private final Set<String> autoConnectQueued = ConcurrentHashMap.newKeySet();
+
+  public SojuEphemeralNetworkImporter(
+      ServerRegistry serverRegistry,
+      EphemeralServerRegistry ephemeralServers,
+      SojuAutoConnectStore autoConnect,
+      @Lazy IrcClientService irc
+  ) {
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.ephemeralServers = Objects.requireNonNull(ephemeralServers, "ephemeralServers");
+    this.autoConnect = Objects.requireNonNull(autoConnect, "autoConnect");
+    this.irc = Objects.requireNonNull(irc, "irc");
   }
 
   /**
@@ -56,6 +72,8 @@ public class SojuEphemeralNetworkImporter {
 
     ephemeralServers.upsert(server, bouncerId);
     log.info("[soju] Discovered network '{}' (netId={}) -> ephemeral server '{}'", d.networkName(), network.netId(), server.id());
+
+    maybeAutoConnect(bouncerId, d.networkName(), server.id());
   }
 
   /**
@@ -73,6 +91,28 @@ public class SojuEphemeralNetworkImporter {
 
     ephemeralServers.removeByOrigin(origin);
     log.info("[soju] Cleared {} ephemeral networks for origin '{}'", count, origin);
+
+    // Drop queued-connect guards for this origin so reconnecting the bouncer can re-trigger.
+    String prefix = "soju:" + origin + ":";
+    autoConnectQueued.removeIf(id -> id != null && id.startsWith(prefix));
+  }
+
+  private void maybeAutoConnect(String bouncerId, String networkName, String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    if (!autoConnect.isEnabled(bouncerId, networkName)) return;
+    if (!autoConnectQueued.add(sid)) return;
+
+    try {
+      irc.connect(sid).subscribe(
+          () -> {},
+          err -> log.warn("[soju] Auto-connect failed for '{}' ({}): {}", networkName, sid, String.valueOf(err))
+      );
+      log.info("[soju] Auto-connect enabled for '{}' on '{}' -> connecting {}", networkName, bouncerId, sid);
+    } catch (Exception e) {
+      log.warn("[soju] Auto-connect threw for '{}' ({}): {}", networkName, sid, String.valueOf(e));
+    }
   }
 
   private static IrcProperties.Server buildEphemeralServer(IrcProperties.Server bouncer, SojuEphemeralNaming.Derived d) {

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.ui.settings.NotificationRule;
+import cafe.woden.ircclient.irc.soju.PircbotxSojuParsers;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -1193,6 +1194,53 @@ public class RuntimeConfigStore {
     }
   }
 
+
+
+  public synchronized void rememberSojuAutoConnectNetwork(String bouncerServerId, String networkName, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(bouncerServerId, "").trim();
+      String net = Objects.toString(networkName, "").trim();
+      if (sid.isEmpty() || net.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> soju = getOrCreateMap(ircafe, "soju");
+      Map<String, Object> autoConnect = getOrCreateMap(soju, "autoConnect");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> nets = (autoConnect.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+
+      if (enabled) {
+        nets.put(net, true);
+        autoConnect.put(sid, nets);
+      } else {
+        // Remove case-insensitively so users can toggle based on what the bouncer returns.
+        nets.keySet().removeIf(k -> k != null && k.equalsIgnoreCase(net));
+        if (nets.isEmpty()) {
+          autoConnect.remove(sid);
+        } else {
+          autoConnect.put(sid, nets);
+        }
+
+        // Clean up empty structures to keep the YAML tidy.
+        if (autoConnect.isEmpty()) {
+          soju.remove("autoConnect");
+        }
+        if (soju.isEmpty()) {
+          ircafe.remove("soju");
+        }
+        if (ircafe.isEmpty()) {
+          doc.remove("ircafe");
+        }
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist soju auto-connect setting to '{}'", file, e);
+    }
+  }
   private interface ServerUpdater {
     void update(Map<String, Object> serverMap);
   }

@@ -89,6 +89,14 @@ ircafe:
         "NickServ": "#FFB300"
         "ChanServ": "#26A69A"
 
+  soju:
+    # Soju bouncer integration.
+    # Networks are discovered ephemerally; this persists only auto-connect intent.
+    # autoConnect:
+    #   soju:
+    #     libera: true
+    #     oftc: true
+
   logging:
     # Master toggle for persistence logging (chat history / message logs).
     # Default: false
