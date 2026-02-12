@@ -68,6 +68,7 @@ public class UiSettingsBus {
         timestampsIncludeChatMessages,
         props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
         props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
+        props.commandHistoryMaxSize() != null ? props.commandHistoryMaxSize() : 500,
         props.clientLineColorEnabled(),
         props.clientLineColor(),
 

@@ -613,6 +613,26 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberCommandHistoryMaxSize(int maxSize) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = maxSize;
+      if (v <= 0) v = 500;
+      if (v > 500) v = 500;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("commandHistoryMaxSize", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist command history max size setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberClientLineColorEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;

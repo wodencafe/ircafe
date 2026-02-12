@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 /**
@@ -311,14 +312,42 @@ public class OutboundChatCommandService {
     if (m.isEmpty()) return;
 
     if (at.isStatus()) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(system)",
-          "Select a channel, or double-click a nick to PM them.");
+      sendRawFromStatus(disposables, at.serverId(), m);
       return;
     }
 
     sendMessage(disposables, at, m);
+  }
+
+  private void sendRawFromStatus(CompositeDisposable disposables, String serverId, String rawLine) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    ui.ensureTargetExists(status);
+
+    String line = rawLine == null ? "" : rawLine.trim();
+    if (line.isEmpty()) return;
+
+    // Prevent accidental multi-line injection.
+    if (line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) {
+      ui.appendStatus(status, "(raw)", "Refusing to send multi-line input.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(sid)) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+
+    // Echo a safe preview of what we are sending (avoid leaking secrets).
+    ui.appendStatus(status, "(raw)", "→ " + redactIfSensitive(line));
+
+    disposables.add(
+        irc.sendRaw(sid, line)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
   }
 
 

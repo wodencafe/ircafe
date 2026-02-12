@@ -16,8 +16,18 @@ public class MessageInputDockable extends MessageInputPanel implements Dockable 
 
   public static final String ID = "input";
 
+  /**
+   * Creates a standalone input dock.
+   *
+   * <p>This constructor keeps the legacy signature working. Since this dockable is deprecated and
+   * not registered by default, it uses its own history store instance.
+   */
   public MessageInputDockable(UiSettingsBus settingsBus) {
-    super(settingsBus);
+    this(settingsBus, new CommandHistoryStore(settingsBus));
+  }
+
+  public MessageInputDockable(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
+    super(settingsBus, historyStore);
   }
 
   @Override

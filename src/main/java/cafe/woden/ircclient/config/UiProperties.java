@@ -29,6 +29,9 @@ public record UiProperties(
 
     Integer chatHistoryPageSize,
 
+    Integer commandHistoryMaxSize,
+
+
     Boolean clientLineColorEnabled,
 
     

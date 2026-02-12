@@ -103,7 +103,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      UserListStore userListStore,
                      NickContextMenuFactory nickContextMenuFactory,
                      ServerProxyResolver proxyResolver,
-                     UiSettingsBus settingsBus) {
+                     UiSettingsBus settingsBus,
+                     CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
     this.transcripts = transcripts;
     this.serverTree = serverTree;
@@ -179,7 +180,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     hideTopicPanel();
 
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
-    this.inputPanel = new MessageInputPanel(settingsBus);
+    this.inputPanel = new MessageInputPanel(settingsBus, commandHistoryStore);
     add(inputPanel, BorderLayout.SOUTH);
     if (this.activeInputRouter != null) {
       // Default active typing surface is the main chat input.

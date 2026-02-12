@@ -1203,9 +1203,18 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         if (PircbotxZncParsers.seemsRpl004Znc(rawLine)) {
           maybeMarkZncDetected("RPL_MYINFO/004", "(" + rawLine + ")");
         }
+        // Show the server line in Status so users can see server replies without watching the console.
+        emitServerResponseLine(event.getBot(), code, line);
         return;
       }
       if (code == 376 || code == 422) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        emitServerResponseLine(event.getBot(), code, line);
         maybeLogNegotiatedCaps();
         maybeRequestZncNetworks(event.getBot());
         maybeRequestZncPlayback(event.getBot());
@@ -1237,6 +1246,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
         }
+
+        emitServerResponseLine(event.getBot(), code, line);
         return;
       }
 
@@ -1403,7 +1414,18 @@ if (code == 302 || code == 352 || code == 354) {
         return;
       }
 
-      if (code != 305 && code != 306) return;
+      // For most numerics we don't have a dedicated high-level event.
+      // Surface the raw-ish server response to the Status transcript.
+      if (code != 305 && code != 306) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+        emitServerResponseLine(event.getBot(), code, line);
+        return;
+      }
+
       String line = null;
       Object l = reflectCall(event, "getLine");
       if (l == null) l = reflectCall(event, "getRawLine");
@@ -1422,6 +1444,66 @@ if (code == 302 || code == 352 || code == 354) {
       }
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.AwayStatusChanged(Instant.now(), isAway, msg)));
+    }
+
+    private void emitServerResponseLine(PircBotX bot, int code, String line) {
+      try {
+        if (line == null || line.isBlank()) return;
+        String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+        ParsedIrcLine pl = parseIrcLine(rawLine);
+
+        Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
+        if (at == null) at = Instant.now();
+
+        String myNick = null;
+        try {
+          myNick = (bot == null) ? null : bot.getNick();
+        } catch (Exception ignored) {
+        }
+
+        String message = renderServerResponseMessage(pl, myNick);
+        if (message == null || message.isBlank()) {
+          message = rawLine;
+        }
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.ServerResponseLine(at, code, message, rawLine)));
+      } catch (Exception ignored) {
+      }
+    }
+
+    private String renderServerResponseMessage(ParsedIrcLine pl, String myNick) {
+      if (pl == null) return null;
+      String trailing = pl.trailing();
+      java.util.List<String> params = pl.params();
+      String msg = (trailing == null) ? "" : trailing;
+
+      int idx = 0;
+      if (params != null && !params.isEmpty()) {
+        if (myNick != null && !myNick.isBlank() && params.get(0) != null
+            && params.get(0).equalsIgnoreCase(myNick)) {
+          idx = 1;
+        } else if ("*".equals(params.get(0))) {
+          idx = 1;
+        }
+      }
+
+      String subject = "";
+      if (params != null && idx < params.size()) {
+        subject = params.get(idx);
+        if (subject == null) subject = "";
+      }
+
+      if (msg.isBlank() && params != null && idx < params.size()) {
+        msg = String.join(" ", params.subList(idx, params.size()));
+      }
+      msg = msg == null ? "" : msg.trim();
+      subject = subject == null ? "" : subject.trim();
+
+      if (!subject.isBlank() && !msg.isBlank() && !msg.contains(subject)) {
+        // Helpful hint for lines like ERR_UNKNOWNCOMMAND: "Unknown command" + subject "test".
+        return msg + " (" + subject + ")";
+      }
+      return msg.isBlank() ? subject : msg;
     }
 
 

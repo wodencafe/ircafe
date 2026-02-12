@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.MessageInputPanel;
+import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
@@ -46,6 +47,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   public PinnedChatDockable(TargetRef target,
                            ChatTranscriptStore transcripts,
                            UiSettingsBus settingsBus,
+                           CommandHistoryStore historyStore,
                            Consumer<TargetRef> activate,
                            OutboundLineBus outboundBus,
                            ActiveInputRouter activeInputRouter,
@@ -65,7 +67,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     setDocument(transcripts.document(target));
 
     // Input panel embedded in the pinned view.
-    this.inputPanel = new MessageInputPanel(settingsBus);
+    this.inputPanel = new MessageInputPanel(settingsBus, historyStore);
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.

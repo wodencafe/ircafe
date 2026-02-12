@@ -35,6 +35,8 @@ public record UiSettings(
 
     int chatHistoryPageSize,
 
+    int commandHistoryMaxSize,
+
     boolean clientLineColorEnabled,
 
     String clientLineColor,
@@ -91,6 +93,9 @@ public record UiSettings(
 
     if (chatHistoryInitialLoadLines < 0) chatHistoryInitialLoadLines = 0;
     if (chatHistoryPageSize <= 0) chatHistoryPageSize = 200;
+
+    if (commandHistoryMaxSize <= 0) commandHistoryMaxSize = 500;
+    if (commandHistoryMaxSize > 500) commandHistoryMaxSize = 500;
 
     clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
 
@@ -177,7 +182,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, 500,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -215,7 +220,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -234,7 +239,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -253,7 +258,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -272,7 +277,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -291,7 +296,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -310,7 +315,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -329,7 +334,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -348,7 +353,7 @@ public record UiSettings(
         enabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -367,7 +372,7 @@ public record UiSettings(
         linkPreviewsEnabled, collapsed,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -386,7 +391,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         enabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -405,7 +410,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         enabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -424,7 +429,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, format, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -443,7 +448,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, enabled,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
@@ -467,7 +472,7 @@ public record UiSettings(
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
-        chatHistoryInitialLoadLines, chatHistoryPageSize,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
 
         userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,

@@ -200,6 +200,7 @@ public class PreferencesDialog {
 
       int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
       int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
+      int commandHistoryMaxSizeV = ((Number) history.commandHistoryMaxSize.getValue()).intValue();
       IrcProperties.Proxy proxyCfg;
       try {
         boolean proxyEnabledV = proxy.enabled.isSelected();
@@ -327,6 +328,7 @@ public class PreferencesDialog {
           timestampsIncludeChatMessagesV,
           historyInitialLoadV,
           historyPageSizeV,
+          commandHistoryMaxSizeV,
           outgoingColorEnabledV,
           outgoingHexV,
           userhostEnabledV,
@@ -376,6 +378,7 @@ public class PreferencesDialog {
 
       runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
       runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
+      runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
       runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
       runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
       runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
@@ -913,6 +916,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JSpinner historyPageSize = numberSpinner(current.chatHistoryPageSize(), 50, 10_000, 50, closeables);
     historyPageSize.setToolTipText("How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
 
+    JSpinner commandHistoryMaxSize = numberSpinner(current.commandHistoryMaxSize(), 1, 500, 25, closeables);
+    commandHistoryMaxSize.setToolTipText("Max entries kept for Up/Down command history in the input bar.\n" +
+        "This history is in-memory only; it does not persist across restarts.");
+
     JTextArea historyInfo = new JTextArea(
         "Chat history settings (requires chat logging to be enabled).\n" +
             "These affect how many messages are pulled from the database when opening a transcript or paging older history."
@@ -927,15 +934,17 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     historyInfo.setForeground(UIManager.getColor("Label.foreground"));
     historyInfo.setColumns(48);
 
-    JPanel historyPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]"));
+    JPanel historyPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
     historyPanel.setOpaque(false);
     historyPanel.add(historyInfo, "span 2, growx, wmin 0, wrap");
     historyPanel.add(new JLabel("Initial load (lines):"));
     historyPanel.add(historyInitialLoadLines, "w 110!");
     historyPanel.add(new JLabel("Page size (Load older):"));
     historyPanel.add(historyPageSize, "w 110!");
+    historyPanel.add(new JLabel("Input command history (max):"));
+    historyPanel.add(commandHistoryMaxSize, "w 110!");
 
-    return new HistoryControls(historyInitialLoadLines, historyPageSize, historyPanel);
+    return new HistoryControls(historyInitialLoadLines, historyPageSize, commandHistoryMaxSize, historyPanel);
   }
 
   private LoggingControls buildLoggingControls(LogProperties logProps, List<AutoCloseable> closeables) {
@@ -2825,7 +2834,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
   private record TimestampControls(JCheckBox enabled, JTextField format, JCheckBox includeChatMessages, JPanel panel) {
   }
-  private record HistoryControls(JSpinner initialLoadLines, JSpinner pageSize, JPanel panel) {
+  private record HistoryControls(JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {
   }
 
   private record LoggingControls(JCheckBox enabled,

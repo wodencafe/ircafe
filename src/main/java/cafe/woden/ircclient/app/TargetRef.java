@@ -64,7 +64,9 @@ public final class TargetRef {
   }
 
   public boolean isUiOnly() {
-    return isStatus() || isNotifications();
+    // UI-only targets are pseudo-buffers that do not represent a real IRC target.
+    // "status" is a real transcript buffer in ircafe (and can accept raw server input).
+    return isNotifications();
   }
 
   public boolean isChannel() {
