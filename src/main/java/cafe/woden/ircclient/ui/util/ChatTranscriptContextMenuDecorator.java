@@ -28,11 +28,12 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 import java.awt.Point;
+import javax.swing.text.Document;
 
 /**
  * Decorates a chat transcript {@link JTextComponent} with a right-click context menu.
  * <ul>
- *   <li>Default: Copy / Select All / Find Text</li>
+ *   <li>Default: Copy / Select All / Find Text / Clear</li>
  *   <li>If right-clicking on a URL token: Open Link in Browser / Copy Link Address / Save Link As...</li>
  * </ul>
  */
@@ -54,6 +55,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem copyItem = new JMenuItem("Copy");
   private final JMenuItem selectAllItem = new JMenuItem("Select All");
   private final JMenuItem findItem = new JMenuItem("Find Text");
+  private final JMenuItem clearItem = new JMenuItem("Clear");
 
   private final JMenuItem openLinkItem = new JMenuItem("Open Link in Browser");
   private final JMenuItem copyLinkItem = new JMenuItem("Copy Link Address");
@@ -87,6 +89,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     copyItem.addActionListener(this::onCopy);
     selectAllItem.addActionListener(this::onSelectAll);
     findItem.addActionListener(this::onFind);
+    clearItem.addActionListener(this::onClear);
 
     openLinkItem.addActionListener(this::onOpenLink);
     copyLinkItem.addActionListener(this::onCopyLink);
@@ -200,11 +203,15 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(selectAllItem);
       menu.addSeparator();
       menu.add(findItem);
+      menu.addSeparator();
+      menu.add(clearItem);
     } else {
       menu.add(copyItem);
       menu.add(selectAllItem);
       menu.addSeparator();
       menu.add(findItem);
+      menu.addSeparator();
+      menu.add(clearItem);
     }
   }
 
@@ -221,6 +228,13 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     openLinkItem.setEnabled(hasUrl);
     copyLinkItem.setEnabled(hasUrl);
     saveLinkItem.setEnabled(hasUrl);
+
+    try {
+      Document doc = transcript.getDocument();
+      clearItem.setEnabled(doc != null && doc.getLength() > 0);
+    } catch (Exception ignored) {
+      clearItem.setEnabled(true);
+    }
   }
 
   private void onCopy(ActionEvent e) {
@@ -292,6 +306,19 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private void onFind(ActionEvent e) {
     try {
       openFind.run();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onClear(ActionEvent e) {
+    try {
+      Document doc = transcript.getDocument();
+      if (doc == null) return;
+      int len = doc.getLength();
+      if (len <= 0) return;
+      // Clear only the in-memory transcript buffer (the UI document).
+      // This intentionally does not touch any persisted logs.
+      doc.remove(0, len);
     } catch (Exception ignored) {
     }
   }
