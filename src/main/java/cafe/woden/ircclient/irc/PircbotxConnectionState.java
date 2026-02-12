@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.irc.soju.SojuNetwork;
+import cafe.woden.ircclient.irc.znc.ZncNetwork;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -73,6 +74,23 @@ final class PircbotxConnectionState {
   // ZNC Playback module support
   final AtomicBoolean zncPlaybackCapAcked = new AtomicBoolean(false);
   final AtomicBoolean zncPlaybackRequestedThisSession = new AtomicBoolean(false);
+
+  // Ensures we only issue *status ListNetworks once per connection (ZNC).
+  final AtomicBoolean zncListNetworksRequestedThisSession = new AtomicBoolean(false);
+
+  // Captures networks discovered via *status ListNetworks (ZNC multi-network).
+  final AtomicBoolean zncListNetworksCaptureActive = new AtomicBoolean(false);
+  final AtomicLong zncListNetworksCaptureStartedMs = new AtomicLong(0);
+  final Map<String, ZncNetwork> zncNetworksByNameLower = new ConcurrentHashMap<>();
+
+  // ZNC (bouncer) detection / username parsing.
+  final AtomicBoolean zncDetected = new AtomicBoolean(false);
+  final AtomicBoolean zncDetectedLogged = new AtomicBoolean(false);
+
+  // Parsed ZNC-style login fields (user[@client]/network).
+  final AtomicReference<String> zncBaseUser = new AtomicReference<>("");
+  final AtomicReference<String> zncClientId = new AtomicReference<>("");
+  final AtomicReference<String> zncNetwork = new AtomicReference<>("");
 
   final ZncPlaybackCaptureCoordinator zncPlaybackCapture = new ZncPlaybackCaptureCoordinator();
 

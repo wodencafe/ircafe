@@ -1241,6 +1241,54 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist soju auto-connect setting to '{}'", file, e);
     }
   }
+
+
+
+  public synchronized void rememberZncAutoConnectNetwork(String bouncerServerId, String networkName, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(bouncerServerId, "").trim();
+      String net = Objects.toString(networkName, "").trim();
+      if (sid.isEmpty() || net.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> znc = getOrCreateMap(ircafe, "znc");
+      Map<String, Object> autoConnect = getOrCreateMap(znc, "autoConnect");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> nets = (autoConnect.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+
+      if (enabled) {
+        nets.put(net, true);
+        autoConnect.put(sid, nets);
+      } else {
+        // Remove case-insensitively so users can toggle based on what the bouncer returns.
+        nets.keySet().removeIf(k -> k != null && k.equalsIgnoreCase(net));
+        if (nets.isEmpty()) {
+          autoConnect.remove(sid);
+        } else {
+          autoConnect.put(sid, nets);
+        }
+
+        // Clean up empty structures to keep the YAML tidy.
+        if (autoConnect.isEmpty()) {
+          znc.remove("autoConnect");
+        }
+        if (znc.isEmpty()) {
+          ircafe.remove("znc");
+        }
+        if (ircafe.isEmpty()) {
+          doc.remove("ircafe");
+        }
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist znc auto-connect setting to '{}'", file, e);
+    }
+  }
   private interface ServerUpdater {
     void update(Map<String, Object> serverMap);
   }

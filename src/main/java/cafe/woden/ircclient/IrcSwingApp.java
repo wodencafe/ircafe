@@ -6,6 +6,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.IgnoreProperties;
+import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
@@ -19,7 +20,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
-@EnableConfigurationProperties({IrcProperties.class, UiProperties.class, IgnoreProperties.class, LogProperties.class, SojuProperties.class})
+@EnableConfigurationProperties({
+    IrcProperties.class,
+    UiProperties.class,
+    IgnoreProperties.class,
+    LogProperties.class,
+    SojuProperties.class,
+    ZncProperties.class
+})
 public class IrcSwingApp {
   public static void main(String[] args) {
     ConsoleTeeHub.install();

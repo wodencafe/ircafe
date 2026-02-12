@@ -6,24 +6,23 @@ import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Soju bouncer integration settings.
+ * ZNC bouncer integration settings.
  */
-@ConfigurationProperties(prefix = "ircafe.soju")
-public record SojuProperties(
+@ConfigurationProperties(prefix = "ircafe.znc")
+public record ZncProperties(
     Map<String, Map<String, Boolean>> autoConnect,
     Discovery discovery
 ) {
 
-  public SojuProperties {
+  public ZncProperties {
     if (autoConnect == null) autoConnect = Map.of();
     if (discovery == null) discovery = new Discovery(true);
   }
 
-  /** Soju discovery settings. */
+  /** ZNC network discovery settings. */
   public record Discovery(boolean enabled) {
     public Discovery {
-      // Keep defaults stable even when config sections are partially present.
-      // If the user omits this value entirely, we default to true.
+      // Defaults are handled by the parent record ctor (enabled=true).
     }
   }
 

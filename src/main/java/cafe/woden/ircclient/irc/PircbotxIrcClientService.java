@@ -2,6 +2,10 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.config.ZncProperties;
+import cafe.woden.ircclient.irc.znc.ZncLoginParts;
+import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -41,20 +45,29 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final PircbotxBotFactory botFactory;
   private final PircbotxConnectionTimersRx timers;
   private final SojuEphemeralNetworkImporter sojuImporter;
+  private final ZncEphemeralNetworkImporter zncImporter;
+  private final SojuProperties sojuProps;
+  private final ZncProperties zncProps;
   private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
                                  ServerCatalog serverCatalog,
                                  PircbotxInputParserHookInstaller inputParserHookInstaller,
                                  PircbotxBotFactory botFactory,
+                                 SojuProperties sojuProps,
+                                 ZncProperties zncProps,
                                  SojuEphemeralNetworkImporter sojuImporter,
+                                 ZncEphemeralNetworkImporter zncImporter,
                                  PircbotxConnectionTimersRx timers,
                                  ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
     this.serverCatalog = serverCatalog;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
+    this.sojuProps = sojuProps;
+    this.zncProps = zncProps;
     this.sojuImporter = Objects.requireNonNull(sojuImporter, "sojuImporter");
+    this.zncImporter = Objects.requireNonNull(zncImporter, "zncImporter");
     this.timers = timers;
     this.playbackCursorProvider = playbackCursorProviderProvider.getIfAvailable(
         () -> (String sid) -> OptionalLong.empty()
@@ -109,6 +122,33 @@ public class PircbotxIrcClientService implements IrcClientService {
 
           IrcProperties.Server s = serverCatalog.require(serverId);
 
+          // ZNC detection uses CAP/004/*status heuristics, but we can still parse the
+          // configured login now (user[@client]/network) so logs and discovery logic have
+          // context once ZNC is detected.
+          try {
+            c.zncDetected.set(false);
+            c.zncDetectedLogged.set(false);
+            c.zncBaseUser.set("");
+            c.zncClientId.set("");
+            c.zncNetwork.set("");
+
+            // Reset per-connection ZNC playback flags (negotiated each connect).
+            c.zncPlaybackCapAcked.set(false);
+            c.zncPlaybackRequestedThisSession.set(false);
+            c.zncListNetworksRequestedThisSession.set(false);
+            c.zncPlaybackCapture.cancelActive("reconnect");
+
+            ZncLoginParts loginParts = ZncLoginParts.parse(s.login());
+            ZncLoginParts saslParts = (s.sasl() != null && s.sasl().enabled())
+                ? ZncLoginParts.parse(s.sasl().username())
+                : new ZncLoginParts("", "", "");
+
+            ZncLoginParts merged = loginParts.mergePreferThis(saslParts);
+            c.zncBaseUser.set(merged.baseUser());
+            c.zncClientId.set(merged.clientId());
+            c.zncNetwork.set(merged.network());
+          } catch (Exception ignored) {}
+
           boolean disconnectOnSaslFailure = s.sasl() != null
               && s.sasl().enabled()
               && Boolean.TRUE.equals(s.sasl().disconnectOnFailure());
@@ -123,8 +163,12 @@ public class PircbotxIrcClientService implements IrcClientService {
               this::scheduleReconnect,
               this::handleCtcpIfPresent,
               disconnectOnSaslFailure,
+              sojuProps.discovery().enabled(),
+              zncProps.discovery().enabled(),
+              zncImporter::onNetworkDiscovered,
               sojuImporter::onNetworkDiscovered,
               sojuImporter::onOriginDisconnected,
+              zncImporter::onOriginDisconnected,
               playbackCursorProvider
           );
 
@@ -161,10 +205,14 @@ public class PircbotxIrcClientService implements IrcClientService {
           cancelReconnect(c);
           timers.stopHeartbeat(c);
 
-          // If this server was acting as a soju origin, drop any discovered ephemeral networks.
+          // If this server was acting as a bouncer origin, drop any discovered ephemeral networks.
           try {
             sojuImporter.onOriginDisconnected(serverId);
           } catch (Exception ignored) {}
+          try {
+            zncImporter.onOriginDisconnected(serverId);
+          } catch (Exception ignored) {}
+
 
           PircBotX bot = c.botRef.getAndSet(null);
           if (bot == null) return;

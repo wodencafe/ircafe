@@ -91,11 +91,30 @@ ircafe:
 
   soju:
     # Soju bouncer integration.
+    discovery:
+      # If true (default), IRCafe will attempt to discover soju bouncer networks ephemerally.
+      # If false, IRCafe will not request soju network discovery (BOUNCER LISTNETWORKS).
+      enabled: true
     # Networks are discovered ephemerally; this persists only auto-connect intent.
     # autoConnect:
     #   soju:
     #     libera: true
     #     oftc: true
+
+  znc:
+    # ZNC bouncer integration.
+    discovery:
+      # If true (default), IRCafe will attempt to discover ZNC networks ephemerally.
+      # If false, IRCafe will not probe *status for ListNetworks.
+      enabled: true
+    # Networks are discovered ephemerally; this persists only auto-connect intent.
+    # Keyed by the bouncer/control connection id from `irc.servers[].id`.
+    # Network keys are normalized (case-insensitive) using ZNC's network segment sanitizer.
+    # autoConnect:
+    #   znc-main:
+    #     libera: true
+    #     oftc: true
+
 
   logging:
     # Master toggle for persistence logging (chat history / message logs).

@@ -68,6 +68,12 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             String c = cap.trim();
             if (c.isEmpty()) continue;
 
+            if (PircbotxZncParsers.seemsZncCap(c)) {
+              if (conn.zncDetected.compareAndSet(false, true)) {
+                log.info("[{}] detected ZNC via CAP ACK: {}", serverId, c);
+              }
+            }
+
             if ("znc.in/playback".equalsIgnoreCase(c)) {
               if (conn.zncPlaybackCapAcked.compareAndSet(false, true)) {
                 log.info("[{}] CAP ACK: znc.in/playback enabled", serverId);
