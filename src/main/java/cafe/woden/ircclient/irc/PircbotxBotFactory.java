@@ -71,6 +71,7 @@ public class PircbotxBotFactory {
         .addCapHandler(new EnableCapHandler("draft/chathistory", true))
         .addCapHandler(new EnableCapHandler("znc.in/playback", true))
         .addCapHandler(new EnableCapHandler("account-tag", true))
+        .addCapHandler(new EnableCapHandler("soju.im/bouncer-networks", true))
         .setAutoNickChange(true)
         .setAutoReconnect(false)
         .addListener(listener);

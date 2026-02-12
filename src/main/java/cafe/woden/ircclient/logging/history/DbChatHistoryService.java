@@ -52,11 +52,15 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private final ChatTranscriptStore transcripts;
   private final UiSettingsBus settingsBus;
 
-  // Step 4E: optional remote fill via IRCv3 CHATHISTORY (soju) when DB runs out.
+  // Optional remote fill when DB runs out:
+  //  - Prefer IRCv3 CHATHISTORY (soju / servers that support it)
+  //  - Fall back to ZNC playback (znc.in/playback) when available
   private final IrcClientService irc;
   private final ChatHistoryIngestBus ingestBus;
 
-  private static final Duration REMOTE_FILL_TIMEOUT = Duration.ofSeconds(4);
+  private static final Duration CHATHISTORY_REMOTE_FILL_TIMEOUT = Duration.ofSeconds(4);
+  private static final Duration ZNC_PLAYBACK_REMOTE_FILL_TIMEOUT = Duration.ofSeconds(18);
+  private static final Duration ZNC_PLAYBACK_WINDOW = Duration.ofHours(6);
 
   
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
@@ -270,28 +274,65 @@ public final class DbChatHistoryService implements ChatHistoryService {
     if ("status".equalsIgnoreCase(target.trim())) return false;
     if (limit <= 0) return false;
 
+    boolean canChatHistory = false;
+    boolean canZncPlayback = false;
     try {
-      var waiter = ingestBus.awaitNext(serverId, target, REMOTE_FILL_TIMEOUT);
+      canChatHistory = irc.isChatHistoryAvailable(serverId);
+    } catch (Exception ignored) {
+      canChatHistory = false;
+    }
+    try {
+      canZncPlayback = irc.isZncPlaybackAvailable(serverId);
+    } catch (Exception ignored) {
+      canZncPlayback = false;
+    }
 
-      try {
-        // Sends the CHATHISTORY request (or throws if caps weren't negotiated).
-        irc.requestChatHistoryBefore(serverId, target, beforeExclusive, limit).blockingAwait();
-      } catch (Exception e) {
-        // Cancel waiter so we don't leak.
+    if (!canChatHistory && !canZncPlayback) return false;
+
+    // ZNC playback completion is best-effort and may take longer than CHATHISTORY.
+    final Duration timeout = canZncPlayback ? ZNC_PLAYBACK_REMOTE_FILL_TIMEOUT : CHATHISTORY_REMOTE_FILL_TIMEOUT;
+
+    try {
+      var waiter = ingestBus.awaitNext(serverId, target, timeout);
+
+      boolean requested = false;
+
+      if (canChatHistory) {
+        try {
+          // Sends the CHATHISTORY request (or throws if caps weren't negotiated).
+          irc.requestChatHistoryBefore(serverId, target, beforeExclusive, limit).blockingAwait();
+          requested = true;
+        } catch (Exception e) {
+          log.debug("Remote CHATHISTORY request failed for {} / {}", serverId, target, e);
+          requested = false;
+        }
+      }
+
+      // Fall back to ZNC playback if CHATHISTORY isn't usable or the send failed.
+      if (!requested && canZncPlayback) {
+        try {
+          irc.requestZncPlaybackBefore(serverId, target, beforeExclusive, ZNC_PLAYBACK_WINDOW).blockingAwait();
+          requested = true;
+        } catch (Exception e) {
+          log.debug("Remote ZNC playback request failed for {} / {}", serverId, target, e);
+          requested = false;
+        }
+      }
+
+      if (!requested) {
         waiter.cancel(true);
-        log.debug("Remote CHATHISTORY request failed for {} / {}", serverId, target, e);
         return false;
       }
 
       try {
-        waiter.get(REMOTE_FILL_TIMEOUT.toMillis() + 250, TimeUnit.MILLISECONDS);
+        waiter.get(timeout.toMillis() + 250, TimeUnit.MILLISECONDS);
       } catch (Exception e) {
         // Timeout is okay; we'll just re-query DB and return whatever we have.
-        log.debug("Remote CHATHISTORY ingest wait timed out for {} / {}", serverId, target);
+        log.debug("Remote history ingest wait timed out for {} / {}", serverId, target);
       }
       return true;
     } catch (Exception e) {
-      log.debug("Remote CHATHISTORY coordination failed for {} / {}", serverId, target, e);
+      log.debug("Remote history coordination failed for {} / {}", serverId, target, e);
       return false;
     }
   }

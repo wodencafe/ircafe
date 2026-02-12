@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
@@ -28,6 +29,7 @@ public class ConnectionCoordinator {
   private final IrcClientService irc;
   private final UiPort ui;
   private final ServerRegistry serverRegistry;
+  private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -40,11 +42,13 @@ public class ConnectionCoordinator {
       IrcClientService irc,
       UiPort ui,
       ServerRegistry serverRegistry,
+      ServerCatalog serverCatalog,
       RuntimeConfigStore runtimeConfig
   ) {
     this.irc = irc;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
+    this.serverCatalog = serverCatalog;
     this.runtimeConfig = runtimeConfig;
 
     configuredServers.addAll(serverRegistry.serverIds());
@@ -119,7 +123,7 @@ public class ConnectionCoordinator {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    if (!serverRegistry.containsId(sid)) {
+    if (!serverCatalog.containsId(sid)) {
       ui.appendError(new TargetRef("default", "status"), "(conn)", "Unknown server: " + sid);
       return;
     }
@@ -173,7 +177,7 @@ public class ConnectionCoordinator {
   public void disconnectOne(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
-    if (!serverRegistry.containsId(sid)) {
+    if (!serverCatalog.containsId(sid)) {
       ui.appendError(new TargetRef("default", "status"), "(disc)", "Unknown server: " + sid);
       return;
     }

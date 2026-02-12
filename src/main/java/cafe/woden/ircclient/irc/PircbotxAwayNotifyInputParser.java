@@ -56,7 +56,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     super.processCommand(target, source, command, line, parsedLine, tags);
     if (command == null) return;
 
-    // Detect CAP ACKs for bouncer-related capabilities (ZNC playback, soju chathistory, IRCv3 batch).
+    // Detect CAP ACKs for bouncer-related capabilities (ZNC playback, soju chathistory, soju bouncer networks, IRCv3 batch).
     if ("CAP".equalsIgnoreCase(command) && parsedLine != null && parsedLine.size() >= 2) {
       String sub = parsedLine.get(1);
       if (sub != null && "ACK".equalsIgnoreCase(sub) && parsedLine.size() >= 3) {
@@ -79,6 +79,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             } else if ("draft/chathistory".equalsIgnoreCase(c)) {
               if (conn.chatHistoryCapAcked.compareAndSet(false, true)) {
                 log.info("[{}] CAP ACK: draft/chathistory enabled", serverId);
+              }
+            } else if ("soju.im/bouncer-networks".equalsIgnoreCase(c)) {
+              if (conn.sojuBouncerNetworksCapAcked.compareAndSet(false, true)) {
+                log.info("[{}] CAP ACK: soju.im/bouncer-networks enabled", serverId);
               }
             } else if ("server-time".equalsIgnoreCase(c)) {
               if (conn.serverTimeCapAcked.compareAndSet(false, true)) {

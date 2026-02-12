@@ -196,7 +196,7 @@ public class TargetCoordinator {
 
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
-        && Objects.equals(activeTarget.target(), ev.channel())) {
+        && activeTarget.matches(ev.channel())) {
       ui.setUsersNicks(ev.nicks());
       ui.setStatusBarCounts(ev.totalUsers(), ev.operatorCount());
 
@@ -220,7 +220,7 @@ public class TargetCoordinator {
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
         && activeTarget.isChannel()
-        && changedChannels.contains(activeTarget.target())) {
+        && changedChannels.contains(activeTarget.key())) {
       scheduleActiveUsersRefresh(sid, activeTarget.target());
     }
   }
@@ -239,7 +239,7 @@ public class TargetCoordinator {
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
         && activeTarget.isChannel()
-        && changedChannels.contains(activeTarget.target())) {
+        && changedChannels.contains(activeTarget.key())) {
       scheduleActiveUsersRefresh(sid, activeTarget.target());
     }
   }
@@ -259,7 +259,7 @@ public class TargetCoordinator {
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
         && activeTarget.isChannel()
-        && changedChannels.contains(activeTarget.target())) {
+        && changedChannels.contains(activeTarget.key())) {
       scheduleActiveUsersRefresh(sid, activeTarget.target());
     }
   }
@@ -358,7 +358,7 @@ public class TargetCoordinator {
   boolean isActiveChannel = activeTarget != null
       && Objects.equals(activeTarget.serverId(), sid)
       && activeTarget.isChannel()
-      && Objects.equals(activeTarget.target(), Objects.toString(channel, "").trim());
+      && activeTarget.matches(Objects.toString(channel, "").trim());
 
   java.util.ArrayList<String> userhostCandidates = new java.util.ArrayList<>();
   java.util.ArrayList<String> whoisUnknownAccountCandidates = new java.util.ArrayList<>();

@@ -1,43 +1,106 @@
 package cafe.woden.ircclient.app;
 
+import java.util.Locale;
 import java.util.Objects;
 
-public record TargetRef(String serverId, String target) {
+/**
+ * Identifies a chat "target" within a server.
+ *
+ * <p>IRC targets (channels + nicks) are case-insensitive for identity purposes.
+ * To avoid accidental duplicates (e.g. "##Llamas" vs "##llamas"), equality and
+ * hashing are performed using a folded (lowercased) key.
+ *
+ * <p>The original {@link #target()} is preserved for display/persistence.
+ */
+public final class TargetRef {
 
-  /**
-   * Reserved, UI-only pseudo-target for per-server notifications/mentions.
-   *
-   * <p>Intentionally uses a name that cannot collide with real IRC channels or nicks.</p>
-   */
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
 
-  /** Convenience constructor for the per-server notifications pseudo-target. */
+  private final String serverId;
+  private final String target;
+  private final String key;
+
+  public TargetRef(String serverId, String target) {
+    this.serverId = norm(serverId);
+    this.target = norm(target);
+    if (this.serverId.isEmpty()) throw new IllegalArgumentException("serverId must not be blank");
+    if (this.target.isEmpty()) throw new IllegalArgumentException("target must not be blank");
+    this.key = foldKey(this.target);
+  }
+
   public static TargetRef notifications(String serverId) {
     return new TargetRef(serverId, NOTIFICATIONS_TARGET);
   }
 
-  public TargetRef {
-    serverId = Objects.requireNonNull(serverId, "serverId").trim();
-    target = Objects.requireNonNull(target, "target").trim();
-    if (serverId.isEmpty()) throw new IllegalArgumentException("serverId is blank");
-    if (target.isEmpty()) throw new IllegalArgumentException("target is blank");
+  public String serverId() {
+    return serverId;
+  }
+
+  /**
+   * Display/persistence target string.
+   *
+   * <p>Do not use this for identity comparisons. Use {@link #matches(String)} or
+   * rely on {@link #equals(Object)}.
+   */
+  public String target() {
+    return target;
+  }
+
+  /**
+   * Case-folded identity key.
+   *
+   * <p>Mostly intended for debugging.
+   */
+  public String key() {
+    return key;
   }
 
   public boolean isStatus() {
-    return "status".equalsIgnoreCase(target);
+    return "status".equals(key);
   }
 
-  /** True when this target is the UI-only per-server notifications pseudo-target. */
   public boolean isNotifications() {
-    return NOTIFICATIONS_TARGET.equalsIgnoreCase(target);
+    return NOTIFICATIONS_TARGET.equals(key);
   }
 
-  /** True when this target should never be treated as a real IRC destination. */
   public boolean isUiOnly() {
-    return isNotifications();
+    return isStatus() || isNotifications();
   }
 
   public boolean isChannel() {
     return target.startsWith("#") || target.startsWith("&");
+  }
+
+  /** True if this ref refers to the same target as {@code otherTarget} (case-insensitive). */
+  public boolean matches(String otherTarget) {
+    return key.equals(foldKey(otherTarget));
+  }
+
+  private static String norm(String s) {
+    return Objects.toString(s, "").trim();
+  }
+
+  private static String foldKey(String target) {
+    String t = norm(target);
+    if (t.isEmpty()) return "";
+    if (NOTIFICATIONS_TARGET.equals(t)) return NOTIFICATIONS_TARGET;
+    return t.toLowerCase(Locale.ROOT);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof TargetRef other)) return false;
+    return Objects.equals(serverId, other.serverId) && Objects.equals(key, other.key);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(serverId, key);
+  }
+
+  @Override
+  public String toString() {
+    return "TargetRef{" + serverId + ":" + target + "}";
   }
 }

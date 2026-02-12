@@ -37,6 +37,11 @@ public class UserListStore {
     return n.isEmpty() ? "" : n.toLowerCase(Locale.ROOT);
   }
 
+  private static String channelKey(String channel) {
+    String c = norm(channel);
+    return c.isEmpty() ? "" : c.toLowerCase(Locale.ROOT);
+  }
+
   private static boolean isUsefulHostmask(String hostmask) {
     String hm = norm(hostmask);
     if (hm.isEmpty()) return false;
@@ -90,7 +95,7 @@ public class UserListStore {
 
   public List<NickInfo> get(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
+    String ch = channelKey(channel);
     if (sid.isEmpty() || ch.isEmpty()) return Collections.emptyList();
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
@@ -128,7 +133,7 @@ public class UserListStore {
 
   public Set<String> getLowerNickSet(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
+    String ch = channelKey(channel);
     if (sid.isEmpty() || ch.isEmpty()) return Collections.emptySet();
 
     Map<String, Set<String>> byChannel = lowerNickSetByServerAndChannel.get(sid);
@@ -138,7 +143,7 @@ public class UserListStore {
 
   public void put(String serverId, String channel, List<NickInfo> nicks) {
     String sid = norm(serverId);
-    String ch = norm(channel);
+    String ch = channelKey(channel);
     if (sid.isEmpty() || ch.isEmpty()) return;
 
     // Merge any learned hostmasks / away-state into the roster, but do not overwrite a useful value
@@ -260,7 +265,7 @@ public class UserListStore {
 
   public void clear(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
+    String ch = channelKey(channel);
     if (sid.isEmpty() || ch.isEmpty()) return;
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
@@ -284,7 +289,7 @@ public class UserListStore {
 
   public boolean updateHostmask(String serverId, String channel, String nick, String hostmask) {
     String sid = norm(serverId);
-    String ch = norm(channel);
+    String ch = channelKey(channel);
     String n = norm(nick);
     String hm = norm(hostmask);
 
@@ -388,7 +393,7 @@ public class UserListStore {
 
   public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState, String awayMessage) {
     String sid = norm(serverId);
-    String ch = norm(channel);
+    String ch = channelKey(channel);
     String n = norm(nick);
     AwayState as = (awayState == null) ? AwayState.UNKNOWN : awayState;
     String msg = normalizeAwayMessage(as, awayMessage);

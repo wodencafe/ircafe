@@ -2,7 +2,9 @@ package cafe.woden.ircclient.irc;
 
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 /**
@@ -54,6 +56,51 @@ public interface IrcClientService {
    * by later pipeline steps.
    */
   Completable requestChatHistoryBefore(String serverId, String target, Instant beforeExclusive, int limit);
+
+  default Completable requestChatHistoryBefore(String serverId, String target, long beforeExclusiveEpochMs, int limit) {
+    return requestChatHistoryBefore(serverId, target, Instant.ofEpochMilli(beforeExclusiveEpochMs), limit);
+  }
+
+  /**
+   * @return true if IRCv3 chat history is usable on this connection (e.g. draft/chathistory negotiated).
+   */
+  default boolean isChatHistoryAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if the connection negotiated {@code znc.in/playback} (ZNC playback module).
+   */
+  default boolean isZncPlaybackAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * Request backlog playback from ZNC.
+   *
+   * <p>Requires {@code znc.in/playback}. ZNC playback replays messages as normal PRIVMSG/NOTICE/ACTION
+   * lines (often with {@code server-time} tags), rather than returning a structured batch.
+   *
+   * <p>This method only issues the request; callers are responsible for capturing/processing the
+   * replayed lines.
+   */
+  default Completable requestZncPlaybackRange(
+      String serverId,
+      String target,
+      Instant fromInclusive,
+      Instant toInclusive
+  ) {
+    return Completable.error(new UnsupportedOperationException("ZNC playback not supported"));
+  }
+
+  /** Convenience overload: request a window ending at {@code beforeExclusive}. */
+  default Completable requestZncPlaybackBefore(String serverId, String target, Instant beforeExclusive, Duration window) {
+    Instant end = beforeExclusive == null ? Instant.now() : beforeExclusive;
+    Duration w = (window == null) ? Duration.ofMinutes(30) : window;
+    // Clamp to seconds because ZNC playback typically uses epoch-seconds.
+    Instant start = end.minus(w.toMillis(), ChronoUnit.MILLIS);
+    return requestZncPlaybackRange(serverId, target, start, end);
+  }
 
 
   default Completable sendAction(String serverId, String target, String action) {

@@ -76,22 +76,34 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     return min;
   }
 
-  private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
-    int count = parent.getChildCount();
-    if (count == 0) return -1;
+private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
+  int count = parent.getChildCount();
+  if (count == 0) return -1;
 
-    int max = count - 1;
-    if (parentIsServer) {
-      // Keep the "Private messages" group as the last child, if present.
-      DefaultMutableTreeNode last = (DefaultMutableTreeNode) parent.getChildAt(count - 1);
-      if (isPrivateMessagesGroupNode(last)) {
-        max = count - 2;
+  int idx = count - 1;
+  if (parentIsServer) {
+    // Keep reserved group nodes at the bottom of the server node ("Soju Networks", "Private messages").
+    while (idx >= 0) {
+      DefaultMutableTreeNode tail = (DefaultMutableTreeNode) parent.getChildAt(idx);
+      if (isPrivateMessagesGroupNode(tail) || isSojuNetworksGroupNode(tail)) {
+        idx--;
+        continue;
       }
+      break;
     }
-    return max;
   }
+  return idx;
+}
 
-  private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+private boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
+  if (node == null) return false;
+  Object uo = node.getUserObject();
+  if (!(uo instanceof String s)) return false;
+  return s.trim().equalsIgnoreCase("Soju Networks");
+}
+
+private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+
     if (node == null) return false;
     Object uo = node.getUserObject();
     if (!(uo instanceof String s)) return false;

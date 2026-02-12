@@ -58,7 +58,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
-    this.persistentId = "chat-pinned:" + b64(target.serverId()) + ":" + b64(target.target());
+    // Use a folded key so "##Llamas" and "##llamas" resolve to the same persistent dock id.
+    this.persistentId = "chat-pinned:" + b64(target.serverId()) + ":" + b64(target.key());
 
     setName(getTabText());
     setDocument(transcripts.document(target));

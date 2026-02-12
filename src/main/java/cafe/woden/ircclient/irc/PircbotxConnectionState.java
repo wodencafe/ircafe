@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.irc.soju.SojuNetwork;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -73,9 +74,24 @@ final class PircbotxConnectionState {
   final AtomicBoolean zncPlaybackCapAcked = new AtomicBoolean(false);
   final AtomicBoolean zncPlaybackRequestedThisSession = new AtomicBoolean(false);
 
+  final ZncPlaybackCaptureCoordinator zncPlaybackCapture = new ZncPlaybackCaptureCoordinator();
+
   // IRCv3 history support (soju): detect whether the server accepted these capabilities.
   final AtomicBoolean batchCapAcked = new AtomicBoolean(false);
   final AtomicBoolean chatHistoryCapAcked = new AtomicBoolean(false);
+
+  // soju bouncer network discovery (cap: soju.im/bouncer-networks)
+  final AtomicBoolean sojuBouncerNetworksCapAcked = new AtomicBoolean(false);
+
+  // Ensures we only issue BOUNCER LISTNETWORKS once per connection.
+  final AtomicBoolean sojuListNetworksRequestedThisSession = new AtomicBoolean(false);
+
+  // soju bouncer: if present, this connection is bound to a specific network on the bouncer.
+  // If blank, this connection is the "bouncer control" session.
+  final AtomicReference<String> sojuBouncerNetId = new AtomicReference<>("");
+
+  // Networks discovered via `BOUNCER LISTNETWORKS` (de-duped by netId).
+  final Map<String, SojuNetwork> sojuNetworksByNetId = new ConcurrentHashMap<>();
 
   // IRCv3 server-time support (canonical message timestamps).
   final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);

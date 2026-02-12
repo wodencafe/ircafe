@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -37,7 +37,7 @@ import org.springframework.stereotype.Component;
 final class PircbotxConnectionTimersRx {
   private static final Logger log = LoggerFactory.getLogger(PircbotxConnectionTimersRx.class);
 
-  private final ServerRegistry serverRegistry;
+  private final ServerCatalog serverCatalog;
   private final IrcProperties.Reconnect reconnectPolicy;
   private final IrcProperties.Heartbeat heartbeatPolicy;
 
@@ -49,8 +49,8 @@ final class PircbotxConnectionTimersRx {
   // Prevent scheduling (and noisy UndeliverableException logs) during JVM/app shutdown.
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
-  PircbotxConnectionTimersRx(IrcProperties props, ServerRegistry serverRegistry) {
-    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
+  PircbotxConnectionTimersRx(IrcProperties props, ServerCatalog serverCatalog) {
+    this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     IrcProperties.Client c = (props != null) ? props.client() : null;
     this.reconnectPolicy = (c != null) ? c.reconnect() : null;
     this.heartbeatPolicy = (c != null) ? c.heartbeat() : null;
@@ -181,7 +181,7 @@ final class PircbotxConnectionTimersRx {
         if (shuttingDown.get() || c.manualDisconnect.get()) return;
 
         // If the server was removed while waiting, abort.
-        if (!serverRegistry.containsId(c.serverId)) {
+        if (!serverCatalog.containsId(c.serverId)) {
           emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
               Instant.now(),
               "Reconnect cancelled (server removed)",

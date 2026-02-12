@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.net;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.ServerCatalog;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -17,10 +17,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class ServerProxyResolver {
 
-  private final ServerRegistry serverRegistry;
+  private final ServerCatalog serverCatalog;
 
-  public ServerProxyResolver(ServerRegistry serverRegistry) {
-    this.serverRegistry = serverRegistry;
+  public ServerProxyResolver(ServerCatalog serverCatalog) {
+    this.serverCatalog = serverCatalog;
   }
 
   /** Returns the current default proxy settings (never null). */
@@ -32,7 +32,7 @@ public class ServerProxyResolver {
   public IrcProperties.Proxy effectiveProxy(String serverId) {
     String id = Objects.toString(serverId, "").trim();
     if (!id.isEmpty()) {
-      IrcProperties.Proxy override = serverRegistry.find(id).map(IrcProperties.Server::proxy).orElse(null);
+      IrcProperties.Proxy override = serverCatalog.find(id).map(IrcProperties.Server::proxy).orElse(null);
       if (override != null) {
         return NetProxyContext.normalize(override);
       }
