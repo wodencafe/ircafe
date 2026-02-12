@@ -175,6 +175,95 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   }
 
   @Override
+  public boolean canReloadRecent(TargetRef target) {
+    if (target == null) return false;
+    if (!shouldOfferPaging(target)) return false;
+    // Allow reload even when transcript is empty.
+    return irc.isChatHistoryAvailable(target.serverId()) || irc.isZncPlaybackAvailable(target.serverId());
+  }
+
+  @Override
+  public void reloadRecent(TargetRef target) {
+    if (!canReloadRecent(target)) return;
+
+    // Seed cursor to "now" so remote history BEFORE now yields the most recent messages.
+    LogCursor seed = new LogCursor(System.currentTimeMillis(), 0);
+    oldestCursor.put(target, seed);
+    noMoreOlder.remove(target);
+
+    int limit = 100;
+    try {
+      if (settingsBus != null) {
+        limit = settingsBus.get().chatHistoryInitialLoadLines();
+      }
+    } catch (Exception ignored) {
+      limit = 100;
+    }
+    if (limit <= 0) return;
+    final int limitFinal = Math.max(1, limit);
+
+    if (Boolean.TRUE.equals(inFlight.putIfAbsent(target, Boolean.TRUE))) return;
+
+    exec.execute(() -> {
+      try {
+        LoadOlderResult res = fetchRemote(target, limitFinal);
+        if (res != null) {
+          try {
+            oldestCursor.put(target, res.newOldestCursor());
+            if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
+          } catch (Exception ignored) {
+          }
+        }
+
+        SwingUtilities.invokeLater(() -> {
+          try {
+            if (res == null) return;
+            List<LogLine> lines = res.linesOldestFirst();
+            if (lines == null || lines.isEmpty()) return;
+
+            // Now that we have something to show, enable the paging control (if available).
+            try {
+              ensureLoadOlderControlAndHandler(target);
+            } catch (Exception ignored) {
+            }
+
+            int insertAt = 0;
+            try {
+              insertAt = transcripts.loadOlderInsertOffset(target);
+            } catch (Exception ignored) {
+              insertAt = 0;
+            }
+            int pos = insertAt;
+            int inserted = 0;
+            for (LogLine line : lines) {
+              pos = insertLineFromHistoryAt(target, pos, line);
+              inserted++;
+            }
+
+            if (inserted > 0) {
+              try {
+                transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
+              } catch (Exception ignored) {
+              }
+            }
+
+            try {
+              transcripts.setLoadOlderMessagesControlState(
+                  target, res.hasMore() ? LoadOlderMessagesComponent.State.READY : LoadOlderMessagesComponent.State.EXHAUSTED
+              );
+            } catch (Exception ignored) {
+            }
+          } finally {
+            // nothing
+          }
+        });
+      } finally {
+        inFlight.remove(target);
+      }
+    });
+  }
+
+  @Override
   public boolean canLoadOlder(TargetRef target) {
     if (!shouldOfferPaging(target)) return false;
     if (!irc.isChatHistoryAvailable(target.serverId())

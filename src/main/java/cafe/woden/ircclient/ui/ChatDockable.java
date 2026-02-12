@@ -7,6 +7,7 @@ import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
+import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.app.UserActionRequest;
@@ -51,6 +52,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final NotificationStore notificationStore;
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
+
+  private final ChatHistoryService chatHistoryService;
 
   private final ActiveInputRouter activeInputRouter;
 
@@ -103,6 +106,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      UserListStore userListStore,
                      NickContextMenuFactory nickContextMenuFactory,
                      ServerProxyResolver proxyResolver,
+                     ChatHistoryService chatHistoryService,
                      UiSettingsBus settingsBus,
                      CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
@@ -116,6 +120,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.ignoreStatusService = ignoreStatusService;
     this.userListStore = userListStore;
     this.proxyResolver = proxyResolver;
+    this.chatHistoryService = chatHistoryService;
 
     this.nickContextMenu = nickContextMenuFactory.create(new NickContextMenuFactory.Callbacks() {
       @Override
@@ -182,6 +187,27 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
     this.inputPanel = new MessageInputPanel(settingsBus, commandHistoryStore);
     add(inputPanel, BorderLayout.SOUTH);
+    // Context menu: Clear (buffer only) + Reload recent history (clear + reload from DB/bouncer).
+    setTranscriptContextMenuActions(
+        () -> {
+          try {
+            TargetRef t = activeTarget;
+            if (t == null || t.isUiOnly()) return;
+            transcripts.clearTarget(t);
+          } catch (Exception ignored) {
+          }
+        },
+        () -> {
+          try {
+            TargetRef t = activeTarget;
+            if (t == null || t.isUiOnly()) return;
+            if (chatHistoryService != null && chatHistoryService.canReloadRecent(t)) {
+              chatHistoryService.reloadRecent(t);
+            }
+          } catch (Exception ignored) {
+          }
+        }
+    );
     if (this.activeInputRouter != null) {
       // Default active typing surface is the main chat input.
       this.activeInputRouter.activate(inputPanel);

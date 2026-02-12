@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -38,6 +39,7 @@ public class ChatDockManager {
   private final OutboundLineBus outboundBus;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
+  private final ChatHistoryService chatHistoryService;
 
   private final Map<TargetRef, PinnedChatDockable> openPinned = new ConcurrentHashMap<>();
   /**
@@ -56,6 +58,7 @@ public class ChatDockManager {
                          UiSettingsBus settingsBus,
                          OutboundLineBus outboundBus,
                          ActiveInputRouter activeInputRouter,
+                         ChatHistoryService chatHistoryService,
                          CommandHistoryStore commandHistoryStore) {
     this.serverTree = serverTree;
     this.mainChat = mainChat;
@@ -64,6 +67,7 @@ public class ChatDockManager {
     this.settingsBus = settingsBus;
     this.outboundBus = outboundBus;
     this.activeInputRouter = activeInputRouter;
+    this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
   }
 
@@ -134,6 +138,7 @@ public class ChatDockManager {
         target,
         transcripts,
         settingsBus,
+        chatHistoryService,
         commandHistoryStore,
         activationBus::activate,
         outboundBus,
