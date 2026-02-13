@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.config;
 
+import cafe.woden.ircclient.app.AppVersion;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -34,9 +35,7 @@ public record IrcProperties(Client client, List<Server> servers) {
     }
 
     public Client {
-      if (version == null || version.isBlank()) {
-        version = "IRCafe";
-      }
+      version = AppVersion.decorateIfDefaultName(version);
       if (reconnect == null) {
         reconnect = new Reconnect(true, 1_000, 120_000, 2.0, 0.20, 0);
       }
