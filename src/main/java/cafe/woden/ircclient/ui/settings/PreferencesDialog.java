@@ -31,6 +31,8 @@ import java.awt.FlowLayout;
 import java.awt.GraphicsEnvironment;
 import java.awt.Graphics;
 import java.awt.Insets;
+import java.awt.Point;
+import java.awt.Toolkit;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.Window;
@@ -66,6 +68,8 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.ListSelectionModel;
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
@@ -448,7 +452,7 @@ public class PreferencesDialog {
     buttons.add(apply);
     buttons.add(ok);
     buttons.add(cancel);
-    JTabbedPane tabs = new JTabbedPane();
+    JTabbedPane tabs = new DynamicTabbedPane();
 
     tabs.addTab("Appearance", wrapTab(appearancePanel));
     tabs.addTab("Startup & Connection", wrapTab(startupPanel));
@@ -462,10 +466,161 @@ public class PreferencesDialog {
     d.setLayout(new BorderLayout());
     d.add(tabs, BorderLayout.CENTER);
     d.add(buttons, BorderLayout.SOUTH);
-    d.setMinimumSize(new Dimension(520, 340));
-    d.pack();
+    d.setMinimumSize(new Dimension(520, 240));
+    installDynamicTabSizing(d, tabs, owner);
     d.setLocationRelativeTo(owner);
     d.setVisible(true);
+  }
+
+  /**
+   * JTabbedPane's preferred size is normally the max of all tabs.
+   * That works for fixed-size tab UIs, but for settings screens it often
+   * causes the dialog to open at the size of the "largest" tab (even if
+   * the user never visits it).
+   *
+   * <p>This variant prefers the currently-selected tab, so the dialog can
+   * pack smaller for simple pages and grow for larger ones.
+   */
+  private static final class DynamicTabbedPane extends JTabbedPane {
+    @Override
+    public Dimension getPreferredSize() {
+      return computeSelectedSize(true);
+    }
+
+    @Override
+    public Dimension getMinimumSize() {
+      return computeSelectedSize(false);
+    }
+
+    private Dimension computeSelectedSize(boolean preferred) {
+      Dimension base = preferred ? super.getPreferredSize() : super.getMinimumSize();
+      if (getTabCount() == 0) return base;
+
+      int maxW = 0;
+      int maxH = 0;
+      for (int i = 0; i < getTabCount(); i++) {
+        java.awt.Component c = getComponentAt(i);
+        if (c == null) continue;
+        Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
+        if (d == null) continue;
+        maxW = Math.max(maxW, d.width);
+        maxH = Math.max(maxH, d.height);
+      }
+
+      java.awt.Component selected = getSelectedComponent();
+      if (selected == null) return base;
+      Dimension sel = preferred ? selected.getPreferredSize() : selected.getMinimumSize();
+      if (sel == null) return base;
+
+      // base already includes tabs/header/insets; swap the "max tab" content for the selected tab content.
+      int w = base.width - maxW + sel.width;
+      int h = base.height - maxH + sel.height;
+      return new Dimension(Math.max(0, w), Math.max(0, h));
+    }
+  }
+
+  private static void installDynamicTabSizing(JDialog d, JTabbedPane tabs, Window owner) {
+    ChangeListener listener = e -> packClampAndKeepCenter(d, owner);
+    tabs.addChangeListener(listener);
+    packClampAndKeepCenter(d, owner);
+  }
+
+  private static void packClampAndKeepCenter(JDialog d, Window owner) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(() -> packClampAndKeepCenter(d, owner));
+      return;
+    }
+
+    Point center = new Point(d.getX() + d.getWidth() / 2, d.getY() + d.getHeight() / 2);
+    d.pack();
+    d.validate();
+
+    Rectangle usable = usableBounds(owner, d);
+    int margin = 32;
+    int maxW = Math.max(usable.width - margin, d.getMinimumSize().width);
+    int maxH = Math.max(usable.height - margin, d.getMinimumSize().height);
+
+    // Some tabs (especially those wrapped in JScrollPane) can slightly under-report
+    // their preferred height, resulting in an unnecessary vertical scrollbar.
+    // Nudge the dialog just enough to avoid that when it fits comfortably.
+    nudgeToAvoidUnnecessaryVerticalScroll(d, maxH);
+
+    Dimension size = d.getSize();
+    int w = Math.max(d.getMinimumSize().width, Math.min(size.width, maxW));
+    int h = Math.max(d.getMinimumSize().height, Math.min(size.height, maxH));
+    if (w != size.width || h != size.height) {
+      d.setSize(w, h);
+      d.validate();
+    }
+
+    // Keep the dialog centered as the user switches tabs.
+    int nx = center.x - d.getWidth() / 2;
+    int ny = center.y - d.getHeight() / 2;
+    nx = Math.max(usable.x, Math.min(nx, usable.x + usable.width - d.getWidth()));
+    ny = Math.max(usable.y, Math.min(ny, usable.y + usable.height - d.getHeight()));
+    d.setLocation(nx, ny);
+  }
+
+  private static void nudgeToAvoidUnnecessaryVerticalScroll(JDialog d, int maxDialogHeight) {
+    if (d == null) return;
+    java.awt.Container root = d.getContentPane();
+    if (root == null) return;
+
+    JTabbedPane tabs = null;
+    for (java.awt.Component c : root.getComponents()) {
+      if (c instanceof JTabbedPane t) {
+        tabs = t;
+        break;
+      }
+    }
+    if (tabs == null) return;
+
+    java.awt.Component selected = tabs.getSelectedComponent();
+    if (!(selected instanceof JScrollPane sp)) return;
+
+    java.awt.Component view = sp.getViewport() != null ? sp.getViewport().getView() : null;
+    if (view == null) return;
+
+    // Force layout so viewport sizes are current.
+    sp.doLayout();
+    if (sp.getViewport() != null) sp.getViewport().doLayout();
+    view.doLayout();
+
+    Dimension viewPref = view.getPreferredSize();
+    Dimension extent = sp.getViewport() != null ? sp.getViewport().getExtentSize() : null;
+    if (viewPref == null || extent == null) return;
+
+    int missing = viewPref.height - extent.height;
+    if (missing <= 0) return;
+
+    // Only nudge if the missing amount is small-ish (we're fixing "almost fits" cases).
+    // If the view is truly huge, we keep the scroll.
+    if (missing > 120) return;
+
+    Dimension dialogSize = d.getSize();
+    int targetH = Math.min(maxDialogHeight, dialogSize.height + missing);
+    if (targetH > dialogSize.height) {
+      d.setSize(dialogSize.width, targetH);
+      d.validate();
+    }
+  }
+
+  private static Rectangle usableBounds(Window owner, Window fallback) {
+    try {
+      var gc = owner != null ? owner.getGraphicsConfiguration() : fallback.getGraphicsConfiguration();
+      if (gc == null) return GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+
+      Rectangle b = gc.getBounds();
+      Insets in = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+      return new Rectangle(
+          b.x + in.left,
+          b.y + in.top,
+          b.width - in.left - in.right,
+          b.height - in.top - in.bottom
+      );
+    } catch (Exception ignored) {
+      return GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+    }
   }
 
   private Map<String, String> buildThemeLabelById() {
