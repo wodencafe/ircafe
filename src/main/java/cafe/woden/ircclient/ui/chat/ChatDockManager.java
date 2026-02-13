@@ -41,6 +41,13 @@ public class ChatDockManager {
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
 
+  /**
+   * Registered pinned dockables.
+   *
+   * <p>ModernDocking does not support unregistering dockables, and it throws if you try to re-register a
+   * different dockable instance with the same persistent ID. Closing a dock via the UI typically undocks
+   * it but keeps it registered, so we keep the instance around and re-dock/re-display it on demand.
+   */
   private final Map<TargetRef, PinnedChatDockable> openPinned = new ConcurrentHashMap<>();
   /**
    * Draft text for pinned dock inputs, persisted in-memory even after the dock is closed.
@@ -118,6 +125,8 @@ public class ChatDockManager {
       // Restore any existing draft for this pinned target.
       String initialDraft = pinnedDrafts.getOrDefault(target, "");
 
+      // Clicking inside a pinned dock should switch the *input*/status/users context,
+      // but should NOT force the main Chat dock to change its displayed transcript.
       dock = new PinnedChatDockable(
           target,
           transcripts,
@@ -145,13 +154,17 @@ public class ChatDockManager {
       Docking.registerDockable(dock);
     }
 
+    // Keep in sync with current settings/draft even for already-registered dockables.
     dock.setInputEnabled(pinnedInputsEnabled);
 
+    // Avoid clobbering undo/caret state unless we actually need to apply a different draft.
     String desiredDraft = pinnedDrafts.get(target);
     if (desiredDraft != null && !desiredDraft.equals(dock.getDraftText())) {
       dock.setDraftText(desiredDraft);
     }
 
+    // If the user previously closed the dock via the UI, it is likely undocked but still registered.
+    // Re-dock it (default: tab with main chat), then display it.
     try {
       if (!Docking.isDocked(dock)) {
         Docking.dock(dock, mainChat, DockingRegion.CENTER);
