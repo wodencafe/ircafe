@@ -8,7 +8,9 @@ plugins {
 }
 
 group = 'cafe.woden'
-version = '0.0.1-SNAPSHOT'
+
+version = (findProperty("version") ?: "0.0.1-SNAPSHOT").toString()
+
 description = 'IRC Client in modern Java, utilizing PircBotX, Spring Boot, and RXJava.'
 
 java {
@@ -18,7 +20,6 @@ java {
 }
 
 springBoot {
-    // Your actual GUI app entrypoint
     mainClass = 'cafe.woden.ircclient.IrcSwingApp'
 }
 
@@ -31,7 +32,6 @@ configurations {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter'
 
-    // Embedded chat logging (history persistence)
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.flywaydb:flyway-core'
     runtimeOnly 'org.flywaydb:flyway-database-hsqldb'
@@ -53,13 +53,11 @@ dependencies {
     implementation "com.formdev:flatlaf:3.7"
     implementation "com.formdev:flatlaf-extras:3.7"
 
-    // Nick auto-complete (tab completion popup)
     implementation "com.fifesoft:autocomplete:3.3.3"
 
     implementation "org.sejda.imageio:webp-imageio:0.1.6"
     implementation "com.madgag:animated-gif-lib:1.4"
 
-    // Layouts
     implementation "com.miglayout:miglayout-swing:11.4.2"
 
     implementation "org.jsoup:jsoup:1.22.1"
@@ -70,6 +68,13 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+tasks.named('bootJar') {
+    archiveFileName = "ircafe-${project.version}.jar"
+}
+tasks.named('jar') {
+    archiveClassifier = "plain"
 }
 
 /**
@@ -91,7 +96,6 @@ tasks.register("copyJpackageDependencies", Copy) {
     into(jpackageInputDir)
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    // Belt + suspenders: don't accidentally bundle devtools
     exclude { details ->
         details.file.name.contains("spring-boot-devtools")
     }
@@ -104,8 +108,22 @@ tasks.register("copyJpackageJar", Copy) {
 }
 
 tasks.named("jpackage") {
-    dependsOn("build", "copyJpackageDependencies", "copyJpackageJar")
+    dependsOn("assemble", "copyJpackageDependencies", "copyJpackageJar")
 }
+
+String sanitizeAppVersion(String v) {
+    if (v == null) return "0.0.0"
+    v = v.replaceFirst(/^v/, "")
+         .replace("-SNAPSHOT", "")
+         .trim()
+
+    v = v.replaceAll(/[^0-9.].*$/, "")
+
+    if (v.isEmpty()) return "0.0.0"
+    if (!(v ==~ /\d+(\.\d+){0,3}/)) return "0.0.0"
+    return v
+}
+
 jpackage {
     input = jpackageInputDir
     destination = layout.buildDirectory.dir("dist")
@@ -114,11 +132,7 @@ jpackage {
     vendor = "WodenCafe"
     appDescription = project.description
 
-    // If you pass -Pversion=... from tags, keep appVersion clean for jpackage
-    def cleanVer = project.version.toString()
-            .replaceFirst(/^v/, "")
-            .replace("-SNAPSHOT", "")
-    appVersion = cleanVer
+    appVersion = sanitizeAppVersion(project.version.toString())
 
     mainJar = tasks.named("jar").get().archiveFileName.get()
     mainClass = springBoot.mainClass.get()
@@ -132,10 +146,8 @@ jpackage {
         "-Dfile.encoding=UTF-8"
     ]
 
-    // APP_IMAGE is “portable”. Installer-only options are removed.
     windows {
-        winConsole = false  // launcher style is fine
-        // (NO winMenu / winShortcut / winDirChooser here)
+        winConsole = false
     }
 
     mac {
@@ -143,8 +155,4 @@ jpackage {
         macPackageName = "IRCafe"
         macAppCategory = "public.app-category.utilities"
     }
-
-    // For APP_IMAGE, skip linuxShortcut/menu/category unless you're building DEB/RPM installers.
-    // linux { }
 }
-
