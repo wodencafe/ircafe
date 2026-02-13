@@ -111,54 +111,59 @@ public class ChatDockManager {
   public void openPinned(TargetRef target) {
     if (target == null) return;
 
-    PinnedChatDockable existing = openPinned.get(target);
-    if (existing != null) {
-      // If the dock was closed/removed via the docking UI, our map may still hold a stale instance.
-      // Treat "not attached to any window" as closed.
-      if (SwingUtilities.getWindowAncestor(existing) == null) {
-        try {
-          existing.close();
-        } catch (Exception ignored) {
-        }
-        openPinned.remove(target);
-      } else {
-        existing.requestFocusInWindow();
-        return;
-      }
+    PinnedChatDockable dock = openPinned.get(target);
+    if (dock == null) {
+      transcripts.ensureTargetExists(target);
+
+      // Restore any existing draft for this pinned target.
+      String initialDraft = pinnedDrafts.getOrDefault(target, "");
+
+      dock = new PinnedChatDockable(
+          target,
+          transcripts,
+          settingsBus,
+          chatHistoryService,
+          commandHistoryStore,
+          activationBus::activate,
+          outboundBus,
+          activeInputRouter,
+          (t, draft) -> {
+            if (t == null) return;
+            pinnedDrafts.put(t, draft == null ? "" : draft);
+          },
+          (t, draft) -> {
+            // Only used for explicit cleanup (e.g., app shutdown). Closing a dock via the UI should
+            // not destroy it because ModernDocking does not support re-registering the same ID.
+            if (t == null) return;
+            pinnedDrafts.put(t, draft == null ? "" : draft);
+          }
+      );
+      dock.setDraftText(initialDraft);
+      dock.setInputEnabled(pinnedInputsEnabled);
+      openPinned.put(target, dock);
+
+      Docking.registerDockable(dock);
     }
 
-    transcripts.ensureTargetExists(target);
-
-    // Restore any existing draft for this pinned target.
-    String initialDraft = pinnedDrafts.getOrDefault(target, "");
-
-    // Clicking inside a pinned dock should switch the *input*/status/users context,
-    // but should NOT force the main Chat dock to change its displayed transcript.
-    PinnedChatDockable dock = new PinnedChatDockable(
-        target,
-        transcripts,
-        settingsBus,
-        chatHistoryService,
-        commandHistoryStore,
-        activationBus::activate,
-        outboundBus,
-        activeInputRouter,
-        (t, draft) -> {
-          if (t == null) return;
-          pinnedDrafts.put(t, draft == null ? "" : draft);
-        },
-        (t, draft) -> {
-          if (t == null) return;
-          pinnedDrafts.put(t, draft == null ? "" : draft);
-          openPinned.remove(t);
-        }
-    );
-    dock.setDraftText(initialDraft);
     dock.setInputEnabled(pinnedInputsEnabled);
-    openPinned.put(target, dock);
 
-    Docking.registerDockable(dock);
-    // Default: tab it with the main chat. User can drag to split / float.
-    Docking.dock(dock, mainChat, DockingRegion.CENTER);
+    String desiredDraft = pinnedDrafts.get(target);
+    if (desiredDraft != null && !desiredDraft.equals(dock.getDraftText())) {
+      dock.setDraftText(desiredDraft);
+    }
+
+    try {
+      if (!Docking.isDocked(dock)) {
+        Docking.dock(dock, mainChat, DockingRegion.CENTER);
+      }
+      Docking.display(dock);
+    } catch (Exception e) {
+      // Last resort: try docking again (some failures are transient depending on window state).
+      try {
+        Docking.dock(dock, mainChat, DockingRegion.CENTER);
+        Docking.display(dock);
+      } catch (Exception ignored) {
+      }
+    }
   }
 }
