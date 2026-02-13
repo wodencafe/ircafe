@@ -126,9 +126,7 @@ jpackage {
     type = ImageType.APP_IMAGE
 
     verbose = true
-
-    // Optional but helps avoid temp/path weirdness in CI
-    temp = layout.buildDirectory.dir("jpackage/tmp")
+    temp = "${buildDir}/jpackage/tmp"
 
     javaOptions = [
         "-Dfile.encoding=UTF-8"
