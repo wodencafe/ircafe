@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.irc.soju.PircbotxSojuParsers;
 import cafe.woden.ircclient.irc.soju.SojuNetwork;
+import cafe.woden.ircclient.irc.znc.ZncNetwork;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.Comparator;
@@ -49,10 +50,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
   private final CtcpRequestHandler ctcpHandler;
   private final boolean disconnectOnSaslFailure;
+  private final boolean sojuDiscoveryEnabled;
+  private final boolean zncDiscoveryEnabled;
 
   private final Consumer<SojuNetwork> sojuNetworkDiscovered;
 
+  private final Consumer<ZncNetwork> zncNetworkDiscovered;
+
   private final Consumer<String> sojuOriginDisconnected;
+
+  private final Consumer<String> zncOriginDisconnected;
 
   private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
 
@@ -256,8 +263,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
       CtcpRequestHandler ctcpHandler,
       boolean disconnectOnSaslFailure,
+      boolean sojuDiscoveryEnabled,
+      boolean zncDiscoveryEnabled,
+      Consumer<ZncNetwork> zncNetworkDiscovered,
       Consumer<SojuNetwork> sojuNetworkDiscovered,
       Consumer<String> sojuOriginDisconnected,
+      Consumer<String> zncOriginDisconnected,
       PlaybackCursorProvider playbackCursorProvider
   ) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
@@ -267,8 +278,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.reconnectScheduler = Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
     this.ctcpHandler = Objects.requireNonNull(ctcpHandler, "ctcpHandler");
     this.disconnectOnSaslFailure = disconnectOnSaslFailure;
+    this.sojuDiscoveryEnabled = sojuDiscoveryEnabled;
+    this.zncDiscoveryEnabled = zncDiscoveryEnabled;
+    this.zncNetworkDiscovered = (zncNetworkDiscovered == null) ? (n) -> {} : zncNetworkDiscovered;
     this.sojuNetworkDiscovered = (sojuNetworkDiscovered == null) ? (n) -> {} : sojuNetworkDiscovered;
     this.sojuOriginDisconnected = (sojuOriginDisconnected == null) ? (id) -> {} : sojuOriginDisconnected;
+    this.zncOriginDisconnected = (zncOriginDisconnected == null) ? (id) -> {} : zncOriginDisconnected;
     this.playbackCursorProvider = java.util.Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
   }
 
@@ -298,6 +313,62 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           from == null ? "" : from,
           text == null ? "" : text
       ));
+      return true;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  /**
+   * While a ZNC ListNetworks capture is active, parse *status output lines and suppress them from
+   * the main UI pipeline.
+   */
+  private boolean maybeCaptureZncListNetworks(String fromNick, String text) {
+    if (!zncDiscoveryEnabled) return false;
+    if (!conn.zncListNetworksCaptureActive.get()) return false;
+
+    String from = Objects.toString(fromNick, "").trim();
+    if (!"*status".equalsIgnoreCase(from)) return false;
+
+    long started = conn.zncListNetworksCaptureStartedMs.get();
+    if (started > 0) {
+      long age = System.currentTimeMillis() - started;
+      // Safety valve: don't keep suppressing *status output forever if ZNC output format changes.
+      if (age > 15_000L) {
+        conn.zncListNetworksCaptureActive.set(false);
+        return false;
+      }
+    }
+
+    try {
+      PircbotxZncParsers.ParsedListNetworksRow row = PircbotxZncParsers.parseListNetworksRow(text);
+      if (row != null) {
+        ZncNetwork network = new ZncNetwork(serverId, row.name, row.onIrc);
+        String key = row.name.toLowerCase(Locale.ROOT);
+        ZncNetwork prev = conn.zncNetworksByNameLower.putIfAbsent(key, network);
+        if (prev == null || !prev.equals(network)) {
+          conn.zncNetworksByNameLower.put(key, network);
+          if (prev == null) {
+            log.info("[{}] znc: discovered network name={} (onIrc={})", serverId, network.name(), network.onIrc());
+          } else {
+            log.info("[{}] znc: updated network name={} (onIrc={})", serverId, network.name(), network.onIrc());
+          }
+          try {
+            zncNetworkDiscovered.accept(network);
+          } catch (Exception e) {
+            log.debug("[{}] znc: network discovered handler threw", serverId, e);
+          }
+        }
+        return true;
+      }
+
+      if (PircbotxZncParsers.looksLikeListNetworksDoneLine(text)) {
+        conn.zncListNetworksCaptureActive.set(false);
+        log.info("[{}] znc: finished ListNetworks capture ({} networks)", serverId, conn.zncNetworksByNameLower.size());
+        return true;
+      }
+
+      // Capture in progress: suppress all *status output (borders, headings, etc).
       return true;
     } catch (Exception ignored) {
       return false;
@@ -335,12 +406,23 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       } catch (Exception e2) {
         log.debug("[{}] soju disconnect cleanup failed: {}", serverId, e2.toString());
       }
+      try {
+        zncOriginDisconnected.accept(serverId);
+      } catch (Exception e2) {
+        log.debug("[{}] znc disconnect cleanup failed: {}", serverId, e2.toString());
+      }
+
 
       try {
         conn.sojuNetworksByNetId.clear();
         conn.sojuListNetworksRequestedThisSession.set(false);
         conn.sojuBouncerNetId.set("");
         conn.sojuBouncerNetworksCapAcked.set(false);
+      } catch (Exception ignored) {
+      }
+
+      try {
+        conn.zncListNetworksRequestedThisSession.set(false);
       } catch (Exception ignored) {
       }
 
@@ -483,6 +565,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = event.getUser().getNick();
       String msg = event.getMessage();
+
+      if ("*status".equalsIgnoreCase(from)) {
+        maybeMarkZncDetected("private message from *status", null);
+      }
+
+      // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
+      if (maybeCaptureZncListNetworks(from, msg)) {
+        return;
+      }
+
       if ("*playback".equalsIgnoreCase(from)) {
         conn.zncPlaybackCapture.onPlaybackControlLine(msg);
       }
@@ -529,6 +621,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       String notice = event.getNotice();
+
+      // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
+      if (maybeCaptureZncListNetworks(from, notice)) {
+        return;
+      }
 
       if ("*playback".equalsIgnoreCase(from)) {
         conn.zncPlaybackCapture.onPlaybackControlLine(notice);
@@ -716,6 +813,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
               target = from;
             }
 
+            // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
+            if (maybeCaptureZncListNetworks(from, payload)) {
+              return;
+            }
+
             if (maybeCaptureZncPlayback(target, at, kind, from, payload)) {
               return;
             }
@@ -738,26 +840,28 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         return;
       }
 
-      // soju bouncer network discovery: parse BOUNCER NETWORK entries.
-      PircbotxSojuParsers.ParsedBouncerNetwork bn = PircbotxSojuParsers.parseBouncerNetworkLine(rawLine);
-      if (bn != null) {
-        SojuNetwork network = new SojuNetwork(serverId, bn.netId(), bn.name(), bn.attrs());
-        SojuNetwork prev = conn.sojuNetworksByNetId.putIfAbsent(bn.netId(), network);
-        if (prev == null) {
-          log.info("[{}] soju: discovered network netId={} name={}", serverId, network.netId(), network.name());
-        } else if (!prev.equals(network)) {
-          conn.sojuNetworksByNetId.put(bn.netId(), network);
-          log.info("[{}] soju: updated network netId={} name={} (attrs changed)", serverId, network.netId(), network.name());
-        }
-        boolean changed = (prev == null) || !prev.equals(network);
-        if (changed) {
-          try {
-            sojuNetworkDiscovered.accept(network);
-          } catch (Exception e) {
-            log.debug("[{}] soju: network discovered handler threw", serverId, e);
+      if (sojuDiscoveryEnabled) {
+        // soju bouncer network discovery: parse BOUNCER NETWORK entries.
+        PircbotxSojuParsers.ParsedBouncerNetwork bn = PircbotxSojuParsers.parseBouncerNetworkLine(rawLine);
+        if (bn != null) {
+          SojuNetwork network = new SojuNetwork(serverId, bn.netId(), bn.name(), bn.attrs());
+          SojuNetwork prev = conn.sojuNetworksByNetId.putIfAbsent(bn.netId(), network);
+          if (prev == null) {
+            log.info("[{}] soju: discovered network netId={} name={}", serverId, network.netId(), network.name());
+          } else if (!prev.equals(network)) {
+            conn.sojuNetworksByNetId.put(bn.netId(), network);
+            log.info("[{}] soju: updated network netId={} name={} (attrs changed)", serverId, network.netId(), network.name());
           }
+          boolean changed = (prev == null) || !prev.equals(network);
+          if (changed) {
+            try {
+              sojuNetworkDiscovered.accept(network);
+            } catch (Exception e) {
+              log.debug("[{}] soju: network discovered handler threw", serverId, e);
+            }
+          }
+          return;
         }
-        return;
       }
 
       String maybeSojuNetId = PircbotxSojuParsers.parseRpl005BouncerNetId(rawLine);
@@ -981,8 +1085,36 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
     }
 
+
+
+    private void maybeRequestZncNetworks(PircBotX bot) {
+      if (bot == null) return;
+      if (!zncDiscoveryEnabled) return;
+      if (!conn.zncDetected.get()) return;
+
+      String net = conn.zncNetwork.get();
+      if (net != null && !net.isBlank()) return; // Not the control session.
+
+      if (conn.zncListNetworksRequestedThisSession.getAndSet(true)) return;
+
+      try {
+        // Begin capture so we can suppress the noisy *status table output from the main UI.
+        conn.zncListNetworksCaptureActive.set(true);
+        conn.zncListNetworksCaptureStartedMs.set(System.currentTimeMillis());
+        conn.zncNetworksByNameLower.clear();
+
+        bot.sendIRC().message("*status", "ListNetworks");
+        log.info("[{}] znc: requested network list (*status ListNetworks)", serverId);
+      } catch (Exception ex) {
+        conn.zncListNetworksCaptureActive.set(false);
+        conn.zncListNetworksRequestedThisSession.set(false);
+        log.warn("[{}] znc: failed to request network list", serverId, ex);
+      }
+    }
+
     private void maybeRequestSojuNetworks(PircBotX bot) {
       if (bot == null) return;
+      if (!sojuDiscoveryEnabled) return;
       if (!conn.sojuBouncerNetworksCapAcked.get()) return;
 
       String netId = conn.sojuBouncerNetId.get();
@@ -996,6 +1128,26 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       } catch (Exception ex) {
         conn.sojuListNetworksRequestedThisSession.set(false);
         log.warn("[{}] soju: failed to request bouncer network list", serverId, ex);
+      }
+    }
+
+    private void maybeMarkZncDetected(String via, String detail) {
+      if (!conn.zncDetected.compareAndSet(false, true)) return;
+      String extra = (detail == null) ? "" : detail;
+      log.info("[{}] znc: detected via {} {}", serverId, via, extra);
+
+      // Log a little more context once per connection.
+      if (conn.zncDetectedLogged.compareAndSet(false, true)) {
+        String baseUser = conn.zncBaseUser.get();
+        String client = conn.zncClientId.get();
+        String net = conn.zncNetwork.get();
+        boolean hasNet = net != null && !net.isBlank();
+        log.info("[{}] znc: login parsed baseUser='{}' clientId='{}' network='{}' (controlSession={})",
+            serverId,
+            baseUser == null ? "" : baseUser,
+            client == null ? "" : client,
+            net == null ? "" : net,
+            !hasNet);
       }
     }
 
@@ -1039,8 +1191,32 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         }
         return;
       }
+
+      if (code == 4) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+        if (PircbotxZncParsers.seemsRpl004Znc(rawLine)) {
+          maybeMarkZncDetected("RPL_MYINFO/004", "(" + rawLine + ")");
+        }
+        // Show the server line in Status so users can see server replies without watching the console.
+        emitServerResponseLine(event.getBot(), code, line);
+        return;
+      }
       if (code == 376 || code == 422) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        emitServerResponseLine(event.getBot(), code, line);
         maybeLogNegotiatedCaps();
+        maybeRequestZncNetworks(event.getBot());
         maybeRequestZncPlayback(event.getBot());
         maybeRequestSojuNetworks(event.getBot());
         return;
@@ -1070,6 +1246,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
         }
+
+        emitServerResponseLine(event.getBot(), code, line);
         return;
       }
 
@@ -1236,7 +1414,18 @@ if (code == 302 || code == 352 || code == 354) {
         return;
       }
 
-      if (code != 305 && code != 306) return;
+      // For most numerics we don't have a dedicated high-level event.
+      // Surface the raw-ish server response to the Status transcript.
+      if (code != 305 && code != 306) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+        emitServerResponseLine(event.getBot(), code, line);
+        return;
+      }
+
       String line = null;
       Object l = reflectCall(event, "getLine");
       if (l == null) l = reflectCall(event, "getRawLine");
@@ -1255,6 +1444,66 @@ if (code == 302 || code == 352 || code == 354) {
       }
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.AwayStatusChanged(Instant.now(), isAway, msg)));
+    }
+
+    private void emitServerResponseLine(PircBotX bot, int code, String line) {
+      try {
+        if (line == null || line.isBlank()) return;
+        String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+        ParsedIrcLine pl = parseIrcLine(rawLine);
+
+        Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
+        if (at == null) at = Instant.now();
+
+        String myNick = null;
+        try {
+          myNick = (bot == null) ? null : bot.getNick();
+        } catch (Exception ignored) {
+        }
+
+        String message = renderServerResponseMessage(pl, myNick);
+        if (message == null || message.isBlank()) {
+          message = rawLine;
+        }
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.ServerResponseLine(at, code, message, rawLine)));
+      } catch (Exception ignored) {
+      }
+    }
+
+    private String renderServerResponseMessage(ParsedIrcLine pl, String myNick) {
+      if (pl == null) return null;
+      String trailing = pl.trailing();
+      java.util.List<String> params = pl.params();
+      String msg = (trailing == null) ? "" : trailing;
+
+      int idx = 0;
+      if (params != null && !params.isEmpty()) {
+        if (myNick != null && !myNick.isBlank() && params.get(0) != null
+            && params.get(0).equalsIgnoreCase(myNick)) {
+          idx = 1;
+        } else if ("*".equals(params.get(0))) {
+          idx = 1;
+        }
+      }
+
+      String subject = "";
+      if (params != null && idx < params.size()) {
+        subject = params.get(idx);
+        if (subject == null) subject = "";
+      }
+
+      if (msg.isBlank() && params != null && idx < params.size()) {
+        msg = String.join(" ", params.subList(idx, params.size()));
+      }
+      msg = msg == null ? "" : msg.trim();
+      subject = subject == null ? "" : subject.trim();
+
+      if (!subject.isBlank() && !msg.isBlank() && !msg.contains(subject)) {
+        // Helpful hint for lines like ERR_UNKNOWNCOMMAND: "Unknown command" + subject "test".
+        return msg + " (" + subject + ")";
+      }
+      return msg.isBlank() ? subject : msg;
     }
 
 

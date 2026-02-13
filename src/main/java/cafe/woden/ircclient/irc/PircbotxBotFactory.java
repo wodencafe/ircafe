@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
@@ -32,9 +33,11 @@ public class PircbotxBotFactory {
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
 
   private final ServerProxyResolver proxyResolver;
+  private final SojuProperties sojuProps;
 
-  public PircbotxBotFactory(ServerProxyResolver proxyResolver) {
+  public PircbotxBotFactory(ServerProxyResolver proxyResolver, SojuProperties sojuProps) {
     this.proxyResolver = proxyResolver;
+    this.sojuProps = sojuProps;
   }
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
@@ -71,7 +74,8 @@ public class PircbotxBotFactory {
         .addCapHandler(new EnableCapHandler("draft/chathistory", true))
         .addCapHandler(new EnableCapHandler("znc.in/playback", true))
         .addCapHandler(new EnableCapHandler("account-tag", true))
-        .addCapHandler(new EnableCapHandler("soju.im/bouncer-networks", true))
+        // Optional: soju network discovery.
+        .addCapHandler(new EnableCapHandler("soju.im/bouncer-networks", sojuProps.discovery().enabled()))
         .setAutoNickChange(true)
         .setAutoReconnect(false)
         .addListener(listener);

@@ -5,6 +5,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.fife.ui.autocomplete.AutoCompletion;
+import org.fife.ui.autocomplete.AutoCompletionEvent;
 import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
@@ -15,8 +16,16 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
+import javax.swing.event.DocumentEvent;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.AbstractDocument;
+import javax.swing.undo.UndoManager;
+import javax.swing.undo.UndoableEdit;
+import javax.swing.undo.CompoundEdit;
+import javax.swing.undo.CannotRedoException;
+import javax.swing.undo.CannotUndoException;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
@@ -34,6 +43,33 @@ public class MessageInputPanel extends JPanel {
   private final JTextField input = new JTextField();
   private final JButton send = new JButton("Send");
   private final JLabel completionHint = new JLabel();
+  private final UndoManager undo = new UndoManager();
+  private static final int UNDO_GROUP_WINDOW_MS = 800;
+  private final Timer undoGroupTimer = new Timer(UNDO_GROUP_WINDOW_MS, e -> endCompoundEdit());
+  private CompoundEdit activeCompoundEdit;
+  private DocumentEvent.EventType activeCompoundType;
+  private long lastUndoEditAtMs;
+  private boolean programmaticEdit;
+  private final Action undoAction = new AbstractAction("Undo") {
+    @Override public void actionPerformed(ActionEvent e) {
+      try {
+        endCompoundEdit();
+        if (undo.canUndo()) undo.undo();
+      } catch (CannotUndoException ignored) {
+      }
+      updateUndoRedoActions();
+    }
+  };
+  private final Action redoAction = new AbstractAction("Redo") {
+    @Override public void actionPerformed(ActionEvent e) {
+      try {
+        endCompoundEdit();
+        if (undo.canRedo()) undo.redo();
+      } catch (CannotRedoException ignored) {
+      }
+      updateUndoRedoActions();
+    }
+  };
   /**
    * Completion provider for nick auto-complete.
    *
@@ -47,10 +83,17 @@ public class MessageInputPanel extends JPanel {
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
   private final UiSettingsBus settingsBus;
+  private final CommandHistoryStore historyStore;
+  private int historyOffset = -1;
+  private String historyScratch = null;
+  private String historySearchPrefix = null;
+  private InputMap historyInputMap;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
-  public MessageInputPanel(UiSettingsBus settingsBus) {
+  public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
     super(new BorderLayout(8, 0));
     this.settingsBus = settingsBus;
+    this.historyStore = historyStore;
+    undoGroupTimer.setRepeats(false);
     setPreferredSize(new Dimension(10, 34));
     completionHint.setText(" ");
     completionHint.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
@@ -64,17 +107,36 @@ public class MessageInputPanel extends JPanel {
     add(right, BorderLayout.EAST);
     installInputContextMenu();
     input.setFocusTraversalKeysEnabled(false);
+    installUndoRedoKeybindings();
     autoCompletion.setAutoActivationEnabled(false);
     autoCompletion.setParameterAssistanceEnabled(false);
     autoCompletion.setShowDescWindow(false);
     autoCompletion.setAutoCompleteSingleChoices(true);
     autoCompletion.setTriggerKey(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));
     autoCompletion.install(input);
-    input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); }
-      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); }
-      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); }
+
+    // Completion popup should keep its expected Up/Down navigation.
+    // We temporarily un-bind history arrow keys while the popup is visible.
+    autoCompletion.addAutoCompletionListener(e -> {
+      if (e.getEventType() == AutoCompletionEvent.Type.POPUP_SHOWN) {
+        setHistoryArrowKeysEnabled(false);
+      } else if (e.getEventType() == AutoCompletionEvent.Type.POPUP_HIDDEN) {
+        setHistoryArrowKeysEnabled(true);
+      }
     });
+
+    installHistoryKeybindings();
+    input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
+      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
+      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
+    });
+
+    input.getDocument().addUndoableEditListener(e -> {
+      if (programmaticEdit) return;
+      handleUndoableEdit(e.getEdit());
+    });
+
     input.addCaretListener(e -> updateHint());
     applySettings(settingsBus.get());
     input.addActionListener(e -> emit());
@@ -83,19 +145,362 @@ public class MessageInputPanel extends JPanel {
     // Mark this input surface as "active" when the user interacts with it.
     FocusAdapter focusAdapter = new FocusAdapter() {
       @Override public void focusGained(FocusEvent e) { fireActivated(); }
+      @Override public void focusLost(FocusEvent e) { endCompoundEdit(); }
     };
     input.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
 
     MouseAdapter mouseAdapter = new MouseAdapter() {
-      @Override public void mousePressed(MouseEvent e) { fireActivated(); }
+      @Override public void mousePressed(MouseEvent e) { endCompoundEdit(); fireActivated(); }
     };
     input.addMouseListener(mouseAdapter);
     send.addMouseListener(mouseAdapter);
     addMouseListener(mouseAdapter);
+
+    // UX polish: ESC cancels history browse and restores the original draft.
+    // We keep this conditional so ESC can continue to dismiss completion popups when not browsing history.
+    input.addKeyListener(new java.awt.event.KeyAdapter() {
+      @Override public void keyPressed(KeyEvent e) {
+        int code = e.getKeyCode();
+        // End the current undo group when the user moves the caret around.
+        if (code == KeyEvent.VK_LEFT || code == KeyEvent.VK_RIGHT || code == KeyEvent.VK_HOME || code == KeyEvent.VK_END) {
+          endCompoundEdit();
+          return;
+        }
+        if (code != KeyEvent.VK_ESCAPE) return;
+        if (historyOffset < 0) return;
+        exitHistoryBrowse(true);
+        e.consume();
+      }
+    });
+  }
+
+  private void handleUndoableEdit(UndoableEdit edit) {
+    if (edit == null) return;
+
+    DocumentEvent.EventType type = null;
+    int len = 1;
+    int offset = -1;
+    if (edit instanceof AbstractDocument.DefaultDocumentEvent dde) {
+      type = dde.getType();
+      len = Math.max(0, dde.getLength());
+      offset = dde.getOffset();
+    }
+
+    long now = System.currentTimeMillis();
+
+    // Only group small insert/remove operations. Everything else is treated as its own step.
+    boolean groupable = (type == DocumentEvent.EventType.INSERT || type == DocumentEvent.EventType.REMOVE) && len == 1;
+    if (!groupable) {
+      endCompoundEdit();
+      undo.addEdit(edit);
+      updateUndoRedoActions();
+      return;
+    }
+
+    boolean expired = activeCompoundEdit != null && (now - lastUndoEditAtMs) > UNDO_GROUP_WINDOW_MS;
+    boolean typeChanged = activeCompoundEdit != null && !java.util.Objects.equals(activeCompoundType, type);
+    if (expired || typeChanged) {
+      endCompoundEdit();
+    }
+
+    if (activeCompoundEdit == null) {
+      CompoundEdit ce = new CompoundEdit();
+      ce.addEdit(edit);
+      // Add the compound as the undo step immediately so redo gets cleared right away.
+      boolean accepted = undo.addEdit(ce);
+      if (!accepted) {
+        // Fallback: no grouping for this edit.
+        undo.addEdit(edit);
+        updateUndoRedoActions();
+        return;
+      }
+      activeCompoundEdit = ce;
+      activeCompoundType = type;
+    } else {
+      activeCompoundEdit.addEdit(edit);
+    }
+
+    lastUndoEditAtMs = now;
+    undoGroupTimer.restart();
+    updateUndoRedoActions();
+
+    // If the user typed whitespace, end the group so the next word becomes a new undo step.
+    if (type == DocumentEvent.EventType.INSERT && offset >= 0) {
+      try {
+        String inserted = input.getDocument().getText(offset, len);
+        if (inserted != null && inserted.chars().anyMatch(Character::isWhitespace)) {
+          endCompoundEdit();
+        }
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  private void endCompoundEdit() {
+    undoGroupTimer.stop();
+    if (activeCompoundEdit != null) {
+      try {
+        activeCompoundEdit.end();
+      } catch (Exception ignored) {
+      }
+      activeCompoundEdit = null;
+      activeCompoundType = null;
+      lastUndoEditAtMs = 0;
+    }
+    // Ending a compound edit is what makes it undoable. Make sure UI state tracks that immediately
+    // (otherwise Ctrl+Z can appear "dead" until the next document event).
+    updateUndoRedoActions();
+  }
+
+  private void discardAllUndoEdits() {
+    undoGroupTimer.stop();
+    if (activeCompoundEdit != null) {
+      try {
+        activeCompoundEdit.end();
+      } catch (Exception ignored) {
+      }
+      activeCompoundEdit = null;
+      activeCompoundType = null;
+      lastUndoEditAtMs = 0;
+    }
+    undo.discardAllEdits();
+    updateUndoRedoActions();
+  }
+
+  private void installUndoRedoKeybindings() {
+    int menuMask;
+    try {
+      menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    } catch (Exception e) {
+      menuMask = KeyEvent.CTRL_DOWN_MASK;
+    }
+    InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
+    ActionMap am = input.getActionMap();
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), "ircafe.undo");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuMask), "ircafe.redo");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | KeyEvent.SHIFT_DOWN_MASK), "ircafe.redo");
+    am.put("ircafe.undo", undoAction);
+    am.put("ircafe.redo", redoAction);
+    updateUndoRedoActions();
+  }
+
+  private void installHistoryKeybindings() {
+    // Use an overlay InputMap so we can temporarily disable Up/Down history keys
+    // and fall back to whatever bindings the auto-completion popup installed.
+    InputMap base = input.getInputMap(JComponent.WHEN_FOCUSED);
+    historyInputMap = new InputMap();
+    historyInputMap.setParent(base);
+    input.setInputMap(JComponent.WHEN_FOCUSED, historyInputMap);
+
+    InputMap im = historyInputMap;
+    ActionMap am = input.getActionMap();
+
+    am.put("ircafe.historyPrev", new AbstractAction() {
+      @Override public void actionPerformed(ActionEvent e) {
+        browseHistoryPrev();
+      }
+    });
+    am.put("ircafe.historyNext", new AbstractAction() {
+      @Override public void actionPerformed(ActionEvent e) {
+        browseHistoryNext();
+      }
+    });
+    am.put("ircafe.historyCancel", new AbstractAction() {
+      @Override public void actionPerformed(ActionEvent e) {
+        if (historyOffset < 0) {
+          Toolkit.getDefaultToolkit().beep();
+          return;
+        }
+        exitHistoryBrowse(true);
+      }
+    });
+    am.put("ircafe.clearInput", new AbstractAction() {
+      @Override public void actionPerformed(ActionEvent e) {
+        if (!input.isEnabled() || !input.isEditable()) return;
+        // Exit history-browse mode first so draft tracking stays sane.
+        historyOffset = -1;
+        historyScratch = null;
+        historySearchPrefix = null;
+        input.setText("");
+      }
+    });
+
+    // Primary: Up/Down (classic IRC client behavior).
+    setHistoryArrowKeysEnabled(true);
+
+    // Shell-style alternatives that don't collide with common app shortcuts (Cmd+P is Print on macOS).
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyPrev");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_N, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyNext");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeyEvent.ALT_DOWN_MASK), "ircafe.historyPrev");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, KeyEvent.ALT_DOWN_MASK), "ircafe.historyNext");
+
+    // Cancel history browse / restore draft. (ESC is handled conditionally via KeyListener.)
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_G, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyCancel");
+
+    // Clear the current input line (undoable).
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK), "ircafe.clearInput");
+  }
+
+  private void setHistoryArrowKeysEnabled(boolean enabled) {
+    if (historyInputMap == null) return;
+    KeyStroke up = KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0);
+    KeyStroke down = KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0);
+    if (enabled) {
+      historyInputMap.put(up, "ircafe.historyPrev");
+      historyInputMap.put(down, "ircafe.historyNext");
+    } else {
+      historyInputMap.remove(up);
+      historyInputMap.remove(down);
+    }
+  }
+
+  private void browseHistoryPrev() {
+    if (!input.isEnabled() || !input.isEditable()) return;
+    if (historyStore == null) return;
+
+    List<String> hist = historyStore.snapshot();
+    if (hist.isEmpty()) {
+      Toolkit.getDefaultToolkit().beep();
+      return;
+    }
+
+    if (historyOffset < 0) {
+      historyScratch = input.getText();
+      historySearchPrefix = normalizeHistoryPrefix(historyScratch);
+      int next = findPrevHistoryOffset(hist, -1, historySearchPrefix);
+      if (next < 0) {
+        Toolkit.getDefaultToolkit().beep();
+        historyScratch = null;
+        historySearchPrefix = null;
+        return;
+      }
+      historyOffset = next;
+    } else {
+      int next = findPrevHistoryOffset(hist, historyOffset, historySearchPrefix);
+      if (next < 0) {
+        Toolkit.getDefaultToolkit().beep();
+        return;
+      }
+      historyOffset = next;
+    }
+
+    String line = hist.get(hist.size() - 1 - historyOffset);
+    setTextFromHistory(line);
+  }
+
+  private void browseHistoryNext() {
+    if (!input.isEnabled() || !input.isEditable()) return;
+    if (historyOffset < 0) return;
+
+    List<String> hist = historyStore == null ? List.of() : historyStore.snapshot();
+    if (hist.isEmpty()) {
+      exitHistoryBrowse(true);
+      return;
+    }
+
+    if (historySearchPrefix != null) {
+      int next = findNextHistoryOffset(hist, historyOffset, historySearchPrefix);
+      if (next < 0) {
+        exitHistoryBrowse(true);
+        return;
+      }
+      historyOffset = next;
+      String line = hist.get(hist.size() - 1 - historyOffset);
+      setTextFromHistory(line);
+      return;
+    }
+
+    if (historyOffset == 0) {
+      exitHistoryBrowse(true);
+      return;
+    }
+
+    historyOffset--;
+    String line = hist.get(hist.size() - 1 - historyOffset);
+    setTextFromHistory(line);
+  }
+
+  private void exitHistoryBrowse(boolean restoreScratch) {
+    String restore = restoreScratch && historyScratch != null ? historyScratch : "";
+    setTextFromHistory(restore);
+    historyOffset = -1;
+    historyScratch = null;
+    historySearchPrefix = null;
+  }
+
+  private static String normalizeHistoryPrefix(String s) {
+    if (s == null) return null;
+    String t = s.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  private static int findPrevHistoryOffset(List<String> hist, int currentOffset, String prefix) {
+    int start = currentOffset + 1;
+    for (int off = start; off < hist.size(); off++) {
+      String line = hist.get(hist.size() - 1 - off);
+      if (matchesHistoryPrefix(line, prefix)) return off;
+    }
+    return -1;
+  }
+
+  private static int findNextHistoryOffset(List<String> hist, int currentOffset, String prefix) {
+    for (int off = currentOffset - 1; off >= 0; off--) {
+      String line = hist.get(hist.size() - 1 - off);
+      if (matchesHistoryPrefix(line, prefix)) return off;
+    }
+    return -1;
+  }
+
+  private static boolean matchesHistoryPrefix(String line, String prefix) {
+    if (prefix == null) return true;
+    if (line == null) return false;
+    return line.regionMatches(true, 0, prefix, 0, prefix.length());
+  }
+
+  private void setTextFromHistory(String text) {
+    programmaticEdit = true;
+    try {
+      input.setText(text == null ? "" : text);
+    } finally {
+      programmaticEdit = false;
+    }
+    discardAllUndoEdits();
+    try {
+      input.setCaretPosition(input.getDocument().getLength());
+    } catch (Exception ignored) {
+    }
+    updateHint();
+  }
+
+  private void maybeExitHistoryBrowseOnUserEdit() {
+    if (programmaticEdit) return;
+    if (historyOffset < 0) return;
+    historyOffset = -1;
+    historyScratch = null;
+    historySearchPrefix = null;
+  }
+
+  private void updateUndoRedoActions() {
+    try {
+      // If we're mid-group, UndoManager can't undo yet because CompoundEdit is "inProgress".
+      // But users still expect Ctrl+Z to work immediately; the action will finalize the group first.
+      undoAction.setEnabled(undo.canUndo() || activeCompoundEdit != null);
+      redoAction.setEnabled(undo.canRedo());
+    } catch (Exception ignored) {
+    }
   }
   private void installInputContextMenu() {
     final JPopupMenu menu = new JPopupMenu();
+    final JMenuItem undoItem = new JMenuItem(undoAction);
+    final JMenuItem redoItem = new JMenuItem(redoAction);
+    // Best-effort: show shortcut hints (some LAFs render these in popups, others don't).
+    try {
+      int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+      undoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask));
+      redoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | KeyEvent.SHIFT_DOWN_MASK));
+    } catch (Exception ignored) {
+    }
     final JMenuItem cutItem = new JMenuItem("Cut");
     cutItem.addActionListener(e -> input.cut());
     final JMenuItem copyItem = new JMenuItem("Copy");
@@ -130,11 +535,56 @@ public class MessageInputPanel extends JPanel {
       if (input.getDocument().getLength() == 0) return;
       input.setText("");
     });
+    clearItem.setToolTipText("Ctrl+L");
+    try {
+      clearItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK));
+    } catch (Exception ignored) {
+    }
     final JMenuItem selectAllItem = new JMenuItem("Select All");
     selectAllItem.addActionListener(e -> {
       if (!input.isEnabled()) return;
       input.selectAll();
     });
+
+    final Action historyPrevAction = new AbstractAction("Previous Command") {
+      @Override public void actionPerformed(ActionEvent e) {
+        browseHistoryPrev();
+      }
+    };
+    final Action historyNextAction = new AbstractAction("Next Command") {
+      @Override public void actionPerformed(ActionEvent e) {
+        browseHistoryNext();
+      }
+    };
+    final Action historyClearAction = new AbstractAction("Clear Command History") {
+      @Override public void actionPerformed(ActionEvent e) {
+        if (historyStore == null) return;
+        historyStore.clear();
+        historyOffset = -1;
+        historyScratch = null;
+        historySearchPrefix = null;
+      }
+    };
+
+    final JMenuItem historyPrevItem = new JMenuItem(historyPrevAction);
+    final JMenuItem historyNextItem = new JMenuItem(historyNextAction);
+    final JMenuItem historyClearItem = new JMenuItem(historyClearAction);
+    try {
+      historyPrevItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0));
+      historyNextItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0));
+    } catch (Exception ignored) {
+    }
+    historyPrevItem.setToolTipText("Up / Ctrl+P / Alt+Up");
+    historyNextItem.setToolTipText("Down / Ctrl+N / Alt+Down");
+    historyClearItem.setToolTipText("Clear stored commands (memory only)");
+    final JMenu historyMenu = new JMenu("History");
+    historyMenu.add(historyPrevItem);
+    historyMenu.add(historyNextItem);
+    historyMenu.addSeparator();
+    historyMenu.add(historyClearItem);
+    menu.add(undoItem);
+    menu.add(redoItem);
+    menu.addSeparator();
     menu.add(cutItem);
     menu.add(copyItem);
     menu.add(pasteItem);
@@ -143,7 +593,10 @@ public class MessageInputPanel extends JPanel {
     menu.add(clearItem);
     menu.addSeparator();
     menu.add(selectAllItem);
+    menu.addSeparator();
+    menu.add(historyMenu);
     final Runnable refreshEnabledStates = () -> {
+      updateUndoRedoActions();
       boolean enabled = input.isEnabled();
       boolean editable = enabled && input.isEditable();
       int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
@@ -157,6 +610,24 @@ public class MessageInputPanel extends JPanel {
       deleteItem.setEnabled(editable && (hasSelection || caret < len));
       clearItem.setEnabled(editable && len > 0);
       selectAllItem.setEnabled(enabled && len > 0 && !(start == 0 && end == len));
+
+      // History navigation
+      boolean historyMenuEnabled = false;
+      boolean canHistoryPrev = false;
+      boolean canHistoryNext = false;
+      boolean canHistoryClear = false;
+      if (editable && historyStore != null) {
+        List<String> hist = historyStore.snapshot();
+        int size = hist.size();
+        historyMenuEnabled = size > 0 || historyOffset >= 0;
+        canHistoryPrev = size > 0 && (historyOffset < 0 || historyOffset < size - 1);
+        canHistoryNext = historyOffset >= 0;
+        canHistoryClear = size > 0;
+      }
+      historyMenu.setEnabled(historyMenuEnabled);
+      historyPrevAction.setEnabled(canHistoryPrev);
+      historyNextAction.setEnabled(canHistoryNext);
+      historyClearAction.setEnabled(canHistoryClear);
     };
     menu.addPopupMenuListener(new PopupMenuListener() {
       @Override public void popupMenuWillBecomeVisible(PopupMenuEvent e) { refreshEnabledStates.run(); }
@@ -418,7 +889,20 @@ public class MessageInputPanel extends JPanel {
   private void emit() {
     String msg = input.getText().trim();
     if (msg.isEmpty()) return;
-    input.setText("");
+    if (historyStore != null) {
+      historyStore.add(msg);
+    }
+    // Leaving history-browse mode before clearing ensures draft persistence isn't polluted.
+    historyOffset = -1;
+    historyScratch = null;
+    historySearchPrefix = null;
+    programmaticEdit = true;
+    try {
+      input.setText("");
+    } finally {
+      programmaticEdit = false;
+    }
+    discardAllUndoEdits();
     outbound.onNext(msg);
   }
 
@@ -435,7 +919,7 @@ public class MessageInputPanel extends JPanel {
 
   private void fireDraftChanged() {
     try {
-      onDraftChanged.accept(input.getText());
+      onDraftChanged.accept(getDraftText());
     } catch (Exception ignored) {
     }
   }
@@ -454,11 +938,23 @@ public class MessageInputPanel extends JPanel {
     updateHint();
   }
   public String getDraftText() {
+    if (historyOffset >= 0) {
+      return historyScratch == null ? "" : historyScratch;
+    }
     return input.getText();
   }
 
   public void setDraftText(String text) {
-    input.setText(text == null ? "" : text);
+    historyOffset = -1;
+    historyScratch = null;
+    historySearchPrefix = null;
+    programmaticEdit = true;
+    try {
+      input.setText(text == null ? "" : text);
+    } finally {
+      programmaticEdit = false;
+    }
+    discardAllUndoEdits();
     updateHint();
   }
 

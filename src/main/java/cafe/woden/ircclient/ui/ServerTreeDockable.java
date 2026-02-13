@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
+import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -68,6 +69,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final String STATUS_LABEL = "status";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
+  private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
@@ -156,17 +158,23 @@ private static final class InsertionLine {
 
   private final SojuAutoConnectStore sojuAutoConnect;
 
+  private final ZncAutoConnectStore zncAutoConnect;
+
   private final Map<String, String> serverDisplayNames = new HashMap<>();
   private final Set<String> ephemeralServerIds = new HashSet<>();
   private final Set<String> sojuBouncerControlServerIds = new HashSet<>();
+  private final Set<String> zncBouncerControlServerIds = new HashSet<>();
   private final Map<String, String> sojuOriginByServerId = new HashMap<>();
+  private final Map<String, String> zncOriginByServerId = new HashMap<>();
   private final Map<String, DefaultMutableTreeNode> sojuNetworksGroupByOrigin = new HashMap<>();
+  private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin = new HashMap<>();
 
   private final NotificationStore notificationStore;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
       SojuAutoConnectStore sojuAutoConnect,
+      ZncAutoConnectStore zncAutoConnect,
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
       NotificationStore notificationStore) {
@@ -174,6 +182,7 @@ private static final class InsertionLine {
 
     this.serverCatalog = serverCatalog;
     this.sojuAutoConnect = sojuAutoConnect;
+    this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
 
     this.connectBtn = connectBtn;
@@ -242,6 +251,16 @@ private static final class InsertionLine {
               .subscribe(
                   __ -> refreshSojuAutoConnectBadges(),
                   err -> log.error("[ircafe] soju auto-connect store stream error", err))
+      );
+    }
+
+    if (zncAutoConnect != null) {
+      disposables.add(
+          zncAutoConnect.updates()
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(
+                  __ -> refreshZncAutoConnectBadges(),
+                  err -> log.error("[ircafe] znc auto-connect store stream error", err))
       );
     }
     TreeSelectionListener tsl = e -> {
@@ -523,6 +542,25 @@ private static final class InsertionLine {
           boolean en = auto.isSelected();
           sojuAutoConnect.setEnabled(originId, networkKey, en);
           refreshSojuAutoConnectBadges();
+        });
+        menu.add(auto);
+      }
+
+      if (isZncEphemeralServer(serverId)) {
+        String originId = zncOriginByServerId.get(serverId);
+        String networkKey = serverDisplayNames.getOrDefault(serverId, serverId);
+        boolean enabled = originId != null && zncAutoConnect != null
+            && zncAutoConnect.isEnabled(originId, networkKey);
+
+        menu.addSeparator();
+        JCheckBoxMenuItem auto = new JCheckBoxMenuItem("Auto-connect \"" + networkKey + "\" next time");
+        auto.setSelected(enabled);
+        auto.setEnabled(originId != null && !originId.isBlank() && zncAutoConnect != null);
+        auto.addActionListener(ev -> {
+          if (originId == null || originId.isBlank() || zncAutoConnect == null) return;
+          boolean en = auto.isSelected();
+          zncAutoConnect.setEnabled(originId, networkKey, en);
+          refreshZncAutoConnectBadges();
         });
         menu.add(auto);
       }
@@ -889,6 +927,8 @@ private void syncServers(List<ServerEntry> latest) {
   Set<String> nextEphemeral = new HashSet<>();
   Set<String> nextSojuBouncerControl = new HashSet<>();
   Map<String, String> nextSojuOrigins = new HashMap<>();
+  Set<String> nextZncBouncerControl = new HashSet<>();
+  Map<String, String> nextZncOrigins = new HashMap<>();
 
   if (latest != null) {
     for (ServerEntry e : latest) {
@@ -908,6 +948,16 @@ private void syncServers(List<ServerEntry> latest) {
           nextSojuOrigins.put(id, origin);
         }
       }
+
+      // If a ZNC network was discovered from a configured bouncer server, label that server's
+      // status tab as "Bouncer Control" for clarity.
+      if (e.ephemeral() && id.startsWith("znc:")) {
+        String origin = Objects.toString(e.originId(), "").trim();
+        if (!origin.isEmpty()) {
+          nextZncBouncerControl.add(origin);
+          nextZncOrigins.put(id, origin);
+        }
+      }
     }
   }
 
@@ -915,9 +965,13 @@ private void syncServers(List<ServerEntry> latest) {
   sojuOriginByServerId.clear();
   sojuOriginByServerId.putAll(nextSojuOrigins);
 
+  // Update origin mapping for ZNC discovered networks.
+  zncOriginByServerId.clear();
+  zncOriginByServerId.putAll(nextZncOrigins);
+
   // Ensure origin servers exist before adding nested soju networks.
   for (String id : newIds) {
-    if (id.startsWith("soju:")) continue;
+    if (id.startsWith("soju:") || id.startsWith("znc:")) continue;
     if (!servers.containsKey(id)) {
       addServerRoot(id);
     }
@@ -934,10 +988,11 @@ private void syncServers(List<ServerEntry> latest) {
       serverDisplayNames.remove(existing);
       ephemeralServerIds.remove(existing);
       sojuBouncerControlServerIds.remove(existing);
+      zncBouncerControlServerIds.remove(existing);
     }
   }
 
-  updateSojuBouncerControlLabels(nextSojuBouncerControl);
+  updateBouncerControlLabels(nextSojuBouncerControl, nextZncBouncerControl);
 
   for (String id : newIds) {
     String next = nextDisplay.getOrDefault(id, id);
@@ -1010,12 +1065,24 @@ private void syncServers(List<ServerEntry> latest) {
       }
       return display;
     }
+    if (isZncEphemeralServer(id)) {
+      String origin = zncOriginByServerId.get(id);
+      if (origin != null && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display)) {
+        return display + " (auto)";
+      }
+      return display;
+    }
     return display;
   }
 
   private boolean isSojuEphemeralServer(String serverId) {
     String id = Objects.toString(serverId, "").trim();
     return !id.isEmpty() && id.startsWith("soju:") && ephemeralServerIds.contains(id);
+  }
+
+  private boolean isZncEphemeralServer(String serverId) {
+    String id = Objects.toString(serverId, "").trim();
+    return !id.isEmpty() && id.startsWith("znc:") && ephemeralServerIds.contains(id);
   }
 
 
@@ -1049,6 +1116,36 @@ private void syncServers(List<ServerEntry> latest) {
     return sojuNetworksGroupByOrigin.containsValue(node);
   }
 
+  private DefaultMutableTreeNode getOrCreateZncNetworksGroupNode(String originServerId) {
+    String origin = Objects.toString(originServerId, "").trim();
+    if (origin.isEmpty()) return null;
+
+    DefaultMutableTreeNode existing = zncNetworksGroupByOrigin.get(origin);
+    if (existing != null) return existing;
+
+    ServerNodes originNodes = servers.get(origin);
+    if (originNodes == null) return null;
+
+    DefaultMutableTreeNode group = new DefaultMutableTreeNode(ZNC_NETWORKS_GROUP_LABEL);
+
+    // Insert right after the fixed leaves (status + notifications) and before PMs.
+    int insertIdx = 2;
+    int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
+    if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
+    insertIdx = Math.min(insertIdx, originNodes.serverNode.getChildCount());
+
+    originNodes.serverNode.insert(group, insertIdx);
+    zncNetworksGroupByOrigin.put(origin, group);
+    return group;
+  }
+
+  private boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (uo instanceof String s && ZNC_NETWORKS_GROUP_LABEL.equals(s)) return true;
+    return zncNetworksGroupByOrigin.containsValue(node);
+  }
+
   private String toolTipForEvent(MouseEvent event) {
     if (event == null) return null;
     TreePath path = tree.getPathForLocation(event.getX(), event.getY());
@@ -1060,20 +1157,38 @@ private void syncServers(List<ServerEntry> latest) {
       return "Soju networks discovered from the bouncer (not saved).";
     }
 
+    if (isZncNetworksGroupNode(node)) {
+      return "ZNC networks discovered from the bouncer (not saved).";
+    }
+
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd && nd.ref != null) {
       if (nd.ref.isStatus() && BOUNCER_CONTROL_LABEL.equals(nd.label)
-          && sojuBouncerControlServerIds.contains(nd.ref.serverId())) {
-        return "Bouncer Control connection (used to discover soju networks).";
+          && (sojuBouncerControlServerIds.contains(nd.ref.serverId())
+              || zncBouncerControlServerIds.contains(nd.ref.serverId()))) {
+        return "Bouncer Control connection (used to discover bouncer networks).";
       }
     }
 
     if (uo instanceof String serverId && isServerNode(node) && isSojuEphemeralServer(serverId)) {
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
-      String name = prettyServerLabel(serverId);
+      String display = serverDisplayNames.getOrDefault(serverId, serverId);
+      boolean auto = !origin.isEmpty() && sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, display);
       String tip = "Discovered from soju; not saved.";
+      if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
-      if (name != null && !name.isBlank()) tip += " Network: " + name + ".";
+      if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
+      return tip;
+    }
+
+    if (uo instanceof String serverId && isServerNode(node) && isZncEphemeralServer(serverId)) {
+      String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
+      String display = serverDisplayNames.getOrDefault(serverId, serverId);
+      boolean auto = !origin.isEmpty() && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display);
+      String tip = "Discovered from ZNC; not saved.";
+      if (auto) tip += " Auto-connect enabled.";
+      if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
+      if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
       return tip;
     }
 
@@ -1084,6 +1199,15 @@ private void syncServers(List<ServerEntry> latest) {
     // Update labels for discovered (ephemeral) soju networks when auto-connect toggles change.
     for (String id : ephemeralServerIds) {
       if (!id.startsWith("soju:")) continue;
+      ServerNodes sn = servers.get(id);
+      if (sn != null) model.nodeChanged(sn.serverNode);
+    }
+  }
+
+  private void refreshZncAutoConnectBadges() {
+    // Update labels for discovered (ephemeral) ZNC networks when auto-connect toggles change.
+    for (String id : ephemeralServerIds) {
+      if (!id.startsWith("znc:")) continue;
       ServerNodes sn = servers.get(id);
       if (sn != null) model.nodeChanged(sn.serverNode);
     }
@@ -1107,6 +1231,14 @@ private void removeServerRoot(String serverId) {
       }
       sojuNetworksGroupByOrigin.entrySet().removeIf(e -> e.getValue() == parent);
     }
+
+    if (isZncNetworksGroupNode(parent) && parent.getChildCount() == 0) {
+      DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) parent.getParent();
+      if (originNode != null) {
+        originNode.remove(parent);
+      }
+      zncNetworksGroupByOrigin.entrySet().removeIf(e -> e.getValue() == parent);
+    }
   }
 }
 
@@ -1120,14 +1252,26 @@ private void removeServerRoot(String serverId) {
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
 
     DefaultMutableTreeNode parent = root;
-    String origin = sojuOriginByServerId.get(id);
-    if (origin != null && !origin.isBlank() && id.startsWith("soju:")) {
-      // Ensure the origin server exists so we can nest beneath it.
-      if (!servers.containsKey(origin)) {
-        addServerRoot(origin);
+    if (id.startsWith("soju:")) {
+      String origin = sojuOriginByServerId.get(id);
+      if (origin != null && !origin.isBlank()) {
+        // Ensure the origin server exists so we can nest beneath it.
+        if (!servers.containsKey(origin)) {
+          addServerRoot(origin);
+        }
+        DefaultMutableTreeNode group = getOrCreateSojuNetworksGroupNode(origin);
+        if (group != null) parent = group;
       }
-      DefaultMutableTreeNode group = getOrCreateSojuNetworksGroupNode(origin);
-      if (group != null) parent = group;
+    } else if (id.startsWith("znc:")) {
+      String origin = zncOriginByServerId.get(id);
+      if (origin != null && !origin.isBlank()) {
+        // Ensure the origin server exists so we can nest beneath it.
+        if (!servers.containsKey(origin)) {
+          addServerRoot(origin);
+        }
+        DefaultMutableTreeNode group = getOrCreateZncNetworksGroupNode(origin);
+        if (group != null) parent = group;
+      }
     }
 
     parent.add(serverNode);
@@ -1158,17 +1302,33 @@ private void removeServerRoot(String serverId) {
   private String statusLeafLabelForServer(String serverId) {
     String id = Objects.toString(serverId, "").trim();
     if (id.isEmpty()) return STATUS_LABEL;
-    return sojuBouncerControlServerIds.contains(id) ? BOUNCER_CONTROL_LABEL : STATUS_LABEL;
+    return (sojuBouncerControlServerIds.contains(id) || zncBouncerControlServerIds.contains(id))
+        ? BOUNCER_CONTROL_LABEL
+        : STATUS_LABEL;
   }
 
-  private void updateSojuBouncerControlLabels(Set<String> nextSojuBouncerControl) {
-    Set<String> next = nextSojuBouncerControl == null ? Set.of() : nextSojuBouncerControl;
-    Set<String> all = new HashSet<>(sojuBouncerControlServerIds);
-    all.addAll(next);
+  private void updateBouncerControlLabels(Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl) {
+    Set<String> nextSoju = nextSojuBouncerControl == null ? Set.of() : nextSojuBouncerControl;
+    Set<String> nextZnc = nextZncBouncerControl == null ? Set.of() : nextZncBouncerControl;
+
+    Set<String> prevUnion = new HashSet<>(sojuBouncerControlServerIds);
+    prevUnion.addAll(zncBouncerControlServerIds);
+
+    // Update the backing sets first so tooltip/label helpers see the current state.
+    sojuBouncerControlServerIds.clear();
+    sojuBouncerControlServerIds.addAll(nextSoju);
+    zncBouncerControlServerIds.clear();
+    zncBouncerControlServerIds.addAll(nextZnc);
+
+    Set<String> nextUnion = new HashSet<>(nextSoju);
+    nextUnion.addAll(nextZnc);
+
+    Set<String> all = new HashSet<>(prevUnion);
+    all.addAll(nextUnion);
 
     for (String serverId : all) {
-      boolean was = sojuBouncerControlServerIds.contains(serverId);
-      boolean now = next.contains(serverId);
+      boolean was = prevUnion.contains(serverId);
+      boolean now = nextUnion.contains(serverId);
       if (was == now) continue;
 
       TargetRef statusRef = new TargetRef(serverId, "status");
@@ -1185,9 +1345,6 @@ private void removeServerRoot(String serverId) {
       node.setUserObject(nd);
       model.nodeChanged(node);
     }
-
-    sojuBouncerControlServerIds.clear();
-    sojuBouncerControlServerIds.addAll(next);
   }
 
   private void refreshNotificationsCount(String serverId) {
@@ -1284,7 +1441,7 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(prettyServerLabel(id));
-        if (isSojuEphemeralServer(id)) {
+        if (ephemeralServerIds.contains(id)) {
           setFont(base.deriveFont(Font.ITALIC));
         } else {
           setFont(base.deriveFont(Font.PLAIN));

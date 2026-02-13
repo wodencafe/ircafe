@@ -52,6 +52,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   private final ChatTranscriptMouseDecorator transcriptMouse;
 
+  private final ChatTranscriptContextMenuDecorator transcriptMenu;
+
   private final Cursor textCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
   private final Cursor handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
 
@@ -70,7 +72,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
     }
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
-    decorators.add(ChatTranscriptContextMenuDecorator.decorate(
+    this.transcriptMenu = decorators.add(ChatTranscriptContextMenuDecorator.decorate(
         chat,
         this::urlAt,
         this::nickAt,
@@ -128,6 +130,16 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   public void toggleFindBar() {
     findBar.toggle();
+  }
+
+  protected void setTranscriptContextMenuActions(Runnable clearAction, Runnable reloadRecentAction) {
+    try {
+      if (transcriptMenu != null) {
+        transcriptMenu.setClearAction(clearAction);
+        transcriptMenu.setReloadRecentAction(reloadRecentAction);
+      }
+    } catch (Exception ignored) {
+    }
   }
 
   private void onSettingsChanged(PropertyChangeEvent evt) {

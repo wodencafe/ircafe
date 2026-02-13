@@ -38,6 +38,7 @@ public sealed interface IrcEvent permits
     IrcEvent.ServerTimeNotNegotiated,
     IrcEvent.ChatHistoryBatchReceived,
     IrcEvent.ZncPlaybackBatchReceived,
+    IrcEvent.ServerResponseLine,
     IrcEvent.Error,
     IrcEvent.CtcpRequestReceived
  {
@@ -89,6 +90,15 @@ public sealed interface IrcEvent permits
   record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
 
   record Notice(Instant at, String from, String text) implements IrcEvent {}
+
+  /**
+   * A server response line (usually a numeric like 421/433/etc) that doesn't map cleanly onto
+   * a higher-level event in IRCafe.
+   *
+   * <p>This is primarily intended for the per-server <em>Status</em> transcript, so users can
+   * see replies to raw commands (and other server numerics) without having to watch the console.
+   */
+  record ServerResponseLine(Instant at, int code, String message, String rawLine) implements IrcEvent {}
 
   /** Warns the UI once when IRCv3 {@code server-time} is not negotiated on this connection. */
   record ServerTimeNotNegotiated(Instant at, String message) implements IrcEvent {}

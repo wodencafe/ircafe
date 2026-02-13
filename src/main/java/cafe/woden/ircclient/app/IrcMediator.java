@@ -428,55 +428,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     }
   }
 
-  private void handleSay(String msg) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(safeStatusTarget(), "(system)", "Select a server first.");
-      return;
-    }
-
-    String m = msg == null ? "" : msg.trim();
-    if (m.isEmpty()) return;
-
-    if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(system)", "Select a channel, or double-click a nick to PM them.");
-      return;
-    }
-
-    if (at.isUiOnly()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(system)", "That view does not accept chat input.");
-      return;
-    }
-
-    sendMessage(at, m);
-  }
-
-  private void sendMessage(TargetRef target, String message) {
-    if (target == null) return;
-    if (target.isUiOnly()) return;
-    String m = message == null ? "" : message.trim();
-    if (m.isEmpty()) return;
-
-    if (!connectionCoordinator.isConnected(target.serverId())) {
-      TargetRef status = new TargetRef(target.serverId(), "status");
-      ui.appendStatus(status, "(conn)", "Not connected");
-      if (!target.isStatus()) {
-        ui.appendStatus(target, "(conn)", "Not connected");
-      }
-      return;
-    }
-
-    disposables.add(
-        irc.sendMessage(target.serverId(), target.target(), m).subscribe(
-            () -> {},
-            err -> ui.appendError(safeStatusTarget(), "(send-error)", String.valueOf(err))
-        )
-    );
-
-    String me = irc.currentNick(target.serverId()).orElse("me");
-    ui.appendChat(target, "(" + me + ")", m, true);
-  }
-
   private void onServerIrcEvent(ServerIrcEvent se) {
     if (se == null) return;
 
@@ -612,6 +563,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       }
       case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.appendStatus(status, "(ircv3)", ev.message());
+      }
+      case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {
+        ensureTargetExists(status);
+        String msg = ev.message();
+        if (msg == null) msg = "";
+        String rendered = "[" + ev.code() + "] " + msg;
+        ui.appendStatusAt(status, ev.at(), "(server)", rendered);
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
         String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();

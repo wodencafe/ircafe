@@ -2,8 +2,10 @@ package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.MessageInputPanel;
+import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.OutboundLineBus;
+import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -28,6 +30,7 @@ import java.util.function.Consumer;
 public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoCloseable {
 
   private final TargetRef target;
+  private final ChatHistoryService chatHistoryService;
   private final String persistentId;
 
   private boolean followTail = true;
@@ -46,6 +49,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   public PinnedChatDockable(TargetRef target,
                            ChatTranscriptStore transcripts,
                            UiSettingsBus settingsBus,
+                           ChatHistoryService chatHistoryService,
+                           CommandHistoryStore historyStore,
                            Consumer<TargetRef> activate,
                            OutboundLineBus outboundBus,
                            ActiveInputRouter activeInputRouter,
@@ -53,6 +58,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
                            BiConsumer<TargetRef, String> onClosed) {
     super(settingsBus);
     this.target = target;
+    this.chatHistoryService = chatHistoryService;
     this.activate = activate;
     this.outboundBus = outboundBus;
     this.activeInputRouter = activeInputRouter;
@@ -64,8 +70,28 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     setName(getTabText());
     setDocument(transcripts.document(target));
 
+    // Context menu: Clear (buffer only) + Reload recent history (clear + reload from DB/bouncer).
+    setTranscriptContextMenuActions(
+        () -> {
+          try {
+            if (this.target == null || this.target.isUiOnly()) return;
+            transcripts.clearTarget(this.target);
+          } catch (Exception ignored) {
+          }
+        },
+        () -> {
+          try {
+            if (this.target == null || this.target.isUiOnly()) return;
+            if (chatHistoryService != null && chatHistoryService.canReloadRecent(this.target)) {
+              chatHistoryService.reloadRecent(this.target);
+            }
+          } catch (Exception ignored) {
+          }
+        }
+    );
+
     // Input panel embedded in the pinned view.
-    this.inputPanel = new MessageInputPanel(settingsBus);
+    this.inputPanel = new MessageInputPanel(settingsBus, historyStore);
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.

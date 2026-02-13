@@ -20,7 +20,6 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JFileChooser;
@@ -28,11 +27,12 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.JTextComponent;
 import java.awt.Point;
+import javax.swing.text.Document;
 
 /**
  * Decorates a chat transcript {@link JTextComponent} with a right-click context menu.
  * <ul>
- *   <li>Default: Copy / Select All / Find Text</li>
+   *   <li>Default: Copy / Select All / Find Text / Reload Recent History / Clear</li>
  *   <li>If right-clicking on a URL token: Open Link in Browser / Copy Link Address / Save Link As...</li>
  * </ul>
  */
@@ -54,6 +54,11 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem copyItem = new JMenuItem("Copy");
   private final JMenuItem selectAllItem = new JMenuItem("Select All");
   private final JMenuItem findItem = new JMenuItem("Find Text");
+  private final JMenuItem reloadRecentItem = new JMenuItem("Reload Recent History");
+  private final JMenuItem clearItem = new JMenuItem("Clear");
+
+  private volatile Runnable clearAction;
+  private volatile Runnable reloadRecentAction;
 
   private final JMenuItem openLinkItem = new JMenuItem("Open Link in Browser");
   private final JMenuItem copyLinkItem = new JMenuItem("Copy Link Address");
@@ -87,6 +92,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     copyItem.addActionListener(this::onCopy);
     selectAllItem.addActionListener(this::onSelectAll);
     findItem.addActionListener(this::onFind);
+    reloadRecentItem.addActionListener(this::onReloadRecent);
+    clearItem.addActionListener(this::onClear);
 
     openLinkItem.addActionListener(this::onOpenLink);
     copyLinkItem.addActionListener(this::onCopyLink);
@@ -189,6 +196,14 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier);
   }
 
+  public void setClearAction(Runnable clearAction) {
+    this.clearAction = clearAction;
+  }
+
+  public void setReloadRecentAction(Runnable reloadRecentAction) {
+    this.reloadRecentAction = reloadRecentAction;
+  }
+
   private void rebuildMenu(String url) {
     menu.removeAll();
 
@@ -200,11 +215,17 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(selectAllItem);
       menu.addSeparator();
       menu.add(findItem);
+      menu.addSeparator();
+      menu.add(reloadRecentItem);
+      menu.add(clearItem);
     } else {
       menu.add(copyItem);
       menu.add(selectAllItem);
       menu.addSeparator();
       menu.add(findItem);
+      menu.addSeparator();
+      menu.add(reloadRecentItem);
+      menu.add(clearItem);
     }
   }
 
@@ -221,6 +242,17 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     openLinkItem.setEnabled(hasUrl);
     copyLinkItem.setEnabled(hasUrl);
     saveLinkItem.setEnabled(hasUrl);
+
+    try {
+      Document doc = transcript.getDocument();
+      boolean hasText = (doc != null && doc.getLength() > 0);
+      boolean canReload = (reloadRecentAction != null);
+      reloadRecentItem.setEnabled(canReload);
+      clearItem.setEnabled(hasText);
+    } catch (Exception ignored) {
+      clearItem.setEnabled(true);
+      reloadRecentItem.setEnabled(reloadRecentAction != null);
+    }
   }
 
   private void onCopy(ActionEvent e) {
@@ -294,6 +326,42 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       openFind.run();
     } catch (Exception ignored) {
     }
+  }
+
+  private void onReloadRecent(ActionEvent e) {
+    // Reload recent history is intentionally implemented as: clear buffer first, then reload.
+    try {
+      clearBufferOnly();
+    } catch (Exception ignored) {
+    }
+
+    try {
+      Runnable reload = reloadRecentAction;
+      if (reload != null) reload.run();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onClear(ActionEvent e) {
+    try {
+      clearBufferOnly();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void clearBufferOnly() throws Exception {
+    Runnable r = clearAction;
+    if (r != null) {
+      r.run();
+      return;
+    }
+    Document doc = transcript.getDocument();
+    if (doc == null) return;
+    int len = doc.getLength();
+    if (len <= 0) return;
+    // Clear only the in-memory transcript buffer (the UI document).
+    // This intentionally does not touch any persisted logs.
+    doc.remove(0, len);
   }
 
   private static String safeHit(Function<Point, String> f, Point p) {
