@@ -19,9 +19,11 @@ jobs:
             suffix: linux-x64
           - os: windows-latest
             suffix: windows-x64
-          # If you want Intel mac builds, use macos-13. If you want Apple Silicon, use macos-latest.
-          - os: macos-13
+          - os: macos-15
+            suffix: macos-arm64
+          - os: macos-15-intel
             suffix: macos-x64
+
 
     runs-on: ${{ matrix.os }}
 
