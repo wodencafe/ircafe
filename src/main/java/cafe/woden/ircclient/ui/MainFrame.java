@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.IrcMediator;
+import cafe.woden.ircclient.app.AppVersion;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
@@ -55,7 +56,7 @@ public class MainFrame extends JFrame {
       ChatDockManager chatDockManager,
       StatusBar statusBar
   ) {
-    super("IRCafe");
+    super(AppVersion.appNameWithVersion());
     this.uiProps = uiProps;
     this.serverTree = serverTree;
     this.chat = chat;
