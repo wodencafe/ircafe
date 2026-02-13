@@ -106,34 +106,38 @@ tasks.register("copyJpackageJar", Copy) {
 tasks.named("jpackage") {
     dependsOn("build", "copyJpackageDependencies", "copyJpackageJar")
 }
-
 jpackage {
-    // IMPORTANT: destination must be inside build/ (plugin deletes it before running jpackage) :contentReference[oaicite:2]{index=2}
     input = jpackageInputDir
     destination = layout.buildDirectory.dir("dist")
 
     appName = "IRCafe"
     vendor = "WodenCafe"
     appDescription = project.description
-    appVersion = project.version.toString().replace("-SNAPSHOT", "")
 
-    // Use the plain jar name that Gradle produced/copied
+    // If you pass -Pversion=... from tags, keep appVersion clean for jpackage
+    def cleanVer = project.version.toString()
+            .replaceFirst(/^v/, "")
+            .replace("-SNAPSHOT", "")
+    appVersion = cleanVer
+
     mainJar = tasks.named("jar").get().archiveFileName.get()
     mainClass = springBoot.mainClass.get()
 
     type = ImageType.APP_IMAGE
 
+    verbose = true
+
+    // Optional but helps avoid temp/path weirdness in CI
+    temp = layout.buildDirectory.dir("jpackage/tmp")
+
     javaOptions = [
         "-Dfile.encoding=UTF-8"
     ]
 
-    // Optional niceties per-OS
+    // APP_IMAGE is “portable”. Installer-only options are removed.
     windows {
-        winConsole = false
-        winMenu = true
-        winShortcut = true
-        winDirChooser = true
-        winMenuGroup = "IRCafe"
+        winConsole = false  // launcher style is fine
+        // (NO winMenu / winShortcut / winDirChooser here)
     }
 
     mac {
@@ -142,9 +146,7 @@ jpackage {
         macAppCategory = "public.app-category.utilities"
     }
 
-    linux {
-        linuxShortcut = true
-        linuxMenuGroup = "Network"
-        linuxAppCategory = "Network"
-    }
+    // For APP_IMAGE, skip linuxShortcut/menu/category unless you're building DEB/RPM installers.
+    // linux { }
 }
+
