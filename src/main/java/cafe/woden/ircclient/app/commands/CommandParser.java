@@ -76,6 +76,16 @@ public class CommandParser {
       return new ParsedInput.Msg(nick, body);
     }
 
+
+    if (matchesCommand(line, "/notice")) {
+      String rest = argAfter(line, "/notice");
+      int sp = rest.indexOf(' ');
+      if (sp <= 0) return new ParsedInput.Notice(rest.trim(), "");
+      String target = rest.substring(0, sp).trim();
+      String body = rest.substring(sp + 1).trim();
+      return new ParsedInput.Notice(target, body);
+    }
+
     if (matchesCommand(line, "/me")) {
       String action = argAfter(line, "/me");
       return new ParsedInput.Me(action);

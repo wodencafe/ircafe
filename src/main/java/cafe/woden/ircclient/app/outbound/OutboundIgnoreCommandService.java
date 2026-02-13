@@ -40,7 +40,7 @@ public class OutboundIgnoreCommandService {
 
     String arg = maskOrNick == null ? "" : maskOrNick.trim();
     if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Usage: /ignore <maskOrNick>");
+      ui.appendStatus(at, "(ignore)", "Usage: /ignore <maskOrNick>");
       return;
     }
 
@@ -62,7 +62,7 @@ public class OutboundIgnoreCommandService {
 
     String arg = maskOrNick == null ? "" : maskOrNick.trim();
     if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Usage: /unignore <maskOrNick>");
+      ui.appendStatus(at, "(unignore)", "Usage: /unignore <maskOrNick>");
       return;
     }
 
@@ -105,7 +105,7 @@ public class OutboundIgnoreCommandService {
 
     String arg = maskOrNick == null ? "" : maskOrNick.trim();
     if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(soft-ignore)", "Usage: /softignore <maskOrNick>");
+      ui.appendStatus(at, "(soft-ignore)", "Usage: /softignore <maskOrNick>");
       return;
     }
 
@@ -127,7 +127,7 @@ public class OutboundIgnoreCommandService {
 
     String arg = maskOrNick == null ? "" : maskOrNick.trim();
     if (arg.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unsoftignore)", "Usage: /unsoftignore <maskOrNick>");
+      ui.appendStatus(at, "(unsoftignore)", "Usage: /unsoftignore <maskOrNick>");
       return;
     }
 

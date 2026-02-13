@@ -650,7 +650,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         maybeEmitHostmaskObserved("", event.getUser());
       }
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(at, from, notice)));
+      String target = null;
+      try {
+        Channel ch = event.getChannel();
+        if (ch != null) target = ch.getName();
+      } catch (Exception ignored) {
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(at, from, target, notice)));
     }
 
     @Override

@@ -36,17 +36,34 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
       URI canonical = id != null ? ImdbPreviewUtil.canonicalTitleUri(id) : null;
       URI target = canonical != null ? canonical : uri;
 
-      var resp = http.getString(target, "text/html,application/xhtml+xml", null);
-      if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+      // IMDb increasingly serves anti-bot/JS interstitial pages to non-browser clients.
+      // Use a browser-ish UA to improve our odds of getting the real HTML with JSON-LD.
+      var resp = http.getString(
+          target,
+          "text/html,application/xhtml+xml",
+          PreviewHttp.headers("User-Agent", PreviewHttp.BROWSER_USER_AGENT)
+      );
+      int status = resp.statusCode();
+      if (status < 200 || status >= 300) {
+        log.debug("IMDb preview: HTTP {} for {}", status, target);
         return null;
       }
 
       String html = resp.body();
       if (html == null || html.isBlank()) return null;
 
+      if (looksLikeBotOrJsInterstitial(html)) {
+        String ct = PreviewHttp.header(resp, "content-type").orElse("");
+        log.info("IMDb preview: blocked by bot/JS interstitial for {} (content-type: {})", target, ct);
+        return null;
+      }
+
       Document doc = Jsoup.parse(html, target.toString());
       JsonNode titleNode = findTitleNode(doc);
-      if (titleNode == null) return null;
+      if (titleNode == null) {
+        log.debug("IMDb preview: no JSON-LD title node found for {}", target);
+        return null;
+      }
 
       String name = text(titleNode, "name");
       if (name == null || name.isBlank()) return null;
@@ -135,6 +152,17 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
       log.warn("IMDb preview resolve failed for {}: {}", originalUrl, ex.toString());
       return null;
     }
+  }
+
+  private static boolean looksLikeBotOrJsInterstitial(String html) {
+    if (html == null || html.isBlank()) return false;
+    String lower = html.toLowerCase(Locale.ROOT);
+    // What IMDb commonly serves to non-browser / blocked clients.
+    if (lower.contains("verify that you're not a robot")) return true;
+    if (lower.contains("javascript is disabled")) return true;
+    if (lower.contains("enable javascript and then reload")) return true;
+    if (lower.contains("robot check")) return true;
+    return false;
   }
 
   private static String metaImage(Document doc, String cssQuery) {

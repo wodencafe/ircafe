@@ -111,7 +111,7 @@ public class OutboundCtcpWhoisCommandService {
     TargetRef ctx = at;
 
     if (n.isEmpty() || cmd.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Usage: /ctcp <nick> <command> [args...]");
+      ui.appendStatus(at, "(ctcp)", "Usage: /ctcp <nick> <command> [args...]");
       return;
     }
 
@@ -135,7 +135,7 @@ public class OutboundCtcpWhoisCommandService {
 
     // If you want /ctcp nick ACTION ... use /me instead.
     if ("ACTION".equals(cmdU)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)", "Use /me for ACTION.");
+      ui.appendStatus(at, "(ctcp)", "Use /me for ACTION.");
       return;
     }
 
@@ -152,7 +152,7 @@ public class OutboundCtcpWhoisCommandService {
     String n = nick == null ? "" : nick.trim();
     String a = args == null ? "" : args.trim();
     if (n.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ctcp)",
+      ui.appendStatus(at, "(ctcp)",
           "Usage: /" + cmdUpper.toLowerCase(Locale.ROOT) + " <nick>");
       return;
     }
