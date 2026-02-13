@@ -7,6 +7,7 @@ public sealed interface ParsedInput permits
     ParsedInput.Away,
     ParsedInput.Query,
     ParsedInput.Msg,
+    ParsedInput.Notice,
     ParsedInput.Me,
     ParsedInput.Mode,
     ParsedInput.Op,
@@ -51,6 +52,13 @@ public sealed interface ParsedInput permits
   record Query(String nick) implements ParsedInput {}
 
   record Msg(String nick, String body) implements ParsedInput {}
+
+  /**
+   * /notice <target> <message>
+   *
+   * <p>Sends an IRC NOTICE to either a channel or nick.
+   */
+  record Notice(String target, String body) implements ParsedInput {}
 
   record Me(String action) implements ParsedInput {}
 

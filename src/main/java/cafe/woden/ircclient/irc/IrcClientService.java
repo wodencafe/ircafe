@@ -45,6 +45,19 @@ public interface IrcClientService {
 
   Completable sendPrivateMessage(String serverId, String nick, String message);
 
+  Completable sendNoticeToChannel(String serverId, String channel, String message);
+
+  Completable sendNoticePrivate(String serverId, String nick, String message);
+
+  default Completable sendNotice(String serverId, String target, String message) {
+    String t = target == null ? "" : target.trim();
+    if (t.startsWith("#") || t.startsWith("&")) {
+      return sendNoticeToChannel(serverId, t, message);
+    }
+    return sendNoticePrivate(serverId, t, message);
+  }
+
+
   /** Send a raw IRC line (advanced). */
   Completable sendRaw(String serverId, String rawLine);
 

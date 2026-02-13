@@ -285,8 +285,20 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable sendNoticeToChannel(String serverId, String channel, String message) {
+    return Completable.fromAction(() -> requireBot(serverId).sendIRC().notice(channel, message))
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
   public Completable sendPrivateMessage(String serverId, String nick, String message) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().message(PircbotxUtil.sanitizeNick(nick), message))
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
+  public Completable sendNoticePrivate(String serverId, String nick, String message) {
+    return Completable.fromAction(() -> requireBot(serverId).sendIRC().notice(PircbotxUtil.sanitizeNick(nick), message))
         .subscribeOn(Schedulers.io());
   }
 

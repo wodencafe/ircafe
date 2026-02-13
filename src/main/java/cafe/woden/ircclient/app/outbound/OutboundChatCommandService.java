@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /join, /nick, /away, /query, /msg, /me, /say, /quote.
+ * <p>Includes: /join, /nick, /away, /query, /msg, /notice, /me, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -64,7 +64,7 @@ public class OutboundChatCommandService {
 
     String chan = channel == null ? "" : channel.trim();
     if (chan.isEmpty()) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(join)", "Usage: /join <#channel>");
+      ui.appendStatus(at, "(join)", "Usage: /join <#channel>");
       return;
     }
 
@@ -103,14 +103,14 @@ public class OutboundChatCommandService {
     TargetRef target;
     if (chan.isEmpty()) {
       if (!at.isChannel()) {
-        ui.appendStatus(status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
+        ui.appendStatus(at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
         return;
       }
       target = at;
     } else {
       target = new TargetRef(at.serverId(), chan);
       if (!target.isChannel()) {
-        ui.appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
+        ui.appendStatus(at, "(part)", "Usage: /part [#channel] [reason]");
         return;
       }
     }
@@ -148,7 +148,7 @@ public class OutboundChatCommandService {
 
     String nick = newNick == null ? "" : newNick.trim();
     if (nick.isEmpty()) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(nick)", "Usage: /nick <newNick>");
+      ui.appendStatus(at, "(nick)", "Usage: /nick <newNick>");
       return;
     }
 
@@ -239,7 +239,7 @@ public class OutboundChatCommandService {
 
     String n = nick == null ? "" : nick.trim();
     if (n.isEmpty()) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(query)", "Usage: /query <nick>");
+      ui.appendStatus(at, "(query)", "Usage: /query <nick>");
       return;
     }
 
@@ -258,7 +258,7 @@ public class OutboundChatCommandService {
     String n = nick == null ? "" : nick.trim();
     String m = body == null ? "" : body.trim();
     if (n.isEmpty() || m.isEmpty()) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(msg)", "Usage: /msg <nick> <message>");
+      ui.appendStatus(at, "(msg)", "Usage: /msg <nick> <message>");
       return;
     }
 
@@ -268,7 +268,25 @@ public class OutboundChatCommandService {
     sendMessage(disposables, pm, m);
   }
 
-  public void handleMe(CompositeDisposable disposables, String action) {
+  
+  public void handleNotice(CompositeDisposable disposables, String target, String body) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(notice)", "Select a server first.");
+      return;
+    }
+
+    String t = target == null ? "" : target.trim();
+    String m = body == null ? "" : body.trim();
+    if (t.isEmpty() || m.isEmpty()) {
+      ui.appendStatus(at, "(notice)", "Usage: /notice <target> <message>");
+      return;
+    }
+
+    sendNotice(disposables, at, t, m);
+  }
+
+public void handleMe(CompositeDisposable disposables, String action) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(me)", "Select a server first.");
@@ -277,7 +295,7 @@ public class OutboundChatCommandService {
 
     String a = action == null ? "" : action.trim();
     if (a.isEmpty()) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(me)", "Usage: /me <action>");
+      ui.appendStatus(at, "(me)", "Usage: /me <action>");
       return;
     }
 
@@ -372,8 +390,8 @@ public class OutboundChatCommandService {
 
     int lim = limit;
     if (lim <= 0) {
-      ui.appendStatus(status, "(chathistory)", "Usage: /chathistory [limit]  (alias: /history)");
-      ui.appendStatus(status, "(chathistory)", "Example: /chathistory 100");
+      ui.appendStatus(at, "(chathistory)", "Usage: /chathistory [limit]  (alias: /history)");
+      ui.appendStatus(at, "(chathistory)", "Example: /chathistory 100");
       return;
     }
     if (lim > 200) lim = 200;
@@ -407,9 +425,9 @@ public class OutboundChatCommandService {
 
     String line = rawLine == null ? "" : rawLine.trim();
     if (line.isEmpty()) {
-      ui.appendStatus(status, "(quote)", "Usage: /quote <RAW IRC LINE>");
-      ui.appendStatus(status, "(quote)", "Example: /quote MONITOR +nick");
-      ui.appendStatus(status, "(quote)", "Alias: /raw <RAW IRC LINE>");
+      ui.appendStatus(at, "(quote)", "Usage: /quote <RAW IRC LINE>");
+      ui.appendStatus(at, "(quote)", "Example: /quote MONITOR +nick");
+      ui.appendStatus(at, "(quote)", "Alias: /raw <RAW IRC LINE>");
       return;
     }
 
@@ -458,6 +476,32 @@ public class OutboundChatCommandService {
     String me = irc.currentNick(target.serverId()).orElse("me");
     ui.appendChat(target, "(" + me + ")", m, true);
   }
+  private void sendNotice(CompositeDisposable disposables, TargetRef echoTarget, String target, String message) {
+    if (echoTarget == null) return;
+    String t = target == null ? "" : target.trim();
+    String m = message == null ? "" : message.trim();
+    if (t.isEmpty() || m.isEmpty()) return;
+
+    if (!connectionCoordinator.isConnected(echoTarget.serverId())) {
+      TargetRef status = new TargetRef(echoTarget.serverId(), "status");
+      ui.appendStatus(status, "(conn)", "Not connected");
+      if (!echoTarget.isStatus()) {
+        ui.appendStatus(echoTarget, "(conn)", "Not connected");
+      }
+      return;
+    }
+
+    disposables.add(
+        irc.sendNotice(echoTarget.serverId(), t, m)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err))));
+
+    String me = irc.currentNick(echoTarget.serverId()).orElse("me");
+    ui.appendNotice(echoTarget, "(" + me + ")", "NOTICE → " + t + ": " + m);
+  }
+
+
 
   private static String redactIfSensitive(String raw) {
     String s = raw == null ? "" : raw.trim();

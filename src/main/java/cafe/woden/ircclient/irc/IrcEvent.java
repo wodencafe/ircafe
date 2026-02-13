@@ -89,7 +89,7 @@ public sealed interface IrcEvent permits
   record PrivateMessage(Instant at, String from, String text) implements IrcEvent {}
   record PrivateAction(Instant at, String from, String action) implements IrcEvent {}
 
-  record Notice(Instant at, String from, String text) implements IrcEvent {}
+  record Notice(Instant at, String from, String target, String text) implements IrcEvent {}
 
   /**
    * A server response line (usually a numeric like 421/433/etc) that doesn't map cleanly onto

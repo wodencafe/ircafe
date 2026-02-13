@@ -59,15 +59,15 @@ public class OutboundModeCommandService {
       channel = at.target();
       modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
     } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)",
           "Usage: /mode <#channel> [modes] [args...]");
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)",
           "Tip: from a channel tab you can use /mode +o nick");
       return;
     }
 
     if (channel == null || channel.isBlank()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)",
           "Usage: /mode <#channel> [modes] [args...]");
       return;
     }
@@ -132,14 +132,14 @@ public class OutboundModeCommandService {
 
     String ch = resolveChannelOrNull(at, channel);
     if (ch == null) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", usage);
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)", usage);
+      ui.appendStatus(at, "(mode)",
           "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
     if (nicks == null || nicks.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)", usage);
+      ui.appendStatus(at, "(mode)", usage);
       return;
     }
 
@@ -173,15 +173,15 @@ public class OutboundModeCommandService {
 
     String ch = resolveChannelOrNull(at, channel);
     if (ch == null) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)",
           "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)",
           "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
     if (masksOrNicks == null || masksOrNicks.isEmpty()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(mode)",
+      ui.appendStatus(at, "(mode)",
           "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
       return;
     }

@@ -45,6 +45,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final int DEFAULT_MAX_DESC_LINES = 3;
   private static final int WIKIPEDIA_MAX_DESC_LINES = 10;
   private static final int YOUTUBE_MAX_DESC_LINES = 8;
+  private static final int SLASHDOT_MAX_DESC_LINES = 10;
   private static final int IMDB_CREDITS_MAX_LINES = 4;
   private static final int IMDB_MAX_DESC_LINES = 30;
   private static final int X_MAX_DESC_LINES = 8;
@@ -77,6 +78,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   private JLabel site;
 
   private boolean wikiExtended;
+
+  private boolean slashdotExtended;
 
   private boolean youtubeExtended;
   private String youtubeVideoId;
@@ -161,6 +164,8 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     String targetUrl = safe(p.url()) != null ? p.url() : url;
     wikiExtended = WikipediaPreviewUtil.isWikipediaArticleUrl(targetUrl);
+
+    slashdotExtended = SlashdotPreviewUtil.isSlashdotStoryUrl(targetUrl);
 
     youtubeVideoId = YouTubePreviewUtil.extractVideoId(targetUrl);
     youtubeExtended = youtubeVideoId != null;
@@ -321,6 +326,56 @@ final class ChatLinkPreviewComponent extends JPanel {
 
       if (imdbCenter.getComponentCount() > 0) {
         body.add(imdbCenter, BorderLayout.CENTER);
+      }
+
+    } else if (slashdotExtended && rawDesc != null && !rawDesc.isBlank()) {
+      SlashdotDescParts parts = splitSlashdotDesc(rawDesc);
+
+      JPanel sdCenter = new JPanel();
+      sdCenter.setOpaque(false);
+      sdCenter.setLayout(new BoxLayout(sdCenter, BoxLayout.Y_AXIS));
+      sdCenter.setAlignmentX(LEFT_ALIGNMENT);
+
+      if (parts.submitter() != null && !parts.submitter().isBlank()) {
+        JLabel submitter = keyValueLabel("Submitter", parts.submitter());
+        submitter.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setOpaque(false);
+        wrap.setAlignmentX(LEFT_ALIGNMENT);
+        wrap.add(submitter, BorderLayout.WEST);
+        sdCenter.add(wrap);
+      }
+
+      if (parts.date() != null && !parts.date().isBlank()) {
+        JLabel date = keyValueLabel("Date", parts.date());
+        date.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setOpaque(false);
+        wrap.setAlignmentX(LEFT_ALIGNMENT);
+        wrap.add(date, BorderLayout.WEST);
+        sdCenter.add(wrap);
+      }
+
+      String summaryText = parts.summary();
+      fullDescText = summaryText;
+      desc = textArea(summaryText, false);
+      if (desc != null) desc.setAlignmentX(LEFT_ALIGNMENT);
+
+      if (desc != null && !desc.getText().isBlank()) {
+        if (sdCenter.getComponentCount() > 0) {
+          JSeparator sep = new JSeparator();
+          JPanel sepWrap = new JPanel(new BorderLayout());
+          sepWrap.setOpaque(false);
+          sepWrap.setAlignmentX(LEFT_ALIGNMENT);
+          sepWrap.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
+          sepWrap.add(sep, BorderLayout.CENTER);
+          sdCenter.add(sepWrap);
+        }
+        sdCenter.add(desc);
+      }
+
+      if (sdCenter.getComponentCount() > 0) {
+        body.add(sdCenter, BorderLayout.CENTER);
       }
     } else {
       fullDescText = rawDesc;
@@ -499,6 +554,8 @@ final class ChatLinkPreviewComponent extends JPanel {
     int maxDescLines;
     if (wikiExtended) {
       maxDescLines = WIKIPEDIA_MAX_DESC_LINES;
+    } else if (slashdotExtended) {
+      maxDescLines = SLASHDOT_MAX_DESC_LINES;
     } else if (youtubeExtended) {
       maxDescLines = YOUTUBE_MAX_DESC_LINES;
     } else if (imdbExtended || rtExtended) {
@@ -586,6 +643,64 @@ final class ChatLinkPreviewComponent extends JPanel {
   }
 
   private record ImdbDescParts(String meta, String credits, String summary) {}
+
+  private static SlashdotDescParts splitSlashdotDesc(String rawDesc) {
+    if (rawDesc == null) return new SlashdotDescParts(null, null, null);
+    String t = rawDesc.strip();
+    if (t.isEmpty()) return new SlashdotDescParts(null, null, null);
+
+    String[] lines = t.split("\\R");
+    String submitter = null;
+    String date = null;
+    StringBuilder summary = new StringBuilder();
+
+    int i = 0;
+    // Parse optional "Submitter:" / "Date:" block at the top.
+    for (; i < lines.length; i++) {
+      String line = lines[i] == null ? "" : lines[i].strip();
+      if (line.isBlank()) {
+        // Blank line can separate meta from summary; stop once we've found any meta.
+        if (submitter != null || date != null) { i++; break; }
+        continue;
+      }
+
+      String lower = line.toLowerCase(java.util.Locale.ROOT);
+      if (lower.startsWith("submitter:")) {
+        submitter = safe(line.substring(line.indexOf(':') + 1));
+        continue;
+      }
+      if (lower.startsWith("date:")) {
+        date = safe(line.substring(line.indexOf(':') + 1));
+        continue;
+      }
+
+      // First non-meta line => start of summary.
+      break;
+    }
+
+    for (; i < lines.length; i++) {
+      String line = lines[i] == null ? "" : lines[i].strip();
+      if (line.isBlank()) continue;
+      if (!summary.isEmpty()) summary.append("\n");
+      summary.append(line);
+    }
+
+    String summaryText = summary.isEmpty() ? null : summary.toString();
+    return new SlashdotDescParts(safe(submitter), safe(date), safe(summaryText));
+  }
+
+  private record SlashdotDescParts(String submitter, String date, String summary) {}
+
+  private static JLabel keyValueLabel(String key, String value) {
+    String k = key == null ? "" : key;
+    String v = value == null ? "" : value;
+    k = k.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    v = v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    JLabel l = new JLabel("<html><b>" + k + ":</b> " + v + "</html>");
+    l.setOpaque(false);
+    l.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+    return l;
+  }
 
   private static JTextArea textArea(String text, boolean bold) {
     JTextArea ta = new JTextArea(text == null ? "" : text);

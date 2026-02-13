@@ -270,6 +270,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     inputPanel.setDraftText(draftByTarget.getOrDefault(target, ""));
 
     updateTopicPanelForActiveTarget();
+
+    // UX: selecting a different buffer should let the user immediately start typing.
+    // (No-op when input is disabled.)
+    inputPanel.focusInput();
   }
 
   private void showTranscriptCard() {

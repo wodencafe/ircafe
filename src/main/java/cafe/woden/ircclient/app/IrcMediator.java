@@ -402,6 +402,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case ParsedInput.Away cmd -> outboundChatCommandService.handleAway(disposables, cmd.message());
       case ParsedInput.Query cmd -> outboundChatCommandService.handleQuery(cmd.nick());
       case ParsedInput.Msg cmd -> outboundChatCommandService.handleMsg(disposables, cmd.nick(), cmd.body());
+      case ParsedInput.Notice cmd -> outboundChatCommandService.handleNotice(disposables, cmd.target(), cmd.body());
       case ParsedInput.Me cmd -> outboundChatCommandService.handleMe(disposables, cmd.action());
       case ParsedInput.Mode cmd -> outboundModeCommandService.handleMode(disposables, cmd.first(), cmd.rest());
       case ParsedInput.Op cmd -> outboundModeCommandService.handleOp(disposables, cmd.channel(), cmd.nicks());
@@ -423,10 +424,23 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case ParsedInput.ChatHistoryBefore cmd -> outboundChatCommandService.handleChatHistoryBefore(disposables, cmd.limit());
       case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
       case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
-      case ParsedInput.Unknown cmd ->
-          ui.appendStatus(safeStatusTarget(), "(system)", "Unknown command: " + cmd.raw());
+      case ParsedInput.Unknown cmd -> {
+        TargetRef at = targetCoordinator.getActiveTarget();
+        TargetRef tgt = (at != null) ? at : safeStatusTarget();
+        ui.appendStatus(tgt, "(system)", "Unknown command: " + cmd.raw());
+      }
     }
   }
+
+  
+  private TargetRef activeTargetForServerOrStatus(String sid, TargetRef status) {
+    TargetRef active = targetCoordinator.getActiveTarget();
+    if (active != null && Objects.equals(active.serverId(), sid)) {
+      return active;
+    }
+    return status;
+  }
+
 
   private void onServerIrcEvent(ServerIrcEvent se) {
     if (se == null) return;
@@ -559,9 +573,22 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
         boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
         boolean suppress = d == InboundIgnorePolicy.Decision.HARD_DROP;
-        handleNoticeOrSpoiler(sid, status, ev.at(), ev.from(), ev.text(), spoiler, suppress);
+
+        TargetRef dest = null;
+        String t = ev.target();
+        if (t != null && !t.isBlank()) {
+          TargetRef noticeTarget = new TargetRef(sid, t);
+          if (noticeTarget.isChannel()) {
+            dest = noticeTarget;
+          }
+        }
+        if (dest == null) {
+          dest = activeTargetForServerOrStatus(sid, status);
+        }
+
+        handleNoticeOrSpoiler(sid, dest, ev.at(), ev.from(), ev.text(), spoiler, suppress);
       }
-      case IrcEvent.ServerTimeNotNegotiated ev -> {
+case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.appendStatus(status, "(ircv3)", ev.message());
       }
       case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {

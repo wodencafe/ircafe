@@ -22,6 +22,10 @@ final class PreviewHttp {
 
   // Package-visible so other embed helpers (e.g., ImageFetchService) can share the same headers.
   static final String USER_AGENT = "ircafe-link-preview/1.0";
+  // Some sites (notably IMDb) increasingly block non-browser user agents.
+  // Use this when we need a browser-ish UA to avoid being served interstitial pages.
+  static final String BROWSER_USER_AGENT =
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
   static final String ACCEPT_LANGUAGE = "en-US,en;q=0.9";
   private static final Map<String, String> BASE_HEADERS = Map.of(
       "User-Agent", USER_AGENT,
