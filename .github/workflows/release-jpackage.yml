@@ -10,7 +10,70 @@ permissions:
   contents: write
 
 jobs:
+  bootjar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compute release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            # Unique label for manual runs; still numeric-ish enough if you pass it into Gradle
+            echo "RELEASE_VERSION=0.0.0" >> "$GITHUB_ENV"
+            echo "RELEASE_LABEL=dev-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Ensure release label (tags)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_LABEL:-}" ]]; then
+            echo "RELEASE_LABEL=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build bootJar
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon clean bootJar -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+
+      - name: Verify bootJar path
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la build/libs
+          test -f "build/libs/ircafe-${RELEASE_VERSION}.jar"
+
+      - name: Upload bootJar (workflow artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ircafe-${{ env.RELEASE_LABEL }}-bootjar
+          path: build/libs/ircafe-${{ env.RELEASE_VERSION }}.jar
+
+      - name: Publish bootJar to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/ircafe-${{ env.RELEASE_VERSION }}.jar
+
   package:
+    needs: bootjar
     strategy:
       fail-fast: false
       matrix:
@@ -23,7 +86,6 @@ jobs:
             suffix: macos-arm64
           - os: macos-15-intel
             suffix: macos-x64
-
 
     runs-on: ${{ matrix.os }}
 
@@ -44,16 +106,27 @@ jobs:
       - name: Compute release version
         shell: bash
         run: |
+          set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+            echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           else
-            echo "RELEASE_VERSION=dev" >> $GITHUB_ENV
+            echo "RELEASE_VERSION=0.0.0" >> "$GITHUB_ENV"
+            echo "RELEASE_LABEL=dev-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Ensure release label (tags)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_LABEL:-}" ]]; then
+            echo "RELEASE_LABEL=${RELEASE_VERSION}" >> "$GITHUB_ENV"
           fi
 
       - name: Build app-image with jpackage
         shell: bash
         run: |
-          ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION}
+          set -euo pipefail
+          ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
 
       # ---- Create an archive per OS ----
 
@@ -61,38 +134,39 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          set -euo pipefail
           cd build/dist
-          tar -czf ../../ircafe-${RELEASE_VERSION}-${{ matrix.suffix }}.tar.gz .
+          tar -czf ../../ircafe-${RELEASE_LABEL}-${{ matrix.suffix }}.tar.gz .
           cd ../..
 
       - name: Archive (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          # build/dist will contain IRCafe.app for app-image
+          set -euo pipefail
           cd build/dist
-          ditto -c -k --sequesterRsrc --keepParent "IRCafe.app" "../../ircafe-${RELEASE_VERSION}-${{ matrix.suffix }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "IRCafe.app" "../../ircafe-${RELEASE_LABEL}-${{ matrix.suffix }}.zip"
           cd ../..
 
       - name: Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path build\dist\* -DestinationPath ("ircafe-{0}-{1}.zip" -f $env:RELEASE_VERSION, "${{ matrix.suffix }}")
+          Compress-Archive -Path build\dist\* -DestinationPath ("ircafe-{0}-{1}.zip" -f $env:RELEASE_LABEL, "${{ matrix.suffix }}")
 
       - name: Upload artifact (workflow)
         uses: actions/upload-artifact@v4
         with:
-          name: ircafe-${{ env.RELEASE_VERSION }}-${{ matrix.suffix }}
+          name: ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}
+          if-no-files-found: error
           path: |
-            ircafe-${{ env.RELEASE_VERSION }}-${{ matrix.suffix }}.zip
-            ircafe-${{ env.RELEASE_VERSION }}-${{ matrix.suffix }}.tar.gz
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.zip
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.tar.gz
 
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ircafe-${{ env.RELEASE_VERSION }}-${{ matrix.suffix }}.zip
-            ircafe-${{ env.RELEASE_VERSION }}-${{ matrix.suffix }}.tar.gz
-
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.zip
+            ircafe-${{ env.RELEASE_LABEL }}-${{ matrix.suffix }}.tar.gz
