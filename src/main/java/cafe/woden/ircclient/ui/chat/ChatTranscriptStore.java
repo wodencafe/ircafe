@@ -421,7 +421,30 @@ public class ChatTranscriptStore {
 
     appendLineInternal(ref, from, text, fs, ms, false, tsEpochMs);
   }
+/**
+ * Append a chat message with a timestamp, allowing embeds (link previews / images).
+ *
+ * <p>This is used for inbound "live" messages where we have an Instant from the server. We keep the
+ * history-loading paths (DB backfill / "load older") embed-free to avoid fetch storms.
+ */
+public void appendChatAt(TargetRef ref,
+                         String from,
+                         String text,
+                         boolean outgoingLocalEcho,
+                         long tsEpochMs) {
+  breakPresenceRun(ref);
 
+  AttributeSet fromStyle = styles.from();
+  if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+    fromStyle = nickColors.forNick(from, fromStyle);
+  }
+
+  SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+  SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+  applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+  appendLineInternal(ref, from, text, fs, ms, true, tsEpochMs);
+}
   public synchronized int insertChatFromHistoryAt(TargetRef ref,
                                                   int insertAt,
                                                   String from,
@@ -1134,7 +1157,16 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
     appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs);
   }
-
+/**
+ * Append an action (/me) with a timestamp, allowing embeds.
+ */
+public void appendActionAt(TargetRef ref,
+                           String from,
+                           String action,
+                           boolean outgoingLocalEcho,
+                           long tsEpochMs) {
+  appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs);
+}
   private void appendActionInternal(TargetRef ref,
                                     String from,
                                     String action,
@@ -1228,7 +1260,29 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     breakPresenceRun(ref);
     appendLineInternal(ref, from, text, styles.error(), styles.error(), false, tsEpochMs);
   }
+/**
+ * Append a notice with a timestamp, allowing embeds.
+ */
+public void appendNoticeAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  breakPresenceRun(ref);
+  appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), true, tsEpochMs);
+}
 
+/**
+ * Append a status line with a timestamp, allowing embeds.
+ */
+public void appendStatusAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  breakPresenceRun(ref);
+  appendLineInternal(ref, from, text, styles.status(), styles.status(), true, tsEpochMs);
+}
+
+/**
+ * Append an error line with a timestamp, allowing embeds.
+ */
+public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  breakPresenceRun(ref);
+  appendLineInternal(ref, from, text, styles.error(), styles.error(), true, tsEpochMs);
+}
   public void appendPresenceFromHistory(TargetRef ref, String displayText, long tsEpochMs) {
     breakPresenceRun(ref);
     appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, tsEpochMs);
