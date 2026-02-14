@@ -17,11 +17,13 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+
 import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -56,6 +58,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem findItem = new JMenuItem("Find Text");
   private final JMenuItem reloadRecentItem = new JMenuItem("Reload Recent History");
   private final JMenuItem clearItem = new JMenuItem("Clear");
+
+  private final JMenuItem inspectLineItem = new JMenuItem("Inspect line…");
+
+  private volatile Point lastPopupPoint;
 
   private volatile Runnable clearAction;
   private volatile Runnable reloadRecentAction;
@@ -94,6 +100,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     findItem.addActionListener(this::onFind);
     reloadRecentItem.addActionListener(this::onReloadRecent);
     clearItem.addActionListener(this::onClear);
+    inspectLineItem.addActionListener(this::onInspectLine);
 
     openLinkItem.addActionListener(this::onOpenLink);
     copyLinkItem.addActionListener(this::onCopyLink);
@@ -116,6 +123,11 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       private void maybeShow(MouseEvent e) {
         if (closed) return;
         if (e == null) return;
+        try {
+          lastPopupPoint = (e != null) ? e.getPoint() : null;
+        } catch (Exception ignored) {
+          lastPopupPoint = null;
+        }
 
         // Cross-platform: popup trigger may fire on pressed or released.
         if (!e.isPopupTrigger() && !SwingUtilities.isRightMouseButton(e)) return;
@@ -213,6 +225,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(saveLinkItem);
       menu.addSeparator();
       menu.add(selectAllItem);
+      menu.add(inspectLineItem);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -221,6 +234,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     } else {
       menu.add(copyItem);
       menu.add(selectAllItem);
+      menu.add(inspectLineItem);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -252,6 +266,17 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     } catch (Exception ignored) {
       clearItem.setEnabled(true);
       reloadRecentItem.setEnabled(reloadRecentAction != null);
+    }
+  }
+
+  private void onInspectLine(ActionEvent e) {
+    try {
+      if (lastPopupPoint != null) {
+        ChatLineInspectorDialog.showAtPoint(transcript, transcript, lastPopupPoint);
+      } else {
+        ChatLineInspectorDialog.showAtPosition(transcript, transcript, Math.max(0, transcript.getCaretPosition()));
+      }
+    } catch (Exception ignored) {
     }
   }
 

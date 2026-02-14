@@ -3,6 +3,8 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.app.TargetCoordinator;
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
@@ -10,19 +12,30 @@ import cafe.woden.ircclient.net.NetHeartbeatContext;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
+import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
+import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
+import cafe.woden.ircclient.ui.filter.FilterRule;
+import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
+import cafe.woden.ircclient.ui.filter.FilterSettings;
+import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import com.formdev.flatlaf.FlatClientProperties;
+import java.beans.PropertyChangeListener;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
 import java.time.format.DateTimeFormatter;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
+import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JColorChooser;
 import javax.swing.JTextField;
+import javax.swing.TransferHandler;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
@@ -38,10 +51,12 @@ import java.awt.Rectangle;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -74,6 +89,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.JOptionPane;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
 import org.springframework.context.annotation.Lazy;
@@ -91,6 +107,9 @@ public class PreferencesDialog {
   private final NickColorService nickColorService;
   private final NickColorOverridesDialog nickColorOverridesDialog;
   private final PircbotxIrcClientService ircClientService;
+  private final FilterSettingsBus filterSettingsBus;
+  private final TranscriptRebuildService transcriptRebuildService;
+  private final TargetCoordinator targetCoordinator;
 
   private JDialog dialog;
 
@@ -101,7 +120,10 @@ public class PreferencesDialog {
                            NickColorSettingsBus nickColorSettingsBus,
                            NickColorService nickColorService,
                            NickColorOverridesDialog nickColorOverridesDialog,
-                           PircbotxIrcClientService ircClientService) {
+                           PircbotxIrcClientService ircClientService,
+                           FilterSettingsBus filterSettingsBus,
+                           TranscriptRebuildService transcriptRebuildService,
+                           TargetCoordinator targetCoordinator) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.runtimeConfig = runtimeConfig;
@@ -110,6 +132,9 @@ public class PreferencesDialog {
     this.nickColorService = nickColorService;
     this.nickColorOverridesDialog = nickColorOverridesDialog;
     this.ircClientService = ircClientService;
+    this.filterSettingsBus = filterSettingsBus;
+    this.transcriptRebuildService = transcriptRebuildService;
+    this.targetCoordinator = targetCoordinator;
   }
 
   public void open(Window owner) {
@@ -158,12 +183,15 @@ public class PreferencesDialog {
 
     NotificationRulesControls notifications = buildNotificationRulesControls(current, closeables);
 
+    FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
+
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications);
+    JPanel filtersPanel = buildFiltersPanel(filters);
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
@@ -383,6 +411,8 @@ public class PreferencesDialog {
       runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
       runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
       runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
+
+      applyFilterSettingsFromUi(filters);
       runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
       runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
       runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
@@ -460,6 +490,7 @@ public class PreferencesDialog {
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
     tabs.addTab("Notifications", wrapTab(notificationsPanel));
+    tabs.addTab("Filters", wrapTab(filtersPanel));
     tabs.addTab("Network", wrapTab(networkPanel));
     tabs.addTab("User lookups", wrapTab(userLookupsPanel));
 
@@ -3122,6 +3153,1154 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     @Override public void insertUpdate(DocumentEvent e) { onChange.run(); }
     @Override public void removeUpdate(DocumentEvent e) { onChange.run(); }
     @Override public void changedUpdate(DocumentEvent e) { onChange.run(); }
+  }
+
+  // ------------------------------
+  // Filters UI (Step 6.2)
+  // ------------------------------
+
+  private static final class FilterControls {
+    final JCheckBox filtersEnabledByDefault;
+    final JCheckBox placeholdersEnabledByDefault;
+    final JCheckBox placeholdersCollapsedByDefault;
+    final JSpinner placeholderPreviewLines;
+
+    final FilterOverridesTableModel overridesModel;
+    final JTable overridesTable;
+    final JButton addOverride;
+    final JButton removeOverride;
+
+    final FilterRulesTableModel rulesModel;
+    final JTable rulesTable;
+
+    final JButton addRule;
+    final JButton editRule;
+    final JButton deleteRule;
+
+    final JButton moveRuleUp;
+    final JButton moveRuleDown;
+
+    private FilterControls(JCheckBox filtersEnabledByDefault,
+                           JCheckBox placeholdersEnabledByDefault,
+                           JCheckBox placeholdersCollapsedByDefault,
+                           JSpinner placeholderPreviewLines,
+                           FilterOverridesTableModel overridesModel,
+                           JTable overridesTable,
+                           JButton addOverride,
+                           JButton removeOverride,
+                           FilterRulesTableModel rulesModel,
+                           JTable rulesTable,
+                           JButton addRule,
+                           JButton editRule,
+                           JButton deleteRule,
+                           JButton moveRuleUp,
+                           JButton moveRuleDown) {
+      this.filtersEnabledByDefault = filtersEnabledByDefault;
+      this.placeholdersEnabledByDefault = placeholdersEnabledByDefault;
+      this.placeholdersCollapsedByDefault = placeholdersCollapsedByDefault;
+      this.placeholderPreviewLines = placeholderPreviewLines;
+      this.overridesModel = overridesModel;
+      this.overridesTable = overridesTable;
+      this.addOverride = addOverride;
+      this.removeOverride = removeOverride;
+      this.rulesModel = rulesModel;
+      this.rulesTable = rulesTable;
+      this.addRule = addRule;
+      this.editRule = editRule;
+      this.deleteRule = deleteRule;
+
+      this.moveRuleUp = moveRuleUp;
+      this.moveRuleDown = moveRuleDown;
+    }
+  }
+
+  private enum Tri {
+    DEFAULT("Default"),
+    ON("On"),
+    OFF("Off");
+
+    final String label;
+    Tri(String label) { this.label = label; }
+
+    static Tri fromNullable(Boolean b) {
+      if (b == null) return DEFAULT;
+      return b ? ON : OFF;
+    }
+
+    Boolean toNullable() {
+      return switch (this) {
+        case DEFAULT -> null;
+        case ON -> Boolean.TRUE;
+        case OFF -> Boolean.FALSE;
+      };
+    }
+
+    @Override public String toString() { return label; }
+  }
+
+  private static final class FilterOverridesRow {
+    String scope;
+    Tri filters;
+    Tri placeholders;
+    Tri collapsed;
+
+    FilterOverridesRow(String scope, Tri filters, Tri placeholders, Tri collapsed) {
+      this.scope = scope;
+      this.filters = filters;
+      this.placeholders = placeholders;
+      this.collapsed = collapsed;
+    }
+  }
+
+  private static final class FilterOverridesTableModel extends AbstractTableModel {
+    private final List<FilterOverridesRow> rows = new ArrayList<>();
+
+    void setOverrides(List<FilterScopeOverride> overrides) {
+      rows.clear();
+      if (overrides != null) {
+        for (FilterScopeOverride o : overrides) {
+          rows.add(new FilterOverridesRow(
+              o.scopePattern(),
+              Tri.fromNullable(o.filtersEnabled()),
+              Tri.fromNullable(o.placeholdersEnabled()),
+              Tri.fromNullable(o.placeholdersCollapsed())
+          ));
+        }
+      }
+      fireTableDataChanged();
+    }
+
+    List<FilterScopeOverride> toOverrides() {
+      List<FilterScopeOverride> out = new ArrayList<>();
+      for (FilterOverridesRow r : rows) {
+        String s = r.scope != null ? r.scope.trim() : "";
+        if (s.isEmpty()) continue;
+        out.add(new FilterScopeOverride(
+            s,
+            r.filters.toNullable(),
+            r.placeholders.toNullable(),
+            r.collapsed.toNullable()
+        ));
+      }
+      return out;
+    }
+
+    void addEmpty(String scope) {
+      rows.add(new FilterOverridesRow(scope, Tri.DEFAULT, Tri.DEFAULT, Tri.DEFAULT));
+      fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
+    }
+
+    void removeAt(int idx) {
+      if (idx < 0 || idx >= rows.size()) return;
+      rows.remove(idx);
+      fireTableRowsDeleted(idx, idx);
+    }
+
+    @Override public int getRowCount() { return rows.size(); }
+    @Override public int getColumnCount() { return 4; }
+
+    @Override
+    public String getColumnName(int column) {
+      return switch (column) {
+        case 0 -> "Scope";
+        case 1 -> "Filters";
+        case 2 -> "Placeholders";
+        case 3 -> "Collapsed";
+        default -> "";
+      };
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+      return switch (columnIndex) {
+        case 0 -> String.class;
+        default -> Tri.class;
+      };
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+      return true;
+    }
+
+    @Override
+    public Object getValueAt(int rowIndex, int columnIndex) {
+      FilterOverridesRow r = rows.get(rowIndex);
+      return switch (columnIndex) {
+        case 0 -> r.scope;
+        case 1 -> r.filters;
+        case 2 -> r.placeholders;
+        case 3 -> r.collapsed;
+        default -> null;
+      };
+    }
+
+    @Override
+    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+      FilterOverridesRow r = rows.get(rowIndex);
+      switch (columnIndex) {
+        case 0 -> r.scope = aValue != null ? String.valueOf(aValue) : "";
+        case 1 -> r.filters = (aValue instanceof Tri t) ? t : r.filters;
+        case 2 -> r.placeholders = (aValue instanceof Tri t) ? t : r.placeholders;
+        case 3 -> r.collapsed = (aValue instanceof Tri t) ? t : r.collapsed;
+        default -> {}
+      }
+      fireTableRowsUpdated(rowIndex, rowIndex);
+    }
+  }
+
+
+  
+  private static final class CenteredBooleanRenderer extends JCheckBox implements TableCellRenderer {
+    CenteredBooleanRenderer() {
+      setHorizontalAlignment(SwingConstants.CENTER);
+      setBorderPainted(false);
+      setOpaque(true);
+      setEnabled(true);
+    }
+
+    @Override
+    public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
+                                                           boolean isSelected, boolean hasFocus,
+                                                           int row, int column) {
+      setSelected(Boolean.TRUE.equals(value));
+      if (isSelected) {
+        setBackground(table.getSelectionBackground());
+        setForeground(table.getSelectionForeground());
+      } else {
+        setBackground(table.getBackground());
+        setForeground(table.getForeground());
+      }
+      return this;
+    }
+  }
+
+  private static final class FilterRulesTableModel extends AbstractTableModel {
+    private final List<FilterRule> rules = new ArrayList<>();
+
+    void setRules(List<FilterRule> next) {
+      rules.clear();
+      if (next != null) rules.addAll(next);
+      fireTableDataChanged();
+    }
+
+    FilterRule ruleAt(int row) {
+      if (row < 0 || row >= rules.size()) return null;
+      return rules.get(row);
+    }
+
+    @Override public int getRowCount() { return rules.size(); }
+    @Override public int getColumnCount() { return 5; }
+
+    @Override
+    public String getColumnName(int column) {
+      return switch (column) {
+        case 0 -> "On";
+        case 1 -> "Name";
+        case 2 -> "Scope";
+        case 3 -> "Action";
+        case 4 -> "Summary";
+        default -> "";
+      };
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+      return switch (columnIndex) {
+        case 0 -> Boolean.class;
+        default -> String.class;
+      };
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+      return columnIndex == 0;
+    }
+
+    @Override
+    public Object getValueAt(int rowIndex, int columnIndex) {
+      FilterRule r = rules.get(rowIndex);
+      return switch (columnIndex) {
+        case 0 -> r.enabled();
+        case 1 -> r.name();
+        case 2 -> r.scopePattern();
+        case 3 -> prettyAction(r);
+        case 4 -> summaryFor(r);
+        default -> null;
+      };
+    }
+
+    @Override
+    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+      if (columnIndex != 0) return;
+      if (rowIndex < 0 || rowIndex >= rules.size()) return;
+      FilterRule cur = rules.get(rowIndex);
+      if (cur == null) return;
+
+      boolean enabled = Boolean.TRUE.equals(aValue);
+      if (cur.enabled() == enabled) return;
+
+      FilterRule next = new FilterRule(
+          cur.id(),
+          cur.name(),
+          enabled,
+          cur.scopePattern(),
+          cur.action(),
+          cur.direction(),
+          cur.kinds(),
+          cur.fromNickGlobs(),
+          cur.textRegex(),
+          cur.tags()
+      );
+      rules.set(rowIndex, next);
+      fireTableCellUpdated(rowIndex, columnIndex);
+    }
+
+    private static String prettyAction(FilterRule r) {
+      if (r == null || r.action() == null) return "";
+      String s = r.action().name().toLowerCase(Locale.ROOT);
+      return s.isEmpty() ? "" : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private static String summaryFor(FilterRule r) {
+      if (r == null) return "";
+      List<String> parts = new ArrayList<>();
+
+      if (r.hasKinds()) {
+        String ks = r.kinds().stream().map(Enum::name).sorted().reduce((a, b) -> a + "," + b).orElse("");
+        if (!ks.isBlank()) parts.add("kinds=" + ks);
+      }
+
+      if (r.direction() != null && r.direction() != cafe.woden.ircclient.ui.filter.FilterDirection.ANY) {
+        parts.add("dir=" + r.direction().name());
+      }
+
+      if (r.hasFromNickGlobs()) {
+        String from = String.join(",", r.fromNickGlobs());
+        parts.add("from=" + truncate(from, 48));
+      }
+
+      if (r.hasTextRegex()) {
+        String pat = r.textRegex().pattern();
+        String flags = "";
+        if (r.textRegex().flags() != null && !r.textRegex().flags().isEmpty()) {
+          StringBuilder sb = new StringBuilder();
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.I)) sb.append('i');
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.M)) sb.append('m');
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.S)) sb.append('s');
+          flags = sb.toString();
+        }
+        String re = "/" + truncate(pat, 48) + "/" + flags;
+        parts.add("text=" + re);
+      }
+
+      if (r != null && r.hasTags()) {
+        parts.add("tags=" + truncate(r.tags().expr(), 48));
+      }
+
+      if (parts.isEmpty()) return "(matches any)";
+      return String.join(" ", parts);
+    }
+
+    private static String truncate(String s, int max) {
+      if (s == null) return "";
+      String v = s.trim();
+      if (v.length() <= max) return v;
+      return v.substring(0, Math.max(0, max - 1)) + "…";
+    }
+  }
+
+
+  private FilterControls buildFilterControls(FilterSettings current, List<AutoCloseable> closeables) {
+    Objects.requireNonNull(current);
+
+    JCheckBox enabledByDefault = new JCheckBox("Enable filters by default");
+    enabledByDefault.setSelected(current.filtersEnabledByDefault());
+
+    JCheckBox placeholdersEnabledByDefault = new JCheckBox("Enable \"Filtered (N)\" placeholders by default");
+    placeholdersEnabledByDefault.setSelected(current.placeholdersEnabledByDefault());
+
+    JCheckBox placeholdersCollapsedByDefault = new JCheckBox("Collapse placeholders by default");
+    placeholdersCollapsedByDefault.setSelected(current.placeholdersCollapsedByDefault());
+
+    JSpinner previewLines = new JSpinner(new SpinnerNumberModel(
+        Math.max(0, Math.min(25, current.placeholderMaxPreviewLines())),
+        0, 25, 1
+    ));
+    // Keep consistent with other numeric spinners in the dialog.
+    if (closeables != null) {
+      try {
+        closeables.add(MouseWheelDecorator.decorateNumberSpinner(previewLines));
+      } catch (Exception ignored) {
+        // best-effort; spinner still works without wheel support
+      }
+    } else {
+      try {
+        MouseWheelDecorator.decorateNumberSpinner(previewLines);
+      } catch (Exception ignored) {
+        // best-effort
+      }
+    }
+
+    FilterOverridesTableModel model = new FilterOverridesTableModel();
+    model.setOverrides(current.overrides());
+
+    JTable table = new JTable(model);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+    // Tri-state editor
+    JComboBox<Tri> triCombo = new JComboBox<>(Tri.values());
+    TableColumn c1 = table.getColumnModel().getColumn(1);
+    TableColumn c2 = table.getColumnModel().getColumn(2);
+    TableColumn c3 = table.getColumnModel().getColumn(3);
+    c1.setCellEditor(new DefaultCellEditor(triCombo));
+    c2.setCellEditor(new DefaultCellEditor(new JComboBox<>(Tri.values())));
+    c3.setCellEditor(new DefaultCellEditor(new JComboBox<>(Tri.values())));
+
+    JButton add = new JButton("Add override...");
+    JButton remove = new JButton("Remove");
+    remove.setEnabled(false);
+
+    table.getSelectionModel().addListSelectionListener(e -> {
+      remove.setEnabled(table.getSelectedRow() >= 0);
+    });
+
+    add.addActionListener(e -> {
+      String scope = JOptionPane.showInputDialog(dialog, "Scope pattern (e.g. libera/#llamas, libera/*, */status)", "Add Override", JOptionPane.PLAIN_MESSAGE);
+      if (scope == null) return;
+      scope = scope.trim();
+      if (scope.isEmpty()) return;
+      model.addEmpty(scope);
+      int idx = model.getRowCount() - 1;
+      if (idx >= 0) {
+        table.getSelectionModel().setSelectionInterval(idx, idx);
+        table.scrollRectToVisible(table.getCellRect(idx, 0, true));
+      }
+    });
+
+    remove.addActionListener(e -> {
+      int row = table.getSelectedRow();
+      if (row < 0) return;
+      int confirm = JOptionPane.showConfirmDialog(dialog, "Remove selected override?", "Remove Override", JOptionPane.OK_CANCEL_OPTION);
+      if (confirm != JOptionPane.OK_OPTION) return;
+      model.removeAt(row);
+    });
+
+    // Rules
+    FilterRulesTableModel rulesModel = new FilterRulesTableModel();
+    rulesModel.setRules(current.rules());
+
+    JTable rulesTable = new JTable(rulesModel);
+    rulesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    // Allow drag-and-drop reordering of filter rules (WeeChat-style).
+    // This persists immediately (same behavior as the Move up/down buttons).
+    try {
+      rulesTable.setDragEnabled(true);
+      rulesTable.setDropMode(DropMode.INSERT_ROWS);
+    } catch (Exception ignored) {
+      // best-effort; table still works without DnD
+    }
+    // Enabled checkbox column (toggleable)
+    try {
+      TableColumn onCol = rulesTable.getColumnModel().getColumn(0);
+      onCol.setMinWidth(42);
+      onCol.setMaxWidth(50);
+      onCol.setPreferredWidth(45);
+      onCol.setCellRenderer(new CenteredBooleanRenderer());
+      JCheckBox cb = new JCheckBox();
+      cb.setHorizontalAlignment(SwingConstants.CENTER);
+      cb.setBorderPainted(false);
+      onCol.setCellEditor(new DefaultCellEditor(cb));
+    } catch (Exception ignored) {
+      // best-effort
+    }
+
+    // Keep in sync if filter settings change while the dialog is open (e.g. /filter add ...).
+    PropertyChangeListener rulesListener = evt -> {
+      if (!FilterSettingsBus.PROP_FILTER_SETTINGS.equals(evt.getPropertyName())) return;
+      Object nv = evt.getNewValue();
+      if (!(nv instanceof FilterSettings fs)) return;
+
+      SwingUtilities.invokeLater(() -> {
+        try {
+          java.util.UUID selectedId = null;
+          int selectedRow = rulesTable.getSelectedRow();
+          if (selectedRow >= 0) {
+            FilterRule selected = rulesModel.ruleAt(selectedRow);
+            if (selected != null) selectedId = selected.id();
+          }
+
+          rulesModel.setRules(fs.rules());
+
+          if (selectedId != null) {
+            for (int i = 0; i < rulesModel.getRowCount(); i++) {
+              FilterRule r = rulesModel.ruleAt(i);
+              if (r != null && selectedId.equals(r.id())) {
+                rulesTable.getSelectionModel().setSelectionInterval(i, i);
+                rulesTable.scrollRectToVisible(rulesTable.getCellRect(i, 0, true));
+                break;
+              }
+            }
+          }
+        } catch (Exception ignored) {
+        }
+      });
+    };
+    filterSettingsBus.addListener(rulesListener);
+    if (closeables != null) {
+      closeables.add(() -> filterSettingsBus.removeListener(rulesListener));
+    }
+
+    // Persist enabled/disabled toggles from the table immediately.
+    rulesModel.addTableModelListener(ev -> {
+      try {
+        if (ev.getColumn() != 0) return;
+        int row = ev.getFirstRow();
+        if (row < 0) return;
+        FilterRule edited = rulesModel.ruleAt(row);
+        if (edited == null) return;
+
+        FilterSettings snap = filterSettingsBus.get();
+        if (snap == null) return;
+
+        java.util.List<FilterRule> nextRules = new java.util.ArrayList<>();
+        boolean replaced = false;
+        if (snap.rules() != null) {
+          for (FilterRule r : snap.rules()) {
+            if (!replaced && r != null && edited.id() != null && edited.id().equals(r.id())) {
+              nextRules.add(edited);
+              replaced = true;
+            } else {
+              nextRules.add(r);
+            }
+          }
+        }
+
+        if (!replaced) {
+          // Fallback: replace by index if possible.
+          if (row >= 0 && row < nextRules.size()) {
+            nextRules.set(row, edited);
+            replaced = true;
+          }
+        }
+
+        if (!replaced) {
+          // Better than losing the toggle.
+          nextRules.add(edited);
+        }
+
+        FilterSettings next = new FilterSettings(
+            snap.filtersEnabledByDefault(),
+            snap.placeholdersEnabledByDefault(),
+            snap.placeholdersCollapsedByDefault(),
+            snap.placeholderMaxPreviewLines(),
+            nextRules,
+            snap.overrides()
+        );
+
+        filterSettingsBus.set(next);
+        runtimeConfig.rememberFilterRules(next.rules());
+
+        // Best-effort: rebuild active target so changes take effect immediately.
+        try {
+          TargetRef active = targetCoordinator.getActiveTarget();
+          if (active != null) transcriptRebuildService.rebuild(active);
+        } catch (Exception ignored) {
+        }
+      } catch (Exception ignored) {
+      }
+    });
+
+    JButton addRule = new JButton("Add rule...");
+    JButton editRule = new JButton("Edit...");
+    JButton deleteRule = new JButton("Delete");
+    JButton moveRuleUp = new JButton("Move up");
+    JButton moveRuleDown = new JButton("Move down");
+    editRule.setEnabled(false);
+    deleteRule.setEnabled(false);
+    moveRuleUp.setEnabled(false);
+    moveRuleDown.setEnabled(false);
+
+    Runnable refreshRuleButtons = () -> {
+      int row = rulesTable.getSelectedRow();
+      boolean has = row >= 0 && rulesModel.ruleAt(row) != null;
+      editRule.setEnabled(has);
+      deleteRule.setEnabled(has);
+
+      if (!has) {
+        moveRuleUp.setEnabled(false);
+        moveRuleDown.setEnabled(false);
+        return;
+      }
+      moveRuleUp.setEnabled(row > 0);
+      moveRuleDown.setEnabled(row < (rulesModel.getRowCount() - 1));
+    };
+
+    rulesTable.getSelectionModel().addListSelectionListener(e -> refreshRuleButtons.run());
+
+    // Drag-and-drop row reordering
+    try {
+      class RuleRowTransferHandler extends TransferHandler {
+        private final DataFlavor rowFlavor;
+
+        RuleRowTransferHandler() {
+          try {
+            rowFlavor = new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=java.lang.Integer");
+          } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+          }
+        }
+
+        @Override
+        protected Transferable createTransferable(JComponent c) {
+          if (!(c instanceof JTable t)) return null;
+          int row = t.getSelectedRow();
+          if (row < 0) return null;
+
+          final Integer payload = row;
+          return new Transferable() {
+            @Override
+            public DataFlavor[] getTransferDataFlavors() {
+              return new DataFlavor[]{rowFlavor};
+            }
+
+            @Override
+            public boolean isDataFlavorSupported(DataFlavor flavor) {
+              return rowFlavor.equals(flavor);
+            }
+
+            @Override
+            public Object getTransferData(DataFlavor flavor) {
+              if (!isDataFlavorSupported(flavor)) return null;
+              return payload;
+            }
+          };
+        }
+
+        @Override
+        public int getSourceActions(JComponent c) {
+          return MOVE;
+        }
+
+        @Override
+        public boolean canImport(TransferSupport support) {
+          if (!support.isDrop()) return false;
+          if (!(support.getComponent() instanceof JTable)) return false;
+          support.setShowDropLocation(true);
+          return support.isDataFlavorSupported(rowFlavor);
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+          if (!canImport(support)) return false;
+          if (!(support.getComponent() instanceof JTable target)) return false;
+          if (!(support.getDropLocation() instanceof JTable.DropLocation dl)) return false;
+
+          int dropViewRow = dl.getRow();
+          if (dropViewRow < 0) dropViewRow = target.getRowCount();
+
+          Integer fromViewRow;
+          try {
+            Object o = support.getTransferable().getTransferData(rowFlavor);
+            if (!(o instanceof Integer i)) return false;
+            fromViewRow = i;
+          } catch (Exception ex) {
+            return false;
+          }
+
+          // No-op drops (dragging onto itself)
+          if (fromViewRow == dropViewRow || fromViewRow + 1 == dropViewRow) return false;
+
+          // Convert to model rows (in case a row sorter is enabled later)
+          int fromModelRow = target.convertRowIndexToModel(fromViewRow);
+
+          // dropViewRow is an insertion point; when dropping at end, it equals rowCount.
+          int dropModelRow;
+          if (dropViewRow >= target.getRowCount()) {
+            dropModelRow = target.getRowCount();
+          } else {
+            dropModelRow = target.convertRowIndexToModel(dropViewRow);
+          }
+
+          FilterSettings snap = filterSettingsBus.get();
+          if (snap == null || snap.rules() == null) return false;
+
+          List<FilterRule> nextRules = new ArrayList<>(snap.rules());
+          if (fromModelRow < 0 || fromModelRow >= nextRules.size()) return false;
+
+          FilterRule moving = nextRules.remove(fromModelRow);
+
+          // If moving down, the removal shifts the insertion index.
+          if (dropModelRow > fromModelRow) dropModelRow--;
+
+          dropModelRow = Math.max(0, Math.min(dropModelRow, nextRules.size()));
+          nextRules.add(dropModelRow, moving);
+
+          FilterSettings next = new FilterSettings(
+              snap.filtersEnabledByDefault(),
+              snap.placeholdersEnabledByDefault(),
+              snap.placeholdersCollapsedByDefault(),
+              snap.placeholderMaxPreviewLines(),
+              nextRules,
+              snap.overrides()
+          );
+
+          filterSettingsBus.set(next);
+          runtimeConfig.rememberFilterRules(next.rules());
+
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null) transcriptRebuildService.rebuild(active);
+          } catch (Exception ignored) {
+          }
+
+          final int newRow = dropModelRow;
+          SwingUtilities.invokeLater(() -> {
+            try {
+              rulesModel.setRules(next.rules());
+              if (newRow >= 0 && newRow < rulesModel.getRowCount()) {
+                rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
+                rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
+              }
+              refreshRuleButtons.run();
+            } catch (Exception ignored) {
+            }
+          });
+
+          return true;
+        }
+      }
+
+      rulesTable.setTransferHandler(new RuleRowTransferHandler());
+    } catch (Exception ignored) {
+      // best-effort; keep Move up/down buttons as fallback
+    }
+
+    Runnable moveSelectedRuleUp = () -> {
+      int row = rulesTable.getSelectedRow();
+      if (row <= 0) return;
+
+      int newRow = row - 1;
+      FilterSettings snap = filterSettingsBus.get();
+      if (snap == null || snap.rules() == null) return;
+
+      List<FilterRule> nextRules = new ArrayList<>(snap.rules());
+      if (row >= nextRules.size() || newRow < 0) return;
+      java.util.Collections.swap(nextRules, row, newRow);
+
+      FilterSettings next = new FilterSettings(
+          snap.filtersEnabledByDefault(),
+          snap.placeholdersEnabledByDefault(),
+          snap.placeholdersCollapsedByDefault(),
+          snap.placeholderMaxPreviewLines(),
+          nextRules,
+          snap.overrides()
+      );
+
+      filterSettingsBus.set(next);
+      runtimeConfig.rememberFilterRules(next.rules());
+
+      try {
+        TargetRef active = targetCoordinator.getActiveTarget();
+        if (active != null) transcriptRebuildService.rebuild(active);
+      } catch (Exception ignored) {
+      }
+
+      SwingUtilities.invokeLater(() -> {
+        try {
+          rulesModel.setRules(next.rules());
+          rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
+          rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
+          refreshRuleButtons.run();
+        } catch (Exception ignored) {
+        }
+      });
+    };
+
+    Runnable moveSelectedRuleDown = () -> {
+      int row = rulesTable.getSelectedRow();
+      if (row < 0) return;
+      if (row >= rulesModel.getRowCount() - 1) return;
+
+      int newRow = row + 1;
+      FilterSettings snap = filterSettingsBus.get();
+      if (snap == null || snap.rules() == null) return;
+
+      List<FilterRule> nextRules = new ArrayList<>(snap.rules());
+      if (newRow >= nextRules.size()) return;
+      java.util.Collections.swap(nextRules, row, newRow);
+
+      FilterSettings next = new FilterSettings(
+          snap.filtersEnabledByDefault(),
+          snap.placeholdersEnabledByDefault(),
+          snap.placeholdersCollapsedByDefault(),
+          snap.placeholderMaxPreviewLines(),
+          nextRules,
+          snap.overrides()
+      );
+
+      filterSettingsBus.set(next);
+      runtimeConfig.rememberFilterRules(next.rules());
+
+      try {
+        TargetRef active = targetCoordinator.getActiveTarget();
+        if (active != null) transcriptRebuildService.rebuild(active);
+      } catch (Exception ignored) {
+      }
+
+      SwingUtilities.invokeLater(() -> {
+        try {
+          rulesModel.setRules(next.rules());
+          rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
+          rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
+          refreshRuleButtons.run();
+        } catch (Exception ignored) {
+        }
+      });
+    };
+
+    moveRuleUp.addActionListener(e -> moveSelectedRuleUp.run());
+    moveRuleDown.addActionListener(e -> moveSelectedRuleDown.run());
+
+    Runnable openEditRule = () -> {
+      int row = rulesTable.getSelectedRow();
+      if (row < 0) return;
+      FilterRule seed = rulesModel.ruleAt(row);
+      if (seed == null) return;
+
+      FilterSettings snap = filterSettingsBus.get();
+
+      Set<String> reserved = new HashSet<>();
+      if (snap != null && snap.rules() != null) {
+        for (FilterRule r : snap.rules()) {
+          if (r == null) continue;
+          if (seed.id() != null && seed.id().equals(r.id())) continue;
+          reserved.add(r.nameKey());
+        }
+      }
+
+      var edited = FilterRuleEntryDialog.open(dialog, "Edit Filter Rule", seed, reserved, seed.scopePattern());
+      if (edited.isEmpty()) return;
+
+      List<FilterRule> nextRules = new ArrayList<>();
+      boolean replaced = false;
+      if (snap != null && snap.rules() != null) {
+        for (FilterRule r : snap.rules()) {
+          if (!replaced && r != null && seed.id() != null && seed.id().equals(r.id())) {
+            nextRules.add(edited.get());
+            replaced = true;
+          } else {
+            nextRules.add(r);
+          }
+        }
+      }
+
+      if (!replaced) {
+        // Fallback (should be rare): replace by index if possible.
+        if (row >= 0 && row < nextRules.size()) {
+          nextRules.set(row, edited.get());
+          replaced = true;
+        }
+      }
+
+      // If we still didn't replace, append (better than losing the edit).
+      if (!replaced) nextRules.add(edited.get());
+
+      FilterSettings next = new FilterSettings(
+          snap != null ? snap.filtersEnabledByDefault() : true,
+          snap != null ? snap.placeholdersEnabledByDefault() : true,
+          snap != null ? snap.placeholdersCollapsedByDefault() : true,
+          snap != null ? snap.placeholderMaxPreviewLines() : 3,
+          nextRules,
+          snap != null ? snap.overrides() : List.of()
+      );
+
+      filterSettingsBus.set(next);
+      runtimeConfig.rememberFilterRules(next.rules());
+
+      // Rebuild active target so changes take effect immediately.
+      try {
+        TargetRef active = targetCoordinator.getActiveTarget();
+        if (active != null) transcriptRebuildService.rebuild(active);
+      } catch (Exception ignored) {
+      }
+
+      SwingUtilities.invokeLater(() -> {
+        try {
+          rulesModel.setRules(next.rules());
+          // Re-select the edited rule.
+          int idx = -1;
+          for (int i = 0; i < next.rules().size(); i++) {
+            FilterRule r = next.rules().get(i);
+            if (r != null && edited.get().id() != null && edited.get().id().equals(r.id())) {
+              idx = i;
+              break;
+            }
+          }
+          if (idx < 0) idx = Math.max(0, Math.min(row, rulesModel.getRowCount() - 1));
+          if (idx >= 0 && idx < rulesModel.getRowCount()) {
+            rulesTable.getSelectionModel().setSelectionInterval(idx, idx);
+            rulesTable.scrollRectToVisible(rulesTable.getCellRect(idx, 0, true));
+          }
+          refreshRuleButtons.run();
+        } catch (Exception ignored) {
+        }
+      });
+    };
+
+    editRule.addActionListener(e -> openEditRule.run());
+
+    deleteRule.addActionListener(e -> {
+      int row = rulesTable.getSelectedRow();
+      if (row < 0) return;
+      FilterRule seed = rulesModel.ruleAt(row);
+      if (seed == null) return;
+
+      int confirm = JOptionPane.showConfirmDialog(
+          dialog,
+          "Delete filter rule '" + seed.name() + "'?",
+          "Delete Filter Rule",
+          JOptionPane.OK_CANCEL_OPTION
+      );
+      if (confirm != JOptionPane.OK_OPTION) return;
+
+      FilterSettings snap = filterSettingsBus.get();
+      List<FilterRule> nextRules = new ArrayList<>();
+      boolean removed = false;
+      if (snap != null && snap.rules() != null) {
+        for (FilterRule r : snap.rules()) {
+          if (!removed && r != null) {
+            if (seed.id() != null && seed.id().equals(r.id())) {
+              removed = true;
+              continue;
+            }
+          }
+          nextRules.add(r);
+        }
+      }
+
+      if (!removed) {
+        // Fallback: remove by index if possible.
+        if (row >= 0 && row < nextRules.size()) {
+          nextRules.remove(row);
+          removed = true;
+        }
+      }
+
+      if (!removed) return;
+
+      FilterSettings next = new FilterSettings(
+          snap != null ? snap.filtersEnabledByDefault() : true,
+          snap != null ? snap.placeholdersEnabledByDefault() : true,
+          snap != null ? snap.placeholdersCollapsedByDefault() : true,
+          snap != null ? snap.placeholderMaxPreviewLines() : 3,
+          nextRules,
+          snap != null ? snap.overrides() : List.of()
+      );
+
+      filterSettingsBus.set(next);
+      runtimeConfig.rememberFilterRules(next.rules());
+
+      // Rebuild active target so changes take effect immediately.
+      try {
+        TargetRef active = targetCoordinator.getActiveTarget();
+        if (active != null) transcriptRebuildService.rebuild(active);
+      } catch (Exception ignored) {
+      }
+
+      SwingUtilities.invokeLater(() -> {
+        try {
+          rulesModel.setRules(next.rules());
+          int nextRow = Math.min(row, Math.max(0, rulesModel.getRowCount() - 1));
+          if (rulesModel.getRowCount() > 0) {
+            rulesTable.getSelectionModel().setSelectionInterval(nextRow, nextRow);
+            rulesTable.scrollRectToVisible(rulesTable.getCellRect(nextRow, 0, true));
+          }
+          refreshRuleButtons.run();
+        } catch (Exception ignored) {
+        }
+      });
+    });
+    rulesTable.addMouseListener(new java.awt.event.MouseAdapter() {
+      @Override
+      public void mouseClicked(java.awt.event.MouseEvent e) {
+        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+          openEditRule.run();
+        }
+      }
+    });
+
+    addRule.addActionListener(e -> {
+      FilterSettings snap = filterSettingsBus.get();
+
+      // Suggest a scope based on the currently active target.
+      String suggestedScope = "*";
+      try {
+        TargetRef active = targetCoordinator.getActiveTarget();
+        if (active != null && !active.isUiOnly()) {
+          if (active.isStatus()) {
+            suggestedScope = "*/status";
+          } else {
+            suggestedScope = active.serverId() + "/" + active.target();
+          }
+        }
+      } catch (Exception ignored) {
+      }
+
+      Set<String> reserved = new HashSet<>();
+      if (snap != null && snap.rules() != null) {
+        for (FilterRule r : snap.rules()) {
+          if (r == null) continue;
+          reserved.add(r.nameKey());
+        }
+      }
+
+      var created = FilterRuleEntryDialog.open(dialog, "Add Filter Rule", null, reserved, suggestedScope);
+      if (created.isEmpty()) return;
+
+      List<FilterRule> nextRules = new ArrayList<>();
+      if (snap != null && snap.rules() != null) {
+        nextRules.addAll(snap.rules());
+      }
+      nextRules.add(created.get());
+
+      FilterSettings next = new FilterSettings(
+          snap != null ? snap.filtersEnabledByDefault() : true,
+          snap != null ? snap.placeholdersEnabledByDefault() : true,
+          snap != null ? snap.placeholdersCollapsedByDefault() : true,
+          snap != null ? snap.placeholderMaxPreviewLines() : 3,
+          nextRules,
+          snap != null ? snap.overrides() : List.of()
+      );
+
+      filterSettingsBus.set(next);
+      runtimeConfig.rememberFilterRules(next.rules());
+
+      // Rebuild active target so changes take effect immediately.
+      try {
+        TargetRef active = targetCoordinator.getActiveTarget();
+        if (active != null) transcriptRebuildService.rebuild(active);
+      } catch (Exception ignored) {
+      }
+
+      // Select the newly-added rule.
+      SwingUtilities.invokeLater(() -> {
+        try {
+          rulesModel.setRules(next.rules());
+          int row = rulesModel.getRowCount() - 1;
+          if (row >= 0) {
+            rulesTable.getSelectionModel().setSelectionInterval(row, row);
+            rulesTable.scrollRectToVisible(rulesTable.getCellRect(row, 0, true));
+          }
+        } catch (Exception ignored) {
+        }
+      });
+    });
+
+    return new FilterControls(
+        enabledByDefault,
+        placeholdersEnabledByDefault,
+        placeholdersCollapsedByDefault,
+        previewLines,
+        model,
+        table,
+        add,
+        remove,
+        rulesModel,
+        rulesTable,
+        addRule,
+        editRule,
+        deleteRule,
+        moveRuleUp,
+        moveRuleDown
+    );
+  }
+
+  private JPanel buildFiltersPanel(FilterControls c) {
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+
+    panel.add(tabTitle("Filters"), "growx, wrap");
+    panel.add(c.filtersEnabledByDefault, "growx, wrap");
+    panel.add(c.placeholdersEnabledByDefault, "growx, wrap");
+    panel.add(c.placeholdersCollapsedByDefault, "growx, wrap");
+
+    JPanel previewRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
+    previewRow.add(new JLabel("Placeholder preview lines:"), "split 2");
+    previewRow.add(c.placeholderPreviewLines, "w 80!");
+    panel.add(previewRow, "growx, wrap 12");
+
+    panel.add(tabTitle("Overrides"), "growx, wrap");
+    panel.add(new JLabel("Overrides apply by scope pattern. Most specific match wins."), "growx, wrap");
+
+    JScrollPane tableScroll = new JScrollPane(c.overridesTable);
+    tableScroll.setPreferredSize(new Dimension(480, 180));
+    panel.add(tableScroll, "growx, wrap");
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    buttons.add(c.addOverride);
+    buttons.add(c.removeOverride);
+    panel.add(buttons, "growx, wrap");
+
+    panel.add(new JLabel("Tip: You can also manage overrides via /filter override ... and export with /filter export."), "growx, wrap 12");
+
+    panel.add(tabTitle("Rules"), "growx, wrap");
+    panel.add(new JLabel("Rules affect transcript rendering only (they do not prevent logging)."), "growx, wrap");
+
+    JScrollPane rulesScroll = new JScrollPane(c.rulesTable);
+    rulesScroll.setPreferredSize(new Dimension(720, 220));
+    panel.add(rulesScroll, "growx, wrap");
+
+    JPanel ruleButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    ruleButtons.add(c.addRule);
+    ruleButtons.add(c.editRule);
+    ruleButtons.add(c.deleteRule);
+    ruleButtons.add(c.moveRuleUp);
+    ruleButtons.add(c.moveRuleDown);
+    panel.add(ruleButtons, "growx, wrap");
+
+    panel.add(new JLabel("Tip: You can also manage rules via /filter add|del|set and export with /filter export."), "growx, wrap");
+
+    return panel;
+  }
+
+  private void applyFilterSettingsFromUi(FilterControls c) {
+    if (c == null) return;
+
+    FilterSettings prev = filterSettingsBus.get();
+    boolean enabledByDefault = c.filtersEnabledByDefault.isSelected();
+    boolean placeholdersEnabledByDefault = c.placeholdersEnabledByDefault.isSelected();
+    boolean placeholdersCollapsedByDefault = c.placeholdersCollapsedByDefault.isSelected();
+    int previewLines = ((Number) c.placeholderPreviewLines.getValue()).intValue();
+    if (previewLines < 0) previewLines = 0;
+    if (previewLines > 25) previewLines = 25;
+
+    List<FilterScopeOverride> overrides = c.overridesModel.toOverrides();
+
+    FilterSettings next = new FilterSettings(
+        enabledByDefault,
+        placeholdersEnabledByDefault,
+        placeholdersCollapsedByDefault,
+        previewLines,
+        prev.rules(),
+        overrides
+    );
+
+    filterSettingsBus.set(next);
+    runtimeConfig.rememberFiltersEnabledByDefault(enabledByDefault);
+    runtimeConfig.rememberFilterPlaceholdersEnabledByDefault(placeholdersEnabledByDefault);
+    runtimeConfig.rememberFilterPlaceholdersCollapsedByDefault(placeholdersCollapsedByDefault);
+    runtimeConfig.rememberFilterPlaceholderMaxPreviewLines(previewLines);
+    runtimeConfig.rememberFilterOverrides(overrides);
+
+    // Best-effort: rebuild active target so changes take effect immediately.
+    try {
+      TargetRef active = targetCoordinator.getActiveTarget();
+      if (active != null) {
+        transcriptRebuildService.rebuild(active);
+      }
+    } catch (Exception ignored) {
+      // rebuild is best-effort; never block saving preferences
+    }
   }
 
 }

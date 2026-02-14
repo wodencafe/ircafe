@@ -22,6 +22,7 @@ import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
+import cafe.woden.ircclient.app.outbound.LocalFilterCommandService;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
@@ -64,6 +65,7 @@ public class IrcMediator {
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
+  private final LocalFilterCommandService localFilterCommandService;
 
   private final NotificationRuleMatcher notificationRuleMatcher;
 
@@ -108,6 +110,7 @@ public class IrcMediator {
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundChatCommandService outboundChatCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
+      LocalFilterCommandService localFilterCommandService,
       InboundIgnorePolicy inboundIgnorePolicy,
       ChatHistoryIngestor chatHistoryIngestor,
       ChatHistoryIngestBus chatHistoryIngestBus,
@@ -135,6 +138,7 @@ public class IrcMediator {
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
+    this.localFilterCommandService = localFilterCommandService;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
     this.chatHistoryIngestor = chatHistoryIngestor;
     this.chatHistoryIngestBus = chatHistoryIngestBus;
@@ -417,6 +421,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case ParsedInput.SoftIgnore cmd -> outboundIgnoreCommandService.handleSoftIgnore(cmd.maskOrNick());
       case ParsedInput.UnsoftIgnore cmd -> outboundIgnoreCommandService.handleUnsoftIgnore(cmd.maskOrNick());
       case ParsedInput.SoftIgnoreList cmd -> outboundIgnoreCommandService.handleSoftIgnoreList();
+      case ParsedInput.Filter cmd -> localFilterCommandService.handle(cmd.command());
       case ParsedInput.CtcpVersion cmd -> outboundCtcpWhoisCommandService.handleCtcpVersion(disposables, cmd.nick());
       case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
       case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
