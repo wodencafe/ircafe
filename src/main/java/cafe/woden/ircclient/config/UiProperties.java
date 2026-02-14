@@ -114,6 +114,10 @@ public record UiProperties(
       Boolean placeholdersEnabledByDefault,
       Boolean placeholdersCollapsedByDefault,
       Integer placeholderMaxPreviewLines,
+      Integer placeholderMaxLinesPerRun,
+      Integer placeholderTooltipMaxTags,
+      Integer historyPlaceholderMaxRunsPerBatch,
+      Boolean historyPlaceholdersEnabledByDefault,
       List<FilterRuleProperties> rules,
       List<FilterScopeOverrideProperties> overrides
   ) {
@@ -128,6 +132,34 @@ public record UiProperties(
       if (placeholderMaxPreviewLines > 25) {
         placeholderMaxPreviewLines = 25;
       }
+
+if (placeholderMaxLinesPerRun == null || placeholderMaxLinesPerRun < 0) {
+  placeholderMaxLinesPerRun = 250;
+}
+// 0 disables the cap (unbounded).
+if (placeholderMaxLinesPerRun > 50_000) {
+  placeholderMaxLinesPerRun = 50_000;
+}
+
+if (placeholderTooltipMaxTags == null || placeholderTooltipMaxTags < 0) {
+  placeholderTooltipMaxTags = 12;
+}
+// 0 disables tag listing in tooltips.
+if (placeholderTooltipMaxTags > 500) {
+  placeholderTooltipMaxTags = 500;
+}
+
+if (historyPlaceholderMaxRunsPerBatch == null || historyPlaceholderMaxRunsPerBatch < 0) {
+  historyPlaceholderMaxRunsPerBatch = 10;
+}
+// 0 disables the per-batch cap (unbounded placeholder/hint runs during history loads).
+if (historyPlaceholderMaxRunsPerBatch > 5_000) {
+  historyPlaceholderMaxRunsPerBatch = 5_000;
+}
+
+if (historyPlaceholdersEnabledByDefault == null) {
+  historyPlaceholdersEnabledByDefault = true;
+}
 
       rules = (rules == null) ? List.of() : rules.stream().filter(Objects::nonNull).toList();
       overrides = (overrides == null) ? List.of() : overrides.stream().filter(Objects::nonNull).toList();
@@ -368,7 +400,7 @@ public record UiProperties(
 
     // Filter defaults.
     if (filters == null) {
-      filters = new Filters(null, null, null, null, null, null);
+      filters = new Filters(null, null, null, null, null, null, null, null, null, null);
     }
 
     if (notificationRules == null) {

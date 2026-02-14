@@ -507,7 +507,7 @@ public class FilterCommandParser {
   private static FilterCommand parseDefaults(List<String> toks) {
     // /filter defaults filters=on placeholders=on collapsed=on preview=3
     if (toks.size() < 3) {
-      return new FilterCommand.Error("Usage: /filter defaults filters=on|off placeholders=on|off collapsed=on|off preview=<0..25>");
+      return new FilterCommand.Error("Usage: /filter defaults filters=on|off placeholders=on|off collapsed=on|off preview=<0..25> maxrun=<0..50000> maxtags=<0..500> maxbatch=<0..5000> history=on|off");
     }
 
     Boolean filters = null;
@@ -518,6 +518,15 @@ public class FilterCommandParser {
     boolean collapsedSpecified = false;
     Integer preview = null;
     boolean previewSpecified = false;
+
+Integer maxRun = null;
+boolean maxRunSpecified = false;
+Integer maxTags = null;
+boolean maxTagsSpecified = false;
+Integer maxBatch = null;
+boolean maxBatchSpecified = false;
+Boolean history = null;
+boolean historySpecified = false;
 
     for (int i = 2; i < toks.size(); i++) {
       String t = toks.get(i);
@@ -552,6 +561,30 @@ public class FilterCommandParser {
           if (p == null) return new FilterCommand.Error("Invalid integer for preview=: '" + val + "'");
           preview = p;
         }
+case "maxrun", "maxrunlines", "placeholdermaxlinesperrun", "runmax", "runcap" -> {
+  maxRunSpecified = true;
+  Integer p = parseInt(val);
+  if (p == null) return new FilterCommand.Error("Invalid integer for maxrun=: '" + val + "'");
+  maxRun = p;
+}
+case "maxtags", "tooltipmaxtags", "placeholdertooltipmaxtags" -> {
+  maxTagsSpecified = true;
+  Integer p = parseInt(val);
+  if (p == null) return new FilterCommand.Error("Invalid integer for maxtags=: '" + val + "'");
+  maxTags = p;
+}
+case "maxbatch", "maxbatchruns", "maxhistoryruns", "historymaxruns", "batchcap", "historybatchcap" -> {
+  maxBatchSpecified = true;
+  Integer p = parseInt(val);
+  if (p == null) return new FilterCommand.Error("Invalid integer for maxbatch=: '" + val + "'");
+  maxBatch = p;
+}
+case "history", "historyplaceholders", "historyplaceholdersenabled", "historyplaceholdersenabledbydefault" -> {
+  historySpecified = true;
+  Boolean b = parseBoolean(val);
+  if (b == null) return new FilterCommand.Error("Invalid boolean for history=: '" + val + "'");
+  history = b;
+}
         default -> {
           return new FilterCommand.Error("Unknown key for /filter defaults: '" + key + "'");
         }
@@ -562,7 +595,11 @@ public class FilterCommandParser {
         filters, filtersSpecified,
         placeholders, placeholdersSpecified,
         collapsed, collapsedSpecified,
-        preview, previewSpecified
+        preview, previewSpecified,
+        maxRun, maxRunSpecified,
+        maxTags, maxTagsSpecified,
+        maxBatch, maxBatchSpecified,
+        history, historySpecified
     );
   }
 

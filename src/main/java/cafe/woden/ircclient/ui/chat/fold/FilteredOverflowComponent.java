@@ -8,11 +8,11 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Tiny hint row shown when filtered lines are being suppressed but placeholders are disabled.
+ * Summary row used when history/backfill filtering would otherwise generate too many placeholder/hint rows.
  *
- * <p>This exists to avoid the "unread but nothing visible" confusion.
+ * <p>It aggregates the remainder of hidden lines for the current load into a single counter.
  */
-public class FilteredHintComponent extends JPanel {
+public class FilteredOverflowComponent extends JPanel {
 
   private int count = 0;
 
@@ -29,7 +29,7 @@ public class FilteredHintComponent extends JPanel {
 
   private final JLabel label = new JLabel();
 
-  public FilteredHintComponent() {
+  public FilteredOverflowComponent() {
     setOpaque(false);
     setLayout(new BorderLayout());
     setBorder(new EmptyBorder(2, 0, 2, 0));
@@ -54,22 +54,19 @@ public class FilteredHintComponent extends JPanel {
     repaint();
   }
 
-/**
- * Limits how many tags are listed in the tooltip tag summary.
- *
- * <p>0 disables tag listing entirely.
- */
-public void setMaxTagsInTooltip(int max) {
-  if (max < 0) max = 0;
-  if (max > 500) max = 500;
-  this.maxTagsInTooltip = max;
-  refreshTooltip();
-}
-
-
   /**
-   * Provides extra tooltip context: which rule filtered this run and which tags were present.
+   * Limits how many tags are listed in the tooltip tag summary.
+   *
+   * <p>0 disables tag listing entirely.
    */
+  public void setMaxTagsInTooltip(int max) {
+    if (max < 0) max = 0;
+    if (max > 500) max = 500;
+    this.maxTagsInTooltip = max;
+    refreshTooltip();
+  }
+
+  /** Provides extra tooltip context: which rule(s) filtered this batch and which tags were present. */
   public void setFilterDetails(String ruleLabel, boolean multiple, Collection<String> tags) {
     this.filterRuleLabel = (ruleLabel == null || ruleLabel.isBlank()) ? null : ruleLabel;
     this.multipleRules = multiple;
@@ -86,7 +83,7 @@ public void setMaxTagsInTooltip(int max) {
     refreshTooltip();
   }
 
-  /** Adds one more filtered line to this contiguous hint run. */
+  /** Adds one more filtered line to the overflow counter. */
   public void addFilteredLine() {
     count++;
     updateText();
@@ -96,7 +93,8 @@ public void setMaxTagsInTooltip(int max) {
   }
 
   private void updateText() {
-    label.setText("Filtered lines: " + count);
+    // Keep it short and clear: this row exists because we hit the per-batch placeholder cap.
+    label.setText("Filtered " + count + " more line" + (count == 1 ? "" : "s") + "…");
     applyDimItalic(label);
   }
 
@@ -124,7 +122,9 @@ public void setMaxTagsInTooltip(int max) {
     }
 
     sb.append("<br/><br/>");
-    sb.append("Hidden lines: ").append(count);
+    sb.append("Hidden lines (overflow): ").append(count);
+    sb.append("<br/>");
+    sb.append("(Placeholder limit reached for this load)");
 
     sb.append("</html>");
     return sb.toString();

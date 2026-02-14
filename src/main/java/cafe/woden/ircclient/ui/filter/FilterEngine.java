@@ -37,7 +37,11 @@ public class FilterEngine implements PropertyChangeListener {
       boolean filtersEnabled,
       boolean placeholdersEnabled,
       boolean placeholdersCollapsed,
-      int placeholderMaxPreviewLines
+      int placeholderMaxPreviewLines,
+      int placeholderMaxLinesPerRun,
+      int placeholderTooltipMaxTags,
+      int historyPlaceholderMaxRunsPerBatch,
+      boolean historyPlaceholdersEnabled
   ) {
   }
 
@@ -64,7 +68,11 @@ public class FilterEngine implements PropertyChangeListener {
       ResolvedBool filtersEnabled,
       ResolvedBool placeholdersEnabled,
       ResolvedBool placeholdersCollapsed,
-      int placeholderMaxPreviewLines
+      int placeholderMaxPreviewLines,
+      int placeholderMaxLinesPerRun,
+      int placeholderTooltipMaxTags,
+      int historyPlaceholderMaxRunsPerBatch,
+      boolean historyPlaceholdersEnabled
   ) {
   }
 
@@ -147,10 +155,14 @@ public class FilterEngine implements PropertyChangeListener {
           c.filtersEnabledFor(key),
           c.placeholdersEnabledFor(key),
           c.placeholdersCollapsedFor(key),
-          c.placeholderMaxPreviewLines()
+          c.placeholderMaxPreviewLines(),
+          c.placeholderMaxLinesPerRun(),
+          c.placeholderTooltipMaxTags(),
+          c.historyPlaceholderMaxRunsPerBatch(),
+          c.historyPlaceholdersEnabled()
       );
     } catch (Exception ignored) {
-      return new Effective(true, true, true, 0);
+      return new Effective(true, true, true, 0, 250, 12, 10, true);
     }
   }
 
@@ -178,14 +190,22 @@ public class FilterEngine implements PropertyChangeListener {
           c.filtersEnabledResolvedFor(key),
           c.placeholdersEnabledResolvedFor(key),
           c.placeholdersCollapsedResolvedFor(key),
-          c.placeholderMaxPreviewLines()
+          c.placeholderMaxPreviewLines(),
+          c.placeholderMaxLinesPerRun(),
+          c.placeholderTooltipMaxTags(),
+          c.historyPlaceholderMaxRunsPerBatch(),
+          c.historyPlaceholdersEnabled()
       );
     } catch (Exception ignored) {
       return new EffectiveResolved(
           new ResolvedBool(true, null),
           new ResolvedBool(true, null),
           new ResolvedBool(true, null),
-          0
+          0,
+          250,
+          12,
+          10,
+          true
       );
     }
   }
@@ -286,6 +306,10 @@ public class FilterEngine implements PropertyChangeListener {
         cur.placeholdersEnabledByDefault(),
         cur.placeholdersCollapsedByDefault(),
         cur.placeholderMaxPreviewLines(),
+        cur.placeholderMaxLinesPerRun(),
+        cur.placeholderTooltipMaxTags(),
+        cur.historyPlaceholderMaxRunsPerBatch(),
+        cur.historyPlaceholdersEnabledByDefault(),
         overrides,
         rules
     );
@@ -423,6 +447,10 @@ public class FilterEngine implements PropertyChangeListener {
                           boolean placeholdersEnabledByDefault,
                           boolean placeholdersCollapsedByDefault,
                           int placeholderMaxPreviewLines,
+                          int placeholderMaxLinesPerRun,
+                          int placeholderTooltipMaxTags,
+                          int historyPlaceholderMaxRunsPerBatch,
+                          boolean historyPlaceholdersEnabled,
                           List<CompiledOverride> overrides,
                           List<CompiledRule> rules) {
     boolean filtersEnabledFor(String bufferKey) {

@@ -37,6 +37,26 @@ public class FilterSettingsBus {
       placeholderMaxPreviewLines = f.placeholderMaxPreviewLines();
     }
 
+int placeholderMaxLinesPerRun = 250;
+if (f != null && f.placeholderMaxLinesPerRun() != null) {
+  placeholderMaxLinesPerRun = f.placeholderMaxLinesPerRun();
+}
+
+int placeholderTooltipMaxTags = 12;
+if (f != null && f.placeholderTooltipMaxTags() != null) {
+  placeholderTooltipMaxTags = f.placeholderTooltipMaxTags();
+}
+
+int historyPlaceholderMaxRunsPerBatch = 10;
+if (f != null && f.historyPlaceholderMaxRunsPerBatch() != null) {
+  historyPlaceholderMaxRunsPerBatch = f.historyPlaceholderMaxRunsPerBatch();
+}
+
+boolean historyPlaceholdersEnabledByDefault = true;
+if (f != null && f.historyPlaceholdersEnabledByDefault() != null) {
+  historyPlaceholdersEnabledByDefault = Boolean.TRUE.equals(f.historyPlaceholdersEnabledByDefault());
+}
+
     List<FilterRule> rules = List.of();
     if (f != null && f.rules() != null) {
       rules = f.rules().stream()
@@ -58,6 +78,10 @@ public class FilterSettingsBus {
         placeholdersEnabledByDefault,
         placeholdersCollapsedByDefault,
         placeholderMaxPreviewLines,
+        placeholderMaxLinesPerRun,
+        placeholderTooltipMaxTags,
+        historyPlaceholderMaxRunsPerBatch,
+        historyPlaceholdersEnabledByDefault,
         rules,
         overrides);
   }

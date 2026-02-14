@@ -562,11 +562,15 @@ private void setGlobalFiltering(TargetRef out, boolean enabled) {
       cur.placeholdersEnabledByDefault(),
       cur.placeholdersCollapsedByDefault(),
       cur.placeholderMaxPreviewLines(),
+      cur.placeholderMaxLinesPerRun(),
+      cur.placeholderTooltipMaxTags(),
+      cur.historyPlaceholderMaxRunsPerBatch(),
+      cur.historyPlaceholdersEnabledByDefault(),
       cur.rules(),
       cur.overrides()
   );
 
-  applySettings(next, false, false, true, false);
+  applySettings(next, false, false, true, false, false);
   rebuildMaybe(out, active);
 
   ui.appendStatus(out, "(filter)", "Global filtering => " + onOff(enabled) + " (show-filtered=" + onOff(!enabled) + ")");
@@ -747,6 +751,10 @@ private void toggle(TargetRef out, List<String> namesOrMasksRaw) {
         base.placeholdersEnabledByDefault(),
         base.placeholdersCollapsedByDefault(),
         base.placeholderMaxPreviewLines(),
+        base.placeholderMaxLinesPerRun(),
+        base.placeholderTooltipMaxTags(),
+        base.historyPlaceholderMaxRunsPerBatch(),
+        base.historyPlaceholdersEnabledByDefault(),
         List.copyOf(nextRules),
         base.overrides()
     );
@@ -901,7 +909,7 @@ private void handleShow(TargetRef out, FilterCommand.Show cmd) {
       null, false);
 
   boolean had = findOverride(cur.overrides(), scope) != null;
-  applySettings(next, false, true, false, false);
+  applySettings(next, false, true, false, false, false);
   rebuildMaybe(out, active);
 
   boolean has = findOverride(next.overrides(), scope) != null;
@@ -952,7 +960,7 @@ private void handlePlaceholders(TargetRef out, FilterCommand.Placeholders cmd) {
       null, false);
 
   boolean had = findOverride(cur.overrides(), scope) != null;
-  applySettings(next, false, true, false, false);
+  applySettings(next, false, true, false, false, false);
   rebuildMaybe(out, active);
 
   boolean has = findOverride(next.overrides(), scope) != null;
@@ -1003,7 +1011,7 @@ private void handlePlaceholdersCollapsed(TargetRef out, FilterCommand.Placeholde
       newVal, true);
 
   boolean had = findOverride(cur.overrides(), scope) != null;
-  applySettings(next, false, true, false, false);
+  applySettings(next, false, true, false, false, false);
   rebuildMaybe(out, active);
 
   boolean has = findOverride(next.overrides(), scope) != null;
@@ -1043,11 +1051,15 @@ private void handlePlaceholderPreview(TargetRef out, FilterCommand.PlaceholderPr
       cur.placeholdersEnabledByDefault(),
       cur.placeholdersCollapsedByDefault(),
       v,
+      cur.placeholderMaxLinesPerRun(),
+      cur.placeholderTooltipMaxTags(),
+      cur.historyPlaceholderMaxRunsPerBatch(),
+      cur.historyPlaceholdersEnabledByDefault(),
       cur.rules(),
       cur.overrides()
   );
 
-  applySettings(next, false, false, false, true);
+  applySettings(next, false, false, false, true, false);
   rebuildMaybe(out, active);
 
   ui.appendStatus(out, "(filter)", "Placeholder preview max lines => " + v);
@@ -1056,7 +1068,11 @@ private void handlePlaceholderPreview(TargetRef out, FilterCommand.PlaceholderPr
       + " filters=" + (next.filtersEnabledByDefault() ? "on" : "off")
       + " placeholders=" + (next.placeholdersEnabledByDefault() ? "on" : "off")
       + " collapsed=" + (next.placeholdersCollapsedByDefault() ? "on" : "off")
-      + " preview=" + v);
+      + " preview=" + v
+      + " maxrun=" + next.placeholderMaxLinesPerRun()
+      + " maxtags=" + next.placeholderTooltipMaxTags()
+      + " maxbatch=" + next.historyPlaceholderMaxRunsPerBatch()
+      + " history=" + (next.historyPlaceholdersEnabledByDefault() ? "on" : "off"));
 }
 
 private void handleDefaults(TargetRef out, FilterCommand.Defaults cmd) {
@@ -1072,27 +1088,53 @@ private void handleDefaults(TargetRef out, FilterCommand.Defaults cmd) {
       ? (cmd.placeholderMaxPreviewLines() == null ? 0 : cmd.placeholderMaxPreviewLines())
       : cur.placeholderMaxPreviewLines();
 
+int maxRun = cmd.maxRunSpecified()
+    ? (cmd.placeholderMaxLinesPerRun() == null ? 0 : cmd.placeholderMaxLinesPerRun())
+    : cur.placeholderMaxLinesPerRun();
+int maxTags = cmd.tooltipTagsSpecified()
+    ? (cmd.placeholderTooltipMaxTags() == null ? 0 : cmd.placeholderTooltipMaxTags())
+    : cur.placeholderTooltipMaxTags();
+int maxBatch = cmd.maxBatchSpecified()
+    ? (cmd.historyPlaceholderMaxRunsPerBatch() == null ? 0 : cmd.historyPlaceholderMaxRunsPerBatch())
+    : cur.historyPlaceholderMaxRunsPerBatch();
+boolean history = cmd.historySpecified()
+    ? Boolean.TRUE.equals(cmd.historyPlaceholdersEnabledByDefault())
+    : cur.historyPlaceholdersEnabledByDefault();
+
   FilterSettings next = new FilterSettings(
       f, p, c, preview,
+      maxRun,
+      maxTags,
+      maxBatch,
+      history,
       cur.rules(),
       cur.overrides()
   );
 
-	  boolean defaultsChanged = cmd.filtersSpecified() || cmd.placeholdersSpecified() || cmd.collapsedSpecified();
-	  applySettings(next, false, false, defaultsChanged, cmd.previewSpecified());
+      boolean defaultsChanged = cmd.filtersSpecified() || cmd.placeholdersSpecified() || cmd.collapsedSpecified();
+      boolean tuningChanged = cmd.maxRunSpecified() || cmd.tooltipTagsSpecified() || cmd.maxBatchSpecified() || cmd.historySpecified();
+      applySettings(next, false, false, defaultsChanged, cmd.previewSpecified(), tuningChanged);
 	  rebuildMaybe(out, active);
 
 	  ui.appendStatus(out, "(filter)", "Defaults updated:"
 	      + " filters=" + (cur.filtersEnabledByDefault() ? "on" : "off") + "->" + (next.filtersEnabledByDefault() ? "on" : "off")
 	      + " placeholders=" + (cur.placeholdersEnabledByDefault() ? "on" : "off") + "->" + (next.placeholdersEnabledByDefault() ? "on" : "off")
 	      + " collapsed=" + (cur.placeholdersCollapsedByDefault() ? "on" : "off") + "->" + (next.placeholdersCollapsedByDefault() ? "on" : "off")
-	      + " preview=" + cur.placeholderMaxPreviewLines() + "->" + next.placeholderMaxPreviewLines());
+	      + " preview=" + cur.placeholderMaxPreviewLines() + "->" + next.placeholderMaxPreviewLines()
+	      + " maxrun=" + cur.placeholderMaxLinesPerRun() + "->" + next.placeholderMaxLinesPerRun()
+	      + " maxtags=" + cur.placeholderTooltipMaxTags() + "->" + next.placeholderTooltipMaxTags()
+	      + " maxbatch=" + cur.historyPlaceholderMaxRunsPerBatch() + "->" + next.historyPlaceholderMaxRunsPerBatch()
+	      + " history=" + (cur.historyPlaceholdersEnabledByDefault() ? "on" : "off") + "->" + (next.historyPlaceholdersEnabledByDefault() ? "on" : "off"));
 	  printEffectiveSummary(out, active);
 	  ui.appendStatus(out, "(filter)", "Runnable: /filter defaults"
       + " filters=" + (next.filtersEnabledByDefault() ? "on" : "off")
       + " placeholders=" + (next.placeholdersEnabledByDefault() ? "on" : "off")
       + " collapsed=" + (next.placeholdersCollapsedByDefault() ? "on" : "off")
-      + " preview=" + next.placeholderMaxPreviewLines());
+	      + " preview=" + next.placeholderMaxPreviewLines()
+	      + " maxrun=" + next.placeholderMaxLinesPerRun()
+	      + " maxtags=" + next.placeholderTooltipMaxTags()
+	      + " maxbatch=" + next.historyPlaceholderMaxRunsPerBatch()
+	      + " history=" + (next.historyPlaceholdersEnabledByDefault() ? "on" : "off"));
 }
 
 private void listOverrides(TargetRef out, String formatRaw) {
@@ -1144,7 +1186,7 @@ private void setOverride(TargetRef out, FilterCommand.OverrideSet cmd) {
       ce, cmd.collapsedSpecified());
 
 	  boolean had = findOverride(cur.overrides(), scope) != null;
-	  applySettings(next, false, true, false, false);
+	  applySettings(next, false, true, false, false, false);
 	  rebuildMaybe(out, active);
 
 	  FilterScopeOverride eff = findOverride(next.overrides(), scope);
@@ -1176,11 +1218,15 @@ private void delOverride(TargetRef out, String scopePattern) {
       cur.placeholdersEnabledByDefault(),
       cur.placeholdersCollapsedByDefault(),
       cur.placeholderMaxPreviewLines(),
+      cur.placeholderMaxLinesPerRun(),
+      cur.placeholderTooltipMaxTags(),
+      cur.historyPlaceholderMaxRunsPerBatch(),
+      cur.historyPlaceholdersEnabledByDefault(),
       cur.rules(),
       List.copyOf(outList)
   );
 
-	  applySettings(next, false, true, false, false);
+	  applySettings(next, false, true, false, false, false);
 	  rebuildMaybe(out, active);
 
   ui.appendStatus(out, "(filter)", "Override removed for " + scope);
@@ -1193,7 +1239,8 @@ private void applySettings(
     boolean rulesChanged,
     boolean overridesChanged,
     boolean defaultsChanged,
-    boolean previewChanged
+    boolean previewChanged,
+    boolean tuningChanged
 ) {
   filterSettingsBus.set(next);
 
@@ -1210,6 +1257,12 @@ private void applySettings(
   }
   if (previewChanged) {
     runtimeConfig.rememberFilterPlaceholderMaxPreviewLines(next.placeholderMaxPreviewLines());
+  }
+  if (tuningChanged) {
+    runtimeConfig.rememberFilterPlaceholderMaxLinesPerRun(next.placeholderMaxLinesPerRun());
+    runtimeConfig.rememberFilterPlaceholderTooltipMaxTags(next.placeholderTooltipMaxTags());
+    runtimeConfig.rememberFilterHistoryPlaceholderMaxRunsPerBatch(next.historyPlaceholderMaxRunsPerBatch());
+    runtimeConfig.rememberFilterHistoryPlaceholdersEnabledByDefault(next.historyPlaceholdersEnabledByDefault());
   }
 }
 
@@ -1250,6 +1303,10 @@ private FilterSettings safeSettings() {
 	    ui.appendStatus(out, "(filter)", "  collapsed=" + onOff(col.value()) + sourceSuffix(col));
 	
 	    ui.appendStatus(out, "(filter)", "  preview=" + eff.placeholderMaxPreviewLines() + " (global)");
+	    ui.appendStatus(out, "(filter)", "  maxrun=" + eff.placeholderMaxLinesPerRun() + " (global)");
+	    ui.appendStatus(out, "(filter)", "  maxtags=" + eff.placeholderTooltipMaxTags() + " (global)");
+	    ui.appendStatus(out, "(filter)", "  maxbatch=" + eff.historyPlaceholderMaxRunsPerBatch() + " (global, 0=unlimited)");
+	    ui.appendStatus(out, "(filter)", "  history=" + onOff(eff.historyPlaceholdersEnabled()) + " (global)");
 	  } catch (Exception ignored) {
 	  }
 	}
@@ -1342,6 +1399,10 @@ private static FilterSettings upsertOverride(
       cur.placeholdersEnabledByDefault(),
       cur.placeholdersCollapsedByDefault(),
       cur.placeholderMaxPreviewLines(),
+      cur.placeholderMaxLinesPerRun(),
+      cur.placeholderTooltipMaxTags(),
+      cur.historyPlaceholderMaxRunsPerBatch(),
+      cur.historyPlaceholdersEnabledByDefault(),
       cur.rules(),
       List.copyOf(out)
   );

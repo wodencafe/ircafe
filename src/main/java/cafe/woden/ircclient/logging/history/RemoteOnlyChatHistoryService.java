@@ -221,6 +221,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
             List<LogLine> lines = res.linesOldestFirst();
             if (lines == null || lines.isEmpty()) return;
 
+            // Explicit batch boundary so filtered placeholders/hints don't "bridge" across separate loads.
+            transcripts.beginHistoryInsertBatch(target);
+
             // Now that we have something to show, enable the paging control (if available).
             try {
               ensureLoadOlderControlAndHandler(target);
@@ -254,7 +257,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
             } catch (Exception ignored) {
             }
           } finally {
-            // nothing
+            try {
+              transcripts.endHistoryInsertBatch(target);
+            } catch (Exception ignored) {
+            }
           }
         });
       } finally {
@@ -354,6 +360,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
       loadOlder(target, limit, res -> {
         try {
+          // Explicit batch boundary so filtered placeholders/hints don't "bridge" across separate paging operations.
+          transcripts.beginHistoryInsertBatch(target);
+
           int insertAt = transcripts.loadOlderInsertOffset(target);
           int pos = insertAt;
           int inserted = 0;
@@ -378,6 +387,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
           // Fail open: allow retry.
           transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
         } finally {
+          try {
+            transcripts.endHistoryInsertBatch(target);
+          } catch (Exception ignored) {
+          }
           if (anchor != null) {
             SwingUtilities.invokeLater(anchor::restoreIfNeeded);
           }

@@ -3164,6 +3164,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     final JCheckBox placeholdersEnabledByDefault;
     final JCheckBox placeholdersCollapsedByDefault;
     final JSpinner placeholderPreviewLines;
+    final JSpinner placeholderMaxLinesPerRun;
+    final JSpinner placeholderTooltipMaxTags;
+    final JCheckBox historyPlaceholdersEnabledByDefault;
+    final JSpinner historyPlaceholderMaxRunsPerBatch;
 
     final FilterOverridesTableModel overridesModel;
     final JTable overridesTable;
@@ -3184,6 +3188,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
                            JCheckBox placeholdersEnabledByDefault,
                            JCheckBox placeholdersCollapsedByDefault,
                            JSpinner placeholderPreviewLines,
+                           JSpinner placeholderMaxLinesPerRun,
+                           JSpinner placeholderTooltipMaxTags,
+                           JCheckBox historyPlaceholdersEnabledByDefault,
+                           JSpinner historyPlaceholderMaxRunsPerBatch,
                            FilterOverridesTableModel overridesModel,
                            JTable overridesTable,
                            JButton addOverride,
@@ -3199,6 +3207,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       this.placeholdersEnabledByDefault = placeholdersEnabledByDefault;
       this.placeholdersCollapsedByDefault = placeholdersCollapsedByDefault;
       this.placeholderPreviewLines = placeholderPreviewLines;
+      this.placeholderMaxLinesPerRun = placeholderMaxLinesPerRun;
+      this.placeholderTooltipMaxTags = placeholderTooltipMaxTags;
+      this.historyPlaceholdersEnabledByDefault = historyPlaceholdersEnabledByDefault;
+      this.historyPlaceholderMaxRunsPerBatch = historyPlaceholderMaxRunsPerBatch;
       this.overridesModel = overridesModel;
       this.overridesTable = overridesTable;
       this.addOverride = addOverride;
@@ -3542,6 +3554,61 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       }
     }
 
+
+    JSpinner maxLinesPerRun = new JSpinner(new SpinnerNumberModel(
+        Math.max(0, Math.min(50_000, current.placeholderMaxLinesPerRun())),
+        0, 50_000, 50
+    ));
+    maxLinesPerRun.setToolTipText("Max hidden lines represented in a single placeholder run. 0 = unlimited.");
+    if (closeables != null) {
+      try { closeables.add(MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun)); } catch (Exception ignored) {}
+    } else {
+      try { MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun); } catch (Exception ignored) {}
+    }
+
+    JSpinner tooltipMaxTags = new JSpinner(new SpinnerNumberModel(
+        Math.max(0, Math.min(500, current.placeholderTooltipMaxTags())),
+        0, 500, 1
+    ));
+    tooltipMaxTags.setToolTipText("Max tags shown in placeholder/hint tooltips. 0 = hide tags.");
+    if (closeables != null) {
+      try { closeables.add(MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags)); } catch (Exception ignored) {}
+    } else {
+      try { MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags); } catch (Exception ignored) {}
+    }
+
+    JCheckBox historyPlaceholdersEnabledByDefault = new JCheckBox("Show placeholders for filtered history loads");
+    historyPlaceholdersEnabledByDefault.setSelected(current.historyPlaceholdersEnabledByDefault());
+    historyPlaceholdersEnabledByDefault.setToolTipText("If off, filtered lines loaded from history are silently hidden (no placeholder/hint rows).");
+
+    JSpinner historyMaxRuns = new JSpinner(new SpinnerNumberModel(
+        Math.max(0, Math.min(5_000, current.historyPlaceholderMaxRunsPerBatch())),
+        0, 5_000, 1
+    ));
+    historyMaxRuns.setToolTipText("Max placeholder runs per history load batch. 0 = unlimited.");
+    if (closeables != null) {
+      try {
+        closeables.add(MouseWheelDecorator.decorateNumberSpinner(historyMaxRuns));
+      } catch (Exception ignored) {
+      }
+    } else {
+      try {
+        MouseWheelDecorator.decorateNumberSpinner(historyMaxRuns);
+      } catch (Exception ignored) {
+      }
+    }
+
+
+    // If history placeholders are disabled, the batch cap is irrelevant (keep the value but disable the control).
+    try {
+      historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected());
+      historyPlaceholdersEnabledByDefault.addActionListener(e ->
+          historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected())
+      );
+    } catch (Exception ignored) {
+      // best-effort
+    }
+
     FilterOverridesTableModel model = new FilterOverridesTableModel();
     model.setOverrides(current.overrides());
 
@@ -3694,6 +3761,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
             snap.placeholdersEnabledByDefault(),
             snap.placeholdersCollapsedByDefault(),
             snap.placeholderMaxPreviewLines(),
+            snap.placeholderMaxLinesPerRun(),
+            snap.placeholderTooltipMaxTags(),
+            snap.historyPlaceholderMaxRunsPerBatch(),
+            snap.historyPlaceholdersEnabledByDefault(),
             nextRules,
             snap.overrides()
         );
@@ -3841,6 +3912,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
               snap.placeholdersEnabledByDefault(),
               snap.placeholdersCollapsedByDefault(),
               snap.placeholderMaxPreviewLines(),
+              snap.placeholderMaxLinesPerRun(),
+              snap.placeholderTooltipMaxTags(),
+              snap.historyPlaceholderMaxRunsPerBatch(),
+              snap.historyPlaceholdersEnabledByDefault(),
               nextRules,
               snap.overrides()
           );
@@ -3893,6 +3968,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
           snap.placeholdersEnabledByDefault(),
           snap.placeholdersCollapsedByDefault(),
           snap.placeholderMaxPreviewLines(),
+          snap.placeholderMaxLinesPerRun(),
+          snap.placeholderTooltipMaxTags(),
+          snap.historyPlaceholderMaxRunsPerBatch(),
+          snap.historyPlaceholdersEnabledByDefault(),
           nextRules,
           snap.overrides()
       );
@@ -3935,6 +4014,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
           snap.placeholdersEnabledByDefault(),
           snap.placeholdersCollapsedByDefault(),
           snap.placeholderMaxPreviewLines(),
+          snap.placeholderMaxLinesPerRun(),
+          snap.placeholderTooltipMaxTags(),
+          snap.historyPlaceholderMaxRunsPerBatch(),
+          snap.historyPlaceholdersEnabledByDefault(),
           nextRules,
           snap.overrides()
       );
@@ -4011,6 +4094,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
           snap != null ? snap.placeholdersEnabledByDefault() : true,
           snap != null ? snap.placeholdersCollapsedByDefault() : true,
           snap != null ? snap.placeholderMaxPreviewLines() : 3,
+          snap != null ? snap.placeholderMaxLinesPerRun() : 250,
+          snap != null ? snap.placeholderTooltipMaxTags() : 12,
+          snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
+          snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
           nextRules,
           snap != null ? snap.overrides() : List.of()
       );
@@ -4094,6 +4181,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
           snap != null ? snap.placeholdersEnabledByDefault() : true,
           snap != null ? snap.placeholdersCollapsedByDefault() : true,
           snap != null ? snap.placeholderMaxPreviewLines() : 3,
+          snap != null ? snap.placeholderMaxLinesPerRun() : 250,
+          snap != null ? snap.placeholderTooltipMaxTags() : 12,
+          snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
+          snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
           nextRules,
           snap != null ? snap.overrides() : List.of()
       );
@@ -4169,6 +4260,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
           snap != null ? snap.placeholdersEnabledByDefault() : true,
           snap != null ? snap.placeholdersCollapsedByDefault() : true,
           snap != null ? snap.placeholderMaxPreviewLines() : 3,
+          snap != null ? snap.placeholderMaxLinesPerRun() : 250,
+          snap != null ? snap.placeholderTooltipMaxTags() : 12,
+          snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
+          snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
           nextRules,
           snap != null ? snap.overrides() : List.of()
       );
@@ -4202,6 +4297,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         placeholdersEnabledByDefault,
         placeholdersCollapsedByDefault,
         previewLines,
+        maxLinesPerRun,
+        tooltipMaxTags,
+        historyPlaceholdersEnabledByDefault,
+        historyMaxRuns,
         model,
         table,
         add,
@@ -4227,7 +4326,27 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JPanel previewRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     previewRow.add(new JLabel("Placeholder preview lines:"), "split 2");
     previewRow.add(c.placeholderPreviewLines, "w 80!");
-    panel.add(previewRow, "growx, wrap 12");
+    panel.add(previewRow, "growx, wrap");
+
+    JPanel runCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
+    runCapRow.add(new JLabel("Max hidden lines per placeholder run:"), "split 2");
+    runCapRow.add(c.placeholderMaxLinesPerRun, "w 80!");
+    panel.add(runCapRow, "growx, wrap");
+    panel.add(new JLabel("0 = unlimited. Prevents a single placeholder from representing an enormous filtered run."), "growx, wrap");
+
+    JPanel tooltipTagsRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
+    tooltipTagsRow.add(new JLabel("Tooltip tag limit:"), "split 2");
+    tooltipTagsRow.add(c.placeholderTooltipMaxTags, "w 80!");
+    panel.add(tooltipTagsRow, "growx, wrap");
+    panel.add(new JLabel("0 = hide tags in the tooltip (rule + count still shown)."), "growx, wrap 12");
+
+    panel.add(c.historyPlaceholdersEnabledByDefault, "growx, wrap");
+
+    JPanel historyCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
+    historyCapRow.add(new JLabel("History placeholder run cap per batch:"), "split 2");
+    historyCapRow.add(c.historyPlaceholderMaxRunsPerBatch, "w 80!");
+    panel.add(historyCapRow, "growx, wrap");
+    panel.add(new JLabel("0 = unlimited. Limits how many filtered placeholder/hint runs appear per history load."), "growx, wrap 12");
 
     panel.add(tabTitle("Overrides"), "growx, wrap");
     panel.add(new JLabel("Overrides apply by scope pattern. Most specific match wins."), "growx, wrap");
@@ -4274,6 +4393,20 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     if (previewLines < 0) previewLines = 0;
     if (previewLines > 25) previewLines = 25;
 
+    int maxLinesPerRun = ((Number) c.placeholderMaxLinesPerRun.getValue()).intValue();
+    if (maxLinesPerRun < 0) maxLinesPerRun = 0;
+    if (maxLinesPerRun > 50_000) maxLinesPerRun = 50_000;
+
+    int tooltipMaxTags = ((Number) c.placeholderTooltipMaxTags.getValue()).intValue();
+    if (tooltipMaxTags < 0) tooltipMaxTags = 0;
+    if (tooltipMaxTags > 500) tooltipMaxTags = 500;
+
+    boolean historyPlaceholdersEnabledByDefault = c.historyPlaceholdersEnabledByDefault.isSelected();
+
+    int maxRunsPerBatch = ((Number) c.historyPlaceholderMaxRunsPerBatch.getValue()).intValue();
+    if (maxRunsPerBatch < 0) maxRunsPerBatch = 0;
+    if (maxRunsPerBatch > 5_000) maxRunsPerBatch = 5_000;
+
     List<FilterScopeOverride> overrides = c.overridesModel.toOverrides();
 
     FilterSettings next = new FilterSettings(
@@ -4281,7 +4414,11 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         placeholdersEnabledByDefault,
         placeholdersCollapsedByDefault,
         previewLines,
-        prev.rules(),
+        maxLinesPerRun,
+        tooltipMaxTags,
+        maxRunsPerBatch,
+        historyPlaceholdersEnabledByDefault,
+        prev != null ? prev.rules() : List.of(),
         overrides
     );
 
@@ -4290,6 +4427,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     runtimeConfig.rememberFilterPlaceholdersEnabledByDefault(placeholdersEnabledByDefault);
     runtimeConfig.rememberFilterPlaceholdersCollapsedByDefault(placeholdersCollapsedByDefault);
     runtimeConfig.rememberFilterPlaceholderMaxPreviewLines(previewLines);
+    runtimeConfig.rememberFilterPlaceholderMaxLinesPerRun(maxLinesPerRun);
+    runtimeConfig.rememberFilterPlaceholderTooltipMaxTags(tooltipMaxTags);
+    runtimeConfig.rememberFilterHistoryPlaceholdersEnabledByDefault(historyPlaceholdersEnabledByDefault);
+    runtimeConfig.rememberFilterHistoryPlaceholderMaxRunsPerBatch(maxRunsPerBatch);
     runtimeConfig.rememberFilterOverrides(overrides);
 
     // Best-effort: rebuild active target so changes take effect immediately.

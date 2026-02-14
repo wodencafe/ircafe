@@ -6,6 +6,7 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -24,6 +25,14 @@ public class FilteredFoldComponent extends JPanel {
 
   // Optional base font from the transcript; if set, we derive italic variants from it.
   private Font transcriptBaseFont;
+
+  // Filter context for tooltip polish.
+  private String filterRuleLabel;
+  private boolean multipleRules;
+  private final List<String> unionTags = new ArrayList<>();
+
+  // UI tuning
+  private int maxTagsInTooltip = 12;
 
   private final JLabel summary = new JLabel();
   private final JPanel details = new JPanel();
@@ -71,6 +80,40 @@ public class FilteredFoldComponent extends JPanel {
     repaint();
   }
 
+
+  /**
+   * Limits how many tags are listed in the tooltip tag summary.
+   *
+   * <p>0 disables tag listing entirely.
+   */
+  public void setMaxTagsInTooltip(int max) {
+    if (max < 0) max = 0;
+    if (max > 500) max = 500;
+    this.maxTagsInTooltip = max;
+    refreshTooltip();
+  }
+
+  /**
+   * Provides extra tooltip context: which rule filtered this run and which tags were present.
+   *
+   * <p>Callers should update this whenever rule/tags change (e.g., as the run grows).
+   */
+  public void setFilterDetails(String ruleLabel, boolean multiple, Collection<String> tags) {
+    this.filterRuleLabel = (ruleLabel == null || ruleLabel.isBlank()) ? null : ruleLabel;
+    this.multipleRules = multiple;
+
+    this.unionTags.clear();
+    if (tags != null) {
+      for (String t : tags) {
+        if (t == null) continue;
+        String s = t.trim();
+        if (!s.isEmpty()) this.unionTags.add(s);
+      }
+    }
+
+    refreshTooltip();
+  }
+
   @Override
   public Dimension getPreferredSize() {
     Dimension d = super.getPreferredSize();
@@ -114,7 +157,7 @@ public class FilteredFoldComponent extends JPanel {
 
     updateSummaryText();
     if (expanded) rebuildDetails();
-    setToolTipText(buildTooltipHtml(count, previews));
+    refreshTooltip();
 
     revalidate();
     repaint();
@@ -141,7 +184,9 @@ public class FilteredFoldComponent extends JPanel {
     }
 
     for (String p : previews) {
-      JLabel l = new JLabel("• " + safe(p));
+      String t = safe(p);
+      if (t.regionMatches(true, 0, "<html", 0, 5)) t = " " + t;
+      JLabel l = new JLabel("• " + t);
       l.setOpaque(false);
       applyDimItalic(l);
       details.add(l);
@@ -161,6 +206,10 @@ public class FilteredFoldComponent extends JPanel {
     applyDimItalic(summary);
   }
 
+  private void refreshTooltip() {
+    setToolTipText(buildTooltipHtml(count, previews, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
+  }
+
   private void applyDimItalic(JLabel l) {
     if (l == null) return;
     Color dim = UIManager.getColor("Label.disabledForeground");
@@ -172,11 +221,33 @@ public class FilteredFoldComponent extends JPanel {
     }
   }
 
-  private static String buildTooltipHtml(int count, List<String> previews) {
+  private static String buildTooltipHtml(int count,
+                                        List<String> previews,
+                                        String ruleLabel,
+                                        boolean multiple,
+                                        List<String> tags,
+                                        int maxTags) {
     if (count <= 0) return null;
+
     StringBuilder sb = new StringBuilder();
     sb.append("<html>");
-    sb.append("Filtered (").append(count).append(")");
+
+    if (ruleLabel != null && !ruleLabel.isBlank()) {
+      sb.append("Filtered by <b>").append(escapeHtml(ruleLabel)).append("</b>");
+      if (multiple) sb.append(" <i>(+ others)</i>");
+    } else {
+      sb.append("Filtered");
+      if (multiple) sb.append(" <i>(multiple rules)</i>");
+    }
+
+    if (tags != null && !tags.isEmpty() && maxTags > 0) {
+      sb.append("<br/>");
+      sb.append("Tags: ").append(tagsSummaryHtml(tags, maxTags));
+    }
+
+    sb.append("<br/><br/>");
+    sb.append("Hidden lines: ").append(count);
+
     if (previews != null && !previews.isEmpty()) {
       sb.append("<br/><br/>");
       int shown = 0;
@@ -189,7 +260,27 @@ public class FilteredFoldComponent extends JPanel {
         sb.append("…and ").append(count - shown).append(" more");
       }
     }
+
     sb.append("</html>");
+    return sb.toString();
+  }
+
+  private static String tagsSummaryHtml(List<String> tags, int maxTags) {
+    if (tags == null || tags.isEmpty()) return "";
+    int limit = Math.max(0, maxTags);
+    if (limit <= 0) return "";
+    StringBuilder sb = new StringBuilder();
+    int shown = 0;
+    for (String t : tags) {
+      if (t == null) continue;
+      if (shown > 0) sb.append(", ");
+      if (shown >= limit) {
+        sb.append("…+").append(tags.size() - shown).append(" more");
+        break;
+      }
+      sb.append(escapeHtml(t));
+      shown++;
+    }
     return sb.toString();
   }
 

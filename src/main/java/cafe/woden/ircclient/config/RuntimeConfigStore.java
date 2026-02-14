@@ -558,6 +558,87 @@ public class RuntimeConfigStore {
     }
   }
 
+public synchronized void rememberFilterPlaceholderMaxLinesPerRun(int maxLines) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    int v = maxLines;
+    if (v < 0) v = 0;
+    if (v > 50_000) v = 50_000;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("placeholderMaxLinesPerRun", v);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters placeholderMaxLinesPerRun setting to '{}'", file, e);
+  }
+}
+
+public synchronized void rememberFilterPlaceholderTooltipMaxTags(int maxTags) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    int v = maxTags;
+    if (v < 0) v = 0;
+    if (v > 500) v = 500;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("placeholderTooltipMaxTags", v);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters placeholderTooltipMaxTags setting to '{}'", file, e);
+  }
+}
+
+public synchronized void rememberFilterHistoryPlaceholderMaxRunsPerBatch(int maxRuns) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    int v = maxRuns;
+    if (v < 0) v = 0;
+    if (v > 5_000) v = 5_000;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("historyPlaceholderMaxRunsPerBatch", v);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters historyPlaceholderMaxRunsPerBatch setting to '{}'", file, e);
+  }
+}
+
+public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boolean enabled) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("historyPlaceholdersEnabledByDefault", enabled);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters historyPlaceholdersEnabledByDefault setting to '{}'", file, e);
+  }
+}
+
+
   public synchronized void rememberFilterRules(List<FilterRule> rules) {
     try {
       if (file.toString().isBlank()) return;

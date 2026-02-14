@@ -181,7 +181,11 @@ public sealed interface FilterCommand permits
       Boolean filtersEnabledByDefault, boolean filtersSpecified,
       Boolean placeholdersEnabledByDefault, boolean placeholdersSpecified,
       Boolean placeholdersCollapsedByDefault, boolean collapsedSpecified,
-      Integer placeholderMaxPreviewLines, boolean previewSpecified
+      Integer placeholderMaxPreviewLines, boolean previewSpecified,
+      Integer placeholderMaxLinesPerRun, boolean maxRunSpecified,
+      Integer placeholderTooltipMaxTags, boolean tooltipTagsSpecified,
+      Integer historyPlaceholderMaxRunsPerBatch, boolean maxBatchSpecified,
+      Boolean historyPlaceholdersEnabledByDefault, boolean historySpecified
   ) implements FilterCommand {
     public Defaults {
       if (!previewSpecified) {
@@ -192,6 +196,39 @@ public sealed interface FilterCommand permits
         if (v > 25) v = 25;
         placeholderMaxPreviewLines = v;
       }
+
+if (!maxRunSpecified) {
+  placeholderMaxLinesPerRun = null;
+} else {
+  int v = (placeholderMaxLinesPerRun == null) ? 0 : placeholderMaxLinesPerRun;
+  if (v < 0) v = 0;
+  if (v > 50_000) v = 50_000;
+  placeholderMaxLinesPerRun = v;
+}
+
+if (!tooltipTagsSpecified) {
+  placeholderTooltipMaxTags = null;
+} else {
+  int v = (placeholderTooltipMaxTags == null) ? 0 : placeholderTooltipMaxTags;
+  if (v < 0) v = 0;
+  if (v > 500) v = 500;
+  placeholderTooltipMaxTags = v;
+}
+
+if (!maxBatchSpecified) {
+  historyPlaceholderMaxRunsPerBatch = null;
+} else {
+  int v = (historyPlaceholderMaxRunsPerBatch == null) ? 0 : historyPlaceholderMaxRunsPerBatch;
+  if (v < 0) v = 0;
+  if (v > 5_000) v = 5_000;
+  historyPlaceholderMaxRunsPerBatch = v;
+}
+
+if (!historySpecified) {
+  historyPlaceholdersEnabledByDefault = null;
+} else {
+  historyPlaceholdersEnabledByDefault = Boolean.TRUE.equals(historyPlaceholdersEnabledByDefault);
+}
     }
   }
 
