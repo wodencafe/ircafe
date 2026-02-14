@@ -318,7 +318,7 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    onEdt(() -> transcripts.appendChatFromHistory(target, from, text, outgoingLocalEcho, ts));
+    onEdt(() -> transcripts.appendChatAt(target, from, text, outgoingLocalEcho, ts));
   }
 
   @Override
@@ -345,7 +345,7 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    onEdt(() -> transcripts.appendActionFromHistory(target, from, action, outgoingLocalEcho, ts));
+    onEdt(() -> transcripts.appendActionAt(target, from, action, outgoingLocalEcho, ts));
   }
 
   @Override
@@ -361,7 +361,7 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendNoticeAt(TargetRef target, Instant at, String from, String text) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    onEdt(() -> transcripts.appendNoticeFromHistory(target, from, text, ts));
+    onEdt(() -> transcripts.appendNoticeAt(target, from, text, ts));
   }
 
   @Override
@@ -372,7 +372,7 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendStatusAt(TargetRef target, Instant at, String from, String text) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    onEdt(() -> transcripts.appendStatusFromHistory(target, from, text, ts));
+    onEdt(() -> transcripts.appendStatusAt(target, from, text, ts));
   }
 
   @Override
@@ -383,6 +383,6 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    onEdt(() -> transcripts.appendErrorFromHistory(target, from, text, ts));
+    onEdt(() -> transcripts.appendErrorAt(target, from, text, ts));
   }
 }
