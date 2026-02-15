@@ -13,6 +13,14 @@ import java.util.Optional;
  * <p>All operations are explicitly scoped to a server id.
  */
 public interface IrcClientService {
+  /**
+   * Stop reconnect timers and close any active IRC connections immediately.
+   *
+   * <p>This is used during app shutdown so transports are torn down even before
+   * the Spring context finishes closing.
+   */
+  default void shutdownNow() {}
+
   Flowable<ServerIrcEvent> events();
 
   Optional<String> currentNick(String serverId);

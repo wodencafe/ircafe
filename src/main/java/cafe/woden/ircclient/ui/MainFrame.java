@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.app.AppVersion;
 import cafe.woden.ircclient.config.UiProperties;
@@ -24,6 +25,8 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 @Component
 @Lazy
@@ -54,7 +57,8 @@ public class MainFrame extends JFrame {
       UserListDockable users,
       TerminalDockable terminal,
       ChatDockManager chatDockManager,
-      StatusBar statusBar
+      StatusBar statusBar,
+      ApplicationShutdownCoordinator shutdownCoordinator
   ) {
     super(AppVersion.appNameWithVersion());
     this.uiProps = uiProps;
@@ -64,7 +68,7 @@ public class MainFrame extends JFrame {
     this.terminal = terminal;
     this.statusBar = statusBar;
 
-    setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+    setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
     setSize(1100, 700);
     setLocationRelativeTo(null);
     setLayout(new BorderLayout());
@@ -175,6 +179,13 @@ public class MainFrame extends JFrame {
       @Override
       public void componentResized(ComponentEvent e) {
         SwingUtilities.invokeLater(applyDockLocks);
+      }
+    });
+
+    addWindowListener(new WindowAdapter() {
+      @Override
+      public void windowClosing(WindowEvent e) {
+        shutdownCoordinator.shutdown();
       }
     });
 

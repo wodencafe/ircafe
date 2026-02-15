@@ -509,8 +509,8 @@ public class PircbotxIrcClientService implements IrcClientService {
     timers.scheduleReconnect(c, reason, this::connect, bus::onNext);
   }
 
-@PreDestroy
-  void shutdown() {
+  @Override
+  public void shutdownNow() {
     shuttingDown.set(true);
     for (PircbotxConnectionState c : connections.values()) {
       if (c == null) continue;
@@ -534,6 +534,11 @@ public class PircbotxIrcClientService implements IrcClientService {
         log.debug("[ircafe] Error during shutdown for {}", c.serverId, e);
       }
     }
+  }
+
+  @PreDestroy
+  void shutdown() {
+    shutdownNow();
   }
 
 }
