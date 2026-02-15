@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
@@ -63,7 +64,8 @@ public class AppMenuBar extends JMenuBar {
                     ServerTreeDockable serverTree,
                     UserListDockable users,
                     TerminalDockable terminal,
-                    TargetCoordinator targetCoordinator) {
+                    TargetCoordinator targetCoordinator,
+                    ApplicationShutdownCoordinator shutdownCoordinator) {
 
     this.uiProps = uiProps;
     this.chat = chat;
@@ -74,11 +76,7 @@ public class AppMenuBar extends JMenuBar {
     // File
     JMenu file = new JMenu("File");
     JMenuItem exit = new JMenuItem("Exit");
-    exit.addActionListener(e -> {
-      Window w = SwingUtilities.getWindowAncestor(this);
-      if (w != null) w.dispose();
-      else System.exit(0);
-    });
+    exit.addActionListener(e -> shutdownCoordinator.shutdown());
     file.add(exit);
 
     // Edit (placeholder for future)
