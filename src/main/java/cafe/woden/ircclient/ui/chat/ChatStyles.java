@@ -26,6 +26,18 @@ public class ChatStyles {
   public static final String ATTR_OVERRIDE_FG = "chat.override.fg";
   
   public static final String ATTR_OUTGOING = "chat.outgoing";
+
+  // Line metadata (for filters / inspector UI)
+  public static final String ATTR_META_BUFFER_KEY = "chat.meta.bufferKey";
+  public static final String ATTR_META_KIND = "chat.meta.kind";
+  public static final String ATTR_META_DIRECTION = "chat.meta.direction";
+  public static final String ATTR_META_FROM = "chat.meta.from";
+  public static final String ATTR_META_TAGS = "chat.meta.tags";
+  public static final String ATTR_META_EPOCH_MS = "chat.meta.epochMs";
+  public static final String ATTR_META_FILTER_RULE_ID = "chat.meta.filter.ruleId";
+  public static final String ATTR_META_FILTER_RULE_NAME = "chat.meta.filter.ruleName";
+  public static final String ATTR_META_FILTER_ACTION = "chat.meta.filter.action";
+  public static final String ATTR_META_FILTER_MULTIPLE = "chat.meta.filter.multiple";
   /** Integer background mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_BG = "chat.irc.bg";
 

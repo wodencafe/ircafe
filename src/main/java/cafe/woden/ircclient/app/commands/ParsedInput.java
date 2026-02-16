@@ -27,6 +27,7 @@ public sealed interface ParsedInput permits
     ParsedInput.UnsoftIgnore,
     ParsedInput.SoftIgnoreList,
     ParsedInput.ChatHistoryBefore,
+    ParsedInput.Filter,
     ParsedInput.Quote,
     ParsedInput.Say,
     ParsedInput.Unknown {
@@ -107,6 +108,9 @@ public sealed interface ParsedInput permits
    * This will request messages BEFORE the current time for the active target.
    */
   record ChatHistoryBefore(int limit) implements ParsedInput {}
+
+  /** Local /filter ... command family. */
+  record Filter(FilterCommand command) implements ParsedInput {}
 
 
 

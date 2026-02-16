@@ -1,6 +1,10 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.ui.settings.NotificationRule;
+import cafe.woden.ircclient.ui.filter.FilterRule;
+import cafe.woden.ircclient.ui.filter.TagSpec;
+import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
+import cafe.woden.ircclient.ui.filter.RegexSpec;
 import cafe.woden.ircclient.irc.soju.PircbotxSojuParsers;
 
 import java.io.IOException;
@@ -477,6 +481,253 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist CTCP request routing setting to '{}'", file, e);
+    }
+  }
+
+  // --- WeeChat-style filters (ircafe.ui.filters.*) ---
+
+  public synchronized void rememberFiltersEnabledByDefault(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+      filters.put("enabledByDefault", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist filters enabledByDefault setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberFilterPlaceholdersEnabledByDefault(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+      filters.put("placeholdersEnabledByDefault", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist filters placeholdersEnabledByDefault setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberFilterPlaceholdersCollapsedByDefault(boolean collapsed) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+      filters.put("placeholdersCollapsedByDefault", collapsed);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist filters placeholdersCollapsedByDefault setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberFilterPlaceholderMaxPreviewLines(int maxLines) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = maxLines;
+      if (v < 0) v = 0;
+      if (v > 25) v = 25;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+      filters.put("placeholderMaxPreviewLines", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist filters placeholderMaxPreviewLines setting to '{}'", file, e);
+    }
+  }
+
+public synchronized void rememberFilterPlaceholderMaxLinesPerRun(int maxLines) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    int v = maxLines;
+    if (v < 0) v = 0;
+    if (v > 50_000) v = 50_000;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("placeholderMaxLinesPerRun", v);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters placeholderMaxLinesPerRun setting to '{}'", file, e);
+  }
+}
+
+public synchronized void rememberFilterPlaceholderTooltipMaxTags(int maxTags) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    int v = maxTags;
+    if (v < 0) v = 0;
+    if (v > 500) v = 500;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("placeholderTooltipMaxTags", v);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters placeholderTooltipMaxTags setting to '{}'", file, e);
+  }
+}
+
+public synchronized void rememberFilterHistoryPlaceholderMaxRunsPerBatch(int maxRuns) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    int v = maxRuns;
+    if (v < 0) v = 0;
+    if (v > 5_000) v = 5_000;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("historyPlaceholderMaxRunsPerBatch", v);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters historyPlaceholderMaxRunsPerBatch setting to '{}'", file, e);
+  }
+}
+
+public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boolean enabled) {
+  try {
+    if (file.toString().isBlank()) return;
+
+    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+    filters.put("historyPlaceholdersEnabledByDefault", enabled);
+
+    writeFile(doc);
+  } catch (Exception e) {
+    log.warn("[ircafe] Could not persist filters historyPlaceholdersEnabledByDefault setting to '{}'", file, e);
+  }
+}
+
+
+  public synchronized void rememberFilterRules(List<FilterRule> rules) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+      List<Map<String, Object>> out = new ArrayList<>();
+      if (rules != null) {
+        for (FilterRule r : rules) {
+          if (r == null) continue;
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("name", Objects.toString(r.name(), "").trim());
+          m.put("enabled", r.enabled());
+          m.put("scope", Objects.toString(r.scopePattern(), "*").trim());
+          m.put("action", r.action() != null ? r.action().name() : "HIDE");
+          m.put("dir", r.direction() != null ? r.direction().name() : "ANY");
+
+          if (r.kinds() != null && !r.kinds().isEmpty()) {
+            m.put("kinds", r.kinds().stream().filter(Objects::nonNull).map(Enum::name).toList());
+          }
+          if (r.fromNickGlobs() != null && !r.fromNickGlobs().isEmpty()) {
+            m.put("from", r.fromNickGlobs().stream()
+                .filter(Objects::nonNull)
+                .map(s -> Objects.toString(s, "").trim())
+                .filter(s -> !s.isEmpty())
+                .toList());
+          }
+
+          TagSpec tags = r.tags();
+          if (tags != null && !tags.isEmpty()) {
+            String expr = Objects.toString(tags.expr(), "").trim();
+            if (!expr.isEmpty()) {
+              m.put("tags", expr);
+            }
+          }
+
+          RegexSpec re = r.textRegex();
+          if (re != null && !re.isEmpty()) {
+            Map<String, Object> tm = new LinkedHashMap<>();
+            tm.put("pattern", re.pattern());
+            if (re.flags() != null && !re.flags().isEmpty()) {
+              String flags = re.flags().stream().map(Enum::name).map(String::toLowerCase).sorted().reduce("", (a, b) -> a + b);
+              tm.put("flags", flags);
+            }
+            m.put("text", tm);
+          }
+
+          out.add(m);
+        }
+      }
+
+      filters.put("rules", out);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist filter rules to '{}'", file, e);
+    }
+  }
+
+
+
+  public synchronized void rememberFilterOverrides(List<FilterScopeOverride> overrides) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
+
+      List<Map<String, Object>> out = new ArrayList<>();
+      if (overrides != null) {
+        for (FilterScopeOverride o : overrides) {
+          if (o == null) continue;
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("scope", Objects.toString(o.scopePattern(), "*").trim());
+          if (o.filtersEnabled() != null) m.put("filtersEnabled", o.filtersEnabled());
+          if (o.placeholdersEnabled() != null) m.put("placeholdersEnabled", o.placeholdersEnabled());
+          if (o.placeholdersCollapsed() != null) m.put("placeholdersCollapsed", o.placeholdersCollapsed());
+          out.add(m);
+        }
+      }
+
+      filters.put("overrides", out);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist filter overrides to '{}'", file, e);
     }
   }
 

@@ -340,6 +340,26 @@ public class MessageInputPanel extends JPanel {
 
     // Clear the current input line (undoable).
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK), "ircafe.clearInput");
+
+// WeeChat-style filter toggles:
+//  - Alt+= toggles global filtering (/filter toggle)
+//  - Alt+- toggles filtering for current buffer (/filter toggle @)
+am.put("ircafe.filterToggleGlobal", new AbstractAction() {
+  @Override public void actionPerformed(ActionEvent e) {
+    outbound.onNext("/filter toggle");
+  }
+});
+am.put("ircafe.filterToggleBuffer", new AbstractAction() {
+  @Override public void actionPerformed(ActionEvent e) {
+    outbound.onNext("/filter toggle @");
+  }
+});
+
+// On US keyboards, the "+=" key is VK_EQUALS (with Shift producing '+').
+im.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK), "ircafe.filterToggleGlobal");
+im.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK), "ircafe.filterToggleGlobal");
+im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircafe.filterToggleBuffer");
+
   }
 
   private void setHistoryArrowKeysEnabled(boolean enabled) {

@@ -1,17 +1,25 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.PresenceEvent;
+import cafe.woden.ircclient.app.PresenceKind;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
+import cafe.woden.ircclient.ui.chat.fold.FilteredFoldComponent;
+import cafe.woden.ircclient.ui.chat.fold.FilteredHintComponent;
+import cafe.woden.ircclient.ui.chat.fold.FilteredOverflowComponent;
 import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.chat.fold.HistoryDividerComponent;
 import cafe.woden.ircclient.ui.chat.fold.SpoilerMessageComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
+import cafe.woden.ircclient.ui.filter.FilterContext;
+import cafe.woden.ircclient.ui.filter.FilterEngine;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.logging.model.LogDirection;
+import cafe.woden.ircclient.logging.model.LogKind;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.awt.Font;
@@ -21,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.Set;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Element;
@@ -36,6 +45,13 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class ChatTranscriptStore {
 
+  private static final int MAX_FILTERED_LINES_PER_PLACEHOLDER_RUN = 250;
+
+  /**
+   * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are created in a single
+   * history batch, we stop creating new placeholder rows and collapse the remainder into one summary row.
+   */
+
   private final ChatStyles styles;
   private final ChatRichTextRenderer renderer;
   private final ChatTimestampFormatter ts;
@@ -44,6 +60,7 @@ public class ChatTranscriptStore {
   private final ChatLinkPreviewEmbedder linkPreviews;
   private final UiSettingsBus uiSettings;
   private final NickColorSettingsBus nickColorSettings;
+  private final FilterEngine filterEngine;
 
   private final PropertyChangeListener nickColorSettingsListener = this::onNickColorSettingsChanged;
 
@@ -58,7 +75,8 @@ public class ChatTranscriptStore {
       NickColorSettingsBus nickColorSettings,
       ChatImageEmbedder imageEmbeds,
       ChatLinkPreviewEmbedder linkPreviews,
-      UiSettingsBus uiSettings
+      UiSettingsBus uiSettings,
+      FilterEngine filterEngine
   ) {
     this.styles = styles;
     this.renderer = renderer;
@@ -68,9 +86,169 @@ public class ChatTranscriptStore {
     this.imageEmbeds = imageEmbeds;
     this.linkPreviews = linkPreviews;
     this.uiSettings = uiSettings;
+    this.filterEngine = filterEngine;
 
     if (this.nickColorSettings != null) {
       this.nickColorSettings.addListener(nickColorSettingsListener);
+    }
+  }
+
+
+  private record LineMeta(
+      String bufferKey,
+      LogKind kind,
+      LogDirection direction,
+      String fromNick,
+      Long epochMs,
+      Set<String> tags
+  ) {
+    String tagsDisplay() {
+      if (tags == null || tags.isEmpty()) return "";
+      return String.join(" ", tags);
+    }
+  }
+
+  private LineMeta buildLineMeta(TargetRef ref, LogKind kind, LogDirection dir, String fromNick, Long epochMs, PresenceEvent presenceEvent) {
+    Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent);
+    return new LineMeta(bufferKey(ref), kind, dir, fromNick, epochMs, tags);
+  }
+
+  private Set<String> computeTags(LogKind kind, LogDirection dir, String fromNick, PresenceEvent presenceEvent) {
+    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+
+    if (kind != null) {
+      switch (kind) {
+        case CHAT -> out.add("irc_privmsg");
+        case ACTION -> out.add("irc_action");
+        case NOTICE -> out.add("irc_notice");
+        case PRESENCE -> out.add("irc_presence");
+        case STATUS -> out.add("irc_status");
+        case ERROR -> out.add("irc_error");
+        case SPOILER -> {
+          out.add("irc_privmsg");
+          out.add("irc_spoiler");
+        }
+        default -> out.add("irc_misc");
+      }
+    }
+
+    if (dir != null) {
+      switch (dir) {
+        case IN -> out.add("irc_in");
+        case OUT -> out.add("irc_out");
+        case SYSTEM -> out.add("irc_system");
+      }
+    }
+
+    String fn = java.util.Objects.toString(fromNick, "").trim();
+    if (!fn.isEmpty()) {
+      out.add("nick_" + fn.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    if (presenceEvent != null) {
+      try {
+        String nick = java.util.Objects.toString(presenceEvent.nick(), "").trim();
+        String oldNick = java.util.Objects.toString(presenceEvent.oldNick(), "").trim();
+        String newNick = java.util.Objects.toString(presenceEvent.newNick(), "").trim();
+        switch (presenceEvent.kind()) {
+          case JOIN -> {
+            out.add("irc_join");
+            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
+          }
+          case PART -> {
+            out.add("irc_part");
+            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
+          }
+          case QUIT -> {
+            out.add("irc_quit");
+            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
+          }
+          case NICK -> {
+            out.add("irc_nick");
+            if (!oldNick.isEmpty()) out.add("nick_" + oldNick.toLowerCase(java.util.Locale.ROOT));
+            if (!newNick.isEmpty()) out.add("nick_" + newNick.toLowerCase(java.util.Locale.ROOT));
+          }
+        }
+      } catch (Exception ignored) {
+      }
+    }
+
+    return java.util.Set.copyOf(out);
+  }
+
+  private SimpleAttributeSet withLineMeta(AttributeSet base, LineMeta meta) {
+    SimpleAttributeSet a = new SimpleAttributeSet(base);
+    if (meta == null) return a;
+
+    if (meta.bufferKey() != null && !meta.bufferKey().isBlank()) {
+      a.addAttribute(ChatStyles.ATTR_META_BUFFER_KEY, meta.bufferKey());
+    }
+    if (meta.kind() != null) {
+      a.addAttribute(ChatStyles.ATTR_META_KIND, meta.kind().name());
+    }
+    if (meta.direction() != null) {
+      a.addAttribute(ChatStyles.ATTR_META_DIRECTION, meta.direction().name());
+    }
+    if (meta.fromNick() != null && !meta.fromNick().isBlank()) {
+      a.addAttribute(ChatStyles.ATTR_META_FROM, meta.fromNick());
+    }
+    if (meta.tags() != null && !meta.tags().isEmpty()) {
+      a.addAttribute(ChatStyles.ATTR_META_TAGS, meta.tagsDisplay());
+    }
+    if (meta.epochMs() != null && meta.epochMs() > 0) {
+      a.addAttribute(ChatStyles.ATTR_META_EPOCH_MS, meta.epochMs());
+    }
+    return a;
+  }
+
+  private SimpleAttributeSet withExistingMeta(AttributeSet base, AttributeSet existing) {
+    SimpleAttributeSet a = new SimpleAttributeSet(base);
+    if (existing == null) return a;
+
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_BUFFER_KEY);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_KIND);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_DIRECTION);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_FROM);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_TAGS);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_EPOCH_MS);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_ID);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_NAME);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_ACTION);
+    return a;
+  }
+
+  private static void copyMetaAttr(AttributeSet src, javax.swing.text.MutableAttributeSet dst, Object key) {
+    try {
+      Object v = src.getAttribute(key);
+      if (v != null) {
+        dst.addAttribute(key, v);
+      }
+    } catch (Exception ignored) {
+    }
+  }
+
+
+  private boolean shouldHideLine(TargetRef ref, LogKind kind, LogDirection dir, String fromNick, String text, Set<String> tags) {
+    if (ref == null) return false;
+    if (filterEngine == null) return false;
+    try {
+      return filterEngine.shouldHide(new FilterContext(ref, kind, dir, fromNick, text, tags != null ? tags : Set.of()));
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private FilterEngine.Match hideMatch(TargetRef ref, LogKind kind, LogDirection dir, String fromNick, String text, Set<String> tags) {
+    if (ref == null) return null;
+    if (filterEngine == null) return null;
+    try {
+      FilterEngine.Match m = filterEngine.firstMatch(
+          new FilterContext(ref, kind, dir, fromNick, text, tags != null ? tags : Set.of())
+      );
+      if (m == null || !m.isHide()) return null;
+      return m;
+    } catch (Exception ignored) {
+      return null;
     }
   }
 
@@ -89,6 +267,709 @@ public class ChatTranscriptStore {
     }
   }
 
+  private String bufferKey(TargetRef ref) {
+    if (ref == null) return "*/status";
+    return ref.serverId() + "/" + ref.key();
+  }
+
+  private void endFilteredRun(TargetRef ref) {
+    if (ref == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null) {
+      st.currentFilteredRun = null;
+      st.currentFilteredHintRun = null;
+    }
+  }
+
+  private void endFilteredInsertRun(TargetRef ref) {
+    if (ref == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null) {
+      st.currentFilteredRunInsert = null;
+      st.currentFilteredHintRunInsert = null;
+    }
+  }
+
+  /**
+   * Explicit batch boundary for history/backfill insertion.
+   *
+   * <p>History loaders typically prepend many lines in a tight loop. We want filtered placeholders/hints
+   * to group consecutive hidden lines within that loop, but we do <b>not</b> want a filtered run from a
+   * previous load to keep growing across separate paging operations.
+   *
+   * <p>Call this once before a batch of {@code insert*FromHistoryAt(...)} calls.
+   */
+  public synchronized void beginHistoryInsertBatch(TargetRef ref) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    endFilteredInsertRun(ref);
+
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null) {
+      st.historyInsertBatchActive = true;
+      st.historyInsertPlaceholderRunsCreated = 0;
+      st.historyInsertHintRunsCreated = 0;
+      st.historyInsertOverflowRun = null;
+    }
+  }
+
+  /**
+   * Optional end-of-batch signal for history/backfill insertion.
+   *
+   * <p>Calling this is safe but not strictly required as long as callers invoke
+   * {@link #beginHistoryInsertBatch(TargetRef)} before each subsequent batch.
+   */
+  public synchronized void endHistoryInsertBatch(TargetRef ref) {
+    if (ref == null) return;
+    endFilteredInsertRun(ref);
+
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null) {
+      st.historyInsertBatchActive = false;
+      st.historyInsertPlaceholderRunsCreated = 0;
+      st.historyInsertHintRunsCreated = 0;
+      st.historyInsertOverflowRun = null;
+    }
+  }
+
+
+
+  private void onFilteredLineAppend(TargetRef ref, String previewText, LineMeta hiddenMeta, FilterEngine.Match match) {
+    if (ref == null) return;
+    if (filterEngine == null) return;
+    if (match == null || !match.isHide()) return;
+
+    ensureTargetExists(ref);
+    noteEpochMs(ref, hiddenMeta != null ? hiddenMeta.epochMs() : null);
+
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+
+    FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+    if (!eff.placeholdersEnabled()) {
+      // Placeholders are OFF, but we still want a tiny visible hint so the user
+      // doesn't get "unread but nothing visible" confusion.
+      onFilteredLineHintAppend(ref, hiddenMeta, match);
+      return;
+    }
+
+    FilteredRun run = st.currentFilteredRun;
+    FilteredFoldComponent comp = (run != null) ? run.component : null;
+
+    // Safety cap: avoid a single placeholder fold representing an unbounded number of hidden lines.
+    int maxRun = Math.max(0, eff.placeholderMaxLinesPerRun());
+    if (comp != null && maxRun > 0
+        && comp.count() >= maxRun) {
+      st.currentFilteredRun = null;
+      run = null;
+      comp = null;
+    }
+
+    if (comp == null) {
+      // A placeholder is a visible element, so it should break any active presence fold...
+      breakPresenceRun(ref);
+      ensureAtLineStart(doc);
+
+      boolean collapsed = eff.placeholdersCollapsed();
+      int maxPreviewLines = eff.placeholderMaxPreviewLines();
+
+      comp = new FilteredFoldComponent(collapsed, maxPreviewLines);
+      try { comp.setMaxTagsInTooltip(eff.placeholderTooltipMaxTags()); } catch (Exception ignored) {}
+      Font f = safeTranscriptFont();
+      if (f != null) comp.setTranscriptFont(f);
+
+      long tsEpochMs = (hiddenMeta != null && hiddenMeta.epochMs() != null && hiddenMeta.epochMs() > 0) ? hiddenMeta.epochMs() : System.currentTimeMillis();
+      LineMeta meta = buildFilteredMeta(hiddenMeta, tsEpochMs, false, hiddenMeta != null ? hiddenMeta.tags() : null);
+
+      try {
+        int insertAt = doc.getLength();
+        SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+        attachFilterMatch(attrs, match, false);
+        StyleConstants.setComponent(attrs, comp);
+
+        doc.insertString(insertAt, " ", attrs);
+        doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+
+        run = new FilteredRun(doc.createPosition(insertAt), comp);
+        st.currentFilteredRun = run;
+      } catch (Exception ignored) {
+        st.currentFilteredRun = new FilteredRun(null, comp);
+        run = st.currentFilteredRun;
+      }
+    }
+
+    // Track which filter(s) caused this run, for inspector visibility.
+    if (run != null) {
+      run.observe(match, hiddenMeta);
+      updateFilteredRunAttributes(doc, run, false);
+    }
+
+    try {
+      comp.addFilteredLine(previewText);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onFilteredLineHintAppend(TargetRef ref, LineMeta hiddenMeta, FilterEngine.Match match) {
+    if (ref == null) return;
+    if (match == null || !match.isHide()) return;
+
+    ensureTargetExists(ref);
+    noteEpochMs(ref, hiddenMeta != null ? hiddenMeta.epochMs() : null);
+
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+
+    FilteredHintRun run = st.currentFilteredHintRun;
+    FilteredHintComponent comp = (run != null) ? run.component : null;
+    if (comp == null) {
+      // A hint is a visible element, so it should break any active presence fold...
+      breakPresenceRun(ref);
+      ensureAtLineStart(doc);
+
+      comp = new FilteredHintComponent();
+      try { comp.setMaxTagsInTooltip(filterEngine.effectiveFor(ref).placeholderTooltipMaxTags()); } catch (Exception ignored) {}
+      Font f = safeTranscriptFont();
+      if (f != null) comp.setTranscriptFont(f);
+
+      long tsEpochMs = (hiddenMeta != null && hiddenMeta.epochMs() != null && hiddenMeta.epochMs() > 0) ? hiddenMeta.epochMs() : System.currentTimeMillis();
+      LineMeta meta = buildFilteredMeta(hiddenMeta, tsEpochMs, true, hiddenMeta != null ? hiddenMeta.tags() : null);
+
+      try {
+        int insertAt = doc.getLength();
+        SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+        attachFilterMatch(attrs, match, false);
+        StyleConstants.setComponent(attrs, comp);
+
+        doc.insertString(insertAt, " ", attrs);
+        doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+
+        run = new FilteredHintRun(doc.createPosition(insertAt), comp);
+        st.currentFilteredHintRun = run;
+      } catch (Exception ignored) {
+        st.currentFilteredHintRun = new FilteredHintRun(null, comp);
+        run = st.currentFilteredHintRun;
+      }
+    }
+
+    if (run != null) {
+      run.observe(match, hiddenMeta);
+      updateFilteredRunAttributes(doc, run, true);
+    }
+
+    try {
+      comp.addFilteredLine();
+    } catch (Exception ignored) {
+    }
+  }
+
+
+  /**
+   * History/backfill insertion path for filtered lines. Unlike {@link #onFilteredLineAppend},
+   * this inserts the placeholder/hint row at the given insertion offset (typically the top of the
+   * document when loading older messages).
+   *
+   * <p>We keep separate run-tracking for inserts so we don't accidentally "reuse" the live append
+   * placeholder run (which would attach hidden lines to the wrong component).
+   */
+  private int onFilteredLineInsertAt(TargetRef ref, int insertAt, String previewText, LineMeta hiddenMeta, FilterEngine.Match match) {
+    if (ref == null) return Math.max(0, insertAt);
+    if (filterEngine == null) return Math.max(0, insertAt);
+    if (match == null || !match.isHide()) return Math.max(0, insertAt);
+
+    ensureTargetExists(ref);
+    noteEpochMs(ref, hiddenMeta != null ? hiddenMeta.epochMs() : null);
+
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return Math.max(0, insertAt);
+
+    FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+
+    // Optional tuning: allow users to suppress placeholders/hints for history/backfill entirely.
+    if (!eff.historyPlaceholdersEnabled()) {
+      return Math.max(0, insertAt);
+    }
+
+    if (!eff.placeholdersEnabled()) {
+      return onFilteredLineHintInsertAt(ref, insertAt, hiddenMeta, match);
+    }
+
+    FilteredRun run = st.currentFilteredRunInsert;
+    FilteredFoldComponent comp = (run != null) ? run.component : null;
+
+    // Safety cap: avoid a single placeholder fold representing an unbounded number of hidden lines.
+    int maxRun = Math.max(0, eff.placeholderMaxLinesPerRun());
+    if (comp != null && maxRun > 0
+        && comp.count() >= maxRun) {
+      st.currentFilteredRunInsert = null;
+      run = null;
+      comp = null;
+    }
+
+    if (comp == null) {
+      // Step 5.2: Avoid creating an unbounded number of placeholder rows during history loads.
+      // Once we exceed the per-batch cap, collapse the remainder into a single summary row.
+      int maxBatchRuns = Math.max(0, eff.historyPlaceholderMaxRunsPerBatch());
+      if (st.historyInsertBatchActive
+          && maxBatchRuns > 0
+          && st.historyInsertPlaceholderRunsCreated >= maxBatchRuns) {
+        return onFilteredOverflowInsertAt(ref, insertAt, hiddenMeta, match, eff);
+      }
+
+      int beforeLen = doc.getLength();
+      int pos = normalizeInsertAtLineStart(doc, insertAt);
+      pos = ensureAtLineStartForInsert(doc, pos);
+      final int insertionStart = pos;
+
+      boolean collapsed = eff.placeholdersCollapsed();
+      int maxPreviewLines = eff.placeholderMaxPreviewLines();
+
+      comp = new FilteredFoldComponent(collapsed, maxPreviewLines);
+      try { comp.setMaxTagsInTooltip(eff.placeholderTooltipMaxTags()); } catch (Exception ignored) {}
+      Font f = safeTranscriptFont();
+      if (f != null) comp.setTranscriptFont(f);
+
+      long tsEpochMs = (hiddenMeta != null && hiddenMeta.epochMs() != null && hiddenMeta.epochMs() > 0) ? hiddenMeta.epochMs() : System.currentTimeMillis();
+      LineMeta meta = buildFilteredMeta(hiddenMeta, tsEpochMs, false, hiddenMeta != null ? hiddenMeta.tags() : null);
+
+      try {
+        SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+        attachFilterMatch(attrs, match, false);
+        StyleConstants.setComponent(attrs, comp);
+
+        doc.insertString(pos, " ", attrs);
+        doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+
+        run = new FilteredRun(doc.createPosition(pos), comp);
+        st.currentFilteredRunInsert = run;
+
+        if (st.historyInsertBatchActive) {
+          st.historyInsertPlaceholderRunsCreated++;
+        }
+      } catch (Exception ignored) {
+        st.currentFilteredRunInsert = new FilteredRun(null, comp);
+        run = st.currentFilteredRunInsert;
+
+        if (st.historyInsertBatchActive) {
+          st.historyInsertPlaceholderRunsCreated++;
+        }
+      }
+
+      int delta = doc.getLength() - beforeLen;
+      shiftCurrentPresenceBlock(ref, insertionStart, delta);
+
+      // After inserting a visible element, the caller should continue inserting after it.
+      insertAt = insertionStart + delta;
+    }
+
+    if (run != null) {
+      run.observe(match, hiddenMeta);
+      updateFilteredRunAttributes(doc, run, false);
+    }
+
+    try {
+      comp.addFilteredLine(previewText);
+    } catch (Exception ignored) {
+    }
+
+    // Hidden lines don't take up any visible space beyond the placeholder itself,
+    // so the insertion offset only advances when we had to create a new placeholder.
+    return Math.max(0, insertAt);
+  }
+
+  private int onFilteredLineHintInsertAt(TargetRef ref, int insertAt, LineMeta hiddenMeta, FilterEngine.Match match) {
+    if (ref == null) return Math.max(0, insertAt);
+    if (match == null || !match.isHide()) return Math.max(0, insertAt);
+
+    ensureTargetExists(ref);
+    noteEpochMs(ref, hiddenMeta != null ? hiddenMeta.epochMs() : null);
+
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return Math.max(0, insertAt);
+
+    FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+
+    // Optional tuning: allow users to suppress placeholders/hints for history/backfill entirely.
+    if (!eff.historyPlaceholdersEnabled()) {
+      return Math.max(0, insertAt);
+    }
+
+    FilteredHintRun run = st.currentFilteredHintRunInsert;
+    FilteredHintComponent comp = (run != null) ? run.component : null;
+
+    if (comp == null) {
+      // Step 5.2: Avoid creating an unbounded number of hint rows during history loads.
+      int maxBatchRuns = Math.max(0, eff.historyPlaceholderMaxRunsPerBatch());
+      if (st.historyInsertBatchActive
+          && maxBatchRuns > 0
+          && st.historyInsertHintRunsCreated >= maxBatchRuns) {
+        return onFilteredOverflowInsertAt(ref, insertAt, hiddenMeta, match, eff);
+      }
+
+      int beforeLen = doc.getLength();
+      int pos = normalizeInsertAtLineStart(doc, insertAt);
+      pos = ensureAtLineStartForInsert(doc, pos);
+      final int insertionStart = pos;
+
+      comp = new FilteredHintComponent();
+      try { comp.setMaxTagsInTooltip(eff.placeholderTooltipMaxTags()); } catch (Exception ignored) {}
+      Font f = safeTranscriptFont();
+      if (f != null) comp.setTranscriptFont(f);
+
+      long tsEpochMs = (hiddenMeta != null && hiddenMeta.epochMs() != null && hiddenMeta.epochMs() > 0) ? hiddenMeta.epochMs() : System.currentTimeMillis();
+      LineMeta meta = buildFilteredMeta(hiddenMeta, tsEpochMs, true, hiddenMeta != null ? hiddenMeta.tags() : null);
+
+      try {
+        SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+        attachFilterMatch(attrs, match, false);
+        StyleConstants.setComponent(attrs, comp);
+
+        doc.insertString(pos, " ", attrs);
+        doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+
+        run = new FilteredHintRun(doc.createPosition(pos), comp);
+        st.currentFilteredHintRunInsert = run;
+
+        if (st.historyInsertBatchActive) {
+          st.historyInsertHintRunsCreated++;
+        }
+      } catch (Exception ignored) {
+        st.currentFilteredHintRunInsert = new FilteredHintRun(null, comp);
+        run = st.currentFilteredHintRunInsert;
+
+        if (st.historyInsertBatchActive) {
+          st.historyInsertHintRunsCreated++;
+        }
+      }
+
+      int delta = doc.getLength() - beforeLen;
+      shiftCurrentPresenceBlock(ref, insertionStart, delta);
+
+      insertAt = insertionStart + delta;
+    }
+
+    if (run != null) {
+      run.observe(match, hiddenMeta);
+      updateFilteredRunAttributes(doc, run, true);
+    }
+
+    try {
+      comp.addFilteredLine();
+    } catch (Exception ignored) {
+    }
+
+    return Math.max(0, insertAt);
+  }
+
+  /**
+   * Step 5.2: When a history/backfill batch would create too many filtered placeholder/hint runs,
+   * collapse the remainder into a single "overflow" summary row.
+   */
+  private int onFilteredOverflowInsertAt(TargetRef ref,
+                                        int insertAt,
+                                        LineMeta hiddenMeta,
+                                        FilterEngine.Match match,
+                                        FilterEngine.Effective eff) {
+    if (ref == null) return Math.max(0, insertAt);
+    if (match == null || !match.isHide()) return Math.max(0, insertAt);
+
+    ensureTargetExists(ref);
+    noteEpochMs(ref, hiddenMeta != null ? hiddenMeta.epochMs() : null);
+
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return Math.max(0, insertAt);
+
+    FilteredOverflowRun run = st.historyInsertOverflowRun;
+    FilteredOverflowComponent comp = (run != null) ? run.component : null;
+
+    if (comp == null) {
+      int beforeLen = doc.getLength();
+      int pos = normalizeInsertAtLineStart(doc, insertAt);
+      pos = ensureAtLineStartForInsert(doc, pos);
+      final int insertionStart = pos;
+
+      comp = new FilteredOverflowComponent();
+      try { comp.setMaxTagsInTooltip(eff.placeholderTooltipMaxTags()); } catch (Exception ignored) {}
+      Font f = safeTranscriptFont();
+      if (f != null) comp.setTranscriptFont(f);
+
+      long tsEpochMs = (hiddenMeta != null && hiddenMeta.epochMs() != null && hiddenMeta.epochMs() > 0)
+          ? hiddenMeta.epochMs()
+          : System.currentTimeMillis();
+      LineMeta meta = buildFilteredOverflowMeta(hiddenMeta, tsEpochMs, hiddenMeta != null ? hiddenMeta.tags() : null);
+
+      try {
+        SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+        attachFilterMatch(attrs, match, false);
+        StyleConstants.setComponent(attrs, comp);
+
+        doc.insertString(pos, " ", attrs);
+        doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+
+        run = new FilteredOverflowRun(doc.createPosition(pos), comp);
+        st.historyInsertOverflowRun = run;
+      } catch (Exception ignored) {
+        run = new FilteredOverflowRun(null, comp);
+        st.historyInsertOverflowRun = run;
+      }
+
+      int delta = doc.getLength() - beforeLen;
+      shiftCurrentPresenceBlock(ref, insertionStart, delta);
+      insertAt = insertionStart + delta;
+    }
+
+    if (run != null) {
+      run.observe(match, hiddenMeta);
+      updateFilteredOverflowRunAttributes(doc, run);
+    }
+
+    try {
+      comp.addFilteredLine();
+    } catch (Exception ignored) {
+    }
+
+    return Math.max(0, insertAt);
+  }
+
+  private LineMeta buildFilteredOverflowMeta(LineMeta base, long tsEpochMs, Set<String> unionTags) {
+    if (base == null) {
+      base = new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of());
+    }
+
+    java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
+    if (unionTags != null && !unionTags.isEmpty()) {
+      tags.addAll(unionTags);
+    } else {
+      tags.addAll(base.tags());
+    }
+
+    tags.add("irc_filtered");
+    tags.add("irc_filtered_overflow");
+
+    return new LineMeta(
+        base.bufferKey(),
+        base.kind(),
+        base.direction(),
+        base.fromNick(),
+        tsEpochMs,
+        Set.copyOf(tags)
+    );
+  }
+
+  private void updateFilteredOverflowRunAttributes(StyledDocument doc, FilteredOverflowRun run) {
+    if (doc == null || run == null || run.pos == null || run.component == null) return;
+
+    LineMeta base = run.lastHiddenMeta;
+    if (base == null) return;
+
+    long tsEpochMs = (base.epochMs() != null && base.epochMs() > 0) ? base.epochMs() : System.currentTimeMillis();
+    LineMeta meta = buildFilteredOverflowMeta(base, tsEpochMs, run.unionTags);
+
+    SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+    attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+    attachFilterMatch(attrs, run.primaryMatch, run.multiple);
+    StyleConstants.setComponent(attrs, run.component);
+
+    try {
+      int off = run.pos.getOffset();
+      doc.setCharacterAttributes(off, 1, attrs, true);
+      if (off + 1 < doc.getLength()) {
+        SimpleAttributeSet nl = withLineMeta(styles.timestamp(), meta);
+        attachFilterMatch(nl, run.primaryMatch, run.multiple);
+        doc.setCharacterAttributes(off + 1, 1, nl, true);
+      }
+    } catch (Exception ignored) {
+    }
+
+    try {
+      boolean multiple = run.multiple;
+      String ruleLabel;
+      if (multiple) {
+        ruleLabel = "(multiple)";
+      } else if (run.primaryMatch != null && run.primaryMatch.ruleName() != null) {
+        ruleLabel = String.valueOf(run.primaryMatch.ruleName());
+      } else {
+        ruleLabel = "(unknown)";
+      }
+      run.component.setFilterDetails(ruleLabel, multiple, run.unionTags);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private String previewChatLine(String from, String text) {
+
+    String t = (text == null) ? "" : text;
+    if (from == null || from.isBlank()) return t;
+    return from + ": " + t;
+  }
+
+  private String previewActionLine(String from, String action) {
+    String f = (from == null) ? "" : from;
+    String a = (action == null) ? "" : action;
+    return "* " + f + " " + a;
+  }
+
+  private Font safeTranscriptFont() {
+    try {
+      if (uiSettings != null && uiSettings.get() != null) {
+        UiSettings us = uiSettings.get();
+        return new Font(
+            us.chatFontFamily(),
+            Font.PLAIN,
+            us.chatFontSize()
+        );
+      }
+    } catch (Exception ignored) {
+    }
+    return null;
+  }
+
+
+
+  private LineMeta buildFilteredMeta(LineMeta base, long tsEpochMs, boolean hint, Set<String> unionTags) {
+    if (base == null) {
+      // Fallback meta: should be rare (only if a caller fails to provide meta).
+      base = new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of());
+    }
+
+    java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
+    if (unionTags != null && !unionTags.isEmpty()) {
+      tags.addAll(unionTags);
+    } else {
+      tags.addAll(base.tags());
+    }
+
+    tags.add("irc_filtered");
+    tags.add(hint ? "irc_filtered_hint" : "irc_filtered_placeholder");
+
+    return new LineMeta(
+        base.bufferKey(),
+        base.kind(),
+        base.direction(),
+        base.fromNick(),
+        tsEpochMs,
+        Set.copyOf(tags)
+    );
+  }
+
+  private void attachFilterMatch(SimpleAttributeSet attrs, FilterEngine.Match match, boolean multiple) {
+    if (attrs == null) return;
+
+    String action = (match != null && match.action() != null) ? match.action().name() : "HIDE";
+    attrs.addAttribute(ChatStyles.ATTR_META_FILTER_ACTION, action);
+    attrs.addAttribute(ChatStyles.ATTR_META_FILTER_MULTIPLE, multiple ? Boolean.TRUE : Boolean.FALSE);
+
+    if (multiple) {
+      attrs.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_NAME, "(multiple)");
+      attrs.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_ID, "");
+      return;
+    }
+
+    if (match != null) {
+      attrs.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_NAME, String.valueOf(match.ruleName()));
+      attrs.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_ID, String.valueOf(match.ruleId()));
+    } else {
+      attrs.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_NAME, "(unknown)");
+      attrs.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_ID, "");
+    }
+  }
+
+  private void updateFilteredRunAttributes(StyledDocument doc, FilteredRun run, boolean hint) {
+    if (doc == null || run == null || run.pos == null || run.component == null) return;
+
+    LineMeta base = run.lastHiddenMeta;
+    if (base == null) return;
+
+    long tsEpochMs = (base.epochMs() != null && base.epochMs() > 0) ? base.epochMs() : System.currentTimeMillis();
+    LineMeta meta = buildFilteredMeta(base, tsEpochMs, hint, run.unionTags);
+
+    SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+    attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+    attachFilterMatch(attrs, run.primaryMatch, run.multiple);
+    StyleConstants.setComponent(attrs, run.component);
+
+    try {
+      int off = run.pos.getOffset();
+      doc.setCharacterAttributes(off, 1, attrs, true);
+      // Also apply metadata to the newline that terminates this row, so the inspector
+      // is reliable even if the user clicks just past the component.
+      if (off + 1 < doc.getLength()) {
+        SimpleAttributeSet nl = withLineMeta(styles.timestamp(), meta);
+        attachFilterMatch(nl, run.primaryMatch, run.multiple);
+        doc.setCharacterAttributes(off + 1, 1, nl, true);
+      }
+    } catch (Exception ignored) {
+    }
+
+    // Tooltip polish: show which rule filtered this run and a summary of tags.
+    try {
+      boolean multiple = run.multiple;
+      String ruleLabel;
+      if (multiple) {
+        ruleLabel = "(multiple)";
+      } else if (run.primaryMatch != null && run.primaryMatch.ruleName() != null) {
+        ruleLabel = String.valueOf(run.primaryMatch.ruleName());
+      } else {
+        ruleLabel = "(unknown)";
+      }
+      run.component.setFilterDetails(ruleLabel, multiple, run.unionTags);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void updateFilteredRunAttributes(StyledDocument doc, FilteredHintRun run, boolean hint) {
+    if (doc == null || run == null || run.pos == null || run.component == null) return;
+
+    LineMeta base = run.lastHiddenMeta;
+    if (base == null) return;
+
+    long tsEpochMs = (base.epochMs() != null && base.epochMs() > 0) ? base.epochMs() : System.currentTimeMillis();
+    LineMeta meta = buildFilteredMeta(base, tsEpochMs, hint, run.unionTags);
+
+    SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+    attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+    attachFilterMatch(attrs, run.primaryMatch, run.multiple);
+    StyleConstants.setComponent(attrs, run.component);
+
+    try {
+      int off = run.pos.getOffset();
+      doc.setCharacterAttributes(off, 1, attrs, true);
+      // Also apply metadata to the newline that terminates this row, so the inspector
+      // is reliable even if the user clicks just past the component.
+      if (off + 1 < doc.getLength()) {
+        SimpleAttributeSet nl = withLineMeta(styles.timestamp(), meta);
+        attachFilterMatch(nl, run.primaryMatch, run.multiple);
+        doc.setCharacterAttributes(off + 1, 1, nl, true);
+      }
+    } catch (Exception ignored) {
+    }
+
+    // Tooltip polish: show which rule filtered this run and a summary of tags.
+    try {
+      boolean multiple = run.multiple;
+      String ruleLabel;
+      if (multiple) {
+        ruleLabel = "(multiple)";
+      } else if (run.primaryMatch != null && run.primaryMatch.ruleName() != null) {
+        ruleLabel = String.valueOf(run.primaryMatch.ruleName());
+      } else {
+        ruleLabel = "(unknown)";
+      }
+      run.component.setFilterDetails(ruleLabel, multiple, run.unionTags);
+    } catch (Exception ignored) {
+    }
+  }
+
   public synchronized StyledDocument document(TargetRef ref) {
     ensureTargetExists(ref);
     return docs.get(ref);
@@ -103,8 +984,13 @@ public class ChatTranscriptStore {
 
   public synchronized LoadOlderMessagesComponent ensureLoadOlderMessagesControl(TargetRef ref) {
     ensureTargetExists(ref);
+    endFilteredRun(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return null;
+
+    // This is a synthetic UI row; still attach line metadata so the inspector and
+    // filtering UI remain consistent and reliable.
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, System.currentTimeMillis(), null);
 
     TranscriptState st = stateByTarget.get(ref);
     if (st != null && st.loadOlderControl != null) {
@@ -127,12 +1013,12 @@ public class ChatTranscriptStore {
     }
 
     try {
-      SimpleAttributeSet attrs = new SimpleAttributeSet(styles.status());
+      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(insertPos, " ", attrs);
       Position pos = doc.createPosition(insertPos);
-      doc.insertString(insertPos + 1, "\n", styles.timestamp());
+      doc.insertString(insertPos + 1, "\n", withLineMeta(styles.timestamp(), meta));
       if (st != null) {
         st.loadOlderControl = new LoadOlderControl(pos, comp);
       }
@@ -150,6 +1036,9 @@ public class ChatTranscriptStore {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return null;
+
+    // Synthetic UI row; keep metadata consistent so inspector behavior is stable.
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, System.currentTimeMillis(), null);
 
     TranscriptState st = stateByTarget.get(ref);
     if (st != null && st.historyDivider != null) {
@@ -178,12 +1067,12 @@ public class ChatTranscriptStore {
     }
 
     try {
-      SimpleAttributeSet attrs = new SimpleAttributeSet(styles.status());
+      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(pos, " ", attrs);
       Position p = doc.createPosition(pos);
-      doc.insertString(pos + 1, "\n", styles.timestamp());
+      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
       if (st != null) {
         st.historyDivider = new HistoryDividerControl(p, comp);
       }
@@ -258,6 +1147,23 @@ public class ChatTranscriptStore {
 
   public synchronized void appendPresence(TargetRef ref, PresenceEvent event) {
     if (ref == null || event == null) return;
+
+    String presenceFrom = null;
+    try {
+      presenceFrom = (event.kind() == PresenceKind.NICK) ? event.oldNick() : event.nick();
+    } catch (Exception ignored) {
+      presenceFrom = event.nick();
+    }
+    LineMeta meta = buildLineMeta(ref, LogKind.PRESENCE, LogDirection.SYSTEM, presenceFrom, System.currentTimeMillis(), event);
+
+    FilterEngine.Match m = hideMatch(ref, LogKind.PRESENCE, LogDirection.SYSTEM, presenceFrom, event.displayText(), meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, event.displayText(), meta, m);
+      return;
+    }
+
+    endFilteredRun(ref);
+
     ensureTargetExists(ref);
 
     StyledDocument doc = docs.get(ref);
@@ -275,11 +1181,11 @@ public class ChatTranscriptStore {
       ensureAtLineStart(doc);
       try {
         if (ts != null && ts.enabled()) {
-          doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+          doc.insertString(doc.getLength(), ts.prefixNow(), withLineMeta(styles.timestamp(), meta));
         }
-        AttributeSet base = styles.status();
+        AttributeSet base = withLineMeta(styles.status(), meta);
         renderer.insertRichText(doc, ref, event.displayText(), base);
-        doc.insertString(doc.getLength(), "\n", styles.timestamp());
+        doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
       } catch (Exception ignored2) {
       }
       return;
@@ -295,12 +1201,12 @@ public class ChatTranscriptStore {
 
     try {
       if (ts != null && ts.enabled()) {
-        doc.insertString(doc.getLength(), ts.prefixNow(), styles.timestamp());
+        doc.insertString(doc.getLength(), ts.prefixNow(), withLineMeta(styles.timestamp(), meta));
       }
 
-      AttributeSet base = styles.status();
+      AttributeSet base = withLineMeta(styles.status(), meta);
       renderer.insertRichText(doc, ref, event.displayText(), base);
-      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
     } catch (Exception ignored) {
       return;
     }
@@ -334,14 +1240,19 @@ public class ChatTranscriptStore {
                                   AttributeSet fromStyle,
                                   AttributeSet msgStyle,
                                   boolean allowEmbeds,
-                                  Long epochMs) {
+                                  LineMeta meta) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
-    noteEpochMs(ref, epochMs);
+    noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
     ensureAtLineStart(doc);
 
+    Long epochMs = (meta != null) ? meta.epochMs() : null;
+    AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+    AttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
+    AttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+
     try {
-      AttributeSet baseForId = msgStyle != null ? msgStyle : styles.message();
+      AttributeSet baseForId = msgStyle2;
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
       boolean timestampsIncludeChatMessages = false;
@@ -359,17 +1270,17 @@ public class ChatTranscriptStore {
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
           || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
-        doc.insertString(doc.getLength(), prefix, styles.timestamp());
+        doc.insertString(doc.getLength(), prefix, tsStyle);
       }
 
       if (from != null && !from.isBlank()) {
-        doc.insertString(doc.getLength(), from + ": ", fromStyle != null ? fromStyle : styles.from());
+        doc.insertString(doc.getLength(), from + ": ", fromStyle2);
       }
 
-      AttributeSet base = msgStyle != null ? msgStyle : styles.message();
+      AttributeSet base = msgStyle2;
       renderer.insertRichText(doc, ref, text, base);
 
-      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
 
       if (!allowEmbeds) {
         return;
@@ -389,6 +1300,15 @@ public class ChatTranscriptStore {
   }
 
   public void appendChat(TargetRef ref, String from, String text, boolean outgoingLocalEcho) {
+    long tsEpochMs = System.currentTimeMillis();
+    LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
+    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
+
     breakPresenceRun(ref);
 
     AttributeSet fromStyle = styles.from();
@@ -396,11 +1316,11 @@ public class ChatTranscriptStore {
       fromStyle = nickColors.forNick(from, fromStyle);
     }
 
-    SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
-    SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
-    appendLine(ref, from, text, fs, ms);
+    appendLineInternal(ref, from, text, fs, ms, true, meta);
   }
 
   public void appendChatFromHistory(TargetRef ref,
@@ -408,6 +1328,17 @@ public class ChatTranscriptStore {
                                     String text,
                                     boolean outgoingLocalEcho,
                                     long tsEpochMs) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+
+    LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
+    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
+
     breakPresenceRun(ref);
 
     AttributeSet fromStyle = styles.from();
@@ -415,11 +1346,11 @@ public class ChatTranscriptStore {
       fromStyle = nickColors.forNick(from, fromStyle);
     }
 
-    SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
-    SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
-    appendLineInternal(ref, from, text, fs, ms, false, tsEpochMs);
+    appendLineInternal(ref, from, text, fs, ms, false, meta);
   }
 /**
  * Append a chat message with a timestamp, allowing embeds (link previews / images).
@@ -432,6 +1363,17 @@ public void appendChatAt(TargetRef ref,
                          String text,
                          boolean outgoingLocalEcho,
                          long tsEpochMs) {
+  ensureTargetExists(ref);
+  noteEpochMs(ref, tsEpochMs);
+
+  LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
+  LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+  FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
+  if (m != null) {
+    onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+    return;
+  }
+
   breakPresenceRun(ref);
 
   AttributeSet fromStyle = styles.from();
@@ -439,11 +1381,11 @@ public void appendChatAt(TargetRef ref,
     fromStyle = nickColors.forNick(from, fromStyle);
   }
 
-  SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
-  SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+  SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+  SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
   applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
-  appendLineInternal(ref, from, text, fs, ms, true, tsEpochMs);
+  appendLineInternal(ref, from, text, fs, ms, true, meta);
 }
   public synchronized int insertChatFromHistoryAt(TargetRef ref,
                                                   int insertAt,
@@ -456,16 +1398,29 @@ public void appendChatAt(TargetRef ref,
     noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
 
+    LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
+    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
+    if (m != null) {
+      FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+      if (eff.historyPlaceholdersEnabled()) {
+        return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, m);
+      }
+      // History placeholders disabled: silently drop filtered history lines.
+      endFilteredInsertRun(ref);
+      return Math.max(0, insertAt);
+    }
+
     AttributeSet fromStyle = styles.from();
     if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
       fromStyle = nickColors.forNick(from, fromStyle);
     }
 
-    SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
-    SimpleAttributeSet ms = new SimpleAttributeSet(styles.message());
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
-    return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, tsEpochMs);
+    return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
   }
 
   public synchronized int prependChatFromHistory(TargetRef ref,
@@ -487,6 +1442,23 @@ public void appendChatAt(TargetRef ref,
     StyledDocument doc = docs.get(ref);
     if (doc == null) return Math.max(0, insertAt);
 
+    LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
+    LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
+    if (m != null) {
+      FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+      if (eff.historyPlaceholdersEnabled()) {
+        return onFilteredLineInsertAt(ref, insertAt, previewActionLine(from, action), meta, m);
+      }
+      // History placeholders disabled: silently drop filtered history lines.
+      endFilteredInsertRun(ref);
+      return Math.max(0, insertAt);
+    }
+
+    // This is a visible history insert (it creates real document content), so break any active
+    // insert-run placeholders created by prior hidden lines.
+    endFilteredInsertRun(ref);
+
     int beforeLen = doc.getLength();
     int pos = normalizeInsertAtLineStart(doc, insertAt);
     pos = ensureAtLineStartForInsert(doc, pos);
@@ -504,9 +1476,11 @@ public void appendChatAt(TargetRef ref,
         timestampsIncludeChatMessages = false;
       }
 
+      AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+
       if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
         String prefix = ts.prefixAt(tsEpochMs);
-        doc.insertString(pos, prefix, styles.timestamp());
+        doc.insertString(pos, prefix, tsStyle);
         pos += prefix.length();
       }
 
@@ -517,8 +1491,8 @@ public void appendChatAt(TargetRef ref,
         fromStyle = nickColors.forNick(from, fromStyle);
       }
 
-      SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
-      SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+      SimpleAttributeSet ms = withLineMeta(msgStyle, meta);
+      SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
       doc.insertString(pos, "* ", ms);
@@ -537,7 +1511,7 @@ public void appendChatAt(TargetRef ref,
         pos += a.length();
       }
 
-      doc.insertString(pos, "\n", styles.timestamp());
+      doc.insertString(pos, "\n", tsStyle);
       pos += 1;
     } catch (Exception ignored) {
     }
@@ -560,8 +1534,25 @@ public void appendChatAt(TargetRef ref,
                                                     String from,
                                                     String text,
                                                     long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, tsEpochMs);
+    if (doc == null) return Math.max(0, insertAt);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
+    if (m != null) {
+      FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+      if (eff.historyPlaceholdersEnabled()) {
+        return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, m);
+      }
+      // History placeholders disabled: silently drop filtered history lines.
+      endFilteredInsertRun(ref);
+      return Math.max(0, insertAt);
+    }
+
     return insertLineInternalAt(ref, insertAt, from, text,
-        styles.noticeFrom(), styles.noticeMessage(), false, tsEpochMs);
+        styles.noticeFrom(), styles.noticeMessage(), false, meta);
   }
 
   public synchronized int prependNoticeFromHistory(TargetRef ref,
@@ -576,8 +1567,25 @@ public void appendChatAt(TargetRef ref,
                                                     String from,
                                                     String text,
                                                     long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, tsEpochMs);
+    if (doc == null) return Math.max(0, insertAt);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
+    if (m != null) {
+      FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+      if (eff.historyPlaceholdersEnabled()) {
+        return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, m);
+      }
+      // History placeholders disabled: silently drop filtered history lines.
+      endFilteredInsertRun(ref);
+      return Math.max(0, insertAt);
+    }
+
     return insertLineInternalAt(ref, insertAt, from, text,
-        styles.status(), styles.status(), false, tsEpochMs);
+        styles.status(), styles.status(), false, meta);
   }
 
   public synchronized int prependStatusFromHistory(TargetRef ref,
@@ -592,8 +1600,25 @@ public void appendChatAt(TargetRef ref,
                                                    String from,
                                                    String text,
                                                    long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, tsEpochMs);
+    if (doc == null) return Math.max(0, insertAt);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.ERROR, LogDirection.SYSTEM, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.ERROR, LogDirection.SYSTEM, from, text, meta.tags());
+    if (m != null) {
+      FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+      if (eff.historyPlaceholdersEnabled()) {
+        return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, m);
+      }
+      // History placeholders disabled: silently drop filtered history lines.
+      endFilteredInsertRun(ref);
+      return Math.max(0, insertAt);
+    }
+
     return insertLineInternalAt(ref, insertAt, from, text,
-        styles.error(), styles.error(), false, tsEpochMs);
+        styles.error(), styles.error(), false, meta);
   }
 
   public synchronized int prependErrorFromHistory(TargetRef ref,
@@ -607,8 +1632,19 @@ public void appendChatAt(TargetRef ref,
                                                       int insertAt,
                                                       String displayText,
                                                       long tsEpochMs) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, tsEpochMs);
+    if (doc == null) return Math.max(0, insertAt);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.PRESENCE, LogDirection.SYSTEM, null, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.PRESENCE, LogDirection.SYSTEM, null, displayText, meta.tags());
+    if (m != null) {
+      return onFilteredLineInsertAt(ref, insertAt, previewChatLine(null, displayText), meta, m);
+    }
+
     return insertLineInternalAt(ref, insertAt, null, displayText,
-        styles.status(), styles.status(), false, tsEpochMs);
+        styles.status(), styles.status(), false, meta);
   }
 
   public synchronized int prependPresenceFromHistory(TargetRef ref,
@@ -626,6 +1662,21 @@ public void appendChatAt(TargetRef ref,
     StyledDocument doc = docs.get(ref);
     noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.SPOILER, LogDirection.IN, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
+    if (m != null) {
+      FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+      if (eff.historyPlaceholdersEnabled()) {
+        return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, m);
+      }
+      // History placeholders disabled: silently drop filtered history lines.
+      endFilteredInsertRun(ref);
+      return Math.max(0, insertAt);
+    }
+
+    // Visible history insert.
+    endFilteredInsertRun(ref);
 
     int beforeLen = doc.getLength();
     int pos = normalizeInsertAtLineStart(doc, insertAt);
@@ -681,14 +1732,14 @@ public void appendChatAt(TargetRef ref,
     } catch (Exception ignored) {
     }
 
-    SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
+    SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
       final Position spoilerPos = doc.createPosition(offFinal);
       comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
           tsPrefixFinal, fromFinal, msgFinal));
-      doc.insertString(offFinal + 1, "\n", styles.timestamp());
+      doc.insertString(offFinal + 1, "\n", withLineMeta(styles.timestamp(), meta));
       pos = offFinal + 2;
     } catch (Exception ignored) {
     }
@@ -705,6 +1756,7 @@ public void appendChatAt(TargetRef ref,
     return insertSpoilerChatFromHistoryAt(ref, 0, from, text, tsEpochMs);
   }
 
+
   private int insertLineInternalAt(TargetRef ref,
                                    int insertAt,
                                    String from,
@@ -712,19 +1764,27 @@ public void appendChatAt(TargetRef ref,
                                    AttributeSet fromStyle,
                                    AttributeSet msgStyle,
                                    boolean allowEmbeds,
-                                   Long epochMs) {
+                                   LineMeta meta) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
-    noteEpochMs(ref, epochMs);
+    noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
     if (doc == null) return Math.max(0, insertAt);
+
+    // Visible history inserts should break any active filtered run created by prior hidden lines.
+    endFilteredInsertRun(ref);
 
     int beforeLen = doc.getLength();
     int pos = normalizeInsertAtLineStart(doc, insertAt);
     pos = ensureAtLineStartForInsert(doc, pos);
     final int insertionStart = pos;
 
+    Long epochMs = (meta != null) ? meta.epochMs() : null;
+    AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+    AttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
+    AttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+
     try {
-      AttributeSet baseForId = msgStyle != null ? msgStyle : styles.message();
+      AttributeSet baseForId = msgStyle2;
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
@@ -743,28 +1803,29 @@ public void appendChatAt(TargetRef ref,
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
           || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
-        doc.insertString(pos, prefix, styles.timestamp());
+        doc.insertString(pos, prefix, tsStyle);
         pos += prefix.length();
       }
 
       if (from != null && !from.isBlank()) {
         String prefix = from + ": ";
-        doc.insertString(pos, prefix, fromStyle != null ? fromStyle : styles.from());
+        doc.insertString(pos, prefix, fromStyle2);
         pos += prefix.length();
       }
 
-      AttributeSet base = msgStyle != null ? msgStyle : styles.message();
       if (renderer != null) {
-        pos = renderer.insertRichTextAt(doc, ref, text, base, pos);
+        pos = renderer.insertRichTextAt(doc, ref, text, msgStyle2, pos);
       } else {
         String t = text == null ? "" : text;
-        doc.insertString(pos, t, base);
+        doc.insertString(pos, t, msgStyle2);
         pos += t.length();
       }
 
-      doc.insertString(pos, "\n", styles.timestamp());
+      doc.insertString(pos, "\n", tsStyle);
       pos += 1;
+
       if (allowEmbeds) {
+        // (Embeds are intentionally skipped here; rich inserts during history prefill can be expensive.)
       }
     } catch (Exception ignored) {
     }
@@ -802,7 +1863,13 @@ public void appendChatAt(TargetRef ref,
     try {
       String prev = doc.getText(p - 1, 1);
       if (!"\n".equals(prev)) {
-        doc.insertString(p, "\n", styles.timestamp());
+        AttributeSet prevAttrs = null;
+        try {
+          prevAttrs = doc.getCharacterElement(Math.max(0, p - 1)).getAttributes();
+        } catch (Exception ignored2) {
+          prevAttrs = null;
+        }
+        doc.insertString(p, "\n", withExistingMeta(styles.timestamp(), prevAttrs));
         return p + 1;
       }
     } catch (Exception ignored) {
@@ -874,6 +1941,12 @@ public void appendChatAt(TargetRef ref,
   }
 
   public void appendSpoilerChat(TargetRef ref, String from, String text) {
+    LineMeta meta = buildLineMeta(ref, LogKind.SPOILER, LogDirection.IN, from, System.currentTimeMillis(), null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
@@ -928,7 +2001,7 @@ public void appendChatAt(TargetRef ref,
     } catch (Exception ignored) {
     }
 
-    SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
+    SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
@@ -936,14 +2009,21 @@ public void appendChatAt(TargetRef ref,
       comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
           tsPrefixFinal, fromFinal, msgFinal));
 
-      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
     } catch (Exception ignored) {
     }
   }
 
   public void appendSpoilerChatFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
-    breakPresenceRun(ref);
     ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    LineMeta meta = buildLineMeta(ref, LogKind.SPOILER, LogDirection.IN, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
+    breakPresenceRun(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
     ensureAtLineStart(doc);
@@ -998,7 +2078,7 @@ public void appendChatAt(TargetRef ref,
     } catch (Exception ignored) {
     }
 
-    SimpleAttributeSet attrs = new SimpleAttributeSet(styles.message());
+    SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
@@ -1008,7 +2088,7 @@ public void appendChatAt(TargetRef ref,
       comp.setOnReveal(() -> revealSpoilerInPlace(refFinal, docFinal, spoilerPos, comp,
           tsPrefixFinal, fromFinal, msgFinal));
 
-      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
     } catch (Exception ignored) {
     }
   }
@@ -1049,6 +2129,9 @@ public void appendChatAt(TargetRef ref,
       Object comp = as != null ? StyleConstants.getComponent(as) : null;
       if (!(comp instanceof SpoilerMessageComponent)) return false;
       if (expected != null && comp != expected) return false;
+
+      AttributeSet tsStyle = withExistingMeta(styles.timestamp(), as);
+      AttributeSet msgStyle = withExistingMeta(styles.message(), as);
       int removeLen = 1;
       if (off + 1 < doc.getLength()) {
         try {
@@ -1061,7 +2144,7 @@ public void appendChatAt(TargetRef ref,
 
       int pos = off;
       if (tsPrefix != null && !tsPrefix.isBlank()) {
-        doc.insertString(pos, tsPrefix, styles.timestamp());
+        doc.insertString(pos, tsPrefix, tsStyle);
         pos += tsPrefix.length();
       }
       if (from != null && !from.isBlank()) {
@@ -1069,6 +2152,7 @@ public void appendChatAt(TargetRef ref,
         if (nickColors != null && nickColors.enabled()) {
           fromStyle = nickColors.forNick(from, fromStyle);
         }
+        fromStyle = withExistingMeta(fromStyle, as);
         String prefix = from + ": ";
         doc.insertString(pos, prefix, fromStyle);
         pos += prefix.length();
@@ -1076,20 +2160,20 @@ public void appendChatAt(TargetRef ref,
       DefaultStyledDocument inner = new DefaultStyledDocument();
       try {
         if (renderer != null) {
-          renderer.insertRichText(inner, ref, msg, styles.message());
+          renderer.insertRichText(inner, ref, msg, new SimpleAttributeSet(msgStyle));
         } else {
-          inner.insertString(0, msg, styles.message());
+          inner.insertString(0, msg, msgStyle);
         }
       } catch (Exception ignored2) {
         try {
           inner.remove(0, inner.getLength());
-          inner.insertString(0, msg, styles.message());
+          inner.insertString(0, msg, msgStyle);
         } catch (Exception ignored3) {
         }
       }
 
       pos = insertStyled(inner, doc, pos);
-      doc.insertString(pos, "\n", styles.timestamp());
+      doc.insertString(pos, "\n", tsStyle);
       return true;
     } catch (Exception ignored) {
       return false;
@@ -1157,24 +2241,38 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
     appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs);
   }
-/**
- * Append an action (/me) with a timestamp, allowing embeds.
- */
-public void appendActionAt(TargetRef ref,
-                           String from,
-                           String action,
-                           boolean outgoingLocalEcho,
-                           long tsEpochMs) {
-  appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs);
-}
+  /**
+   * Append an action (/me) with a timestamp, allowing embeds.
+   */
+  public void appendActionAt(TargetRef ref,
+                             String from,
+                             String action,
+                             boolean outgoingLocalEcho,
+                             long tsEpochMs) {
+    appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs);
+  }
+
   private void appendActionInternal(TargetRef ref,
                                     String from,
                                     String action,
                                     boolean outgoingLocalEcho,
                                     boolean allowEmbeds,
                                     Long epochMs) {
-    breakPresenceRun(ref);
     ensureTargetExists(ref);
+
+    LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
+    long tsEpochMs = epochMs != null ? epochMs : System.currentTimeMillis();
+    noteEpochMs(ref, tsEpochMs);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null);
+
+    FilterEngine.Match m = hideMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewActionLine(from, action), meta, m);
+      return;
+    }
+
+    breakPresenceRun(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
 
@@ -1191,12 +2289,14 @@ public void appendActionAt(TargetRef ref,
         timestampsIncludeChatMessages = false;
       }
 
+      AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+
       if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
-        String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
-        doc.insertString(doc.getLength(), prefix, styles.timestamp());
+        String prefix = ts.prefixAt(tsEpochMs);
+        doc.insertString(doc.getLength(), prefix, tsStyle);
       }
 
-      AttributeSet msgStyle = styles.actionMessage();
+      AttributeSet msgStyle = withLineMeta(styles.actionMessage(), meta);
       AttributeSet fromStyle = styles.actionFrom();
 
       if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
@@ -1204,7 +2304,7 @@ public void appendActionAt(TargetRef ref,
       }
 
       SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
-      SimpleAttributeSet fs = new SimpleAttributeSet(fromStyle);
+      SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
       doc.insertString(doc.getLength(), "* ", ms);
@@ -1213,8 +2313,13 @@ public void appendActionAt(TargetRef ref,
         doc.insertString(doc.getLength(), " ", ms);
       }
 
-      renderer.insertRichText(doc, ref, a, ms);
-      doc.insertString(doc.getLength(), "\n", styles.timestamp());
+      if (renderer != null) {
+        renderer.insertRichText(doc, ref, a, ms);
+      } else {
+        doc.insertString(doc.getLength(), a, ms);
+      }
+
+      doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
         return;
@@ -1232,66 +2337,144 @@ public void appendActionAt(TargetRef ref,
   }
 
   public void appendNotice(TargetRef ref, String from, String text) {
+    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, System.currentTimeMillis(), null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLine(ref, from, text, styles.noticeFrom(), styles.noticeMessage());
+    appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), true, meta);
   }
 
   public void appendStatus(TargetRef ref, String from, String text) {
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, System.currentTimeMillis(), null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLine(ref, from, text, styles.status(), styles.status());
+    appendLineInternal(ref, from, text, styles.status(), styles.status(), true, meta);
   }
 
   public void appendError(TargetRef ref, String from, String text) {
+    LineMeta meta = buildLineMeta(ref, LogKind.ERROR, LogDirection.SYSTEM, from, System.currentTimeMillis(), null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.ERROR, LogDirection.SYSTEM, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLine(ref, from, text, styles.error(), styles.error());
+    appendLineInternal(ref, from, text, styles.error(), styles.error(), true, meta);
   }
 
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), false, tsEpochMs);
+    appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), false, meta);
   }
 
   public void appendStatusFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.status(), styles.status(), false, tsEpochMs);
+    appendLineInternal(ref, from, text, styles.status(), styles.status(), false, meta);
   }
 
   public void appendErrorFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    LineMeta meta = buildLineMeta(ref, LogKind.ERROR, LogDirection.SYSTEM, from, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.ERROR, LogDirection.SYSTEM, from, text, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.error(), styles.error(), false, tsEpochMs);
+    appendLineInternal(ref, from, text, styles.error(), styles.error(), false, meta);
   }
 /**
  * Append a notice with a timestamp, allowing embeds.
  */
 public void appendNoticeAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  ensureTargetExists(ref);
+  noteEpochMs(ref, tsEpochMs);
+  LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+  FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
+  if (m != null) {
+    onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+    return;
+  }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), true, tsEpochMs);
+  appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), true, meta);
 }
 
 /**
  * Append a status line with a timestamp, allowing embeds.
  */
 public void appendStatusAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  ensureTargetExists(ref);
+  noteEpochMs(ref, tsEpochMs);
+  LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null);
+  FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
+  if (m != null) {
+    onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+    return;
+  }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.status(), styles.status(), true, tsEpochMs);
+  appendLineInternal(ref, from, text, styles.status(), styles.status(), true, meta);
 }
 
 /**
  * Append an error line with a timestamp, allowing embeds.
  */
 public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  ensureTargetExists(ref);
+  noteEpochMs(ref, tsEpochMs);
+  LineMeta meta = buildLineMeta(ref, LogKind.ERROR, LogDirection.SYSTEM, from, tsEpochMs, null);
+  FilterEngine.Match m = hideMatch(ref, LogKind.ERROR, LogDirection.SYSTEM, from, text, meta.tags());
+  if (m != null) {
+    onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
+    return;
+  }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.error(), styles.error(), true, tsEpochMs);
+  appendLineInternal(ref, from, text, styles.error(), styles.error(), true, meta);
 }
   public void appendPresenceFromHistory(TargetRef ref, String displayText, long tsEpochMs) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    LineMeta meta = buildLineMeta(ref, LogKind.PRESENCE, LogDirection.SYSTEM, null, tsEpochMs, null);
+    FilterEngine.Match m = hideMatch(ref, LogKind.PRESENCE, LogDirection.SYSTEM, null, displayText, meta.tags());
+    if (m != null) {
+      onFilteredLineAppend(ref, displayText, meta, m);
+      return;
+    }
     breakPresenceRun(ref);
-    appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, tsEpochMs);
+    appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, meta);
   }
 
   private void breakPresenceRun(TargetRef ref) {
     if (ref == null) return;
     TranscriptState st = stateByTarget.get(ref);
-    if (st != null) st.currentPresenceBlock = null;
+    if (st != null) {
+      st.currentPresenceBlock = null;
+      st.currentFilteredRun = null;
+      st.currentFilteredHintRun = null;
+    }
   }
 
     private void ensureAtLineStart(StyledDocument doc) {
@@ -1301,7 +2484,13 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     try {
       String last = doc.getText(len - 1, 1);
       if (!"\n".equals(last)) {
-        doc.insertString(len, "\n", styles.timestamp());
+        AttributeSet lastAttrs = null;
+        try {
+          lastAttrs = doc.getCharacterElement(Math.max(0, len - 1)).getAttributes();
+        } catch (Exception ignored2) {
+          lastAttrs = null;
+        }
+        doc.insertString(len, "\n", withExistingMeta(styles.timestamp(), lastAttrs));
       }
     } catch (Exception ignored) {
     }
@@ -1315,18 +2504,32 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     if (end <= start) return;
 
     try {
+      AttributeSet existingAttrs = null;
+      try {
+        existingAttrs = doc.getCharacterElement(start).getAttributes();
+      } catch (Exception ignored2) {
+        existingAttrs = null;
+      }
+
       doc.remove(start, end - start);
       PresenceFoldComponent comp = new PresenceFoldComponent(block.entries);
 
-      SimpleAttributeSet attrs = new SimpleAttributeSet(styles.status());
+      SimpleAttributeSet attrs = withExistingMeta(styles.status(), existingAttrs);
       StyleConstants.setComponent(attrs, comp);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+
       int insertPos = start;
       if (insertPos > 0) {
         try {
           String prev = doc.getText(insertPos - 1, 1);
           if (!"\n".equals(prev)) {
-            doc.insertString(insertPos, "\n", styles.timestamp());
+            AttributeSet prevAttrs = null;
+            try {
+              prevAttrs = doc.getCharacterElement(insertPos - 1).getAttributes();
+            } catch (Exception ignored3) {
+              prevAttrs = null;
+            }
+            doc.insertString(insertPos, "\n", withExistingMeta(styles.timestamp(), prevAttrs));
             insertPos++;
           }
         } catch (Exception ignored2) {
@@ -1334,7 +2537,7 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       }
 
       doc.insertString(insertPos, " ", attrs);
-      doc.insertString(insertPos + 1, "\n", styles.timestamp());
+      doc.insertString(insertPos + 1, "\n", withExistingMeta(styles.timestamp(), existingAttrs));
 
       block.folded = true;
       block.component = comp;
@@ -1344,11 +2547,150 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     }
   }
 
+
   private static final class TranscriptState {
     Long earliestEpochMsSeen;
     PresenceBlock currentPresenceBlock;
+    FilteredRun currentFilteredRun;
+    FilteredHintRun currentFilteredHintRun;
+
+    // Separate run tracking for history/backfill inserts (typically at the top of the doc).
+    FilteredRun currentFilteredRunInsert;
+    FilteredHintRun currentFilteredHintRunInsert;
+
+    // Step 5.2: per-batch overflow aggregation for history inserts.
+    boolean historyInsertBatchActive;
+    int historyInsertPlaceholderRunsCreated;
+    int historyInsertHintRunsCreated;
+    FilteredOverflowRun historyInsertOverflowRun;
+
     LoadOlderControl loadOlderControl;
     HistoryDividerControl historyDivider;
+  }
+
+
+  
+  /** Tracks a contiguous run of filtered lines (represented by a single placeholder component). */
+  private static final class FilteredRun {
+    final Position pos;
+    final FilteredFoldComponent component;
+
+    FilterEngine.Match primaryMatch;
+    boolean multiple;
+
+    LineMeta lastHiddenMeta;
+    final java.util.LinkedHashSet<String> unionTags = new java.util.LinkedHashSet<>();
+
+    private FilteredRun(Position pos, FilteredFoldComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
+
+    void observe(FilterEngine.Match m, LineMeta hiddenMeta) {
+      if (hiddenMeta != null) {
+        lastHiddenMeta = hiddenMeta;
+        try {
+          unionTags.addAll(hiddenMeta.tags());
+        } catch (Exception ignored) {
+        }
+      }
+
+      if (m == null) return;
+      if (primaryMatch == null) {
+        primaryMatch = m;
+        return;
+      }
+
+      try {
+        if (primaryMatch.ruleId() != null && m.ruleId() != null && !primaryMatch.ruleId().equals(m.ruleId())) {
+          multiple = true;
+        }
+      } catch (Exception ignored) {
+        multiple = true;
+      }
+    }
+  }
+
+  /** Tracks a contiguous run of filtered lines when placeholders are disabled (shown as a tiny hint row). */
+  private static final class FilteredHintRun {
+    final Position pos;
+    final FilteredHintComponent component;
+
+    FilterEngine.Match primaryMatch;
+    boolean multiple;
+
+    LineMeta lastHiddenMeta;
+    final java.util.LinkedHashSet<String> unionTags = new java.util.LinkedHashSet<>();
+
+    private FilteredHintRun(Position pos, FilteredHintComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
+
+    void observe(FilterEngine.Match m, LineMeta hiddenMeta) {
+      if (hiddenMeta != null) {
+        lastHiddenMeta = hiddenMeta;
+        try {
+          unionTags.addAll(hiddenMeta.tags());
+        } catch (Exception ignored) {
+        }
+      }
+
+      if (m == null) return;
+      if (primaryMatch == null) {
+        primaryMatch = m;
+        return;
+      }
+
+      try {
+        if (primaryMatch.ruleId() != null && m.ruleId() != null && !primaryMatch.ruleId().equals(m.ruleId())) {
+          multiple = true;
+        }
+      } catch (Exception ignored) {
+        multiple = true;
+      }
+    }
+  }
+
+  /** Tracks the aggregated overflow row used once the history placeholder/hint run cap is exceeded. */
+  private static final class FilteredOverflowRun {
+    final Position pos;
+    final FilteredOverflowComponent component;
+
+    FilterEngine.Match primaryMatch;
+    boolean multiple;
+
+    LineMeta lastHiddenMeta;
+    final java.util.LinkedHashSet<String> unionTags = new java.util.LinkedHashSet<>();
+
+    private FilteredOverflowRun(Position pos, FilteredOverflowComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
+
+    void observe(FilterEngine.Match m, LineMeta hiddenMeta) {
+      if (hiddenMeta != null) {
+        lastHiddenMeta = hiddenMeta;
+        try {
+          unionTags.addAll(hiddenMeta.tags());
+        } catch (Exception ignored) {
+        }
+      }
+
+      if (m == null) return;
+      if (primaryMatch == null) {
+        primaryMatch = m;
+        return;
+      }
+
+      try {
+        if (primaryMatch.ruleId() != null && m.ruleId() != null && !primaryMatch.ruleId().equals(m.ruleId())) {
+          multiple = true;
+        }
+      } catch (Exception ignored) {
+        multiple = true;
+      }
+    }
   }
 
   private static final class LoadOlderControl {

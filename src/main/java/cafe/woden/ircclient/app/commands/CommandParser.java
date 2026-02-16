@@ -11,6 +11,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class CommandParser {
 
+  private final FilterCommandParser filterCommandParser;
+
+  public CommandParser(FilterCommandParser filterCommandParser) {
+    this.filterCommandParser = filterCommandParser;
+  }
+
   public ParsedInput parse(String raw) {
     String line = raw == null ? "" : raw.trim();
     if (line.isEmpty()) return new ParsedInput.Say("");
@@ -218,10 +224,20 @@ public class CommandParser {
       }
       return new ParsedInput.ChatHistoryBefore(lim);
     }
+
+    // Local-only: weechat-style filters.
+    if (matchesCommand(line, "/filter")) {
+      return new ParsedInput.Filter(filterCommandParser.parse(line));
+    }
     // Raw IRC line escape hatch.
     if (matchesCommand(line, "/quote")) {
       String rawLine = argAfter(line, "/quote");
       return new ParsedInput.Quote(rawLine);
+    }
+
+    // Local-only filters (weechat-style).
+    if (matchesCommand(line, "/filter")) {
+      return new ParsedInput.Filter(filterCommandParser.parse(line));
     }
 
     // Alias used by some clients.

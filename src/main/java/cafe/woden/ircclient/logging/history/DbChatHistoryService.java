@@ -413,6 +413,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
       final List<LogLine> linesFinal = List.copyOf(lines);
       SwingUtilities.invokeLater(() -> {
         try {
+          // Explicit batch boundary so filtered placeholders/hints don't "bridge" across separate loads.
+          transcripts.beginHistoryInsertBatch(target);
+
           // If older rows exist beyond this batch, render the in-transcript paging control first,
           // so history gets inserted *below* it.
           if (hasMoreFinal) {
@@ -448,6 +451,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
           }
         } catch (Exception e) {
           log.debug("History replay error for {} / {}", serverId, tgt, e);
+        } finally {
+          try {
+            transcripts.endHistoryInsertBatch(target);
+          } catch (Exception ignored) {
+          }
         }
       });
     });
@@ -487,6 +495,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
       loadOlder(target, limit, res -> {
         try {
+          // Explicit batch boundary so filtered placeholders/hints don't "bridge" across separate paging operations.
+          transcripts.beginHistoryInsertBatch(target);
+
           int insertAt = transcripts.loadOlderInsertOffset(target);
           int pos = insertAt;
           for (LogLine line : res.linesOldestFirst()) {
@@ -502,6 +513,10 @@ public final class DbChatHistoryService implements ChatHistoryService {
           // Fail open: allow retry.
           transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
         } finally {
+          try {
+            transcripts.endHistoryInsertBatch(target);
+          } catch (Exception ignored) {
+          }
           if (anchor != null) {
             // Run after document/layout updates so preferred size reflects the inserted content.
             SwingUtilities.invokeLater(anchor::restoreIfNeeded);

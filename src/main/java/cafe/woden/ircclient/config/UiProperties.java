@@ -99,8 +99,72 @@ public record UiProperties(
 
     Map<String, String> nickColorOverrides,
 
+    Filters filters,
+
     Layout layout
 ) {
+
+  /**
+   * WeeChat-style message filters.
+   *
+   * <p>Filters are evaluated at render time only. They never affect logging.
+   */
+  public record Filters(
+      Boolean enabledByDefault,
+      Boolean placeholdersEnabledByDefault,
+      Boolean placeholdersCollapsedByDefault,
+      Integer placeholderMaxPreviewLines,
+      Integer placeholderMaxLinesPerRun,
+      Integer placeholderTooltipMaxTags,
+      Integer historyPlaceholderMaxRunsPerBatch,
+      Boolean historyPlaceholdersEnabledByDefault,
+      List<FilterRuleProperties> rules,
+      List<FilterScopeOverrideProperties> overrides
+  ) {
+    public Filters {
+      if (enabledByDefault == null) enabledByDefault = true;
+      if (placeholdersEnabledByDefault == null) placeholdersEnabledByDefault = true;
+      if (placeholdersCollapsedByDefault == null) placeholdersCollapsedByDefault = true;
+
+      if (placeholderMaxPreviewLines == null || placeholderMaxPreviewLines < 0) {
+        placeholderMaxPreviewLines = 3;
+      }
+      if (placeholderMaxPreviewLines > 25) {
+        placeholderMaxPreviewLines = 25;
+      }
+
+if (placeholderMaxLinesPerRun == null || placeholderMaxLinesPerRun < 0) {
+  placeholderMaxLinesPerRun = 250;
+}
+// 0 disables the cap (unbounded).
+if (placeholderMaxLinesPerRun > 50_000) {
+  placeholderMaxLinesPerRun = 50_000;
+}
+
+if (placeholderTooltipMaxTags == null || placeholderTooltipMaxTags < 0) {
+  placeholderTooltipMaxTags = 12;
+}
+// 0 disables tag listing in tooltips.
+if (placeholderTooltipMaxTags > 500) {
+  placeholderTooltipMaxTags = 500;
+}
+
+if (historyPlaceholderMaxRunsPerBatch == null || historyPlaceholderMaxRunsPerBatch < 0) {
+  historyPlaceholderMaxRunsPerBatch = 10;
+}
+// 0 disables the per-batch cap (unbounded placeholder/hint runs during history loads).
+if (historyPlaceholderMaxRunsPerBatch > 5_000) {
+  historyPlaceholderMaxRunsPerBatch = 5_000;
+}
+
+if (historyPlaceholdersEnabledByDefault == null) {
+  historyPlaceholdersEnabledByDefault = true;
+}
+
+      rules = (rules == null) ? List.of() : rules.stream().filter(Objects::nonNull).toList();
+      overrides = (overrides == null) ? List.of() : overrides.stream().filter(Objects::nonNull).toList();
+    }
+  }
 
   /**
    * Docking/layout defaults.
@@ -332,6 +396,11 @@ public record UiProperties(
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
       ctcpRequestsInActiveTargetEnabled = true;
+    }
+
+    // Filter defaults.
+    if (filters == null) {
+      filters = new Filters(null, null, null, null, null, null, null, null, null, null);
     }
 
     if (notificationRules == null) {
