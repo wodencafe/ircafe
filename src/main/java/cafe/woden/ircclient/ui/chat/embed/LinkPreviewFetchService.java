@@ -42,7 +42,7 @@ public class LinkPreviewFetchService {
 
     // Per-server cache key. Previews can vary by proxy (geo/CDN/bot pages), so we isolate.
     final String sid = Objects.toString(serverId, "").trim();
-    final String key = sid + "|" + normalized;
+    final String key = sid + "|" + normalized + "|" + cacheVersion(normalized);
 
     // Cache hit
     var ref = cache.get(key);
@@ -129,5 +129,22 @@ public class LinkPreviewFetchService {
     } catch (Exception ignored) {
       return -1;
     }
+  }
+
+  private static String cacheVersion(String normalizedUrl) {
+    try {
+      URI uri = URI.create(normalizedUrl);
+      if (InstagramPreviewUtil.isInstagramPostUri(uri)) {
+        // Bump this when Instagram extraction/layout semantics change to avoid stale cached cards.
+        return "ig-v2";
+      }
+      if (NewsPreviewUtil.isLikelyNewsArticleUri(uri)) {
+        // News previews can switch from plain OG to structured metadata+summary formatting.
+        return "news-v2";
+      }
+    } catch (Exception ignored) {
+      // Fall through to default version.
+    }
+    return "v1";
   }
 }

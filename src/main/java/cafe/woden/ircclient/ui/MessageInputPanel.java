@@ -28,6 +28,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -43,7 +44,20 @@ public class MessageInputPanel extends JPanel {
   public static final String ID = "input";
   private final JTextField input = new JTextField();
   private final JButton send = new JButton("Send");
-  private final JLabel completionHint = new JLabel();
+  private static final int HINT_POPUP_GAP_PX = 6;
+  private final JLabel hintPopupLabel = new JLabel();
+  private final JPanel hintPopupPanel = new JPanel(new BorderLayout());
+  private Popup hintPopup;
+  private String hintPopupText = "";
+  private String hintPopupShownText = "";
+  private int hintPopupX = Integer.MIN_VALUE;
+  private int hintPopupY = Integer.MIN_VALUE;
+  private final java.awt.event.ComponentListener hintAnchorListener = new java.awt.event.ComponentAdapter() {
+    @Override public void componentResized(java.awt.event.ComponentEvent e) { refreshHintPopup(); }
+    @Override public void componentMoved(java.awt.event.ComponentEvent e) { refreshHintPopup(); }
+    @Override public void componentShown(java.awt.event.ComponentEvent e) { refreshHintPopup(); }
+    @Override public void componentHidden(java.awt.event.ComponentEvent e) { hideHintPopup(); }
+  };
   private final JPanel composeBanner = new JPanel(new BorderLayout(6, 0));
   private final JLabel composeBannerLabel = new JLabel();
   private final JButton composeBannerCancel = new JButton("Cancel");
@@ -117,14 +131,18 @@ public class MessageInputPanel extends JPanel {
     typingPauseTimer.setRepeats(false);
     remoteTypingHintTimer.setRepeats(false);
     setPreferredSize(new Dimension(10, 34));
-    completionHint.setText(" ");
-    completionHint.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
-    completionHint.setHorizontalAlignment(SwingConstants.RIGHT);
-    completionHint.setToolTipText("Press Tab for nick completion");
-    JPanel right = new JPanel(new BorderLayout(6, 0));
+    hintPopupPanel.setOpaque(true);
+    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(new Color(0, 0, 0, 64)),
+        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+    hintPopupLabel.setOpaque(false);
+    hintPopupLabel.setHorizontalAlignment(SwingConstants.LEFT);
+    hintPopupPanel.add(hintPopupLabel, BorderLayout.CENTER);
+    applyHintPopupTheme();
+
+    JPanel right = new JPanel(new BorderLayout(0, 0));
     right.setOpaque(false);
-    right.add(completionHint, BorderLayout.CENTER);
-    right.add(send, BorderLayout.EAST);
+    right.add(send, BorderLayout.CENTER);
     composeBanner.setOpaque(false);
     composeBanner.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
     composeBannerLabel.setText("");
@@ -140,6 +158,18 @@ public class MessageInputPanel extends JPanel {
     center.add(input, BorderLayout.CENTER);
     add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
+    input.addComponentListener(hintAnchorListener);
+    addComponentListener(hintAnchorListener);
+    addHierarchyListener(e -> {
+      long flags = e.getChangeFlags();
+      if ((flags & (HierarchyEvent.SHOWING_CHANGED | HierarchyEvent.DISPLAYABILITY_CHANGED)) != 0) {
+        if (isShowing()) {
+          refreshHintPopup();
+        } else {
+          hideHintPopup();
+        }
+      }
+    });
     installInputContextMenu();
     input.setFocusTraversalKeysEnabled(false);
     installUndoRedoKeybindings();
@@ -179,8 +209,15 @@ public class MessageInputPanel extends JPanel {
 
     // Mark this input surface as "active" when the user interacts with it.
     FocusAdapter focusAdapter = new FocusAdapter() {
-      @Override public void focusGained(FocusEvent e) { fireActivated(); }
-      @Override public void focusLost(FocusEvent e) { endCompoundEdit(); flushTypingDone(); }
+      @Override public void focusGained(FocusEvent e) {
+        fireActivated();
+        updateHint();
+      }
+      @Override public void focusLost(FocusEvent e) {
+        endCompoundEdit();
+        flushTypingDone();
+        updateHint();
+      }
     };
     input.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
@@ -411,6 +448,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   }
 
   private void browseHistoryPrev() {
+    if (maybeRouteHistoryKeyToAutocomplete(true)) return;
     if (!input.isEnabled() || !input.isEditable()) return;
     if (historyStore == null) return;
 
@@ -445,6 +483,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   }
 
   private void browseHistoryNext() {
+    if (maybeRouteHistoryKeyToAutocomplete(false)) return;
     if (!input.isEnabled() || !input.isEditable()) return;
     if (historyOffset < 0) return;
 
@@ -526,6 +565,38 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     } catch (Exception ignored) {
     }
     updateHint();
+  }
+
+  private boolean maybeRouteHistoryKeyToAutocomplete(boolean up) {
+    if (autoCompletion == null || !autoCompletion.isPopupVisible()) return false;
+    KeyStroke key = KeyStroke.getKeyStroke(up ? KeyEvent.VK_UP : KeyEvent.VK_DOWN, 0);
+    boolean routed = invokeParentInputBinding(key);
+    if (!routed) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+    return true;
+  }
+
+  private boolean invokeParentInputBinding(KeyStroke keyStroke) {
+    if (keyStroke == null || historyInputMap == null) return false;
+    InputMap m = historyInputMap.getParent();
+    Object binding = null;
+    while (m != null) {
+      binding = m.get(keyStroke);
+      if (binding != null) break;
+      m = m.getParent();
+    }
+    if (binding == null) return false;
+    Action a = input.getActionMap().get(binding);
+    if (a == null || !a.isEnabled()) return false;
+    a.actionPerformed(new ActionEvent(
+        input,
+        ActionEvent.ACTION_PERFORMED,
+        String.valueOf(binding),
+        EventQueue.getMostRecentEventTime(),
+        0
+    ));
+    return true;
   }
 
   private void maybeExitHistoryBrowseOnUserEdit() {
@@ -722,9 +793,11 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   public void addNotify() {
     super.addNotify();
     if (settingsBus != null) settingsBus.addListener(settingsListener);
+    updateHint();
   }
   @Override
   public void removeNotify() {
+    hideHintPopup();
     if (settingsBus != null) settingsBus.removeListener(settingsListener);
     super.removeNotify();
   }
@@ -740,9 +813,53 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       Font f = new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize());
       input.setFont(f);
       send.setFont(f);
-      completionHint.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      hintPopupLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      applyHintPopupTheme();
+      refreshHintPopup();
     } catch (Exception ignored) {
     }
+  }
+
+  private void applyHintPopupTheme() {
+    Color textBg = UIManager.getColor("TextPane.background");
+    if (textBg == null) textBg = input.getBackground();
+    if (textBg == null) textBg = UIManager.getColor("Panel.background");
+    if (textBg == null) textBg = new Color(245, 245, 245);
+
+    Color textFg = UIManager.getColor("TextPane.foreground");
+    if (textFg == null) textFg = input.getForeground();
+    if (textFg == null) textFg = UIManager.getColor("Label.foreground");
+    if (textFg == null) textFg = Color.DARK_GRAY;
+
+    Color selBg = UIManager.getColor("TextPane.selectionBackground");
+    if (selBg == null) selBg = UIManager.getColor("List.selectionBackground");
+
+    // Subtle tint so the hint is distinct but still theme-native.
+    Color hintBg = (selBg == null) ? textBg : mix(textBg, selBg, 0.22);
+    Color border = UIManager.getColor("Component.borderColor");
+    if (border == null) border = UIManager.getColor("Separator.foreground");
+    if (border == null) border = new Color(textFg.getRed(), textFg.getGreen(), textFg.getBlue(), 120);
+
+    hintPopupPanel.setBackground(hintBg);
+    hintPopupLabel.setForeground(textFg);
+    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(border),
+        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+  }
+
+  private static Color mix(Color a, Color b, double wb) {
+    if (a == null) return b;
+    if (b == null) return a;
+    double w = Math.max(0.0, Math.min(1.0, wb));
+    double wa = 1.0 - w;
+    int r = (int) Math.round(a.getRed() * wa + b.getRed() * w);
+    int g = (int) Math.round(a.getGreen() * wa + b.getGreen() * w);
+    int bl = (int) Math.round(a.getBlue() * wa + b.getBlue() * w);
+    return new Color(clampColor(r), clampColor(g), clampColor(bl));
+  }
+
+  private static int clampColor(int v) {
+    return Math.max(0, Math.min(255, v));
   }
 
   /**
@@ -875,26 +992,104 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   }
   private void updateHint() {
     if (remoteTypingHint != null && !remoteTypingHint.isBlank()) {
-      completionHint.setText(remoteTypingHint);
+      showHintText(remoteTypingHint, false);
       return;
     }
     if (!input.isEnabled() || !input.isEditable()) {
-      completionHint.setText(" ");
+      clearHintPopup();
+      return;
+    }
+    if (!input.hasFocus()) {
+      clearHintPopup();
       return;
     }
     String text = input.getText();
     int caret = input.getCaretPosition();
     String token = currentToken(text, caret);
     if (token.isBlank()) {
-      completionHint.setText(" ");
+      clearHintPopup();
       return;
     }
     String match = firstNickStartingWith(token, nickSnapshot);
     if (match == null) {
-      completionHint.setText(" ");
+      clearHintPopup();
     } else {
-      completionHint.setText("Tab → " + match);
+      showHintText("Tab -> " + match, true);
     }
+  }
+
+  private void showHintText(String rawText, boolean isCompletionHint) {
+    String text = rawText == null ? "" : rawText.trim();
+    if (text.isEmpty()) {
+      clearHintPopup();
+      return;
+    }
+    hintPopupText = text;
+    hintPopupLabel.setText(text);
+    hintPopupLabel.setToolTipText(isCompletionHint ? "Press Tab for nick completion" : null);
+    refreshHintPopup();
+  }
+
+  private void clearHintPopup() {
+    hintPopupText = "";
+    hideHintPopup();
+  }
+
+  private void refreshHintPopup() {
+    if (hintPopupText == null || hintPopupText.isBlank()) {
+      hideHintPopup();
+      return;
+    }
+    if (!isShowing() || !input.isShowing()) {
+      hideHintPopup();
+      return;
+    }
+    try {
+      Dimension pref = hintPopupPanel.getPreferredSize();
+      Point anchor = input.getLocationOnScreen();
+
+      GraphicsConfiguration gc = input.getGraphicsConfiguration();
+      Rectangle screen = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+
+      int x = anchor.x;
+      int y = anchor.y - pref.height - HINT_POPUP_GAP_PX;
+      if (y < screen.y) {
+        y = anchor.y + input.getHeight() + HINT_POPUP_GAP_PX;
+      }
+      int maxX = screen.x + screen.width - pref.width;
+      if (x > maxX) x = maxX;
+      if (x < screen.x) x = screen.x;
+
+      boolean unchanged = hintPopup != null
+          && x == hintPopupX
+          && y == hintPopupY
+          && Objects.equals(hintPopupShownText, hintPopupText);
+      if (unchanged) return;
+
+      hideHintPopup();
+      hintPopup = PopupFactory.getSharedInstance().getPopup(this, hintPopupPanel, x, y);
+      hintPopup.show();
+      hintPopupX = x;
+      hintPopupY = y;
+      hintPopupShownText = hintPopupText;
+    } catch (IllegalComponentStateException ignored) {
+      hideHintPopup();
+    } catch (Exception ignored) {
+      hideHintPopup();
+    }
+  }
+
+  private void hideHintPopup() {
+    if (hintPopup != null) {
+      try {
+        hintPopup.hide();
+      } catch (Exception ignored) {
+      }
+      hintPopup = null;
+    }
+    hintPopupX = Integer.MIN_VALUE;
+    hintPopupY = Integer.MIN_VALUE;
+    hintPopupShownText = "";
   }
 
   private void onDraftDocumentChanged() {

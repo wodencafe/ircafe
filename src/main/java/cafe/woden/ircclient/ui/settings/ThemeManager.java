@@ -293,6 +293,24 @@ public class ThemeManager {
       Map.entry("Tree.selectionBackground", "#254A72")
   );
 
+  private static final Map<String, String> VIOLET_NEBULA_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#1B1629"),
+      Map.entry("@foreground", "#E9E3FF"),
+      Map.entry("@componentBackground", "#241D37"),
+      Map.entry("@buttonBackground", "#2D2343"),
+      Map.entry("@menuBackground", "#161126"),
+      Map.entry("@accentColor", "#8A63F5"),
+      Map.entry("@accentBaseColor", "#7A54EC"),
+      Map.entry("@accentBase2Color", "#A07CFF"),
+      Map.entry("Component.focusColor", "#B292FF"),
+      Map.entry("Component.linkColor", "#C2A7FF"),
+      Map.entry("TextComponent.selectionBackground", "#4A3688"),
+      Map.entry("TextComponent.selectionForeground", "#F7F3FF"),
+      Map.entry("List.selectionBackground", "#4A3688"),
+      Map.entry("Table.selectionBackground", "#4A3688"),
+      Map.entry("Tree.selectionBackground", "#4A3688")
+  );
+
   private static final ThemeOption[] THEMES = new ThemeOption[] {
       new ThemeOption("system", "Native (System)"),
       new ThemeOption("dark", "Flat Dark"),
@@ -302,6 +320,7 @@ public class ThemeManager {
       new ThemeOption("forest-dark", "Forest Dark"),
       new ThemeOption("high-contrast-dark", "High Contrast Dark"),
       new ThemeOption("ruby-night", "Ruby Night"),
+      new ThemeOption("violet-nebula", "Violet Nebula"),
       new ThemeOption("solarized-dark", "Solarized Dark"),
       new ThemeOption("sunset-dark", "Sunset Dark"),
       new ThemeOption("terminal-amber", "Terminal Amber"),
@@ -400,6 +419,11 @@ public class ThemeManager {
           FlatDarkLaf rubyNight = new FlatDarkLaf();
           rubyNight.setExtraDefaults(RUBY_NIGHT_DEFAULTS);
           UIManager.setLookAndFeel(rubyNight);
+        }
+        case "violet-nebula" -> {
+          FlatDarkLaf violetNebula = new FlatDarkLaf();
+          violetNebula.setExtraDefaults(VIOLET_NEBULA_DEFAULTS);
+          UIManager.setLookAndFeel(violetNebula);
         }
         case "solarized-dark" -> {
           FlatDarkLaf solarizedDark = new FlatDarkLaf();
