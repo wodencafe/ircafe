@@ -89,6 +89,38 @@ public interface IrcClientService {
     return Completable.error(new UnsupportedOperationException("CHATHISTORY selector requests not supported"));
   }
 
+  /**
+   * Request chat history using IRCv3 {@code CHATHISTORY LATEST}.
+   *
+   * <p>The selector may be {@code *} or a standard selector token ({@code msgid=...},
+   * {@code timestamp=...}).
+   */
+  default Completable requestChatHistoryLatest(String serverId, String target, String selector, int limit) {
+    return Completable.error(new UnsupportedOperationException("CHATHISTORY latest requests not supported"));
+  }
+
+  /**
+   * Request chat history using IRCv3 {@code CHATHISTORY BETWEEN}.
+   *
+   * <p>Selectors may be standard selector tokens and, where supported by the server, {@code *}.
+   */
+  default Completable requestChatHistoryBetween(
+      String serverId,
+      String target,
+      String startSelector,
+      String endSelector,
+      int limit
+  ) {
+    return Completable.error(new UnsupportedOperationException("CHATHISTORY between requests not supported"));
+  }
+
+  /**
+   * Request chat history using IRCv3 {@code CHATHISTORY AROUND}.
+   */
+  default Completable requestChatHistoryAround(String serverId, String target, String selector, int limit) {
+    return Completable.error(new UnsupportedOperationException("CHATHISTORY around requests not supported"));
+  }
+
   default Completable requestChatHistoryBefore(String serverId, String target, long beforeExclusiveEpochMs, int limit) {
     return requestChatHistoryBefore(serverId, target, Instant.ofEpochMilli(beforeExclusiveEpochMs), limit);
   }
@@ -133,6 +165,20 @@ public interface IrcClientService {
    * @return true if IRCv3 {@code read-marker} is negotiated on this connection.
    */
   default boolean isReadMarkerAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code labeled-response} is negotiated on this connection.
+   */
+  default boolean isLabeledResponseAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code standard-replies} is negotiated on this connection.
+   */
+  default boolean isStandardRepliesAvailable(String serverId) {
     return false;
   }
 

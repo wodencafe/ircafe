@@ -42,6 +42,7 @@ public class PircbotxBotFactory {
       "chghost",
       "message-tags",
       "server-time",
+      "standard-replies",
       "echo-message",
       "labeled-response",
       "draft/reply",

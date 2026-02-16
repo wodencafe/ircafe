@@ -31,6 +31,7 @@ import javax.swing.text.DefaultStyledDocument;
 import java.awt.*;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -489,6 +490,42 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     inputPanel.showRemoteTypingIndicator(nick, state);
   }
 
+  public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
+    String sid = Objects.toString(serverId, "").trim();
+    String cap = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
+    if (sid.isEmpty() || cap.isEmpty()) return;
+
+    if ("typing".equals(cap)) {
+      if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
+        inputPanel.clearRemoteTypingIndicator();
+      }
+      return;
+    }
+
+    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap)) {
+      return;
+    }
+
+    boolean replySupported = isDraftReplySupportedForServer(sid);
+    boolean reactSupported = isDraftReactSupportedForServer(sid);
+
+    if (activeTarget != null
+        && Objects.equals(activeTarget.serverId(), sid)
+        && !activeTarget.isUiOnly()) {
+      inputPanel.normalizeIrcv3DraftForCapabilities(replySupported, reactSupported);
+    }
+
+    ArrayList<TargetRef> targets = new ArrayList<>(draftByTarget.keySet());
+    for (TargetRef t : targets) {
+      if (t == null || !Objects.equals(t.serverId(), sid)) continue;
+      String before = draftByTarget.getOrDefault(t, "");
+      String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, replySupported, reactSupported);
+      if (!Objects.equals(before, after)) {
+        draftByTarget.put(t, after);
+      }
+    }
+  }
+
   @Override
   protected boolean replyContextActionVisible() {
     TargetRef t = activeTarget;
@@ -514,19 +551,55 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   @Override
+  protected boolean loadNewerHistoryContextActionVisible() {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return false;
+    return isLoadNewerHistorySupportedForServer(t.serverId());
+  }
+
+  @Override
+  protected boolean loadAroundMessageContextActionVisible() {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return false;
+    return isChatHistorySupportedForServer(t.serverId());
+  }
+
+  @Override
+  protected void onLoadNewerHistoryRequested() {
+    if (!loadNewerHistoryContextActionVisible()) return;
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (isChatHistorySupportedForServer(t.serverId())) {
+      emitHistoryCommand(buildChatHistoryLatestCommand());
+      return;
+    }
+    if (chatHistoryService != null && chatHistoryService.canReloadRecent(t)) {
+      chatHistoryService.reloadRecent(t);
+    }
+  }
+
+  @Override
+  protected void onLoadContextAroundMessageRequested(String messageId) {
+    if (!loadAroundMessageContextActionVisible()) return;
+    String line = buildChatHistoryAroundByMsgIdCommand(messageId);
+    if (line.isBlank()) return;
+    emitHistoryCommand(line);
+  }
+
+  @Override
   protected void onReplyToMessageRequested(String messageId) {
     TargetRef t = activeTarget;
     if (t == null || t.isStatus() || t.isUiOnly()) return;
     if (!replyContextActionVisible()) return;
-    String draft = buildReplyPrefillDraft(t.target(), messageId);
-    if (draft.isBlank()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
     if (activeTarget != null) {
       activationBus.activate(activeTarget);
     }
     if (activeInputRouter != null) {
       activeInputRouter.activate(inputPanel);
     }
-    inputPanel.setDraftText(draft);
+    inputPanel.beginReplyCompose(t.target(), msgId);
     inputPanel.focusInput();
   }
 
@@ -535,16 +608,31 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     TargetRef t = activeTarget;
     if (t == null || t.isStatus() || t.isUiOnly()) return;
     if (!reactContextActionVisible()) return;
-    String draft = buildReactPrefillDraft(t.target(), messageId);
-    if (draft.isBlank()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
     if (activeTarget != null) {
       activationBus.activate(activeTarget);
     }
     if (activeInputRouter != null) {
       activeInputRouter.activate(inputPanel);
     }
-    inputPanel.setDraftText(draft);
+    inputPanel.openQuickReactionPicker(t.target(), msgId);
     inputPanel.focusInput();
+  }
+
+  private void emitHistoryCommand(String line) {
+    String cmd = Objects.toString(line, "").trim();
+    if (cmd.isEmpty()) return;
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (activeTarget != null) {
+      activationBus.activate(activeTarget);
+    }
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    armTailPinOnNextAppendIfAtBottom();
+    outboundBus.emit(cmd);
   }
 
   @Override
@@ -574,9 +662,16 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     TargetRef t = activeTarget;
     if (t == null || t.isUiOnly()) return false;
     int off = transcripts.messageOffsetById(t, messageId);
-    if (off < 0) return false;
-    setFollowTail(false);
-    scrollToTranscriptOffset(off);
+    if (off >= 0) {
+      setFollowTail(false);
+      scrollToTranscriptOffset(off);
+      return true;
+    }
+
+    if (!loadAroundMessageContextActionVisible()) return false;
+    String line = buildChatHistoryAroundByMsgIdCommand(messageId);
+    if (line.isBlank()) return false;
+    emitHistoryCommand(line);
     return true;
   }
 
@@ -598,6 +693,46 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       case "done", "inactive" -> "done";
       default -> "";
     };
+  }
+
+  private boolean isDraftReplySupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReplyAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isDraftReactSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReactAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isLoadNewerHistorySupportedForServer(String serverId) {
+    return isChatHistorySupportedForServer(serverId) || isZncPlaybackSupportedForServer(serverId);
+  }
+
+  private boolean isChatHistorySupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isChatHistoryAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isZncPlaybackSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isZncPlaybackAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   @Override

@@ -75,6 +75,28 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
       case ParsedInput.Ctcp cmd -> outboundCtcpWhoisCommandService.handleCtcp(disposables, cmd.nick(), cmd.command(), cmd.args());
       case ParsedInput.ChatHistoryBefore cmd -> outboundChatCommandService.handleChatHistoryBefore(disposables, cmd.limit(), cmd.selector());
+      case ParsedInput.ChatHistoryLatest cmd -> outboundChatCommandService.handleChatHistoryLatest(disposables, cmd.limit(), cmd.selector());
+      case ParsedInput.ChatHistoryBetween cmd ->
+          outboundChatCommandService.handleChatHistoryBetween(
+              disposables,
+              cmd.startSelector(),
+              cmd.endSelector(),
+              cmd.limit());
+      case ParsedInput.ChatHistoryAround cmd ->
+          outboundChatCommandService.handleChatHistoryAround(
+              disposables,
+              cmd.selector(),
+              cmd.limit());
+      case ParsedInput.ReplyMessage cmd ->
+          outboundChatCommandService.handleReplyMessage(
+              disposables,
+              cmd.messageId(),
+              cmd.body());
+      case ParsedInput.ReactMessage cmd ->
+          outboundChatCommandService.handleReactMessage(
+              disposables,
+              cmd.messageId(),
+              cmd.reaction());
       case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
       case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
       case ParsedInput.Unknown cmd -> {

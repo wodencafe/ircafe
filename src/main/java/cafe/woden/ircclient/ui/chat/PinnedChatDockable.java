@@ -193,6 +193,14 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     inputPanel.showRemoteTypingIndicator(nick, state);
   }
 
+  public void clearTypingIndicator() {
+    inputPanel.clearRemoteTypingIndicator();
+  }
+
+  public boolean normalizeIrcv3DraftForCapabilities(boolean replySupported, boolean reactSupported) {
+    return inputPanel.normalizeIrcv3DraftForCapabilities(replySupported, reactSupported);
+  }
+
   @Override
   protected boolean replyContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
@@ -216,33 +224,81 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   @Override
+  protected boolean loadNewerHistoryContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    return isLoadNewerHistorySupportedForServer(target.serverId());
+  }
+
+  @Override
+  protected boolean loadAroundMessageContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    return isChatHistorySupportedForServer(target.serverId());
+  }
+
+  @Override
+  protected void onLoadNewerHistoryRequested() {
+    if (!loadNewerHistoryContextActionVisible()) return;
+    if (isChatHistorySupportedForServer(target.serverId())) {
+      emitHistoryCommand(buildChatHistoryLatestCommand());
+      return;
+    }
+    if (chatHistoryService != null && chatHistoryService.canReloadRecent(target)) {
+      chatHistoryService.reloadRecent(target);
+    }
+  }
+
+  @Override
+  protected void onLoadContextAroundMessageRequested(String messageId) {
+    if (!loadAroundMessageContextActionVisible()) return;
+    String line = buildChatHistoryAroundByMsgIdCommand(messageId);
+    if (line.isBlank()) return;
+    emitHistoryCommand(line);
+  }
+
+  @Override
   protected void onReplyToMessageRequested(String messageId) {
     if (!replyContextActionVisible()) return;
-    String draft = buildReplyPrefillDraft(target.target(), messageId);
-    if (draft.isBlank()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
     if (activeInputRouter != null) {
       activeInputRouter.activate(inputPanel);
     }
     if (activate != null) {
       activate.accept(target);
     }
-    inputPanel.setDraftText(draft);
+    inputPanel.beginReplyCompose(target.target(), msgId);
     inputPanel.focusInput();
   }
 
   @Override
   protected void onReactToMessageRequested(String messageId) {
     if (!reactContextActionVisible()) return;
-    String draft = buildReactPrefillDraft(target.target(), messageId);
-    if (draft.isBlank()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
     if (activeInputRouter != null) {
       activeInputRouter.activate(inputPanel);
     }
     if (activate != null) {
       activate.accept(target);
     }
-    inputPanel.setDraftText(draft);
+    inputPanel.openQuickReactionPicker(target.target(), msgId);
     inputPanel.focusInput();
+  }
+
+  private void emitHistoryCommand(String line) {
+    String cmd = Objects.toString(line, "").trim();
+    if (cmd.isEmpty()) return;
+    if (target == null || target.isStatus() || target.isUiOnly()) return;
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    if (activate != null) {
+      activate.accept(target);
+    }
+    armTailPinOnNextAppendIfAtBottom();
+    if (outboundBus != null) {
+      outboundBus.emit(cmd);
+    }
   }
 
   @Override
@@ -264,9 +320,16 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   @Override
   protected boolean onMessageReferenceClicked(String messageId) {
     int off = transcripts.messageOffsetById(target, messageId);
-    if (off < 0) return false;
-    setFollowTail(false);
-    scrollToTranscriptOffset(off);
+    if (off >= 0) {
+      setFollowTail(false);
+      scrollToTranscriptOffset(off);
+      return true;
+    }
+
+    if (!loadAroundMessageContextActionVisible()) return false;
+    String line = buildChatHistoryAroundByMsgIdCommand(messageId);
+    if (line.isBlank()) return false;
+    emitHistoryCommand(line);
     return true;
   }
 
@@ -353,6 +416,28 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       case "done", "inactive" -> "done";
       default -> "";
     };
+  }
+
+  private boolean isLoadNewerHistorySupportedForServer(String serverId) {
+    return isChatHistorySupportedForServer(serverId) || isZncPlaybackSupportedForServer(serverId);
+  }
+
+  private boolean isChatHistorySupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isChatHistoryAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isZncPlaybackSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isZncPlaybackAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private void applyReadMarkerViewState() {

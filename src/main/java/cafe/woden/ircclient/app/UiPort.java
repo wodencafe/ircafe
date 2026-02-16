@@ -265,4 +265,11 @@ Flowable<TargetRef> targetActivations();
       String targetMessageId,
       String reaction
   ) {}
+
+  /**
+   * Normalize UI affordances when an IRCv3 capability is disabled/removed.
+   *
+   * <p>This is used to clear ephemeral per-capability state (e.g. typing hints, staged reply/react drafts).
+   */
+  default void normalizeIrcv3CapabilityUiState(String serverId, String capability) {}
 }

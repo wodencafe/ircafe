@@ -165,6 +165,7 @@ public class UserListDockable extends JPanel implements Dockable {
       IgnoreMark mark = ignoreMark(ni);
       String nick = Objects.toString(ni.nick(), "").trim();
       String hostmask = Objects.toString(ni.hostmask(), "").trim();
+      String realName = Objects.toString(ni.realName(), "").trim();
       AwayState away = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
       AccountState acct = (ni.accountState() == null) ? AccountState.UNKNOWN : ni.accountState();
 
@@ -175,6 +176,10 @@ public class UserListDockable extends JPanel implements Dockable {
       sb.append("<html>");
       if (!nick.isEmpty()) {
         sb.append("<b>").append(escapeHtml(nick)).append("</b>");
+      }
+
+      if (!realName.isEmpty()) {
+        sb.append("<br>").append("<i>Name</i>: ").append(escapeHtml(realName));
       }
 
       if (hasHostmask) {

@@ -80,6 +80,11 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       return;
     }
 
+    if (isStandardReplyCommand(command)) {
+      emitStandardReply(now, command, line, parsedLine, tags);
+      return;
+    }
+
     if (source == null) return;
     String nick = Objects.toString(source.getNick(), "").trim();
     if (nick.isEmpty()) return;
@@ -230,6 +235,15 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     String account = parsedLine.get(1);
     if (account != null && account.startsWith(":")) account = account.substring(1);
     account = (account == null) ? null : account.trim();
+    String realName = null;
+    if (parsedLine.size() >= 3) {
+      realName = parsedLine.get(2);
+      if (realName != null && realName.startsWith(":")) realName = realName.substring(1);
+      if (realName != null) {
+        realName = realName.trim();
+        if (realName.isEmpty()) realName = null;
+      }
+    }
 
     IrcEvent.AccountState st;
     if (account == null || account.isEmpty() || "*".equals(account) || "0".equals(account)) {
@@ -239,12 +253,16 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       st = IrcEvent.AccountState.LOGGED_IN;
     }
 
-    log.debug("[{}] extended-join observed via InputParser: nick={} channel={} state={} account={} params={} raw={}",
-        serverId, nick, channel, st, account, parsedLine, line);
+    log.debug("[{}] extended-join observed via InputParser: nick={} channel={} state={} account={} realName={} params={} raw={}",
+        serverId, nick, channel, st, account, realName, parsedLine, line);
 
     // We treat this as another best-effort signal for account state.
     sink.accept(new ServerIrcEvent(serverId,
         new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
+    if (realName != null) {
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.UserSetNameObserved(now, nick, realName)));
+    }
   }
 
   private void applyCapStateFromCapLine(String sub, String capList) {
@@ -375,6 +393,12 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           log.info("[{}] CAP {}: server-time {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
+      case "standard-replies" -> {
+        boolean prev = conn.standardRepliesCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: standard-replies {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
       case "echo-message" -> {
         boolean prev = conn.echoMessageCapAcked.getAndSet(enabled);
         if (prev != enabled) {
@@ -483,6 +507,98 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     }
     return "";
   }
+
+  private void emitStandardReply(
+      Instant at,
+      String command,
+      String rawLine,
+      List<String> parsedLine,
+      ImmutableMap<String, String> tags
+  ) {
+    IrcEvent.StandardReplyKind kind = toStandardReplyKind(command);
+    if (kind == null) return;
+
+    ParsedStandardReply parsed = parseStandardReply(parsedLine);
+    String msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+    Map<String, String> ircv3Tags = (tags == null) ? Map.of() : tags;
+    String line = Objects.toString(rawLine, "").trim();
+    sink.accept(new ServerIrcEvent(serverId, new IrcEvent.StandardReply(
+        at,
+        kind,
+        parsed.command(),
+        parsed.code(),
+        parsed.context(),
+        parsed.description(),
+        line,
+        msgId,
+        ircv3Tags)));
+  }
+
+  private static ParsedStandardReply parseStandardReply(List<String> parsedLine) {
+    String command = paramAt(parsedLine, 0);
+    String code = paramAt(parsedLine, 1);
+    String context = "";
+    String description = "";
+    if (parsedLine == null || parsedLine.size() <= 2) {
+      return new ParsedStandardReply(command, code, context, description);
+    }
+
+    int trailingIdx = -1;
+    for (int i = 2; i < parsedLine.size(); i++) {
+      String token = Objects.toString(parsedLine.get(i), "");
+      if (token.startsWith(":")) {
+        trailingIdx = i;
+        break;
+      }
+    }
+    if (trailingIdx < 0) {
+      trailingIdx = parsedLine.size() - 1;
+    }
+
+    description = stripLeadingColon(parsedLine.get(trailingIdx));
+    if (trailingIdx > 2) {
+      context = joinParams(parsedLine, 2, trailingIdx);
+    }
+    return new ParsedStandardReply(command, code, context, description);
+  }
+
+  private static String paramAt(List<String> parsedLine, int index) {
+    if (parsedLine == null || index < 0 || index >= parsedLine.size()) return "";
+    return stripLeadingColon(parsedLine.get(index));
+  }
+
+  private static String joinParams(List<String> parsedLine, int fromInclusive, int toExclusive) {
+    if (parsedLine == null) return "";
+    int from = Math.max(0, fromInclusive);
+    int to = Math.min(parsedLine.size(), toExclusive);
+    if (from >= to) return "";
+    StringBuilder sb = new StringBuilder();
+    for (int i = from; i < to; i++) {
+      String part = stripLeadingColon(parsedLine.get(i));
+      if (part.isBlank()) continue;
+      if (sb.length() > 0) sb.append(' ');
+      sb.append(part);
+    }
+    return sb.toString().trim();
+  }
+
+  private static boolean isStandardReplyCommand(String command) {
+    if (command == null || command.isBlank()) return false;
+    String c = command.trim().toUpperCase(Locale.ROOT);
+    return "FAIL".equals(c) || "WARN".equals(c) || "NOTE".equals(c);
+  }
+
+  private static IrcEvent.StandardReplyKind toStandardReplyKind(String command) {
+    if (command == null || command.isBlank()) return null;
+    return switch (command.trim().toUpperCase(Locale.ROOT)) {
+      case "FAIL" -> IrcEvent.StandardReplyKind.FAIL;
+      case "WARN" -> IrcEvent.StandardReplyKind.WARN;
+      case "NOTE" -> IrcEvent.StandardReplyKind.NOTE;
+      default -> null;
+    };
+  }
+
+  private record ParsedStandardReply(String command, String code, String context, String description) {}
 
   private static String normalizeTagKey(String raw) {
     String k = Objects.toString(raw, "").trim();

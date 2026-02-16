@@ -16,9 +16,12 @@ import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
+import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
+import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
@@ -30,6 +33,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.concurrent.TimeUnit;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +41,9 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class IrcMediator {
+  private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);
+  private static final Duration LABELED_RESPONSE_TIMEOUT = Duration.ofSeconds(30);
+
   private final IrcClientService irc;
   private final UiPort ui;
   private final CommandParser commandParser;
@@ -56,7 +63,9 @@ public class IrcMediator {
   private final CtcpRoutingState ctcpRoutingState;
   private final ModeRoutingState modeRoutingState;
   private final AwayRoutingState awayRoutingState;
+  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
   private final JoinRoutingState joinRoutingState;
+  private final LabeledResponseRoutingState labeledResponseRoutingState;
   private final PendingEchoMessageState pendingEchoMessageState;
   private final InboundModeEventHandler inboundModeEventHandler;
 
@@ -93,7 +102,9 @@ public class IrcMediator {
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
       AwayRoutingState awayRoutingState,
+      ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
       JoinRoutingState joinRoutingState,
+      LabeledResponseRoutingState labeledResponseRoutingState,
       PendingEchoMessageState pendingEchoMessageState,
       InboundModeEventHandler inboundModeEventHandler,
       InboundIgnorePolicy inboundIgnorePolicy
@@ -117,7 +128,9 @@ public class IrcMediator {
     this.ctcpRoutingState = ctcpRoutingState;
     this.modeRoutingState = modeRoutingState;
     this.awayRoutingState = awayRoutingState;
+    this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
     this.joinRoutingState = joinRoutingState;
+    this.labeledResponseRoutingState = labeledResponseRoutingState;
     this.pendingEchoMessageState = pendingEchoMessageState;
     this.inboundModeEventHandler = inboundModeEventHandler;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
@@ -136,6 +149,7 @@ public class IrcMediator {
         this::handleOutgoingLine
     );
     bindIrcEventSubscriptions();
+    bindLabeledResponseTimeoutTicker();
     mediatorConnectionSubscriptionBinder.bind(
         ui,
         connectionCoordinator,
@@ -152,6 +166,15 @@ public class IrcMediator {
             .subscribe(this::onServerIrcEvent,
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(irc-error)", err.toString()))
     );
+  }
+
+  private void bindLabeledResponseTimeoutTicker() {
+    disposables.add(
+        Flowable.interval(5, TimeUnit.SECONDS)
+            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .subscribe(
+                tick -> handleLabeledRequestTimeouts(),
+                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(label-timeout)", String.valueOf(err))));
   }
 
   private void handleUserActionRequest(UserActionRequest req) {
@@ -351,7 +374,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         ctcpRoutingState.clearServer(sid);
         modeRoutingState.clearServer(sid);
         awayRoutingState.clearServer(sid);
+        chatHistoryRequestRoutingState.clearServer(sid);
         joinRoutingState.clearServer(sid);
+        labeledResponseRoutingState.clearServer(sid);
         inboundModeEventHandler.clearServer(sid);
       }
       targetCoordinator.refreshInputEnabledForActiveTarget();
@@ -507,16 +532,11 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.appendStatus(status, "(ircv3)", ev.message());
       }
+      case IrcEvent.StandardReply ev -> {
+        handleStandardReply(sid, status, ev);
+      }
       case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {
-        ensureTargetExists(status);
-        String msg = ev.message();
-        if (msg == null) msg = "";
-        String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
-        if (label != null && !label.isBlank()) {
-          msg = msg + " {label=" + label + "}";
-        }
-        String rendered = "[" + ev.code() + "] " + msg;
-        ui.appendStatusAt(status, ev.at(), "(server)", rendered, ev.messageId(), ev.ircv3Tags());
+        handleServerResponseLine(sid, status, ev);
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
         mediatorHistoryIngestOrchestrator.onChatHistoryBatchReceived(sid, ev);
@@ -710,6 +730,9 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserHostChanged ev -> {
+        boolean knownNick = targetCoordinator.onUserHostChanged(sid, ev);
+        if (knownNick) return;
+
         TargetRef dest = resolveActiveOrStatus(sid, status);
         String nick = Objects.toString(ev.nick(), "").trim();
         String user = Objects.toString(ev.user(), "").trim();
@@ -733,6 +756,9 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserSetNameObserved ev -> {
+        boolean knownNick = targetCoordinator.onUserSetNameObserved(sid, ev);
+        if (knownNick) return;
+
         TargetRef dest = resolveActiveOrStatus(sid, status);
         String nick = Objects.toString(ev.nick(), "").trim();
         String realName = Objects.toString(ev.realName(), "").trim();
@@ -779,6 +805,9 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         ensureTargetExists(status);
         String sub = Objects.toString(ev.subcommand(), "").trim().toUpperCase(Locale.ROOT);
         String cap = Objects.toString(ev.capability(), "").trim();
+        if (!ev.enabled() && ("ACK".equals(sub) || "DEL".equals(sub))) {
+          ui.normalizeIrcv3CapabilityUiState(sid, cap);
+        }
         if (cap.isEmpty()) cap = "(unknown)";
         String rendered;
         if ("NEW".equals(sub)) {
@@ -902,6 +931,165 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           pending.text(),
           reason);
     }
+  }
+
+  private void handleServerResponseLine(String sid, TargetRef status, IrcEvent.ServerResponseLine ev) {
+    ensureTargetExists(status);
+    String msg = Objects.toString(ev.message(), "");
+    String rendered = "[" + ev.code() + "] " + msg;
+    String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
+    if (!label.isBlank()) {
+      LabeledResponseRoutingState.PendingLabeledRequest pending =
+          labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
+      if (pending != null && pending.originTarget() != null) {
+        TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
+        LabeledResponseRoutingState.PendingLabeledRequest transitioned =
+            labeledResponseRoutingState.markOutcomeIfPending(
+                sid,
+                label,
+                LabeledResponseRoutingState.Outcome.SUCCESS,
+                ev.at());
+        if (transitioned != null) {
+          appendLabeledOutcome(
+              dest,
+              ev.at(),
+              label,
+              transitioned.requestPreview(),
+              transitioned.outcome(),
+              "response received");
+        }
+
+        String preview = Objects.toString(pending.requestPreview(), "").trim();
+        String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
+        postTo(dest, true, d -> ui.appendStatusAt(
+            d,
+            ev.at(),
+            "(server)",
+            correlated,
+            ev.messageId(),
+            ev.ircv3Tags()));
+        return;
+      }
+      rendered = rendered + " {label=" + label + "}";
+    }
+    ui.appendStatusAt(status, ev.at(), "(server)", rendered, ev.messageId(), ev.ircv3Tags());
+  }
+
+  private void handleStandardReply(String sid, TargetRef status, IrcEvent.StandardReply ev) {
+    ensureTargetExists(status);
+    String rendered = renderStandardReply(ev);
+    String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
+    if (!label.isBlank()) {
+      LabeledResponseRoutingState.PendingLabeledRequest pending =
+          labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
+      if (pending != null && pending.originTarget() != null) {
+        TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
+        LabeledResponseRoutingState.Outcome outcome =
+            (ev.kind() == IrcEvent.StandardReplyKind.FAIL)
+                ? LabeledResponseRoutingState.Outcome.FAILURE
+                : LabeledResponseRoutingState.Outcome.SUCCESS;
+        LabeledResponseRoutingState.PendingLabeledRequest transitioned =
+            labeledResponseRoutingState.markOutcomeIfPending(sid, label, outcome, ev.at());
+        if (transitioned != null) {
+          appendLabeledOutcome(
+              dest,
+              ev.at(),
+              label,
+              transitioned.requestPreview(),
+              transitioned.outcome(),
+              ev.description());
+        }
+
+        String preview = Objects.toString(pending.requestPreview(), "").trim();
+        String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
+        postTo(dest, true, d -> ui.appendStatusAt(
+            d,
+            ev.at(),
+            "(standard-reply)",
+            correlated,
+            ev.messageId(),
+            ev.ircv3Tags()));
+        return;
+      }
+      rendered = rendered + " {label=" + label + "}";
+    }
+    ui.appendStatusAt(status, ev.at(), "(standard-reply)", rendered, ev.messageId(), ev.ircv3Tags());
+  }
+
+  private void handleLabeledRequestTimeouts() {
+    List<LabeledResponseRoutingState.TimedOutLabeledRequest> timedOut =
+        labeledResponseRoutingState.collectTimedOut(LABELED_RESPONSE_TIMEOUT, 32);
+    if (timedOut == null || timedOut.isEmpty()) return;
+    for (LabeledResponseRoutingState.TimedOutLabeledRequest timeout : timedOut) {
+      if (timeout == null || timeout.request() == null) continue;
+      TargetRef status = new TargetRef(timeout.serverId(), "status");
+      TargetRef dest = normalizeLabeledDestination(timeout.serverId(), status, timeout.request().originTarget());
+      appendLabeledOutcome(
+          dest,
+          timeout.timedOutAt(),
+          timeout.label(),
+          timeout.request().requestPreview(),
+          LabeledResponseRoutingState.Outcome.TIMEOUT,
+          "no reply within " + LABELED_RESPONSE_TIMEOUT.toSeconds() + "s");
+    }
+  }
+
+  private static String renderStandardReply(IrcEvent.StandardReply ev) {
+    if (ev == null) return "";
+    StringBuilder out = new StringBuilder();
+    out.append(ev.kind().name());
+    String cmd = Objects.toString(ev.command(), "").trim();
+    if (!cmd.isBlank()) out.append(' ').append(cmd);
+    String code = Objects.toString(ev.code(), "").trim();
+    if (!code.isBlank()) out.append(' ').append(code);
+    String context = Objects.toString(ev.context(), "").trim();
+    if (!context.isBlank()) out.append(" [").append(context).append(']');
+    String desc = Objects.toString(ev.description(), "").trim();
+    if (!desc.isBlank()) out.append(": ").append(desc);
+    return out.toString();
+  }
+
+  private void appendLabeledOutcome(
+      TargetRef dest,
+      Instant at,
+      String label,
+      String requestPreview,
+      LabeledResponseRoutingState.Outcome outcome,
+      String detail
+  ) {
+    String lbl = Objects.toString(label, "").trim();
+    if (lbl.isEmpty()) return;
+    String preview = Objects.toString(requestPreview, "").trim();
+    String d = Objects.toString(detail, "").trim();
+    String state = switch (outcome) {
+      case FAILURE -> "failed";
+      case TIMEOUT -> "timed out";
+      case SUCCESS -> "completed";
+      case PENDING -> "pending";
+    };
+
+    StringBuilder text = new StringBuilder("Request ").append(state).append(" {label=").append(lbl).append('}');
+    if (!preview.isBlank()) text.append(": ").append(preview);
+    if (!d.isBlank()) text.append(" (").append(d).append(')');
+    String from = switch (outcome) {
+      case FAILURE -> "(label-fail)";
+      case TIMEOUT -> "(label-timeout)";
+      case SUCCESS -> "(label-ok)";
+      case PENDING -> "(label)";
+    };
+    ui.appendStatusAt(dest, at == null ? Instant.now() : at, from, text.toString());
+  }
+
+  private TargetRef normalizeLabeledDestination(String sid, TargetRef status, TargetRef origin) {
+    if (origin == null) return status;
+    TargetRef dest = origin;
+    if (!Objects.equals(dest.serverId(), sid)) {
+      dest = new TargetRef(sid, dest.target());
+    }
+    if (dest.isUiOnly()) {
+      return status;
+    }
+    return dest;
   }
 
   private boolean isFromSelf(String serverId, String from) {

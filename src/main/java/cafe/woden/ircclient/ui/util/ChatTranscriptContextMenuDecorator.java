@@ -54,6 +54,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   // Optional: allow the caller to provide a per-view proxy plan (e.g., per server).
   // If null, fall back to the global NetProxyContext proxy.
   private final Supplier<ProxyPlan> proxyPlanSupplier;
+  private final Supplier<Boolean> loadNewerActionVisibleSupplier;
+  private final Supplier<Boolean> loadAroundActionVisibleSupplier;
+  private final Runnable onLoadNewerHistory;
+  private final Consumer<String> onLoadContextAroundMessage;
   private final Supplier<Boolean> replyActionVisibleSupplier;
   private final Supplier<Boolean> reactActionVisibleSupplier;
   private final Consumer<String> onReplyToMessage;
@@ -69,6 +73,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem inspectLineItem = new JMenuItem("Inspect line…");
   private final JMenuItem copyMessageIdItem = new JMenuItem("Copy Message ID");
   private final JMenuItem copyIrcv3TagsItem = new JMenuItem("Copy IRCv3 Tags");
+  private final JMenuItem loadNewerHistoryItem = new JMenuItem("Load Newer History");
+  private final JMenuItem loadAroundMessageItem = new JMenuItem("Load Context Around Message…");
   private final JMenuItem replyToMessageItem = new JMenuItem("Reply to Message…");
   private final JMenuItem reactToMessageItem = new JMenuItem("React to Message…");
 
@@ -99,6 +105,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind,
       Supplier<ProxyPlan> proxyPlanSupplier,
+      Supplier<Boolean> loadNewerActionVisibleSupplier,
+      Supplier<Boolean> loadAroundActionVisibleSupplier,
+      Runnable onLoadNewerHistory,
+      Consumer<String> onLoadContextAroundMessage,
       Supplier<Boolean> replyActionVisibleSupplier,
       Supplier<Boolean> reactActionVisibleSupplier,
       Consumer<String> onReplyToMessage,
@@ -111,6 +121,14 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
     this.proxyPlanSupplier = proxyPlanSupplier;
+    this.loadNewerActionVisibleSupplier = (loadNewerActionVisibleSupplier != null)
+        ? loadNewerActionVisibleSupplier
+        : () -> false;
+    this.loadAroundActionVisibleSupplier = (loadAroundActionVisibleSupplier != null)
+        ? loadAroundActionVisibleSupplier
+        : () -> false;
+    this.onLoadNewerHistory = (onLoadNewerHistory != null) ? onLoadNewerHistory : () -> {};
+    this.onLoadContextAroundMessage = (onLoadContextAroundMessage != null) ? onLoadContextAroundMessage : msgId -> {};
     this.replyActionVisibleSupplier = (replyActionVisibleSupplier != null) ? replyActionVisibleSupplier : () -> false;
     this.reactActionVisibleSupplier = (reactActionVisibleSupplier != null) ? reactActionVisibleSupplier : () -> false;
     this.onReplyToMessage = (onReplyToMessage != null) ? onReplyToMessage : msgId -> {};
@@ -124,6 +142,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     inspectLineItem.addActionListener(this::onInspectLine);
     copyMessageIdItem.addActionListener(this::onCopyMessageId);
     copyIrcv3TagsItem.addActionListener(this::onCopyIrcv3Tags);
+    loadNewerHistoryItem.addActionListener(this::onLoadNewerHistory);
+    loadAroundMessageItem.addActionListener(this::onLoadContextAroundMessage);
     replyToMessageItem.addActionListener(this::onReplyToMessage);
     reactToMessageItem.addActionListener(this::onReactToMessage);
 
@@ -202,7 +222,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, null, null, null, null, openFind, null, null, null, null, null);
+        transcript, null, null, null, null, openFind, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -212,7 +232,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Runnable openFind
   ) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, null, null, openUrl, openFind, null, null, null, null, null);
+        transcript, urlAt, null, null, openUrl, openFind, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -224,7 +244,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Runnable openFind
   ) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null, null, null, null, null);
+        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -237,7 +257,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<ProxyPlan> proxyPlanSupplier
   ) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier, null, null, null, null);
+        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -248,6 +268,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind,
       Supplier<ProxyPlan> proxyPlanSupplier,
+      Supplier<Boolean> loadNewerActionVisibleSupplier,
+      Supplier<Boolean> loadAroundActionVisibleSupplier,
+      Runnable onLoadNewerHistory,
+      Consumer<String> onLoadContextAroundMessage,
       Supplier<Boolean> replyActionVisibleSupplier,
       Supplier<Boolean> reactActionVisibleSupplier,
       Consumer<String> onReplyToMessage,
@@ -261,6 +285,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         openUrl,
         openFind,
         proxyPlanSupplier,
+        loadNewerActionVisibleSupplier,
+        loadAroundActionVisibleSupplier,
+        onLoadNewerHistory,
+        onLoadContextAroundMessage,
         replyActionVisibleSupplier,
         reactActionVisibleSupplier,
         onReplyToMessage,
@@ -276,6 +304,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
   private void rebuildMenu(String url) {
+    boolean hasMessageId = currentPopupMessageId != null && !currentPopupMessageId.isBlank();
+    boolean showLoadNewerAction = isActionVisible(loadNewerActionVisibleSupplier);
+    boolean showLoadAroundAction = isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId;
     boolean showReplyAction = isActionVisible(replyActionVisibleSupplier);
     boolean showReactAction = isActionVisible(reactActionVisibleSupplier);
     menu.removeAll();
@@ -289,6 +320,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(inspectLineItem);
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
+      maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
       maybeAddReplyReactItems(showReplyAction, showReactAction);
       menu.addSeparator();
       menu.add(findItem);
@@ -301,12 +333,24 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(inspectLineItem);
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
+      maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
       maybeAddReplyReactItems(showReplyAction, showReactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
       menu.add(reloadRecentItem);
       menu.add(clearItem);
+    }
+  }
+
+  private void maybeAddHistoryActionItems(boolean showLoadNewerAction, boolean showLoadAroundAction) {
+    if (!showLoadNewerAction && !showLoadAroundAction) return;
+    menu.addSeparator();
+    if (showLoadNewerAction) {
+      menu.add(loadNewerHistoryItem);
+    }
+    if (showLoadAroundAction) {
+      menu.add(loadAroundMessageItem);
     }
   }
 
@@ -337,6 +381,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     boolean hasMessageId = currentPopupMessageId != null && !currentPopupMessageId.isBlank();
     copyMessageIdItem.setEnabled(hasMessageId);
     copyIrcv3TagsItem.setEnabled(currentPopupIrcv3Tags != null && !currentPopupIrcv3Tags.isBlank());
+    loadNewerHistoryItem.setEnabled(isActionVisible(loadNewerActionVisibleSupplier));
+    loadAroundMessageItem.setEnabled(isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId);
     replyToMessageItem.setEnabled(isActionVisible(replyActionVisibleSupplier) && hasMessageId);
     reactToMessageItem.setEnabled(isActionVisible(reactActionVisibleSupplier) && hasMessageId);
 
@@ -384,6 +430,24 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (tags == null || tags.isBlank()) return;
     try {
       Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(tags), null);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onLoadNewerHistory(ActionEvent e) {
+    if (!isActionVisible(loadNewerActionVisibleSupplier)) return;
+    try {
+      onLoadNewerHistory.run();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onLoadContextAroundMessage(ActionEvent e) {
+    if (!isActionVisible(loadAroundActionVisibleSupplier)) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onLoadContextAroundMessage.accept(msgId);
     } catch (Exception ignored) {
     }
   }

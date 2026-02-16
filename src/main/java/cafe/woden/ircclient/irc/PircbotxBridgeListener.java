@@ -1104,6 +1104,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean batch = conn.batchCapAcked.get();
       boolean znc = conn.zncPlaybackCapAcked.get();
       boolean st = conn.serverTimeCapAcked.get();
+      boolean standardReplies = conn.standardRepliesCapAcked.get();
       boolean echo = conn.echoMessageCapAcked.get();
       boolean capNotify = conn.capNotifyCapAcked.get();
       boolean labeled = conn.labeledResponseCapAcked.get();
@@ -1114,11 +1115,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean typing = conn.typingCapAcked.get();
       boolean readMarker = conn.readMarkerCapAcked.get();
       log.info(
-          "[{}] negotiated caps: server-time={} echo-message={} cap-notify={} labeled-response={} "
+          "[{}] negotiated caps: server-time={} standard-replies={} echo-message={} cap-notify={} labeled-response={} "
               + "setname={} chghost={} draft/reply={} draft/react={} typing={} read-marker={} "
               + "chathistory={} batch={} znc.in/playback={}",
           serverId,
           st,
+          standardReplies,
           echo,
           capNotify,
           labeled,

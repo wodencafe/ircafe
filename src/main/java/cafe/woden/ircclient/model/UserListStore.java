@@ -27,6 +27,7 @@ public class UserListStore {
   private final Map<String, Map<String, AccountState>> accountStateByServerAndNickLower = new ConcurrentHashMap<>();
 
   private final Map<String, Map<String, String>> accountNameByServerAndNickLower = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, String>> realNameByServerAndNickLower = new ConcurrentHashMap<>();
 
   private static String norm(String s) {
     return Objects.toString(s, "").trim();
@@ -72,6 +73,11 @@ public class UserListStore {
     String n = norm(name);
     if (n.isEmpty() || "*".equals(n) || "0".equals(n)) return null;
     return n;
+  }
+
+  private static String normalizeRealName(String realName) {
+    String rn = norm(realName);
+    return rn.isEmpty() ? null : rn;
   }
 
   public String getLearnedHostmask(String serverId, String nick) {
@@ -131,6 +137,20 @@ public class UserListStore {
     return java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(firstCasedByLower.values()));
   }
 
+  public boolean isNickPresentOnServer(String serverId, String nick) {
+    String sid = norm(serverId);
+    String nk = nickKey(nick);
+    if (sid.isEmpty() || nk.isEmpty()) return false;
+
+    Map<String, Set<String>> byChannel = lowerNickSetByServerAndChannel.get(sid);
+    if (byChannel == null || byChannel.isEmpty()) return false;
+
+    for (Set<String> nicks : byChannel.values()) {
+      if (nicks != null && nicks.contains(nk)) return true;
+    }
+    return false;
+  }
+
   public Set<String> getLowerNickSet(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
     String ch = channelKey(channel);
@@ -153,8 +173,15 @@ public class UserListStore {
     Map<String, String> knownAwayMsg = awayMessageByServerAndNickLower.getOrDefault(sid, Map.of());
     Map<String, AccountState> knownAccount = accountStateByServerAndNickLower.getOrDefault(sid, Map.of());
     Map<String, String> knownAccountName = accountNameByServerAndNickLower.getOrDefault(sid, Map.of());
+    Map<String, String> knownRealName = realNameByServerAndNickLower.getOrDefault(sid, Map.of());
     List<NickInfo> safe;
-    if (nicks == null || nicks.isEmpty() || (knownHostmasks.isEmpty() && knownAway.isEmpty() && knownAwayMsg.isEmpty() && knownAccount.isEmpty() && knownAccountName.isEmpty())) {
+    if (nicks == null || nicks.isEmpty()
+        || (knownHostmasks.isEmpty()
+        && knownAway.isEmpty()
+        && knownAwayMsg.isEmpty()
+        && knownAccount.isEmpty()
+        && knownAccountName.isEmpty()
+        && knownRealName.isEmpty())) {
       safe = nicks == null ? List.of() : List.copyOf(nicks);
     } else {
       java.util.ArrayList<NickInfo> merged = new java.util.ArrayList<>(nicks.size());
@@ -232,8 +259,19 @@ public class UserListStore {
           changed = true;
         }
 
+        // Real name merge (best-effort from setname/extended-join observations).
+        String rn = normalizeRealName(ni.realName());
+        String rnNext = rn;
+        if (rnNext == null && !nk.isEmpty()) {
+          String learnedRealName = normalizeRealName(knownRealName.get(nk));
+          if (learnedRealName != null) {
+            rnNext = learnedRealName;
+            changed = true;
+          }
+        }
+
         if (changed) {
-          merged.add(new NickInfo(ni.nick(), ni.prefix(), hmNext, asNext, amNext, accNext, anNext));
+          merged.add(new NickInfo(ni.nick(), ni.prefix(), hmNext, asNext, amNext, accNext, anNext, rnNext));
         } else {
           merged.add(ni);
         }
@@ -285,6 +323,7 @@ public class UserListStore {
     awayMessageByServerAndNickLower.remove(sid);
     accountStateByServerAndNickLower.remove(sid);
     accountNameByServerAndNickLower.remove(sid);
+    realNameByServerAndNickLower.remove(sid);
   }
 
   public boolean updateHostmask(String serverId, String channel, String nick, String hostmask) {
@@ -321,7 +360,15 @@ public class UserListStore {
       if (!niNick.isBlank() && niNick.equalsIgnoreCase(n)) {
         String existing = Objects.toString(ni.hostmask(), "").trim();
         if (!Objects.equals(existing, hm)) {
-          next.add(new NickInfo(ni.nick(), ni.prefix(), hm, ni.awayState(), ni.awayMessage(), ni.accountState(), ni.accountName()));
+          next.add(new NickInfo(
+              ni.nick(),
+              ni.prefix(),
+              hm,
+              ni.awayState(),
+              ni.awayMessage(),
+              ni.accountState(),
+              ni.accountName(),
+              ni.realName()));
           changed = true;
           continue;
         }
@@ -336,6 +383,7 @@ public class UserListStore {
     byChannel.put(ch, List.copyOf(next));
     return true;
   }
+
   public Set<String> updateHostmaskAcrossChannels(String serverId, String nick, String hostmask) {
     String sid = norm(serverId);
     String n = norm(nick);
@@ -370,7 +418,7 @@ public class UserListStore {
         if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
           String existing = norm(ni.hostmask());
           if (!Objects.equals(existing, hm)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), hm, ni.awayState(), ni.awayMessage(), ni.accountState(), ni.accountName()));
+            next.add(new NickInfo(ni.nick(), ni.prefix(), hm, ni.awayState(), ni.awayMessage(), ni.accountState(), ni.accountName(), ni.realName()));
             changed = true;
             continue;
           }
@@ -438,7 +486,15 @@ public class UserListStore {
         // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing reason.
         String nextMsg = (as == AwayState.AWAY) ? ((msg != null) ? msg : existingMsg) : null;
         if (!Objects.equals(existing, as) || !Objects.equals(existingMsg, nextMsg)) {
-          next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), as, nextMsg, ni.accountState(), ni.accountName()));
+          next.add(new NickInfo(
+              ni.nick(),
+              ni.prefix(),
+              ni.hostmask(),
+              as,
+              nextMsg,
+              ni.accountState(),
+              ni.accountName(),
+              ni.realName()));
           changed = true;
           continue;
         }
@@ -506,7 +562,7 @@ public class UserListStore {
           // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing reason.
           String nextMsg = (as == AwayState.AWAY) ? ((msg != null) ? msg : existingMsg) : null;
           if (!Objects.equals(existing, as) || !Objects.equals(existingMsg, nextMsg)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), as, nextMsg, ni.accountState(), ni.accountName()));
+            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), as, nextMsg, ni.accountState(), ni.accountName(), ni.realName()));
             changed = true;
             continue;
           }
@@ -575,7 +631,70 @@ public class UserListStore {
           String nextName = (st == AccountState.LOGGED_IN) ? ((name != null) ? name : existingName) : null;
 
           if (!java.util.Objects.equals(existing, st) || !java.util.Objects.equals(existingName, nextName)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), ni.awayState(), ni.awayMessage(), st, nextName));
+            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), ni.awayState(), ni.awayMessage(), st, nextName, ni.realName()));
+            changed = true;
+            continue;
+          }
+        }
+        next.add(ni);
+      }
+
+      if (changed) {
+        byChannel.put(ch, List.copyOf(next));
+        changedChannels.add(ch);
+      }
+    }
+
+    return java.util.Set.copyOf(changedChannels);
+  }
+
+  public Set<String> updateRealNameAcrossChannels(String serverId, String nick, String realName) {
+    String sid = norm(serverId);
+    String n = norm(nick);
+    String rn = normalizeRealName(realName);
+
+    if (sid.isEmpty() || n.isEmpty()) return Set.of();
+
+    if (rn != null) {
+      realNameByServerAndNickLower
+          .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+          .put(nickKey(n), rn);
+    } else {
+      Map<String, String> m = realNameByServerAndNickLower.get(sid);
+      if (m != null) m.remove(nickKey(n));
+    }
+
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
+    if (byChannel == null || byChannel.isEmpty()) return Set.of();
+
+    java.util.Set<String> changedChannels = new java.util.HashSet<>();
+
+    for (Map.Entry<String, List<NickInfo>> e : byChannel.entrySet()) {
+      String ch = e.getKey();
+      List<NickInfo> cur = e.getValue();
+      if (cur == null || cur.isEmpty()) continue;
+
+      boolean changed = false;
+      java.util.ArrayList<NickInfo> next = new java.util.ArrayList<>(cur.size());
+
+      for (NickInfo ni : cur) {
+        if (ni == null) {
+          next.add(null);
+          continue;
+        }
+        String niNick = norm(ni.nick());
+        if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
+          String existing = normalizeRealName(ni.realName());
+          if (!Objects.equals(existing, rn)) {
+            next.add(new NickInfo(
+                ni.nick(),
+                ni.prefix(),
+                ni.hostmask(),
+                ni.awayState(),
+                ni.awayMessage(),
+                ni.accountState(),
+                ni.accountName(),
+                rn));
             changed = true;
             continue;
           }

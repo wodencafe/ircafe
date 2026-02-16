@@ -37,12 +37,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Consumer;
 public class MessageInputPanel extends JPanel {
   public static final String ID = "input";
   private final JTextField input = new JTextField();
   private final JButton send = new JButton("Send");
   private final JLabel completionHint = new JLabel();
+  private final JPanel composeBanner = new JPanel(new BorderLayout(6, 0));
+  private final JLabel composeBannerLabel = new JLabel();
+  private final JButton composeBannerCancel = new JButton("Cancel");
   private final UndoManager undo = new UndoManager();
   private static final int UNDO_GROUP_WINDOW_MS = 800;
   private final Timer undoGroupTimer = new Timer(UNDO_GROUP_WINDOW_MS, e -> endCompoundEdit());
@@ -94,8 +98,17 @@ public class MessageInputPanel extends JPanel {
   private int historyOffset = -1;
   private String historyScratch = null;
   private String historySearchPrefix = null;
+  private String replyComposeTarget = "";
+  private String replyComposeMessageId = "";
   private InputMap historyInputMap;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
+  private static final String[] QUICK_REACTION_TOKENS = {
+      ":+1:",
+      ":heart:",
+      ":laughing:",
+      ":thinking:",
+      ":eyes:"
+  };
   public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
     super(new BorderLayout(8, 0));
     this.settingsBus = settingsBus;
@@ -112,7 +125,20 @@ public class MessageInputPanel extends JPanel {
     right.setOpaque(false);
     right.add(completionHint, BorderLayout.CENTER);
     right.add(send, BorderLayout.EAST);
-    add(input, BorderLayout.CENTER);
+    composeBanner.setOpaque(false);
+    composeBanner.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+    composeBannerLabel.setText("");
+    composeBannerCancel.setFocusable(false);
+    composeBannerCancel.addActionListener(e -> clearReplyCompose());
+    composeBanner.add(composeBannerLabel, BorderLayout.CENTER);
+    composeBanner.add(composeBannerCancel, BorderLayout.EAST);
+    composeBanner.setVisible(false);
+
+    JPanel center = new JPanel(new BorderLayout(0, 2));
+    center.setOpaque(false);
+    center.add(composeBanner, BorderLayout.NORTH);
+    center.add(input, BorderLayout.CENTER);
+    add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
     installInputContextMenu();
     input.setFocusTraversalKeysEnabled(false);
@@ -953,6 +979,11 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   private void emit() {
     String msg = input.getText().trim();
     if (msg.isEmpty()) return;
+    String outboundLine = msg;
+    boolean consumeReplyCompose = shouldEmitReplyComposeCommand(msg);
+    if (consumeReplyCompose) {
+      outboundLine = "/reply " + replyComposeMessageId + " " + msg;
+    }
     flushTypingDone();
     if (historyStore != null) {
       historyStore.add(msg);
@@ -968,7 +999,130 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       programmaticEdit = false;
     }
     discardAllUndoEdits();
-    outbound.onNext(msg);
+    outbound.onNext(outboundLine);
+    if (consumeReplyCompose) {
+      clearReplyComposeInternal(false, false);
+    }
+  }
+
+  private boolean shouldEmitReplyComposeCommand(String message) {
+    if (!hasReplyCompose()) return false;
+    String m = Objects.toString(message, "").trim();
+    if (m.isEmpty()) return false;
+    // Slash commands should remain explicit user commands; reply mode only applies to plain chat text.
+    return !m.startsWith("/");
+  }
+
+  public void beginReplyCompose(String ircTarget, String messageId) {
+    String target = normalizeComposeTarget(ircTarget);
+    String msgId = normalizeComposeMessageId(messageId);
+    if (target.isEmpty() || msgId.isEmpty()) return;
+    replyComposeTarget = target;
+    replyComposeMessageId = msgId;
+    updateComposeBanner();
+  }
+
+  public void clearReplyCompose() {
+    clearReplyComposeInternal(true, true);
+  }
+
+  public void openQuickReactionPicker(String ircTarget, String messageId) {
+    String target = normalizeComposeTarget(ircTarget);
+    String msgId = normalizeComposeMessageId(messageId);
+    if (target.isEmpty() || msgId.isEmpty()) return;
+    if (!input.isEnabled()) return;
+
+    JPopupMenu menu = new JPopupMenu();
+    for (String reaction : QUICK_REACTION_TOKENS) {
+      JMenuItem item = new JMenuItem(reaction);
+      item.addActionListener(e -> emitQuickReaction(target, msgId, reaction));
+      menu.add(item);
+    }
+    menu.addSeparator();
+    JMenuItem custom = new JMenuItem("Custom...");
+    custom.addActionListener(e -> {
+      String entered = JOptionPane.showInputDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Reaction token (for example :sparkles:)",
+          "React to Message",
+          JOptionPane.PLAIN_MESSAGE);
+      String token = normalizeReactionToken(entered);
+      if (token.isEmpty()) return;
+      emitQuickReaction(target, msgId, token);
+    });
+    menu.add(custom);
+
+    try {
+      menu.show(input, Math.max(0, input.getWidth() - 8), input.getHeight());
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void emitQuickReaction(String target, String msgId, String reaction) {
+    String t = normalizeComposeTarget(target);
+    String m = normalizeComposeMessageId(msgId);
+    String r = normalizeReactionToken(reaction);
+    if (t.isEmpty() || m.isEmpty() || r.isEmpty()) return;
+    flushTypingDone();
+    outbound.onNext("/react " + m + " " + r);
+  }
+
+  private boolean hasReplyCompose() {
+    return !replyComposeTarget.isBlank() && !replyComposeMessageId.isBlank();
+  }
+
+  private void clearReplyComposeInternal(boolean focusInputAfter, boolean notifyDraftChanged) {
+    boolean hadCompose = hasReplyCompose();
+    replyComposeTarget = "";
+    replyComposeMessageId = "";
+    updateComposeBanner();
+    if (focusInputAfter) {
+      focusInput();
+    }
+    if (hadCompose && notifyDraftChanged) {
+      fireDraftChanged();
+    }
+  }
+
+  private void updateComposeBanner() {
+    if (hasReplyCompose()) {
+      composeBannerLabel.setText("Replying to message " + abbreviateMessageId(replyComposeMessageId));
+      composeBanner.setVisible(true);
+      send.setText("Reply");
+    } else {
+      composeBannerLabel.setText("");
+      composeBanner.setVisible(false);
+      send.setText("Send");
+    }
+    revalidate();
+    repaint();
+  }
+
+  private static String abbreviateMessageId(String raw) {
+    String id = Objects.toString(raw, "").trim();
+    if (id.length() <= 18) return id;
+    return id.substring(0, 18) + "...";
+  }
+
+  private static String normalizeComposeTarget(String raw) {
+    String target = Objects.toString(raw, "").trim();
+    if (target.isEmpty()) return "";
+    if (target.indexOf(' ') >= 0 || target.indexOf('\n') >= 0 || target.indexOf('\r') >= 0) return "";
+    return target;
+  }
+
+  private static String normalizeComposeMessageId(String raw) {
+    String msgId = Objects.toString(raw, "").trim();
+    if (msgId.isEmpty()) return "";
+    if (msgId.indexOf(' ') >= 0 || msgId.indexOf('\n') >= 0 || msgId.indexOf('\r') >= 0) return "";
+    return msgId;
+  }
+
+  private static String normalizeReactionToken(String raw) {
+    String token = Objects.toString(raw, "").trim();
+    if (token.isEmpty()) return "";
+    if (token.indexOf(' ') >= 0 || token.indexOf('\n') >= 0 || token.indexOf('\r') >= 0) return "";
+    return token;
   }
 
   /**
@@ -1047,6 +1201,104 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     updateHint();
   }
 
+  /**
+   * Normalize staged IRCv3 /quote drafts against currently negotiated capabilities.
+   *
+   * <p>This exits reply/react prefill modes when the backing capability is disabled mid-session.
+   *
+   * @return true when the draft text changed.
+   */
+  public boolean normalizeIrcv3DraftForCapabilities(boolean replySupported, boolean reactSupported) {
+    boolean changed = false;
+    String before = getDraftText();
+    String after = normalizeIrcv3DraftForCapabilities(before, replySupported, reactSupported);
+    if (!Objects.equals(before, after)) {
+      setDraftText(after);
+      changed = true;
+    }
+    if (!replySupported && hasReplyCompose()) {
+      clearReplyComposeInternal(false, false);
+      changed = true;
+    }
+    return changed;
+  }
+
+  public static String normalizeIrcv3DraftForCapabilities(String draft, boolean replySupported, boolean reactSupported) {
+    String raw = (draft == null) ? "" : draft;
+    if (raw.isBlank()) return raw;
+
+    int ws = 0;
+    while (ws < raw.length() && Character.isWhitespace(raw.charAt(ws))) ws++;
+    String leading = raw.substring(0, ws);
+    String rest = raw.substring(ws);
+
+    if (!startsWithIgnoreCase(rest, "/quote")) return raw;
+    int idx = "/quote".length();
+    if (rest.length() > idx && !Character.isWhitespace(rest.charAt(idx))) return raw;
+    while (idx < rest.length() && Character.isWhitespace(rest.charAt(idx))) idx++;
+    if (idx >= rest.length() || rest.charAt(idx) != '@') return raw;
+
+    int tagStart = idx;
+    int tagEnd = rest.indexOf(' ', tagStart);
+    if (tagEnd < 0) return raw;
+    String tagBody = rest.substring(tagStart + 1, tagEnd);
+    if (tagBody.isBlank()) return raw;
+
+    String[] parts = tagBody.split(";");
+    java.util.ArrayList<String> kept = new java.util.ArrayList<>(parts.length);
+    boolean sawReplyTag = false;
+    boolean sawReactTag = false;
+
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) continue;
+      String key = normalizeIrcv3TagKey(p);
+      if ("draft/reply".equals(key)) {
+        sawReplyTag = true;
+        if (replySupported) kept.add(part);
+        continue;
+      }
+      if ("draft/react".equals(key)) {
+        sawReactTag = true;
+        kept.add(part);
+        continue;
+      }
+      kept.add(part);
+    }
+
+    // React prefill depends on draft/reply target metadata; disabling either capability exits the mode.
+    if (sawReactTag && (!reactSupported || !replySupported)) {
+      return "";
+    }
+    if (!sawReplyTag || replySupported) {
+      return raw;
+    }
+
+    String head = rest.substring(0, tagStart);
+    String tail = rest.substring(tagEnd); // includes whitespace + command
+    if (kept.isEmpty()) {
+      String commandPart = tail.stripLeading();
+      if (commandPart.isEmpty()) return "";
+      return leading + head + commandPart;
+    }
+    return leading + head + "@" + String.join(";", kept) + tail;
+  }
+
+  private static String normalizeIrcv3TagKey(String tagPart) {
+    String token = Objects.toString(tagPart, "");
+    int eq = token.indexOf('=');
+    if (eq >= 0) token = token.substring(0, eq);
+    token = token.trim();
+    while (token.startsWith("+")) token = token.substring(1);
+    return token.toLowerCase(Locale.ROOT);
+  }
+
+  private static boolean startsWithIgnoreCase(String value, String prefix) {
+    if (value == null || prefix == null) return false;
+    if (value.length() < prefix.length()) return false;
+    return value.regionMatches(true, 0, prefix, 0, prefix.length());
+  }
+
   public void setInputEnabled(boolean enabled) {
     input.setEditable(enabled);
     input.setEnabled(enabled);
@@ -1054,6 +1306,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     if (!enabled) {
       flushTypingDone();
       clearRemoteTypingIndicator();
+      clearReplyComposeInternal(false, false);
     }
     updateHint();
   }
@@ -1069,6 +1322,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     historyScratch = null;
     historySearchPrefix = null;
     typingPauseTimer.stop();
+    clearReplyComposeInternal(false, false);
     programmaticEdit = true;
     try {
       input.setText(text == null ? "" : text);

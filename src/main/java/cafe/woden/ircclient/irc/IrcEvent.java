@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public sealed interface IrcEvent permits
     IrcEvent.Connected,
@@ -53,6 +54,7 @@ public sealed interface IrcEvent permits
     IrcEvent.ChatHistoryBatchReceived,
     IrcEvent.ZncPlaybackBatchReceived,
     IrcEvent.ServerResponseLine,
+    IrcEvent.StandardReply,
     IrcEvent.Error,
     IrcEvent.CtcpRequestReceived
  {
@@ -208,6 +210,53 @@ public sealed interface IrcEvent permits
     }
   }
 
+  enum StandardReplyKind {
+    FAIL,
+    WARN,
+    NOTE
+  }
+
+  /**
+   * IRCv3 standard reply line (FAIL/WARN/NOTE).
+   *
+   * <p>Format is typically:
+   * {@code :server FAIL <command> <code> [context] :description}
+   */
+  record StandardReply(
+      Instant at,
+      StandardReplyKind kind,
+      String command,
+      String code,
+      String context,
+      String description,
+      String rawLine,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) implements IrcEvent {
+    public StandardReply {
+      if (kind == null) kind = StandardReplyKind.NOTE;
+      command = normalizeToken(command);
+      code = normalizeToken(code);
+      context = normalizeToken(context);
+      description = Objects.toString(description, "").trim();
+      rawLine = Objects.toString(rawLine, "").trim();
+      messageId = normalizeMessageId(messageId);
+      ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
+    }
+
+    public StandardReply(
+        Instant at,
+        StandardReplyKind kind,
+        String command,
+        String code,
+        String context,
+        String description,
+        String rawLine
+    ) {
+      this(at, kind, command, code, context, description, rawLine, "", Map.of());
+    }
+  }
+
   /** Warns the UI once when IRCv3 {@code server-time} is not negotiated on this connection. */
   record ServerTimeNotNegotiated(Instant at, String message) implements IrcEvent {}
 
@@ -282,7 +331,8 @@ public sealed interface IrcEvent permits
         AwayState awayState,
         String awayMessage,
         AccountState accountState,
-        String accountName
+        String accountName,
+        String realName
     ) { // prefix like "@", "+", "~", etc.
       public NickInfo {
         // Normalize null to UNKNOWN to keep downstream UI / stores simple.
@@ -299,18 +349,35 @@ public sealed interface IrcEvent permits
         }
         // Only keep an account name if we are sure they're logged in.
         if (accountState != AccountState.LOGGED_IN) accountName = null;
+
+        if (realName != null) {
+          realName = realName.trim();
+          if (realName.isEmpty()) realName = null;
+        }
       }
 
       public NickInfo(String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) {
-        this(nick, prefix, hostmask, awayState, awayMessage, AccountState.UNKNOWN, null);
+        this(nick, prefix, hostmask, awayState, awayMessage, AccountState.UNKNOWN, null, null);
+      }
+
+      public NickInfo(
+          String nick,
+          String prefix,
+          String hostmask,
+          AwayState awayState,
+          String awayMessage,
+          AccountState accountState,
+          String accountName
+      ) {
+        this(nick, prefix, hostmask, awayState, awayMessage, accountState, accountName, null);
       }
 
       public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
-        this(nick, prefix, hostmask, awayState, null, AccountState.UNKNOWN, null);
+        this(nick, prefix, hostmask, awayState, null, AccountState.UNKNOWN, null, null);
       }
 
       public NickInfo(String nick, String prefix, String hostmask) {
-        this(nick, prefix, hostmask, AwayState.UNKNOWN, null, AccountState.UNKNOWN, null);
+        this(nick, prefix, hostmask, AwayState.UNKNOWN, null, AccountState.UNKNOWN, null, null);
       }
     }
 
@@ -417,6 +484,10 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
   private static String normalizeMessageId(String raw) {
     String s = (raw == null) ? "" : raw.trim();
     return s;
+  }
+
+  private static String normalizeToken(String raw) {
+    return Objects.toString(raw, "").trim();
   }
 
   private static Map<String, String> normalizeIrcv3Tags(Map<String, String> raw) {

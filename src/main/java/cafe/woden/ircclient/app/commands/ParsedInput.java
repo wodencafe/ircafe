@@ -34,6 +34,11 @@ public sealed interface ParsedInput permits
     ParsedInput.UnsoftIgnore,
     ParsedInput.SoftIgnoreList,
     ParsedInput.ChatHistoryBefore,
+    ParsedInput.ChatHistoryLatest,
+    ParsedInput.ChatHistoryBetween,
+    ParsedInput.ChatHistoryAround,
+    ParsedInput.ReplyMessage,
+    ParsedInput.ReactMessage,
     ParsedInput.Filter,
     ParsedInput.Quote,
     ParsedInput.Say,
@@ -144,6 +149,39 @@ public sealed interface ParsedInput permits
       this(limit, "");
     }
   }
+
+  /**
+   * /chathistory latest [*|selector] [limit]
+   */
+  record ChatHistoryLatest(int limit, String selector) implements ParsedInput {
+    public ChatHistoryLatest(int limit) {
+      this(limit, "*");
+    }
+  }
+
+  /**
+   * /chathistory between <start-selector> <end-selector> [limit]
+   */
+  record ChatHistoryBetween(String startSelector, String endSelector, int limit) implements ParsedInput {}
+
+  /**
+   * /chathistory around <selector> [limit]
+   */
+  record ChatHistoryAround(String selector, int limit) implements ParsedInput {}
+
+  /**
+   * /reply <msgid> <message>
+   *
+   * <p>Internal/advanced IRCv3 compose helper used by the first-class reply composer UI.
+   */
+  record ReplyMessage(String messageId, String body) implements ParsedInput {}
+
+  /**
+   * /react <msgid> <reaction-token>
+   *
+   * <p>Internal/advanced IRCv3 compose helper used by the quick reaction picker UI.
+   */
+  record ReactMessage(String messageId, String reaction) implements ParsedInput {}
 
   /** Local /filter ... command family. */
   record Filter(FilterCommand command) implements ParsedInput {}

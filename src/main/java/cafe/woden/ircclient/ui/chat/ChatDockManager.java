@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.swing.SwingUtilities;
 
@@ -126,6 +127,83 @@ public class ChatDockManager {
     try {
       dock.showTypingIndicator(nick, state);
     } catch (Exception ignored) {
+    }
+  }
+
+  public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
+    String sid = java.util.Objects.toString(serverId, "").trim();
+    String cap = java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    if (sid.isEmpty() || cap.isEmpty()) return;
+
+    if ("typing".equals(cap)) {
+      clearTypingIndicatorsForServer(sid);
+      return;
+    }
+    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap)) return;
+
+    boolean replySupported = isDraftReplySupportedForServer(sid);
+    boolean reactSupported = isDraftReactSupportedForServer(sid);
+    normalizePinnedDraftsForServer(sid, replySupported, reactSupported);
+  }
+
+  private void clearTypingIndicatorsForServer(String serverId) {
+    for (Map.Entry<TargetRef, PinnedChatDockable> e : openPinned.entrySet()) {
+      TargetRef target = e.getKey();
+      PinnedChatDockable dock = e.getValue();
+      if (target == null || dock == null) continue;
+      if (!java.util.Objects.equals(target.serverId(), serverId)) continue;
+      try {
+        dock.clearTypingIndicator();
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  private void normalizePinnedDraftsForServer(String serverId, boolean replySupported, boolean reactSupported) {
+    // Persisted drafts for currently hidden/closed pinned docks.
+    java.util.ArrayList<TargetRef> persistedTargets = new java.util.ArrayList<>(pinnedDrafts.keySet());
+    for (TargetRef target : persistedTargets) {
+      if (target == null || !java.util.Objects.equals(target.serverId(), serverId)) continue;
+      String before = pinnedDrafts.getOrDefault(target, "");
+      String after = cafe.woden.ircclient.ui.MessageInputPanel.normalizeIrcv3DraftForCapabilities(
+          before,
+          replySupported,
+          reactSupported);
+      if (!java.util.Objects.equals(before, after)) {
+        pinnedDrafts.put(target, after);
+      }
+    }
+
+    // Open pinned docks currently visible.
+    for (Map.Entry<TargetRef, PinnedChatDockable> e : new ArrayList<>(openPinned.entrySet())) {
+      TargetRef target = e.getKey();
+      PinnedChatDockable dock = e.getValue();
+      if (target == null || dock == null) continue;
+      if (!java.util.Objects.equals(target.serverId(), serverId)) continue;
+      try {
+        if (dock.normalizeIrcv3DraftForCapabilities(replySupported, reactSupported)) {
+          pinnedDrafts.put(target, dock.getDraftText());
+        }
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  private boolean isDraftReplySupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReplyAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isDraftReactSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReactAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
     }
   }
 

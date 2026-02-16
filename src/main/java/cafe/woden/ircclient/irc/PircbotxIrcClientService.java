@@ -366,18 +366,61 @@ public class PircbotxIrcClientService implements IrcClientService {
   @Override
   public Completable requestChatHistoryBefore(String serverId, String target, String selector, int limit) {
     return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
-          PircbotxConnectionState c = conn(serverId);
-          if (!c.chatHistoryCapAcked.get()) {
-            throw new IllegalStateException("CHATHISTORY not negotiated (chathistory or draft/chathistory): " + serverId);
-          }
-          if (!c.batchCapAcked.get()) {
-            throw new IllegalStateException("CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
-          }
+          ensureChatHistoryNegotiated(serverId);
 
           String line = Ircv3ChatHistoryCommandBuilder.buildBefore(target, selector, limit);
           requireBot(serverId).sendRaw().rawLine(line);
         })
         .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+  }
+
+  @Override
+  public Completable requestChatHistoryLatest(String serverId, String target, String selector, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
+          ensureChatHistoryNegotiated(serverId);
+
+          String line = Ircv3ChatHistoryCommandBuilder.buildLatest(target, selector, limit);
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+  }
+
+  @Override
+  public Completable requestChatHistoryBetween(
+      String serverId,
+      String target,
+      String startSelector,
+      String endSelector,
+      int limit
+  ) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
+          ensureChatHistoryNegotiated(serverId);
+
+          String line = Ircv3ChatHistoryCommandBuilder.buildBetween(target, startSelector, endSelector, limit);
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+  }
+
+  @Override
+  public Completable requestChatHistoryAround(String serverId, String target, String selector, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
+          ensureChatHistoryNegotiated(serverId);
+
+          String line = Ircv3ChatHistoryCommandBuilder.buildAround(target, selector, limit);
+          requireBot(serverId).sendRaw().rawLine(line);
+        })
+        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+  }
+
+  private void ensureChatHistoryNegotiated(String serverId) {
+    PircbotxConnectionState c = conn(serverId);
+    if (!c.chatHistoryCapAcked.get()) {
+      throw new IllegalStateException("CHATHISTORY not negotiated (chathistory or draft/chathistory): " + serverId);
+    }
+    if (!c.batchCapAcked.get()) {
+      throw new IllegalStateException("CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
+    }
   }
 
 
@@ -436,6 +479,26 @@ public class PircbotxIrcClientService implements IrcClientService {
     try {
       PircbotxConnectionState c = conn(serverId);
       return c != null && c.botRef.get() != null && c.readMarkerCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isLabeledResponseAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.botRef.get() != null && c.labeledResponseCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isStandardRepliesAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.botRef.get() != null && c.standardRepliesCapAcked.get();
     } catch (Exception e) {
       return false;
     }

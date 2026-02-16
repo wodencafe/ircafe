@@ -264,44 +264,15 @@ public class CommandParser {
     // IRCv3 CHATHISTORY
     if (matchesCommand(line, "/chathistory") || matchesCommand(line, "/history")) {
       String rest = matchesCommand(line, "/chathistory") ? argAfter(line, "/chathistory") : argAfter(line, "/history");
-      String r = rest == null ? "" : rest.trim();
-      if (r.isEmpty()) {
-        return new ParsedInput.ChatHistoryBefore(0, "");
-      }
+      return parseChatHistoryInput(rest);
+    }
 
-      String[] toks = r.split("\\s+");
-      int idx = 0;
-      if (idx < toks.length && "before".equalsIgnoreCase(toks[idx])) {
-        idx++;
-      }
-
-      if (idx >= toks.length) {
-        return new ParsedInput.ChatHistoryBefore(0, "");
-      }
-
-      String selector = "";
-      int lim = 50;
-      String first = toks[idx];
-      if (isIntegerToken(first)) {
-        lim = parseIntOrZero(first);
-        idx++;
-      } else {
-        selector = normalizeChatHistorySelector(first);
-        idx++;
-        if (selector.isEmpty()) {
-          return new ParsedInput.ChatHistoryBefore(0, "");
-        }
-      }
-
-      if (idx < toks.length) {
-        lim = parseIntOrZero(toks[idx]);
-        idx++;
-      }
-      if (idx < toks.length) {
-        return new ParsedInput.ChatHistoryBefore(0, "");
-      }
-
-      return new ParsedInput.ChatHistoryBefore(lim, selector);
+    // IRCv3 compose helpers (used by first-class reply/reaction input UX).
+    if (matchesCommand(line, "/reply")) {
+      return parseReplyInput(argAfter(line, "/reply"));
+    }
+    if (matchesCommand(line, "/react")) {
+      return parseReactInput(argAfter(line, "/react"));
     }
 
     // Local-only filters (weechat-style).
@@ -331,6 +302,26 @@ public class CommandParser {
     return rest.trim();
   }
 
+  private static ParsedInput parseReplyInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.ReplyMessage("", "");
+    int sp = r.indexOf(' ');
+    if (sp <= 0) return new ParsedInput.ReplyMessage(r.trim(), "");
+    String msgId = r.substring(0, sp).trim();
+    String body = r.substring(sp + 1).trim();
+    return new ParsedInput.ReplyMessage(msgId, body);
+  }
+
+  private static ParsedInput parseReactInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.ReactMessage("", "");
+    int sp = r.indexOf(' ');
+    if (sp <= 0) return new ParsedInput.ReactMessage(r.trim(), "");
+    String msgId = r.substring(0, sp).trim();
+    String reaction = r.substring(sp + 1).trim();
+    return new ParsedInput.ReactMessage(msgId, reaction);
+  }
+
   private static boolean isIntegerToken(String raw) {
     String s = raw == null ? "" : raw.trim();
     if (s.isEmpty()) return false;
@@ -353,6 +344,131 @@ public class CommandParser {
     }
   }
 
+  private static ParsedInput parseChatHistoryInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) {
+      return new ParsedInput.ChatHistoryBefore(0, "");
+    }
+
+    String[] toks = r.split("\\s+");
+    if (toks.length == 0) {
+      return new ParsedInput.ChatHistoryBefore(0, "");
+    }
+
+    String head = toks[0].toLowerCase(java.util.Locale.ROOT);
+    return switch (head) {
+      case "before" -> parseChatHistoryBefore(toks, 1);
+      case "latest" -> parseChatHistoryLatest(toks, 1);
+      case "between" -> parseChatHistoryBetween(toks, 1);
+      case "around" -> parseChatHistoryAround(toks, 1);
+      default -> parseChatHistoryBefore(toks, 0);
+    };
+  }
+
+  private static ParsedInput parseChatHistoryBefore(String[] toks, int startIdx) {
+    if (toks == null || startIdx >= toks.length) {
+      return new ParsedInput.ChatHistoryBefore(0, "");
+    }
+
+    int idx = startIdx;
+    int lim = 50;
+    String selector = "";
+    String first = toks[idx];
+    if (isIntegerToken(first)) {
+      lim = parseIntOrZero(first);
+      idx++;
+    } else {
+      selector = normalizeChatHistorySelector(first);
+      idx++;
+      if (selector.isEmpty()) {
+        return new ParsedInput.ChatHistoryBefore(0, "");
+      }
+    }
+
+    if (idx < toks.length) {
+      if (!isIntegerToken(toks[idx])) return new ParsedInput.ChatHistoryBefore(0, "");
+      lim = parseIntOrZero(toks[idx]);
+      idx++;
+    }
+    if (idx < toks.length) {
+      return new ParsedInput.ChatHistoryBefore(0, "");
+    }
+    return new ParsedInput.ChatHistoryBefore(lim, selector);
+  }
+
+  private static ParsedInput parseChatHistoryLatest(String[] toks, int startIdx) {
+    int idx = startIdx;
+    int lim = 50;
+    String selector = "*";
+
+    if (toks == null) return new ParsedInput.ChatHistoryLatest(0, selector);
+
+    if (idx < toks.length) {
+      String first = toks[idx];
+      if (isIntegerToken(first)) {
+        lim = parseIntOrZero(first);
+        idx++;
+      } else {
+        selector = normalizeChatHistorySelectorOrWildcard(first);
+        idx++;
+        if (selector.isEmpty()) {
+          return new ParsedInput.ChatHistoryLatest(0, "");
+        }
+      }
+    }
+
+    if (idx < toks.length) {
+      if (!isIntegerToken(toks[idx])) return new ParsedInput.ChatHistoryLatest(0, "");
+      lim = parseIntOrZero(toks[idx]);
+      idx++;
+    }
+    if (idx < toks.length) return new ParsedInput.ChatHistoryLatest(0, "");
+
+    return new ParsedInput.ChatHistoryLatest(lim, selector);
+  }
+
+  private static ParsedInput parseChatHistoryAround(String[] toks, int startIdx) {
+    if (toks == null || startIdx >= toks.length) return new ParsedInput.ChatHistoryAround("", 0);
+
+    int idx = startIdx;
+    String selector = normalizeChatHistorySelector(toks[idx]);
+    if (selector.isEmpty()) return new ParsedInput.ChatHistoryAround("", 0);
+    idx++;
+
+    int lim = 50;
+    if (idx < toks.length) {
+      if (!isIntegerToken(toks[idx])) return new ParsedInput.ChatHistoryAround("", 0);
+      lim = parseIntOrZero(toks[idx]);
+      idx++;
+    }
+    if (idx < toks.length) return new ParsedInput.ChatHistoryAround("", 0);
+
+    return new ParsedInput.ChatHistoryAround(selector, lim);
+  }
+
+  private static ParsedInput parseChatHistoryBetween(String[] toks, int startIdx) {
+    if (toks == null || startIdx + 1 >= toks.length) {
+      return new ParsedInput.ChatHistoryBetween("", "", 0);
+    }
+
+    int idx = startIdx;
+    String startSelector = normalizeChatHistorySelectorOrWildcard(toks[idx++]);
+    String endSelector = normalizeChatHistorySelectorOrWildcard(toks[idx++]);
+    if (startSelector.isEmpty() || endSelector.isEmpty()) {
+      return new ParsedInput.ChatHistoryBetween("", "", 0);
+    }
+
+    int lim = 50;
+    if (idx < toks.length) {
+      if (!isIntegerToken(toks[idx])) return new ParsedInput.ChatHistoryBetween("", "", 0);
+      lim = parseIntOrZero(toks[idx]);
+      idx++;
+    }
+    if (idx < toks.length) return new ParsedInput.ChatHistoryBetween("", "", 0);
+
+    return new ParsedInput.ChatHistoryBetween(startSelector, endSelector, lim);
+  }
+
   private static String normalizeChatHistorySelector(String raw) {
     String s = raw == null ? "" : raw.trim();
     if (s.isEmpty()) return "";
@@ -363,6 +479,12 @@ public class CommandParser {
     if (value.isEmpty()) return "";
     if (!"timestamp".equals(key) && !"msgid".equals(key)) return "";
     return key + "=" + value;
+  }
+
+  private static String normalizeChatHistorySelectorOrWildcard(String raw) {
+    String s = raw == null ? "" : raw.trim();
+    if ("*".equals(s)) return "*";
+    return normalizeChatHistorySelector(s);
   }
 
   

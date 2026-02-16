@@ -81,6 +81,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::openUrl,
         this::openFindBar,
         this::currentProxyPlan,
+        this::loadNewerHistoryContextActionVisible,
+        this::loadAroundMessageContextActionVisible,
+        this::onLoadNewerHistoryRequested,
+        this::onLoadContextAroundMessageRequested,
         this::replyContextActionVisible,
         this::reactContextActionVisible,
         this::onReplyToMessageRequested,
@@ -228,6 +232,26 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return false;
   }
 
+  /** Whether the transcript context menu should show "Load Newer History". */
+  protected boolean loadNewerHistoryContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "Load Context Around Message…". */
+  protected boolean loadAroundMessageContextActionVisible() {
+    return false;
+  }
+
+  /** Called by transcript context menu action "Load Newer History". */
+  protected void onLoadNewerHistoryRequested() {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Load Context Around Message…". */
+  protected void onLoadContextAroundMessageRequested(String messageId) {
+    // default: no-op
+  }
+
   /** Called by transcript context menu action "Reply to Message…". */
   protected void onReplyToMessageRequested(String messageId) {
     // default: no-op
@@ -263,6 +287,25 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     if (target.isEmpty() || msgId.isEmpty()) return "";
     String escapedMsgId = escapeIrcv3TagValue(msgId);
     return "/quote @+draft/react=:+1:;+draft/reply=" + escapedMsgId + " TAGMSG " + target;
+  }
+
+  /**
+   * Build a raw command line that requests the latest/newer CHATHISTORY page for the active target.
+   */
+  protected static String buildChatHistoryLatestCommand() {
+    return "/chathistory latest *";
+  }
+
+  /**
+   * Build a raw command line that requests CHATHISTORY context around a specific IRCv3 message id.
+   */
+  protected static String buildChatHistoryAroundByMsgIdCommand(String messageId) {
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return "";
+    for (int i = 0; i < msgId.length(); i++) {
+      if (Character.isWhitespace(msgId.charAt(i))) return "";
+    }
+    return "/chathistory around msgid=" + msgId;
   }
 
   private static String escapeIrcv3TagValue(String value) {

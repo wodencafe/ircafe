@@ -350,4 +350,9 @@ public abstract class UiPortDecorator implements UiPort {
   ) {
     delegate.applyMessageReaction(target, at, fromNick, targetMessageId, reaction);
   }
+
+  @Override
+  public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
+    delegate.normalizeIrcv3CapabilityUiState(serverId, capability);
+  }
 }

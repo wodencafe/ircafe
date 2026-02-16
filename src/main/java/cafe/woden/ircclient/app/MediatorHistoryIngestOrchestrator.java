@@ -1,12 +1,23 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
+import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryBatchBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
 import cafe.woden.ircclient.logging.history.ZncPlaybackBus;
+import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,25 +25,36 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class MediatorHistoryIngestOrchestrator {
+  private static final Duration LIVE_REQUEST_MAX_AGE = Duration.ofMinutes(2);
+  private static final String HISTORY_STATUS_TAG = "(history)";
 
   private final UiPort ui;
   private final ChatHistoryIngestor chatHistoryIngestor;
   private final ChatHistoryIngestBus chatHistoryIngestBus;
   private final ChatHistoryBatchBus chatHistoryBatchBus;
   private final ZncPlaybackBus zncPlaybackBus;
+  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
+  private final ChatTranscriptStore transcripts;
+  private final IrcClientService irc;
 
   public MediatorHistoryIngestOrchestrator(
       UiPort ui,
       ChatHistoryIngestor chatHistoryIngestor,
       ChatHistoryIngestBus chatHistoryIngestBus,
       ChatHistoryBatchBus chatHistoryBatchBus,
-      ZncPlaybackBus zncPlaybackBus
+      ZncPlaybackBus zncPlaybackBus,
+      ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
+      ChatTranscriptStore transcripts,
+      IrcClientService irc
   ) {
     this.ui = ui;
     this.chatHistoryIngestor = chatHistoryIngestor;
     this.chatHistoryIngestBus = chatHistoryIngestBus;
     this.chatHistoryBatchBus = chatHistoryBatchBus;
     this.zncPlaybackBus = zncPlaybackBus;
+    this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
+    this.transcripts = transcripts;
+    this.irc = irc;
   }
 
   public void onChatHistoryBatchReceived(String sid, IrcEvent.ChatHistoryBatchReceived ev) {
@@ -57,11 +79,24 @@ public class MediatorHistoryIngestOrchestrator {
     }
 
     int n = (ev.entries() == null) ? 0 : ev.entries().size();
-    ui.appendStatus(dest, "(chathistory)", "Received " + n + " history lines (batch " + ev.batchId() + "). Persisting… (still not displayed)");
+    LiveRenderResult live = renderRequestedBatchIfAny(sid, target, dest, ev.entries());
+    if (live.displayedCount() > 0) {
+      ui.appendStatus(
+          live.target(),
+          HISTORY_STATUS_TAG,
+          "Received " + n + " history lines (batch " + ev.batchId() + "). Displayed "
+              + live.displayedCount()
+              + " now; persisting in background.");
+    } else {
+      ui.appendStatus(
+          dest,
+          HISTORY_STATUS_TAG,
+          "Received " + n + " history lines (batch " + ev.batchId() + "). Persisting for scrollback.");
+    }
 
     chatHistoryIngestor.ingestAsync(sid, target, ev.batchId(), ev.entries(), result -> {
       if (result == null) {
-        appendStatus(dest, "(chathistory)", "Persist finished (no details).");
+        appendStatus(dest, HISTORY_STATUS_TAG, "Persist finished (no details).");
         return;
       }
 
@@ -73,7 +108,7 @@ public class MediatorHistoryIngestOrchestrator {
       } else {
         msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
       }
-      appendStatus(dest, "(chathistory)", msg);
+      appendStatus(dest, HISTORY_STATUS_TAG, msg);
 
       try {
         if (chatHistoryIngestBus != null) {
@@ -121,23 +156,36 @@ public class MediatorHistoryIngestOrchestrator {
     }
 
     int n = (ev.entries() == null) ? 0 : ev.entries().size();
-    ui.appendStatus(dest, "(znc-playback)", "Captured " + n + " playback lines for scrollback. Persisting… (still not displayed)");
+    LiveRenderResult live = renderRequestedBatchIfAny(sid, target, dest, ev.entries());
+    if (live.displayedCount() > 0) {
+      ui.appendStatus(
+          live.target(),
+          HISTORY_STATUS_TAG,
+          "Received " + n + " playback history lines for " + target + ". Displayed "
+              + live.displayedCount()
+              + " now; persisting in background.");
+    } else if (n > 0) {
+      ui.appendStatus(
+          dest,
+          HISTORY_STATUS_TAG,
+          "Received " + n + " playback history lines. Persisting for scrollback.");
+    }
 
     chatHistoryIngestor.ingestAsync(sid, target, batchId, ev.entries(), result -> {
       if (result == null) {
-        appendStatus(dest, "(znc-playback)", "Persist finished (no details).");
+        appendStatus(dest, HISTORY_STATUS_TAG, "Persist finished (no details).");
         return;
       }
 
       String msg;
       if (!result.enabled()) {
-        msg = "Playback batch not persisted: chat logging is disabled.";
+        msg = "History batch not persisted: chat logging is disabled.";
       } else if (result.message() != null) {
         msg = result.message();
       } else {
-        msg = "Persisted " + result.inserted() + "/" + result.total() + " playback lines.";
+        msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
       }
-      appendStatus(dest, "(znc-playback)", msg);
+      appendStatus(dest, HISTORY_STATUS_TAG, msg);
 
       try {
         if (chatHistoryIngestBus != null) {
@@ -161,6 +209,132 @@ public class MediatorHistoryIngestOrchestrator {
     return target;
   }
 
+  private LiveRenderResult renderRequestedBatchIfAny(
+      String sid,
+      String normalizedTarget,
+      TargetRef fallbackTarget,
+      List<ChatHistoryEntry> entries
+  ) {
+    ChatHistoryRequestRoutingState.PendingRequest pending =
+        chatHistoryRequestRoutingState.consumeIfFresh(sid, normalizedTarget, LIVE_REQUEST_MAX_AGE);
+    if (pending == null || pending.originTarget() == null) {
+      return new LiveRenderResult(fallbackTarget, 0);
+    }
+
+    TargetRef renderTarget = normalizeRenderTarget(sid, normalizedTarget, pending.originTarget(), fallbackTarget);
+    ensureTargetExists(renderTarget);
+    List<ChatHistoryEntry> ordered = orderedEntries(entries);
+    if (ordered.isEmpty()) {
+      return new LiveRenderResult(renderTarget, 0);
+    }
+
+    String myNick = "";
+    try {
+      myNick = irc.currentNick(sid).orElse("");
+    } catch (Exception ignored) {
+      myNick = "";
+    }
+    Set<HistoryFingerprint> seen = new HashSet<>();
+    QueryMode mode = pending.queryMode() == null ? QueryMode.BEFORE : pending.queryMode();
+    int displayed = 0;
+    transcripts.beginHistoryInsertBatch(renderTarget);
+    try {
+      int insertAt = (mode == QueryMode.BEFORE) ? transcripts.loadOlderInsertOffset(renderTarget) : 0;
+      for (ChatHistoryEntry entry : ordered) {
+        HistoryFingerprint fp = HistoryFingerprint.from(entry);
+        if (!seen.add(fp)) {
+          continue;
+        }
+
+        String from = Objects.toString(entry.from(), "");
+        String text = Objects.toString(entry.text(), "");
+        long tsEpochMs = entry.at() == null ? System.currentTimeMillis() : entry.at().toEpochMilli();
+        boolean outgoing = !myNick.isBlank() && !from.isBlank() && from.equalsIgnoreCase(myNick);
+
+        ChatHistoryEntry.Kind kind = (entry.kind() == null) ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
+        if (mode == QueryMode.BEFORE) {
+          insertAt = switch (kind) {
+            case ACTION -> transcripts.insertActionFromHistoryAt(
+                renderTarget,
+                insertAt,
+                from,
+                text,
+                outgoing,
+                tsEpochMs);
+            case NOTICE -> transcripts.insertNoticeFromHistoryAt(
+                renderTarget,
+                insertAt,
+                from,
+                text,
+                tsEpochMs);
+            case PRIVMSG -> transcripts.insertChatFromHistoryAt(
+                renderTarget,
+                insertAt,
+                from,
+                text,
+                outgoing,
+                tsEpochMs);
+          };
+        } else {
+          switch (kind) {
+            case ACTION -> transcripts.appendActionFromHistory(
+                renderTarget,
+                from,
+                text,
+                outgoing,
+                tsEpochMs);
+            case NOTICE -> transcripts.appendNoticeFromHistory(
+                renderTarget,
+                from,
+                text,
+                tsEpochMs);
+            case PRIVMSG -> transcripts.appendChatFromHistory(
+                renderTarget,
+                from,
+                text,
+                outgoing,
+                tsEpochMs);
+          }
+        }
+        displayed++;
+      }
+    } finally {
+      transcripts.endHistoryInsertBatch(renderTarget);
+    }
+
+    return new LiveRenderResult(renderTarget, displayed);
+  }
+
+  private static List<ChatHistoryEntry> orderedEntries(List<ChatHistoryEntry> entries) {
+    if (entries == null || entries.isEmpty()) return List.of();
+    List<ChatHistoryEntry> ordered = new ArrayList<>(entries.size());
+    for (ChatHistoryEntry entry : entries) {
+      if (entry != null) ordered.add(entry);
+    }
+    if (ordered.size() <= 1) return ordered;
+    ordered.sort(Comparator.comparing(ChatHistoryEntry::at));
+    return ordered;
+  }
+
+  private static TargetRef normalizeRenderTarget(
+      String sid,
+      String normalizedTarget,
+      TargetRef origin,
+      TargetRef fallbackTarget
+  ) {
+    if (origin == null) return fallbackTarget;
+    if (!Objects.equals(origin.serverId(), sid)) {
+      return new TargetRef(sid, normalizedTarget);
+    }
+    if (origin.isStatus() || origin.isUiOnly()) {
+      return new TargetRef(sid, normalizedTarget);
+    }
+    if (!Objects.equals(origin.target().toLowerCase(Locale.ROOT), normalizedTarget.toLowerCase(Locale.ROOT))) {
+      return new TargetRef(sid, normalizedTarget);
+    }
+    return origin;
+  }
+
   private void appendStatus(TargetRef dest, String tag, String msg) {
     ensureTargetExists(dest);
     ui.appendStatus(dest, tag, msg);
@@ -178,5 +352,22 @@ public class MediatorHistoryIngestOrchestrator {
   private static long latestEpochMs(List<ChatHistoryEntry> entries) {
     if (entries == null || entries.isEmpty()) return 0L;
     return entries.stream().mapToLong(entry -> entry.at().toEpochMilli()).max().orElse(0L);
+  }
+
+  private record LiveRenderResult(TargetRef target, int displayedCount) {}
+
+  private record HistoryFingerprint(long tsEpochMs, ChatHistoryEntry.Kind kind, String from, String text) {
+    static HistoryFingerprint from(ChatHistoryEntry entry) {
+      if (entry == null) {
+        return new HistoryFingerprint(0L, ChatHistoryEntry.Kind.PRIVMSG, "", "");
+      }
+      long ts = entry.at() == null ? 0L : entry.at().toEpochMilli();
+      ChatHistoryEntry.Kind k = entry.kind() == null ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
+      return new HistoryFingerprint(
+          ts,
+          k,
+          Objects.toString(entry.from(), ""),
+          Objects.toString(entry.text(), ""));
+    }
   }
 }

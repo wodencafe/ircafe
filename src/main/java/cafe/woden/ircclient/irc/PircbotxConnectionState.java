@@ -122,6 +122,7 @@ final class PircbotxConnectionState {
 
   // IRCv3 server-time support (canonical message timestamps).
   final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean standardRepliesCapAcked = new AtomicBoolean(false);
   // Warn once per application run if server-time wasn't negotiated on this server.
   final AtomicBoolean serverTimeMissingWarned = new AtomicBoolean(false);
 
@@ -147,6 +148,7 @@ final class PircbotxConnectionState {
     readMarkerCapAcked.set(false);
     sojuBouncerNetworksCapAcked.set(false);
     serverTimeCapAcked.set(false);
+    standardRepliesCapAcked.set(false);
     capSummaryLogged.set(false);
   }
 }

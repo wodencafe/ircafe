@@ -518,4 +518,16 @@ public class SwingUiPort implements UiPort {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.applyMessageReaction(target, targetMessageId, reaction, fromNick, ts));
   }
+
+  @Override
+  public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
+    onEdt(() -> {
+      if (chat != null) {
+        chat.normalizeIrcv3CapabilityUiState(serverId, capability);
+      }
+      if (chatDockManager != null) {
+        chatDockManager.normalizeIrcv3CapabilityUiState(serverId, capability);
+      }
+    });
+  }
 }

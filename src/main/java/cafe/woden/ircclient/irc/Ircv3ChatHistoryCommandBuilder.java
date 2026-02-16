@@ -35,6 +35,28 @@ final class Ircv3ChatHistoryCommandBuilder {
     return "CHATHISTORY BEFORE " + t + " " + s + " " + lim;
   }
 
+  static String buildLatest(String target, String selectorOrWildcard, int limit) {
+    String t = sanitizeTarget(target);
+    String s = sanitizeSelectorOrWildcard(selectorOrWildcard);
+    int lim = clampLimit(limit);
+    return "CHATHISTORY LATEST " + t + " " + s + " " + lim;
+  }
+
+  static String buildAround(String target, String selector, int limit) {
+    String t = sanitizeTarget(target);
+    String s = sanitizeSelector(selector);
+    int lim = clampLimit(limit);
+    return "CHATHISTORY AROUND " + t + " " + s + " " + lim;
+  }
+
+  static String buildBetween(String target, String startSelector, String endSelector, int limit) {
+    String t = sanitizeTarget(target);
+    String start = sanitizeSelectorOrWildcard(startSelector);
+    String end = sanitizeSelectorOrWildcard(endSelector);
+    int lim = clampLimit(limit);
+    return "CHATHISTORY BETWEEN " + t + " " + start + " " + end + " " + lim;
+  }
+
   static String timestampSelector(Instant at) {
     Instant ts = Objects.requireNonNull(at, "at");
     return "timestamp=" + TS_FMT.format(ts);
@@ -74,6 +96,12 @@ final class Ircv3ChatHistoryCommandBuilder {
     String value = sanitizeSelectorValue(s.substring(eq + 1));
     if (key.isEmpty()) throw new IllegalArgumentException("selector key is blank");
     return key + "=" + value;
+  }
+
+  static String sanitizeSelectorOrWildcard(String selector) {
+    String s = Objects.requireNonNull(selector, "selector").trim();
+    if (s.equals("*")) return "*";
+    return sanitizeSelector(s);
   }
 
   private static String sanitizeSelectorValue(String raw) {

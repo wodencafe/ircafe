@@ -52,7 +52,7 @@ public class TargetCoordinator {
   });
 
   /**
-   * UI refreshes for user-list metadata (away/account/hostmask) can arrive in huge bursts
+   * UI refreshes for user-list metadata (away/account/hostmask/real-name) can arrive in huge bursts
    * (e.g., WHOX scans on big channels). Coalesce these to avoid rebuilding nick completions
    * on the EDT thousands of times.
    */
@@ -225,6 +225,37 @@ public class TargetCoordinator {
     }
   }
 
+  /**
+   * Handles IRCv3 CHGHOST as an identity refresh signal for roster metadata.
+   *
+   * @return true if this nick is known in any roster (whether or not metadata changed)
+   */
+  public boolean onUserHostChanged(String serverId, IrcEvent.UserHostChanged ev) {
+    if (ev == null) return false;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+
+    String nick = Objects.toString(ev.nick(), "").trim();
+    String user = Objects.toString(ev.user(), "").trim();
+    String host = Objects.toString(ev.host(), "").trim();
+    if (nick.isEmpty()) return false;
+
+    java.util.Set<String> changedChannels = java.util.Set.of();
+    if (!user.isEmpty() && !host.isEmpty()) {
+      String hostmask = nick + "!" + user + "@" + host;
+      changedChannels = userListStore.updateHostmaskAcrossChannels(sid, nick, hostmask);
+    }
+
+    if (activeTarget != null
+        && Objects.equals(activeTarget.serverId(), sid)
+        && activeTarget.isChannel()
+        && changedChannels.contains(activeTarget.key())) {
+      scheduleActiveUsersRefresh(sid, activeTarget.target());
+    }
+
+    return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
+  }
+
   public void onUserAwayStateObserved(String serverId, IrcEvent.UserAwayStateObserved ev) {
     if (ev == null) return;
     String sid = Objects.toString(serverId, "").trim();
@@ -262,6 +293,30 @@ public class TargetCoordinator {
         && changedChannels.contains(activeTarget.key())) {
       scheduleActiveUsersRefresh(sid, activeTarget.target());
     }
+  }
+
+  /**
+   * Handles IRCv3 SETNAME as an identity refresh signal for roster metadata.
+   *
+   * @return true if this nick is known in any roster (whether or not metadata changed)
+   */
+  public boolean onUserSetNameObserved(String serverId, IrcEvent.UserSetNameObserved ev) {
+    if (ev == null) return false;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+
+    String nick = Objects.toString(ev.nick(), "").trim();
+    if (nick.isEmpty()) return false;
+
+    java.util.Set<String> changedChannels = userListStore.updateRealNameAcrossChannels(sid, nick, ev.realName());
+    if (activeTarget != null
+        && Objects.equals(activeTarget.serverId(), sid)
+        && activeTarget.isChannel()
+        && changedChannels.contains(activeTarget.key())) {
+      scheduleActiveUsersRefresh(sid, activeTarget.target());
+    }
+
+    return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
   }
 
 
