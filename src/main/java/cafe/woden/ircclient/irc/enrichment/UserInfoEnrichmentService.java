@@ -49,7 +49,7 @@ public class UserInfoEnrichmentService {
   private final IrcClientService irc;
   private final ObjectProvider<UiSettingsBus> settingsBusProvider;
 
-  private final UserInfoEnrichmentPlanner planner = new UserInfoEnrichmentPlanner();
+  private final UserInfoEnrichmentPlanner planner;
   private final Set<String> knownServers = ConcurrentHashMap.newKeySet();
 
   /** Guard to ensure we only do one self-WHOIS capability probe per server connection. */
@@ -82,9 +82,12 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     return t;
   });
 
-  public UserInfoEnrichmentService(IrcClientService irc, ObjectProvider<UiSettingsBus> settingsBusProvider) {
+  public UserInfoEnrichmentService(IrcClientService irc,
+                                   ObjectProvider<UiSettingsBus> settingsBusProvider,
+                                   UserInfoEnrichmentPlanner planner) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.settingsBusProvider = Objects.requireNonNull(settingsBusProvider, "settingsBusProvider");
+    this.planner = Objects.requireNonNull(planner, "planner");
 
     this.eventsSub = irc.events().subscribe(this::onEvent, err ->
         log.debug("UserInfoEnrichmentService event handler failed", err));

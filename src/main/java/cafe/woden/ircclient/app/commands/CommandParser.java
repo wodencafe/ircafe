@@ -225,19 +225,15 @@ public class CommandParser {
       return new ParsedInput.ChatHistoryBefore(lim);
     }
 
-    // Local-only: weechat-style filters.
+    // Local-only filters (weechat-style).
     if (matchesCommand(line, "/filter")) {
       return new ParsedInput.Filter(filterCommandParser.parse(line));
     }
+
     // Raw IRC line escape hatch.
     if (matchesCommand(line, "/quote")) {
       String rawLine = argAfter(line, "/quote");
       return new ParsedInput.Quote(rawLine);
-    }
-
-    // Local-only filters (weechat-style).
-    if (matchesCommand(line, "/filter")) {
-      return new ParsedInput.Filter(filterCommandParser.parse(line));
     }
 
     // Alias used by some clients.

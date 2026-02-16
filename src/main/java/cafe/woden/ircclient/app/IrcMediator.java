@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.commands.CommandParser;
-import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
+import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -11,18 +11,9 @@ import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
-import cafe.woden.ircclient.logging.history.ChatHistoryBatchBus;
-import cafe.woden.ircclient.logging.history.ZncPlaybackBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
-import cafe.woden.ircclient.app.outbound.OutboundModeCommandService;
-import cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService;
-import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
-import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
-import cafe.woden.ircclient.app.outbound.LocalFilterCommandService;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
@@ -50,6 +41,10 @@ public class IrcMediator {
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
+  private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder;
+  private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder;
+  private final MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator;
+  private final OutboundCommandDispatcher outboundCommandDispatcher;
   private final TargetCoordinator targetCoordinator;
   private final UiSettingsBus uiSettingsBus;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
@@ -61,21 +56,8 @@ public class IrcMediator {
   private final AwayRoutingState awayRoutingState;
   private final JoinRoutingState joinRoutingState;
   private final InboundModeEventHandler inboundModeEventHandler;
-  private final OutboundModeCommandService outboundModeCommandService;
-  private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
-  private final OutboundChatCommandService outboundChatCommandService;
-  private final OutboundIgnoreCommandService outboundIgnoreCommandService;
-  private final LocalFilterCommandService localFilterCommandService;
 
   private final NotificationRuleMatcher notificationRuleMatcher;
-
-  private final ChatHistoryIngestor chatHistoryIngestor;
-
-  private final ChatHistoryIngestBus chatHistoryIngestBus;
-
-  private final ChatHistoryBatchBus chatHistoryBatchBus;
-
-  private final ZncPlaybackBus zncPlaybackBus;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -96,6 +78,10 @@ public class IrcMediator {
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
+      MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder,
+      MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder,
+      MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator,
+      OutboundCommandDispatcher outboundCommandDispatcher,
       TargetCoordinator targetCoordinator,
       UiSettingsBus uiSettingsBus,
       NotificationRuleMatcher notificationRuleMatcher,
@@ -106,16 +92,7 @@ public class IrcMediator {
       AwayRoutingState awayRoutingState,
       JoinRoutingState joinRoutingState,
       InboundModeEventHandler inboundModeEventHandler,
-      OutboundModeCommandService outboundModeCommandService,
-      OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
-      OutboundChatCommandService outboundChatCommandService,
-      OutboundIgnoreCommandService outboundIgnoreCommandService,
-      LocalFilterCommandService localFilterCommandService,
-      InboundIgnorePolicy inboundIgnorePolicy,
-      ChatHistoryIngestor chatHistoryIngestor,
-      ChatHistoryIngestBus chatHistoryIngestBus,
-      ChatHistoryBatchBus chatHistoryBatchBus,
-      ZncPlaybackBus zncPlaybackBus
+      InboundIgnorePolicy inboundIgnorePolicy
   ) {
 
     this.irc = irc;
@@ -124,6 +101,10 @@ public class IrcMediator {
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
     this.connectionCoordinator = connectionCoordinator;
+    this.mediatorConnectionSubscriptionBinder = mediatorConnectionSubscriptionBinder;
+    this.mediatorUiSubscriptionBinder = mediatorUiSubscriptionBinder;
+    this.mediatorHistoryIngestOrchestrator = mediatorHistoryIngestOrchestrator;
+    this.outboundCommandDispatcher = outboundCommandDispatcher;
     this.targetCoordinator = targetCoordinator;
     this.uiSettingsBus = uiSettingsBus;
     this.notificationRuleMatcher = notificationRuleMatcher;
@@ -134,16 +115,7 @@ public class IrcMediator {
     this.awayRoutingState = awayRoutingState;
     this.joinRoutingState = joinRoutingState;
     this.inboundModeEventHandler = inboundModeEventHandler;
-    this.outboundModeCommandService = outboundModeCommandService;
-    this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
-    this.outboundChatCommandService = outboundChatCommandService;
-    this.outboundIgnoreCommandService = outboundIgnoreCommandService;
-    this.localFilterCommandService = localFilterCommandService;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
-    this.chatHistoryIngestor = chatHistoryIngestor;
-    this.chatHistoryIngestBus = chatHistoryIngestBus;
-    this.chatHistoryBatchBus = chatHistoryBatchBus;
-    this.zncPlaybackBus = zncPlaybackBus;
   }
 
   public void start() {
@@ -151,95 +123,29 @@ public class IrcMediator {
       return;
     }
 
-    disposables.add(
-        ui.targetSelections()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(targetCoordinator::onTargetSelected,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))
+    mediatorUiSubscriptionBinder.bind(
+        ui,
+        targetCoordinator,
+        disposables,
+        this::handleUserActionRequest,
+        this::handleOutgoingLine
     );
-
-    disposables.add(
-        ui.targetActivations()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(targetCoordinator::onTargetActivated,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))
+    bindIrcEventSubscriptions();
+    mediatorConnectionSubscriptionBinder.bind(
+        ui,
+        connectionCoordinator,
+        targetCoordinator,
+        serverRegistry,
+        disposables
     );
+  }
 
-    disposables.add(
-        ui.privateMessageRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(targetCoordinator::openPrivateConversation,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))
-    );
-
-    disposables.add(
-        ui.userActionRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(this::handleUserActionRequest,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))
-    );
-
-    disposables.add(
-        ui.outboundLines()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(this::handleOutgoingLine,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))
-    );
-
+  private void bindIrcEventSubscriptions() {
     disposables.add(
         irc.events()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(this::onServerIrcEvent,
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(irc-error)", err.toString()))
-    );
-
-    disposables.add(
-        ui.connectClicks()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(ignored -> connectionCoordinator.connectAll())
-    );
-
-    disposables.add(
-        ui.disconnectClicks()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(ignored -> connectionCoordinator.disconnectAll())
-    );
-
-    disposables.add(
-        ui.connectServerRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(connectionCoordinator::connectOne,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
-    );
-
-    disposables.add(
-        ui.disconnectServerRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(connectionCoordinator::disconnectOne,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
-    );
-
-    disposables.add(
-        ui.closeTargetRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(targetCoordinator::closeTarget,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
-    );
-
-    disposables.add(
-        ui.clearLogRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(targetCoordinator::clearLog,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
-    );
-    disposables.add(
-        serverRegistry.updates()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(latest -> {
-                  connectionCoordinator.onServersUpdated(latest, targetCoordinator.getActiveTarget());
-                  targetCoordinator.refreshInputEnabledForActiveTarget();
-                },
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", "Server list update failed: " + err))
     );
   }
 
@@ -398,43 +304,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
   }
 
   private void handleOutgoingLine(String raw) {
-    ParsedInput in = commandParser.parse(raw);
-    switch (in) {
-      case ParsedInput.Join cmd -> outboundChatCommandService.handleJoin(disposables, cmd.channel());
-      case ParsedInput.Part cmd -> outboundChatCommandService.handlePart(disposables, cmd.channel(), cmd.reason());
-      case ParsedInput.Nick cmd -> outboundChatCommandService.handleNick(disposables, cmd.newNick());
-      case ParsedInput.Away cmd -> outboundChatCommandService.handleAway(disposables, cmd.message());
-      case ParsedInput.Query cmd -> outboundChatCommandService.handleQuery(cmd.nick());
-      case ParsedInput.Msg cmd -> outboundChatCommandService.handleMsg(disposables, cmd.nick(), cmd.body());
-      case ParsedInput.Notice cmd -> outboundChatCommandService.handleNotice(disposables, cmd.target(), cmd.body());
-      case ParsedInput.Me cmd -> outboundChatCommandService.handleMe(disposables, cmd.action());
-      case ParsedInput.Mode cmd -> outboundModeCommandService.handleMode(disposables, cmd.first(), cmd.rest());
-      case ParsedInput.Op cmd -> outboundModeCommandService.handleOp(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Deop cmd -> outboundModeCommandService.handleDeop(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Voice cmd -> outboundModeCommandService.handleVoice(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Devoice cmd -> outboundModeCommandService.handleDevoice(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Ban cmd -> outboundModeCommandService.handleBan(disposables, cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Unban cmd -> outboundModeCommandService.handleUnban(disposables, cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Ignore cmd -> outboundIgnoreCommandService.handleIgnore(cmd.maskOrNick());
-      case ParsedInput.Unignore cmd -> outboundIgnoreCommandService.handleUnignore(cmd.maskOrNick());
-      case ParsedInput.IgnoreList cmd -> outboundIgnoreCommandService.handleIgnoreList();
-      case ParsedInput.SoftIgnore cmd -> outboundIgnoreCommandService.handleSoftIgnore(cmd.maskOrNick());
-      case ParsedInput.UnsoftIgnore cmd -> outboundIgnoreCommandService.handleUnsoftIgnore(cmd.maskOrNick());
-      case ParsedInput.SoftIgnoreList cmd -> outboundIgnoreCommandService.handleSoftIgnoreList();
-      case ParsedInput.Filter cmd -> localFilterCommandService.handle(cmd.command());
-      case ParsedInput.CtcpVersion cmd -> outboundCtcpWhoisCommandService.handleCtcpVersion(disposables, cmd.nick());
-      case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
-      case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
-      case ParsedInput.Ctcp cmd -> outboundCtcpWhoisCommandService.handleCtcp(disposables, cmd.nick(), cmd.command(), cmd.args());
-      case ParsedInput.ChatHistoryBefore cmd -> outboundChatCommandService.handleChatHistoryBefore(disposables, cmd.limit());
-      case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
-      case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
-      case ParsedInput.Unknown cmd -> {
-        TargetRef at = targetCoordinator.getActiveTarget();
-        TargetRef tgt = (at != null) ? at : safeStatusTarget();
-        ui.appendStatus(tgt, "(system)", "Unknown command: " + cmd.raw());
-      }
-    }
+    outboundCommandDispatcher.dispatch(disposables, commandParser.parse(raw));
   }
 
   
@@ -604,129 +474,11 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.appendStatusAt(status, ev.at(), "(server)", rendered);
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
-        String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();
-        final TargetRef dest = new TargetRef(sid, target);
-        ensureTargetExists(dest);
-        try {
-          long earliest = 0L;
-          long latest = 0L;
-          if (ev.entries() != null && !ev.entries().isEmpty()) {
-            earliest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).min().orElse(0L);
-            latest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).max().orElse(0L);
-          }
-          if (chatHistoryBatchBus != null) {
-            chatHistoryBatchBus.publish(new ChatHistoryBatchBus.BatchEvent(
-                sid,
-                target,
-                ev.batchId(),
-                ev.entries(),
-                earliest,
-                latest
-            ));
-          }
-        } catch (Exception ignored) {
-        }
-
-        int n = (ev.entries() == null) ? 0 : ev.entries().size();
-        ui.appendStatus(dest, "(chathistory)", "Received " + n + " history lines (batch " + ev.batchId() + "). Persisting… (still not displayed)");
-
-        chatHistoryIngestor.ingestAsync(sid, target, ev.batchId(), ev.entries(), result -> {
-          if (result == null) {
-            postTo(dest, false, d -> ui.appendStatus(d, "(chathistory)", "Persist finished (no details)."));
-            return;
-          }
-          String msg;
-          if (!result.enabled()) {
-            msg = "History batch not persisted: chat logging is disabled.";
-          } else if (result.message() != null) {
-            msg = result.message();
-          } else {
-            msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
-          }
-          postTo(dest, false, d -> ui.appendStatus(d, "(chathistory)", msg));
-
-          try {
-            if (chatHistoryIngestBus != null) {
-              chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
-                  sid,
-                  target,
-                  ev.batchId(),
-                  result.total(),
-                  result.inserted(),
-                  result.earliestInsertedEpochMs(),
-                  result.latestInsertedEpochMs()
-              ));
-            }
-          } catch (Exception ignored) {
-          }
-        });
+        mediatorHistoryIngestOrchestrator.onChatHistoryBatchReceived(sid, ev);
       }
 
       case IrcEvent.ZncPlaybackBatchReceived ev -> {
-        String target = (ev.target() == null || ev.target().isBlank()) ? "status" : ev.target();
-        final TargetRef dest = new TargetRef(sid, target);
-        ensureTargetExists(dest);
-
-        // Deterministic batch id so the DB-backed history service can wait for ingest.
-        final String batchId = "znc-playback:"
-            + (ev.fromInclusive() == null ? 0L : ev.fromInclusive().toEpochMilli())
-            + "-"
-            + (ev.toInclusive() == null ? 0L : ev.toInclusive().toEpochMilli());
-
-        try {
-          long earliest = 0L;
-          long latest = 0L;
-          if (ev.entries() != null && !ev.entries().isEmpty()) {
-            earliest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).min().orElse(0L);
-            latest = ev.entries().stream().mapToLong(entry -> entry.at().toEpochMilli()).max().orElse(0L);
-          }
-          if (zncPlaybackBus != null) {
-            zncPlaybackBus.publish(new ZncPlaybackBus.PlaybackEvent(
-                sid,
-                target,
-                ev.fromInclusive(),
-                ev.toInclusive(),
-                ev.entries(),
-                earliest,
-                latest
-            ));
-          }
-        } catch (Exception ignored) {
-        }
-
-        int n = (ev.entries() == null) ? 0 : ev.entries().size();
-        ui.appendStatus(dest, "(znc-playback)", "Captured " + n + " playback lines for scrollback. Persisting… (still not displayed)");
-
-        chatHistoryIngestor.ingestAsync(sid, target, batchId, ev.entries(), result -> {
-          if (result == null) {
-            postTo(dest, false, d -> ui.appendStatus(d, "(znc-playback)", "Persist finished (no details)."));
-            return;
-          }
-          String msg;
-          if (!result.enabled()) {
-            msg = "Playback batch not persisted: chat logging is disabled.";
-          } else if (result.message() != null) {
-            msg = result.message();
-          } else {
-            msg = "Persisted " + result.inserted() + "/" + result.total() + " playback lines.";
-          }
-          postTo(dest, false, d -> ui.appendStatus(d, "(znc-playback)", msg));
-
-          try {
-            if (chatHistoryIngestBus != null) {
-              chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
-                  sid,
-                  target,
-                  batchId,
-                  result.total(),
-                  result.inserted(),
-                  result.earliestInsertedEpochMs(),
-                  result.latestInsertedEpochMs()
-              ));
-            }
-          } catch (Exception ignored) {
-          }
-        });
+        mediatorHistoryIngestOrchestrator.onZncPlaybackBatchReceived(sid, ev);
       }
       case IrcEvent.CtcpRequestReceived ev -> {
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);

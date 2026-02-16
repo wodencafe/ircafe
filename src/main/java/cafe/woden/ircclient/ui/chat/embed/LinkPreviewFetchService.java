@@ -21,30 +21,15 @@ public class LinkPreviewFetchService {
 
   private static final Logger log = LoggerFactory.getLogger(LinkPreviewFetchService.class);
 
-  
-  private static final int MAX_BYTES = 1024 * 1024; // 1 MiB
-
   private final ServerProxyResolver proxyResolver;
-
-  private final List<LinkPreviewResolver> resolvers = List.of(
-      new WikipediaLinkPreviewResolver(),
-      new YouTubeLinkPreviewResolver(),
-      new SlashdotLinkPreviewResolver(),
-      new ImdbLinkPreviewResolver(),
-      new RottenTomatoesLinkPreviewResolver(),
-      new XLinkPreviewResolver(MAX_BYTES),
-      new GitHubLinkPreviewResolver(),
-      new RedditLinkPreviewResolver(),
-      new MastodonStatusApiPreviewResolver(),
-      new OEmbedLinkPreviewResolver(OEmbedLinkPreviewResolver.defaultProviders()),
-      new OpenGraphLinkPreviewResolver(MAX_BYTES)
-  );
+  private final List<LinkPreviewResolver> resolvers;
 
   private final ConcurrentMap<String, java.lang.ref.SoftReference<LinkPreview>> cache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Single<LinkPreview>> inflight = new ConcurrentHashMap<>();
 
-  public LinkPreviewFetchService(ServerProxyResolver proxyResolver) {
+  public LinkPreviewFetchService(ServerProxyResolver proxyResolver, List<LinkPreviewResolver> resolvers) {
     this.proxyResolver = proxyResolver;
+    this.resolvers = (resolvers == null) ? List.of() : List.copyOf(resolvers);
   }
 
   public Single<LinkPreview> fetch(String serverId, String url) {
