@@ -61,6 +61,57 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void joinWithKeySendsRawJoinLine() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "JOIN #secret hunter2")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "#secret", "hunter2");
+
+    verify(runtimeConfig).rememberJoinedChannel("libera", "#secret");
+    verify(joinRoutingState).rememberOrigin("libera", "#secret", status);
+    verify(irc).sendRaw("libera", "JOIN #secret hunter2");
+  }
+
+  @Test
+  void connectWithoutArgUsesActiveServerContext() {
+    TargetRef pm = new TargetRef("libera", "alice");
+    when(targetCoordinator.getActiveTarget()).thenReturn(pm);
+
+    service.handleConnect("");
+
+    verify(connectionCoordinator).connectOne("libera");
+  }
+
+  @Test
+  void connectAllKeywordConnectsAllServers() {
+    when(targetCoordinator.getActiveTarget()).thenReturn(null);
+
+    service.handleConnect("all");
+
+    verify(connectionCoordinator).connectAll();
+  }
+
+  @Test
+  void reconnectWithExplicitServerRoutesToCoordinator() {
+    service.handleReconnect("oftc");
+
+    verify(connectionCoordinator).reconnectOne("oftc");
+  }
+
+  @Test
+  void quitWithReasonDisconnectsCurrentServerUsingReason() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(targetCoordinator.safeStatusTarget()).thenReturn(new TargetRef("libera", "status"));
+
+    service.handleQuit("gone for lunch");
+
+    verify(connectionCoordinator).disconnectOne("libera", "gone for lunch");
+  }
+
+  @Test
   void sendsLocalEchoWhenEchoMessageIsUnavailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);

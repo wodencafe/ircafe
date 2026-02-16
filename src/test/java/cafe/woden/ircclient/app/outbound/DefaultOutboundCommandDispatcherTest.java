@@ -42,14 +42,35 @@ class DefaultOutboundCommandDispatcherTest {
 
   @Test
   void dispatchJoinRoutesToChatService() {
-    dispatcher.dispatch(disposables, new ParsedInput.Join("#ircafe"));
-    verify(chat).handleJoin(disposables, "#ircafe");
+    dispatcher.dispatch(disposables, new ParsedInput.Join("#ircafe", "hunter2"));
+    verify(chat).handleJoin(disposables, "#ircafe", "hunter2");
   }
 
   @Test
   void dispatchWhoisRoutesToWhoisService() {
     dispatcher.dispatch(disposables, new ParsedInput.Whois("alice"));
     verify(ctcp).handleWhois(disposables, "alice");
+  }
+
+  @Test
+  void dispatchWhowasRoutesToWhoisService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Whowas("alice", 2));
+    verify(ctcp).handleWhowas(disposables, "alice", 2);
+  }
+
+  @Test
+  void dispatchConnectionLifecycleRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Connect("libera"));
+    verify(chat).handleConnect("libera");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Disconnect("all"));
+    verify(chat).handleDisconnect("all");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Reconnect(""));
+    verify(chat).handleReconnect("");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Quit("bye"));
+    verify(chat).handleQuit("bye");
   }
 
   @Test

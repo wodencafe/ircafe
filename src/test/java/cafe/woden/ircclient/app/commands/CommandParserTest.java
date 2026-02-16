@@ -9,6 +9,43 @@ class CommandParserTest {
   private final CommandParser parser = new CommandParser(new FilterCommandParser());
 
   @Test
+  void parsesJoinWithOptionalKey() {
+    ParsedInput in = parser.parse("/join #secret hunter2");
+    assertTrue(in instanceof ParsedInput.Join);
+    ParsedInput.Join join = (ParsedInput.Join) in;
+    assertEquals("#secret", join.channel());
+    assertEquals("hunter2", join.key());
+  }
+
+  @Test
+  void parsesConnectionLifecycleCommands() {
+    ParsedInput connect = parser.parse("/connect libera");
+    assertTrue(connect instanceof ParsedInput.Connect);
+    assertEquals("libera", ((ParsedInput.Connect) connect).target());
+
+    ParsedInput disconnect = parser.parse("/disconnect all");
+    assertTrue(disconnect instanceof ParsedInput.Disconnect);
+    assertEquals("all", ((ParsedInput.Disconnect) disconnect).target());
+
+    ParsedInput reconnect = parser.parse("/reconnect");
+    assertTrue(reconnect instanceof ParsedInput.Reconnect);
+    assertEquals("", ((ParsedInput.Reconnect) reconnect).target());
+
+    ParsedInput quit = parser.parse("/quit gone for lunch");
+    assertTrue(quit instanceof ParsedInput.Quit);
+    assertEquals("gone for lunch", ((ParsedInput.Quit) quit).reason());
+  }
+
+  @Test
+  void parsesWhowasWithOptionalCount() {
+    ParsedInput in = parser.parse("/whowas oldNick 3");
+    assertTrue(in instanceof ParsedInput.Whowas);
+    ParsedInput.Whowas whowas = (ParsedInput.Whowas) in;
+    assertEquals("oldNick", whowas.nick());
+    assertEquals(3, whowas.count());
+  }
+
+  @Test
   void parsesAwayWithMessage() {
     ParsedInput in = parser.parse("/away out to lunch");
     assertTrue(in instanceof ParsedInput.Away);
