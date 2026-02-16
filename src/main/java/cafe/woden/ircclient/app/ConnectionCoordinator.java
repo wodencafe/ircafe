@@ -151,6 +151,10 @@ public class ConnectionCoordinator {
   }
 
   public void disconnectAll() {
+    disconnectAll(null);
+  }
+
+  public void disconnectAll(String reason) {
     Set<String> serverIds = serverRegistry.serverIds();
 
     for (String sid : serverIds) {
@@ -162,7 +166,7 @@ public class ConnectionCoordinator {
       ui.appendStatus(status, "(conn)", "Disconnecting…");
 
       disposables.add(
-          irc.disconnect(sid)
+          irc.disconnect(sid, reason)
               .observeOn(SwingEdt.scheduler())
               .subscribe(
                   () -> {},
@@ -175,6 +179,10 @@ public class ConnectionCoordinator {
   }
 
   public void disconnectOne(String serverId) {
+    disconnectOne(serverId, null);
+  }
+
+  public void disconnectOne(String serverId, String reason) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     if (!serverCatalog.containsId(sid)) {
@@ -190,11 +198,58 @@ public class ConnectionCoordinator {
     updateConnectionUi();
 
     disposables.add(
-        irc.disconnect(sid)
+        irc.disconnect(sid, reason)
             .observeOn(SwingEdt.scheduler())
             .subscribe(
                 () -> {},
                 err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
+            )
+    );
+  }
+
+  public void reconnectAll() {
+    Set<String> serverIds = serverRegistry.serverIds();
+    if (serverIds.isEmpty()) {
+      ui.setConnectionStatusText("No servers configured");
+      ui.setConnectionControlsEnabled(false, false);
+      return;
+    }
+
+    for (String sid : serverIds) {
+      reconnectOne(sid);
+    }
+  }
+
+  public void reconnectOne(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!serverCatalog.containsId(sid)) {
+      ui.appendError(new TargetRef("default", "status"), "(reconnect)", "Unknown server: " + sid);
+      return;
+    }
+
+    TargetRef status = new TargetRef(sid, "status");
+    ui.ensureTargetExists(status);
+    ui.appendStatus(status, "(conn)", "Reconnecting…");
+
+    setState(sid, ConnectionState.RECONNECTING);
+    updateConnectionUi();
+
+    io.reactivex.rxjava3.core.Completable reconnect =
+        irc.disconnect(sid)
+            .onErrorComplete()
+            .andThen(irc.connect(sid));
+
+    disposables.add(
+        reconnect
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                () -> {},
+                err -> {
+                  ui.appendError(status, "(reconnect-error)", String.valueOf(err));
+                  setState(sid, ConnectionState.DISCONNECTED);
+                  updateConnectionUi();
+                }
             )
     );
   }

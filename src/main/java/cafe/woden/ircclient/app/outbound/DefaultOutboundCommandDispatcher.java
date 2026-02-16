@@ -41,12 +41,17 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     if (in == null) return;
 
     switch (in) {
-      case ParsedInput.Join cmd -> outboundChatCommandService.handleJoin(disposables, cmd.channel());
+      case ParsedInput.Join cmd -> outboundChatCommandService.handleJoin(disposables, cmd.channel(), cmd.key());
       case ParsedInput.Part cmd -> outboundChatCommandService.handlePart(disposables, cmd.channel(), cmd.reason());
+      case ParsedInput.Connect cmd -> outboundChatCommandService.handleConnect(cmd.target());
+      case ParsedInput.Disconnect cmd -> outboundChatCommandService.handleDisconnect(cmd.target());
+      case ParsedInput.Reconnect cmd -> outboundChatCommandService.handleReconnect(cmd.target());
+      case ParsedInput.Quit cmd -> outboundChatCommandService.handleQuit(cmd.reason());
       case ParsedInput.Nick cmd -> outboundChatCommandService.handleNick(disposables, cmd.newNick());
       case ParsedInput.Away cmd -> outboundChatCommandService.handleAway(disposables, cmd.message());
       case ParsedInput.Query cmd -> outboundChatCommandService.handleQuery(cmd.nick());
       case ParsedInput.Whois cmd -> outboundCtcpWhoisCommandService.handleWhois(disposables, cmd.nick());
+      case ParsedInput.Whowas cmd -> outboundCtcpWhoisCommandService.handleWhowas(disposables, cmd.nick(), cmd.count());
       case ParsedInput.Msg cmd -> outboundChatCommandService.handleMsg(disposables, cmd.nick(), cmd.body());
       case ParsedInput.Notice cmd -> outboundChatCommandService.handleNotice(disposables, cmd.target(), cmd.body());
       case ParsedInput.Me cmd -> outboundChatCommandService.handleMe(disposables, cmd.action());

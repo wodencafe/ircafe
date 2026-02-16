@@ -22,8 +22,8 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /join, /part, /nick, /away, /query, /msg, /notice, /me, /topic, /kick,
- * /invite, /names, /who, /list, /say, /quote.
+ * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query,
+ * /msg, /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -68,7 +68,7 @@ public class OutboundChatCommandService {
     this.pendingEchoMessageState = pendingEchoMessageState;
   }
 
-  public void handleJoin(CompositeDisposable disposables, String channel) {
+  public void handleJoin(CompositeDisposable disposables, String channel, String key) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(join)", "Select a server first.");
@@ -76,8 +76,9 @@ public class OutboundChatCommandService {
     }
 
     String chan = channel == null ? "" : channel.trim();
+    String joinKey = key == null ? "" : key.trim();
     if (chan.isEmpty()) {
-      ui.appendStatus(at, "(join)", "Usage: /join <#channel>");
+      ui.appendStatus(at, "(join)", "Usage: /join <#channel> [key]");
       return;
     }
 
@@ -90,6 +91,21 @@ public class OutboundChatCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected (join queued in config only)");
+      return;
+    }
+
+    if (containsCrlf(chan) || containsCrlf(joinKey)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(join)", "Refusing to send multi-line /join input.");
+      return;
+    }
+
+    if (!joinKey.isEmpty()) {
+      String line = "JOIN " + chan + " " + joinKey;
+      disposables.add(
+          irc.sendRaw(at.serverId(), line)
+              .subscribe(
+                  () -> {},
+                  err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(join-error)", String.valueOf(err))));
       return;
     }
 
@@ -150,6 +166,63 @@ public class OutboundChatCommandService {
                 err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
 
     ui.closeTarget(target);
+  }
+
+  public void handleConnect(String target) {
+    ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
+    if (cmd == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(connect)", "Usage: /connect [serverId|all]");
+      return;
+    }
+    if (cmd.all()) {
+      connectionCoordinator.connectAll();
+      return;
+    }
+    connectionCoordinator.connectOne(cmd.serverId());
+  }
+
+  public void handleDisconnect(String target) {
+    ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
+    if (cmd == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(disconnect)", "Usage: /disconnect [serverId|all]");
+      return;
+    }
+    if (cmd.all()) {
+      connectionCoordinator.disconnectAll();
+      return;
+    }
+    connectionCoordinator.disconnectOne(cmd.serverId());
+  }
+
+  public void handleReconnect(String target) {
+    ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
+    if (cmd == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(reconnect)", "Usage: /reconnect [serverId|all]");
+      return;
+    }
+    if (cmd.all()) {
+      connectionCoordinator.reconnectAll();
+      return;
+    }
+    connectionCoordinator.reconnectOne(cmd.serverId());
+  }
+
+  public void handleQuit(String reason) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef status = targetCoordinator.safeStatusTarget();
+    String sid = (at != null && at.serverId() != null && !at.serverId().isBlank()) ? at.serverId() : status.serverId();
+    if (sid == null || sid.isBlank()) {
+      ui.appendStatus(status, "(quit)", "No server selected.");
+      return;
+    }
+
+    String msg = reason == null ? "" : reason.trim();
+    if (containsCrlf(msg)) {
+      ui.appendStatus(new TargetRef(sid, "status"), "(quit)", "Refusing to send multi-line /quit reason.");
+      return;
+    }
+
+    connectionCoordinator.disconnectOne(sid, msg);
   }
 
   public void handleNick(CompositeDisposable disposables, String newNick) {
@@ -1166,6 +1239,30 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
     return s;
   }
+
+  private ConnectionCommandTarget parseConnectionCommandTarget(String rawTarget) {
+    String raw = Objects.toString(rawTarget, "").trim();
+    if (raw.isEmpty()) {
+      TargetRef at = targetCoordinator.getActiveTarget();
+      if (at != null) {
+        String sid = Objects.toString(at.serverId(), "").trim();
+        if (!sid.isEmpty()) return new ConnectionCommandTarget(false, sid);
+      }
+      return new ConnectionCommandTarget(true, "");
+    }
+
+    if ("all".equalsIgnoreCase(raw) || "*".equals(raw)) {
+      return new ConnectionCommandTarget(true, "");
+    }
+
+    if (raw.indexOf(' ') >= 0 || containsCrlf(raw)) {
+      return null;
+    }
+
+    return new ConnectionCommandTarget(false, raw);
+  }
+
+  private record ConnectionCommandTarget(boolean all, String serverId) {}
 
   private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
     String ch = explicitChannel == null ? "" : explicitChannel.trim();

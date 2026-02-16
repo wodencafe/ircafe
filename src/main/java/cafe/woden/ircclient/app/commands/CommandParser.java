@@ -26,14 +26,14 @@ public class CommandParser {
     }
 
     if (matchesCommand(line, "/join")) {
-      String chan = argAfter(line, "/join");
-      return new ParsedInput.Join(chan);
+      String args = argAfter(line, "/join");
+      return parseJoinInput(args);
     }
 
     // Common alias used by many IRC clients.
     if (matchesCommand(line, "/j")) {
-      String chan = argAfter(line, "/j");
-      return new ParsedInput.Join(chan);
+      String args = argAfter(line, "/j");
+      return parseJoinInput(args);
     }
 
     if (matchesCommand(line, "/part") || matchesCommand(line, "/leave")) {
@@ -58,6 +58,26 @@ public class CommandParser {
       return new ParsedInput.Part("", r);
     }
 
+    if (matchesCommand(line, "/connect")) {
+      String target = argAfter(line, "/connect");
+      return new ParsedInput.Connect(target);
+    }
+
+    if (matchesCommand(line, "/disconnect")) {
+      String target = argAfter(line, "/disconnect");
+      return new ParsedInput.Disconnect(target);
+    }
+
+    if (matchesCommand(line, "/reconnect")) {
+      String target = argAfter(line, "/reconnect");
+      return new ParsedInput.Reconnect(target);
+    }
+
+    if (matchesCommand(line, "/quit")) {
+      String reason = argAfter(line, "/quit");
+      return new ParsedInput.Quit(reason);
+    }
+
     if (matchesCommand(line, "/nick")) {
       String nick = argAfter(line, "/nick");
       return new ParsedInput.Nick(nick);
@@ -76,6 +96,11 @@ public class CommandParser {
     if (matchesCommand(line, "/whois")) {
       String nick = argAfter(line, "/whois");
       return new ParsedInput.Whois(nick);
+    }
+
+    if (matchesCommand(line, "/whowas")) {
+      String rest = argAfter(line, "/whowas");
+      return parseWhowasInput(rest);
     }
 
     // Common alias used by many IRC clients.
@@ -300,6 +325,39 @@ public class CommandParser {
     if (line.length() <= cmd.length()) return "";
     String rest = line.substring(cmd.length());
     return rest.trim();
+  }
+
+  private static ParsedInput parseJoinInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.Join("", "");
+
+    String[] toks = r.split("\\s+", 3);
+    if (toks.length == 0) return new ParsedInput.Join("", "");
+    if (toks.length > 2) return new ParsedInput.Join("", "");
+
+    String channel = toks[0].trim();
+    String key = toks.length > 1 ? toks[1].trim() : "";
+    return new ParsedInput.Join(channel, key);
+  }
+
+  private static ParsedInput parseWhowasInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.Whowas("", 0);
+
+    String[] toks = r.split("\\s+", 3);
+    if (toks.length == 0) return new ParsedInput.Whowas("", 0);
+    if (toks.length > 2) return new ParsedInput.Whowas("", 0);
+
+    String nick = toks[0].trim();
+    if (nick.isEmpty()) return new ParsedInput.Whowas("", 0);
+
+    if (toks.length == 1) return new ParsedInput.Whowas(nick, 0);
+
+    String countRaw = toks[1].trim();
+    if (!isIntegerToken(countRaw)) return new ParsedInput.Whowas("", 0);
+    int count = parseIntOrZero(countRaw);
+    if (count < 0) return new ParsedInput.Whowas("", 0);
+    return new ParsedInput.Whowas(nick, count);
   }
 
   private static ParsedInput parseReplyInput(String rest) {

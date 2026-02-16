@@ -28,6 +28,15 @@ public interface IrcClientService {
   Completable connect(String serverId);
   Completable disconnect(String serverId);
 
+  /**
+   * Disconnect from a server, optionally sending a QUIT reason.
+   *
+   * <p>If {@code reason} is blank, implementations should use their default disconnect reason.
+   */
+  default Completable disconnect(String serverId, String reason) {
+    return disconnect(serverId);
+  }
+
   Completable changeNick(String serverId, String newNick);
 
   /**
@@ -42,6 +51,14 @@ public interface IrcClientService {
 
   /** Request WHOIS info for a nick (results will be emitted on {@link #events()}). */
   Completable whois(String serverId, String nick);
+
+  /** Request WHOWAS info for a nick (results will be emitted on {@link #events()}). */
+  default Completable whowas(String serverId, String nick, int count) {
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) return Completable.error(new IllegalArgumentException("nick is blank"));
+    String line = count > 0 ? ("WHOWAS " + n + " " + count) : ("WHOWAS " + n);
+    return sendRaw(serverId, line);
+  }
 
   
   default Completable partChannel(String serverId, String channel) {

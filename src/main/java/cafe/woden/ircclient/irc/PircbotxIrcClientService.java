@@ -203,6 +203,11 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   @Override
   public Completable disconnect(String serverId) {
+    return disconnect(serverId, null);
+  }
+
+  @Override
+  public Completable disconnect(String serverId, String reason) {
     return Completable.fromAction(() -> {
           PircbotxConnectionState c = conn(serverId);
           c.manualDisconnect.set(true);
@@ -221,10 +226,16 @@ public class PircbotxIrcClientService implements IrcClientService {
           PircBotX bot = c.botRef.getAndSet(null);
           if (bot == null) return;
 
+          String quitReason = reason == null ? "" : reason.trim();
+          if (quitReason.contains("\r") || quitReason.contains("\n")) {
+            throw new IllegalArgumentException("quit reason contains CR/LF");
+          }
+          if (quitReason.isEmpty()) quitReason = "Client disconnect";
+
           try {
             bot.stopBotReconnect();
             try {
-              bot.sendIRC().quitServer("Client disconnect");
+              bot.sendIRC().quitServer(quitReason);
             } catch (Exception ignored) {}
             try {
               bot.close();
@@ -608,6 +619,19 @@ public class PircbotxIrcClientService implements IrcClientService {
           conn(serverId).whoisSawAccountByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
 
           requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
+        })
+        .subscribeOn(Schedulers.io());
+  }
+
+  @Override
+  public Completable whowas(String serverId, String nick, int count) {
+    return Completable.fromAction(() -> {
+          String n = PircbotxUtil.sanitizeNick(nick);
+          if (count > 0) {
+            requireBot(serverId).sendRaw().rawLine("WHOWAS " + n + " " + count);
+          } else {
+            requireBot(serverId).sendRaw().rawLine("WHOWAS " + n);
+          }
         })
         .subscribeOn(Schedulers.io());
   }

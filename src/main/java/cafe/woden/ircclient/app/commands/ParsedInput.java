@@ -3,10 +3,15 @@ package cafe.woden.ircclient.app.commands;
 public sealed interface ParsedInput permits
     ParsedInput.Join,
     ParsedInput.Part,
+    ParsedInput.Connect,
+    ParsedInput.Disconnect,
+    ParsedInput.Reconnect,
+    ParsedInput.Quit,
     ParsedInput.Nick,
     ParsedInput.Away,
     ParsedInput.Query,
     ParsedInput.Whois,
+    ParsedInput.Whowas,
     ParsedInput.Msg,
     ParsedInput.Notice,
     ParsedInput.Me,
@@ -44,7 +49,12 @@ public sealed interface ParsedInput permits
     ParsedInput.Say,
     ParsedInput.Unknown {
 
-  record Join(String channel) implements ParsedInput {}
+  /** /join <#channel> [key] */
+  record Join(String channel, String key) implements ParsedInput {
+    public Join(String channel) {
+      this(channel, "");
+    }
+  }
 
   /**
    * /part [#channel] [reason]
@@ -52,6 +62,18 @@ public sealed interface ParsedInput permits
    * <p>If #channel is omitted, parts the currently active channel.
    */
   record Part(String channel, String reason) implements ParsedInput {}
+
+  /** /connect [serverId|all] */
+  record Connect(String target) implements ParsedInput {}
+
+  /** /disconnect [serverId|all] */
+  record Disconnect(String target) implements ParsedInput {}
+
+  /** /reconnect [serverId|all] */
+  record Reconnect(String target) implements ParsedInput {}
+
+  /** /quit [reason...] */
+  record Quit(String reason) implements ParsedInput {}
 
   record Nick(String newNick) implements ParsedInput {}
 
@@ -66,6 +88,9 @@ public sealed interface ParsedInput permits
 
   /** /whois <nick> */
   record Whois(String nick) implements ParsedInput {}
+
+  /** /whowas <nick> [count] */
+  record Whowas(String nick, int count) implements ParsedInput {}
 
   record Msg(String nick, String body) implements ParsedInput {}
 
