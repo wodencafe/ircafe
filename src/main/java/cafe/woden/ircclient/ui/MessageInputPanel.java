@@ -5,7 +5,6 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.fife.ui.autocomplete.AutoCompletion;
-import org.fife.ui.autocomplete.AutoCompletionEvent;
 import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
@@ -180,16 +179,6 @@ public class MessageInputPanel extends JPanel {
     autoCompletion.setTriggerKey(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));
     autoCompletion.install(input);
 
-    // Completion popup should keep its expected Up/Down navigation.
-    // We temporarily un-bind history arrow keys while the popup is visible.
-    autoCompletion.addAutoCompletionListener(e -> {
-      if (e.getEventType() == AutoCompletionEvent.Type.POPUP_SHOWN) {
-        setHistoryArrowKeysEnabled(false);
-      } else if (e.getEventType() == AutoCompletionEvent.Type.POPUP_HIDDEN) {
-        setHistoryArrowKeysEnabled(true);
-      }
-    });
-
     installHistoryKeybindings();
     input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
       @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
@@ -358,8 +347,8 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void installHistoryKeybindings() {
-    // Use an overlay InputMap so we can temporarily disable Up/Down history keys
-    // and fall back to whatever bindings the auto-completion popup installed.
+    // Use an overlay InputMap so Up/Down can always flow through our history handlers.
+    // When the completion popup is open, those handlers route the keys into the popup.
     InputMap base = input.getInputMap(JComponent.WHEN_FOCUSED);
     historyInputMap = new InputMap();
     historyInputMap.setParent(base);
@@ -399,7 +388,8 @@ public class MessageInputPanel extends JPanel {
     });
 
     // Primary: Up/Down (classic IRC client behavior).
-    setHistoryArrowKeysEnabled(true);
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "ircafe.historyPrev");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "ircafe.historyNext");
 
     // Shell-style alternatives that don't collide with common app shortcuts (Cmd+P is Print on macOS).
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyPrev");
@@ -433,20 +423,6 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK | KeyEv
 im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircafe.filterToggleBuffer");
 
   }
-
-  private void setHistoryArrowKeysEnabled(boolean enabled) {
-    if (historyInputMap == null) return;
-    KeyStroke up = KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0);
-    KeyStroke down = KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0);
-    if (enabled) {
-      historyInputMap.put(up, "ircafe.historyPrev");
-      historyInputMap.put(down, "ircafe.historyNext");
-    } else {
-      historyInputMap.remove(up);
-      historyInputMap.remove(down);
-    }
-  }
-
   private void browseHistoryPrev() {
     if (maybeRouteHistoryKeyToAutocomplete(true)) return;
     if (!input.isEnabled() || !input.isEditable()) return;
@@ -569,11 +545,26 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
 
   private boolean maybeRouteHistoryKeyToAutocomplete(boolean up) {
     if (autoCompletion == null || !autoCompletion.isPopupVisible()) return false;
+    String popupActionKey = up ? "Up" : "Down";
     KeyStroke key = KeyStroke.getKeyStroke(up ? KeyEvent.VK_UP : KeyEvent.VK_DOWN, 0);
-    boolean routed = invokeParentInputBinding(key);
+    boolean routed = invokeActionByKey(popupActionKey) || invokeParentInputBinding(key);
     if (!routed) {
       Toolkit.getDefaultToolkit().beep();
     }
+    return true;
+  }
+
+  private boolean invokeActionByKey(String actionKey) {
+    if (actionKey == null || actionKey.isBlank()) return false;
+    Action a = input.getActionMap().get(actionKey);
+    if (a == null || !a.isEnabled()) return false;
+    a.actionPerformed(new ActionEvent(
+        input,
+        ActionEvent.ACTION_PERFORMED,
+        actionKey,
+        EventQueue.getMostRecentEventTime(),
+        0
+    ));
     return true;
   }
 

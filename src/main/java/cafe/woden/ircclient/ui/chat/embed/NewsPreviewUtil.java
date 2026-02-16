@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
 import java.net.URI;
+import java.text.BreakIterator;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -508,6 +509,7 @@ final class NewsPreviewUtil {
     }
 
     if (summary == null) return null;
+    summary = reflowSummaryParagraphs(summary);
     return PreviewTextUtil.trimToSentence(summary, 2400);
   }
 
@@ -567,7 +569,72 @@ final class NewsPreviewUtil {
     if (low.startsWith("watch:")) return null;
     if (low.startsWith("listen:")) return null;
     if (low.startsWith("advertisement")) return null;
+    s = s.replace('\u00A0', ' ');
+    s = s.replaceAll("[\\t\\r\\f]+", " ");
+    s = s.replaceAll("\\s*\\n\\s*", "\n");
+    s = s.replaceAll("\\n{3,}", "\n\n");
     return s;
+  }
+
+  private static String reflowSummaryParagraphs(String summary) {
+    String s = safe(summary);
+    if (s == null) return null;
+
+    // Start from sentence-level text to avoid source markup causing one-line-per-sentence output.
+    String linear = s.replace('\u00A0', ' ');
+    linear = linear.replaceAll("[\\t\\r\\f]+", " ");
+    linear = linear.replaceAll("\\s*\\n\\s*", " ");
+    linear = linear.replaceAll("\\s{2,}", " ").trim();
+    if (linear.isEmpty()) return null;
+
+    List<String> sentences = splitSentences(linear);
+    if (sentences.size() < 3) {
+      return linear;
+    }
+
+    StringBuilder out = new StringBuilder(linear.length() + 32);
+    int i = 0;
+    while (i < sentences.size()) {
+      int remaining = sentences.size() - i;
+      int take;
+      if (remaining <= 5) {
+        take = remaining;
+      } else {
+        // Target 4 sentences/paragraph, but avoid ending with 1-2 sentence stragglers.
+        int tailIfFour = remaining - 4;
+        if (tailIfFour == 1) {
+          take = 5;
+        } else if (tailIfFour == 2) {
+          take = 3;
+        } else {
+          take = 4;
+        }
+      }
+
+      if (out.length() > 0) out.append("\n\n");
+      for (int j = 0; j < take; j++) {
+        if (j > 0) out.append(' ');
+        out.append(sentences.get(i + j));
+      }
+      i += take;
+    }
+
+    return safe(out.toString());
+  }
+
+  private static List<String> splitSentences(String text) {
+    String s = safe(text);
+    if (s == null) return List.of();
+    BreakIterator it = BreakIterator.getSentenceInstance(Locale.US);
+    it.setText(s);
+    List<String> out = new ArrayList<>();
+    int start = it.first();
+    for (int end = it.next(); end != BreakIterator.DONE; start = end, end = it.next()) {
+      String sentence = safe(s.substring(start, end));
+      if (sentence != null) out.add(sentence);
+    }
+    if (out.isEmpty()) out.add(s);
+    return out;
   }
 
   private static String buildDescription(String author, LocalDate date, String publisher, String summary) {

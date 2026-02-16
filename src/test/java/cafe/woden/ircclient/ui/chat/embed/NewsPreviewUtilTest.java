@@ -204,4 +204,45 @@ class NewsPreviewUtilTest {
       assertTrue(preview.description().contains("Second "), preview.description());
     }
   }
+
+  @Test
+  void parseArticleDocumentReflowsSummaryIntoNaturalParagraphs() {
+    String html = """
+        <html><head>
+          <meta property="og:url" content="https://www.reuters.com/world/europe/sample-article-2026-02-16/">
+          <meta property="og:site_name" content="Reuters">
+          <meta property="og:title" content="Sample Reuters headline - Reuters">
+          <meta property="og:image" content="https://cdn.example.com/reuters.jpg">
+          <meta property="article:published_time" content="2026-02-16T10:22:00Z">
+          <meta name="author" content="By Alex Writer">
+        </head><body>
+          <article data-testid='Body'>
+            <p>Sentence one explains the event and introduces the key actors involved in the development.</p>
+            <p>Sentence two adds timing and context for how the situation evolved across the day.</p>
+            <p>Sentence three describes the official response and includes operational details for readers.</p>
+            <p>Sentence four provides additional evidence and corroborating statements from participants.</p>
+            <p>Sentence five broadens the scope with regional impact and stakeholder reactions.</p>
+            <p>Sentence six outlines expected next steps and pending decisions over the coming week.</p>
+            <p>Sentence seven highlights unresolved questions and where follow-up reporting is focused.</p>
+            <p>Sentence eight closes with implications for policy and market observers.</p>
+          </article>
+        </body></html>
+        """;
+
+    var doc = Jsoup.parse(html, "https://www.reuters.com/world/europe/sample-article-2026-02-16/");
+    LinkPreview preview = NewsPreviewUtil.parseArticleDocument(
+        doc,
+        "https://www.reuters.com/world/europe/sample-article-2026-02-16/"
+    );
+
+    assertNotNull(preview);
+    assertNotNull(preview.description());
+    String desc = preview.description();
+    assertTrue(desc.contains("Summary:\n"), desc);
+    assertTrue(desc.contains("Sentence one"), desc);
+    assertTrue(desc.contains("Sentence eight"), desc);
+    // The summary should be grouped into compact paragraphs, not one blank line between every sentence.
+    assertTrue(desc.contains("\n\nSentence five"), desc);
+    assertFalse(desc.contains("\n\n\n"), desc);
+  }
 }
