@@ -125,6 +125,8 @@ public final class ChatLineInspectorDialog {
     String dir = getString(attrs, ChatStyles.ATTR_META_DIRECTION);
     String from = getString(attrs, ChatStyles.ATTR_META_FROM);
     String tags = getString(attrs, ChatStyles.ATTR_META_TAGS);
+    String msgId = getString(attrs, ChatStyles.ATTR_META_MSGID);
+    String ircv3Tags = getString(attrs, ChatStyles.ATTR_META_IRCV3_TAGS);
 
     String filterName = getString(attrs, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     String filterId = getString(attrs, ChatStyles.ATTR_META_FILTER_RULE_ID);
@@ -141,6 +143,8 @@ public final class ChatLineInspectorDialog {
     if (!from.isBlank()) sb.append("From: ").append(from).append('\n');
 
     if (!tags.isBlank()) sb.append("Tags: ").append(tags).append('\n');
+    if (!msgId.isBlank()) sb.append("Message ID: ").append(msgId).append('\n');
+    if (!ircv3Tags.isBlank()) sb.append("IRCv3 tags: ").append(ircv3Tags).append('\n');
 
     if (!filterName.isBlank()) {
       sb.append("Matched filter: ").append(filterName);

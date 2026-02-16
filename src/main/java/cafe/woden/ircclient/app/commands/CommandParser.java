@@ -73,6 +73,17 @@ public class CommandParser {
       return new ParsedInput.Query(nick);
     }
 
+    if (matchesCommand(line, "/whois")) {
+      String nick = argAfter(line, "/whois");
+      return new ParsedInput.Whois(nick);
+    }
+
+    // Common alias used by many IRC clients.
+    if (matchesCommand(line, "/wi")) {
+      String nick = argAfter(line, "/wi");
+      return new ParsedInput.Whois(nick);
+    }
+
     if (matchesCommand(line, "/msg")) {
       String rest = argAfter(line, "/msg");
       int sp = rest.indexOf(' ');
@@ -95,6 +106,46 @@ public class CommandParser {
     if (matchesCommand(line, "/me")) {
       String action = argAfter(line, "/me");
       return new ParsedInput.Me(action);
+    }
+
+    if (matchesCommand(line, "/topic")) {
+      String rest = argAfter(line, "/topic");
+      if (rest.isEmpty()) return new ParsedInput.Topic("", "");
+      int sp = rest.indexOf(' ');
+      if (sp < 0) return new ParsedInput.Topic(rest.trim(), "");
+      String first = rest.substring(0, sp).trim();
+      String tail = rest.substring(sp + 1).trim();
+      return new ParsedInput.Topic(first, tail);
+    }
+
+    if (matchesCommand(line, "/kick")) {
+      ParsedKick p = parseKickArgs(argAfter(line, "/kick"));
+      return new ParsedInput.Kick(p.channel(), p.nick(), p.reason());
+    }
+
+    if (matchesCommand(line, "/invite")) {
+      String rest = argAfter(line, "/invite");
+      String r = rest == null ? "" : rest.trim();
+      if (r.isEmpty()) return new ParsedInput.Invite("", "");
+      String[] toks = r.split("\\s+", 3);
+      String nick = toks.length > 0 ? toks[0].trim() : "";
+      String channel = toks.length > 1 ? toks[1].trim() : "";
+      return new ParsedInput.Invite(nick, channel);
+    }
+
+    if (matchesCommand(line, "/names")) {
+      String channel = argAfter(line, "/names");
+      return new ParsedInput.Names(channel);
+    }
+
+    if (matchesCommand(line, "/who")) {
+      String args = argAfter(line, "/who");
+      return new ParsedInput.Who(args);
+    }
+
+    if (matchesCommand(line, "/list")) {
+      String args = argAfter(line, "/list");
+      return new ParsedInput.ListCmd(args);
     }
 
 
@@ -210,19 +261,47 @@ public class CommandParser {
 
 
 
-    // IRCv3 CHATHISTORY (debug/developer helper)
+    // IRCv3 CHATHISTORY
     if (matchesCommand(line, "/chathistory") || matchesCommand(line, "/history")) {
       String rest = matchesCommand(line, "/chathistory") ? argAfter(line, "/chathistory") : argAfter(line, "/history");
       String r = rest == null ? "" : rest.trim();
+      if (r.isEmpty()) {
+        return new ParsedInput.ChatHistoryBefore(0, "");
+      }
+
+      String[] toks = r.split("\\s+");
+      int idx = 0;
+      if (idx < toks.length && "before".equalsIgnoreCase(toks[idx])) {
+        idx++;
+      }
+
+      if (idx >= toks.length) {
+        return new ParsedInput.ChatHistoryBefore(0, "");
+      }
+
+      String selector = "";
       int lim = 50;
-      if (!r.isEmpty()) {
-        try {
-          lim = Integer.parseInt(r);
-        } catch (NumberFormatException ignored) {
-          lim = 0;
+      String first = toks[idx];
+      if (isIntegerToken(first)) {
+        lim = parseIntOrZero(first);
+        idx++;
+      } else {
+        selector = normalizeChatHistorySelector(first);
+        idx++;
+        if (selector.isEmpty()) {
+          return new ParsedInput.ChatHistoryBefore(0, "");
         }
       }
-      return new ParsedInput.ChatHistoryBefore(lim);
+
+      if (idx < toks.length) {
+        lim = parseIntOrZero(toks[idx]);
+        idx++;
+      }
+      if (idx < toks.length) {
+        return new ParsedInput.ChatHistoryBefore(0, "");
+      }
+
+      return new ParsedInput.ChatHistoryBefore(lim, selector);
     }
 
     // Local-only filters (weechat-style).
@@ -252,8 +331,43 @@ public class CommandParser {
     return rest.trim();
   }
 
+  private static boolean isIntegerToken(String raw) {
+    String s = raw == null ? "" : raw.trim();
+    if (s.isEmpty()) return false;
+    for (int i = 0; i < s.length(); i++) {
+      char ch = s.charAt(i);
+      if (i == 0 && (ch == '+' || ch == '-')) {
+        if (s.length() == 1) return false;
+        continue;
+      }
+      if (ch < '0' || ch > '9') return false;
+    }
+    return true;
+  }
+
+  private static int parseIntOrZero(String raw) {
+    try {
+      return Integer.parseInt(raw == null ? "" : raw.trim());
+    } catch (Exception ignored) {
+      return 0;
+    }
+  }
+
+  private static String normalizeChatHistorySelector(String raw) {
+    String s = raw == null ? "" : raw.trim();
+    if (s.isEmpty()) return "";
+    int eq = s.indexOf('=');
+    if (eq <= 0 || eq == s.length() - 1) return "";
+    String key = s.substring(0, eq).trim().toLowerCase(java.util.Locale.ROOT);
+    String value = s.substring(eq + 1).trim();
+    if (value.isEmpty()) return "";
+    if (!"timestamp".equals(key) && !"msgid".equals(key)) return "";
+    return key + "=" + value;
+  }
+
   
   private record ParsedTargetList(String channel, java.util.List<String> items) {}
+  private record ParsedKick(String channel, String nick, String reason) {}
 
   private static ParsedTargetList parseTargetList(String rest) {
     String r = rest == null ? "" : rest.trim();
@@ -273,6 +387,33 @@ public class CommandParser {
       if (!t.isEmpty()) items.add(t);
     }
     return new ParsedTargetList(channel, java.util.List.copyOf(items));
+  }
+
+  private static ParsedKick parseKickArgs(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedKick("", "", "");
+
+    String first;
+    String afterFirst;
+    int sp = r.indexOf(' ');
+    if (sp < 0) {
+      first = r;
+      afterFirst = "";
+    } else {
+      first = r.substring(0, sp).trim();
+      afterFirst = r.substring(sp + 1).trim();
+    }
+
+    if (first.startsWith("#") || first.startsWith("&")) {
+      if (afterFirst.isEmpty()) return new ParsedKick(first, "", "");
+      int sp2 = afterFirst.indexOf(' ');
+      if (sp2 < 0) return new ParsedKick(first, afterFirst.trim(), "");
+      String nick = afterFirst.substring(0, sp2).trim();
+      String reason = afterFirst.substring(sp2 + 1).trim();
+      return new ParsedKick(first, nick, reason);
+    }
+
+    return new ParsedKick("", first, afterFirst);
   }
 
 

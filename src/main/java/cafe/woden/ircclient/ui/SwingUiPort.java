@@ -13,6 +13,7 @@ import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Locale;
 import java.util.List;
+import java.util.Map;
 import java.time.Instant;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -322,6 +323,69 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendChatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
+  }
+
+  @Override
+  public void appendPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendPendingOutgoingChat(target, pendingId, from, text, ts));
+  }
+
+  @Override
+  public boolean resolvePendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.resolvePendingOutgoingChat(target, pendingId, from, text, ts, messageId, ircv3Tags);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out[0] = transcripts.resolvePendingOutgoingChat(target, pendingId, from, text, ts, messageId, ircv3Tags));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public void failPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String reason
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.failPendingOutgoingChat(target, pendingId, from, text, ts, reason));
+  }
+
+  @Override
   public void appendSpoilerChat(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendSpoilerChat(target, from, text));
   }
@@ -349,6 +413,20 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendActionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+  }
+
+  @Override
   public void appendPresence(TargetRef target, cafe.woden.ircclient.app.PresenceEvent event) {
     onEdt(() -> transcripts.appendPresence(target, event));
   }
@@ -365,6 +443,19 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendNoticeAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendNoticeAt(target, from, text, ts, messageId, ircv3Tags));
+  }
+
+  @Override
   public void appendStatus(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendStatus(target, from, text));
   }
@@ -376,6 +467,19 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendStatusAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendStatusAt(target, from, text, ts, messageId, ircv3Tags));
+  }
+
+  @Override
   public void appendError(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendError(target, from, text));
   }
@@ -384,5 +488,34 @@ public class SwingUiPort implements UiPort {
   public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.appendErrorAt(target, from, text, ts));
+  }
+
+  @Override
+  public void showTypingIndicator(TargetRef target, String nick, String state) {
+    onEdt(() -> {
+      if (chat != null) {
+        chat.showTypingIndicator(target, nick, state);
+      }
+      if (chatDockManager != null) {
+        chatDockManager.showTypingIndicator(target, nick, state);
+      }
+    });
+  }
+
+  @Override
+  public void setReadMarker(TargetRef target, long markerEpochMs) {
+    onEdt(() -> transcripts.updateReadMarker(target, markerEpochMs));
+  }
+
+  @Override
+  public void applyMessageReaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String reaction
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.applyMessageReaction(target, targetMessageId, reaction, fromNick, ts));
   }
 }

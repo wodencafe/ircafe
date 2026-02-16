@@ -4,6 +4,7 @@ import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Boundary between application logic and the Swing UI.
@@ -107,6 +108,67 @@ Flowable<TargetRef> targetActivations();
     appendChat(target, from, text, outgoingLocalEcho);
   }
 
+  /**
+   * Append a chat message line with an explicit timestamp and IRCv3 identity metadata.
+   *
+   * <p>Default implementation falls back to {@link #appendChatAt(TargetRef, Instant, String, String, boolean)}.
+   */
+  default void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    appendChatAt(target, at, from, text, outgoingLocalEcho);
+  }
+
+  /**
+   * Append an outbound chat line in a temporary "pending send" state while waiting for server echo.
+   */
+  default void appendPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text
+  ) {
+    appendChatAt(target, at, from, text + " [pending]", true);
+  }
+
+  /**
+   * Replace a pending outbound line with the canonical server-echoed copy.
+   *
+   * @return true when the pending line was found/replaced.
+   */
+  default boolean resolvePendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return false;
+  }
+
+  /**
+   * Mark a pending outbound line as failed.
+   */
+  default void failPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String reason
+  ) {
+    appendErrorAt(target, at, "(send-error)", "Failed to send: " + text);
+  }
+
   
   void appendSpoilerChat(TargetRef target, String from, String text);
 
@@ -126,6 +188,19 @@ Flowable<TargetRef> targetActivations();
     appendAction(target, from, action, outgoingLocalEcho);
   }
 
+  /** Append an action line with an explicit timestamp and IRCv3 identity metadata. */
+  default void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    appendActionAt(target, at, from, action, outgoingLocalEcho);
+  }
+
   void appendPresence(TargetRef target, PresenceEvent event);
 
   void appendNotice(TargetRef target, String from, String text);
@@ -136,11 +211,58 @@ Flowable<TargetRef> targetActivations();
     appendNotice(target, from, text);
   }
 
+  /** Append a notice line with an explicit timestamp and IRCv3 identity metadata. */
+  default void appendNoticeAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    appendNoticeAt(target, at, from, text);
+  }
+
   default void appendStatusAt(TargetRef target, Instant at, String from, String text) {
     appendStatus(target, from, text);
+  }
+
+  /** Append a status line with an explicit timestamp and IRCv3 identity metadata. */
+  default void appendStatusAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    appendStatusAt(target, at, from, text);
   }
 
   default void appendErrorAt(TargetRef target, Instant at, String from, String text) {
     appendError(target, from, text);
   }
+
+  /**
+   * Show an ephemeral IRCv3 typing indicator for a target.
+   *
+   * <p>This is intentionally non-transcript UI state.
+   */
+  default void showTypingIndicator(TargetRef target, String nick, String state) {}
+
+  /**
+   * Update the read-marker boundary for a target using epoch milliseconds.
+   */
+  default void setReadMarker(TargetRef target, long markerEpochMs) {}
+
+  /**
+   * Update inline reaction state for a target message identified by IRCv3 {@code msgid}.
+   */
+  default void applyMessageReaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String reaction
+  ) {}
 }

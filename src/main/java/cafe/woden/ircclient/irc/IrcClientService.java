@@ -72,21 +72,84 @@ public interface IrcClientService {
   /**
    * Request chat history from the server/bouncer.
    *
-   * <p>Requires IRCv3 {@code draft/chathistory} (and typically {@code batch}) to be negotiated.
+   * <p>Requires IRCv3 {@code chathistory} (or legacy {@code draft/chathistory}), and typically
+   * {@code batch}, to be negotiated.
    * The returned history will arrive asynchronously on {@link #events()} and will be handled
    * by later pipeline steps.
    */
   Completable requestChatHistoryBefore(String serverId, String target, Instant beforeExclusive, int limit);
+
+  /**
+   * Request chat history with an explicit selector.
+   *
+   * <p>The selector must be an IRCv3 CHATHISTORY selector token (for example
+   * {@code timestamp=2026-02-16T12:34:56.000Z} or {@code msgid=abc123}).
+   */
+  default Completable requestChatHistoryBefore(String serverId, String target, String selector, int limit) {
+    return Completable.error(new UnsupportedOperationException("CHATHISTORY selector requests not supported"));
+  }
 
   default Completable requestChatHistoryBefore(String serverId, String target, long beforeExclusiveEpochMs, int limit) {
     return requestChatHistoryBefore(serverId, target, Instant.ofEpochMilli(beforeExclusiveEpochMs), limit);
   }
 
   /**
-   * @return true if IRCv3 chat history is usable on this connection (e.g. draft/chathistory negotiated).
+   * @return true if IRCv3 chat history is usable on this connection (for example when
+   *     {@code chathistory} or {@code draft/chathistory} is negotiated).
    */
   default boolean isChatHistoryAvailable(String serverId) {
     return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code echo-message} is negotiated on this connection.
+   */
+  default boolean isEchoMessageAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code draft/reply} is negotiated on this connection.
+   */
+  default boolean isDraftReplyAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code draft/react} is negotiated on this connection.
+   */
+  default boolean isDraftReactAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code typing} is negotiated on this connection.
+   */
+  default boolean isTypingAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code read-marker} is negotiated on this connection.
+   */
+  default boolean isReadMarkerAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * Send an IRCv3 typing state signal for a target using {@code TAGMSG}.
+   *
+   * <p>Typical states are {@code active}, {@code paused}, {@code done}.
+   */
+  default Completable sendTyping(String serverId, String target, String state) {
+    return Completable.error(new UnsupportedOperationException("typing capability not supported"));
+  }
+
+  /**
+   * Send an IRCv3 read-marker update for a target.
+   */
+  default Completable sendReadMarker(String serverId, String target, Instant markerAt) {
+    return Completable.error(new UnsupportedOperationException("read-marker capability not supported"));
   }
 
   /**

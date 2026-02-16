@@ -142,15 +142,16 @@ public class FilterCommandParser {
 
     try {
       FilterCommand.FilterRulePatch patch;
-      if (containsKeyValueTokens(toks, 3)) {
+      // Prefer positional form when the token shape is unambiguous:
+      // /filter add <name> <buffer> <tags> <regex>
+      // This avoids mis-detecting positional regex values that contain '='.
+      if (looksLikeWeeChatPositionalAdd(toks)) {
+        patch = parseWeeChatPositionalPatch(toks.get(3), toks.get(4), toks.get(5));
+      } else if (containsKeyValueTokens(toks, 3)) {
         patch = parseRulePatch(toks, 3);
       } else {
-        // WeeChat-style positional
-        if (toks.size() != 6) {
-          return new FilterCommand.Error(
-              "Usage: /filter " + (addReplace ? "addreplace" : "add") + " <name> <buffer> <tags> <regex> (tip: quote the regex if it contains spaces)");
-        }
-        patch = parseWeeChatPositionalPatch(toks.get(3), toks.get(4), toks.get(5));
+        return new FilterCommand.Error(
+            "Usage: /filter " + (addReplace ? "addreplace" : "add") + " <name> <buffer> <tags> <regex> (tip: quote the regex if it contains spaces)");
       }
 
       return addReplace ? new FilterCommand.AddReplace(name, patch) : new FilterCommand.Add(name, patch);
@@ -164,6 +165,12 @@ public class FilterCommandParser {
       if (toks.get(i).contains("=")) return true;
     }
     return false;
+  }
+
+  private static boolean looksLikeWeeChatPositionalAdd(List<String> toks) {
+    if (toks == null || toks.size() != 6) return false;
+    // <buffer> and <tags> are positional and should not be key=value in this form.
+    return !toks.get(3).contains("=") && !toks.get(4).contains("=");
   }
 
   private static FilterCommand.FilterRulePatch parseWeeChatPositionalPatch(String buffer, String tags, String regex) {

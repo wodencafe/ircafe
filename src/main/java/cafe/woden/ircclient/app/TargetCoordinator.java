@@ -316,6 +316,29 @@ public class TargetCoordinator {
     ui.closeTarget(target);
   }
 
+  /**
+   * Close a channel target locally without sending PART.
+   *
+   * <p>Used when the server already ended our membership (e.g. remote PART/KICK).
+   */
+  public void closeChannelLocally(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+    TargetRef target = new TargetRef(sid, ch);
+    if (!target.isChannel()) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    ensureTargetExists(status);
+    if (Objects.equals(activeTarget, target)) {
+      ui.selectTarget(status);
+    }
+
+    runtimeConfig.forgetJoinedChannel(sid, ch);
+    userListStore.clear(sid, ch);
+    ui.closeTarget(target);
+  }
+
   private void applyTargetContext(TargetRef target) {
     if (target == null) return;
 

@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
+import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -19,7 +20,8 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /join, /nick, /away, /query, /msg, /notice, /me, /say, /quote.
+ * <p>Includes: /join, /part, /nick, /away, /query, /msg, /notice, /me, /topic, /kick,
+ * /invite, /names, /who, /list, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -37,6 +39,7 @@ public class OutboundChatCommandService {
   private final RuntimeConfigStore runtimeConfig;
   private final AwayRoutingState awayRoutingState;
   private final JoinRoutingState joinRoutingState;
+  private final PendingEchoMessageState pendingEchoMessageState;
 
   public OutboundChatCommandService(
       IrcClientService irc,
@@ -45,7 +48,8 @@ public class OutboundChatCommandService {
       TargetCoordinator targetCoordinator,
       RuntimeConfigStore runtimeConfig,
       AwayRoutingState awayRoutingState,
-      JoinRoutingState joinRoutingState) {
+      JoinRoutingState joinRoutingState,
+      PendingEchoMessageState pendingEchoMessageState) {
     this.irc = irc;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
@@ -53,6 +57,7 @@ public class OutboundChatCommandService {
     this.runtimeConfig = runtimeConfig;
     this.awayRoutingState = awayRoutingState;
     this.joinRoutingState = joinRoutingState;
+    this.pendingEchoMessageState = pendingEchoMessageState;
   }
 
   public void handleJoin(CompositeDisposable disposables, String channel) {
@@ -309,14 +314,259 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    String me = irc.currentNick(at.serverId()).orElse("me");
-    ui.appendAction(at, me, a, true);
+    if (shouldUseLocalEcho(at.serverId())) {
+      String me = irc.currentNick(at.serverId()).orElse("me");
+      ui.appendAction(at, me, a, true);
+    }
 
     disposables.add(
         irc.sendAction(at.serverId(), at.target(), a)
             .subscribe(
                 () -> {},
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err))));
+  }
+
+  public void handleTopic(CompositeDisposable disposables, String first, String rest) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(topic)", "Select a server first.");
+      return;
+    }
+
+    String f = first == null ? "" : first.trim();
+    String r = rest == null ? "" : rest.trim();
+
+    String channel;
+    String topicText = "";
+    boolean settingTopic;
+
+    if (f.startsWith("#") || f.startsWith("&")) {
+      channel = f;
+      topicText = r;
+      settingTopic = !topicText.isEmpty();
+    } else if (at.isChannel()) {
+      channel = at.target();
+      topicText = (f + (r.isEmpty() ? "" : " " + r)).trim();
+      settingTopic = !topicText.isEmpty();
+    } else {
+      ui.appendStatus(at, "(topic)", "Usage: /topic [#channel] [new topic...]");
+      ui.appendStatus(at, "(topic)", "Tip: from a channel tab you can omit #channel.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    if (containsCrlf(channel) || containsCrlf(topicText)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(topic)", "Refusing to send multi-line /topic input.");
+      return;
+    }
+
+    String line = settingTopic ? ("TOPIC " + channel + " :" + topicText) : ("TOPIC " + channel);
+    TargetRef out = new TargetRef(at.serverId(), channel);
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ui.ensureTargetExists(out);
+    ui.appendStatus(out, "(topic)", "→ " + line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(topic-error)", String.valueOf(err))));
+  }
+
+  public void handleKick(CompositeDisposable disposables, String channel, String nick, String reason) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(kick)", "Select a server first.");
+      return;
+    }
+
+    String ch = resolveChannelOrNull(at, channel);
+    String n = nick == null ? "" : nick.trim();
+    String rsn = reason == null ? "" : reason.trim();
+
+    if (ch == null || n.isEmpty()) {
+      ui.appendStatus(at, "(kick)", "Usage: /kick [#channel] <nick> [reason]");
+      ui.appendStatus(at, "(kick)", "Tip: from a channel tab you can omit #channel.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    if (containsCrlf(ch) || containsCrlf(n) || containsCrlf(rsn)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(kick)", "Refusing to send multi-line /kick input.");
+      return;
+    }
+
+    String line = "KICK " + ch + " " + n + (rsn.isEmpty() ? "" : " :" + rsn);
+    TargetRef out = new TargetRef(at.serverId(), ch);
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ui.ensureTargetExists(out);
+    ui.appendStatus(out, "(kick)", "→ " + line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(kick-error)", String.valueOf(err))));
+  }
+
+  public void handleInvite(CompositeDisposable disposables, String nick, String channel) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(invite)", "Select a server first.");
+      return;
+    }
+
+    String n = nick == null ? "" : nick.trim();
+    String ch = resolveChannelOrNull(at, channel);
+
+    if (n.isEmpty() || ch == null) {
+      ui.appendStatus(at, "(invite)", "Usage: /invite <nick> [#channel]");
+      ui.appendStatus(at, "(invite)", "Tip: from a channel tab you can omit #channel.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    if (containsCrlf(ch) || containsCrlf(n)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(invite)", "Refusing to send multi-line /invite input.");
+      return;
+    }
+
+    String line = "INVITE " + n + " " + ch;
+    TargetRef out = new TargetRef(at.serverId(), ch);
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ui.ensureTargetExists(out);
+    ui.appendStatus(out, "(invite)", "→ " + line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(invite-error)", String.valueOf(err))));
+  }
+
+  public void handleNames(CompositeDisposable disposables, String channel) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(names)", "Select a server first.");
+      return;
+    }
+
+    String ch = resolveChannelOrNull(at, channel);
+    if (ch == null) {
+      ui.appendStatus(at, "(names)", "Usage: /names [#channel]");
+      ui.appendStatus(at, "(names)", "Tip: from a channel tab you can omit #channel.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    if (containsCrlf(ch)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(names)", "Refusing to send multi-line /names input.");
+      return;
+    }
+
+    TargetRef out = new TargetRef(at.serverId(), ch);
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ui.ensureTargetExists(out);
+    ui.appendStatus(out, "(names)", "Requesting NAMES for " + ch + "...");
+
+    disposables.add(
+        irc.requestNames(at.serverId(), ch)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(names-error)", String.valueOf(err))));
+  }
+
+  public void handleWho(CompositeDisposable disposables, String args) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(who)", "Select a server first.");
+      return;
+    }
+
+    String a = args == null ? "" : args.trim();
+    if (a.isEmpty()) {
+      if (at.isChannel()) {
+        a = at.target();
+      } else {
+        ui.appendStatus(at, "(who)", "Usage: /who [mask|#channel] [flags]");
+        ui.appendStatus(at, "(who)", "Tip: from a channel tab, /who defaults to that channel.");
+        return;
+      }
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    if (containsCrlf(a)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(who)", "Refusing to send multi-line /who input.");
+      return;
+    }
+
+    String line = "WHO " + a;
+    String firstToken = a;
+    int sp = firstToken.indexOf(' ');
+    if (sp >= 0) firstToken = firstToken.substring(0, sp).trim();
+
+    TargetRef out = (firstToken.startsWith("#") || firstToken.startsWith("&"))
+        ? new TargetRef(at.serverId(), firstToken)
+        : new TargetRef(at.serverId(), "status");
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ui.ensureTargetExists(out);
+    ui.appendStatus(out, "(who)", "→ " + line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(who-error)", String.valueOf(err))));
+  }
+
+  public void handleList(CompositeDisposable disposables, String args) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(list)", "Select a server first.");
+      return;
+    }
+
+    String a = args == null ? "" : args.trim();
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    if (containsCrlf(a)) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(list)", "Refusing to send multi-line /list input.");
+      return;
+    }
+
+    String line = a.isEmpty() ? "LIST" : ("LIST " + a);
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    ui.ensureTargetExists(status);
+    ui.appendStatus(status, "(list)", "→ " + line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), line)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {
@@ -368,8 +618,11 @@ public void handleMe(CompositeDisposable disposables, String action) {
                 err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
   }
 
-
   public void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
+    handleChatHistoryBefore(disposables, limit, "");
+  }
+
+  public void handleChatHistoryBefore(CompositeDisposable disposables, int limit, String selector) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(chathistory)", "Select a server first.");
@@ -389,9 +642,15 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     int lim = limit;
+    String selectorToken = normalizeChatHistorySelector(selector);
     if (lim <= 0) {
-      ui.appendStatus(at, "(chathistory)", "Usage: /chathistory [limit]  (alias: /history)");
+      ui.appendStatus(at, "(chathistory)", "Usage: /chathistory [limit] | /chathistory [before] <msgid=...|timestamp=...> [limit]");
       ui.appendStatus(at, "(chathistory)", "Example: /chathistory 100");
+      ui.appendStatus(at, "(chathistory)", "Example: /chathistory msgid=abc123 100");
+      return;
+    }
+    if (!Objects.toString(selector, "").trim().isEmpty() && selectorToken.isEmpty()) {
+      ui.appendStatus(at, "(chathistory)", "Selector must be msgid=... or timestamp=...");
       return;
     }
     if (lim > 200) lim = 200;
@@ -400,15 +659,17 @@ public void handleMe(CompositeDisposable disposables, String action) {
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
-    Instant before = Instant.now();
-
-    String ts = CHATHISTORY_TS_FMT.format(before);
-    String preview = "CHATHISTORY BEFORE " + at.target() + " timestamp=" + ts + " " + lim;
+    if (selectorToken.isEmpty()) {
+      selectorToken = "timestamp=" + CHATHISTORY_TS_FMT.format(Instant.now());
+    }
+    String preview = "CHATHISTORY BEFORE " + at.target() + " " + selectorToken + " " + lim;
     ui.appendStatus(at, "(chathistory)", "Requesting older history… limit=" + lim);
     ui.appendStatus(at, "(chathistory)", "→ " + preview);
 
+    final String selectorFinal = selectorToken;
+    final int limitFinal = lim;
     disposables.add(
-        irc.requestChatHistoryBefore(at.serverId(), at.target(), before, lim)
+        irc.requestChatHistoryBefore(at.serverId(), at.target(), selectorFinal, limitFinal)
             .subscribe(
                 () -> {},
                 err -> ui.appendError(status, "(chathistory-error)", String.valueOf(err))));
@@ -467,14 +728,37 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
+    boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
+    String me = irc.currentNick(target.serverId()).orElse("me");
+    final PendingEchoMessageState.PendingOutboundChat pendingEntry;
+    if (useLocalEcho) {
+      pendingEntry = null;
+    } else {
+      pendingEntry = pendingEchoMessageState.register(target, me, m, Instant.now());
+      ui.appendPendingOutgoingChat(target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
+    }
+
     disposables.add(
         irc.sendMessage(target.serverId(), target.target(), m)
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err))));
+                err -> {
+                  if (pendingEntry != null) {
+                    pendingEchoMessageState.removeById(pendingEntry.pendingId());
+                    ui.failPendingOutgoingChat(
+                        target,
+                        pendingEntry.pendingId(),
+                        Instant.now(),
+                        pendingEntry.fromNick(),
+                        pendingEntry.text(),
+                        String.valueOf(err));
+                  }
+                  ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err));
+                }));
 
-    String me = irc.currentNick(target.serverId()).orElse("me");
-    ui.appendChat(target, "(" + me + ")", m, true);
+    if (useLocalEcho) {
+      ui.appendChat(target, "(" + me + ")", m, true);
+    }
   }
   private void sendNotice(CompositeDisposable disposables, TargetRef echoTarget, String target, String message) {
     if (echoTarget == null) return;
@@ -497,8 +781,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
                 () -> {},
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err))));
 
-    String me = irc.currentNick(echoTarget.serverId()).orElse("me");
-    ui.appendNotice(echoTarget, "(" + me + ")", "NOTICE → " + t + ": " + m);
+    if (shouldUseLocalEcho(echoTarget.serverId())) {
+      String me = irc.currentNick(echoTarget.serverId()).orElse("me");
+      ui.appendNotice(echoTarget, "(" + me + ")", "NOTICE → " + t + ": " + m);
+    }
   }
 
 
@@ -514,5 +800,36 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return upper + (sp < 0 ? "" : " <redacted>");
     }
     return s;
+  }
+
+  private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
+    String ch = explicitChannel == null ? "" : explicitChannel.trim();
+    if (!ch.isEmpty()) {
+      if (ch.startsWith("#") || ch.startsWith("&")) return ch;
+      return null;
+    }
+    if (active != null && active.isChannel()) return active.target();
+    return null;
+  }
+
+  private static boolean containsCrlf(String s) {
+    return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
+  }
+
+  private static String normalizeChatHistorySelector(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    if (s.isEmpty()) return "";
+    int eq = s.indexOf('=');
+    if (eq <= 0 || eq == s.length() - 1) return "";
+    String key = s.substring(0, eq).trim().toLowerCase(Locale.ROOT);
+    String value = s.substring(eq + 1).trim();
+    if (value.isEmpty()) return "";
+    if (value.indexOf(' ') >= 0 || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) return "";
+    if (!"msgid".equals(key) && !"timestamp".equals(key)) return "";
+    return key + "=" + value;
+  }
+
+  private boolean shouldUseLocalEcho(String serverId) {
+    return !irc.isEchoMessageAvailable(serverId);
   }
 }

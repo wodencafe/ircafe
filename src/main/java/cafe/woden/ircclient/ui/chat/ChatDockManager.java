@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -37,6 +38,7 @@ public class ChatDockManager {
   private final TargetActivationBus activationBus;
   private final UiSettingsBus settingsBus;
   private final OutboundLineBus outboundBus;
+  private final IrcClientService irc;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
@@ -64,6 +66,7 @@ public class ChatDockManager {
                          TargetActivationBus activationBus,
                          UiSettingsBus settingsBus,
                          OutboundLineBus outboundBus,
+                         IrcClientService irc,
                          ActiveInputRouter activeInputRouter,
                          ChatHistoryService chatHistoryService,
                          CommandHistoryStore commandHistoryStore) {
@@ -73,6 +76,7 @@ public class ChatDockManager {
     this.activationBus = activationBus;
     this.settingsBus = settingsBus;
     this.outboundBus = outboundBus;
+    this.irc = irc;
     this.activeInputRouter = activeInputRouter;
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
@@ -115,6 +119,16 @@ public class ChatDockManager {
     }
   }
 
+  public void showTypingIndicator(TargetRef target, String nick, String state) {
+    if (target == null || nick == null || nick.isBlank()) return;
+    PinnedChatDockable dock = openPinned.get(target);
+    if (dock == null) return;
+    try {
+      dock.showTypingIndicator(nick, state);
+    } catch (Exception ignored) {
+    }
+  }
+
   public void openPinned(TargetRef target) {
     if (target == null) return;
 
@@ -135,6 +149,7 @@ public class ChatDockManager {
           commandHistoryStore,
           activationBus::activate,
           outboundBus,
+          irc,
           activeInputRouter,
           (t, draft) -> {
             if (t == null) return;
@@ -177,6 +192,11 @@ public class ChatDockManager {
         Docking.display(dock);
       } catch (Exception ignored) {
       }
+    }
+
+    try {
+      dock.onShown();
+    } catch (Exception ignored) {
     }
   }
 }

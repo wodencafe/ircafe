@@ -5,6 +5,7 @@ import cafe.woden.ircclient.ui.MessageInputPanel;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.OutboundLineBus;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -13,10 +14,14 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 
 import java.awt.BorderLayout;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import javax.swing.SwingUtilities;
 
 /**
  * A pinned chat view which shares the transcript document with the main chat,
@@ -29,15 +34,20 @@ import java.util.function.Consumer;
  */
 public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoCloseable {
 
+  private static final long READ_MARKER_SEND_COOLDOWN_MS = 3000L;
+
   private final TargetRef target;
+  private final ChatTranscriptStore transcripts;
   private final ChatHistoryService chatHistoryService;
   private final String persistentId;
 
   private boolean followTail = true;
   private int savedScrollValue = 0;
+  private long lastReadMarkerSentAtMs = 0L;
 
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
+  private final IrcClientService irc;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
 
@@ -53,14 +63,17 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
                            CommandHistoryStore historyStore,
                            Consumer<TargetRef> activate,
                            OutboundLineBus outboundBus,
+                           IrcClientService irc,
                            ActiveInputRouter activeInputRouter,
                            BiConsumer<TargetRef, String> onDraftChanged,
                            BiConsumer<TargetRef, String> onClosed) {
     super(settingsBus);
     this.target = target;
+    this.transcripts = transcripts;
     this.chatHistoryService = chatHistoryService;
     this.activate = activate;
     this.outboundBus = outboundBus;
+    this.irc = irc;
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -103,6 +116,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       } catch (Exception ignored) {
       }
     });
+    inputPanel.setOnTypingStateChanged(this::onLocalTypingStateChanged);
 
     if (this.activeInputRouter != null) {
       inputPanel.setOnActivated(() -> {
@@ -131,6 +145,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
           // Never crash UI because outbound stream had an error.
         })
     );
+
+    SwingUtilities.invokeLater(this::applyReadMarkerViewState);
   }
 
   /**
@@ -172,6 +188,63 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     inputPanel.focusInput();
   }
 
+  public void showTypingIndicator(String nick, String state) {
+    if (nick == null || nick.isBlank()) return;
+    inputPanel.showRemoteTypingIndicator(nick, state);
+  }
+
+  @Override
+  protected boolean replyContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReplyAvailable(target.serverId());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  @Override
+  protected boolean reactContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReactAvailable(target.serverId());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  @Override
+  protected void onReplyToMessageRequested(String messageId) {
+    if (!replyContextActionVisible()) return;
+    String draft = buildReplyPrefillDraft(target.target(), messageId);
+    if (draft.isBlank()) return;
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    if (activate != null) {
+      activate.accept(target);
+    }
+    inputPanel.setDraftText(draft);
+    inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onReactToMessageRequested(String messageId) {
+    if (!reactContextActionVisible()) return;
+    String draft = buildReactPrefillDraft(target.target(), messageId);
+    if (draft.isBlank()) return;
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    if (activate != null) {
+      activate.accept(target);
+    }
+    inputPanel.setDraftText(draft);
+    inputPanel.focusInput();
+  }
+
   @Override
   protected boolean onChannelClicked(String channel) {
     if (channel == null || channel.isBlank()) return false;
@@ -186,6 +259,15 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       return true;
     }
     return false;
+  }
+
+  @Override
+  protected boolean onMessageReferenceClicked(String messageId) {
+    int off = transcripts.messageOffsetById(target, messageId);
+    if (off < 0) return false;
+    setFollowTail(false);
+    scrollToTranscriptOffset(off);
+    return true;
   }
 
   @Override
@@ -205,7 +287,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   @Override
   protected void setFollowTail(boolean followTail) {
+    boolean was = this.followTail;
     this.followTail = followTail;
+    if (!was && followTail) {
+      maybeSendReadMarker();
+    }
   }
 
   @Override
@@ -222,8 +308,16 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     return target;
   }
 
+  public void onShown() {
+    SwingUtilities.invokeLater(this::applyReadMarkerViewState);
+  }
+
   @Override
   public void close() {
+    try {
+      inputPanel.flushTypingDone();
+    } catch (Exception ignored) {
+    }
     try {
       disposables.dispose();
     } catch (Exception ignored) {
@@ -240,5 +334,50 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private static String b64(String s) {
     if (s == null) s = "";
     return Base64.getUrlEncoder().withoutPadding().encodeToString(s.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private void onLocalTypingStateChanged(String state) {
+    if (target == null || target.isStatus() || target.isUiOnly()) return;
+    if (irc == null || !irc.isTypingAvailable(target.serverId())) return;
+    String s = normalizeTypingState(state);
+    if (s.isEmpty()) return;
+    irc.sendTyping(target.serverId(), target.target(), s).subscribe(() -> {}, err -> {});
+  }
+
+  private static String normalizeTypingState(String state) {
+    String s = Objects.toString(state, "").trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "";
+    return switch (s) {
+      case "active", "composing" -> "active";
+      case "paused" -> "paused";
+      case "done", "inactive" -> "done";
+      default -> "";
+    };
+  }
+
+  private void applyReadMarkerViewState() {
+    int unreadJumpOffset = transcripts.readMarkerJumpOffset(target);
+    if (unreadJumpOffset >= 0) {
+      setFollowTail(false);
+      scrollToTranscriptOffset(unreadJumpOffset);
+      updateScrollStateFromBar();
+      return;
+    }
+
+    if (isTranscriptAtBottom()) {
+      maybeSendReadMarker();
+    }
+  }
+
+  private void maybeSendReadMarker() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return;
+    if (irc == null || !irc.isReadMarkerAvailable(target.serverId())) return;
+
+    long now = System.currentTimeMillis();
+    if ((now - lastReadMarkerSentAtMs) < READ_MARKER_SEND_COOLDOWN_MS) return;
+    lastReadMarkerSentAtMs = now;
+
+    transcripts.updateReadMarker(target, now);
+    irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now)).subscribe(() -> {}, err -> {});
   }
 }

@@ -65,6 +65,11 @@ public class ChannelFlagModeState {
     channelFlags.keySet().removeIf(k -> Objects.equals(k.serverId, sid));
   }
 
+  public void clearChannel(String serverId, String channel) {
+    if (serverId == null || channel == null) return;
+    channelFlags.remove(ModeKey.of(serverId, channel));
+  }
+
   private static String normalizeServer(String serverId) {
     return (serverId == null) ? "" : serverId.trim();
   }

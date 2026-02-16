@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -28,7 +29,9 @@ import jakarta.annotation.PreDestroy;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import java.awt.*;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -46,12 +49,14 @@ import java.util.Objects;
 public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public static final String ID = "chat";
+  private static final long READ_MARKER_SEND_COOLDOWN_MS = 3000L;
 
   private final ChatTranscriptStore transcripts;
   private final ServerTreeDockable serverTree;
   private final NotificationStore notificationStore;
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
+  private final IrcClientService irc;
 
   private final ChatHistoryService chatHistoryService;
 
@@ -79,6 +84,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final Map<TargetRef, String> topicByTarget = new HashMap<>();
   private final Map<TargetRef, String> draftByTarget = new HashMap<>();
+  private final Map<TargetRef, Long> lastReadMarkerSentAtByTarget = new HashMap<>();
 
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
@@ -100,6 +106,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      NotificationStore notificationStore,
                      TargetActivationBus activationBus,
                      OutboundLineBus outboundBus,
+                     IrcClientService irc,
                      ActiveInputRouter activeInputRouter,
                      IgnoreListService ignoreListService,
                      IgnoreStatusService ignoreStatusService,
@@ -115,6 +122,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.notificationStore = notificationStore;
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
+    this.irc = irc;
     this.activeInputRouter = activeInputRouter;
     this.ignoreListService = ignoreListService;
     this.ignoreStatusService = ignoreStatusService;
@@ -218,6 +226,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         }
       });
     }
+    inputPanel.setOnTypingStateChanged(this::onLocalTypingStateChanged);
     disposables.add(inputPanel.outboundMessages().subscribe(line -> {
       armTailPinOnNextAppendIfAtBottom();
       outboundBus.emit(line);
@@ -247,6 +256,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     // Persist state + draft of the current target before swapping.
     if (activeTarget != null) {
+      inputPanel.flushTypingDone();
       draftByTarget.put(activeTarget, inputPanel.getDraftText());
       updateScrollStateFromBar();
     }
@@ -265,11 +275,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     showTranscriptCard();
     transcripts.ensureTargetExists(target);
     setDocument(transcripts.document(target));
+    int unreadJumpOffset = transcripts.readMarkerJumpOffset(target);
 
     // Restore any saved draft for this target.
     inputPanel.setDraftText(draftByTarget.getOrDefault(target, ""));
 
     updateTopicPanelForActiveTarget();
+
+    SwingUtilities.invokeLater(() -> applyReadMarkerViewState(target, unreadJumpOffset));
 
     // UX: selecting a different buffer should let the user immediately start typing.
     // (No-op when input is disabled.)
@@ -470,6 +483,70 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     inputPanel.focusInput();
   }
 
+  public void showTypingIndicator(TargetRef target, String nick, String state) {
+    if (target == null || nick == null || nick.isBlank()) return;
+    if (activeTarget == null || !activeTarget.equals(target)) return;
+    inputPanel.showRemoteTypingIndicator(nick, state);
+  }
+
+  @Override
+  protected boolean replyContextActionVisible() {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return false;
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReplyAvailable(t.serverId());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  @Override
+  protected boolean reactContextActionVisible() {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return false;
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReactAvailable(t.serverId());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  @Override
+  protected void onReplyToMessageRequested(String messageId) {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (!replyContextActionVisible()) return;
+    String draft = buildReplyPrefillDraft(t.target(), messageId);
+    if (draft.isBlank()) return;
+    if (activeTarget != null) {
+      activationBus.activate(activeTarget);
+    }
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    inputPanel.setDraftText(draft);
+    inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onReactToMessageRequested(String messageId) {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (!reactContextActionVisible()) return;
+    String draft = buildReactPrefillDraft(t.target(), messageId);
+    if (draft.isBlank()) return;
+    if (activeTarget != null) {
+      activationBus.activate(activeTarget);
+    }
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    inputPanel.setDraftText(draft);
+    inputPanel.focusInput();
+  }
+
   @Override
   protected boolean onNickClicked(String nick) {
     if (activeTarget == null || !activeTarget.isChannel()) return false;
@@ -493,6 +570,37 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   @Override
+  protected boolean onMessageReferenceClicked(String messageId) {
+    TargetRef t = activeTarget;
+    if (t == null || t.isUiOnly()) return false;
+    int off = transcripts.messageOffsetById(t, messageId);
+    if (off < 0) return false;
+    setFollowTail(false);
+    scrollToTranscriptOffset(off);
+    return true;
+  }
+
+  private void onLocalTypingStateChanged(String state) {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (irc == null || !irc.isTypingAvailable(t.serverId())) return;
+    String s = normalizeTypingState(state);
+    if (s.isEmpty()) return;
+    irc.sendTyping(t.serverId(), t.target(), s).subscribe(() -> {}, err -> {});
+  }
+
+  private static String normalizeTypingState(String state) {
+    String s = Objects.toString(state, "").trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "";
+    return switch (s) {
+      case "active", "composing" -> "active";
+      case "paused" -> "paused";
+      case "done", "inactive" -> "done";
+      default -> "";
+    };
+  }
+
+  @Override
   public String getPersistentID() {
     return ID;
   }
@@ -509,7 +617,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   @Override
   protected void setFollowTail(boolean followTail) {
-    state().followTail = followTail;
+    ViewState s = state();
+    boolean was = s.followTail;
+    s.followTail = followTail;
+    TargetRef t = activeTarget;
+    if (!was && followTail && t != null && !t.isNotifications()) {
+      maybeSendReadMarker(t);
+    }
   }
 
   @Override
@@ -578,6 +692,35 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     int scrollValue = 0;
   }
 
+  private void applyReadMarkerViewState(TargetRef target, int unreadJumpOffset) {
+    if (target == null || target.isUiOnly()) return;
+    if (!Objects.equals(activeTarget, target)) return;
+
+    if (unreadJumpOffset >= 0) {
+      setFollowTail(false);
+      scrollToTranscriptOffset(unreadJumpOffset);
+      updateScrollStateFromBar();
+      return;
+    }
+
+    if (isTranscriptAtBottom()) {
+      maybeSendReadMarker(target);
+    }
+  }
+
+  private void maybeSendReadMarker(TargetRef target) {
+    if (target == null || target.isStatus() || target.isUiOnly()) return;
+    if (irc == null || !irc.isReadMarkerAvailable(target.serverId())) return;
+
+    long now = System.currentTimeMillis();
+    Long last = lastReadMarkerSentAtByTarget.get(target);
+    if (last != null && (now - last) < READ_MARKER_SEND_COOLDOWN_MS) return;
+    lastReadMarkerSentAtByTarget.put(target, now);
+
+    transcripts.updateReadMarker(target, now);
+    irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now)).subscribe(() -> {}, err -> {});
+  }
+
   private static final class TopicPanel extends JPanel {
     private final JLabel header = new JLabel();
     private final JTextArea text = new JTextArea();
@@ -614,6 +757,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   @PreDestroy
   void shutdown() {
+    try {
+      inputPanel.flushTypingDone();
+    } catch (Exception ignored) {
+    }
     try {
       disposables.dispose();
     } catch (Exception ignored) {

@@ -82,6 +82,13 @@ public class MessageInputPanel extends JPanel {
   private final FlowableProcessor<String> outbound = PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
+  private volatile Consumer<String> onTypingStateChanged = s -> {};
+  private static final int TYPING_PAUSE_MS = 5000;
+  private static final int REMOTE_TYPING_HINT_MS = 5000;
+  private final Timer typingPauseTimer = new Timer(TYPING_PAUSE_MS, e -> onTypingPauseElapsed());
+  private final Timer remoteTypingHintTimer = new Timer(REMOTE_TYPING_HINT_MS, e -> clearRemoteTypingIndicator());
+  private String lastEmittedTypingState = "done";
+  private String remoteTypingHint = "";
   private final UiSettingsBus settingsBus;
   private final CommandHistoryStore historyStore;
   private int historyOffset = -1;
@@ -94,6 +101,8 @@ public class MessageInputPanel extends JPanel {
     this.settingsBus = settingsBus;
     this.historyStore = historyStore;
     undoGroupTimer.setRepeats(false);
+    typingPauseTimer.setRepeats(false);
+    remoteTypingHintTimer.setRepeats(false);
     setPreferredSize(new Dimension(10, 34));
     completionHint.setText(" ");
     completionHint.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
@@ -127,9 +136,9 @@ public class MessageInputPanel extends JPanel {
 
     installHistoryKeybindings();
     input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
-      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
-      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
+      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
+      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
+      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
     });
 
     input.getDocument().addUndoableEditListener(e -> {
@@ -145,7 +154,7 @@ public class MessageInputPanel extends JPanel {
     // Mark this input surface as "active" when the user interacts with it.
     FocusAdapter focusAdapter = new FocusAdapter() {
       @Override public void focusGained(FocusEvent e) { fireActivated(); }
-      @Override public void focusLost(FocusEvent e) { endCompoundEdit(); }
+      @Override public void focusLost(FocusEvent e) { endCompoundEdit(); flushTypingDone(); }
     };
     input.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
@@ -839,6 +848,10 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     return Collections.unmodifiableList(deduped);
   }
   private void updateHint() {
+    if (remoteTypingHint != null && !remoteTypingHint.isBlank()) {
+      completionHint.setText(remoteTypingHint);
+      return;
+    }
     if (!input.isEnabled() || !input.isEditable()) {
       completionHint.setText(" ");
       return;
@@ -856,6 +869,37 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     } else {
       completionHint.setText("Tab → " + match);
     }
+  }
+
+  private void onDraftDocumentChanged() {
+    updateHint();
+    fireDraftChanged();
+    maybeExitHistoryBrowseOnUserEdit();
+    if (!programmaticEdit) {
+      fireTypingStateFromUserEdit();
+    }
+  }
+
+  private void fireTypingStateFromUserEdit() {
+    if (!input.isEnabled() || !input.isEditable()) return;
+    String text = input.getText();
+    if (text == null || text.isBlank()) {
+      typingPauseTimer.stop();
+      emitTypingState("done");
+      return;
+    }
+    emitTypingState("active");
+    typingPauseTimer.restart();
+  }
+
+  private void onTypingPauseElapsed() {
+    if (!input.isEnabled() || !input.isEditable()) return;
+    String text = input.getText();
+    if (text == null || text.isBlank()) {
+      emitTypingState("done");
+      return;
+    }
+    emitTypingState("paused");
   }
   private static String currentToken(String text, int caretPos) {
     if (text == null || text.isEmpty()) return "";
@@ -909,6 +953,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   private void emit() {
     String msg = input.getText().trim();
     if (msg.isEmpty()) return;
+    flushTypingDone();
     if (historyStore != null) {
       historyStore.add(msg);
     }
@@ -937,6 +982,15 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     this.onDraftChanged = onDraftChanged == null ? t -> {} : onDraftChanged;
   }
 
+  public void setOnTypingStateChanged(Consumer<String> onTypingStateChanged) {
+    this.onTypingStateChanged = onTypingStateChanged == null ? s -> {} : onTypingStateChanged;
+  }
+
+  public void flushTypingDone() {
+    typingPauseTimer.stop();
+    emitTypingState("done");
+  }
+
   private void fireDraftChanged() {
     try {
       onDraftChanged.accept(getDraftText());
@@ -951,10 +1005,56 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     }
   }
 
+  private void emitTypingState(String state) {
+    String normalized = normalizeTypingState(state);
+    if (normalized.isEmpty()) return;
+    if (normalized.equals(lastEmittedTypingState)) return;
+    lastEmittedTypingState = normalized;
+    try {
+      onTypingStateChanged.accept(normalized);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static String normalizeTypingState(String state) {
+    String s = state == null ? "" : state.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "";
+    return switch (s) {
+      case "active", "composing" -> "active";
+      case "paused" -> "paused";
+      case "done", "inactive" -> "done";
+      default -> "";
+    };
+  }
+
+  public void showRemoteTypingIndicator(String nick, String state) {
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) return;
+    String s = normalizeTypingState(state);
+    if (s.isEmpty()) s = "active";
+    if ("done".equals(s)) {
+      clearRemoteTypingIndicator();
+      return;
+    }
+    remoteTypingHint = "paused".equals(s) ? (n + " paused typing...") : (n + " is typing...");
+    remoteTypingHintTimer.restart();
+    updateHint();
+  }
+
+  public void clearRemoteTypingIndicator() {
+    remoteTypingHintTimer.stop();
+    remoteTypingHint = "";
+    updateHint();
+  }
+
   public void setInputEnabled(boolean enabled) {
     input.setEditable(enabled);
     input.setEnabled(enabled);
     send.setEnabled(enabled);
+    if (!enabled) {
+      flushTypingDone();
+      clearRemoteTypingIndicator();
+    }
     updateHint();
   }
   public String getDraftText() {
@@ -968,6 +1068,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     historyOffset = -1;
     historyScratch = null;
     historySearchPrefix = null;
+    typingPauseTimer.stop();
     programmaticEdit = true;
     try {
       input.setText(text == null ? "" : text);

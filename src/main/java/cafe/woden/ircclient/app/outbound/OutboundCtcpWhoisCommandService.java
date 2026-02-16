@@ -83,6 +83,23 @@ public class OutboundCtcpWhoisCommandService {
   }
 
 
+  public void handleWhois(CompositeDisposable disposables, String nick) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(whois)", "Select a server first.");
+      return;
+    }
+
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) {
+      ui.appendStatus(at, "(whois)", "Usage: /whois <nick>");
+      return;
+    }
+
+    requestWhois(disposables, at, n);
+  }
+
+
   public void handleCtcpVersion(CompositeDisposable disposables, String nick) {
     sendCtcpSlash(disposables, "VERSION", nick, "", false);
   }

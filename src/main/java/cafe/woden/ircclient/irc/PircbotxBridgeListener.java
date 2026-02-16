@@ -463,6 +463,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String channel = event.getChannel().getName();
       maybeEmitHostmaskObserved(channel, event.getUser());
       String msg = event.getMessage();
+      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
+      String messageId = ircv3MessageId(ircv3Tags);
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
@@ -470,7 +472,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           return;
         }
         bus.onNext(new ServerIrcEvent(serverId,
-            new IrcEvent.ChannelAction(at, channel, event.getUser().getNick(), action)
+            new IrcEvent.ChannelAction(at, channel, event.getUser().getNick(), action, messageId, ircv3Tags)
         ));
         return;
       }
@@ -480,7 +482,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
 
       bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.ChannelMessage(at, channel, event.getUser().getNick(), msg)
+          new IrcEvent.ChannelMessage(at, channel, event.getUser().getNick(), msg, messageId, ircv3Tags)
       ));
     }
 
@@ -506,6 +508,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
+      String messageId = ircv3MessageId(ircv3Tags);
 
       if (event.getChannel() != null) {
         String channel = event.getChannel().getName();
@@ -514,7 +518,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
           return;
         }
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(at, channel, from, action)));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(at, channel, from, action, messageId, ircv3Tags)));
       } else {
         maybeEmitHostmaskObserved("", event.getUser());
 
@@ -524,7 +528,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           return;
         }
 
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action)));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
       }
     }
 
@@ -538,6 +542,41 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelTopicUpdated(
           Instant.now(), channel, topic
       )));
+    }
+
+    @Override
+    public void onInvite(InviteEvent event) {
+      touchInbound();
+      if (event == null) return;
+
+      String channel = "";
+      try {
+        Object c = reflectCall(event, "getChannel");
+        if (c != null) channel = String.valueOf(c);
+      } catch (Exception ignored) {
+      }
+      if (channel == null || channel.isBlank()) {
+        try {
+          Object c = reflectCall(event, "getChannelName");
+          if (c != null) channel = String.valueOf(c);
+        } catch (Exception ignored) {
+        }
+      }
+      channel = channel == null ? "" : channel.trim();
+      if (channel.isBlank()) return;
+
+      String from = "server";
+      try {
+        if (event.getUser() != null) {
+          maybeEmitHostmaskObserved(channel, event.getUser());
+          String nick = event.getUser().getNick();
+          if (nick != null && !nick.isBlank()) from = nick.trim();
+        }
+      } catch (Exception ignored) {
+      }
+
+      bus.onNext(new ServerIrcEvent(serverId,
+          new IrcEvent.InvitedToChannel(Instant.now(), channel, from)));
     }
 
 
@@ -565,6 +604,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = event.getUser().getNick();
       String msg = event.getMessage();
+      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
+      String messageId = ircv3MessageId(ircv3Tags);
 
       if ("*status".equalsIgnoreCase(from)) {
         maybeMarkZncDetected("private message from *status", null);
@@ -594,13 +635,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action)));
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
         return;
       }
 
       if (ctcpHandler.handle(event.getBot(), from, msg)) return;
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg)));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg, messageId, ircv3Tags)));
     }
 
     @Override
@@ -621,6 +662,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       String notice = event.getNotice();
+      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
+      String messageId = ircv3MessageId(ircv3Tags);
 
       // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
       if (maybeCaptureZncListNetworks(from, notice)) {
@@ -657,7 +700,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       } catch (Exception ignored) {
       }
 
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(at, from, target, notice)));
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Notice(at, from, target, notice, messageId, ircv3Tags)));
     }
 
     @Override
@@ -1061,8 +1104,33 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean batch = conn.batchCapAcked.get();
       boolean znc = conn.zncPlaybackCapAcked.get();
       boolean st = conn.serverTimeCapAcked.get();
-      log.info("[{}] negotiated caps: server-time={} draft/chathistory={} batch={} znc.in/playback={}",
-          serverId, st, ch, batch, znc);
+      boolean echo = conn.echoMessageCapAcked.get();
+      boolean capNotify = conn.capNotifyCapAcked.get();
+      boolean labeled = conn.labeledResponseCapAcked.get();
+      boolean setname = conn.setnameCapAcked.get();
+      boolean chghost = conn.chghostCapAcked.get();
+      boolean reply = conn.draftReplyCapAcked.get();
+      boolean react = conn.draftReactCapAcked.get();
+      boolean typing = conn.typingCapAcked.get();
+      boolean readMarker = conn.readMarkerCapAcked.get();
+      log.info(
+          "[{}] negotiated caps: server-time={} echo-message={} cap-notify={} labeled-response={} "
+              + "setname={} chghost={} draft/reply={} draft/react={} typing={} read-marker={} "
+              + "chathistory={} batch={} znc.in/playback={}",
+          serverId,
+          st,
+          echo,
+          capNotify,
+          labeled,
+          setname,
+          chghost,
+          reply,
+          react,
+          typing,
+          readMarker,
+          ch,
+          batch,
+          znc);
 
       if (!st && conn.serverTimeMissingWarned.compareAndSet(false, true)) {
         String msg = "IRCv3 server-time was not negotiated; message ordering/timestamps may be less accurate (especially on reconnect/backlog).";
@@ -1456,8 +1524,11 @@ if (code == 302 || code == 352 || code == 354) {
     private void emitServerResponseLine(PircBotX bot, int code, String line) {
       try {
         if (line == null || line.isBlank()) return;
-        String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
-        ParsedIrcLine pl = parseIrcLine(rawLine);
+        String originalLine = line.trim();
+        Map<String, String> ircv3Tags = PircbotxIrcv3Tags.fromRawLine(originalLine);
+        String messageId = PircbotxIrcv3Tags.firstTagValue(ircv3Tags, "msgid", "draft/msgid");
+        String normalizedLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+        ParsedIrcLine pl = parseIrcLine(normalizedLine);
 
         Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
         if (at == null) at = Instant.now();
@@ -1470,10 +1541,10 @@ if (code == 302 || code == 352 || code == 354) {
 
         String message = renderServerResponseMessage(pl, myNick);
         if (message == null || message.isBlank()) {
-          message = rawLine;
+          message = normalizedLine;
         }
         bus.onNext(new ServerIrcEvent(serverId,
-            new IrcEvent.ServerResponseLine(at, code, message, rawLine)));
+            new IrcEvent.ServerResponseLine(at, code, message, originalLine, messageId, ircv3Tags)));
       } catch (Exception ignored) {
       }
     }
@@ -1538,12 +1609,20 @@ if (code == 302 || code == 352 || code == 354) {
     @Override
     public void onPart(PartEvent event) {
       touchInbound();
+      boolean selfPart = false;
       try {
         maybeEmitHostmaskObserved(event.getChannelName(), event.getUser());
       } catch (Exception ignored) {}
       try {
         String nick = event.getUser() == null ? null : event.getUser().getNick();
-        if (!isSelf(event.getBot(), nick)) {
+        if (isSelf(event.getBot(), nick)) {
+          selfPart = true;
+          bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.LeftChannel(
+              Instant.now(),
+              event.getChannelName(),
+              event.getReason()
+          )));
+        } else {
           bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserPartedChannel(
               Instant.now(),
               event.getChannelName(),
@@ -1552,7 +1631,9 @@ if (code == 302 || code == 352 || code == 354) {
           )));
         }
       } catch (Exception ignored) {}
-      refreshRosterByName(event.getBot(), event.getChannelName());
+      if (!selfPart) {
+        refreshRosterByName(event.getBot(), event.getChannelName());
+      }
     }
 
     @Override
@@ -1734,7 +1815,72 @@ if (code == 302 || code == 352 || code == 354) {
     @Override
     public void onKick(KickEvent event) {
       touchInbound();
-      emitRoster(event.getChannel());
+      if (event == null) return;
+
+      Instant at = Instant.now();
+      String channel = "";
+      Channel ch = null;
+      try {
+        ch = event.getChannel();
+      } catch (Exception ignored) {
+      }
+      if (ch != null) {
+        channel = Objects.toString(ch.getName(), "").trim();
+      } else {
+        Object nameObj = reflectCall(event, "getChannelName");
+        if (nameObj != null) channel = String.valueOf(nameObj).trim();
+      }
+
+      String by = "server";
+      try {
+        if (event.getUser() != null) {
+          maybeEmitHostmaskObserved(channel, event.getUser());
+          String nick = event.getUser().getNick();
+          if (nick != null && !nick.isBlank()) by = nick.trim();
+        }
+      } catch (Exception ignored) {
+      }
+
+      String kickedNick = "";
+      Object rec = reflectCall(event, "getRecipient");
+      if (rec != null) {
+        Object n = reflectCall(rec, "getNick");
+        if (n != null) kickedNick = String.valueOf(n).trim();
+      }
+      if (kickedNick.isBlank()) {
+        Object n = reflectCall(event, "getRecipientNick");
+        if (n != null) kickedNick = String.valueOf(n).trim();
+      }
+
+      String reason = PircbotxUtil.safeStr(event::getReason, "");
+      boolean selfKick = false;
+      if (!channel.isBlank() && !kickedNick.isBlank()) {
+        if (isSelf(event.getBot(), kickedNick)) {
+          selfKick = true;
+          bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.KickedFromChannel(
+              at,
+              channel,
+              by,
+              reason
+          )));
+        } else {
+          bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserKickedFromChannel(
+              at,
+              channel,
+              kickedNick,
+              by,
+              reason
+          )));
+        }
+      }
+
+      if (selfKick) return;
+
+      if (ch != null) {
+        emitRoster(ch);
+      } else if (!channel.isBlank()) {
+        refreshRosterByName(event.getBot(), channel);
+      }
     }
 
     @Override
@@ -1981,6 +2127,15 @@ if (code == 302 || code == 352 || code == 354) {
     if (f.indexOf('H') >= 0 || f.indexOf('h') >= 0) return IrcEvent.AwayState.HERE;
     return IrcEvent.AwayState.UNKNOWN;
   }
+
+  private static Map<String, String> ircv3TagsFromEvent(Object event) {
+    return PircbotxIrcv3Tags.fromEvent(event);
+  }
+
+  private static String ircv3MessageId(Map<String, String> tags) {
+    return PircbotxIrcv3Tags.firstTagValue(tags, "msgid", "draft/msgid");
+  }
+
   private static Object reflectCall(Object target, String method) {
       if (target == null || method == null) return null;
       try {

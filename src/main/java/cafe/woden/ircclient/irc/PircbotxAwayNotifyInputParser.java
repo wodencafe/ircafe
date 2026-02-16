@@ -56,48 +56,27 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     super.processCommand(target, source, command, line, parsedLine, tags);
     if (command == null) return;
 
-    // Detect CAP ACKs for bouncer-related capabilities (ZNC playback, soju chathistory, soju bouncer networks, IRCv3 batch).
+    // Detect CAP state changes for capabilities we care about.
     if ("CAP".equalsIgnoreCase(command) && parsedLine != null && parsedLine.size() >= 2) {
       String sub = parsedLine.get(1);
-      if (sub != null && "ACK".equalsIgnoreCase(sub) && parsedLine.size() >= 3) {
-        String capList = parsedLine.get(2);
-        if (capList != null && capList.startsWith(":")) capList = capList.substring(1);
-        if (capList != null) {
-          for (String cap : capList.split("\s+")) {
-            if (cap == null) continue;
-            String c = cap.trim();
-            if (c.isEmpty()) continue;
-
-            if (PircbotxZncParsers.seemsZncCap(c)) {
-              if (conn.zncDetected.compareAndSet(false, true)) {
-                log.info("[{}] detected ZNC via CAP ACK: {}", serverId, c);
-              }
-            }
-
-            if ("znc.in/playback".equalsIgnoreCase(c)) {
-              if (conn.zncPlaybackCapAcked.compareAndSet(false, true)) {
-                log.info("[{}] CAP ACK: znc.in/playback enabled", serverId);
-              }
-            } else if ("batch".equalsIgnoreCase(c)) {
-              if (conn.batchCapAcked.compareAndSet(false, true)) {
-                log.info("[{}] CAP ACK: batch enabled", serverId);
-              }
-            } else if ("draft/chathistory".equalsIgnoreCase(c)) {
-              if (conn.chatHistoryCapAcked.compareAndSet(false, true)) {
-                log.info("[{}] CAP ACK: draft/chathistory enabled", serverId);
-              }
-            } else if ("soju.im/bouncer-networks".equalsIgnoreCase(c)) {
-              if (conn.sojuBouncerNetworksCapAcked.compareAndSet(false, true)) {
-                log.info("[{}] CAP ACK: soju.im/bouncer-networks enabled", serverId);
-              }
-            } else if ("server-time".equalsIgnoreCase(c)) {
-              if (conn.serverTimeCapAcked.compareAndSet(false, true)) {
-                log.info("[{}] CAP ACK: server-time enabled", serverId);
-              }
-            }
-          }
+      if (sub != null && parsedLine.size() >= 3) {
+        if ("ACK".equalsIgnoreCase(sub) || "DEL".equalsIgnoreCase(sub)) {
+          applyCapStateFromCapLine(sub, parsedLine.get(2));
+        } else if ("NEW".equalsIgnoreCase(sub)) {
+          emitCapAvailabilityFromCapLine(sub, parsedLine.get(2));
         }
       }
+      return;
+    }
+
+    Instant now = Instant.now();
+
+    if ("MARKREAD".equalsIgnoreCase(command)) {
+      String markerTarget = firstParam(parsedLine);
+      String marker = secondParam(parsedLine);
+      String from = source != null ? Objects.toString(source.getNick(), "").trim() : "server";
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.ReadMarkerObserved(now, from, markerTarget, marker)));
       return;
     }
 
@@ -127,9 +106,32 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           log.trace("[{}] account-tag observed via tags: nick={} cmd={} target={} state={} account={}",
               serverId, nick, command, target, st, name);
           sink.accept(new ServerIrcEvent(serverId,
-              new IrcEvent.UserAccountStateObserved(Instant.now(), nick, st, name)));
+              new IrcEvent.UserAccountStateObserved(now, nick, st, name)));
         }
       }
+    }
+
+    emitTagSignals(now, nick, target, command, parsedLine, tags);
+
+    if ("SETNAME".equalsIgnoreCase(command)) {
+      String realName = firstParam(parsedLine);
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.UserSetNameObserved(now, nick, realName)));
+      return;
+    }
+
+    if ("CHGHOST".equalsIgnoreCase(command)) {
+      String user = firstParam(parsedLine);
+      String host = secondParam(parsedLine);
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.UserHostChanged(now, nick, user, host)));
+
+      if (!user.isBlank() && !host.isBlank()) {
+        String hm = nick + "!" + user + "@" + host;
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.UserHostmaskObserved(now, "", nick, hm)));
+      }
+      return;
     }
 
     // The remaining handlers are specific to a small set of IRCv3 capabilities that arrive as
@@ -157,7 +159,6 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       }
     }
 
-    Instant now = Instant.now();
     // Hostmask capture is most valuable for passive state updates (away/account-notify), since
     // JOIN/PART/QUIT already produce hostmask observations via the bridge listener.
     if ((isAway || isAccount) && PircbotxUtil.isUsefulHostmask(observedHostmask)) {
@@ -244,5 +245,272 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     // We treat this as another best-effort signal for account state.
     sink.accept(new ServerIrcEvent(serverId,
         new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
+  }
+
+  private void applyCapStateFromCapLine(String sub, String capList) {
+    if (sub == null) return;
+    String action = sub.trim().toUpperCase(Locale.ROOT);
+    boolean fromAck = "ACK".equals(action);
+    boolean fromDel = "DEL".equals(action);
+    if (!fromAck && !fromDel) return;
+
+    String caps = Objects.toString(capList, "").trim();
+    if (caps.startsWith(":")) caps = caps.substring(1).trim();
+    if (caps.isEmpty()) return;
+
+    for (String token : caps.split("\\s+")) {
+      String t = Objects.toString(token, "").trim();
+      if (t.isEmpty()) continue;
+
+      boolean tokenDisable = t.startsWith("-");
+      String capName = canonicalCapName(t);
+      if (capName == null) continue;
+
+      boolean enabled = fromAck && !tokenDisable;
+      if (fromDel || tokenDisable) enabled = false;
+
+      if (enabled && PircbotxZncParsers.seemsZncCap(capName)) {
+        if (conn.zncDetected.compareAndSet(false, true)) {
+          log.info("[{}] detected ZNC via CAP {}: {}", serverId, action, capName);
+        }
+      }
+
+      setCapState(capName, enabled, action);
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, enabled)));
+    }
+  }
+
+  private void emitCapAvailabilityFromCapLine(String sub, String capList) {
+    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
+    if (!"NEW".equals(action)) return;
+    String caps = Objects.toString(capList, "").trim();
+    if (caps.startsWith(":")) caps = caps.substring(1).trim();
+    if (caps.isEmpty()) return;
+
+    for (String token : caps.split("\\s+")) {
+      String capName = canonicalCapName(token);
+      if (capName == null || capName.isBlank()) continue;
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, false)));
+    }
+  }
+
+  private void emitTagSignals(
+      Instant at,
+      String nick,
+      String rawTarget,
+      String command,
+      List<String> parsedLine,
+      ImmutableMap<String, String> tags
+  ) {
+    if (tags == null || tags.isEmpty()) return;
+
+    String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
+    String firstParam = firstParam(parsedLine);
+    String msgTarget = !firstParam.isBlank() ? firstParam : stripLeadingColon(rawTarget);
+    String convTarget = resolveConversationTarget(msgTarget, nick);
+
+    if (cmd.equals("PRIVMSG") || cmd.equals("NOTICE") || cmd.equals("TAGMSG")) {
+      String replyTo = firstTag(tags, "draft/reply", "+draft/reply");
+      if (!replyTo.isBlank()) {
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.MessageReplyObserved(at, nick, convTarget, replyTo)));
+      }
+
+      String react = firstTag(tags, "draft/react", "+draft/react");
+      if (!react.isBlank()) {
+        String msgId = firstTag(tags, "draft/reply", "+draft/reply");
+        if (msgId.isBlank()) {
+          msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+        }
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.MessageReactObserved(at, nick, convTarget, react, msgId)));
+      }
+
+      String typing = firstTag(tags, "typing", "+typing");
+      if (!typing.isBlank()) {
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.UserTypingObserved(at, nick, convTarget, typing)));
+      }
+    }
+
+    String readMarker = firstTag(tags, "draft/read-marker", "+draft/read-marker", "read-marker", "+read-marker");
+    if (!readMarker.isBlank()) {
+      sink.accept(new ServerIrcEvent(serverId,
+          new IrcEvent.ReadMarkerObserved(at, nick, convTarget, readMarker)));
+    }
+  }
+
+  private void setCapState(String capName, boolean enabled, String sourceAction) {
+    String c = capName.toLowerCase(Locale.ROOT);
+    switch (c) {
+      case "znc.in/playback" -> {
+        boolean prev = conn.zncPlaybackCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: znc.in/playback {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "batch" -> {
+        boolean prev = conn.batchCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: batch {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "draft/chathistory", "chathistory" -> {
+        boolean prev = conn.chatHistoryCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "soju.im/bouncer-networks" -> {
+        boolean prev = conn.sojuBouncerNetworksCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: soju.im/bouncer-networks {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "server-time" -> {
+        boolean prev = conn.serverTimeCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: server-time {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "echo-message" -> {
+        boolean prev = conn.echoMessageCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: echo-message {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "cap-notify" -> {
+        boolean prev = conn.capNotifyCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: cap-notify {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "labeled-response" -> {
+        boolean prev = conn.labeledResponseCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: labeled-response {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "setname" -> {
+        boolean prev = conn.setnameCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: setname {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "chghost" -> {
+        boolean prev = conn.chghostCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: chghost {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "draft/reply" -> {
+        boolean prev = conn.draftReplyCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: draft/reply {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "draft/react" -> {
+        boolean prev = conn.draftReactCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: draft/react {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "typing" -> {
+        boolean prev = conn.typingCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: typing {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "read-marker" -> {
+        boolean prev = conn.readMarkerCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: read-marker {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      default -> {
+        // Ignore capabilities we don't currently track.
+      }
+    }
+  }
+
+  private static String canonicalCapName(String rawToken) {
+    String s = Objects.toString(rawToken, "").trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith(":")) s = s.substring(1).trim();
+    if (s.startsWith("-")) s = s.substring(1).trim();
+    int eq = s.indexOf('=');
+    if (eq >= 0) s = s.substring(0, eq).trim();
+    return s.isEmpty() ? null : s;
+  }
+
+  private static String firstParam(List<String> parsedLine) {
+    if (parsedLine == null || parsedLine.isEmpty()) return "";
+    return stripLeadingColon(parsedLine.get(0));
+  }
+
+  private static String secondParam(List<String> parsedLine) {
+    if (parsedLine == null || parsedLine.size() < 2) return "";
+    return stripLeadingColon(parsedLine.get(1));
+  }
+
+  private static String stripLeadingColon(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    if (s.startsWith(":")) s = s.substring(1).trim();
+    return s;
+  }
+
+  private static String resolveConversationTarget(String rawTarget, String fromNick) {
+    String t = Objects.toString(rawTarget, "").trim();
+    if (t.startsWith("#") || t.startsWith("&")) return t;
+    String from = Objects.toString(fromNick, "").trim();
+    return from.isBlank() ? t : from;
+  }
+
+  private static String firstTag(ImmutableMap<String, String> tags, String... keys) {
+    if (tags == null || tags.isEmpty() || keys == null) return "";
+    for (String k : keys) {
+      if (k == null || k.isBlank()) continue;
+      String want = normalizeTagKey(k);
+      for (Map.Entry<String, String> e : tags.entrySet()) {
+        String got = normalizeTagKey(e.getKey());
+        if (!want.equals(got)) continue;
+        String v = Objects.toString(e.getValue(), "").trim();
+        if (v.isEmpty()) continue;
+        return unescapeTagValue(v);
+      }
+    }
+    return "";
+  }
+
+  private static String normalizeTagKey(String raw) {
+    String k = Objects.toString(raw, "").trim();
+    if (k.startsWith("@")) k = k.substring(1).trim();
+    if (k.startsWith("+")) k = k.substring(1).trim();
+    return k.toLowerCase(Locale.ROOT);
+  }
+
+  private static String unescapeTagValue(String raw) {
+    if (raw == null || raw.isEmpty() || raw.indexOf('\\') < 0) return raw == null ? "" : raw;
+    StringBuilder sb = new StringBuilder(raw.length());
+    for (int i = 0; i < raw.length(); i++) {
+      char c = raw.charAt(i);
+      if (c != '\\') {
+        sb.append(c);
+        continue;
+      }
+      if (i + 1 >= raw.length()) break;
+      char n = raw.charAt(++i);
+      switch (n) {
+        case ':' -> sb.append(';');
+        case 's' -> sb.append(' ');
+        case 'r' -> sb.append('\r');
+        case 'n' -> sb.append('\n');
+        case '\\' -> sb.append('\\');
+        default -> sb.append(n);
+      }
+    }
+    return sb.toString();
   }
 }

@@ -43,15 +43,14 @@ public final class TagSpec {
     String raw = Objects.toString(expr, "").trim();
     if (raw.isEmpty() || raw.equals("*")) return empty();
 
-    // Split OR terms by comma or whitespace.
-    String normalized = raw.replace(',', ' ');
-    String[] orParts = normalized.split("\\s+");
-
     List<OrTerm> terms = new ArrayList<>();
-    for (String part : orParts) {
+    for (String part : splitOrParts(raw)) {
       String p = Objects.toString(part, "").trim();
       if (p.isEmpty()) continue;
-      terms.add(parseOrTerm(p));
+      OrTerm t = parseOrTerm(p);
+      if (!t.isEmpty()) {
+        terms.add(t);
+      }
     }
 
     if (terms.isEmpty()) return empty();
@@ -87,10 +86,8 @@ public final class TagSpec {
   }
 
   private static OrTerm parseOrTerm(String token) {
-    // AND terms separated by '+'
-    String[] andParts = token.split("\\+");
     List<Clause> clauses = new ArrayList<>();
-    for (String a : andParts) {
+    for (String a : splitAndParts(token)) {
       String s = Objects.toString(a, "").trim();
       if (s.isEmpty()) continue;
       boolean neg = s.startsWith("!");
@@ -101,6 +98,106 @@ public final class TagSpec {
       clauses.add(new Clause(neg, compileTokenMatcher(s)));
     }
     return new OrTerm(clauses);
+  }
+
+  private static List<String> splitOrParts(String raw) {
+    // OR separators are comma or whitespace. Keep '+' as part of the same term,
+    // including the common spaced form: "tag_a + tag_b".
+    String normalized = Objects.toString(raw, "").replace(',', ' ');
+    String[] parts = normalized.split("\\s+");
+    List<String> out = new ArrayList<>();
+    boolean pendingPlus = false;
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) continue;
+      if (p.equals("+")) {
+        if (!out.isEmpty()) {
+          int last = out.size() - 1;
+          out.set(last, out.get(last) + "+");
+          pendingPlus = true;
+        }
+        continue;
+      }
+      if (pendingPlus && !out.isEmpty()) {
+        int last = out.size() - 1;
+        out.set(last, out.get(last) + p);
+        pendingPlus = false;
+      } else {
+        out.add(p);
+      }
+    }
+    return out;
+  }
+
+  private static List<String> splitAndParts(String token) {
+    String t = Objects.toString(token, "").trim();
+    if (t.isEmpty()) return List.of();
+
+    // For re:<body>, treat the full token as one matcher. This avoids splitting
+    // common regex quantifiers like '+' inside the body.
+    String tl = t.toLowerCase(Locale.ROOT);
+    if (tl.startsWith("re:")) {
+      return List.of(t);
+    }
+
+    List<String> out = new ArrayList<>();
+    StringBuilder cur = new StringBuilder();
+    boolean inRegexLiteral = false;
+    boolean escaping = false;
+    boolean regexClosed = false;
+
+    for (int i = 0; i < t.length(); i++) {
+      char c = t.charAt(i);
+      if (escaping) {
+        cur.append(c);
+        escaping = false;
+        continue;
+      }
+      if (c == '\\') {
+        cur.append(c);
+        escaping = true;
+        continue;
+      }
+
+      if (inRegexLiteral) {
+        cur.append(c);
+        if (c == '/') {
+          inRegexLiteral = false;
+          regexClosed = true;
+        }
+        continue;
+      }
+
+      if (regexClosed) {
+        // Accept /.../ims flag tail as part of the same clause.
+        char lc = Character.toLowerCase(c);
+        if (lc == 'i' || lc == 'm' || lc == 's') {
+          cur.append(c);
+          continue;
+        }
+        regexClosed = false;
+      }
+
+      if (c == '/' && cur.isEmpty()) {
+        inRegexLiteral = true;
+        cur.append(c);
+        continue;
+      }
+
+      if (c == '+') {
+        String part = cur.toString().trim();
+        if (!part.isEmpty()) out.add(part);
+        cur.setLength(0);
+        regexClosed = false;
+        continue;
+      }
+
+      cur.append(c);
+    }
+
+    String part = cur.toString().trim();
+    if (!part.isEmpty()) out.add(part);
+    return out;
   }
 
   private static Matcher compileTokenMatcher(String token) {
@@ -116,14 +213,16 @@ public final class TagSpec {
     }
 
     // Regex literal /body/flags
-    if (t.length() >= 2 && t.startsWith("/") && t.lastIndexOf('/') > 0) {
-      int last = t.lastIndexOf('/');
-      String body = t.substring(1, last);
-      String flags = t.substring(last + 1);
-      EnumSet<RegexFlag> fs = parseFlags(flags);
-      // Always case-insensitive by default for tags.
-      fs.add(RegexFlag.I);
-      return new Matcher(compileRegexBody(body, fs), token);
+    if (t.length() >= 2 && t.startsWith("/")) {
+      int last = findLastUnescapedSlash(t);
+      if (last > 0) {
+        String body = t.substring(1, last);
+        String flags = t.substring(last + 1);
+        EnumSet<RegexFlag> fs = parseFlags(flags);
+        // Always case-insensitive by default for tags.
+        fs.add(RegexFlag.I);
+        return new Matcher(compileRegexBody(body, fs), token);
+      }
     }
 
     // Glob if it contains wildcards, else exact.
@@ -151,6 +250,16 @@ public final class TagSpec {
       }
     }
     return out;
+  }
+
+  private static int findLastUnescapedSlash(String v) {
+    for (int i = v.length() - 1; i > 0; i--) {
+      if (v.charAt(i) != '/') continue;
+      int bs = 0;
+      for (int j = i - 1; j >= 0 && v.charAt(j) == '\\'; j--) bs++;
+      if ((bs % 2) == 0) return i;
+    }
+    return -1;
   }
 
   private static Pattern compileGlob(String glob) {
@@ -211,6 +320,10 @@ public final class TagSpec {
 
     private OrTerm(List<Clause> clauses) {
       this.clauses = (clauses == null) ? List.of() : List.copyOf(clauses);
+    }
+
+    boolean isEmpty() {
+      return clauses.isEmpty();
     }
 
     boolean hasAnyPositive() {

@@ -26,9 +26,11 @@ public final class ChatTranscriptMouseDecorator implements AutoCloseable {
       Function<Point, String> urlAt,
       Function<Point, String> channelAt,
       Function<Point, String> nickAt,
+      Function<Point, String> messageRefAt,
       Consumer<String> openUrl,
       Predicate<String> onChannelClicked,
       Predicate<String> onNickClicked,
+      Predicate<String> onMessageRefClicked,
       Runnable onTranscriptClicked
   ) {
     this.transcript = transcript;
@@ -40,7 +42,8 @@ public final class ChatTranscriptMouseDecorator implements AutoCloseable {
         String url = safeHit(urlAt, e.getPoint());
         String ch = safeHit(channelAt, e.getPoint());
         String nick = safeHit(nickAt, e.getPoint());
-        transcript.setCursor((url != null || ch != null || nick != null) ? handCursor : textCursor);
+        String msgRef = safeHit(messageRefAt, e.getPoint());
+        transcript.setCursor((url != null || ch != null || nick != null || msgRef != null) ? handCursor : textCursor);
       }
     };
 
@@ -72,6 +75,14 @@ public final class ChatTranscriptMouseDecorator implements AutoCloseable {
           }
         }
 
+        String msgRef = safeHit(messageRefAt, e.getPoint());
+        if (msgRef != null && onMessageRefClicked != null) {
+          try {
+            if (onMessageRefClicked.test(msgRef)) return;
+          } catch (Exception ignored) {
+          }
+        }
+
         if (onTranscriptClicked != null) {
           try {
             onTranscriptClicked.run();
@@ -92,9 +103,11 @@ public final class ChatTranscriptMouseDecorator implements AutoCloseable {
       Function<Point, String> urlAt,
       Function<Point, String> channelAt,
       Function<Point, String> nickAt,
+      Function<Point, String> messageRefAt,
       Consumer<String> openUrl,
       Predicate<String> onChannelClicked,
       Predicate<String> onNickClicked,
+      Predicate<String> onMessageRefClicked,
       Runnable onTranscriptClicked
   ) {
     if (transcript == null) {
@@ -109,9 +122,11 @@ public final class ChatTranscriptMouseDecorator implements AutoCloseable {
         urlAt,
         channelAt,
         nickAt,
+        messageRefAt,
         openUrl,
         onChannelClicked,
         onNickClicked,
+        onMessageRefClicked,
         onTranscriptClicked
     );
   }

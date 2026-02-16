@@ -59,6 +59,13 @@ public class InboundModeEventHandler {
     recentStatusModeState.clearServer(serverId);
   }
 
+  public void onLeftChannel(String serverId, String channel) {
+    if (serverId == null || channel == null) return;
+    joinModeBurstService.clearChannel(serverId, channel);
+    channelFlagModeState.clearChannel(serverId, channel);
+    recentStatusModeState.clearChannel(serverId, channel);
+  }
+
   public void handleChannelModeChanged(String serverId, IrcEvent.ChannelModeChanged ev) {
     if (serverId == null || ev == null) return;
 

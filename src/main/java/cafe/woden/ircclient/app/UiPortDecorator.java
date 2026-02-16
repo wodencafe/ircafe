@@ -4,6 +4,7 @@ import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -189,6 +190,55 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    delegate.appendChatAt(target, at, from, text, outgoingLocalEcho, messageId, ircv3Tags);
+  }
+
+  @Override
+  public void appendPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text
+  ) {
+    delegate.appendPendingOutgoingChat(target, pendingId, at, from, text);
+  }
+
+  @Override
+  public boolean resolvePendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return delegate.resolvePendingOutgoingChat(target, pendingId, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
+  public void failPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String reason
+  ) {
+    delegate.failPendingOutgoingChat(target, pendingId, at, from, text, reason);
+  }
+
+  @Override
   public void appendSpoilerChat(TargetRef target, String from, String text) {
     delegate.appendSpoilerChat(target, from, text);
   }
@@ -209,6 +259,19 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    delegate.appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendPresence(TargetRef target, PresenceEvent event) {
     delegate.appendPresence(target, event);
   }
@@ -224,6 +287,18 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendNoticeAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    delegate.appendNoticeAt(target, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendStatus(TargetRef target, String from, String text) {
     delegate.appendStatus(target, from, text);
   }
@@ -234,6 +309,18 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendStatusAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    delegate.appendStatusAt(target, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendError(TargetRef target, String from, String text) {
     delegate.appendError(target, from, text);
   }
@@ -241,5 +328,26 @@ public abstract class UiPortDecorator implements UiPort {
   @Override
   public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
     delegate.appendErrorAt(target, at, from, text);
+  }
+
+  @Override
+  public void showTypingIndicator(TargetRef target, String nick, String state) {
+    delegate.showTypingIndicator(target, nick, state);
+  }
+
+  @Override
+  public void setReadMarker(TargetRef target, long markerEpochMs) {
+    delegate.setReadMarker(target, markerEpochMs);
+  }
+
+  @Override
+  public void applyMessageReaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String reaction
+  ) {
+    delegate.applyMessageReaction(target, at, fromNick, targetMessageId, reaction);
   }
 }

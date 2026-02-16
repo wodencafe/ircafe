@@ -6,9 +6,16 @@ public sealed interface ParsedInput permits
     ParsedInput.Nick,
     ParsedInput.Away,
     ParsedInput.Query,
+    ParsedInput.Whois,
     ParsedInput.Msg,
     ParsedInput.Notice,
     ParsedInput.Me,
+    ParsedInput.Topic,
+    ParsedInput.Kick,
+    ParsedInput.Invite,
+    ParsedInput.Names,
+    ParsedInput.Who,
+    ParsedInput.ListCmd,
     ParsedInput.Mode,
     ParsedInput.Op,
     ParsedInput.Deop,
@@ -52,6 +59,9 @@ public sealed interface ParsedInput permits
 
   record Query(String nick) implements ParsedInput {}
 
+  /** /whois <nick> */
+  record Whois(String nick) implements ParsedInput {}
+
   record Msg(String nick, String body) implements ParsedInput {}
 
   /**
@@ -62,6 +72,24 @@ public sealed interface ParsedInput permits
   record Notice(String target, String body) implements ParsedInput {}
 
   record Me(String action) implements ParsedInput {}
+
+  /** /topic [#channel] [new topic...] */
+  record Topic(String first, String rest) implements ParsedInput {}
+
+  /** /kick [#channel] <nick> [reason...] */
+  record Kick(String channel, String nick, String reason) implements ParsedInput {}
+
+  /** /invite <nick> [#channel] */
+  record Invite(String nick, String channel) implements ParsedInput {}
+
+  /** /names [#channel] */
+  record Names(String channel) implements ParsedInput {}
+
+  /** /who [maskOrChannel [flags...]] */
+  record Who(String args) implements ParsedInput {}
+
+  /** /list [args...] */
+  record ListCmd(String args) implements ParsedInput {}
 
   
   record Mode(String first, String rest) implements ParsedInput {}
@@ -103,11 +131,19 @@ public sealed interface ParsedInput permits
 
   /**
    * /chathistory [limit]
+   * /chathistory [before] <selector> [limit]
    *
-   * <p>Developer/debug helper for requesting IRCv3 CHATHISTORY scrollback.
-   * This will request messages BEFORE the current time for the active target.
+   * <p>Request IRCv3 CHATHISTORY scrollback for the active target.
+   *
+   * <p>Selector examples:
+   * {@code timestamp=2026-02-16T12:34:56.000Z}
+   * {@code msgid=abc123}
    */
-  record ChatHistoryBefore(int limit) implements ParsedInput {}
+  record ChatHistoryBefore(int limit, String selector) implements ParsedInput {
+    public ChatHistoryBefore(int limit) {
+      this(limit, "");
+    }
+  }
 
   /** Local /filter ... command family. */
   record Filter(FilterCommand command) implements ParsedInput {}
