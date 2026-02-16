@@ -7,6 +7,7 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import java.awt.Window;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import javax.swing.SwingUtilities;
@@ -22,11 +23,68 @@ public class ThemeManager {
 
   public record ThemeOption(String id, String label) {}
 
+  private static final Map<String, String> ORANGE_DARK_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#2F241E"),
+      Map.entry("@foreground", "#F1DEC9"),
+      Map.entry("@componentBackground", "#3A2C24"),
+      Map.entry("@buttonBackground", "#4A3328"),
+      Map.entry("@menuBackground", "#281F1A"),
+      Map.entry("@accentColor", "#E48A33"),
+      Map.entry("@accentBaseColor", "#D8751D"),
+      Map.entry("@accentBase2Color", "#F0A14F"),
+      Map.entry("Component.focusColor", "#F0A14F"),
+      Map.entry("Component.linkColor", "#FFB367"),
+      Map.entry("TextComponent.selectionBackground", "#A65414"),
+      Map.entry("TextComponent.selectionForeground", "#FFF4E8"),
+      Map.entry("List.selectionBackground", "#A65414"),
+      Map.entry("Table.selectionBackground", "#A65414"),
+      Map.entry("Tree.selectionBackground", "#A65414")
+  );
+
+  private static final Map<String, String> BLUE_DARK_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#1E2734"),
+      Map.entry("@foreground", "#DCEBFF"),
+      Map.entry("@componentBackground", "#273447"),
+      Map.entry("@buttonBackground", "#2C3E56"),
+      Map.entry("@menuBackground", "#18212C"),
+      Map.entry("@accentColor", "#4F8AD9"),
+      Map.entry("@accentBaseColor", "#3B78C9"),
+      Map.entry("@accentBase2Color", "#6DA2EA"),
+      Map.entry("Component.focusColor", "#6DA2EA"),
+      Map.entry("Component.linkColor", "#8BC0FF"),
+      Map.entry("TextComponent.selectionBackground", "#2F5F9E"),
+      Map.entry("TextComponent.selectionForeground", "#F3F8FF"),
+      Map.entry("List.selectionBackground", "#2F5F9E"),
+      Map.entry("Table.selectionBackground", "#2F5F9E"),
+      Map.entry("Tree.selectionBackground", "#2F5F9E")
+  );
+
+  private static final Map<String, String> BLUE_LIGHT_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#EEF5FF"),
+      Map.entry("@foreground", "#1F3552"),
+      Map.entry("@componentBackground", "#FAFCFF"),
+      Map.entry("@buttonBackground", "#DCEBFF"),
+      Map.entry("@menuBackground", "#E2EEFF"),
+      Map.entry("@accentColor", "#2E6FBE"),
+      Map.entry("@accentBaseColor", "#2E6FBE"),
+      Map.entry("@accentBase2Color", "#4C88D0"),
+      Map.entry("Component.focusColor", "#4C88D0"),
+      Map.entry("Component.linkColor", "#1D5DAA"),
+      Map.entry("TextComponent.selectionBackground", "#B8D6FF"),
+      Map.entry("TextComponent.selectionForeground", "#10253F"),
+      Map.entry("List.selectionBackground", "#B8D6FF"),
+      Map.entry("Table.selectionBackground", "#B8D6FF"),
+      Map.entry("Tree.selectionBackground", "#B8D6FF")
+  );
+
   private static final ThemeOption[] THEMES = new ThemeOption[] {
       new ThemeOption("system", "Native (System)"),
       new ThemeOption("dark", "Flat Dark"),
       new ThemeOption("darcula", "Flat Darcula"),
-      new ThemeOption("light", "Flat Light")
+      new ThemeOption("blue-dark", "Flat Blue (Dark)"),
+      new ThemeOption("orange", "Flat Orange (Dark)"),
+      new ThemeOption("light", "Flat Light"),
+      new ThemeOption("blue-light", "Flat Blue (Light)")
   };
 
   private final ChatStyles chatStyles;
@@ -90,6 +148,21 @@ public class ThemeManager {
         case "system" -> UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         case "light" -> UIManager.setLookAndFeel(new FlatLightLaf());
         case "darcula" -> UIManager.setLookAndFeel(new FlatDarculaLaf());
+        case "blue-dark" -> {
+          FlatDarkLaf blueDark = new FlatDarkLaf();
+          blueDark.setExtraDefaults(BLUE_DARK_DEFAULTS);
+          UIManager.setLookAndFeel(blueDark);
+        }
+        case "orange" -> {
+          FlatDarkLaf orange = new FlatDarkLaf();
+          orange.setExtraDefaults(ORANGE_DARK_DEFAULTS);
+          UIManager.setLookAndFeel(orange);
+        }
+        case "blue-light" -> {
+          FlatLightLaf blueLight = new FlatLightLaf();
+          blueLight.setExtraDefaults(BLUE_LIGHT_DEFAULTS);
+          UIManager.setLookAndFeel(blueLight);
+        }
         default -> UIManager.setLookAndFeel(new FlatDarkLaf());
       }
     } catch (Exception e) {
