@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.UiProperties;
@@ -9,9 +8,7 @@ import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
-import cafe.woden.ircclient.ui.settings.ThemeManager;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -20,11 +17,9 @@ import io.github.andrewauclair.moderndocking.app.Docking;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import javax.swing.ButtonGroup;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
-import javax.swing.JRadioButtonMenuItem;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -55,9 +50,7 @@ public class AppMenuBar extends JMenuBar {
   public AppMenuBar(PreferencesDialog preferencesDialog,
                     NickColorOverridesDialog nickColorOverridesDialog,
                     IgnoreListDialog ignoreListDialog,
-                    UiSettingsBus settingsBus,
-                    ThemeManager themeManager,
-                    RuntimeConfigStore runtimeConfig,
+                    ThemeSelectionDialog themeSelectionDialog,
                     ServerDialogs serverDialogs,
                     UiProperties uiProps,
                     ChatDockable chat,
@@ -88,26 +81,12 @@ public class AppMenuBar extends JMenuBar {
     // Settings
     JMenu settings = new JMenu("Settings");
 
-    JMenu theme = new JMenu("Theme");
-    ButtonGroup themeGroup = new ButtonGroup();
-    for (ThemeManager.ThemeOption opt : themeManager.supportedThemes()) {
-      JRadioButtonMenuItem item = new JRadioButtonMenuItem(opt.label());
-      themeGroup.add(item);
-      theme.add(item);
-
-      item.addActionListener(e -> {
-        UiSettings cur = settingsBus.get();
-        UiSettings next = cur.withTheme(opt.id());
-        settingsBus.set(next);
-        runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
-        themeManager.applyTheme(next.theme());
-      });
-
-      if (opt.id().equalsIgnoreCase(settingsBus.get().theme())) {
-        item.setSelected(true);
-      }
-    }
-    settings.add(theme);
+    JMenuItem themeSelector = new JMenuItem("Theme Selector...");
+    themeSelector.addActionListener(e -> {
+      Window w = SwingUtilities.getWindowAncestor(this);
+      themeSelectionDialog.open(w);
+    });
+    settings.add(themeSelector);
 
     JMenuItem nickColors = new JMenuItem("Nick Colors...");
     nickColors.addActionListener(e -> {
