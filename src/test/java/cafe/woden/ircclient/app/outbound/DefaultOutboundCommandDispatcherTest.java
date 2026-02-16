@@ -143,6 +143,21 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchEditAndRedactRouteToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.EditMessage("abc123", "new body"));
+    verify(chat).handleEditMessage(disposables, "abc123", "new body");
+
+    dispatcher.dispatch(disposables, new ParsedInput.RedactMessage("abc123"));
+    verify(chat).handleRedactMessage(disposables, "abc123");
+  }
+
+  @Test
+  void dispatchHelpRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Help("edit"));
+    verify(chat).handleHelp("edit");
+  }
+
+  @Test
   void dispatchUnknownShowsSystemMessageOnSafeTarget() {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(null);

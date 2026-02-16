@@ -292,12 +292,26 @@ public class CommandParser {
       return parseChatHistoryInput(rest);
     }
 
+    if (matchesCommand(line, "/help") || matchesCommand(line, "/commands")) {
+      String topic = matchesCommand(line, "/help") ? argAfter(line, "/help") : argAfter(line, "/commands");
+      return new ParsedInput.Help(topic);
+    }
+
     // IRCv3 compose helpers (used by first-class reply/reaction input UX).
     if (matchesCommand(line, "/reply")) {
       return parseReplyInput(argAfter(line, "/reply"));
     }
     if (matchesCommand(line, "/react")) {
       return parseReactInput(argAfter(line, "/react"));
+    }
+    if (matchesCommand(line, "/edit")) {
+      return parseEditInput(argAfter(line, "/edit"));
+    }
+    if (matchesCommand(line, "/redact")) {
+      return parseRedactInput(argAfter(line, "/redact"));
+    }
+    if (matchesCommand(line, "/delete")) {
+      return parseRedactInput(argAfter(line, "/delete"));
     }
 
     // Local-only filters (weechat-style).
@@ -378,6 +392,24 @@ public class CommandParser {
     String msgId = r.substring(0, sp).trim();
     String reaction = r.substring(sp + 1).trim();
     return new ParsedInput.ReactMessage(msgId, reaction);
+  }
+
+  private static ParsedInput parseEditInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.EditMessage("", "");
+    int sp = r.indexOf(' ');
+    if (sp <= 0) return new ParsedInput.EditMessage(r.trim(), "");
+    String msgId = r.substring(0, sp).trim();
+    String body = r.substring(sp + 1).trim();
+    return new ParsedInput.EditMessage(msgId, body);
+  }
+
+  private static ParsedInput parseRedactInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.RedactMessage("");
+    int sp = r.indexOf(' ');
+    String msgId = (sp < 0) ? r : r.substring(0, sp).trim();
+    return new ParsedInput.RedactMessage(msgId);
   }
 
   private static boolean isIntegerToken(String raw) {

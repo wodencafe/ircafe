@@ -224,6 +224,18 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   @Override
+  protected boolean editContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    return isMessageEditSupportedForServer(target.serverId());
+  }
+
+  @Override
+  protected boolean redactContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    return isMessageRedactionSupportedForServer(target.serverId());
+  }
+
+  @Override
   protected boolean loadNewerHistoryContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
     return isLoadNewerHistorySupportedForServer(target.serverId());
@@ -283,6 +295,29 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     }
     inputPanel.openQuickReactionPicker(target.target(), msgId);
     inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onEditMessageRequested(String messageId) {
+    if (!editContextActionVisible()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    if (activate != null) {
+      activate.accept(target);
+    }
+    inputPanel.setDraftText("/edit " + msgId + " ");
+    inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onRedactMessageRequested(String messageId) {
+    if (!redactContextActionVisible()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+    emitHistoryCommand("/redact " + msgId);
   }
 
   private void emitHistoryCommand(String line) {
@@ -435,6 +470,24 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     if (irc == null) return false;
     try {
       return irc.isZncPlaybackAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isMessageEditSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isMessageEditAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isMessageRedactionSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isMessageRedactionAvailable(serverId);
     } catch (Exception ignored) {
       return false;
     }

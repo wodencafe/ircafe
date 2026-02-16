@@ -346,6 +346,17 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             new IrcEvent.MessageReactObserved(at, nick, convTarget, react, msgId)));
       }
 
+      String redactMsgId = firstTag(
+          tags,
+          "draft/delete",
+          "+draft/delete",
+          "draft/redact",
+          "+draft/redact");
+      if (!redactMsgId.isBlank()) {
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.MessageRedactionObserved(at, nick, convTarget, redactMsgId)));
+      }
+
       String typing = firstTag(tags, "typing", "+typing");
       if (!typing.isBlank()) {
         sink.accept(new ServerIrcEvent(serverId,
@@ -439,6 +450,18 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         boolean prev = conn.draftReactCapAcked.getAndSet(enabled);
         if (prev != enabled) {
           log.info("[{}] CAP {}: draft/react {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "draft/message-edit", "message-edit" -> {
+        boolean prev = conn.draftMessageEditCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "draft/message-redaction", "message-redaction" -> {
+        boolean prev = conn.draftMessageRedactionCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "typing" -> {

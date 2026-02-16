@@ -1301,6 +1301,29 @@ public class ChatTranscriptStore {
     return findLineStartByMessageId(doc, msgId);
   }
 
+  public synchronized boolean isOwnMessage(TargetRef ref, String messageId) {
+    if (ref == null) return false;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return false;
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    int lineStart = findLineStartByMessageId(doc, msgId);
+    if (lineStart < 0) return false;
+
+    try {
+      int len = doc.getLength();
+      if (len <= 0) return false;
+      int safePos = Math.max(0, Math.min(lineStart, len - 1));
+      AttributeSet attrs = doc.getCharacterElement(safePos).getAttributes();
+      if (attrs == null) return false;
+      if (Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_OUTGOING))) return true;
+      return logDirectionFromAttrs(attrs) == LogDirection.OUT;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   public synchronized void applyMessageReaction(
       TargetRef ref,
       String targetMessageId,
@@ -1314,6 +1337,84 @@ public class ChatTranscriptStore {
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
     applyMessageReactionInternal(ref, doc, st, targetMessageId, reaction, fromNick, tsEpochMs);
+  }
+
+  public synchronized boolean applyMessageEdit(
+      TargetRef ref,
+      String targetMessageId,
+      String editedText,
+      String fromNick,
+      long tsEpochMs,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    if (ref == null) return false;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    if (targetMsgId.isEmpty()) return false;
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) return false;
+
+    AttributeSet attrs;
+    try {
+      attrs = doc.getCharacterElement(Math.max(0, Math.min(lineStart, Math.max(0, doc.getLength() - 1)))).getAttributes();
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    return replaceMessageLine(
+        ref,
+        doc,
+        lineStart,
+        attrs,
+        renderEditedText(editedText),
+        tsEpochMs,
+        replacementMessageId,
+        replacementIrcv3Tags);
+  }
+
+  public synchronized boolean applyMessageRedaction(
+      TargetRef ref,
+      String targetMessageId,
+      String fromNick,
+      long tsEpochMs,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    if (ref == null) return false;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null) return false;
+
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    if (targetMsgId.isEmpty()) return false;
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) return false;
+
+    AttributeSet attrs;
+    try {
+      attrs = doc.getCharacterElement(Math.max(0, Math.min(lineStart, Math.max(0, doc.getLength() - 1)))).getAttributes();
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    boolean replaced = replaceMessageLine(
+        ref,
+        doc,
+        lineStart,
+        attrs,
+        "[message redacted]",
+        tsEpochMs,
+        replacementMessageId,
+        replacementIrcv3Tags);
+    if (replaced && st != null) {
+      clearReactionStateForMessage(ref, doc, st, targetMsgId);
+    }
+    return replaced;
   }
 
   public synchronized int loadOlderInsertOffset(TargetRef ref) {
@@ -2346,6 +2447,251 @@ public void appendChatAt(TargetRef ref,
       doc.insertString(doc.getLength(), "\n", tsStyle);
     } catch (Exception ignored) {
     }
+  }
+
+  private boolean replaceMessageLine(
+      TargetRef ref,
+      StyledDocument doc,
+      int lineStart,
+      AttributeSet existingAttrs,
+      String replacementText,
+      long tsEpochMs,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    if (ref == null || doc == null || existingAttrs == null) return false;
+
+    LogKind kind = logKindFromAttrs(existingAttrs);
+    if (kind != LogKind.CHAT && kind != LogKind.NOTICE && kind != LogKind.ACTION) {
+      return false;
+    }
+
+    String from = Objects.toString(existingAttrs.getAttribute(ChatStyles.ATTR_META_FROM), "").trim();
+    LogDirection dir = logDirectionFromAttrs(existingAttrs);
+    boolean outgoingLocalEcho =
+        dir == LogDirection.OUT || Boolean.TRUE.equals(existingAttrs.getAttribute(ChatStyles.ATTR_OUTGOING));
+
+    long epochMs = tsEpochMs > 0 ? tsEpochMs : System.currentTimeMillis();
+    Long existingEpochMs = lineEpochMs(existingAttrs);
+    if (existingEpochMs != null && existingEpochMs > 0) {
+      epochMs = existingEpochMs;
+    }
+    noteEpochMs(ref, epochMs);
+
+    String existingMsgId =
+        normalizeMessageId(Objects.toString(existingAttrs.getAttribute(ChatStyles.ATTR_META_MSGID), ""));
+    String replacementMsgId = normalizeMessageId(replacementMessageId);
+    String msgIdForMeta = !existingMsgId.isBlank() ? existingMsgId : replacementMsgId;
+
+    Map<String, String> mergedTags = mergeIrcv3Tags(
+        parseIrcv3TagsDisplay(Objects.toString(existingAttrs.getAttribute(ChatStyles.ATTR_META_IRCV3_TAGS), "")),
+        replacementIrcv3Tags);
+    if (!replacementMsgId.isBlank() && !mergedTags.containsKey("msgid")) {
+      LinkedHashMap<String, String> augmented = new LinkedHashMap<>(mergedTags);
+      augmented.put("msgid", replacementMsgId);
+      mergedTags = augmented;
+    }
+
+    int lineEnd = lineEndOffsetForLineStart(doc, lineStart);
+    int removeLen = Math.max(0, lineEnd - lineStart);
+    if (removeLen <= 0) return false;
+    try {
+      doc.remove(lineStart, removeLen);
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    LineMeta meta = buildLineMeta(ref, kind, dir, from, epochMs, null, msgIdForMeta, mergedTags);
+    String text = Objects.toString(replacementText, "");
+
+    if (kind == LogKind.ACTION) {
+      insertActionLineInternalAt(ref, lineStart, from, text, outgoingLocalEcho, meta);
+      return true;
+    }
+
+    AttributeSet fromStyle = (kind == LogKind.NOTICE) ? styles.noticeFrom() : styles.from();
+    if (kind == LogKind.CHAT && from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+    AttributeSet msgStyle = (kind == LogKind.NOTICE) ? styles.noticeMessage() : styles.message();
+
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(msgStyle, meta);
+    applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+    insertLineInternalAt(ref, lineStart, from, text, fs, ms, false, meta);
+    return true;
+  }
+
+  private int insertActionLineInternalAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      LineMeta meta
+  ) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
+    if (doc == null) return Math.max(0, insertAt);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    long tsEpochMs = (meta != null && meta.epochMs() != null && meta.epochMs() > 0)
+        ? meta.epochMs()
+        : System.currentTimeMillis();
+    String a = action == null ? "" : action;
+
+    try {
+      boolean timestampsIncludeChatMessages = false;
+      try {
+        timestampsIncludeChatMessages = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().timestampsIncludeChatMessages();
+      } catch (Exception ignored) {
+        timestampsIncludeChatMessages = false;
+      }
+
+      AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+      if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
+        String prefix = ts.prefixAt(tsEpochMs);
+        doc.insertString(pos, prefix, tsStyle);
+        pos += prefix.length();
+      }
+
+      AttributeSet msgStyle = withLineMeta(styles.actionMessage(), meta);
+      AttributeSet fromStyle = styles.actionFrom();
+      if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+        fromStyle = nickColors.forNick(from, fromStyle);
+      }
+
+      SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
+      SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+      applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+      doc.insertString(pos, "* ", ms);
+      pos += 2;
+      if (from != null && !from.isBlank()) {
+        doc.insertString(pos, from, fs);
+        pos += from.length();
+        doc.insertString(pos, " ", ms);
+        pos += 1;
+      }
+
+      if (renderer != null) {
+        pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
+      } else {
+        doc.insertString(pos, a, ms);
+        pos += a.length();
+      }
+
+      doc.insertString(pos, "\n", tsStyle);
+      pos += 1;
+    } catch (Exception ignored) {
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return pos;
+  }
+
+  private void clearReactionStateForMessage(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String targetMessageId
+  ) {
+    if (ref == null || doc == null || st == null) return;
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    if (targetMsgId.isEmpty()) return;
+
+    ReactionState state = st.reactionsByTargetMsgId.remove(targetMsgId);
+    if (state == null || state.control == null) return;
+
+    try {
+      int len = doc.getLength();
+      int start = Math.max(0, Math.min(state.control.pos.getOffset(), len));
+      int removeLen = 0;
+      if (start < len) removeLen = 1;
+      if ((start + removeLen) < len) {
+        try {
+          String maybeNl = doc.getText(start + removeLen, 1);
+          if ("\n".equals(maybeNl)) removeLen += 1;
+        } catch (Exception ignored) {
+        }
+      }
+      if (removeLen > 0) {
+        doc.remove(start, removeLen);
+        shiftCurrentPresenceBlock(ref, start, -removeLen);
+      }
+    } catch (Exception ignored) {
+    } finally {
+      state.control = null;
+    }
+  }
+
+  private static LogKind logKindFromAttrs(AttributeSet attrs) {
+    if (attrs == null) return LogKind.CHAT;
+    String raw = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_KIND), "").trim();
+    if (raw.isEmpty()) return LogKind.CHAT;
+    try {
+      return LogKind.valueOf(raw.toUpperCase(Locale.ROOT));
+    } catch (Exception ignored) {
+      return LogKind.CHAT;
+    }
+  }
+
+  private static LogDirection logDirectionFromAttrs(AttributeSet attrs) {
+    if (attrs == null) return LogDirection.IN;
+    String raw = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_DIRECTION), "").trim();
+    if (raw.isEmpty()) return LogDirection.IN;
+    try {
+      return LogDirection.valueOf(raw.toUpperCase(Locale.ROOT));
+    } catch (Exception ignored) {
+      return LogDirection.IN;
+    }
+  }
+
+  private static Map<String, String> parseIrcv3TagsDisplay(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    if (s.isEmpty()) return Map.of();
+    LinkedHashMap<String, String> out = new LinkedHashMap<>();
+    String[] parts = s.split(";");
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) continue;
+      int eq = p.indexOf('=');
+      if (eq < 0) {
+        out.put(p, "");
+      } else {
+        String k = p.substring(0, eq).trim();
+        String v = p.substring(eq + 1).trim();
+        if (!k.isEmpty()) out.put(k, v);
+      }
+    }
+    if (out.isEmpty()) return Map.of();
+    return out;
+  }
+
+  private static Map<String, String> mergeIrcv3Tags(Map<String, String> base, Map<String, String> overlay) {
+    Map<String, String> left = normalizeIrcv3Tags(base);
+    Map<String, String> right = normalizeIrcv3Tags(overlay);
+    if (left.isEmpty()) return right;
+    if (right.isEmpty()) return left;
+    LinkedHashMap<String, String> out = new LinkedHashMap<>(left);
+    out.putAll(right);
+    return out;
+  }
+
+  private static String renderEditedText(String text) {
+    String t = Objects.toString(text, "");
+    if (t.isBlank()) {
+      return "(edited)";
+    }
+    return t + " (edited)";
   }
 
   private void applyMessageReactionInternal(

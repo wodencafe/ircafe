@@ -14,6 +14,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.time.Instant;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -263,6 +264,36 @@ public class SwingUiPort implements UiPort {
           chat.setNickCompletions(names);
         }
       }
+    });
+  }
+
+  @Override
+  public void beginChannelList(String serverId, String banner) {
+    onEdt(() -> {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.beginChannelList(sid, banner);
+    });
+  }
+
+  @Override
+  public void appendChannelListEntry(String serverId, String channel, int visibleUsers, String topic) {
+    onEdt(() -> {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.appendChannelListEntry(sid, channel, visibleUsers, topic);
+    });
+  }
+
+  @Override
+  public void endChannelList(String serverId, String summary) {
+    onEdt(() -> {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.endChannelList(sid, summary);
     });
   }
 
@@ -517,6 +548,93 @@ public class SwingUiPort implements UiPort {
   ) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.applyMessageReaction(target, targetMessageId, reaction, fromNick, ts));
+  }
+
+  @Override
+  public boolean isOwnMessage(TargetRef target, String targetMessageId) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.isOwnMessage(target, targetMessageId);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(() -> out[0] = transcripts.isOwnMessage(target, targetMessageId));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public boolean applyMessageEdit(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String editedText,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.applyMessageEdit(
+          target,
+          targetMessageId,
+          editedText,
+          fromNick,
+          ts,
+          replacementMessageId,
+          replacementIrcv3Tags);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out[0] = transcripts.applyMessageEdit(
+              target,
+              targetMessageId,
+              editedText,
+              fromNick,
+              ts,
+              replacementMessageId,
+              replacementIrcv3Tags));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public boolean applyMessageRedaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.applyMessageRedaction(
+          target,
+          targetMessageId,
+          fromNick,
+          ts,
+          replacementMessageId,
+          replacementIrcv3Tags);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out[0] = transcripts.applyMessageRedaction(
+              target,
+              targetMessageId,
+              fromNick,
+              ts,
+              replacementMessageId,
+              replacementIrcv3Tags));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
   }
 
   @Override

@@ -60,13 +60,13 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
   private int minMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
     if (!parentIsServer) return 0;
     // Keep fixed leaves at the top of the server node, if present.
-    // Today that's: status (index 0) and notifications (index 1).
+    // Today that's: status + UI-only utility leaves (notifications/channel list).
     int min = 0;
     int count = parent.getChildCount();
     while (min < count) {
       Object uo = ((DefaultMutableTreeNode) parent.getChildAt(min)).getUserObject();
       if (uo instanceof ServerTreeDockable.NodeData nd && nd.ref != null) {
-        if (nd.ref.isStatus() || nd.ref.isNotifications()) {
+        if (nd.ref.isStatus() || nd.ref.isUiOnly()) {
           min++;
           continue;
         }

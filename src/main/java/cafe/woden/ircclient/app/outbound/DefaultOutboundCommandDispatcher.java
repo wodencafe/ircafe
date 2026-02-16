@@ -92,6 +92,8 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
               disposables,
               cmd.selector(),
               cmd.limit());
+      case ParsedInput.Help cmd ->
+          outboundChatCommandService.handleHelp(cmd.topic());
       case ParsedInput.ReplyMessage cmd ->
           outboundChatCommandService.handleReplyMessage(
               disposables,
@@ -102,6 +104,15 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
               disposables,
               cmd.messageId(),
               cmd.reaction());
+      case ParsedInput.EditMessage cmd ->
+          outboundChatCommandService.handleEditMessage(
+              disposables,
+              cmd.messageId(),
+              cmd.body());
+      case ParsedInput.RedactMessage cmd ->
+          outboundChatCommandService.handleRedactMessage(
+              disposables,
+              cmd.messageId());
       case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
       case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
       case ParsedInput.Unknown cmd -> {

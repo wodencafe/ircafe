@@ -45,6 +45,7 @@ public sealed interface IrcEvent permits
     IrcEvent.ReadMarkerObserved,
     IrcEvent.MessageReplyObserved,
     IrcEvent.MessageReactObserved,
+    IrcEvent.MessageRedactionObserved,
     IrcEvent.Ircv3CapabilityChanged,
     IrcEvent.WhoisResult,
     IrcEvent.WhoisProbeCompleted,
@@ -54,6 +55,9 @@ public sealed interface IrcEvent permits
     IrcEvent.ChatHistoryBatchReceived,
     IrcEvent.ZncPlaybackBatchReceived,
     IrcEvent.ServerResponseLine,
+    IrcEvent.ChannelListStarted,
+    IrcEvent.ChannelListEntry,
+    IrcEvent.ChannelListEnded,
     IrcEvent.StandardReply,
     IrcEvent.Error,
     IrcEvent.CtcpRequestReceived
@@ -209,6 +213,15 @@ public sealed interface IrcEvent permits
       this(at, code, message, rawLine, "", Map.of());
     }
   }
+
+  /** Start of an IRC channel list (/LIST) response stream. */
+  record ChannelListStarted(Instant at, String banner) implements IrcEvent {}
+
+  /** One row from an IRC channel list (/LIST) response stream. */
+  record ChannelListEntry(Instant at, String channel, int visibleUsers, String topic) implements IrcEvent {}
+
+  /** End of an IRC channel list (/LIST) response stream. */
+  record ChannelListEnded(Instant at, String summary) implements IrcEvent {}
 
   enum StandardReplyKind {
     FAIL,
@@ -438,6 +451,9 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
 
   /** Observed IRCv3 draft/react tag. */
   record MessageReactObserved(Instant at, String from, String target, String reaction, String messageId) implements IrcEvent {}
+
+  /** Observed IRCv3 message redaction tag (for example draft/delete). */
+  record MessageRedactionObserved(Instant at, String from, String target, String messageId) implements IrcEvent {}
 
   /** Observed CAP change line (ACK/NEW/DEL) for a capability. */
   record Ircv3CapabilityChanged(Instant at, String subcommand, String capability, boolean enabled) implements IrcEvent {}

@@ -67,6 +67,15 @@ Flowable<TargetRef> targetActivations();
   void setUsersChannel(TargetRef target);
   void setUsersNicks(List<NickInfo> nicks);
 
+  /** Reset/prepare the per-server channel list view for a new /LIST response stream. */
+  default void beginChannelList(String serverId, String banner) {}
+
+  /** Append one channel row to the per-server channel list view. */
+  default void appendChannelListEntry(String serverId, String channel, int visibleUsers, String topic) {}
+
+  /** Mark completion of a /LIST response stream for the given server. */
+  default void endChannelList(String serverId, String summary) {}
+
   void setStatusBarChannel(String channel);
   void setStatusBarCounts(int users, int ops);
   void setStatusBarServer(String serverText);
@@ -265,6 +274,48 @@ Flowable<TargetRef> targetActivations();
       String targetMessageId,
       String reaction
   ) {}
+
+  /**
+   * Check whether the transcript line identified by IRCv3 {@code msgid} belongs to the local user.
+   *
+   * <p>Implementations typically infer ownership from outbound line metadata.
+   */
+  default boolean isOwnMessage(TargetRef target, String targetMessageId) {
+    return false;
+  }
+
+  /**
+   * Apply an IRCv3 message edit to an existing transcript line identified by {@code msgid}.
+   *
+   * @return true when a matching line was found and updated.
+   */
+  default boolean applyMessageEdit(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String editedText,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    return false;
+  }
+
+  /**
+   * Apply an IRCv3 message redaction to an existing transcript line identified by {@code msgid}.
+   *
+   * @return true when a matching line was found and redacted.
+   */
+  default boolean applyMessageRedaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    return false;
+  }
 
   /**
    * Normalize UI affordances when an IRCv3 capability is disabled/removed.

@@ -62,6 +62,25 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capAckTracksMessageEditAndRedactionState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :draft/message-edit draft/message-redaction",
+        List.of("me", "ACK", ":draft/message-edit draft/message-redaction"),
+        ImmutableMap.of());
+
+    assertTrue(conn.draftMessageEditCapAcked.get());
+    assertTrue(conn.draftMessageRedactionCapAcked.get());
+  }
+
+  @Test
   void finalChathistoryCapAlsoUpdatesChatHistoryState() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
@@ -201,7 +220,7 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
-  void typingReplyAndReactTagsAreObservedOnTaggedMessage() throws Exception {
+  void typingReplyReactAndRedactionTagsAreObservedOnTaggedMessage() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
@@ -211,12 +230,13 @@ class PircbotxAwayNotifyInputParserTest {
         "#ircafe",
         source("bob"),
         "TAGMSG",
-        "@typing=active;+draft/reply=abc123;+draft/react=:+1;+msgid=xyz :bob!u@h TAGMSG #ircafe",
+        "@typing=active;+draft/reply=abc123;+draft/react=:+1;+draft/delete=abc123;+msgid=xyz :bob!u@h TAGMSG #ircafe",
         List.of("#ircafe"),
         ImmutableMap.of(
             "typing", "active",
             "draft/reply", "abc123",
             "draft/react", ":+1",
+            "draft/delete", "abc123",
             "msgid", "xyz"));
 
     assertTrue(
@@ -246,6 +266,15 @@ class PircbotxAwayNotifyInputParserTest {
                         && "bob".equals(r.from())
                         && "#ircafe".equals(r.target())
                         && ":+1".equals(r.reaction())
+                        && "abc123".equals(r.messageId())));
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.MessageRedactionObserved r
+                        && "bob".equals(r.from())
+                        && "#ircafe".equals(r.target())
                         && "abc123".equals(r.messageId())));
   }
 

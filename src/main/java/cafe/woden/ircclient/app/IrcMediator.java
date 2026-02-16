@@ -221,7 +221,73 @@ public class IrcMediator {
         disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
             .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
+
+      case OP -> handleNickModeUserAction(ctx, nick, "+o");
+
+      case DEOP -> handleNickModeUserAction(ctx, nick, "-o");
+
+      case VOICE -> handleNickModeUserAction(ctx, nick, "+v");
+
+      case DEVOICE -> handleNickModeUserAction(ctx, nick, "-v");
+
+      case KICK -> handleKickUserAction(ctx, nick);
+
+      case BAN -> handleBanUserAction(ctx, nick);
     }
+  }
+
+  private void handleNickModeUserAction(TargetRef ctx, String nick, String mode) {
+    if (ctx == null || !ctx.isChannel()) return;
+    String line = "MODE " + ctx.target() + " " + mode + " " + nick;
+    sendUserActionRaw(ctx, "(mode)", "(mode-error)", line);
+  }
+
+  private void handleKickUserAction(TargetRef ctx, String nick) {
+    if (ctx == null || !ctx.isChannel()) return;
+    String line = "KICK " + ctx.target() + " " + nick;
+    sendUserActionRaw(ctx, "(kick)", "(kick-error)", line);
+  }
+
+  private void handleBanUserAction(TargetRef ctx, String nick) {
+    if (ctx == null || !ctx.isChannel()) return;
+    String mask = looksLikeMask(nick) ? nick : (nick + "!*@*");
+    String line = "MODE " + ctx.target() + " +b " + mask;
+    sendUserActionRaw(ctx, "(mode)", "(mode-error)", line);
+  }
+
+  private void sendUserActionRaw(TargetRef out, String statusTag, String errorTag, String line) {
+    if (out == null) return;
+    String sid = Objects.toString(out.serverId(), "").trim();
+    String sendLine = Objects.toString(line, "").trim();
+    if (sid.isBlank() || sendLine.isBlank()) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    if (!connectionCoordinator.isConnected(sid)) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+    if (containsCrlf(sendLine)) {
+      ui.appendStatus(status, statusTag, "Refusing to send multi-line input.");
+      return;
+    }
+
+    ensureTargetExists(out);
+    ui.appendStatus(out, statusTag, "\u2192 " + sendLine);
+    disposables.add(
+        irc.sendRaw(sid, sendLine)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, errorTag, String.valueOf(err))));
+  }
+
+  private static boolean containsCrlf(String s) {
+    if (s == null || s.isEmpty()) return false;
+    return s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0;
+  }
+
+  private static boolean looksLikeMask(String s) {
+    if (s == null) return false;
+    return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
   }
 
   private record ParsedCtcp(String commandUpper, String arg) {}
@@ -407,6 +473,17 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           return;
         }
 
+        if (maybeApplyMessageEditFromTaggedLine(
+            sid,
+            chan,
+            ev.at(),
+            ev.from(),
+            ev.text(),
+            ev.messageId(),
+            ev.ircv3Tags())) {
+          return;
+        }
+
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
           postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
         } else {
@@ -480,6 +557,17 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           return;
         }
 
+        if (maybeApplyMessageEditFromTaggedLine(
+            sid,
+            pm,
+            ev.at(),
+            ev.from(),
+            ev.text(),
+            ev.messageId(),
+            ev.ircv3Tags())) {
+          return;
+        }
+
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
           postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
         } else {
@@ -518,6 +606,17 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           dest = activeTargetForServerOrStatus(sid, status);
         }
 
+        if (maybeApplyMessageEditFromTaggedLine(
+            sid,
+            dest,
+            ev.at(),
+            ev.from(),
+            ev.text(),
+            ev.messageId(),
+            ev.ircv3Tags())) {
+          return;
+        }
+
         handleNoticeOrSpoiler(
             sid,
             dest,
@@ -534,6 +633,15 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
       case IrcEvent.StandardReply ev -> {
         handleStandardReply(sid, status, ev);
+      }
+      case IrcEvent.ChannelListStarted ev -> {
+        ui.beginChannelList(sid, ev.banner());
+      }
+      case IrcEvent.ChannelListEntry ev -> {
+        ui.appendChannelListEntry(sid, ev.channel(), ev.visibleUsers(), ev.topic());
+      }
+      case IrcEvent.ChannelListEnded ev -> {
+        ui.endChannelList(sid, ev.summary());
       }
       case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {
         handleServerResponseLine(sid, status, ev);
@@ -801,6 +909,15 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.applyMessageReaction(dest, ev.at(), from, targetMsgId, reaction);
       }
 
+      case IrcEvent.MessageRedactionObserved ev -> {
+        if (!irc.isMessageRedactionAvailable(sid)) return;
+        TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
+        String from = Objects.toString(ev.from(), "").trim();
+        String targetMsgId = Objects.toString(ev.messageId(), "").trim();
+        if (targetMsgId.isEmpty()) return;
+        ui.applyMessageRedaction(dest, ev.at(), from, targetMsgId, "", Map.of("draft/delete", targetMsgId));
+      }
+
       case IrcEvent.Ircv3CapabilityChanged ev -> {
         ensureTargetExists(status);
         String sub = Objects.toString(ev.subcommand(), "").trim().toUpperCase(Locale.ROOT);
@@ -917,6 +1034,32 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     return true;
   }
 
+  private boolean maybeApplyMessageEditFromTaggedLine(
+      String sid,
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    if (sid == null || sid.isBlank()) return false;
+    if (target == null || target.isUiOnly()) return false;
+    if (!irc.isMessageEditAvailable(sid)) return false;
+
+    String targetMsgId = firstIrcv3TagValue(ircv3Tags, "draft/edit", "+draft/edit");
+    if (targetMsgId.isBlank()) return false;
+
+    return ui.applyMessageEdit(
+        target,
+        at,
+        Objects.toString(from, "").trim(),
+        targetMsgId,
+        Objects.toString(text, ""),
+        messageId,
+        ircv3Tags);
+  }
+
   private void failPendingEchoesForServer(String sid, String reason) {
     if (sid == null || sid.isBlank()) return;
     Instant now = Instant.now();
@@ -937,6 +1080,12 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     ensureTargetExists(status);
     String msg = Objects.toString(ev.message(), "");
     String rendered = "[" + ev.code() + "] " + msg;
+    boolean suppressStatusLine = (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
+    if (ev.code() == 321) {
+      rendered = "[321] " + (msg.isBlank() ? "Channel list follows (see Channel List)." : (msg + " (see Channel List)."));
+    } else if (ev.code() == 323 && !msg.isBlank()) {
+      rendered = "[323] " + msg + " (see Channel List).";
+    }
     String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
     if (!label.isBlank()) {
       LabeledResponseRoutingState.PendingLabeledRequest pending =
@@ -961,18 +1110,22 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
         String preview = Objects.toString(pending.requestPreview(), "").trim();
         String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
-        postTo(dest, true, d -> ui.appendStatusAt(
-            d,
-            ev.at(),
-            "(server)",
-            correlated,
-            ev.messageId(),
-            ev.ircv3Tags()));
+        if (!suppressStatusLine) {
+          postTo(dest, true, d -> ui.appendStatusAt(
+              d,
+              ev.at(),
+              "(server)",
+              correlated,
+              ev.messageId(),
+              ev.ircv3Tags()));
+        }
         return;
       }
       rendered = rendered + " {label=" + label + "}";
     }
-    ui.appendStatusAt(status, ev.at(), "(server)", rendered, ev.messageId(), ev.ircv3Tags());
+    if (!suppressStatusLine) {
+      ui.appendStatusAt(status, ev.at(), "(server)", rendered, ev.messageId(), ev.ircv3Tags());
+    }
   }
 
   private void handleStandardReply(String sid, TargetRef status, IrcEvent.StandardReply ev) {
@@ -1198,6 +1351,30 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     String f = Objects.toString(from, "").trim();
     if (f.isEmpty() || "server".equalsIgnoreCase(f)) return true;
     return isFromSelf(sid, f);
+  }
+
+  private static String firstIrcv3TagValue(Map<String, String> tags, String... keys) {
+    if (tags == null || tags.isEmpty() || keys == null) return "";
+    for (String key : keys) {
+      String want = normalizeIrcv3TagKey(key);
+      if (want.isEmpty()) continue;
+      for (Map.Entry<String, String> e : tags.entrySet()) {
+        String got = normalizeIrcv3TagKey(e.getKey());
+        if (!want.equals(got)) continue;
+        String raw = Objects.toString(e.getValue(), "").trim();
+        if (raw.isEmpty()) continue;
+        return raw;
+      }
+    }
+    return "";
+  }
+
+  private static String normalizeIrcv3TagKey(String rawKey) {
+    String k = Objects.toString(rawKey, "").trim();
+    if (k.startsWith("@")) k = k.substring(1).trim();
+    if (k.startsWith("+")) k = k.substring(1).trim();
+    if (k.isEmpty()) return "";
+    return k.toLowerCase(Locale.ROOT);
   }
 
   private TargetRef resolveReadMarkerTarget(String sid, String target, TargetRef status) {

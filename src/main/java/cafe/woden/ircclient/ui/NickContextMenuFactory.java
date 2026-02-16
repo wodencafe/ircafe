@@ -37,6 +37,12 @@ public final class NickContextMenuFactory {
     private final JMenuItem version = new JMenuItem("Version");
     private final JMenuItem ping = new JMenuItem("Ping");
     private final JMenuItem time = new JMenuItem("Time");
+    private final JMenuItem op = new JMenuItem("Op");
+    private final JMenuItem deop = new JMenuItem("Deop");
+    private final JMenuItem voice = new JMenuItem("Voice");
+    private final JMenuItem devoice = new JMenuItem("Devoice");
+    private final JMenuItem kick = new JMenuItem("Kick");
+    private final JMenuItem ban = new JMenuItem("Ban");
     private final JMenuItem ignore = new JMenuItem("Ignore...");
     private final JMenuItem unignore = new JMenuItem("Unignore...");
     private final JMenuItem softIgnore = new JMenuItem("Soft Ignore...");
@@ -61,6 +67,13 @@ public final class NickContextMenuFactory {
       menu.add(time);
 
       menu.addSeparator();
+      menu.add(op);
+      menu.add(deop);
+      menu.add(voice);
+      menu.add(devoice);
+      menu.add(kick);
+      menu.add(ban);
+      menu.addSeparator();
       menu.add(ignore);
       menu.add(unignore);
       menu.addSeparator();
@@ -75,6 +88,12 @@ public final class NickContextMenuFactory {
       version.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.CTCP_VERSION)));
       ping.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.CTCP_PING)));
       time.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.CTCP_TIME)));
+      op.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.OP)));
+      deop.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.DEOP)));
+      voice.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.VOICE)));
+      devoice.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.DEVOICE)));
+      kick.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.KICK)));
+      ban.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.BAN)));
 
       ignore.addActionListener(e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, false, false)));
       unignore.addActionListener(e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, true, false)));
@@ -111,6 +130,13 @@ public final class NickContextMenuFactory {
       version.setEnabled(canAct);
       ping.setEnabled(canAct);
       time.setEnabled(canAct);
+      boolean canModerate = canAct && ctx.isChannel();
+      op.setEnabled(canModerate);
+      deop.setEnabled(canModerate);
+      voice.setEnabled(canModerate);
+      devoice.setEnabled(canModerate);
+      kick.setEnabled(canModerate);
+      ban.setEnabled(canModerate);
 
       boolean hard = mark != null && mark.hard;
       boolean soft = mark != null && mark.soft;

@@ -1112,11 +1112,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean chghost = conn.chghostCapAcked.get();
       boolean reply = conn.draftReplyCapAcked.get();
       boolean react = conn.draftReactCapAcked.get();
+      boolean edit = conn.draftMessageEditCapAcked.get();
+      boolean redaction = conn.draftMessageRedactionCapAcked.get();
       boolean typing = conn.typingCapAcked.get();
       boolean readMarker = conn.readMarkerCapAcked.get();
       log.info(
           "[{}] negotiated caps: server-time={} standard-replies={} echo-message={} cap-notify={} labeled-response={} "
-              + "setname={} chghost={} draft/reply={} draft/react={} typing={} read-marker={} "
+              + "setname={} chghost={} draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
+              + "typing={} read-marker={} "
               + "chathistory={} batch={} znc.in/playback={}",
           serverId,
           st,
@@ -1128,6 +1131,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           chghost,
           reply,
           react,
+          edit,
+          redaction,
           typing,
           readMarker,
           ch,
@@ -1541,6 +1546,8 @@ if (code == 302 || code == 352 || code == 354) {
         } catch (Exception ignored) {
         }
 
+        emitChannelListEvent(at, pl, myNick);
+
         String message = renderServerResponseMessage(pl, myNick);
         if (message == null || message.isBlank()) {
           message = normalizedLine;
@@ -1551,8 +1558,36 @@ if (code == 302 || code == 352 || code == 354) {
       }
     }
 
+    private void emitChannelListEvent(Instant at, ParsedIrcLine pl, String myNick) {
+      if (pl == null) return;
+
+      String banner = PircbotxListParsers.parseListStartBanner(pl.command(), pl.trailing());
+      if (banner != null) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelListStarted(at, banner)));
+        return;
+      }
+
+      PircbotxListParsers.ListEntry entry =
+          PircbotxListParsers.parseListEntry(pl.command(), pl.params(), pl.trailing(), myNick);
+      if (entry != null) {
+        bus.onNext(new ServerIrcEvent(
+            serverId,
+            new IrcEvent.ChannelListEntry(at, entry.channel(), Math.max(0, entry.visibleUsers()), entry.topic())));
+        return;
+      }
+
+      String summary = PircbotxListParsers.parseListEndSummary(pl.command(), pl.trailing());
+      if (summary != null) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelListEnded(at, summary)));
+      }
+    }
+
     private String renderServerResponseMessage(ParsedIrcLine pl, String myNick) {
       if (pl == null) return null;
+      String listRendered =
+          PircbotxListParsers.tryFormatListNumeric(pl.command(), pl.params(), pl.trailing(), myNick);
+      if (listRendered != null && !listRendered.isBlank()) return listRendered;
+
       String trailing = pl.trailing();
       java.util.List<String> params = pl.params();
       String msg = (trailing == null) ? "" : trailing;

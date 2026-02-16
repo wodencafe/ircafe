@@ -14,6 +14,7 @@ import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -90,11 +91,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
 
-  // Center content swaps between the normal transcript view and the per-server notifications view.
+  // Center content swaps between transcript and UI-only per-server views (notifications, channel list).
   private static final String CARD_TRANSCRIPT = "transcript";
   private static final String CARD_NOTIFICATIONS = "notifications";
+  private static final String CARD_CHANNEL_LIST = "channel-list";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
+  private final ChannelListPanel channelListPanel = new ChannelListPanel();
 
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private int lastTopicHeightPx = 58;
@@ -186,9 +189,16 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         ChatDockable.this.serverTree.selectTarget(ref);
       }
     });
+    this.channelListPanel.setOnJoinChannel(channel -> {
+      String ch = Objects.toString(channel, "").trim();
+      TargetRef t = activeTarget;
+      if (t == null || ch.isEmpty()) return;
+      outboundBus.emit("/join " + ch);
+    });
 
     centerCards.add(topicSplit, CARD_TRANSCRIPT);
     centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
+    centerCards.add(channelListPanel, CARD_CHANNEL_LIST);
     add(centerCards, BorderLayout.CENTER);
     showTranscriptCard();
     hideTopicPanel();
@@ -264,10 +274,17 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     activeTarget = target;
 
-    // UI-only targets (e.g. Notifications) do not have a transcript.
+    // UI-only targets (e.g. Notifications, Channel List) do not have a transcript.
     if (target.isNotifications()) {
       showNotificationsCard(target.serverId());
       // Notifications doesn't accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isChannelList()) {
+      showChannelListCard(target.serverId());
+      // Channel list doesn't accept input; clear any draft to avoid confusion.
       inputPanel.setDraftText("");
       updateTopicPanelForActiveTarget();
       return;
@@ -303,6 +320,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       notificationsPanel.setServerId(serverId);
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_NOTIFICATIONS);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showChannelListCard(String serverId) {
+    try {
+      channelListPanel.setServerId(serverId);
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_CHANNEL_LIST);
     } catch (Exception ignored) {
     }
   }
@@ -346,6 +372,18 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget();
     }
+  }
+
+  public void beginChannelList(String serverId, String banner) {
+    channelListPanel.beginList(serverId, banner);
+  }
+
+  public void appendChannelListEntry(String serverId, String channel, int visibleUsers, String topic) {
+    channelListPanel.appendEntry(serverId, channel, visibleUsers, topic);
+  }
+
+  public void endChannelList(String serverId, String summary) {
+    channelListPanel.endList(serverId, summary);
   }
 
   public Flowable<PrivateMessageRequest> privateMessageRequests() {
@@ -551,6 +589,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   @Override
+  protected boolean editContextActionVisible() {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return false;
+    return isMessageEditSupportedForServer(t.serverId());
+  }
+
+  @Override
+  protected boolean redactContextActionVisible() {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return false;
+    return isMessageRedactionSupportedForServer(t.serverId());
+  }
+
+  @Override
   protected boolean loadNewerHistoryContextActionVisible() {
     TargetRef t = activeTarget;
     if (t == null || t.isStatus() || t.isUiOnly()) return false;
@@ -618,6 +670,33 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
     inputPanel.openQuickReactionPicker(t.target(), msgId);
     inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onEditMessageRequested(String messageId) {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (!editContextActionVisible()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+    if (activeTarget != null) {
+      activationBus.activate(activeTarget);
+    }
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    inputPanel.setDraftText("/edit " + msgId + " ");
+    inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onRedactMessageRequested(String messageId) {
+    TargetRef t = activeTarget;
+    if (t == null || t.isStatus() || t.isUiOnly()) return;
+    if (!redactContextActionVisible()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+    emitHistoryCommand("/redact " + msgId);
   }
 
   private void emitHistoryCommand(String line) {
@@ -713,6 +792,24 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
   }
 
+  private boolean isMessageEditSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isMessageEditAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isMessageRedactionSupportedForServer(String serverId) {
+    if (irc == null) return false;
+    try {
+      return irc.isMessageRedactionAvailable(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   private boolean isLoadNewerHistorySupportedForServer(String serverId) {
     return isChatHistorySupportedForServer(serverId) || isZncPlaybackSupportedForServer(serverId);
   }
@@ -756,7 +853,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     boolean was = s.followTail;
     s.followTail = followTail;
     TargetRef t = activeTarget;
-    if (!was && followTail && t != null && !t.isNotifications()) {
+    if (!was && followTail && t != null && !t.isUiOnly()) {
       maybeSendReadMarker(t);
     }
   }

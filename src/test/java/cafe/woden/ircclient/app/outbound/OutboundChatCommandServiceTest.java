@@ -75,6 +75,20 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void joinFromUiOnlyTargetRoutesJoinOriginToStatus() {
+    TargetRef listTarget = TargetRef.channelList("libera");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(listTarget);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.joinChannel("libera", "#ircafe")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "#ircafe", "");
+
+    verify(joinRoutingState).rememberOrigin("libera", "#ircafe", status);
+    verify(irc).joinChannel("libera", "#ircafe");
+  }
+
+  @Test
   void connectWithoutArgUsesActiveServerContext() {
     TargetRef pm = new TargetRef("libera", "alice");
     when(targetCoordinator.getActiveTarget()).thenReturn(pm);
@@ -255,6 +269,22 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void listOpensChannelListTargetAndSendsListRawLine() {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef channelList = TargetRef.channelList("libera");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "LIST >10")).thenReturn(Completable.complete());
+
+    service.handleList(disposables, ">10");
+
+    verify(ui).ensureTargetExists(channelList);
+    verify(ui).beginChannelList("libera", "Loading channel list (>10)...");
+    verify(ui).selectTarget(channelList);
+    verify(irc).sendRaw("libera", "LIST >10");
+  }
+
+  @Test
   void quoteInjectsLabelWhenLabeledResponseIsAvailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     TargetRef status = new TargetRef("libera", "status");
@@ -374,5 +404,128 @@ class OutboundChatCommandServiceTest {
 
     verify(irc).sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
     verify(ui).applyMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
+  }
+
+  @Test
+  void editCommandSendsTaggedPrivmsgAndAppliesLocalEditWhenEchoUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.sendRaw("libera", "@+draft/edit=abc123 PRIVMSG #ircafe :fixed text"))
+        .thenReturn(Completable.complete());
+
+    service.handleEditMessage(disposables, "abc123", "fixed text");
+
+    verify(irc).sendRaw("libera", "@+draft/edit=abc123 PRIVMSG #ircafe :fixed text");
+    verify(ui).applyMessageEdit(
+        eq(chan),
+        any(Instant.class),
+        eq("me"),
+        eq("abc123"),
+        eq("fixed text"),
+        eq(""),
+        eq(java.util.Map.of("draft/edit", "abc123")));
+  }
+
+  @Test
+  void editCommandRejectsNonOwnedMessageBeforeSending() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(ui.isOwnMessage(chan, "abc123")).thenReturn(false);
+
+    service.handleEditMessage(disposables, "abc123", "fixed text");
+
+    verify(ui).appendStatus(chan, "(edit)", "Can only edit your own messages in this buffer.");
+    verify(irc, never()).sendRaw(eq("libera"), any());
+    verify(ui, never()).applyMessageEdit(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any());
+  }
+
+  @Test
+  void redactCommandSendsTaggedTagmsgAndAppliesLocalRedactionWhenEchoUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
+    when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.sendRaw("libera", "@+draft/delete=abc123 TAGMSG #ircafe"))
+        .thenReturn(Completable.complete());
+
+    service.handleRedactMessage(disposables, "abc123");
+
+    verify(irc).sendRaw("libera", "@+draft/delete=abc123 TAGMSG #ircafe");
+    verify(ui).applyMessageRedaction(
+        eq(chan),
+        any(Instant.class),
+        eq("me"),
+        eq("abc123"),
+        eq(""),
+        eq(java.util.Map.of("draft/delete", "abc123")));
+  }
+
+  @Test
+  void redactCommandRejectsNonOwnedMessageBeforeSending() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
+    when(ui.isOwnMessage(chan, "abc123")).thenReturn(false);
+
+    service.handleRedactMessage(disposables, "abc123");
+
+    verify(ui).appendStatus(chan, "(redact)", "Can only redact your own messages in this buffer.");
+    verify(irc, never()).sendRaw(eq("libera"), any());
+    verify(ui, never()).applyMessageRedaction(
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any());
+  }
+
+  @Test
+  void helpAnnotatesEditAndRedactAsUnavailableWhenCapsNotNegotiated() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.isMessageEditAvailable("libera")).thenReturn(false);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(false);
+
+    service.handleHelp("");
+
+    verify(ui).appendStatus(
+        eq(chan),
+        eq("(help)"),
+        contains("/edit <msgid> <message> (unavailable:"));
+    verify(ui).appendStatus(
+        eq(chan),
+        eq("(help)"),
+        contains("/redact <msgid> (alias: /delete) (unavailable:"));
+  }
+
+  @Test
+  void helpShowsEditAndRedactWithoutUnavailableSuffixWhenCapsNegotiated() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
+
+    service.handleHelp("edit");
+    service.handleHelp("redact");
+
+    verify(ui).appendStatus(chan, "(help)", "/edit <msgid> <message>");
+    verify(ui).appendStatus(chan, "(help)", "/redact <msgid> (alias: /delete)");
   }
 }

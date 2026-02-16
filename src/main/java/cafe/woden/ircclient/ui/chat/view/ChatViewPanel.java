@@ -88,7 +88,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::replyContextActionVisible,
         this::reactContextActionVisible,
         this::onReplyToMessageRequested,
-        this::onReactToMessageRequested
+        this::onReactToMessageRequested,
+        this::editContextActionVisible,
+        this::redactContextActionVisible,
+        this::onEditMessageRequested,
+        this::onRedactMessageRequested
     ));
     this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
         scroll,
@@ -232,6 +236,16 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return false;
   }
 
+  /** Whether the transcript context menu should show "Edit Message…". */
+  protected boolean editContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "Redact Message…". */
+  protected boolean redactContextActionVisible() {
+    return false;
+  }
+
   /** Whether the transcript context menu should show "Load Newer History". */
   protected boolean loadNewerHistoryContextActionVisible() {
     return false;
@@ -259,6 +273,16 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   /** Called by transcript context menu action "React to Message…". */
   protected void onReactToMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Edit Message…". */
+  protected void onEditMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Redact Message…". */
+  protected void onRedactMessageRequested(String messageId) {
     // default: no-op
   }
 

@@ -86,8 +86,9 @@ public class OutboundChatCommandService {
     runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
 
     // Remember where the user initiated the join so join-failure numerics can be routed
-    // back to the correct buffer (and also to status).
-    joinRoutingState.rememberOrigin(at.serverId(), chan, at);
+    // back to the correct buffer (and also to status). UI-only surfaces route to status.
+    TargetRef joinOrigin = at.isUiOnly() ? new TargetRef(at.serverId(), "status") : at;
+    joinRoutingState.rememberOrigin(at.serverId(), chan, joinOrigin);
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected (join queued in config only)");
@@ -642,6 +643,13 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
+    TargetRef channelList = TargetRef.channelList(at.serverId());
+    ui.ensureTargetExists(channelList);
+    ui.beginChannelList(
+        at.serverId(),
+        a.isEmpty() ? "Loading channel list..." : ("Loading channel list (" + a + ")..."));
+    ui.selectTarget(channelList);
+
     String line = a.isEmpty() ? "LIST" : ("LIST " + a);
     TargetRef status = new TargetRef(at.serverId(), "status");
     PreparedRawLine prepared = prepareCorrelatedRawLine(status, line);
@@ -651,8 +659,37 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
+            () -> {},
+            err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
+  }
+
+  public void handleHelp(String topic) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
+    String t = normalizeHelpTopic(topic);
+    if (!t.isEmpty()) {
+      switch (t) {
+        case "edit" -> {
+          appendEditHelp(out);
+          return;
+        }
+        case "redact", "delete" -> {
+          appendRedactHelp(out);
+          return;
+        }
+        default -> ui.appendStatus(out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
+      }
+    }
+
+    ui.appendStatus(
+        out,
+        "(help)",
+        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /chathistory /quote");
+    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
+    ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
+    appendEditHelp(out);
+    appendRedactHelp(out);
+    ui.appendStatus(out, "(help)", "Tip: /help edit or /help redact for focused details.");
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {
@@ -725,6 +762,75 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     sendReactionTag(disposables, at, msgId, token);
+  }
+
+  public void handleEditMessage(CompositeDisposable disposables, String messageId, String body) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(edit)", "Select a server first.");
+      return;
+    }
+
+    String msgId = normalizeIrcv3Token(messageId);
+    String text = body == null ? "" : body.trim();
+    if (msgId.isEmpty() || text.isEmpty()) {
+      ui.appendStatus(at, "(edit)", "Usage: /edit <msgid> <message>");
+      return;
+    }
+
+    if (at.isStatus()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(edit)", "Select a channel or PM first.");
+      return;
+    }
+
+    if (!irc.isMessageEditAvailable(at.serverId())) {
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(edit)",
+          "draft/message-edit is not negotiated on this server.");
+      return;
+    }
+
+    if (!isOwnMessageInBuffer(at, msgId)) {
+      ui.appendStatus(at, "(edit)", "Can only edit your own messages in this buffer.");
+      return;
+    }
+
+    sendEditMessage(disposables, at, msgId, text);
+  }
+
+  public void handleRedactMessage(CompositeDisposable disposables, String messageId) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(redact)", "Select a server first.");
+      return;
+    }
+
+    String msgId = normalizeIrcv3Token(messageId);
+    if (msgId.isEmpty()) {
+      ui.appendStatus(at, "(redact)", "Usage: /redact <msgid>");
+      return;
+    }
+
+    if (at.isStatus()) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(redact)", "Select a channel or PM first.");
+      return;
+    }
+
+    if (!irc.isMessageRedactionAvailable(at.serverId())) {
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(redact)",
+          "draft/message-redaction is not negotiated on this server.");
+      return;
+    }
+
+    if (!isOwnMessageInBuffer(at, msgId)) {
+      ui.appendStatus(at, "(redact)", "Can only redact your own messages in this buffer.");
+      return;
+    }
+
+    sendRedactionTag(disposables, at, msgId);
   }
 
   private void sendRawFromStatus(CompositeDisposable disposables, String serverId, String rawLine) {
@@ -1138,6 +1244,92 @@ public void handleMe(CompositeDisposable disposables, String action) {
                 () -> {},
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(react-error)", String.valueOf(err))));
   }
+
+  private void sendEditMessage(
+      CompositeDisposable disposables,
+      TargetRef target,
+      String targetMessageId,
+      String editedText
+  ) {
+    if (target == null) return;
+    String msgId = normalizeIrcv3Token(targetMessageId);
+    String text = editedText == null ? "" : editedText.trim();
+    if (msgId.isEmpty() || text.isEmpty()) return;
+
+    if (!connectionCoordinator.isConnected(target.serverId())) {
+      TargetRef status = new TargetRef(target.serverId(), "status");
+      ui.appendStatus(status, "(conn)", "Not connected");
+      if (!target.isStatus()) {
+        ui.appendStatus(target, "(conn)", "Not connected");
+      }
+      return;
+    }
+
+    String rawLine =
+        "@+draft/edit=" + escapeIrcv3TagValue(msgId) + " PRIVMSG " + target.target() + " :" + text;
+    PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
+
+    String me = irc.currentNick(target.serverId()).orElse("me");
+    Instant now = Instant.now();
+    if (shouldUseLocalEcho(target.serverId())) {
+      ui.applyMessageEdit(
+          target,
+          now,
+          me,
+          msgId,
+          text,
+          "",
+          java.util.Map.of("draft/edit", msgId));
+    }
+
+    disposables.add(
+        irc.sendRaw(target.serverId(), prepared.line())
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(edit-error)", String.valueOf(err))));
+  }
+
+  private void sendRedactionTag(
+      CompositeDisposable disposables,
+      TargetRef target,
+      String targetMessageId
+  ) {
+    if (target == null) return;
+    String msgId = normalizeIrcv3Token(targetMessageId);
+    if (msgId.isEmpty()) return;
+
+    if (!connectionCoordinator.isConnected(target.serverId())) {
+      TargetRef status = new TargetRef(target.serverId(), "status");
+      ui.appendStatus(status, "(conn)", "Not connected");
+      if (!target.isStatus()) {
+        ui.appendStatus(target, "(conn)", "Not connected");
+      }
+      return;
+    }
+
+    String rawLine =
+        "@+draft/delete=" + escapeIrcv3TagValue(msgId) + " TAGMSG " + target.target();
+    PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
+
+    String me = irc.currentNick(target.serverId()).orElse("me");
+    Instant now = Instant.now();
+    if (shouldUseLocalEcho(target.serverId())) {
+      ui.applyMessageRedaction(
+          target,
+          now,
+          me,
+          msgId,
+          "",
+          java.util.Map.of("draft/delete", msgId));
+    }
+
+    disposables.add(
+        irc.sendRaw(target.serverId(), prepared.line())
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(redact-error)", String.valueOf(err))));
+  }
+
   private void sendNotice(CompositeDisposable disposables, TargetRef echoTarget, String target, String message) {
     if (echoTarget == null) return;
     String t = target == null ? "" : target.trim();
@@ -1333,5 +1525,68 @@ public void handleMe(CompositeDisposable disposables, String action) {
 
   private boolean shouldUseLocalEcho(String serverId) {
     return !irc.isEchoMessageAvailable(serverId);
+  }
+
+  private void appendEditHelp(TargetRef out) {
+    boolean available = isMessageEditSupportedForServer(out);
+    ui.appendStatus(
+        out,
+        "(help)",
+        "/edit <msgid> <message>" + availabilitySuffix(
+            available,
+            "requires negotiated draft/message-edit or message-edit"));
+  }
+
+  private void appendRedactHelp(TargetRef out) {
+    boolean available = isMessageRedactionSupportedForServer(out);
+    ui.appendStatus(
+        out,
+        "(help)",
+        "/redact <msgid> (alias: /delete)" + availabilitySuffix(
+            available,
+            "requires negotiated draft/message-redaction or message-redaction"));
+  }
+
+  private boolean isMessageEditSupportedForServer(TargetRef target) {
+    if (target == null) return false;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return false;
+    try {
+      return irc.isMessageEditAvailable(sid);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isMessageRedactionSupportedForServer(TargetRef target) {
+    if (target == null) return false;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return false;
+    try {
+      return irc.isMessageRedactionAvailable(sid);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static String normalizeHelpTopic(String raw) {
+    String s = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    if (s.startsWith("/")) s = s.substring(1).trim();
+    return s;
+  }
+
+  private static String availabilitySuffix(boolean available, String unavailableReason) {
+    if (available) return "";
+    String reason = Objects.toString(unavailableReason, "").trim();
+    if (reason.isEmpty()) return " (unavailable)";
+    return " (unavailable: " + reason + ")";
+  }
+
+  private boolean isOwnMessageInBuffer(TargetRef target, String messageId) {
+    try {
+      return ui.isOwnMessage(target, messageId);
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 }

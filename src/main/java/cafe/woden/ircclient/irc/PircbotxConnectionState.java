@@ -104,6 +104,8 @@ final class PircbotxConnectionState {
   final AtomicBoolean chghostCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftReplyCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftReactCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftMessageEditCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftMessageRedactionCapAcked = new AtomicBoolean(false);
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
 
@@ -144,6 +146,8 @@ final class PircbotxConnectionState {
     chghostCapAcked.set(false);
     draftReplyCapAcked.set(false);
     draftReactCapAcked.set(false);
+    draftMessageEditCapAcked.set(false);
+    draftMessageRedactionCapAcked.set(false);
     typingCapAcked.set(false);
     readMarkerCapAcked.set(false);
     sojuBouncerNetworksCapAcked.set(false);

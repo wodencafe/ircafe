@@ -205,4 +205,35 @@ class CommandParserTest {
     assertEquals("abc123", cmd.messageId());
     assertEquals(":+1:", cmd.reaction());
   }
+
+  @Test
+  void parsesHelpCommandAndCommandsAlias() {
+    ParsedInput help = parser.parse("/help redact");
+    assertTrue(help instanceof ParsedInput.Help);
+    assertEquals("redact", ((ParsedInput.Help) help).topic());
+
+    ParsedInput commands = parser.parse("/commands edit");
+    assertTrue(commands instanceof ParsedInput.Help);
+    assertEquals("edit", ((ParsedInput.Help) commands).topic());
+  }
+
+  @Test
+  void parsesEditComposeCommand() {
+    ParsedInput in = parser.parse("/edit abc123 replacement text");
+    assertTrue(in instanceof ParsedInput.EditMessage);
+    ParsedInput.EditMessage cmd = (ParsedInput.EditMessage) in;
+    assertEquals("abc123", cmd.messageId());
+    assertEquals("replacement text", cmd.body());
+  }
+
+  @Test
+  void parsesRedactComposeCommandAndDeleteAlias() {
+    ParsedInput redact = parser.parse("/redact abc123");
+    assertTrue(redact instanceof ParsedInput.RedactMessage);
+    assertEquals("abc123", ((ParsedInput.RedactMessage) redact).messageId());
+
+    ParsedInput delete = parser.parse("/delete abc123");
+    assertTrue(delete instanceof ParsedInput.RedactMessage);
+    assertEquals("abc123", ((ParsedInput.RedactMessage) delete).messageId());
+  }
 }

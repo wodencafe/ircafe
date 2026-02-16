@@ -23,6 +23,10 @@ class PircbotxBotFactoryCapabilitiesTest {
     assertTrue(caps.contains("chghost"));
     assertTrue(caps.contains("draft/reply"));
     assertTrue(caps.contains("draft/react"));
+    assertTrue(caps.contains("draft/message-edit"));
+    assertTrue(caps.contains("message-edit"));
+    assertTrue(caps.contains("draft/message-redaction"));
+    assertTrue(caps.contains("message-redaction"));
     assertTrue(caps.contains("typing"));
     assertTrue(caps.contains("read-marker"));
     assertTrue(caps.contains("chathistory"));

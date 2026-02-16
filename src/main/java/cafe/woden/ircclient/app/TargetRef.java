@@ -15,6 +15,7 @@ import java.util.Objects;
 public final class TargetRef {
 
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
+  public static final String CHANNEL_LIST_TARGET = "__channel_list__";
 
   private final String serverId;
   private final String target;
@@ -30,6 +31,10 @@ public final class TargetRef {
 
   public static TargetRef notifications(String serverId) {
     return new TargetRef(serverId, NOTIFICATIONS_TARGET);
+  }
+
+  public static TargetRef channelList(String serverId) {
+    return new TargetRef(serverId, CHANNEL_LIST_TARGET);
   }
 
   public String serverId() {
@@ -63,10 +68,14 @@ public final class TargetRef {
     return NOTIFICATIONS_TARGET.equals(key);
   }
 
+  public boolean isChannelList() {
+    return CHANNEL_LIST_TARGET.equals(key);
+  }
+
   public boolean isUiOnly() {
     // UI-only targets are pseudo-buffers that do not represent a real IRC target.
     // "status" is a real transcript buffer in ircafe (and can accept raw server input).
-    return isNotifications();
+    return isNotifications() || isChannelList();
   }
 
   public boolean isChannel() {
@@ -86,6 +95,7 @@ public final class TargetRef {
     String t = norm(target);
     if (t.isEmpty()) return "";
     if (NOTIFICATIONS_TARGET.equals(t)) return NOTIFICATIONS_TARGET;
+    if (CHANNEL_LIST_TARGET.equals(t)) return CHANNEL_LIST_TARGET;
     return t.toLowerCase(Locale.ROOT);
   }
 

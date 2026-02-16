@@ -42,8 +42,11 @@ public sealed interface ParsedInput permits
     ParsedInput.ChatHistoryLatest,
     ParsedInput.ChatHistoryBetween,
     ParsedInput.ChatHistoryAround,
+    ParsedInput.Help,
     ParsedInput.ReplyMessage,
     ParsedInput.ReactMessage,
+    ParsedInput.EditMessage,
+    ParsedInput.RedactMessage,
     ParsedInput.Filter,
     ParsedInput.Quote,
     ParsedInput.Say,
@@ -195,6 +198,13 @@ public sealed interface ParsedInput permits
   record ChatHistoryAround(String selector, int limit) implements ParsedInput {}
 
   /**
+   * /help [topic]
+   *
+   * <p>Local help output for common slash commands.
+   */
+  record Help(String topic) implements ParsedInput {}
+
+  /**
    * /reply <msgid> <message>
    *
    * <p>Internal/advanced IRCv3 compose helper used by the first-class reply composer UI.
@@ -207,6 +217,20 @@ public sealed interface ParsedInput permits
    * <p>Internal/advanced IRCv3 compose helper used by the quick reaction picker UI.
    */
   record ReactMessage(String messageId, String reaction) implements ParsedInput {}
+
+  /**
+   * /edit <msgid> <message>
+   *
+   * <p>IRCv3 draft/message-edit compose helper.
+   */
+  record EditMessage(String messageId, String body) implements ParsedInput {}
+
+  /**
+   * /redact <msgid>
+   *
+   * <p>IRCv3 draft/message-redaction compose helper.
+   */
+  record RedactMessage(String messageId) implements ParsedInput {}
 
   /** Local /filter ... command family. */
   record Filter(FilterCommand command) implements ParsedInput {}

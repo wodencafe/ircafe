@@ -398,7 +398,13 @@ public class TargetCoordinator {
     if (target == null) return;
 
     this.activeTarget = target;
-    ui.setStatusBarChannel(target.target());
+    String statusBarChannel = target.target();
+    if (target.isNotifications()) {
+      statusBarChannel = "Notifications";
+    } else if (target.isChannelList()) {
+      statusBarChannel = "Channel List";
+    }
+    ui.setStatusBarChannel(statusBarChannel);
     ui.setStatusBarServer(serverDisplay(target.serverId()));
     ui.setUsersChannel(target);
     if (target.isChannel()) {

@@ -172,6 +172,20 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true if IRCv3 {@code draft/message-edit} (or equivalent) is negotiated on this connection.
+   */
+  default boolean isMessageEditAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if IRCv3 {@code draft/message-redaction} (or equivalent) is negotiated on this connection.
+   */
+  default boolean isMessageRedactionAvailable(String serverId) {
+    return false;
+  }
+
+  /**
    * @return true if IRCv3 {@code typing} is negotiated on this connection.
    */
   default boolean isTypingAvailable(String serverId) {

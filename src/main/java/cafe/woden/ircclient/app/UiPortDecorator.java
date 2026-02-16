@@ -352,6 +352,38 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public boolean isOwnMessage(TargetRef target, String targetMessageId) {
+    return delegate.isOwnMessage(target, targetMessageId);
+  }
+
+  @Override
+  public boolean applyMessageEdit(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String editedText,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    return delegate.applyMessageEdit(
+        target, at, fromNick, targetMessageId, editedText, replacementMessageId, replacementIrcv3Tags);
+  }
+
+  @Override
+  public boolean applyMessageRedaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    return delegate.applyMessageRedaction(
+        target, at, fromNick, targetMessageId, replacementMessageId, replacementIrcv3Tags);
+  }
+
+  @Override
   public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
     delegate.normalizeIrcv3CapabilityUiState(serverId, capability);
   }

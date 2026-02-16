@@ -476,6 +476,26 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public boolean isMessageEditAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.botRef.get() != null && c.draftMessageEditCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isMessageRedactionAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.botRef.get() != null && c.draftMessageRedactionCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
   public boolean isTypingAvailable(String serverId) {
     try {
       PircbotxConnectionState c = conn(serverId);

@@ -67,6 +67,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
 
   private static final String STATUS_LABEL = "status";
+  private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
@@ -661,7 +662,7 @@ private boolean isRootServerNode(DefaultMutableTreeNode node) {
     while (min < count) {
       Object uo = ((DefaultMutableTreeNode) serverNode.getChildAt(min)).getUserObject();
       if (uo instanceof NodeData nd && nd.ref != null) {
-        if (nd.ref.isStatus() || nd.ref.isNotifications()) {
+        if (nd.ref.isStatus() || nd.ref.isUiOnly()) {
           min++;
           continue;
         }
@@ -847,13 +848,21 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       parent = sn.serverNode;
     } else if (ref.isNotifications()) {
       parent = sn.serverNode;
+    } else if (ref.isChannelList()) {
+      parent = sn.serverNode;
     } else if (ref.isChannel()) {
       parent = sn.serverNode;
     } else {
       parent = sn.pmNode;
     }
 
-    DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, ref.target()));
+    String leafLabel = ref.target();
+    if (ref.isNotifications()) {
+      leafLabel = "Notifications";
+    } else if (ref.isChannelList()) {
+      leafLabel = CHANNEL_LIST_LABEL;
+    }
+    DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, leafLabel));
     leaves.put(ref, leaf);
     int idx;
     if (ref.isChannel() && parent == sn.serverNode) {
@@ -1288,9 +1297,15 @@ private void removeServerRoot(String serverId) {
     DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
     serverNode.insert(notificationsLeaf, 1);
     leaves.put(notificationsRef, notificationsLeaf);
+
+    TargetRef channelListRef = TargetRef.channelList(id);
+    DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
+    serverNode.insert(channelListLeaf, 2);
+    leaves.put(channelListRef, channelListLeaf);
+
     serverNode.add(pmNode);
 
-    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef);
+    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, channelListRef);
     servers.put(id, sn);
 
     model.reload(root);
@@ -1400,15 +1415,18 @@ private void removeServerRoot(String serverId) {
     final DefaultMutableTreeNode pmNode;
     final TargetRef statusRef;
     final TargetRef notificationsRef;
+    final TargetRef channelListRef;
 
     ServerNodes(DefaultMutableTreeNode serverNode,
         DefaultMutableTreeNode pmNode,
         TargetRef statusRef,
-        TargetRef notificationsRef) {
+        TargetRef notificationsRef,
+        TargetRef channelListRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
       this.statusRef = statusRef;
       this.notificationsRef = notificationsRef;
+      this.channelListRef = channelListRef;
     }
   }
 

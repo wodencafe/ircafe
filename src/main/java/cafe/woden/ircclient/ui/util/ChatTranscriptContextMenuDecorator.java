@@ -60,8 +60,12 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final Consumer<String> onLoadContextAroundMessage;
   private final Supplier<Boolean> replyActionVisibleSupplier;
   private final Supplier<Boolean> reactActionVisibleSupplier;
+  private final Supplier<Boolean> editActionVisibleSupplier;
+  private final Supplier<Boolean> redactActionVisibleSupplier;
   private final Consumer<String> onReplyToMessage;
   private final Consumer<String> onReactToMessage;
+  private final Consumer<String> onEditMessage;
+  private final Consumer<String> onRedactMessage;
 
   private final JPopupMenu menu = new JPopupMenu();
   private final JMenuItem copyItem = new JMenuItem("Copy");
@@ -77,6 +81,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem loadAroundMessageItem = new JMenuItem("Load Context Around Message…");
   private final JMenuItem replyToMessageItem = new JMenuItem("Reply to Message…");
   private final JMenuItem reactToMessageItem = new JMenuItem("React to Message…");
+  private final JMenuItem editMessageItem = new JMenuItem("Edit Message…");
+  private final JMenuItem redactMessageItem = new JMenuItem("Redact Message…");
 
   private volatile Point lastPopupPoint;
 
@@ -90,6 +96,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private volatile String currentPopupUrl;
   private volatile String currentPopupMessageId;
   private volatile String currentPopupIrcv3Tags;
+  private volatile boolean currentPopupOwnMessage;
 
   // Some sites reject programmatic downloads unless the request looks like a browser.
   private static final String DEFAULT_UA =
@@ -112,7 +119,11 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<Boolean> replyActionVisibleSupplier,
       Supplier<Boolean> reactActionVisibleSupplier,
       Consumer<String> onReplyToMessage,
-      Consumer<String> onReactToMessage
+      Consumer<String> onReactToMessage,
+      Supplier<Boolean> editActionVisibleSupplier,
+      Supplier<Boolean> redactActionVisibleSupplier,
+      Consumer<String> onEditMessage,
+      Consumer<String> onRedactMessage
   ) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
     this.urlAt = urlAt;
@@ -133,6 +144,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.reactActionVisibleSupplier = (reactActionVisibleSupplier != null) ? reactActionVisibleSupplier : () -> false;
     this.onReplyToMessage = (onReplyToMessage != null) ? onReplyToMessage : msgId -> {};
     this.onReactToMessage = (onReactToMessage != null) ? onReactToMessage : msgId -> {};
+    this.editActionVisibleSupplier = (editActionVisibleSupplier != null) ? editActionVisibleSupplier : () -> false;
+    this.redactActionVisibleSupplier = (redactActionVisibleSupplier != null) ? redactActionVisibleSupplier : () -> false;
+    this.onEditMessage = (onEditMessage != null) ? onEditMessage : msgId -> {};
+    this.onRedactMessage = (onRedactMessage != null) ? onRedactMessage : msgId -> {};
 
     copyItem.addActionListener(this::onCopy);
     selectAllItem.addActionListener(this::onSelectAll);
@@ -146,6 +161,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     loadAroundMessageItem.addActionListener(this::onLoadContextAroundMessage);
     replyToMessageItem.addActionListener(this::onReplyToMessage);
     reactToMessageItem.addActionListener(this::onReactToMessage);
+    editMessageItem.addActionListener(this::onEditMessage);
+    redactMessageItem.addActionListener(this::onRedactMessage);
 
     openLinkItem.addActionListener(this::onOpenLink);
     copyLinkItem.addActionListener(this::onCopyLink);
@@ -204,6 +221,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         LineIdentity identity = lineIdentityAtPoint(e.getPoint());
         currentPopupMessageId = identity.messageId();
         currentPopupIrcv3Tags = identity.ircv3Tags();
+        currentPopupOwnMessage = identity.outgoingOwnMessage();
         rebuildMenu(url);
         updateEnabledState(url);
 
@@ -222,7 +240,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, null, null, null, null, openFind, null, null, null, null, null, null, null, null, null);
+        transcript, null, null, null, null, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -232,7 +250,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Runnable openFind
   ) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, null, null, openUrl, openFind, null, null, null, null, null, null, null, null, null);
+        transcript, urlAt, null, null, openUrl, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -244,7 +262,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Runnable openFind
   ) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null, null, null, null, null, null, null, null, null);
+        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -257,7 +275,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<ProxyPlan> proxyPlanSupplier
   ) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier, null, null, null, null, null, null, null, null);
+        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -275,7 +293,11 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<Boolean> replyActionVisibleSupplier,
       Supplier<Boolean> reactActionVisibleSupplier,
       Consumer<String> onReplyToMessage,
-      Consumer<String> onReactToMessage
+      Consumer<String> onReactToMessage,
+      Supplier<Boolean> editActionVisibleSupplier,
+      Supplier<Boolean> redactActionVisibleSupplier,
+      Consumer<String> onEditMessage,
+      Consumer<String> onRedactMessage
   ) {
     return new ChatTranscriptContextMenuDecorator(
         transcript,
@@ -292,7 +314,11 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         replyActionVisibleSupplier,
         reactActionVisibleSupplier,
         onReplyToMessage,
-        onReactToMessage);
+        onReactToMessage,
+        editActionVisibleSupplier,
+        redactActionVisibleSupplier,
+        onEditMessage,
+        onRedactMessage);
   }
 
   public void setClearAction(Runnable clearAction) {
@@ -309,6 +335,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     boolean showLoadAroundAction = isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId;
     boolean showReplyAction = isActionVisible(replyActionVisibleSupplier);
     boolean showReactAction = isActionVisible(reactActionVisibleSupplier);
+    boolean showEditAction =
+        isActionVisible(editActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage;
+    boolean showRedactAction =
+        isActionVisible(redactActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage;
     menu.removeAll();
 
     if (url != null) {
@@ -321,7 +351,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
       maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
-      maybeAddReplyReactItems(showReplyAction, showReactAction);
+      maybeAddMessageActionItems(showReplyAction, showReactAction, showEditAction, showRedactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -334,7 +364,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
       maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
-      maybeAddReplyReactItems(showReplyAction, showReactAction);
+      maybeAddMessageActionItems(showReplyAction, showReactAction, showEditAction, showRedactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -354,14 +384,25 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     }
   }
 
-  private void maybeAddReplyReactItems(boolean showReplyAction, boolean showReactAction) {
-    if (!showReplyAction && !showReactAction) return;
+  private void maybeAddMessageActionItems(
+      boolean showReplyAction,
+      boolean showReactAction,
+      boolean showEditAction,
+      boolean showRedactAction
+  ) {
+    if (!showReplyAction && !showReactAction && !showEditAction && !showRedactAction) return;
     menu.addSeparator();
     if (showReplyAction) {
       menu.add(replyToMessageItem);
     }
     if (showReactAction) {
       menu.add(reactToMessageItem);
+    }
+    if (showEditAction) {
+      menu.add(editMessageItem);
+    }
+    if (showRedactAction) {
+      menu.add(redactMessageItem);
     }
   }
 
@@ -385,6 +426,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     loadAroundMessageItem.setEnabled(isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId);
     replyToMessageItem.setEnabled(isActionVisible(replyActionVisibleSupplier) && hasMessageId);
     reactToMessageItem.setEnabled(isActionVisible(reactActionVisibleSupplier) && hasMessageId);
+    editMessageItem.setEnabled(
+        isActionVisible(editActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage);
+    redactMessageItem.setEnabled(
+        isActionVisible(redactActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage);
 
     try {
       Document doc = transcript.getDocument();
@@ -468,6 +513,28 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (msgId == null || msgId.isBlank()) return;
     try {
       onReactToMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onEditMessage(ActionEvent e) {
+    if (!isActionVisible(editActionVisibleSupplier)) return;
+    if (!currentPopupOwnMessage) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onEditMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onRedactMessage(ActionEvent e) {
+    if (!isActionVisible(redactActionVisibleSupplier)) return;
+    if (!currentPopupOwnMessage) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onRedactMessage.accept(msgId);
     } catch (Exception ignored) {
     }
   }
@@ -596,8 +663,13 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (attrs == null) return LineIdentity.EMPTY;
     String msgId = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_MSGID), "").trim();
     String tags = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_IRCV3_TAGS), "").trim();
-    if (msgId.isBlank() && tags.isBlank()) return LineIdentity.EMPTY;
-    return new LineIdentity(msgId, tags);
+    boolean outgoing = Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_OUTGOING));
+    if (!outgoing) {
+      String dir = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_DIRECTION), "").trim();
+      outgoing = "OUT".equalsIgnoreCase(dir);
+    }
+    if (msgId.isBlank() && tags.isBlank() && !outgoing) return LineIdentity.EMPTY;
+    return new LineIdentity(msgId, tags, outgoing);
   }
 
   private LineIdentity lineIdentityAtPoint(Point p) {
@@ -618,14 +690,16 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
   static final class LineIdentity {
-    static final LineIdentity EMPTY = new LineIdentity("", "");
+    static final LineIdentity EMPTY = new LineIdentity("", "", false);
 
     private final String messageId;
     private final String ircv3Tags;
+    private final boolean outgoingOwnMessage;
 
-    LineIdentity(String messageId, String ircv3Tags) {
+    LineIdentity(String messageId, String ircv3Tags, boolean outgoingOwnMessage) {
       this.messageId = Objects.toString(messageId, "").trim();
       this.ircv3Tags = Objects.toString(ircv3Tags, "").trim();
+      this.outgoingOwnMessage = outgoingOwnMessage;
     }
 
     String messageId() {
@@ -634,6 +708,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
     String ircv3Tags() {
       return ircv3Tags;
+    }
+
+    boolean outgoingOwnMessage() {
+      return outgoingOwnMessage;
     }
   }
 
