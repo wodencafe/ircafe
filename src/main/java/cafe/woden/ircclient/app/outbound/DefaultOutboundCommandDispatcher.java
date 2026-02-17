@@ -13,6 +13,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
 
   private final OutboundModeCommandService outboundModeCommandService;
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
+  private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
   private final LocalFilterCommandService localFilterCommandService;
@@ -22,6 +23,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   public DefaultOutboundCommandDispatcher(
       OutboundModeCommandService outboundModeCommandService,
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
+      OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandService localFilterCommandService,
@@ -29,6 +31,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       UiPort ui) {
     this.outboundModeCommandService = outboundModeCommandService;
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
+    this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.localFilterCommandService = localFilterCommandService;
@@ -79,6 +82,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.CtcpPing cmd -> outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
       case ParsedInput.CtcpTime cmd -> outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
       case ParsedInput.Ctcp cmd -> outboundCtcpWhoisCommandService.handleCtcp(disposables, cmd.nick(), cmd.command(), cmd.args());
+      case ParsedInput.Dcc cmd -> outboundDccCommandService.handleDcc(disposables, cmd.subcommand(), cmd.nick(), cmd.argument());
       case ParsedInput.ChatHistoryBefore cmd -> outboundChatCommandService.handleChatHistoryBefore(disposables, cmd.limit(), cmd.selector());
       case ParsedInput.ChatHistoryLatest cmd -> outboundChatCommandService.handleChatHistoryLatest(disposables, cmd.limit(), cmd.selector());
       case ParsedInput.ChatHistoryBetween cmd ->

@@ -138,6 +138,10 @@ public class LinkPreviewFetchService {
         // Bump this when Instagram extraction/layout semantics change to avoid stale cached cards.
         return "ig-v2";
       }
+      if (ImgurPreviewUtil.isImgurUri(uri)) {
+        // Imgur has a dedicated resolver and metadata layout.
+        return "imgur-v1";
+      }
       if (NewsPreviewUtil.isLikelyNewsArticleUri(uri)) {
         // News previews can switch from plain OG to structured metadata+summary formatting.
         return "news-v2";

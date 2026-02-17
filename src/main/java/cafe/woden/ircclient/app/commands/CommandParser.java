@@ -284,6 +284,19 @@ public class CommandParser {
       return new ParsedInput.Ctcp(nick, cmd, args);
     }
 
+    if (matchesCommand(line, "/dcc")) {
+      return parseDccInput(argAfter(line, "/dcc"));
+    }
+
+    if (matchesCommand(line, "/dccmsg")) {
+      String rest = argAfter(line, "/dccmsg");
+      int sp = rest.indexOf(' ');
+      if (sp <= 0) return new ParsedInput.Dcc("msg", rest.trim(), "");
+      String nick = rest.substring(0, sp).trim();
+      String text = rest.substring(sp + 1).trim();
+      return new ParsedInput.Dcc("msg", nick, text);
+    }
+
 
 
     // IRCv3 CHATHISTORY
@@ -372,6 +385,31 @@ public class CommandParser {
     int count = parseIntOrZero(countRaw);
     if (count < 0) return new ParsedInput.Whowas("", 0);
     return new ParsedInput.Whowas(nick, count);
+  }
+
+  private static ParsedInput parseDccInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.Dcc("", "", "");
+
+    int sp1 = r.indexOf(' ');
+    if (sp1 < 0) {
+      return new ParsedInput.Dcc(r, "", "");
+    }
+
+    String sub = r.substring(0, sp1).trim();
+    String rest2 = r.substring(sp1 + 1).trim();
+    if (rest2.isEmpty()) {
+      return new ParsedInput.Dcc(sub, "", "");
+    }
+
+    int sp2 = rest2.indexOf(' ');
+    if (sp2 < 0) {
+      return new ParsedInput.Dcc(sub, rest2.trim(), "");
+    }
+
+    String nick = rest2.substring(0, sp2).trim();
+    String arg = rest2.substring(sp2 + 1).trim();
+    return new ParsedInput.Dcc(sub, nick, arg);
   }
 
   private static ParsedInput parseReplyInput(String rest) {

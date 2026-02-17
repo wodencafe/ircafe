@@ -44,6 +44,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final int X_THUMB_H = 90;
   private static final int INSTAGRAM_THUMB_W = 320;
   private static final int INSTAGRAM_THUMB_H = 320;
+  private static final int IMGUR_THUMB_W = 320;
+  private static final int IMGUR_THUMB_H = 320;
   private static final int MAX_TITLE_LINES = 2;
   private static final int DEFAULT_MAX_DESC_LINES = 3;
   private static final int WIKIPEDIA_MAX_DESC_LINES = 10;
@@ -54,6 +56,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final int X_MAX_DESC_LINES = 8;
   private static final int GITHUB_MAX_DESC_LINES = 6;
   private static final int INSTAGRAM_MAX_DESC_LINES = 28;
+  private static final int IMGUR_MAX_DESC_LINES = 24;
   private static final int NEWS_MAX_DESC_LINES = 22;
 
   // Padding tweaks for collapsed vs expanded previews.
@@ -95,6 +98,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private boolean imdbExtended;
   private boolean rtExtended;
   private boolean instagramExtended;
+  private boolean imgurExtended;
   private boolean newsExtended;
 
   private JLabel imdbMeta;
@@ -189,9 +193,14 @@ final class ChatLinkPreviewComponent extends JPanel {
     boolean instagramBySite = previewSite != null && previewSite.equalsIgnoreCase("instagram");
     boolean instagramByTitle = previewTitle != null && previewTitle.toLowerCase(Locale.ROOT).contains("instagram");
     instagramExtended = instagramByTarget || instagramByOriginal || instagramBySite || instagramByTitle;
+    boolean imgurByTarget = ImgurPreviewUtil.isImgurUrl(targetUrl);
+    boolean imgurByOriginal = ImgurPreviewUtil.isImgurUrl(url);
+    boolean imgurBySite = previewSite != null && previewSite.equalsIgnoreCase("imgur");
+    boolean imgurByDesc = ImgurPreviewUtil.looksLikeImgurDescription(safe(p.description()));
+    imgurExtended = !instagramExtended && (imgurByTarget || imgurByOriginal || imgurBySite || imgurByDesc);
     boolean newsByTarget = NewsPreviewUtil.isLikelyNewsArticleUrl(targetUrl);
     boolean newsBySite = NewsPreviewUtil.isLikelyNewsSiteName(previewSite);
-    newsExtended = !instagramExtended && (newsByTarget || newsBySite);
+    newsExtended = !instagramExtended && !imgurExtended && (newsByTarget || newsBySite);
     // Header: collapse button + site + title.
     header = new JPanel(new BorderLayout(8, 0));
     header.setOpaque(false);
@@ -235,19 +244,23 @@ final class ChatLinkPreviewComponent extends JPanel {
     header.add(headerText, BorderLayout.CENTER);
 
     // Body: optional thumbnail + description.
-    body = new JPanel(new BorderLayout(instagramExtended ? 0 : 10, instagramExtended ? 8 : 0));
+    body = new JPanel(new BorderLayout((instagramExtended || imgurExtended) ? 0 : 10, (instagramExtended || imgurExtended) ? 8 : 0));
     body.setOpaque(false);
 
     thumb = new JLabel();
     thumbHost = thumb;
-    thumbnailBesideText = !instagramExtended;
+    thumbnailBesideText = !(instagramExtended || imgurExtended);
     boolean tallPoster = imdbExtended || rtExtended;
     int thumbW = instagramExtended
         ? INSTAGRAM_THUMB_W
-        : (youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : (tallPoster ? IMDB_THUMB_W : THUMB_SIZE)));
+        : (imgurExtended
+            ? IMGUR_THUMB_W
+            : (youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : (tallPoster ? IMDB_THUMB_W : THUMB_SIZE))));
     int thumbH = instagramExtended
         ? INSTAGRAM_THUMB_H
-        : (youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : (tallPoster ? IMDB_THUMB_H : THUMB_SIZE)));
+        : (imgurExtended
+            ? IMGUR_THUMB_H
+            : (youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : (tallPoster ? IMDB_THUMB_H : THUMB_SIZE))));
     setThumbHostSize(thumbW, thumbH);
     thumb.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
@@ -286,7 +299,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     String rawDesc = safe(p.description());
 
     if (p.imageUrl() != null && !p.imageUrl().isBlank()) {
-      body.add(thumbHost, instagramExtended ? BorderLayout.NORTH : BorderLayout.WEST);
+      body.add(thumbHost, (instagramExtended || imgurExtended) ? BorderLayout.NORTH : BorderLayout.WEST);
       installImageOpenBehavior(p.imageUrl());
       loadThumbnail(p.imageUrl());
     }
@@ -449,6 +462,55 @@ final class ChatLinkPreviewComponent extends JPanel {
       if (igCenter.getComponentCount() > 0) {
         body.add(igCenter, BorderLayout.CENTER);
       }
+    } else if (imgurExtended && rawDesc != null && !rawDesc.isBlank()) {
+      ImgurDescParts parts = splitImgurDesc(rawDesc);
+
+      JPanel imgurCenter = new JPanel();
+      imgurCenter.setOpaque(false);
+      imgurCenter.setLayout(new BoxLayout(imgurCenter, BoxLayout.Y_AXIS));
+      imgurCenter.setAlignmentX(LEFT_ALIGNMENT);
+
+      if (parts.submitter() != null && !parts.submitter().isBlank()) {
+        JLabel submitter = keyValueLabel("Submitter", parts.submitter());
+        submitter.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setOpaque(false);
+        wrap.setAlignmentX(LEFT_ALIGNMENT);
+        wrap.add(submitter, BorderLayout.WEST);
+        imgurCenter.add(wrap);
+      }
+
+      if (parts.date() != null && !parts.date().isBlank()) {
+        JLabel date = keyValueLabel("Date", parts.date());
+        date.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setOpaque(false);
+        wrap.setAlignmentX(LEFT_ALIGNMENT);
+        wrap.add(date, BorderLayout.WEST);
+        imgurCenter.add(wrap);
+      }
+
+      String summaryText = parts.caption();
+      fullDescText = summaryText;
+      desc = textArea(summaryText, false);
+      if (desc != null) desc.setAlignmentX(LEFT_ALIGNMENT);
+
+      if (desc != null && !desc.getText().isBlank()) {
+        if (imgurCenter.getComponentCount() > 0) {
+          JSeparator sep = new JSeparator();
+          JPanel sepWrap = new JPanel(new BorderLayout());
+          sepWrap.setOpaque(false);
+          sepWrap.setAlignmentX(LEFT_ALIGNMENT);
+          sepWrap.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
+          sepWrap.add(sep, BorderLayout.CENTER);
+          imgurCenter.add(sepWrap);
+        }
+        imgurCenter.add(desc);
+      }
+
+      if (imgurCenter.getComponentCount() > 0) {
+        body.add(imgurCenter, BorderLayout.CENTER);
+      }
     } else if (newsExtended && rawDesc != null && !rawDesc.isBlank()) {
       NewsDescParts parts = splitNewsDesc(rawDesc);
 
@@ -586,21 +648,21 @@ final class ChatLinkPreviewComponent extends JPanel {
                   } catch (Exception ignored2) {
                     // best effort
                   }
-                  if (instagramExtended) {
+                  if (instagramExtended || imgurExtended) {
                     int inlineW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
                     if (inlineW > 0) {
-                      // Keep Instagram media inside the card's usable content width.
+                      // Keep vertical media previews inside the card's usable content width.
                       maxW = Math.max(120, inlineW - 28);
                     }
                   }
                   java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(img, maxW);
-                  if (instagramExtended) {
-                    // Portrait Instagram photos can exceed the initial placeholder height.
+                  if (instagramExtended || imgurExtended) {
+                    // Portrait photos can exceed the initial placeholder height.
                     // Grow the host to the scaled image so it doesn't look cramped/cropped.
                     setThumbHostSize(scaled.getWidth(), scaled.getHeight());
                   }
                   thumb.setIcon(new javax.swing.ImageIcon(scaled));
-                  if (instagramExtended) {
+                  if (instagramExtended || imgurExtended) {
                     lastMaxW = -1;
                     layoutForCurrentWidth();
                   }
@@ -711,6 +773,8 @@ final class ChatLinkPreviewComponent extends JPanel {
       maxDescLines = X_MAX_DESC_LINES;
     } else if (githubExtended) {
       maxDescLines = GITHUB_MAX_DESC_LINES;
+    } else if (imgurExtended) {
+      maxDescLines = IMGUR_MAX_DESC_LINES;
     } else if (instagramExtended) {
       maxDescLines = INSTAGRAM_MAX_DESC_LINES;
     } else if (newsExtended) {
@@ -946,6 +1010,58 @@ final class ChatLinkPreviewComponent extends JPanel {
   }
 
   private record InstagramDescParts(String author, String date, String caption) {}
+
+  private static ImgurDescParts splitImgurDesc(String rawDesc) {
+    if (rawDesc == null) return new ImgurDescParts(null, null, null);
+    String t = rawDesc.strip();
+    if (t.isEmpty()) return new ImgurDescParts(null, null, null);
+
+    String[] lines = t.split("\\R");
+    String submitter = null;
+    String date = null;
+    StringBuilder caption = new StringBuilder();
+
+    int i = 0;
+    for (; i < lines.length; i++) {
+      String line = lines[i] == null ? "" : lines[i].strip();
+      if (line.isBlank()) {
+        if (submitter != null || date != null) { i++; break; }
+        continue;
+      }
+
+      String lower = line.toLowerCase(Locale.ROOT);
+      if (lower.startsWith("submitter:")) {
+        submitter = safe(line.substring(line.indexOf(':') + 1));
+        continue;
+      }
+      if (lower.startsWith("author:")) {
+        submitter = safe(line.substring(line.indexOf(':') + 1));
+        continue;
+      }
+      if (lower.startsWith("date:")) {
+        date = safe(line.substring(line.indexOf(':') + 1));
+        continue;
+      }
+      break;
+    }
+
+    boolean started = false;
+    for (; i < lines.length; i++) {
+      String line = lines[i] == null ? "" : lines[i];
+      if (!started && line.isBlank()) continue;
+      started = true;
+      if (caption.length() > 0) caption.append("\n");
+      caption.append(line.strip());
+    }
+
+    String captionText = caption.isEmpty() ? null : caption.toString();
+    if (captionText != null) {
+      captionText = captionText.replaceFirst("(?is)^summary:\\s*", "");
+    }
+    return new ImgurDescParts(safe(submitter), safe(date), safe(captionText));
+  }
+
+  private record ImgurDescParts(String submitter, String date, String caption) {}
 
   private static JLabel keyValueLabel(String key, String value) {
     String k = key == null ? "" : key;

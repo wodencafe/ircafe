@@ -32,6 +32,7 @@ public sealed interface ParsedInput permits
     ParsedInput.CtcpPing,
     ParsedInput.CtcpTime,
     ParsedInput.Ctcp,
+    ParsedInput.Dcc,
     ParsedInput.Ignore,
     ParsedInput.Unignore,
     ParsedInput.IgnoreList,
@@ -147,6 +148,20 @@ public sealed interface ParsedInput permits
   record CtcpTime(String nick) implements ParsedInput {}
 
   record Ctcp(String nick, String command, String args) implements ParsedInput {}
+
+  /**
+   * /dcc <subcommand> [nick] [args...]
+   *
+   * <p>Examples:
+   * /dcc chat <nick>
+   * /dcc send <nick> <path>
+   * /dcc accept <nick>
+   * /dcc get <nick> [save-path]
+   * /dcc msg <nick> <text>
+   * /dcc close <nick>
+   * /dcc list
+   */
+  record Dcc(String subcommand, String nick, String argument) implements ParsedInput {}
 
   record Ignore(String maskOrNick) implements ParsedInput {}
 

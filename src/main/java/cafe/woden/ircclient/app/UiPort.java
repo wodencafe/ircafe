@@ -88,6 +88,16 @@ Flowable<TargetRef> targetActivations();
 
   void setServerConnectionState(String serverId, ConnectionState state);
 
+  /**
+   * Update best-effort online state for a private-message target icon in the server tree.
+   */
+  default void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {}
+
+  /**
+   * Clear all cached private-message online states for one server.
+   */
+  default void clearPrivateMessageOnlineStates(String serverId) {}
+
   
   void setInputEnabled(boolean enabled);
 

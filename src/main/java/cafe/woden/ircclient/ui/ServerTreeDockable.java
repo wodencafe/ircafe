@@ -25,6 +25,7 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Stroke;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,6 +38,7 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -71,6 +73,9 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
+  private static final Icon CHANNEL_ICON = new ChannelPoundIcon(13, 13);
+  private static final Icon PM_ONLINE_ICON = new PrivateMessageStatusIcon(true, 13, 13);
+  private static final Icon PM_OFFLINE_ICON = new PrivateMessageStatusIcon(false, 13, 13);
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
@@ -152,6 +157,7 @@ private static final class InsertionLine {
 
   private final Map<String, ServerNodes> servers = new HashMap<>();
   private final Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+  private final Map<TargetRef, Boolean> privateMessageOnlineByTarget = new HashMap<>();
 
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
 
@@ -805,6 +811,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     if (st == ConnectionState.DISCONNECTED) {
       serverStates.remove(serverId);
+      clearPrivateMessageOnlineStates(serverId);
     } else {
       serverStates.put(serverId, st);
     }
@@ -828,6 +835,54 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   @Deprecated
   public void setConnectedUi(boolean connected) {
     setConnectionControlsEnabled(!connected, connected);
+  }
+
+  private static boolean isPrivateMessageTarget(TargetRef ref) {
+    if (ref == null) return false;
+    return !ref.isStatus() && !ref.isChannel() && !ref.isUiOnly();
+  }
+
+  public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
+    String sid = Objects.toString(serverId, "").trim();
+    String n = Objects.toString(nick, "").trim();
+    if (sid.isEmpty() || n.isEmpty()) return;
+
+    TargetRef pm;
+    try {
+      pm = new TargetRef(sid, n);
+    } catch (Exception ignored) {
+      return;
+    }
+    if (!isPrivateMessageTarget(pm)) return;
+
+    privateMessageOnlineByTarget.put(pm, online);
+    DefaultMutableTreeNode node = leaves.get(pm);
+    if (node != null) {
+      model.nodeChanged(node);
+    }
+  }
+
+  public void clearPrivateMessageOnlineStates(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    java.util.ArrayList<TargetRef> changed = new java.util.ArrayList<>();
+    java.util.Iterator<Map.Entry<TargetRef, Boolean>> it = privateMessageOnlineByTarget.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<TargetRef, Boolean> e = it.next();
+      TargetRef ref = e.getKey();
+      if (ref != null && Objects.equals(ref.serverId(), sid)) {
+        changed.add(ref);
+        it.remove();
+      }
+    }
+
+    for (TargetRef ref : changed) {
+      DefaultMutableTreeNode node = leaves.get(ref);
+      if (node != null) {
+        model.nodeChanged(node);
+      }
+    }
   }
 
   public void ensureNode(TargetRef ref) {
@@ -864,6 +919,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
     DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, leafLabel));
     leaves.put(ref, leaf);
+    if (isPrivateMessageTarget(ref)) {
+      privateMessageOnlineByTarget.putIfAbsent(ref, Boolean.FALSE);
+    }
     int idx;
     if (ref.isChannel() && parent == sn.serverNode) {
       int beforePm = sn.serverNode.getChildCount();
@@ -896,6 +954,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref == null || ref.isStatus() || ref.isUiOnly()) return;
     DefaultMutableTreeNode node = leaves.remove(ref);
     if (node == null) return;
+    if (isPrivateMessageTarget(ref)) {
+      privateMessageOnlineByTarget.remove(ref);
+    }
 
     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
     if (parent != null) {
@@ -1227,6 +1288,7 @@ private void removeServerRoot(String serverId) {
   if (sn == null) return;
 
   serverStates.remove(serverId);
+  clearPrivateMessageOnlineStates(serverId);
   leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
 
   DefaultMutableTreeNode parent = (DefaultMutableTreeNode) sn.serverNode.getParent();
@@ -1457,6 +1519,15 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         } else {
           setFont(base.deriveFont(Font.PLAIN));
         }
+        if (nd.ref != null && nd.ref.isChannel()) {
+          setIcon(CHANNEL_ICON);
+          setDisabledIcon(CHANNEL_ICON);
+        } else if (isPrivateMessageTarget(nd.ref)) {
+          boolean online = Boolean.TRUE.equals(privateMessageOnlineByTarget.get(nd.ref));
+          Icon icon = online ? PM_ONLINE_ICON : PM_OFFLINE_ICON;
+          setIcon(icon);
+          setDisabledIcon(icon);
+        }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(prettyServerLabel(id));
         if (ephemeralServerIds.contains(id)) {
@@ -1472,6 +1543,180 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     }
 
     return c;
+  }
+}
+
+private static final class ChannelPoundIcon implements Icon {
+  private final int width;
+  private final int height;
+
+  private ChannelPoundIcon(int width, int height) {
+    this.width = Math.max(10, width);
+    this.height = Math.max(10, height);
+  }
+
+  @Override
+  public int getIconWidth() {
+    return width;
+  }
+
+  @Override
+  public int getIconHeight() {
+    return height;
+  }
+
+  @Override
+  public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+      Color fg = (c != null && c.getForeground() != null)
+          ? c.getForeground()
+          : UIManager.getColor("Tree.textForeground");
+      if (fg == null) fg = Color.GRAY;
+
+      Color bg = (c != null && c.getBackground() != null)
+          ? c.getBackground()
+          : UIManager.getColor("Tree.background");
+      if (bg == null) bg = new Color(0, 0, 0, 0);
+
+      float strokeW = Math.max(1.6f, Math.min(width, height) * 0.16f);
+      Stroke stroke = new BasicStroke(strokeW, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+      g2.setStroke(stroke);
+
+      int left = x + Math.round(width * 0.33f);
+      int right = x + Math.round(width * 0.67f);
+      int top = y + Math.round(height * 0.12f);
+      int bottom = y + Math.round(height * 0.88f);
+      int midA = y + Math.round(height * 0.40f);
+      int midB = y + Math.round(height * 0.63f);
+      int startX = x + Math.round(width * 0.12f);
+      int endX = x + Math.round(width * 0.88f);
+      int slant = Math.max(1, Math.round(width * 0.08f));
+
+      // Subtle depth pass to make the glyph feel less flat across themes.
+      g2.setColor(mix(fg, bg, 0.50f, 180));
+      g2.drawLine(left + 1, top + 1, left + 1, bottom + 1);
+      g2.drawLine(right + 1, top + 1, right + 1, bottom + 1);
+      g2.drawLine(startX + 1, midA + 1, endX + 1, midA - slant + 1);
+      g2.drawLine(startX + 1, midB + 1, endX + 1, midB - slant + 1);
+
+      // Foreground pass: fancy hash with a slight diagonal crossbar slant.
+      g2.setColor(fg);
+      g2.drawLine(left, top, left, bottom);
+      g2.drawLine(right, top, right, bottom);
+      g2.drawLine(startX, midA, endX, midA - slant);
+      g2.drawLine(startX, midB, endX, midB - slant);
+    } finally {
+      g2.dispose();
+    }
+  }
+
+  private static Color mix(Color a, Color b, float ratioA, int alpha) {
+    float ra = Math.max(0f, Math.min(1f, ratioA));
+    float rb = 1f - ra;
+    int r = Math.round(a.getRed() * ra + b.getRed() * rb);
+    int g = Math.round(a.getGreen() * ra + b.getGreen() * rb);
+    int bl = Math.round(a.getBlue() * ra + b.getBlue() * rb);
+    int al = Math.max(0, Math.min(255, alpha));
+    return new Color(r, g, bl, al);
+  }
+}
+
+private static final class PrivateMessageStatusIcon implements Icon {
+  private final boolean online;
+  private final int width;
+  private final int height;
+
+  private PrivateMessageStatusIcon(boolean online, int width, int height) {
+    this.online = online;
+    this.width = Math.max(10, width);
+    this.height = Math.max(10, height);
+  }
+
+  @Override
+  public int getIconWidth() {
+    return width;
+  }
+
+  @Override
+  public int getIconHeight() {
+    return height;
+  }
+
+  @Override
+  public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+      Color fg = (c != null && c.getForeground() != null)
+          ? c.getForeground()
+          : UIManager.getColor("Tree.textForeground");
+      if (fg == null) fg = Color.GRAY;
+
+      Color bg = (c != null && c.getBackground() != null)
+          ? c.getBackground()
+          : UIManager.getColor("Tree.background");
+      if (bg == null) bg = new Color(0, 0, 0, 0);
+
+      float strokeW = Math.max(1.4f, Math.min(width, height) * 0.13f);
+      g2.setStroke(new BasicStroke(strokeW, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+      int bubbleX = x + 1;
+      int bubbleY = y + Math.round(height * 0.16f);
+      int bubbleW = Math.max(6, Math.round(width * 0.72f));
+      int bubbleH = Math.max(5, Math.round(height * 0.58f));
+      int arc = Math.max(4, Math.round(height * 0.28f));
+
+      Color stroke = mix(fg, bg, 0.88f, 240);
+      g2.setColor(stroke);
+      g2.drawRoundRect(bubbleX, bubbleY, bubbleW, bubbleH, arc, arc);
+
+      int tailBaseX = bubbleX + Math.round(bubbleW * 0.30f);
+      int tailBaseY = bubbleY + bubbleH;
+      int tailTipX = tailBaseX - Math.max(1, Math.round(width * 0.10f));
+      int tailTipY = tailBaseY + Math.max(1, Math.round(height * 0.14f));
+      g2.drawLine(tailBaseX, tailBaseY, tailTipX, tailTipY);
+      g2.drawLine(tailTipX, tailTipY, tailBaseX + Math.max(2, Math.round(width * 0.13f)), tailBaseY);
+
+      int dotD = Math.max(4, Math.round(Math.min(width, height) * 0.30f));
+      int dotX = x + width - dotD - 1;
+      int dotY = y + height - dotD - 1;
+
+      Color dot = online ? onlineDotColor(fg, bg) : offlineDotColor(fg, bg);
+      g2.setColor(dot);
+      g2.fillOval(dotX, dotY, dotD, dotD);
+
+      g2.setColor(mix(bg, dot, 0.72f, 230));
+      g2.drawOval(dotX, dotY, dotD, dotD);
+    } finally {
+      g2.dispose();
+    }
+  }
+
+  private static Color onlineDotColor(Color fg, Color bg) {
+    Color candidate = UIManager.getColor("Actions.Green");
+    if (candidate == null) candidate = UIManager.getColor("Component.successColor");
+    if (candidate == null) candidate = new Color(46, 163, 94);
+    return mix(candidate, mix(fg, bg, 0.20f, 255), 0.90f, 245);
+  }
+
+  private static Color offlineDotColor(Color fg, Color bg) {
+    return mix(fg, bg, 0.36f, 225);
+  }
+
+  private static Color mix(Color a, Color b, float ratioA, int alpha) {
+    float ra = Math.max(0f, Math.min(1f, ratioA));
+    float rb = 1f - ra;
+    int r = Math.round(a.getRed() * ra + b.getRed() * rb);
+    int g = Math.round(a.getGreen() * ra + b.getGreen() * rb);
+    int bl = Math.round(a.getBlue() * ra + b.getBlue() * rb);
+    int al = Math.max(0, Math.min(255, alpha));
+    return new Color(r, g, bl, al);
   }
 }
 

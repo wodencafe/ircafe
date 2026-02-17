@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
+import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -54,6 +55,7 @@ public class IrcMediator {
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder;
   private final MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator;
   private final OutboundCommandDispatcher outboundCommandDispatcher;
+  private final OutboundDccCommandService outboundDccCommandService;
   private final TargetCoordinator targetCoordinator;
   private final UiSettingsBus uiSettingsBus;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
@@ -94,6 +96,7 @@ public class IrcMediator {
       MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder,
       MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator,
       OutboundCommandDispatcher outboundCommandDispatcher,
+      OutboundDccCommandService outboundDccCommandService,
       TargetCoordinator targetCoordinator,
       UiSettingsBus uiSettingsBus,
       NotificationRuleMatcher notificationRuleMatcher,
@@ -120,6 +123,7 @@ public class IrcMediator {
     this.mediatorUiSubscriptionBinder = mediatorUiSubscriptionBinder;
     this.mediatorHistoryIngestOrchestrator = mediatorHistoryIngestOrchestrator;
     this.outboundCommandDispatcher = outboundCommandDispatcher;
+    this.outboundDccCommandService = outboundDccCommandService;
     this.targetCoordinator = targetCoordinator;
     this.uiSettingsBus = uiSettingsBus;
     this.notificationRuleMatcher = notificationRuleMatcher;
@@ -435,6 +439,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       connectionCoordinator.handleConnectivityEvent(sid, e, targetCoordinator.getActiveTarget());
       if (e instanceof IrcEvent.Disconnected) {
         failPendingEchoesForServer(sid, "disconnected before echo");
+        ui.clearPrivateMessageOnlineStates(sid);
         targetCoordinator.onServerDisconnected(sid);
         whoisRoutingState.clearServer(sid);
         ctcpRoutingState.clearServer(sid);
@@ -549,6 +554,21 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef pm = new TargetRef(sid, ev.from());
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+        markPrivateMessagePeerOnline(sid, ev.from());
+
+        ParsedCtcp ctcp = parseCtcp(ev.text());
+        if (ctcp != null && "DCC".equals(ctcp.commandUpper())) {
+          InboundIgnorePolicy.Decision dccDecision = decideInbound(sid, ev.from(), true);
+          if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+          boolean dccHandled = outboundDccCommandService.handleInboundDccOffer(
+              ev.at(),
+              sid,
+              ev.from(),
+              ctcp.arg(),
+              dccDecision == InboundIgnorePolicy.Decision.SOFT_SPOILER);
+          if (dccHandled) return;
+        }
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
@@ -578,6 +598,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         TargetRef pm = new TargetRef(sid, ev.from());
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+        markPrivateMessagePeerOnline(sid, ev.from());
 
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
@@ -589,6 +610,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
       }
       case IrcEvent.Notice ev -> {
+        markPrivateMessagePeerOnline(sid, ev.from());
         boolean isCtcp = parseCtcp(ev.text()) != null;
         InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
         boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
@@ -654,6 +676,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         mediatorHistoryIngestOrchestrator.onZncPlaybackBatchReceived(sid, ev);
       }
       case IrcEvent.CtcpRequestReceived ev -> {
+        markPrivateMessagePeerOnline(sid, ev.from());
         InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
@@ -776,6 +799,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserQuitChannel ev -> {
+        markPrivateMessagePeerOffline(sid, ev.nick());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendPresence(chan, PresenceEvent.quit(ev.nick(), ev.reason()));
@@ -856,10 +880,16 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserAwayStateObserved ev -> {
+        if (ev.awayState() == IrcEvent.AwayState.AWAY || ev.awayState() == IrcEvent.AwayState.HERE) {
+          markPrivateMessagePeerOnline(sid, ev.nick());
+        }
         targetCoordinator.onUserAwayStateObserved(sid, ev);
       }
 
       case IrcEvent.UserAccountStateObserved ev -> {
+        if (ev.accountState() == IrcEvent.AccountState.LOGGED_IN || ev.accountState() == IrcEvent.AccountState.LOGGED_OUT) {
+          markPrivateMessagePeerOnline(sid, ev.nick());
+        }
         targetCoordinator.onUserAccountStateObserved(sid, ev);
       }
 
@@ -878,6 +908,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
       case IrcEvent.UserTypingObserved ev -> {
         if (isFromSelf(sid, ev.from())) return;
+        markPrivateMessagePeerOnline(sid, ev.from());
         TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
         String from = Objects.toString(ev.from(), "").trim();
         if (from.isEmpty()) from = "Someone";
@@ -1253,6 +1284,20 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     return fromNorm != null && fromNorm.equalsIgnoreCase(me);
   }
 
+  private void markPrivateMessagePeerOnline(String serverId, String rawNick) {
+    String nick = normalizePrivateMessagePeer(rawNick);
+    if (nick.isEmpty()) return;
+    if (isFromSelf(serverId, nick)) return;
+    ui.setPrivateMessageOnlineState(serverId, nick, true);
+  }
+
+  private void markPrivateMessagePeerOffline(String serverId, String rawNick) {
+    String nick = normalizePrivateMessagePeer(rawNick);
+    if (nick.isEmpty()) return;
+    if (isFromSelf(serverId, nick)) return;
+    ui.setPrivateMessageOnlineState(serverId, nick, false);
+  }
+
   private static String snippetAround(String message, int start, int end) {
     if (message == null) return "";
     int len = message.length();
@@ -1310,6 +1355,15 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
     }
     return s;
+  }
+
+  private static String normalizePrivateMessagePeer(String raw) {
+    String n = normalizeNickForCompare(raw);
+    n = Objects.toString(n, "").trim();
+    if (n.isEmpty()) return "";
+    if ("server".equalsIgnoreCase(n)) return "";
+    if (n.startsWith("*")) return "";
+    return n;
   }
 
   private static boolean containsNickToken(String message, String nick) {

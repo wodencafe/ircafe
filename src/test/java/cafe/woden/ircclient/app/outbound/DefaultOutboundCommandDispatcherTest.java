@@ -17,6 +17,7 @@ class DefaultOutboundCommandDispatcherTest {
 
   private final OutboundModeCommandService mode = mock(OutboundModeCommandService.class);
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
+  private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final OutboundIgnoreCommandService ignore = mock(OutboundIgnoreCommandService.class);
   private final LocalFilterCommandService filter = mock(LocalFilterCommandService.class);
@@ -28,6 +29,7 @@ class DefaultOutboundCommandDispatcherTest {
       new DefaultOutboundCommandDispatcher(
           mode,
           ctcp,
+          dcc,
           chat,
           ignore,
           filter,
@@ -56,6 +58,12 @@ class DefaultOutboundCommandDispatcherTest {
   void dispatchWhowasRoutesToWhoisService() {
     dispatcher.dispatch(disposables, new ParsedInput.Whowas("alice", 2));
     verify(ctcp).handleWhowas(disposables, "alice", 2);
+  }
+
+  @Test
+  void dispatchDccRoutesToDccService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Dcc("send", "alice", "/tmp/example.txt"));
+    verify(dcc).handleDcc(disposables, "send", "alice", "/tmp/example.txt");
   }
 
   @Test

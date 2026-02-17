@@ -328,6 +328,16 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
+    onEdt(() -> serverTree.setPrivateMessageOnlineState(serverId, nick, online));
+  }
+
+  @Override
+  public void clearPrivateMessageOnlineStates(String serverId) {
+    onEdt(() -> serverTree.clearPrivateMessageOnlineStates(serverId));
+  }
+
+  @Override
   public void setInputEnabled(boolean enabled) {
     onEdt(() -> {
       chat.setInputEnabled(enabled);

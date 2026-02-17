@@ -118,6 +118,36 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesDccSendWithPath() {
+    ParsedInput in = parser.parse("/dcc send alice /tmp/my file.txt");
+    assertTrue(in instanceof ParsedInput.Dcc);
+    ParsedInput.Dcc dcc = (ParsedInput.Dcc) in;
+    assertEquals("send", dcc.subcommand());
+    assertEquals("alice", dcc.nick());
+    assertEquals("/tmp/my file.txt", dcc.argument());
+  }
+
+  @Test
+  void parsesDccListWithoutNick() {
+    ParsedInput in = parser.parse("/dcc list");
+    assertTrue(in instanceof ParsedInput.Dcc);
+    ParsedInput.Dcc dcc = (ParsedInput.Dcc) in;
+    assertEquals("list", dcc.subcommand());
+    assertEquals("", dcc.nick());
+    assertEquals("", dcc.argument());
+  }
+
+  @Test
+  void parsesDccMsgAlias() {
+    ParsedInput in = parser.parse("/dccmsg alice hi there");
+    assertTrue(in instanceof ParsedInput.Dcc);
+    ParsedInput.Dcc dcc = (ParsedInput.Dcc) in;
+    assertEquals("msg", dcc.subcommand());
+    assertEquals("alice", dcc.nick());
+    assertEquals("hi there", dcc.argument());
+  }
+
+  @Test
   void parsesChatHistoryLimitOnly() {
     ParsedInput in = parser.parse("/chathistory 120");
     assertTrue(in instanceof ParsedInput.ChatHistoryBefore);

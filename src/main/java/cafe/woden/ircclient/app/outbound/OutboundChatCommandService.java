@@ -684,7 +684,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(
         out,
         "(help)",
-        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /chathistory /quote");
+        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /chathistory /quote /dcc");
     ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
     ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
     appendEditHelp(out);

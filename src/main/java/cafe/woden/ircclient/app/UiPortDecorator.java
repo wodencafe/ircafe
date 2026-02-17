@@ -175,6 +175,16 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
+    delegate.setPrivateMessageOnlineState(serverId, nick, online);
+  }
+
+  @Override
+  public void clearPrivateMessageOnlineStates(String serverId) {
+    delegate.clearPrivateMessageOnlineStates(serverId);
+  }
+
+  @Override
   public void setInputEnabled(boolean enabled) {
     delegate.setInputEnabled(enabled);
   }

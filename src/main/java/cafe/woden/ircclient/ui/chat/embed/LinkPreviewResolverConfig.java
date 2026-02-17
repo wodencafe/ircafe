@@ -59,36 +59,42 @@ public class LinkPreviewResolverConfig {
 
   @Bean
   @Order(8)
+  LinkPreviewResolver imgurLinkPreviewResolver() {
+    return new ImgurLinkPreviewResolver(DEFAULT_MAX_HTML_BYTES);
+  }
+
+  @Bean
+  @Order(9)
   LinkPreviewResolver gitHubLinkPreviewResolver() {
     return new GitHubLinkPreviewResolver();
   }
 
   @Bean
-  @Order(9)
+  @Order(10)
   LinkPreviewResolver redditLinkPreviewResolver() {
     return new RedditLinkPreviewResolver();
   }
 
   @Bean
-  @Order(10)
+  @Order(11)
   LinkPreviewResolver mastodonStatusApiPreviewResolver() {
     return new MastodonStatusApiPreviewResolver();
   }
 
   @Bean
-  @Order(11)
+  @Order(12)
   LinkPreviewResolver oEmbedLinkPreviewResolver() {
     return new OEmbedLinkPreviewResolver(OEmbedLinkPreviewResolver.defaultProviders());
   }
 
   @Bean
-  @Order(12)
+  @Order(13)
   LinkPreviewResolver newsLinkPreviewResolver() {
     return new NewsLinkPreviewResolver(DEFAULT_MAX_HTML_BYTES);
   }
 
   @Bean
-  @Order(13)
+  @Order(14)
   LinkPreviewResolver openGraphLinkPreviewResolver() {
     return new OpenGraphLinkPreviewResolver(DEFAULT_MAX_HTML_BYTES);
   }
