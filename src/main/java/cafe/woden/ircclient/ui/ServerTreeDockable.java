@@ -982,14 +982,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private void syncUiLeafVisibility() {
-    boolean modelChanged = false;
     TargetRef selected = selectedTargetRef();
 
     for (ServerNodes sn : servers.values()) {
       if (sn == null || sn.serverNode == null) continue;
 
-      modelChanged |= ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
-      modelChanged |= ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
+      ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
+      ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
     }
 
     if (selected != null) {
@@ -998,10 +997,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       } else if (selected.isDccTransfers() && !showDccTransfersNodes) {
         selectTarget(new TargetRef(selected.serverId(), "status"));
       }
-    }
-
-    if (modelChanged) {
-      model.reload(root);
     }
   }
 
@@ -1016,9 +1011,17 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (!visible) {
       if (existing == null) return false;
       DefaultMutableTreeNode parent = (DefaultMutableTreeNode) existing.getParent();
+      int idx = parent == null ? -1 : parent.getIndex(existing);
       leaves.remove(ref);
       if (parent != null) {
-        parent.remove(existing);
+        Object[] removed = new Object[] { existing };
+        if (idx < 0) {
+          parent.remove(existing);
+          model.nodeStructureChanged(parent);
+        } else {
+          parent.remove(existing);
+          model.nodesWereRemoved(parent, new int[] { idx }, removed);
+        }
       }
       return true;
     }
@@ -1028,6 +1031,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     leaves.put(ref, leaf);
     int idx = fixedLeafInsertIndexFor(sn, ref);
     sn.serverNode.insert(leaf, idx);
+    model.nodesWereInserted(sn.serverNode, new int[] { idx });
     return true;
   }
 
