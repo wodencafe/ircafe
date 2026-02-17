@@ -48,8 +48,11 @@ import javax.swing.ToolTipManager;
 import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.Action;
+import javax.swing.AbstractAction;
 import javax.swing.SwingUtilities;
 import javax.swing.JViewport;
+import javax.swing.JComponent;
+import javax.swing.KeyStroke;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -57,6 +60,8 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreePath;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -77,6 +82,8 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final Icon CHANNEL_ICON = new ChannelPoundIcon(13, 13);
   private static final Icon PM_ONLINE_ICON = new PrivateMessageStatusIcon(true, 13, 13);
   private static final Icon PM_OFFLINE_ICON = new PrivateMessageStatusIcon(false, 13, 13);
+  public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
+  public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
@@ -178,6 +185,8 @@ private static final class InsertionLine {
   private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin = new HashMap<>();
 
   private final NotificationStore notificationStore;
+  private volatile boolean showChannelListNodes = false;
+  private volatile boolean showDccTransfersNodes = false;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -226,6 +235,7 @@ private static final class InsertionLine {
         },
         ref -> closeTargetRequests.onNext(ref)
     );
+    installTreeKeyBindings();
 
     JScrollPane scroll = new JScrollPane(tree);
     scroll.setPreferredSize(new Dimension(260, 400));
@@ -681,14 +691,20 @@ private boolean isRootServerNode(DefaultMutableTreeNode node) {
 
   private int maxInsertIndex(DefaultMutableTreeNode serverNode) {
     if (serverNode == null) return 0;
-    int count = serverNode.getChildCount();
-    if (count == 0) return 0;
-
-    DefaultMutableTreeNode last = (DefaultMutableTreeNode) serverNode.getChildAt(count - 1);
-    if (isPrivateMessagesGroupNode(last)) {
-      return count - 1;
+    int idx = serverNode.getChildCount();
+    while (idx > 0) {
+      DefaultMutableTreeNode tail = (DefaultMutableTreeNode) serverNode.getChildAt(idx - 1);
+      if (isReservedServerTailNode(tail)) {
+        idx--;
+        continue;
+      }
+      break;
     }
-    return count;
+    return idx;
+  }
+
+  private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
+    return isPrivateMessagesGroupNode(node) || isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node);
   }
 
 private void setInsertionLine(InsertionLine line) {
@@ -838,6 +854,85 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     setConnectionControlsEnabled(!connected, connected);
   }
 
+  public boolean isChannelListNodesVisible() {
+    return showChannelListNodes;
+  }
+
+  public boolean isDccTransfersNodesVisible() {
+    return showDccTransfersNodes;
+  }
+
+  public void setChannelListNodesVisible(boolean visible) {
+    boolean old = showChannelListNodes;
+    boolean next = visible;
+    if (old == next) return;
+    showChannelListNodes = next;
+    syncUiLeafVisibility();
+    firePropertyChange(PROP_CHANNEL_LIST_NODES_VISIBLE, old, next);
+  }
+
+  public void setDccTransfersNodesVisible(boolean visible) {
+    boolean old = showDccTransfersNodes;
+    boolean next = visible;
+    if (old == next) return;
+    showDccTransfersNodes = next;
+    syncUiLeafVisibility();
+    firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
+  }
+
+  public boolean canOpenSelectedNodeInChatDock() {
+    return selectedTargetRef() != null;
+  }
+
+  public void openSelectedNodeInChatDock() {
+    TargetRef ref = selectedTargetRef();
+    if (ref == null) return;
+    openPinnedChatRequests.onNext(ref);
+  }
+
+  private void installTreeKeyBindings() {
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        "ircafe.tree.nodeMoveUp");
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        "ircafe.tree.nodeMoveDown");
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK),
+        "ircafe.tree.closeNode");
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0),
+        "ircafe.tree.closeNode");
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        "ircafe.tree.openPinnedDock");
+
+    tree.getActionMap().put("ircafe.tree.nodeMoveUp", new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        moveNodeUpAction().actionPerformed(e);
+      }
+    });
+    tree.getActionMap().put("ircafe.tree.nodeMoveDown", new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        moveNodeDownAction().actionPerformed(e);
+      }
+    });
+    tree.getActionMap().put("ircafe.tree.closeNode", new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        closeNodeAction().actionPerformed(e);
+      }
+    });
+    tree.getActionMap().put("ircafe.tree.openPinnedDock", new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        openSelectedNodeInChatDock();
+      }
+    });
+  }
+
   private static boolean isPrivateMessageTarget(TargetRef ref) {
     if (ref == null) return false;
     return !ref.isStatus() && !ref.isChannel() && !ref.isUiOnly();
@@ -886,8 +981,93 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
   }
 
+  private void syncUiLeafVisibility() {
+    boolean modelChanged = false;
+    TargetRef selected = selectedTargetRef();
+
+    for (ServerNodes sn : servers.values()) {
+      if (sn == null || sn.serverNode == null) continue;
+
+      modelChanged |= ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
+      modelChanged |= ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
+    }
+
+    if (selected != null) {
+      if (selected.isChannelList() && !showChannelListNodes) {
+        selectTarget(new TargetRef(selected.serverId(), "status"));
+      } else if (selected.isDccTransfers() && !showDccTransfersNodes) {
+        selectTarget(new TargetRef(selected.serverId(), "status"));
+      }
+    }
+
+    if (modelChanged) {
+      model.reload(root);
+    }
+  }
+
+  private boolean ensureUiLeafVisible(
+      ServerNodes sn,
+      TargetRef ref,
+      String label,
+      boolean visible
+  ) {
+    if (sn == null || ref == null) return false;
+    DefaultMutableTreeNode existing = leaves.get(ref);
+    if (!visible) {
+      if (existing == null) return false;
+      DefaultMutableTreeNode parent = (DefaultMutableTreeNode) existing.getParent();
+      leaves.remove(ref);
+      if (parent != null) {
+        parent.remove(existing);
+      }
+      return true;
+    }
+
+    if (existing != null) return false;
+    DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, label));
+    leaves.put(ref, leaf);
+    int idx = fixedLeafInsertIndexFor(sn, ref);
+    sn.serverNode.insert(leaf, idx);
+    return true;
+  }
+
+  private int fixedLeafInsertIndexFor(ServerNodes sn, TargetRef ref) {
+    int idx = 0;
+    if (leaves.containsKey(sn.statusRef)) idx++;
+    if (leaves.containsKey(sn.notificationsRef)) idx++;
+
+    boolean hasChannelList = leaves.containsKey(sn.channelListRef);
+    boolean hasDccTransfers = leaves.containsKey(sn.dccTransfersRef);
+
+    if (ref.equals(sn.channelListRef)) {
+      return idx;
+    }
+
+    if (hasChannelList) idx++;
+    if (ref.equals(sn.dccTransfersRef)) {
+      return idx;
+    }
+
+    if (hasDccTransfers) idx++;
+    return Math.min(idx, sn.serverNode.getChildCount());
+  }
+
+  private TargetRef selectedTargetRef() {
+    DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+    if (node == null) return null;
+    Object uo = node.getUserObject();
+    if (uo instanceof NodeData nd) return nd.ref;
+    return null;
+  }
+
   public void ensureNode(TargetRef ref) {
     Objects.requireNonNull(ref, "ref");
+    if (ref.isChannelList() && !showChannelListNodes) {
+      setChannelListNodesVisible(true);
+    }
+    if (ref.isDccTransfers() && !showDccTransfersNodes) {
+      setDccTransfersNodesVisible(true);
+    }
     if (leaves.containsKey(ref)) return;
 
     ServerNodes sn = servers.get(ref.serverId());
@@ -1173,8 +1353,8 @@ private void syncServers(List<ServerEntry> latest) {
 
     DefaultMutableTreeNode group = new DefaultMutableTreeNode(SOJU_NETWORKS_GROUP_LABEL);
 
-    // Insert right after fixed leaves (status + notifications + channel list + dcc transfers) and before PMs.
-    int insertIdx = 4;
+    // Insert right after fixed leaves (status + notifications + optional UI-only leaves) and before PMs.
+    int insertIdx = fixedLeafCount(originNodes);
     int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
     if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
     insertIdx = Math.min(insertIdx, originNodes.serverNode.getChildCount());
@@ -1203,8 +1383,8 @@ private void syncServers(List<ServerEntry> latest) {
 
     DefaultMutableTreeNode group = new DefaultMutableTreeNode(ZNC_NETWORKS_GROUP_LABEL);
 
-    // Insert right after fixed leaves (status + notifications + channel list + dcc transfers) and before PMs.
-    int insertIdx = 4;
+    // Insert right after fixed leaves (status + notifications + optional UI-only leaves) and before PMs.
+    int insertIdx = fixedLeafCount(originNodes);
     int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
     if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
     insertIdx = Math.min(insertIdx, originNodes.serverNode.getChildCount());
@@ -1219,6 +1399,16 @@ private void syncServers(List<ServerEntry> latest) {
     Object uo = node.getUserObject();
     if (uo instanceof String s && ZNC_NETWORKS_GROUP_LABEL.equals(s)) return true;
     return zncNetworksGroupByOrigin.containsValue(node);
+  }
+
+  private int fixedLeafCount(ServerNodes originNodes) {
+    if (originNodes == null) return 0;
+    int count = 0;
+    if (leaves.containsKey(originNodes.statusRef)) count++;
+    if (leaves.containsKey(originNodes.notificationsRef)) count++;
+    if (leaves.containsKey(originNodes.channelListRef)) count++;
+    if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
+    return count;
   }
 
   private String toolTipForEvent(MouseEvent event) {
@@ -1366,14 +1556,19 @@ private void removeServerRoot(String serverId) {
     leaves.put(notificationsRef, notificationsLeaf);
 
     TargetRef channelListRef = TargetRef.channelList(id);
-    DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
-    serverNode.insert(channelListLeaf, 2);
-    leaves.put(channelListRef, channelListLeaf);
+    if (showChannelListNodes) {
+      DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
+      serverNode.insert(channelListLeaf, 2);
+      leaves.put(channelListRef, channelListLeaf);
+    }
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
-    DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
-    serverNode.insert(dccTransfersLeaf, 3);
-    leaves.put(dccTransfersRef, dccTransfersLeaf);
+    if (showDccTransfersNodes) {
+      int dccIndex = showChannelListNodes ? 3 : 2;
+      DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
+      serverNode.insert(dccTransfersLeaf, dccIndex);
+      leaves.put(dccTransfersRef, dccTransfersLeaf);
+    }
 
     serverNode.add(pmNode);
 

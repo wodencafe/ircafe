@@ -13,6 +13,8 @@ import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.Font;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -21,6 +23,11 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import javax.swing.BorderFactory;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSplitPane;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 
 /**
@@ -55,6 +62,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private final MessageInputPanel inputPanel;
   private final CompositeDisposable disposables = new CompositeDisposable();
+  private final TopicPanel topicPanel = new TopicPanel();
+  private final JSplitPane topicSplit;
+  private static final int TOPIC_DIVIDER_SIZE = 6;
+  private int lastTopicHeightPx = 58;
+  private boolean topicVisible = false;
 
   public PinnedChatDockable(TargetRef target,
                            ChatTranscriptStore transcripts,
@@ -82,6 +94,22 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     setName(getTabText());
     setDocument(transcripts.document(target));
+    remove(scroll);
+    topicSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topicPanel, scroll);
+    topicSplit.setResizeWeight(0.0);
+    topicSplit.setBorder(null);
+    topicSplit.setOneTouchExpandable(true);
+    topicPanel.setMinimumSize(new Dimension(0, 0));
+    topicPanel.setPreferredSize(new Dimension(10, lastTopicHeightPx));
+    topicSplit.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+      if (!topicVisible) return;
+      Object v = evt.getNewValue();
+      if (v instanceof Integer i) {
+        lastTopicHeightPx = Math.max(0, i);
+      }
+    });
+    add(topicSplit, BorderLayout.CENTER);
+    hideTopicPanel();
 
     // Context menu: Clear (buffer only) + Reload recent history (clear + reload from DB/bouncer).
     setTranscriptContextMenuActions(
@@ -175,6 +203,24 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
    */
   public String getDraftText() {
     return inputPanel.getDraftText();
+  }
+
+  public void setTopic(String topic) {
+    if (target == null || !target.isChannel()) {
+      topicPanel.setTopic("", "");
+      hideTopicPanel();
+      return;
+    }
+
+    String sanitized = sanitizeTopic(topic).trim();
+    if (sanitized.isEmpty()) {
+      topicPanel.setTopic(target.target(), "");
+      hideTopicPanel();
+      return;
+    }
+
+    topicPanel.setTopic(target.target(), sanitized);
+    showTopicPanel();
   }
 
   @Override
@@ -432,6 +478,64 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private static String b64(String s) {
     if (s == null) s = "";
     return Base64.getUrlEncoder().withoutPadding().encodeToString(s.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private void showTopicPanel() {
+    topicVisible = true;
+    topicPanel.setVisible(true);
+    topicSplit.setDividerSize(TOPIC_DIVIDER_SIZE);
+    int targetHeight = Math.max(28, Math.min(lastTopicHeightPx, 200));
+    topicSplit.setDividerLocation(targetHeight);
+    revalidate();
+    repaint();
+  }
+
+  private void hideTopicPanel() {
+    topicVisible = false;
+    topicPanel.setVisible(false);
+    topicSplit.setDividerSize(0);
+    topicSplit.setDividerLocation(0);
+    revalidate();
+    repaint();
+  }
+
+  private static String sanitizeTopic(String topic) {
+    if (topic == null) return "";
+    return topic.replaceAll("[\\x00-\\x1F\\x7F]", "");
+  }
+
+  private static final class TopicPanel extends JPanel {
+    private final JLabel header = new JLabel();
+    private final JTextArea text = new JTextArea();
+
+    private TopicPanel() {
+      super(new BorderLayout(8, 6));
+
+      header.setFont(header.getFont().deriveFont(Font.BOLD));
+
+      text.setEditable(false);
+      text.setLineWrap(true);
+      text.setWrapStyleWord(true);
+      text.setOpaque(false);
+      text.setBorder(null);
+
+      JPanel top = new JPanel(new BorderLayout());
+      top.setOpaque(false);
+      top.add(header, BorderLayout.WEST);
+
+      setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+      setOpaque(true);
+
+      add(top, BorderLayout.NORTH);
+      add(text, BorderLayout.CENTER);
+    }
+
+    void setTopic(String channelName, String topic) {
+      String ch = (channelName == null) ? "" : channelName.trim();
+      header.setText(ch.isEmpty() ? "Topic" : "Topic - " + ch);
+      text.setText(topic == null ? "" : topic);
+      text.setCaretPosition(0);
+    }
   }
 
   private void onLocalTypingStateChanged(String state) {

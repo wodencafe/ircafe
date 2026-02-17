@@ -82,10 +82,10 @@ private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode paren
 
   int idx = count - 1;
   if (parentIsServer) {
-    // Keep reserved group nodes at the bottom of the server node ("Soju Networks", "Private messages").
+    // Keep reserved group nodes at the bottom of the server node.
     while (idx >= 0) {
       DefaultMutableTreeNode tail = (DefaultMutableTreeNode) parent.getChildAt(idx);
-      if (isPrivateMessagesGroupNode(tail) || isSojuNetworksGroupNode(tail)) {
+      if (isReservedServerTailNode(tail)) {
         idx--;
         continue;
       }
@@ -95,11 +95,22 @@ private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode paren
   return idx;
 }
 
+private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
+  return isPrivateMessagesGroupNode(node) || isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node);
+}
+
 private boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
   if (node == null) return false;
   Object uo = node.getUserObject();
   if (!(uo instanceof String s)) return false;
   return s.trim().equalsIgnoreCase("Soju Networks");
+}
+
+private boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
+  if (node == null) return false;
+  Object uo = node.getUserObject();
+  if (!(uo instanceof String s)) return false;
+  return s.trim().equalsIgnoreCase("ZNC Networks");
 }
 
 private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {

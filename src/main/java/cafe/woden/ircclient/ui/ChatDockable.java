@@ -82,6 +82,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
+  private final FlowableProcessor<TopicUpdate> topicUpdates =
+      PublishProcessor.<TopicUpdate>create().toSerialized();
 
   private final Map<TargetRef, ViewState> stateByTarget = new HashMap<>();
   private final ViewState fallbackState = new ViewState();
@@ -108,6 +110,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private boolean topicVisible = false;
 
   private TargetRef activeTarget;
+
+  /** Channel topic update for pinned docks and other secondary views. */
+  public record TopicUpdate(TargetRef target, String topic) {}
 
   public ChatDockable(ChatTranscriptStore transcripts,
                      ServerTreeDockable serverTree,
@@ -391,23 +396,45 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (!target.isChannel()) return;
 
     String sanitized = sanitizeTopic(topic);
-    if (sanitized.isBlank()) {
+    String normalized = sanitized.isBlank() ? "" : sanitized;
+    String before = topicByTarget.getOrDefault(target, "");
+    if (Objects.equals(before, normalized)) {
+      if (target.equals(activeTarget)) {
+        updateTopicPanelForActiveTarget();
+      }
+      return;
+    }
+
+    if (normalized.isBlank()) {
       topicByTarget.remove(target);
     } else {
-      topicByTarget.put(target, sanitized);
+      topicByTarget.put(target, normalized);
     }
 
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget();
     }
+    topicUpdates.onNext(new TopicUpdate(target, normalized));
   }
 
   public void clearTopic(TargetRef target) {
     if (target == null) return;
-    topicByTarget.remove(target);
+    String removed = topicByTarget.remove(target);
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget();
     }
+    if (target.isChannel() && removed != null && !removed.isBlank()) {
+      topicUpdates.onNext(new TopicUpdate(target, ""));
+    }
+  }
+
+  public String topicFor(TargetRef target) {
+    if (target == null) return "";
+    return topicByTarget.getOrDefault(target, "");
+  }
+
+  public Flowable<TopicUpdate> topicUpdates() {
+    return topicUpdates.onBackpressureLatest();
   }
 
   public void beginChannelList(String serverId, String banner) {

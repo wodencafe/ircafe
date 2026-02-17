@@ -91,6 +91,12 @@ public class ChatDockManager {
             .subscribe(this::openPinned,
                 err -> log.error("[ircafe] pinned chat stream error", err))
     );
+    disposables.add(
+        mainChat.topicUpdates()
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(this::onTopicUpdated,
+                err -> log.error("[ircafe] topic update stream error", err))
+    );
   }
 
   @PreDestroy
@@ -249,6 +255,7 @@ public class ChatDockManager {
 
     // Keep in sync with current settings/draft even for already-registered dockables.
     dock.setInputEnabled(pinnedInputsEnabled);
+    dock.setTopic(mainChat.topicFor(target));
 
     // Avoid clobbering undo/caret state unless we actually need to apply a different draft.
     String desiredDraft = pinnedDrafts.get(target);
@@ -274,6 +281,18 @@ public class ChatDockManager {
 
     try {
       dock.onShown();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onTopicUpdated(ChatDockable.TopicUpdate update) {
+    if (update == null) return;
+    TargetRef target = update.target();
+    if (target == null) return;
+    PinnedChatDockable dock = openPinned.get(target);
+    if (dock == null) return;
+    try {
+      dock.setTopic(update.topic());
     } catch (Exception ignored) {
     }
   }

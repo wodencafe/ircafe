@@ -17,6 +17,7 @@ import io.github.andrewauclair.moderndocking.app.Docking;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -141,19 +142,51 @@ public class AppMenuBar extends JMenuBar {
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     resetLayout.addActionListener(e -> resetDockLayout());
 
+    JCheckBoxMenuItem showChannelListNodes = new JCheckBoxMenuItem("Show Channel List Nodes");
+    showChannelListNodes.setSelected(serverTree.isChannelListNodesVisible());
+    showChannelListNodes.addActionListener(e ->
+        serverTree.setChannelListNodesVisible(showChannelListNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_CHANNEL_LIST_NODES_VISIBLE, evt ->
+        showChannelListNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JCheckBoxMenuItem showDccNodes = new JCheckBoxMenuItem("Show DCC Transfers Nodes");
+    showDccNodes.setSelected(serverTree.isDccTransfersNodesVisible());
+    showDccNodes.addActionListener(e ->
+        serverTree.setDccTransfersNodesVisible(showDccNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
+        showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JMenuItem openSelectedNodeDock = new JMenuItem("Open Selected Node in Chat Dock");
+    openSelectedNodeDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    openSelectedNodeDock.addActionListener(e -> serverTree.openSelectedNodeInChatDock());
+
     window.add(reopenServersDock);
     window.add(reopenUsersDock);
     window.add(reopenTerminalDock);
     window.addSeparator();
     window.add(resetLayout);
     window.addSeparator();
+    window.add(showChannelListNodes);
+    window.add(showDccNodes);
+    window.addSeparator();
+    window.add(openSelectedNodeDock);
+    window.addSeparator();
 
     // Node actions come from the server tree controller.
     // Enabled/disabled state updates automatically based on the tree selection.
-    window.add(new JMenuItem(serverTree.moveNodeUpAction()));
-    window.add(new JMenuItem(serverTree.moveNodeDownAction()));
+    JMenuItem moveNodeUp = new JMenuItem(serverTree.moveNodeUpAction());
+    moveNodeUp.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_UP,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    JMenuItem moveNodeDown = new JMenuItem(serverTree.moveNodeDownAction());
+    moveNodeDown.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    JMenuItem closeNode = new JMenuItem(serverTree.closeNodeAction());
+    closeNode.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
+    window.add(moveNodeUp);
+    window.add(moveNodeDown);
     window.addSeparator();
-    window.add(new JMenuItem(serverTree.closeNodeAction()));
+    window.add(closeNode);
 
     // Servers
     JMenu servers = new JMenu("Servers");
