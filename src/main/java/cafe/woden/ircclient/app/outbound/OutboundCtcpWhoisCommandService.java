@@ -12,7 +12,7 @@ import java.util.Locale;
 import org.springframework.stereotype.Component;
 
 /**
- * Handles outbound WHOIS and CTCP actions.
+ * Handles outbound WHOIS/WHOWAS and CTCP actions.
  *
  * <p>Extracted from {@code IrcMediator} to keep the mediator focused on wiring and inbound routing.
  * Behavior is intended to match the previous in-mediator implementation.
@@ -80,6 +80,60 @@ public class OutboundCtcpWhoisCommandService {
     String token = Long.toString(System.currentTimeMillis());
     // Preserve previous UX: do not show the token in the status line for the context-menu ping.
     sendCtcpForUserAction(disposables, ctx, nick, "PING", token, token, "→ " + nick + " PING");
+  }
+
+
+  public void handleWhois(CompositeDisposable disposables, String nick) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(whois)", "Select a server first.");
+      return;
+    }
+
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) {
+      ui.appendStatus(at, "(whois)", "Usage: /whois <nick>");
+      return;
+    }
+
+    requestWhois(disposables, at, n);
+  }
+
+  public void handleWhowas(CompositeDisposable disposables, String nick, int count) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(whowas)", "Select a server first.");
+      return;
+    }
+
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) {
+      ui.appendStatus(at, "(whowas)", "Usage: /whowas <nick> [count]");
+      return;
+    }
+    if (count < 0) {
+      ui.appendStatus(at, "(whowas)", "Usage: /whowas <nick> [count]");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+
+    ui.ensureTargetExists(at);
+    if (count > 0) {
+      ui.appendStatus(at, "(whowas)", "Requesting WHOWAS for " + n + " (" + count + ")...");
+    } else {
+      ui.appendStatus(at, "(whowas)", "Requesting WHOWAS for " + n + "...");
+    }
+
+    disposables.add(
+        irc.whowas(at.serverId(), n, count).subscribe(
+            () -> {},
+            err -> ui.appendError(at, "(whowas)", String.valueOf(err))
+        )
+    );
   }
 
 

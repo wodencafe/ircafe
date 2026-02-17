@@ -185,6 +185,11 @@ public class MainFrame extends JFrame {
     addWindowListener(new WindowAdapter() {
       @Override
       public void windowClosing(WindowEvent e) {
+        try {
+          setVisible(false);
+          dispose();
+        } catch (Exception ignored) {
+        }
         shutdownCoordinator.shutdown();
       }
     });

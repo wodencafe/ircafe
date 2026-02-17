@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.UiProperties;
@@ -9,9 +8,7 @@ import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
-import cafe.woden.ircclient.ui.settings.ThemeManager;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -20,11 +17,10 @@ import io.github.andrewauclair.moderndocking.app.Docking;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import javax.swing.ButtonGroup;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
-import javax.swing.JRadioButtonMenuItem;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -55,9 +51,7 @@ public class AppMenuBar extends JMenuBar {
   public AppMenuBar(PreferencesDialog preferencesDialog,
                     NickColorOverridesDialog nickColorOverridesDialog,
                     IgnoreListDialog ignoreListDialog,
-                    UiSettingsBus settingsBus,
-                    ThemeManager themeManager,
-                    RuntimeConfigStore runtimeConfig,
+                    ThemeSelectionDialog themeSelectionDialog,
                     ServerDialogs serverDialogs,
                     UiProperties uiProps,
                     ChatDockable chat,
@@ -88,26 +82,12 @@ public class AppMenuBar extends JMenuBar {
     // Settings
     JMenu settings = new JMenu("Settings");
 
-    JMenu theme = new JMenu("Theme");
-    ButtonGroup themeGroup = new ButtonGroup();
-    for (ThemeManager.ThemeOption opt : themeManager.supportedThemes()) {
-      JRadioButtonMenuItem item = new JRadioButtonMenuItem(opt.label());
-      themeGroup.add(item);
-      theme.add(item);
-
-      item.addActionListener(e -> {
-        UiSettings cur = settingsBus.get();
-        UiSettings next = cur.withTheme(opt.id());
-        settingsBus.set(next);
-        runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
-        themeManager.applyTheme(next.theme());
-      });
-
-      if (opt.id().equalsIgnoreCase(settingsBus.get().theme())) {
-        item.setSelected(true);
-      }
-    }
-    settings.add(theme);
+    JMenuItem themeSelector = new JMenuItem("Theme Selector...");
+    themeSelector.addActionListener(e -> {
+      Window w = SwingUtilities.getWindowAncestor(this);
+      themeSelectionDialog.open(w);
+    });
+    settings.add(themeSelector);
 
     JMenuItem nickColors = new JMenuItem("Nick Colors...");
     nickColors.addActionListener(e -> {
@@ -162,19 +142,51 @@ public class AppMenuBar extends JMenuBar {
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     resetLayout.addActionListener(e -> resetDockLayout());
 
+    JCheckBoxMenuItem showChannelListNodes = new JCheckBoxMenuItem("Show Channel List Nodes");
+    showChannelListNodes.setSelected(serverTree.isChannelListNodesVisible());
+    showChannelListNodes.addActionListener(e ->
+        serverTree.setChannelListNodesVisible(showChannelListNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_CHANNEL_LIST_NODES_VISIBLE, evt ->
+        showChannelListNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JCheckBoxMenuItem showDccNodes = new JCheckBoxMenuItem("Show DCC Transfers Nodes");
+    showDccNodes.setSelected(serverTree.isDccTransfersNodesVisible());
+    showDccNodes.addActionListener(e ->
+        serverTree.setDccTransfersNodesVisible(showDccNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
+        showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JMenuItem openSelectedNodeDock = new JMenuItem("Open Selected Node in Chat Dock");
+    openSelectedNodeDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    openSelectedNodeDock.addActionListener(e -> serverTree.openSelectedNodeInChatDock());
+
     window.add(reopenServersDock);
     window.add(reopenUsersDock);
     window.add(reopenTerminalDock);
     window.addSeparator();
     window.add(resetLayout);
     window.addSeparator();
+    window.add(showChannelListNodes);
+    window.add(showDccNodes);
+    window.addSeparator();
+    window.add(openSelectedNodeDock);
+    window.addSeparator();
 
     // Node actions come from the server tree controller.
     // Enabled/disabled state updates automatically based on the tree selection.
-    window.add(new JMenuItem(serverTree.moveNodeUpAction()));
-    window.add(new JMenuItem(serverTree.moveNodeDownAction()));
+    JMenuItem moveNodeUp = new JMenuItem(serverTree.moveNodeUpAction());
+    moveNodeUp.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_UP,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    JMenuItem moveNodeDown = new JMenuItem(serverTree.moveNodeDownAction());
+    moveNodeDown.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN,
+        InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+    JMenuItem closeNode = new JMenuItem(serverTree.closeNodeAction());
+    closeNode.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
+    window.add(moveNodeUp);
+    window.add(moveNodeDown);
     window.addSeparator();
-    window.add(new JMenuItem(serverTree.closeNodeAction()));
+    window.add(closeNode);
 
     // Servers
     JMenu servers = new JMenu("Servers");

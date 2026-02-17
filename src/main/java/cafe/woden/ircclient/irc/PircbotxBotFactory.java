@@ -7,19 +7,20 @@ import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
+import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
-import org.pircbotx.cap.EnableCapHandler;
 import org.pircbotx.cap.SASLCapHandler;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,34 @@ import org.springframework.stereotype.Component;
 public class PircbotxBotFactory {
 
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
+  private static final List<String> BASE_CAPABILITIES = List.of(
+      "multi-prefix",
+      "cap-notify",
+      "away-notify",
+      "account-notify",
+      "extended-join",
+      "setname",
+      "chghost",
+      "message-tags",
+      "server-time",
+      "standard-replies",
+      "echo-message",
+      "labeled-response",
+      "draft/reply",
+      "draft/react",
+      "draft/message-edit",
+      "message-edit",
+      "draft/message-redaction",
+      "message-redaction",
+      "typing",
+      "read-marker",
+      "batch",
+      "chathistory",
+      "draft/chathistory",
+      "znc.in/playback",
+      "account-tag",
+      "userhost-in-names"
+  );
 
   private final ServerProxyResolver proxyResolver;
   private final SojuProperties sojuProps;
@@ -64,21 +93,10 @@ public class PircbotxBotFactory {
         .addServer(s.host(), s.port())
         .setSocketFactory(socketFactory)
         .setCapEnabled(true)
-        .addCapHandler(new EnableCapHandler("userhost-in-names", true))
-        .addCapHandler(new EnableCapHandler("away-notify", true))
-        .addCapHandler(new EnableCapHandler("account-notify", true))
-        .addCapHandler(new EnableCapHandler("extended-join", true))
-        .addCapHandler(new EnableCapHandler("message-tags", true))
-        .addCapHandler(new EnableCapHandler("server-time", true))
-        .addCapHandler(new EnableCapHandler("batch", true))
-        .addCapHandler(new EnableCapHandler("draft/chathistory", true))
-        .addCapHandler(new EnableCapHandler("znc.in/playback", true))
-        .addCapHandler(new EnableCapHandler("account-tag", true))
-        // Optional: soju network discovery.
-        .addCapHandler(new EnableCapHandler("soju.im/bouncer-networks", sojuProps.discovery().enabled()))
         .setAutoNickChange(true)
         .setAutoReconnect(false)
         .addListener(listener);
+    configureCapHandlers(builder);
     applyMessageDelay(builder, DEFAULT_MESSAGE_DELAY_MS);
 
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
@@ -102,6 +120,16 @@ public class PircbotxBotFactory {
     }
 
     return new PircBotX(builder.buildConfiguration());
+  }
+
+  private void configureCapHandlers(Configuration.Builder builder) {
+    builder.getCapHandlers().clear();
+    List<String> caps = new ArrayList<>(BASE_CAPABILITIES);
+    // Optional: soju network discovery.
+    if (sojuProps.discovery().enabled()) {
+      caps.add("soju.im/bouncer-networks");
+    }
+    builder.addCapHandler(new BatchedEnableCapHandler(caps));
   }
 
   private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {

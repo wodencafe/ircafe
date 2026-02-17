@@ -4,12 +4,19 @@ import cafe.woden.ircclient.ui.chat.ChatStyles;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
 import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.Window;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
+import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -84,18 +91,66 @@ public final class ChatLineInspectorDialog {
     area.setEditable(false);
     area.setLineWrap(true);
     area.setWrapStyleWord(true);
+    area.setCaretPosition(0);
     try {
       area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
     } catch (Exception ignored) {
     }
 
     JScrollPane scroll = new JScrollPane(area);
-    scroll.setPreferredSize(new Dimension(680, 420));
+    Component anchor = owner != null ? owner : transcript;
+    Window ownerWindow = anchor != null ? SwingUtilities.getWindowAncestor(anchor) : null;
+    Component dialogAnchor = ownerWindow != null ? ownerWindow : anchor;
 
-    JOptionPane.showMessageDialog(owner != null ? owner : transcript,
+    Dimension preferred = preferredDialogSize(dialogAnchor);
+    scroll.setPreferredSize(preferred);
+
+    JOptionPane pane = new JOptionPane(
         scroll,
-        "Line Inspector",
-        JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.INFORMATION_MESSAGE,
+        JOptionPane.DEFAULT_OPTION
+    );
+    JDialog dialog = pane.createDialog(dialogAnchor, "Line Inspector");
+    dialog.setResizable(true);
+    dialog.setMinimumSize(new Dimension(Math.min(520, preferred.width), Math.min(300, preferred.height)));
+    dialog.pack();
+    dialog.setLocationRelativeTo(dialogAnchor);
+    dialog.setVisible(true);
+  }
+
+  private static Dimension preferredDialogSize(Component anchor) {
+    int availableWidth = 1280;
+    int availableHeight = 720;
+
+    GraphicsConfiguration gc = anchor != null ? anchor.getGraphicsConfiguration() : null;
+    if (gc == null) {
+      try {
+        gc = GraphicsEnvironment
+            .getLocalGraphicsEnvironment()
+            .getDefaultScreenDevice()
+            .getDefaultConfiguration();
+      } catch (Exception ignored) {
+        gc = null;
+      }
+    }
+
+    if (gc != null) {
+      try {
+        Rectangle bounds = gc.getBounds();
+        Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+        availableWidth = Math.max(320, bounds.width - insets.left - insets.right);
+        availableHeight = Math.max(240, bounds.height - insets.top - insets.bottom);
+      } catch (Exception ignored) {
+      }
+    }
+
+    int preferredWidth = Math.min(760, Math.max(560, availableWidth - 220));
+    int preferredHeight = Math.min(520, Math.max(340, availableHeight - 260));
+
+    preferredWidth = Math.min(preferredWidth, Math.max(320, availableWidth - 80));
+    preferredHeight = Math.min(preferredHeight, Math.max(240, availableHeight - 100));
+
+    return new Dimension(preferredWidth, preferredHeight);
   }
 
   private static String extractParagraphText(Document doc, int pos) {
@@ -125,6 +180,8 @@ public final class ChatLineInspectorDialog {
     String dir = getString(attrs, ChatStyles.ATTR_META_DIRECTION);
     String from = getString(attrs, ChatStyles.ATTR_META_FROM);
     String tags = getString(attrs, ChatStyles.ATTR_META_TAGS);
+    String msgId = getString(attrs, ChatStyles.ATTR_META_MSGID);
+    String ircv3Tags = getString(attrs, ChatStyles.ATTR_META_IRCV3_TAGS);
 
     String filterName = getString(attrs, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     String filterId = getString(attrs, ChatStyles.ATTR_META_FILTER_RULE_ID);
@@ -141,6 +198,8 @@ public final class ChatLineInspectorDialog {
     if (!from.isBlank()) sb.append("From: ").append(from).append('\n');
 
     if (!tags.isBlank()) sb.append("Tags: ").append(tags).append('\n');
+    if (!msgId.isBlank()) sb.append("Message ID: ").append(msgId).append('\n');
+    if (!ircv3Tags.isBlank()) sb.append("IRCv3 tags: ").append(ircv3Tags).append('\n');
 
     if (!filterName.isBlank()) {
       sb.append("Matched filter: ").append(filterName);

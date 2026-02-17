@@ -97,6 +97,17 @@ final class PircbotxConnectionState {
   // IRCv3 history support (soju): detect whether the server accepted these capabilities.
   final AtomicBoolean batchCapAcked = new AtomicBoolean(false);
   final AtomicBoolean chatHistoryCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean echoMessageCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean capNotifyCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean labeledResponseCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean setnameCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean chghostCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftReplyCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftReactCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftMessageEditCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftMessageRedactionCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
 
   // soju bouncer network discovery (cap: soju.im/bouncer-networks)
   final AtomicBoolean sojuBouncerNetworksCapAcked = new AtomicBoolean(false);
@@ -113,6 +124,7 @@ final class PircbotxConnectionState {
 
   // IRCv3 server-time support (canonical message timestamps).
   final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean standardRepliesCapAcked = new AtomicBoolean(false);
   // Warn once per application run if server-time wasn't negotiated on this server.
   final AtomicBoolean serverTimeMissingWarned = new AtomicBoolean(false);
 
@@ -121,5 +133,26 @@ final class PircbotxConnectionState {
 
   PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
+  }
+
+  void resetNegotiatedCaps() {
+    zncPlaybackCapAcked.set(false);
+    batchCapAcked.set(false);
+    chatHistoryCapAcked.set(false);
+    echoMessageCapAcked.set(false);
+    capNotifyCapAcked.set(false);
+    labeledResponseCapAcked.set(false);
+    setnameCapAcked.set(false);
+    chghostCapAcked.set(false);
+    draftReplyCapAcked.set(false);
+    draftReactCapAcked.set(false);
+    draftMessageEditCapAcked.set(false);
+    draftMessageRedactionCapAcked.set(false);
+    typingCapAcked.set(false);
+    readMarkerCapAcked.set(false);
+    sojuBouncerNetworksCapAcked.set(false);
+    serverTimeCapAcked.set(false);
+    standardRepliesCapAcked.set(false);
+    capSummaryLogged.set(false);
   }
 }

@@ -13,6 +13,8 @@ import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Locale;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.time.Instant;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -266,6 +268,36 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void beginChannelList(String serverId, String banner) {
+    onEdt(() -> {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.beginChannelList(sid, banner);
+    });
+  }
+
+  @Override
+  public void appendChannelListEntry(String serverId, String channel, int visibleUsers, String topic) {
+    onEdt(() -> {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.appendChannelListEntry(sid, channel, visibleUsers, topic);
+    });
+  }
+
+  @Override
+  public void endChannelList(String serverId, String summary) {
+    onEdt(() -> {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.endChannelList(sid, summary);
+    });
+  }
+
+  @Override
   public void setStatusBarChannel(String channel) {
     onEdt(() -> statusBar.setChannel(channel));
   }
@@ -296,6 +328,16 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
+    onEdt(() -> serverTree.setPrivateMessageOnlineState(serverId, nick, online));
+  }
+
+  @Override
+  public void clearPrivateMessageOnlineStates(String serverId) {
+    onEdt(() -> serverTree.clearPrivateMessageOnlineStates(serverId));
+  }
+
+  @Override
   public void setInputEnabled(boolean enabled) {
     onEdt(() -> {
       chat.setInputEnabled(enabled);
@@ -319,6 +361,69 @@ public class SwingUiPort implements UiPort {
   public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.appendChatAt(target, from, text, outgoingLocalEcho, ts));
+  }
+
+  @Override
+  public void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendChatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
+  }
+
+  @Override
+  public void appendPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendPendingOutgoingChat(target, pendingId, from, text, ts));
+  }
+
+  @Override
+  public boolean resolvePendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.resolvePendingOutgoingChat(target, pendingId, from, text, ts, messageId, ircv3Tags);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out[0] = transcripts.resolvePendingOutgoingChat(target, pendingId, from, text, ts, messageId, ircv3Tags));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public void failPendingOutgoingChat(
+      TargetRef target,
+      String pendingId,
+      Instant at,
+      String from,
+      String text,
+      String reason
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.failPendingOutgoingChat(target, pendingId, from, text, ts, reason));
   }
 
   @Override
@@ -349,6 +454,20 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendActionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+  }
+
+  @Override
   public void appendPresence(TargetRef target, cafe.woden.ircclient.app.PresenceEvent event) {
     onEdt(() -> transcripts.appendPresence(target, event));
   }
@@ -365,6 +484,19 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendNoticeAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendNoticeAt(target, from, text, ts, messageId, ircv3Tags));
+  }
+
+  @Override
   public void appendStatus(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendStatus(target, from, text));
   }
@@ -376,6 +508,19 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendStatusAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendStatusAt(target, from, text, ts, messageId, ircv3Tags));
+  }
+
+  @Override
   public void appendError(TargetRef target, String from, String text) {
     onEdt(() -> transcripts.appendError(target, from, text));
   }
@@ -384,5 +529,133 @@ public class SwingUiPort implements UiPort {
   public void appendErrorAt(TargetRef target, Instant at, String from, String text) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.appendErrorAt(target, from, text, ts));
+  }
+
+  @Override
+  public void showTypingIndicator(TargetRef target, String nick, String state) {
+    onEdt(() -> {
+      if (chat != null) {
+        chat.showTypingIndicator(target, nick, state);
+      }
+      if (chatDockManager != null) {
+        chatDockManager.showTypingIndicator(target, nick, state);
+      }
+    });
+  }
+
+  @Override
+  public void setReadMarker(TargetRef target, long markerEpochMs) {
+    onEdt(() -> transcripts.updateReadMarker(target, markerEpochMs));
+  }
+
+  @Override
+  public void applyMessageReaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String reaction
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.applyMessageReaction(target, targetMessageId, reaction, fromNick, ts));
+  }
+
+  @Override
+  public boolean isOwnMessage(TargetRef target, String targetMessageId) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.isOwnMessage(target, targetMessageId);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(() -> out[0] = transcripts.isOwnMessage(target, targetMessageId));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public boolean applyMessageEdit(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String editedText,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.applyMessageEdit(
+          target,
+          targetMessageId,
+          editedText,
+          fromNick,
+          ts,
+          replacementMessageId,
+          replacementIrcv3Tags);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out[0] = transcripts.applyMessageEdit(
+              target,
+              targetMessageId,
+              editedText,
+              fromNick,
+              ts,
+              replacementMessageId,
+              replacementIrcv3Tags));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public boolean applyMessageRedaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return transcripts.applyMessageRedaction(
+          target,
+          targetMessageId,
+          fromNick,
+          ts,
+          replacementMessageId,
+          replacementIrcv3Tags);
+    }
+    final boolean[] out = new boolean[] {false};
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out[0] = transcripts.applyMessageRedaction(
+              target,
+              targetMessageId,
+              fromNick,
+              ts,
+              replacementMessageId,
+              replacementIrcv3Tags));
+    } catch (Exception ignored) {
+      out[0] = false;
+    }
+    return out[0];
+  }
+
+  @Override
+  public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
+    onEdt(() -> {
+      if (chat != null) {
+        chat.normalizeIrcv3CapabilityUiState(serverId, capability);
+      }
+      if (chatDockManager != null) {
+        chatDockManager.normalizeIrcv3CapabilityUiState(serverId, capability);
+      }
+    });
   }
 }

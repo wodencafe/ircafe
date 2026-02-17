@@ -5,7 +5,6 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.fife.ui.autocomplete.AutoCompletion;
-import org.fife.ui.autocomplete.AutoCompletionEvent;
 import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
@@ -28,6 +27,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -37,12 +37,29 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Consumer;
 public class MessageInputPanel extends JPanel {
   public static final String ID = "input";
   private final JTextField input = new JTextField();
   private final JButton send = new JButton("Send");
-  private final JLabel completionHint = new JLabel();
+  private static final int HINT_POPUP_GAP_PX = 6;
+  private final JLabel hintPopupLabel = new JLabel();
+  private final JPanel hintPopupPanel = new JPanel(new BorderLayout());
+  private Popup hintPopup;
+  private String hintPopupText = "";
+  private String hintPopupShownText = "";
+  private int hintPopupX = Integer.MIN_VALUE;
+  private int hintPopupY = Integer.MIN_VALUE;
+  private final java.awt.event.ComponentListener hintAnchorListener = new java.awt.event.ComponentAdapter() {
+    @Override public void componentResized(java.awt.event.ComponentEvent e) { refreshHintPopup(); }
+    @Override public void componentMoved(java.awt.event.ComponentEvent e) { refreshHintPopup(); }
+    @Override public void componentShown(java.awt.event.ComponentEvent e) { refreshHintPopup(); }
+    @Override public void componentHidden(java.awt.event.ComponentEvent e) { hideHintPopup(); }
+  };
+  private final JPanel composeBanner = new JPanel(new BorderLayout(6, 0));
+  private final JLabel composeBannerLabel = new JLabel();
+  private final JButton composeBannerCancel = new JButton("Cancel");
   private final UndoManager undo = new UndoManager();
   private static final int UNDO_GROUP_WINDOW_MS = 800;
   private final Timer undoGroupTimer = new Timer(UNDO_GROUP_WINDOW_MS, e -> endCompoundEdit());
@@ -82,29 +99,76 @@ public class MessageInputPanel extends JPanel {
   private final FlowableProcessor<String> outbound = PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
+  private volatile Consumer<String> onTypingStateChanged = s -> {};
+  private static final int TYPING_PAUSE_MS = 5000;
+  private static final int REMOTE_TYPING_HINT_MS = 5000;
+  private final Timer typingPauseTimer = new Timer(TYPING_PAUSE_MS, e -> onTypingPauseElapsed());
+  private final Timer remoteTypingHintTimer = new Timer(REMOTE_TYPING_HINT_MS, e -> clearRemoteTypingIndicator());
+  private String lastEmittedTypingState = "done";
+  private String remoteTypingHint = "";
   private final UiSettingsBus settingsBus;
   private final CommandHistoryStore historyStore;
   private int historyOffset = -1;
   private String historyScratch = null;
   private String historySearchPrefix = null;
+  private String replyComposeTarget = "";
+  private String replyComposeMessageId = "";
   private InputMap historyInputMap;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
+  private static final String[] QUICK_REACTION_TOKENS = {
+      ":+1:",
+      ":heart:",
+      ":laughing:",
+      ":thinking:",
+      ":eyes:"
+  };
   public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
     super(new BorderLayout(8, 0));
     this.settingsBus = settingsBus;
     this.historyStore = historyStore;
     undoGroupTimer.setRepeats(false);
+    typingPauseTimer.setRepeats(false);
+    remoteTypingHintTimer.setRepeats(false);
     setPreferredSize(new Dimension(10, 34));
-    completionHint.setText(" ");
-    completionHint.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
-    completionHint.setHorizontalAlignment(SwingConstants.RIGHT);
-    completionHint.setToolTipText("Press Tab for nick completion");
-    JPanel right = new JPanel(new BorderLayout(6, 0));
+    hintPopupPanel.setOpaque(true);
+    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(new Color(0, 0, 0, 64)),
+        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+    hintPopupLabel.setOpaque(false);
+    hintPopupLabel.setHorizontalAlignment(SwingConstants.LEFT);
+    hintPopupPanel.add(hintPopupLabel, BorderLayout.CENTER);
+    applyHintPopupTheme();
+
+    JPanel right = new JPanel(new BorderLayout(0, 0));
     right.setOpaque(false);
-    right.add(completionHint, BorderLayout.CENTER);
-    right.add(send, BorderLayout.EAST);
-    add(input, BorderLayout.CENTER);
+    right.add(send, BorderLayout.CENTER);
+    composeBanner.setOpaque(false);
+    composeBanner.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+    composeBannerLabel.setText("");
+    composeBannerCancel.setFocusable(false);
+    composeBannerCancel.addActionListener(e -> clearReplyCompose());
+    composeBanner.add(composeBannerLabel, BorderLayout.CENTER);
+    composeBanner.add(composeBannerCancel, BorderLayout.EAST);
+    composeBanner.setVisible(false);
+
+    JPanel center = new JPanel(new BorderLayout(0, 2));
+    center.setOpaque(false);
+    center.add(composeBanner, BorderLayout.NORTH);
+    center.add(input, BorderLayout.CENTER);
+    add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
+    input.addComponentListener(hintAnchorListener);
+    addComponentListener(hintAnchorListener);
+    addHierarchyListener(e -> {
+      long flags = e.getChangeFlags();
+      if ((flags & (HierarchyEvent.SHOWING_CHANGED | HierarchyEvent.DISPLAYABILITY_CHANGED)) != 0) {
+        if (isShowing()) {
+          refreshHintPopup();
+        } else {
+          hideHintPopup();
+        }
+      }
+    });
     installInputContextMenu();
     input.setFocusTraversalKeysEnabled(false);
     installUndoRedoKeybindings();
@@ -115,21 +179,11 @@ public class MessageInputPanel extends JPanel {
     autoCompletion.setTriggerKey(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));
     autoCompletion.install(input);
 
-    // Completion popup should keep its expected Up/Down navigation.
-    // We temporarily un-bind history arrow keys while the popup is visible.
-    autoCompletion.addAutoCompletionListener(e -> {
-      if (e.getEventType() == AutoCompletionEvent.Type.POPUP_SHOWN) {
-        setHistoryArrowKeysEnabled(false);
-      } else if (e.getEventType() == AutoCompletionEvent.Type.POPUP_HIDDEN) {
-        setHistoryArrowKeysEnabled(true);
-      }
-    });
-
     installHistoryKeybindings();
     input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
-      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
-      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { updateHint(); fireDraftChanged(); maybeExitHistoryBrowseOnUserEdit(); }
+      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
+      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
+      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
     });
 
     input.getDocument().addUndoableEditListener(e -> {
@@ -144,8 +198,15 @@ public class MessageInputPanel extends JPanel {
 
     // Mark this input surface as "active" when the user interacts with it.
     FocusAdapter focusAdapter = new FocusAdapter() {
-      @Override public void focusGained(FocusEvent e) { fireActivated(); }
-      @Override public void focusLost(FocusEvent e) { endCompoundEdit(); }
+      @Override public void focusGained(FocusEvent e) {
+        fireActivated();
+        updateHint();
+      }
+      @Override public void focusLost(FocusEvent e) {
+        endCompoundEdit();
+        flushTypingDone();
+        updateHint();
+      }
     };
     input.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
@@ -286,8 +347,8 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void installHistoryKeybindings() {
-    // Use an overlay InputMap so we can temporarily disable Up/Down history keys
-    // and fall back to whatever bindings the auto-completion popup installed.
+    // Use an overlay InputMap so Up/Down can always flow through our history handlers.
+    // When the completion popup is open, those handlers route the keys into the popup.
     InputMap base = input.getInputMap(JComponent.WHEN_FOCUSED);
     historyInputMap = new InputMap();
     historyInputMap.setParent(base);
@@ -327,7 +388,8 @@ public class MessageInputPanel extends JPanel {
     });
 
     // Primary: Up/Down (classic IRC client behavior).
-    setHistoryArrowKeysEnabled(true);
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "ircafe.historyPrev");
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "ircafe.historyNext");
 
     // Shell-style alternatives that don't collide with common app shortcuts (Cmd+P is Print on macOS).
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyPrev");
@@ -361,21 +423,8 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK | KeyEv
 im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircafe.filterToggleBuffer");
 
   }
-
-  private void setHistoryArrowKeysEnabled(boolean enabled) {
-    if (historyInputMap == null) return;
-    KeyStroke up = KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0);
-    KeyStroke down = KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0);
-    if (enabled) {
-      historyInputMap.put(up, "ircafe.historyPrev");
-      historyInputMap.put(down, "ircafe.historyNext");
-    } else {
-      historyInputMap.remove(up);
-      historyInputMap.remove(down);
-    }
-  }
-
   private void browseHistoryPrev() {
+    if (maybeRouteHistoryKeyToAutocomplete(true)) return;
     if (!input.isEnabled() || !input.isEditable()) return;
     if (historyStore == null) return;
 
@@ -410,6 +459,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   }
 
   private void browseHistoryNext() {
+    if (maybeRouteHistoryKeyToAutocomplete(false)) return;
     if (!input.isEnabled() || !input.isEditable()) return;
     if (historyOffset < 0) return;
 
@@ -491,6 +541,53 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     } catch (Exception ignored) {
     }
     updateHint();
+  }
+
+  private boolean maybeRouteHistoryKeyToAutocomplete(boolean up) {
+    if (autoCompletion == null || !autoCompletion.isPopupVisible()) return false;
+    String popupActionKey = up ? "Up" : "Down";
+    KeyStroke key = KeyStroke.getKeyStroke(up ? KeyEvent.VK_UP : KeyEvent.VK_DOWN, 0);
+    boolean routed = invokeActionByKey(popupActionKey) || invokeParentInputBinding(key);
+    if (!routed) {
+      Toolkit.getDefaultToolkit().beep();
+    }
+    return true;
+  }
+
+  private boolean invokeActionByKey(String actionKey) {
+    if (actionKey == null || actionKey.isBlank()) return false;
+    Action a = input.getActionMap().get(actionKey);
+    if (a == null || !a.isEnabled()) return false;
+    a.actionPerformed(new ActionEvent(
+        input,
+        ActionEvent.ACTION_PERFORMED,
+        actionKey,
+        EventQueue.getMostRecentEventTime(),
+        0
+    ));
+    return true;
+  }
+
+  private boolean invokeParentInputBinding(KeyStroke keyStroke) {
+    if (keyStroke == null || historyInputMap == null) return false;
+    InputMap m = historyInputMap.getParent();
+    Object binding = null;
+    while (m != null) {
+      binding = m.get(keyStroke);
+      if (binding != null) break;
+      m = m.getParent();
+    }
+    if (binding == null) return false;
+    Action a = input.getActionMap().get(binding);
+    if (a == null || !a.isEnabled()) return false;
+    a.actionPerformed(new ActionEvent(
+        input,
+        ActionEvent.ACTION_PERFORMED,
+        String.valueOf(binding),
+        EventQueue.getMostRecentEventTime(),
+        0
+    ));
+    return true;
   }
 
   private void maybeExitHistoryBrowseOnUserEdit() {
@@ -687,9 +784,11 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   public void addNotify() {
     super.addNotify();
     if (settingsBus != null) settingsBus.addListener(settingsListener);
+    updateHint();
   }
   @Override
   public void removeNotify() {
+    hideHintPopup();
     if (settingsBus != null) settingsBus.removeListener(settingsListener);
     super.removeNotify();
   }
@@ -705,9 +804,53 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       Font f = new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize());
       input.setFont(f);
       send.setFont(f);
-      completionHint.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      hintPopupLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      applyHintPopupTheme();
+      refreshHintPopup();
     } catch (Exception ignored) {
     }
+  }
+
+  private void applyHintPopupTheme() {
+    Color textBg = UIManager.getColor("TextPane.background");
+    if (textBg == null) textBg = input.getBackground();
+    if (textBg == null) textBg = UIManager.getColor("Panel.background");
+    if (textBg == null) textBg = new Color(245, 245, 245);
+
+    Color textFg = UIManager.getColor("TextPane.foreground");
+    if (textFg == null) textFg = input.getForeground();
+    if (textFg == null) textFg = UIManager.getColor("Label.foreground");
+    if (textFg == null) textFg = Color.DARK_GRAY;
+
+    Color selBg = UIManager.getColor("TextPane.selectionBackground");
+    if (selBg == null) selBg = UIManager.getColor("List.selectionBackground");
+
+    // Subtle tint so the hint is distinct but still theme-native.
+    Color hintBg = (selBg == null) ? textBg : mix(textBg, selBg, 0.22);
+    Color border = UIManager.getColor("Component.borderColor");
+    if (border == null) border = UIManager.getColor("Separator.foreground");
+    if (border == null) border = new Color(textFg.getRed(), textFg.getGreen(), textFg.getBlue(), 120);
+
+    hintPopupPanel.setBackground(hintBg);
+    hintPopupLabel.setForeground(textFg);
+    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(border),
+        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+  }
+
+  private static Color mix(Color a, Color b, double wb) {
+    if (a == null) return b;
+    if (b == null) return a;
+    double w = Math.max(0.0, Math.min(1.0, wb));
+    double wa = 1.0 - w;
+    int r = (int) Math.round(a.getRed() * wa + b.getRed() * w);
+    int g = (int) Math.round(a.getGreen() * wa + b.getGreen() * w);
+    int bl = (int) Math.round(a.getBlue() * wa + b.getBlue() * w);
+    return new Color(clampColor(r), clampColor(g), clampColor(bl));
+  }
+
+  private static int clampColor(int v) {
+    return Math.max(0, Math.min(255, v));
   }
 
   /**
@@ -839,23 +982,136 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     return Collections.unmodifiableList(deduped);
   }
   private void updateHint() {
+    if (remoteTypingHint != null && !remoteTypingHint.isBlank()) {
+      showHintText(remoteTypingHint, false);
+      return;
+    }
     if (!input.isEnabled() || !input.isEditable()) {
-      completionHint.setText(" ");
+      clearHintPopup();
+      return;
+    }
+    if (!input.hasFocus()) {
+      clearHintPopup();
       return;
     }
     String text = input.getText();
     int caret = input.getCaretPosition();
     String token = currentToken(text, caret);
     if (token.isBlank()) {
-      completionHint.setText(" ");
+      clearHintPopup();
       return;
     }
     String match = firstNickStartingWith(token, nickSnapshot);
     if (match == null) {
-      completionHint.setText(" ");
+      clearHintPopup();
     } else {
-      completionHint.setText("Tab → " + match);
+      showHintText("Tab -> " + match, true);
     }
+  }
+
+  private void showHintText(String rawText, boolean isCompletionHint) {
+    String text = rawText == null ? "" : rawText.trim();
+    if (text.isEmpty()) {
+      clearHintPopup();
+      return;
+    }
+    hintPopupText = text;
+    hintPopupLabel.setText(text);
+    hintPopupLabel.setToolTipText(isCompletionHint ? "Press Tab for nick completion" : null);
+    refreshHintPopup();
+  }
+
+  private void clearHintPopup() {
+    hintPopupText = "";
+    hideHintPopup();
+  }
+
+  private void refreshHintPopup() {
+    if (hintPopupText == null || hintPopupText.isBlank()) {
+      hideHintPopup();
+      return;
+    }
+    if (!isShowing() || !input.isShowing()) {
+      hideHintPopup();
+      return;
+    }
+    try {
+      Dimension pref = hintPopupPanel.getPreferredSize();
+      Point anchor = input.getLocationOnScreen();
+
+      GraphicsConfiguration gc = input.getGraphicsConfiguration();
+      Rectangle screen = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+
+      int x = anchor.x;
+      int y = anchor.y - pref.height - HINT_POPUP_GAP_PX;
+      if (y < screen.y) {
+        y = anchor.y + input.getHeight() + HINT_POPUP_GAP_PX;
+      }
+      int maxX = screen.x + screen.width - pref.width;
+      if (x > maxX) x = maxX;
+      if (x < screen.x) x = screen.x;
+
+      boolean unchanged = hintPopup != null
+          && x == hintPopupX
+          && y == hintPopupY
+          && Objects.equals(hintPopupShownText, hintPopupText);
+      if (unchanged) return;
+
+      hideHintPopup();
+      hintPopup = PopupFactory.getSharedInstance().getPopup(this, hintPopupPanel, x, y);
+      hintPopup.show();
+      hintPopupX = x;
+      hintPopupY = y;
+      hintPopupShownText = hintPopupText;
+    } catch (IllegalComponentStateException ignored) {
+      hideHintPopup();
+    } catch (Exception ignored) {
+      hideHintPopup();
+    }
+  }
+
+  private void hideHintPopup() {
+    if (hintPopup != null) {
+      try {
+        hintPopup.hide();
+      } catch (Exception ignored) {
+      }
+      hintPopup = null;
+    }
+    hintPopupX = Integer.MIN_VALUE;
+    hintPopupY = Integer.MIN_VALUE;
+    hintPopupShownText = "";
+  }
+
+  private void onDraftDocumentChanged() {
+    updateHint();
+    fireDraftChanged();
+    maybeExitHistoryBrowseOnUserEdit();
+    if (!programmaticEdit) {
+      fireTypingStateFromUserEdit();
+    }
+  }
+
+  private void fireTypingStateFromUserEdit() {
+    if (!input.isEnabled() || !input.isEditable()) return;
+    String text = input.getText();
+    if (text == null || text.isBlank()) {
+      typingPauseTimer.stop();
+      emitTypingState("done");
+      return;
+    }
+    emitTypingState("active");
+    typingPauseTimer.restart();
+  }
+
+  private void onTypingPauseElapsed() {
+    if (!input.isEnabled() || !input.isEditable()) return;
+    String text = input.getText();
+    if (text == null || text.isBlank()) {
+      emitTypingState("done");
+      return;
+    }
+    emitTypingState("paused");
   }
   private static String currentToken(String text, int caretPos) {
     if (text == null || text.isEmpty()) return "";
@@ -909,6 +1165,12 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   private void emit() {
     String msg = input.getText().trim();
     if (msg.isEmpty()) return;
+    String outboundLine = msg;
+    boolean consumeReplyCompose = shouldEmitReplyComposeCommand(msg);
+    if (consumeReplyCompose) {
+      outboundLine = "/reply " + replyComposeMessageId + " " + msg;
+    }
+    flushTypingDone();
     if (historyStore != null) {
       historyStore.add(msg);
     }
@@ -923,7 +1185,130 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       programmaticEdit = false;
     }
     discardAllUndoEdits();
-    outbound.onNext(msg);
+    outbound.onNext(outboundLine);
+    if (consumeReplyCompose) {
+      clearReplyComposeInternal(false, false);
+    }
+  }
+
+  private boolean shouldEmitReplyComposeCommand(String message) {
+    if (!hasReplyCompose()) return false;
+    String m = Objects.toString(message, "").trim();
+    if (m.isEmpty()) return false;
+    // Slash commands should remain explicit user commands; reply mode only applies to plain chat text.
+    return !m.startsWith("/");
+  }
+
+  public void beginReplyCompose(String ircTarget, String messageId) {
+    String target = normalizeComposeTarget(ircTarget);
+    String msgId = normalizeComposeMessageId(messageId);
+    if (target.isEmpty() || msgId.isEmpty()) return;
+    replyComposeTarget = target;
+    replyComposeMessageId = msgId;
+    updateComposeBanner();
+  }
+
+  public void clearReplyCompose() {
+    clearReplyComposeInternal(true, true);
+  }
+
+  public void openQuickReactionPicker(String ircTarget, String messageId) {
+    String target = normalizeComposeTarget(ircTarget);
+    String msgId = normalizeComposeMessageId(messageId);
+    if (target.isEmpty() || msgId.isEmpty()) return;
+    if (!input.isEnabled()) return;
+
+    JPopupMenu menu = new JPopupMenu();
+    for (String reaction : QUICK_REACTION_TOKENS) {
+      JMenuItem item = new JMenuItem(reaction);
+      item.addActionListener(e -> emitQuickReaction(target, msgId, reaction));
+      menu.add(item);
+    }
+    menu.addSeparator();
+    JMenuItem custom = new JMenuItem("Custom...");
+    custom.addActionListener(e -> {
+      String entered = JOptionPane.showInputDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Reaction token (for example :sparkles:)",
+          "React to Message",
+          JOptionPane.PLAIN_MESSAGE);
+      String token = normalizeReactionToken(entered);
+      if (token.isEmpty()) return;
+      emitQuickReaction(target, msgId, token);
+    });
+    menu.add(custom);
+
+    try {
+      menu.show(input, Math.max(0, input.getWidth() - 8), input.getHeight());
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void emitQuickReaction(String target, String msgId, String reaction) {
+    String t = normalizeComposeTarget(target);
+    String m = normalizeComposeMessageId(msgId);
+    String r = normalizeReactionToken(reaction);
+    if (t.isEmpty() || m.isEmpty() || r.isEmpty()) return;
+    flushTypingDone();
+    outbound.onNext("/react " + m + " " + r);
+  }
+
+  private boolean hasReplyCompose() {
+    return !replyComposeTarget.isBlank() && !replyComposeMessageId.isBlank();
+  }
+
+  private void clearReplyComposeInternal(boolean focusInputAfter, boolean notifyDraftChanged) {
+    boolean hadCompose = hasReplyCompose();
+    replyComposeTarget = "";
+    replyComposeMessageId = "";
+    updateComposeBanner();
+    if (focusInputAfter) {
+      focusInput();
+    }
+    if (hadCompose && notifyDraftChanged) {
+      fireDraftChanged();
+    }
+  }
+
+  private void updateComposeBanner() {
+    if (hasReplyCompose()) {
+      composeBannerLabel.setText("Replying to message " + abbreviateMessageId(replyComposeMessageId));
+      composeBanner.setVisible(true);
+      send.setText("Reply");
+    } else {
+      composeBannerLabel.setText("");
+      composeBanner.setVisible(false);
+      send.setText("Send");
+    }
+    revalidate();
+    repaint();
+  }
+
+  private static String abbreviateMessageId(String raw) {
+    String id = Objects.toString(raw, "").trim();
+    if (id.length() <= 18) return id;
+    return id.substring(0, 18) + "...";
+  }
+
+  private static String normalizeComposeTarget(String raw) {
+    String target = Objects.toString(raw, "").trim();
+    if (target.isEmpty()) return "";
+    if (target.indexOf(' ') >= 0 || target.indexOf('\n') >= 0 || target.indexOf('\r') >= 0) return "";
+    return target;
+  }
+
+  private static String normalizeComposeMessageId(String raw) {
+    String msgId = Objects.toString(raw, "").trim();
+    if (msgId.isEmpty()) return "";
+    if (msgId.indexOf(' ') >= 0 || msgId.indexOf('\n') >= 0 || msgId.indexOf('\r') >= 0) return "";
+    return msgId;
+  }
+
+  private static String normalizeReactionToken(String raw) {
+    String token = Objects.toString(raw, "").trim();
+    if (token.isEmpty()) return "";
+    if (token.indexOf(' ') >= 0 || token.indexOf('\n') >= 0 || token.indexOf('\r') >= 0) return "";
+    return token;
   }
 
   /**
@@ -935,6 +1320,15 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
 
   public void setOnDraftChanged(Consumer<String> onDraftChanged) {
     this.onDraftChanged = onDraftChanged == null ? t -> {} : onDraftChanged;
+  }
+
+  public void setOnTypingStateChanged(Consumer<String> onTypingStateChanged) {
+    this.onTypingStateChanged = onTypingStateChanged == null ? s -> {} : onTypingStateChanged;
+  }
+
+  public void flushTypingDone() {
+    typingPauseTimer.stop();
+    emitTypingState("done");
   }
 
   private void fireDraftChanged() {
@@ -951,10 +1345,155 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     }
   }
 
+  private void emitTypingState(String state) {
+    String normalized = normalizeTypingState(state);
+    if (normalized.isEmpty()) return;
+    if (normalized.equals(lastEmittedTypingState)) return;
+    lastEmittedTypingState = normalized;
+    try {
+      onTypingStateChanged.accept(normalized);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static String normalizeTypingState(String state) {
+    String s = state == null ? "" : state.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "";
+    return switch (s) {
+      case "active", "composing" -> "active";
+      case "paused" -> "paused";
+      case "done", "inactive" -> "done";
+      default -> "";
+    };
+  }
+
+  public void showRemoteTypingIndicator(String nick, String state) {
+    String n = nick == null ? "" : nick.trim();
+    if (n.isEmpty()) return;
+    String s = normalizeTypingState(state);
+    if (s.isEmpty()) s = "active";
+    if ("done".equals(s)) {
+      clearRemoteTypingIndicator();
+      return;
+    }
+    remoteTypingHint = "paused".equals(s) ? (n + " paused typing...") : (n + " is typing...");
+    remoteTypingHintTimer.restart();
+    updateHint();
+  }
+
+  public void clearRemoteTypingIndicator() {
+    remoteTypingHintTimer.stop();
+    remoteTypingHint = "";
+    updateHint();
+  }
+
+  /**
+   * Normalize staged IRCv3 /quote drafts against currently negotiated capabilities.
+   *
+   * <p>This exits reply/react prefill modes when the backing capability is disabled mid-session.
+   *
+   * @return true when the draft text changed.
+   */
+  public boolean normalizeIrcv3DraftForCapabilities(boolean replySupported, boolean reactSupported) {
+    boolean changed = false;
+    String before = getDraftText();
+    String after = normalizeIrcv3DraftForCapabilities(before, replySupported, reactSupported);
+    if (!Objects.equals(before, after)) {
+      setDraftText(after);
+      changed = true;
+    }
+    if (!replySupported && hasReplyCompose()) {
+      clearReplyComposeInternal(false, false);
+      changed = true;
+    }
+    return changed;
+  }
+
+  public static String normalizeIrcv3DraftForCapabilities(String draft, boolean replySupported, boolean reactSupported) {
+    String raw = (draft == null) ? "" : draft;
+    if (raw.isBlank()) return raw;
+
+    int ws = 0;
+    while (ws < raw.length() && Character.isWhitespace(raw.charAt(ws))) ws++;
+    String leading = raw.substring(0, ws);
+    String rest = raw.substring(ws);
+
+    if (!startsWithIgnoreCase(rest, "/quote")) return raw;
+    int idx = "/quote".length();
+    if (rest.length() > idx && !Character.isWhitespace(rest.charAt(idx))) return raw;
+    while (idx < rest.length() && Character.isWhitespace(rest.charAt(idx))) idx++;
+    if (idx >= rest.length() || rest.charAt(idx) != '@') return raw;
+
+    int tagStart = idx;
+    int tagEnd = rest.indexOf(' ', tagStart);
+    if (tagEnd < 0) return raw;
+    String tagBody = rest.substring(tagStart + 1, tagEnd);
+    if (tagBody.isBlank()) return raw;
+
+    String[] parts = tagBody.split(";");
+    java.util.ArrayList<String> kept = new java.util.ArrayList<>(parts.length);
+    boolean sawReplyTag = false;
+    boolean sawReactTag = false;
+
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) continue;
+      String key = normalizeIrcv3TagKey(p);
+      if ("draft/reply".equals(key)) {
+        sawReplyTag = true;
+        if (replySupported) kept.add(part);
+        continue;
+      }
+      if ("draft/react".equals(key)) {
+        sawReactTag = true;
+        kept.add(part);
+        continue;
+      }
+      kept.add(part);
+    }
+
+    // React prefill depends on draft/reply target metadata; disabling either capability exits the mode.
+    if (sawReactTag && (!reactSupported || !replySupported)) {
+      return "";
+    }
+    if (!sawReplyTag || replySupported) {
+      return raw;
+    }
+
+    String head = rest.substring(0, tagStart);
+    String tail = rest.substring(tagEnd); // includes whitespace + command
+    if (kept.isEmpty()) {
+      String commandPart = tail.stripLeading();
+      if (commandPart.isEmpty()) return "";
+      return leading + head + commandPart;
+    }
+    return leading + head + "@" + String.join(";", kept) + tail;
+  }
+
+  private static String normalizeIrcv3TagKey(String tagPart) {
+    String token = Objects.toString(tagPart, "");
+    int eq = token.indexOf('=');
+    if (eq >= 0) token = token.substring(0, eq);
+    token = token.trim();
+    while (token.startsWith("+")) token = token.substring(1);
+    return token.toLowerCase(Locale.ROOT);
+  }
+
+  private static boolean startsWithIgnoreCase(String value, String prefix) {
+    if (value == null || prefix == null) return false;
+    if (value.length() < prefix.length()) return false;
+    return value.regionMatches(true, 0, prefix, 0, prefix.length());
+  }
+
   public void setInputEnabled(boolean enabled) {
     input.setEditable(enabled);
     input.setEnabled(enabled);
     send.setEnabled(enabled);
+    if (!enabled) {
+      flushTypingDone();
+      clearRemoteTypingIndicator();
+      clearReplyComposeInternal(false, false);
+    }
     updateHint();
   }
   public String getDraftText() {
@@ -968,6 +1507,8 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     historyOffset = -1;
     historyScratch = null;
     historySearchPrefix = null;
+    typingPauseTimer.stop();
+    clearReplyComposeInternal(false, false);
     programmaticEdit = true;
     try {
       input.setText(text == null ? "" : text);

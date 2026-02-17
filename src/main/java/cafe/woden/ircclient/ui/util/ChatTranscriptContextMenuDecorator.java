@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.util;
 import cafe.woden.ircclient.net.HttpLite;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.ui.chat.ChatStyles;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
@@ -17,19 +18,21 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-
-import java.util.function.Supplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.Element;
 import javax.swing.text.JTextComponent;
 import java.awt.Point;
 import javax.swing.text.Document;
+import javax.swing.text.StyledDocument;
 
 /**
  * Decorates a chat transcript {@link JTextComponent} with a right-click context menu.
@@ -51,6 +54,18 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   // Optional: allow the caller to provide a per-view proxy plan (e.g., per server).
   // If null, fall back to the global NetProxyContext proxy.
   private final Supplier<ProxyPlan> proxyPlanSupplier;
+  private final Supplier<Boolean> loadNewerActionVisibleSupplier;
+  private final Supplier<Boolean> loadAroundActionVisibleSupplier;
+  private final Runnable onLoadNewerHistory;
+  private final Consumer<String> onLoadContextAroundMessage;
+  private final Supplier<Boolean> replyActionVisibleSupplier;
+  private final Supplier<Boolean> reactActionVisibleSupplier;
+  private final Supplier<Boolean> editActionVisibleSupplier;
+  private final Supplier<Boolean> redactActionVisibleSupplier;
+  private final Consumer<String> onReplyToMessage;
+  private final Consumer<String> onReactToMessage;
+  private final Consumer<String> onEditMessage;
+  private final Consumer<String> onRedactMessage;
 
   private final JPopupMenu menu = new JPopupMenu();
   private final JMenuItem copyItem = new JMenuItem("Copy");
@@ -60,6 +75,14 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem clearItem = new JMenuItem("Clear");
 
   private final JMenuItem inspectLineItem = new JMenuItem("Inspect line…");
+  private final JMenuItem copyMessageIdItem = new JMenuItem("Copy Message ID");
+  private final JMenuItem copyIrcv3TagsItem = new JMenuItem("Copy IRCv3 Tags");
+  private final JMenuItem loadNewerHistoryItem = new JMenuItem("Load Newer History");
+  private final JMenuItem loadAroundMessageItem = new JMenuItem("Load Context Around Message…");
+  private final JMenuItem replyToMessageItem = new JMenuItem("Reply to Message…");
+  private final JMenuItem reactToMessageItem = new JMenuItem("React to Message…");
+  private final JMenuItem editMessageItem = new JMenuItem("Edit Message…");
+  private final JMenuItem redactMessageItem = new JMenuItem("Redact Message…");
 
   private volatile Point lastPopupPoint;
 
@@ -71,6 +94,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem saveLinkItem = new JMenuItem("Save Link As...");
 
   private volatile String currentPopupUrl;
+  private volatile String currentPopupMessageId;
+  private volatile String currentPopupIrcv3Tags;
+  private volatile boolean currentPopupOwnMessage;
 
   // Some sites reject programmatic downloads unless the request looks like a browser.
   private static final String DEFAULT_UA =
@@ -85,7 +111,19 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Function<String, JPopupMenu> nickMenuFor,
       Consumer<String> openUrl,
       Runnable openFind,
-      Supplier<ProxyPlan> proxyPlanSupplier
+      Supplier<ProxyPlan> proxyPlanSupplier,
+      Supplier<Boolean> loadNewerActionVisibleSupplier,
+      Supplier<Boolean> loadAroundActionVisibleSupplier,
+      Runnable onLoadNewerHistory,
+      Consumer<String> onLoadContextAroundMessage,
+      Supplier<Boolean> replyActionVisibleSupplier,
+      Supplier<Boolean> reactActionVisibleSupplier,
+      Consumer<String> onReplyToMessage,
+      Consumer<String> onReactToMessage,
+      Supplier<Boolean> editActionVisibleSupplier,
+      Supplier<Boolean> redactActionVisibleSupplier,
+      Consumer<String> onEditMessage,
+      Consumer<String> onRedactMessage
   ) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
     this.urlAt = urlAt;
@@ -94,6 +132,22 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
     this.proxyPlanSupplier = proxyPlanSupplier;
+    this.loadNewerActionVisibleSupplier = (loadNewerActionVisibleSupplier != null)
+        ? loadNewerActionVisibleSupplier
+        : () -> false;
+    this.loadAroundActionVisibleSupplier = (loadAroundActionVisibleSupplier != null)
+        ? loadAroundActionVisibleSupplier
+        : () -> false;
+    this.onLoadNewerHistory = (onLoadNewerHistory != null) ? onLoadNewerHistory : () -> {};
+    this.onLoadContextAroundMessage = (onLoadContextAroundMessage != null) ? onLoadContextAroundMessage : msgId -> {};
+    this.replyActionVisibleSupplier = (replyActionVisibleSupplier != null) ? replyActionVisibleSupplier : () -> false;
+    this.reactActionVisibleSupplier = (reactActionVisibleSupplier != null) ? reactActionVisibleSupplier : () -> false;
+    this.onReplyToMessage = (onReplyToMessage != null) ? onReplyToMessage : msgId -> {};
+    this.onReactToMessage = (onReactToMessage != null) ? onReactToMessage : msgId -> {};
+    this.editActionVisibleSupplier = (editActionVisibleSupplier != null) ? editActionVisibleSupplier : () -> false;
+    this.redactActionVisibleSupplier = (redactActionVisibleSupplier != null) ? redactActionVisibleSupplier : () -> false;
+    this.onEditMessage = (onEditMessage != null) ? onEditMessage : msgId -> {};
+    this.onRedactMessage = (onRedactMessage != null) ? onRedactMessage : msgId -> {};
 
     copyItem.addActionListener(this::onCopy);
     selectAllItem.addActionListener(this::onSelectAll);
@@ -101,6 +155,14 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     reloadRecentItem.addActionListener(this::onReloadRecent);
     clearItem.addActionListener(this::onClear);
     inspectLineItem.addActionListener(this::onInspectLine);
+    copyMessageIdItem.addActionListener(this::onCopyMessageId);
+    copyIrcv3TagsItem.addActionListener(this::onCopyIrcv3Tags);
+    loadNewerHistoryItem.addActionListener(this::onLoadNewerHistory);
+    loadAroundMessageItem.addActionListener(this::onLoadContextAroundMessage);
+    replyToMessageItem.addActionListener(this::onReplyToMessage);
+    reactToMessageItem.addActionListener(this::onReactToMessage);
+    editMessageItem.addActionListener(this::onEditMessage);
+    redactMessageItem.addActionListener(this::onRedactMessage);
 
     openLinkItem.addActionListener(this::onOpenLink);
     copyLinkItem.addActionListener(this::onCopyLink);
@@ -156,6 +218,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
         String url = safeHit(urlAt, e.getPoint());
         currentPopupUrl = url;
+        LineIdentity identity = lineIdentityAtPoint(e.getPoint());
+        currentPopupMessageId = identity.messageId();
+        currentPopupIrcv3Tags = identity.ircv3Tags();
+        currentPopupOwnMessage = identity.outgoingOwnMessage();
         rebuildMenu(url);
         updateEnabledState(url);
 
@@ -173,7 +239,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
-    return new ChatTranscriptContextMenuDecorator(transcript, null, null, null, null, openFind, null);
+    return new ChatTranscriptContextMenuDecorator(
+        transcript, null, null, null, null, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -182,7 +249,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind
   ) {
-    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, null, null, openUrl, openFind, null);
+    return new ChatTranscriptContextMenuDecorator(
+        transcript, urlAt, null, null, openUrl, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -193,7 +261,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> openUrl,
       Runnable openFind
   ) {
-    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null);
+    return new ChatTranscriptContextMenuDecorator(
+        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -205,7 +274,51 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Runnable openFind,
       Supplier<ProxyPlan> proxyPlanSupplier
   ) {
-    return new ChatTranscriptContextMenuDecorator(transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier);
+    return new ChatTranscriptContextMenuDecorator(
+        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier, null, null, null, null, null, null, null, null, null, null, null, null);
+  }
+
+  public static ChatTranscriptContextMenuDecorator decorate(
+      JTextComponent transcript,
+      Function<Point, String> urlAt,
+      Function<Point, String> nickAt,
+      Function<String, JPopupMenu> nickMenuFor,
+      Consumer<String> openUrl,
+      Runnable openFind,
+      Supplier<ProxyPlan> proxyPlanSupplier,
+      Supplier<Boolean> loadNewerActionVisibleSupplier,
+      Supplier<Boolean> loadAroundActionVisibleSupplier,
+      Runnable onLoadNewerHistory,
+      Consumer<String> onLoadContextAroundMessage,
+      Supplier<Boolean> replyActionVisibleSupplier,
+      Supplier<Boolean> reactActionVisibleSupplier,
+      Consumer<String> onReplyToMessage,
+      Consumer<String> onReactToMessage,
+      Supplier<Boolean> editActionVisibleSupplier,
+      Supplier<Boolean> redactActionVisibleSupplier,
+      Consumer<String> onEditMessage,
+      Consumer<String> onRedactMessage
+  ) {
+    return new ChatTranscriptContextMenuDecorator(
+        transcript,
+        urlAt,
+        nickAt,
+        nickMenuFor,
+        openUrl,
+        openFind,
+        proxyPlanSupplier,
+        loadNewerActionVisibleSupplier,
+        loadAroundActionVisibleSupplier,
+        onLoadNewerHistory,
+        onLoadContextAroundMessage,
+        replyActionVisibleSupplier,
+        reactActionVisibleSupplier,
+        onReplyToMessage,
+        onReactToMessage,
+        editActionVisibleSupplier,
+        redactActionVisibleSupplier,
+        onEditMessage,
+        onRedactMessage);
   }
 
   public void setClearAction(Runnable clearAction) {
@@ -217,6 +330,15 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
   private void rebuildMenu(String url) {
+    boolean hasMessageId = currentPopupMessageId != null && !currentPopupMessageId.isBlank();
+    boolean showLoadNewerAction = isActionVisible(loadNewerActionVisibleSupplier);
+    boolean showLoadAroundAction = isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId;
+    boolean showReplyAction = isActionVisible(replyActionVisibleSupplier);
+    boolean showReactAction = isActionVisible(reactActionVisibleSupplier);
+    boolean showEditAction =
+        isActionVisible(editActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage;
+    boolean showRedactAction =
+        isActionVisible(redactActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage;
     menu.removeAll();
 
     if (url != null) {
@@ -226,6 +348,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.addSeparator();
       menu.add(selectAllItem);
       menu.add(inspectLineItem);
+      menu.add(copyMessageIdItem);
+      menu.add(copyIrcv3TagsItem);
+      maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
+      maybeAddMessageActionItems(showReplyAction, showReactAction, showEditAction, showRedactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -235,11 +361,48 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(copyItem);
       menu.add(selectAllItem);
       menu.add(inspectLineItem);
+      menu.add(copyMessageIdItem);
+      menu.add(copyIrcv3TagsItem);
+      maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
+      maybeAddMessageActionItems(showReplyAction, showReactAction, showEditAction, showRedactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
       menu.add(reloadRecentItem);
       menu.add(clearItem);
+    }
+  }
+
+  private void maybeAddHistoryActionItems(boolean showLoadNewerAction, boolean showLoadAroundAction) {
+    if (!showLoadNewerAction && !showLoadAroundAction) return;
+    menu.addSeparator();
+    if (showLoadNewerAction) {
+      menu.add(loadNewerHistoryItem);
+    }
+    if (showLoadAroundAction) {
+      menu.add(loadAroundMessageItem);
+    }
+  }
+
+  private void maybeAddMessageActionItems(
+      boolean showReplyAction,
+      boolean showReactAction,
+      boolean showEditAction,
+      boolean showRedactAction
+  ) {
+    if (!showReplyAction && !showReactAction && !showEditAction && !showRedactAction) return;
+    menu.addSeparator();
+    if (showReplyAction) {
+      menu.add(replyToMessageItem);
+    }
+    if (showReactAction) {
+      menu.add(reactToMessageItem);
+    }
+    if (showEditAction) {
+      menu.add(editMessageItem);
+    }
+    if (showRedactAction) {
+      menu.add(redactMessageItem);
     }
   }
 
@@ -256,6 +419,17 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     openLinkItem.setEnabled(hasUrl);
     copyLinkItem.setEnabled(hasUrl);
     saveLinkItem.setEnabled(hasUrl);
+    boolean hasMessageId = currentPopupMessageId != null && !currentPopupMessageId.isBlank();
+    copyMessageIdItem.setEnabled(hasMessageId);
+    copyIrcv3TagsItem.setEnabled(currentPopupIrcv3Tags != null && !currentPopupIrcv3Tags.isBlank());
+    loadNewerHistoryItem.setEnabled(isActionVisible(loadNewerActionVisibleSupplier));
+    loadAroundMessageItem.setEnabled(isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId);
+    replyToMessageItem.setEnabled(isActionVisible(replyActionVisibleSupplier) && hasMessageId);
+    reactToMessageItem.setEnabled(isActionVisible(reactActionVisibleSupplier) && hasMessageId);
+    editMessageItem.setEnabled(
+        isActionVisible(editActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage);
+    redactMessageItem.setEnabled(
+        isActionVisible(redactActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage);
 
     try {
       Document doc = transcript.getDocument();
@@ -283,6 +457,84 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private void onCopy(ActionEvent e) {
     try {
       transcript.copy();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onCopyMessageId(ActionEvent e) {
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(msgId), null);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onCopyIrcv3Tags(ActionEvent e) {
+    String tags = currentPopupIrcv3Tags;
+    if (tags == null || tags.isBlank()) return;
+    try {
+      Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(tags), null);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onLoadNewerHistory(ActionEvent e) {
+    if (!isActionVisible(loadNewerActionVisibleSupplier)) return;
+    try {
+      onLoadNewerHistory.run();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onLoadContextAroundMessage(ActionEvent e) {
+    if (!isActionVisible(loadAroundActionVisibleSupplier)) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onLoadContextAroundMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onReplyToMessage(ActionEvent e) {
+    if (!isActionVisible(replyActionVisibleSupplier)) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onReplyToMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onReactToMessage(ActionEvent e) {
+    if (!isActionVisible(reactActionVisibleSupplier)) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onReactToMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onEditMessage(ActionEvent e) {
+    if (!isActionVisible(editActionVisibleSupplier)) return;
+    if (!currentPopupOwnMessage) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onEditMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onRedactMessage(ActionEvent e) {
+    if (!isActionVisible(redactActionVisibleSupplier)) return;
+    if (!currentPopupOwnMessage) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onRedactMessage.accept(msgId);
     } catch (Exception ignored) {
     }
   }
@@ -395,6 +647,71 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       return f.apply(p);
     } catch (Exception ignored) {
       return null;
+    }
+  }
+
+  private static boolean isActionVisible(Supplier<Boolean> visibleSupplier) {
+    if (visibleSupplier == null) return false;
+    try {
+      return Boolean.TRUE.equals(visibleSupplier.get());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  static LineIdentity lineIdentityFromAttributes(AttributeSet attrs) {
+    if (attrs == null) return LineIdentity.EMPTY;
+    String msgId = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_MSGID), "").trim();
+    String tags = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_IRCV3_TAGS), "").trim();
+    boolean outgoing = Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_OUTGOING));
+    if (!outgoing) {
+      String dir = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_DIRECTION), "").trim();
+      outgoing = "OUT".equalsIgnoreCase(dir);
+    }
+    if (msgId.isBlank() && tags.isBlank() && !outgoing) return LineIdentity.EMPTY;
+    return new LineIdentity(msgId, tags, outgoing);
+  }
+
+  private LineIdentity lineIdentityAtPoint(Point p) {
+    if (p == null) return LineIdentity.EMPTY;
+    try {
+      int pos = transcript.viewToModel2D(p);
+      Document doc = transcript.getDocument();
+      if (!(doc instanceof StyledDocument sdoc)) return LineIdentity.EMPTY;
+      int len = doc.getLength();
+      if (len <= 0) return LineIdentity.EMPTY;
+      int safePos = Math.max(0, Math.min(pos, len - 1));
+      Element el = sdoc.getCharacterElement(safePos);
+      if (el == null) return LineIdentity.EMPTY;
+      return lineIdentityFromAttributes(el.getAttributes());
+    } catch (Exception ignored) {
+      return LineIdentity.EMPTY;
+    }
+  }
+
+  static final class LineIdentity {
+    static final LineIdentity EMPTY = new LineIdentity("", "", false);
+
+    private final String messageId;
+    private final String ircv3Tags;
+    private final boolean outgoingOwnMessage;
+
+    LineIdentity(String messageId, String ircv3Tags, boolean outgoingOwnMessage) {
+      this.messageId = Objects.toString(messageId, "").trim();
+      this.ircv3Tags = Objects.toString(ircv3Tags, "").trim();
+      this.outgoingOwnMessage = outgoingOwnMessage;
+    }
+
+    String messageId() {
+      return messageId;
+    }
+
+    String ircv3Tags() {
+      return ircv3Tags;
+    }
+
+    boolean outgoingOwnMessage() {
+      return outgoingOwnMessage;
     }
   }
 

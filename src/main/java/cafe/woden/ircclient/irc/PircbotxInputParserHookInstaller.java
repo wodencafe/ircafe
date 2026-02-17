@@ -13,8 +13,9 @@ import org.springframework.stereotype.Component;
  * Installs small PircBotX hooks that require reflection.
  *
  * <p>PircBotX does not expose a public API for swapping its {@link InputParser}, but we need to
- * decorate it to surface a few low-cost IRCv3 capabilities into our own event stream
- * (currently: {@code away-notify}, {@code account-notify}, {@code extended-join}, and {@code account-tag}).
+ * decorate it to surface selected IRCv3 capabilities into our own event stream
+ * (e.g. {@code away-notify}, {@code account-notify}, {@code extended-join}, {@code account-tag},
+ * {@code setname}, {@code chghost}, typing/reply/react/read-marker tags, and CAP updates).
  */
 @Component
 public class PircbotxInputParserHookInstaller {
@@ -31,7 +32,7 @@ public class PircbotxInputParserHookInstaller {
       InputParser replacement = new PircbotxAwayNotifyInputParser(bot, sid, conn, sink);
       boolean swapped = swapInputParser(bot, replacement);
       if (swapped) {
-        log.info("[{}] installed IRCv3 InputParser hook (away/account/extended-join/account-tag)", sid);
+        log.info("[{}] installed IRCv3 InputParser hook (away/account/extended-join/account-tag/setname/chghost/tags/cap)", sid);
       } else {
         log.warn("[{}] could not install away-notify InputParser hook (no compatible field found)", sid);
       }

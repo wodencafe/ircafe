@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 final class PircbotxIrcv3ServerTime {
@@ -11,21 +12,11 @@ final class PircbotxIrcv3ServerTime {
   static Optional<Instant> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();
 
-    Object tags = reflectCall(pircbotxEvent, "getTags");
-    if (tags instanceof java.util.Map<?, ?> map && !map.isEmpty()) {
-      Object v = map.get("time");
-      if (v == null) v = map.get("@time");
-      if (v != null) {
-        Optional<Instant> parsed = parseInstantSafe(String.valueOf(v));
-        if (parsed.isPresent()) return parsed;
-      }
-    }
-
-    Object raw = reflectCall(pircbotxEvent, "getRawLine");
-    if (raw == null) raw = reflectCall(pircbotxEvent, "getLine");
-    if (raw == null) raw = reflectCall(pircbotxEvent, "getRaw");
-    if (raw != null) {
-      return fromRawLine(String.valueOf(raw));
+    Map<String, String> tags = PircbotxIrcv3Tags.fromEvent(pircbotxEvent);
+    String rawTime = PircbotxIrcv3Tags.firstTagValue(tags, "time");
+    if (!rawTime.isBlank()) {
+      Optional<Instant> parsed = parseInstantSafe(rawTime);
+      if (parsed.isPresent()) return parsed;
     }
 
     return Optional.empty();
@@ -33,34 +24,10 @@ final class PircbotxIrcv3ServerTime {
 
   /** Parse {@code @time=} tag from a raw IRC line. */
   static Optional<Instant> fromRawLine(String rawLine) {
-    if (rawLine == null) return Optional.empty();
-    String s = rawLine.trim();
-    if (s.isEmpty() || s.charAt(0) != '@') return Optional.empty();
-
-    int sp = s.indexOf(' ');
-    if (sp <= 0) return Optional.empty();
-
-    String tagSection = s.substring(1, sp); // exclude leading '@'
-    if (tagSection.isEmpty()) return Optional.empty();
-
-    // tags are separated by ';' and each entry is either "key" or "key=value".
-    int idx = 0;
-    while (idx < tagSection.length()) {
-      int next = tagSection.indexOf(';', idx);
-      if (next < 0) next = tagSection.length();
-      String part = tagSection.substring(idx, next);
-      idx = next + 1;
-
-      if (part.isEmpty()) continue;
-      int eq = part.indexOf('=');
-      String key = (eq >= 0) ? part.substring(0, eq) : part;
-      if (!"time".equals(key)) continue;
-
-      String val = (eq >= 0) ? part.substring(eq + 1) : "";
-      return parseInstantSafe(val);
-    }
-
-    return Optional.empty();
+    Map<String, String> tags = PircbotxIrcv3Tags.fromRawLine(rawLine);
+    String rawTime = PircbotxIrcv3Tags.firstTagValue(tags, "time");
+    if (rawTime.isBlank()) return Optional.empty();
+    return parseInstantSafe(rawTime);
   }
 
   static Instant parseServerTimeFromRawLine(String rawLine) {
@@ -79,16 +46,6 @@ final class PircbotxIrcv3ServerTime {
       return Optional.of(Instant.parse(v));
     } catch (Exception ignored) {
       return Optional.empty();
-    }
-  }
-
-  private static Object reflectCall(Object target, String method) {
-    if (target == null || method == null) return null;
-    try {
-      java.lang.reflect.Method m = target.getClass().getMethod(method);
-      return m.invoke(target);
-    } catch (Exception ignored) {
-      return null;
     }
   }
 }

@@ -21,6 +21,7 @@ import java.awt.BorderLayout;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
+import java.util.Objects;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import java.awt.Rectangle;
@@ -79,7 +80,19 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::nickContextMenuFor,
         this::openUrl,
         this::openFindBar,
-        this::currentProxyPlan
+        this::currentProxyPlan,
+        this::loadNewerHistoryContextActionVisible,
+        this::loadAroundMessageContextActionVisible,
+        this::onLoadNewerHistoryRequested,
+        this::onLoadContextAroundMessageRequested,
+        this::replyContextActionVisible,
+        this::reactContextActionVisible,
+        this::onReplyToMessageRequested,
+        this::onReactToMessageRequested,
+        this::editContextActionVisible,
+        this::redactContextActionVisible,
+        this::onEditMessageRequested,
+        this::onRedactMessageRequested
     ));
     this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
         scroll,
@@ -101,9 +114,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::urlAt,
         this::channelAt,
         this::nickAt,
+        this::messageReferenceAt,
         this::openUrl,
         this::onChannelClicked,
         this::onNickClicked,
+        this::onMessageReferenceClicked,
         this::onTranscriptClicked
     ));
   }
@@ -184,6 +199,15 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   /**
+   * Called when the user clicks a reply/reference token linked to a message ID.
+   *
+   * @return true if the click was handled/consumed
+   */
+  protected boolean onMessageReferenceClicked(String messageId) {
+    return false;
+  }
+
+  /**
    * Optional hook: if provided, this menu is shown when the user right-clicks a nick token
    * in the transcript. Return {@code null} (or an empty menu) to fall back to the default
    * transcript context menu.
@@ -202,6 +226,130 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return null;
   }
 
+  /** Whether the transcript context menu should show "Reply to Message…". */
+  protected boolean replyContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "React to Message…". */
+  protected boolean reactContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "Edit Message…". */
+  protected boolean editContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "Redact Message…". */
+  protected boolean redactContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "Load Newer History". */
+  protected boolean loadNewerHistoryContextActionVisible() {
+    return false;
+  }
+
+  /** Whether the transcript context menu should show "Load Context Around Message…". */
+  protected boolean loadAroundMessageContextActionVisible() {
+    return false;
+  }
+
+  /** Called by transcript context menu action "Load Newer History". */
+  protected void onLoadNewerHistoryRequested() {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Load Context Around Message…". */
+  protected void onLoadContextAroundMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Reply to Message…". */
+  protected void onReplyToMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "React to Message…". */
+  protected void onReactToMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Edit Message…". */
+  protected void onEditMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Redact Message…". */
+  protected void onRedactMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /**
+   * Build a prefilled raw-line draft for replying to an IRCv3 message by msgid.
+   *
+   * <p>Returned text is intended for the input field and should be sent with {@code /quote}.
+   */
+  protected static String buildReplyPrefillDraft(String ircTarget, String messageId) {
+    String target = Objects.toString(ircTarget, "").trim();
+    String msgId = Objects.toString(messageId, "").trim();
+    if (target.isEmpty() || msgId.isEmpty()) return "";
+    String escapedMsgId = escapeIrcv3TagValue(msgId);
+    return "/quote @+draft/reply=" + escapedMsgId + " PRIVMSG " + target + " :";
+  }
+
+  /**
+   * Build a prefilled raw-line draft for reacting to an IRCv3 message by msgid.
+   *
+   * <p>Returned text is intended for the input field and should be sent with {@code /quote}.
+   * The default reaction token is {@code :+1:}; users can edit it before sending.
+   */
+  protected static String buildReactPrefillDraft(String ircTarget, String messageId) {
+    String target = Objects.toString(ircTarget, "").trim();
+    String msgId = Objects.toString(messageId, "").trim();
+    if (target.isEmpty() || msgId.isEmpty()) return "";
+    String escapedMsgId = escapeIrcv3TagValue(msgId);
+    return "/quote @+draft/react=:+1:;+draft/reply=" + escapedMsgId + " TAGMSG " + target;
+  }
+
+  /**
+   * Build a raw command line that requests the latest/newer CHATHISTORY page for the active target.
+   */
+  protected static String buildChatHistoryLatestCommand() {
+    return "/chathistory latest *";
+  }
+
+  /**
+   * Build a raw command line that requests CHATHISTORY context around a specific IRCv3 message id.
+   */
+  protected static String buildChatHistoryAroundByMsgIdCommand(String messageId) {
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return "";
+    for (int i = 0; i < msgId.length(); i++) {
+      if (Character.isWhitespace(msgId.charAt(i))) return "";
+    }
+    return "/chathistory around msgid=" + msgId;
+  }
+
+  private static String escapeIrcv3TagValue(String value) {
+    String raw = Objects.toString(value, "");
+    if (raw.isEmpty()) return "";
+    StringBuilder out = new StringBuilder(raw.length() + 8);
+    for (int i = 0; i < raw.length(); i++) {
+      char c = raw.charAt(i);
+      switch (c) {
+        case ';' -> out.append("\\:");
+        case ' ' -> out.append("\\s");
+        case '\\' -> out.append("\\\\");
+        case '\r' -> out.append("\\r");
+        case '\n' -> out.append("\\n");
+        default -> out.append(c);
+      }
+    }
+    return out.toString();
+  }
+
   protected void setDocument(StyledDocument doc) {
     if (currentDocument == doc) return;
 
@@ -216,6 +364,33 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   protected void scrollToBottom() {
     followTailScroll.scrollToBottom();
+  }
+
+  protected void scrollToTranscriptOffset(int offset) {
+    try {
+      StyledDocument doc = currentDocument;
+      int len = (doc != null) ? doc.getLength() : 0;
+      int off = Math.max(0, Math.min(offset, len));
+      chat.setCaretPosition(off);
+      java.awt.geom.Rectangle2D r = chat.modelToView2D(off);
+      if (r != null) {
+        chat.scrollRectToVisible(r.getBounds());
+      }
+    } catch (Exception ignored) {
+    }
+  }
+
+  protected boolean isTranscriptAtBottom() {
+    try {
+      JScrollBar bar = scroll.getVerticalScrollBar();
+      if (bar == null) return true;
+      int max = bar.getMaximum();
+      int extent = bar.getModel().getExtent();
+      int val = bar.getValue();
+      return (val + extent) >= (max - 2);
+    } catch (Exception ignored) {
+      return true;
+    }
   }
 
   protected void armTailPinOnNextAppendIfAtBottom() {
@@ -324,6 +499,25 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       token = token.substring(hash).trim();
       if (token.length() <= 1) return null;
       return token;
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private String messageReferenceAt(Point p) {
+    try {
+      int pos = chat.viewToModel2D(p);
+      if (pos < 0) return null;
+
+      StyledDocument doc = (StyledDocument) chat.getDocument();
+      Element el = doc.getCharacterElement(pos);
+      if (el == null) return null;
+
+      AttributeSet attrs = el.getAttributes();
+      Object marker = attrs.getAttribute(ChatStyles.ATTR_MSG_REF);
+      if (marker == null) return null;
+      String msgId = String.valueOf(marker).trim();
+      return msgId.isEmpty() ? null : msgId;
     } catch (Exception ignored) {
       return null;
     }

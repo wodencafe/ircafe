@@ -5,7 +5,7 @@ import java.net.URI;
 
 final class XLinkPreviewResolver implements LinkPreviewResolver {
 
-  // Keep in sync with LinkPreviewFetchService's HTML cap.
+  // Keep in sync with LinkPreviewResolverConfig.DEFAULT_MAX_HTML_BYTES.
   private final int maxHtmlBytes;
 
   XLinkPreviewResolver(int maxHtmlBytes) {

@@ -107,7 +107,7 @@ public class LocalFilterCommandService {
     ui.appendStatus(out, "(filter)", "  /filter export [format=all|cmd] [file=<path>]");
     ui.appendStatus(out, "(filter)", "  /filter move <name> <pos|top|bottom|up [n]|down [n]|before <other>|after <other>>");
     ui.appendStatus(out, "(filter)", "  /filter add <name> [key=value ...]  (also WeeChat positional: /filter add <name> <buffer> <tags> <regex>)");
-    ui.appendStatus(out, "(filter)", "  /filter addreplace <name> key=value ...");
+    ui.appendStatus(out, "(filter)", "  /filter addreplace <name> [key=value ...]  (also WeeChat positional form)");
     ui.appendStatus(out, "(filter)", "  /filter set <name> key=value ...");
     ui.appendStatus(out, "(filter)", "  /filter rename <old> <new>");
     ui.appendStatus(out, "(filter)", "  /filter recreate <name>");
@@ -123,10 +123,10 @@ public class LocalFilterCommandService {
     ui.appendStatus(out, "(filter)", "  /filter override del scope=<glob>");
     ui.appendStatus(out, "(filter)", "");
     ui.appendStatus(out, "(filter)", "Global defaults:");
-    ui.appendStatus(out, "(filter)", "  /filter defaults filters=on|off placeholders=on|off collapsed=on|off preview=<0..25>");
+    ui.appendStatus(out, "(filter)", "  /filter defaults filters=on|off placeholders=on|off collapsed=on|off preview=<0..25> maxrun=<0..50000> maxtags=<0..500> maxbatch=<0..5000> history=on|off");
     ui.appendStatus(out, "(filter)", "  /filter placeholder-preview <0..25>");
     ui.appendStatus(out, "(filter)", "");
-    ui.appendStatus(out, "(filter)", "Rule keys: scope, enabled, action, dir, kind, from, text");
+    ui.appendStatus(out, "(filter)", "Rule keys: scope, enabled, action, dir, kind, from, tags, text");
     ui.appendStatus(out, "(filter)", "Keybinds (WeeChat-style): Alt+= toggle global filtering; Alt+- toggle current buffer");
     ui.appendStatus(out, "(filter)", "Scope shorthand: libera => libera/* ; #llamas => */#llamas ; status => */status");
     ui.appendStatus(out, "(filter)", "from/text matchers: glob:* ? (or prefix glob:...), or regex via re:<pattern> or /pattern/i");
@@ -870,7 +870,11 @@ private void toggle(TargetRef out, List<String> namesOrMasksRaw) {
         + " filters=" + (cur.filtersEnabledByDefault() ? "on" : "off")
         + " placeholders=" + (cur.placeholdersEnabledByDefault() ? "on" : "off")
         + " collapsed=" + (cur.placeholdersCollapsedByDefault() ? "on" : "off")
-        + " preview=" + cur.placeholderMaxPreviewLines());
+        + " preview=" + cur.placeholderMaxPreviewLines()
+        + " maxrun=" + cur.placeholderMaxLinesPerRun()
+        + " maxtags=" + cur.placeholderTooltipMaxTags()
+        + " maxbatch=" + cur.historyPlaceholderMaxRunsPerBatch()
+        + " history=" + (cur.historyPlaceholdersEnabledByDefault() ? "on" : "off"));
 
     for (FilterScopeOverride o : cur.overrides()) {
       out.add("/filter override set scope=" + o.scopePattern()

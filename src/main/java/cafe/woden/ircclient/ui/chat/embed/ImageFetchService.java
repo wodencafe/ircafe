@@ -100,7 +100,7 @@ public class ImageFetchService {
     // Use HttpURLConnection (via HttpLite) so SOCKS proxies work.
     // java.net.http.HttpClient does not support SOCKS proxies.
     Map<String, String> headers = new HashMap<>();
-    headers.put("User-Agent", PreviewHttp.USER_AGENT);
+    headers.put("User-Agent", needsInstagramReferer(uri) ? PreviewHttp.BROWSER_USER_AGENT : PreviewHttp.USER_AGENT);
     headers.put("Accept-Language", PreviewHttp.ACCEPT_LANGUAGE);
     headers.put("Accept-Encoding", "gzip");
     // IMPORTANT: Do NOT advertise AVIF by default.
@@ -115,6 +115,11 @@ public class ImageFetchService {
     // Some IMDb/Amazon image endpoints can be picky without a referer.
     if (needsImdbReferer(uri)) {
       headers.put("Referer", "https://www.imdb.com/");
+    }
+
+    // Instagram CDN endpoints can return bot-check HTML without a referer.
+    if (!headers.containsKey("Referer") && needsInstagramReferer(uri)) {
+      headers.put("Referer", "https://www.instagram.com/");
     }
 
     ProxyPlan plan = (proxyResolver != null) ? proxyResolver.planForServer(serverId) : ProxyPlan.direct();
@@ -260,6 +265,23 @@ public class ImageFetchService {
     return host.contains("media-amazon.com")
         || host.contains("images-amazon.com")
         || host.contains("amazonaws.com");
+  }
+
+  private static boolean needsInstagramReferer(URI uri) {
+    if (uri == null) return false;
+    String host = uri.getHost();
+    if (host == null || host.isBlank()) return false;
+    String h = host.toLowerCase(Locale.ROOT);
+    if (h.startsWith("www.")) h = h.substring(4);
+
+    if (h.equals("instagram.com") || h.endsWith(".instagram.com") || h.equals("instagr.am")) {
+      return true;
+    }
+
+    // Common direct media hosts.
+    if (h.contains("cdninstagram.com")) return true;
+    if (h.endsWith("fbcdn.net") && h.contains("instagram")) return true;
+    return false;
   }
 
   private static boolean looksLikeHtmlResponse(String contentType, byte[] sample, int sampleN) {

@@ -21,30 +21,15 @@ public class LinkPreviewFetchService {
 
   private static final Logger log = LoggerFactory.getLogger(LinkPreviewFetchService.class);
 
-  
-  private static final int MAX_BYTES = 1024 * 1024; // 1 MiB
-
   private final ServerProxyResolver proxyResolver;
-
-  private final List<LinkPreviewResolver> resolvers = List.of(
-      new WikipediaLinkPreviewResolver(),
-      new YouTubeLinkPreviewResolver(),
-      new SlashdotLinkPreviewResolver(),
-      new ImdbLinkPreviewResolver(),
-      new RottenTomatoesLinkPreviewResolver(),
-      new XLinkPreviewResolver(MAX_BYTES),
-      new GitHubLinkPreviewResolver(),
-      new RedditLinkPreviewResolver(),
-      new MastodonStatusApiPreviewResolver(),
-      new OEmbedLinkPreviewResolver(OEmbedLinkPreviewResolver.defaultProviders()),
-      new OpenGraphLinkPreviewResolver(MAX_BYTES)
-  );
+  private final List<LinkPreviewResolver> resolvers;
 
   private final ConcurrentMap<String, java.lang.ref.SoftReference<LinkPreview>> cache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Single<LinkPreview>> inflight = new ConcurrentHashMap<>();
 
-  public LinkPreviewFetchService(ServerProxyResolver proxyResolver) {
+  public LinkPreviewFetchService(ServerProxyResolver proxyResolver, List<LinkPreviewResolver> resolvers) {
     this.proxyResolver = proxyResolver;
+    this.resolvers = (resolvers == null) ? List.of() : List.copyOf(resolvers);
   }
 
   public Single<LinkPreview> fetch(String serverId, String url) {
@@ -57,7 +42,7 @@ public class LinkPreviewFetchService {
 
     // Per-server cache key. Previews can vary by proxy (geo/CDN/bot pages), so we isolate.
     final String sid = Objects.toString(serverId, "").trim();
-    final String key = sid + "|" + normalized;
+    final String key = sid + "|" + normalized + "|" + cacheVersion(normalized);
 
     // Cache hit
     var ref = cache.get(key);
@@ -144,5 +129,26 @@ public class LinkPreviewFetchService {
     } catch (Exception ignored) {
       return -1;
     }
+  }
+
+  private static String cacheVersion(String normalizedUrl) {
+    try {
+      URI uri = URI.create(normalizedUrl);
+      if (InstagramPreviewUtil.isInstagramPostUri(uri)) {
+        // Bump this when Instagram extraction/layout semantics change to avoid stale cached cards.
+        return "ig-v2";
+      }
+      if (ImgurPreviewUtil.isImgurUri(uri)) {
+        // Imgur has a dedicated resolver and metadata layout.
+        return "imgur-v1";
+      }
+      if (NewsPreviewUtil.isLikelyNewsArticleUri(uri)) {
+        // News previews can switch from plain OG to structured metadata+summary formatting.
+        return "news-v2";
+      }
+    } catch (Exception ignored) {
+      // Fall through to default version.
+    }
+    return "v1";
   }
 }

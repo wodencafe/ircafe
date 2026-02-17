@@ -11,6 +11,7 @@ import cafe.woden.ircclient.ui.chat.fold.FilteredOverflowComponent;
 import cafe.woden.ircclient.ui.chat.fold.PresenceFoldComponent;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.chat.fold.HistoryDividerComponent;
+import cafe.woden.ircclient.ui.chat.fold.MessageReactionsComponent;
 import cafe.woden.ircclient.ui.chat.fold.SpoilerMessageComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.chat.render.IrcFormatting;
@@ -25,9 +26,14 @@ import java.beans.PropertyChangeListener;
 import java.awt.Font;
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Set;
 import javax.swing.text.AttributeSet;
@@ -100,20 +106,64 @@ public class ChatTranscriptStore {
       LogDirection direction,
       String fromNick,
       Long epochMs,
-      Set<String> tags
+      Set<String> tags,
+      String messageId,
+      String ircv3Tags
   ) {
     String tagsDisplay() {
       if (tags == null || tags.isEmpty()) return "";
       return String.join(" ", tags);
     }
+
+    String messageIdDisplay() {
+      return messageId == null ? "" : messageId;
+    }
+
+    String ircv3TagsDisplay() {
+      return ircv3Tags == null ? "" : ircv3Tags;
+    }
   }
 
   private LineMeta buildLineMeta(TargetRef ref, LogKind kind, LogDirection dir, String fromNick, Long epochMs, PresenceEvent presenceEvent) {
-    Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent);
-    return new LineMeta(bufferKey(ref), kind, dir, fromNick, epochMs, tags);
+    return buildLineMeta(ref, kind, dir, fromNick, epochMs, presenceEvent, "", Map.of());
+  }
+
+  private LineMeta buildLineMeta(
+      TargetRef ref,
+      LogKind kind,
+      LogDirection dir,
+      String fromNick,
+      Long epochMs,
+      PresenceEvent presenceEvent,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    String msgId = normalizeMessageId(messageId);
+    Map<String, String> tagsMap = normalizeIrcv3Tags(ircv3Tags);
+    Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent, msgId, tagsMap);
+    return new LineMeta(
+        bufferKey(ref),
+        kind,
+        dir,
+        fromNick,
+        epochMs,
+        tags,
+        msgId,
+        formatIrcv3Tags(tagsMap));
   }
 
   private Set<String> computeTags(LogKind kind, LogDirection dir, String fromNick, PresenceEvent presenceEvent) {
+    return computeTags(kind, dir, fromNick, presenceEvent, "", Map.of());
+  }
+
+  private Set<String> computeTags(
+      LogKind kind,
+      LogDirection dir,
+      String fromNick,
+      PresenceEvent presenceEvent,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
     java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
 
     if (kind != null) {
@@ -173,6 +223,18 @@ public class ChatTranscriptStore {
       }
     }
 
+    if (messageId != null && !messageId.isBlank()) {
+      out.add("ircv3_msgid");
+    }
+
+    if (ircv3Tags != null && !ircv3Tags.isEmpty()) {
+      out.add("ircv3_tagged");
+      for (String rawKey : ircv3Tags.keySet()) {
+        String key = sanitizeTagForMeta(rawKey);
+        if (!key.isEmpty()) out.add("ircv3_tag_" + key);
+      }
+    }
+
     return java.util.Set.copyOf(out);
   }
 
@@ -198,6 +260,12 @@ public class ChatTranscriptStore {
     if (meta.epochMs() != null && meta.epochMs() > 0) {
       a.addAttribute(ChatStyles.ATTR_META_EPOCH_MS, meta.epochMs());
     }
+    if (!meta.messageIdDisplay().isBlank()) {
+      a.addAttribute(ChatStyles.ATTR_META_MSGID, meta.messageIdDisplay());
+    }
+    if (!meta.ircv3TagsDisplay().isBlank()) {
+      a.addAttribute(ChatStyles.ATTR_META_IRCV3_TAGS, meta.ircv3TagsDisplay());
+    }
     return a;
   }
 
@@ -211,6 +279,10 @@ public class ChatTranscriptStore {
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FROM);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_TAGS);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_EPOCH_MS);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_MSGID);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_IRCV3_TAGS);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_PENDING_ID);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_PENDING_STATE);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_ID);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_ACTION);
@@ -225,6 +297,82 @@ public class ChatTranscriptStore {
       }
     } catch (Exception ignored) {
     }
+  }
+
+  private static String normalizeMessageId(String raw) {
+    String s = (raw == null) ? "" : raw.trim();
+    return s;
+  }
+
+  private static String normalizePendingId(String raw) {
+    String s = (raw == null) ? "" : raw.trim();
+    return s;
+  }
+
+  private static Map<String, String> normalizeIrcv3Tags(Map<String, String> raw) {
+    if (raw == null || raw.isEmpty()) return Map.of();
+    java.util.LinkedHashMap<String, String> out = new java.util.LinkedHashMap<>();
+    for (Map.Entry<String, String> e : raw.entrySet()) {
+      String key = normalizeIrcv3TagKey(e.getKey());
+      if (key.isEmpty()) continue;
+      String val = (e.getValue() == null) ? "" : e.getValue();
+      out.put(key, val);
+    }
+    if (out.isEmpty()) return Map.of();
+    return java.util.Collections.unmodifiableMap(out);
+  }
+
+  private static String normalizeIrcv3TagKey(String rawKey) {
+    String k = (rawKey == null) ? "" : rawKey.trim();
+    if (k.startsWith("@")) k = k.substring(1).trim();
+    if (k.startsWith("+")) k = k.substring(1).trim();
+    if (k.isEmpty()) return "";
+    return k.toLowerCase(Locale.ROOT);
+  }
+
+  private static String firstIrcv3TagValue(Map<String, String> tags, String... keys) {
+    if (tags == null || tags.isEmpty() || keys == null) return "";
+    for (String key : keys) {
+      String want = normalizeIrcv3TagKey(key);
+      if (want.isEmpty()) continue;
+      for (Map.Entry<String, String> e : tags.entrySet()) {
+        String got = normalizeIrcv3TagKey(e.getKey());
+        if (!want.equals(got)) continue;
+        String raw = (e.getValue() == null) ? "" : e.getValue().trim();
+        if (raw.isEmpty()) continue;
+        return raw;
+      }
+    }
+    return "";
+  }
+
+  private static String sanitizeTagForMeta(String rawKey) {
+    String key = normalizeIrcv3TagKey(rawKey);
+    if (key.isEmpty()) return "";
+    StringBuilder sb = new StringBuilder(key.length());
+    for (int i = 0; i < key.length(); i++) {
+      char c = key.charAt(i);
+      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+        sb.append(c);
+      } else {
+        sb.append('_');
+      }
+    }
+    return sb.toString();
+  }
+
+  private static String formatIrcv3Tags(Map<String, String> tags) {
+    if (tags == null || tags.isEmpty()) return "";
+    StringBuilder sb = new StringBuilder();
+    for (Map.Entry<String, String> e : tags.entrySet()) {
+      String key = normalizeIrcv3TagKey(e.getKey());
+      if (key.isEmpty()) continue;
+      if (sb.length() > 0) sb.append(';');
+      sb.append(key);
+      String val = (e.getValue() == null) ? "" : e.getValue();
+      if (!val.isEmpty()) sb.append('=').append(val);
+    }
+    return sb.toString();
   }
 
 
@@ -743,7 +891,7 @@ public class ChatTranscriptStore {
 
   private LineMeta buildFilteredOverflowMeta(LineMeta base, long tsEpochMs, Set<String> unionTags) {
     if (base == null) {
-      base = new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of());
+      base = new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "");
     }
 
     java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
@@ -762,7 +910,9 @@ public class ChatTranscriptStore {
         base.direction(),
         base.fromNick(),
         tsEpochMs,
-        Set.copyOf(tags)
+        Set.copyOf(tags),
+        base.messageId(),
+        base.ircv3Tags()
     );
   }
 
@@ -839,7 +989,7 @@ public class ChatTranscriptStore {
   private LineMeta buildFilteredMeta(LineMeta base, long tsEpochMs, boolean hint, Set<String> unionTags) {
     if (base == null) {
       // Fallback meta: should be rare (only if a caller fails to provide meta).
-      base = new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of());
+      base = new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "");
     }
 
     java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
@@ -858,7 +1008,9 @@ public class ChatTranscriptStore {
         base.direction(),
         base.fromNick(),
         tsEpochMs,
-        Set.copyOf(tags)
+        Set.copyOf(tags),
+        base.messageId(),
+        base.ircv3Tags()
     );
   }
 
@@ -1082,6 +1234,187 @@ public class ChatTranscriptStore {
     int delta = doc.getLength() - beforeLen;
     shiftCurrentPresenceBlock(ref, insertionStart, delta);
     return comp;
+  }
+
+  public synchronized void updateReadMarker(TargetRef ref, long markerEpochMs) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+
+    removeReadMarkerControl(ref, doc, st);
+
+    long markerMs = markerEpochMs > 0 ? markerEpochMs : System.currentTimeMillis();
+    int firstUnreadStart = findFirstUnreadLineStart(doc, markerMs);
+    if (firstUnreadStart < 0) return;
+
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, markerMs, null);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, firstUnreadStart);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    HistoryDividerComponent comp = new HistoryDividerComponent("Unread");
+    Font f = safeTranscriptFont();
+    if (f != null) {
+      try {
+        comp.setTranscriptFont(f);
+      } catch (Exception ignored) {
+      }
+    }
+
+    try {
+      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(pos, " ", attrs);
+      Position p = doc.createPosition(pos);
+      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      st.readMarker = new ReadMarkerControl(p, comp);
+    } catch (Exception ignored) {
+      st.readMarker = null;
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+  }
+
+  public synchronized int readMarkerJumpOffset(TargetRef ref) {
+    if (ref == null) return -1;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || st.readMarker == null) return -1;
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return -1;
+    int base = st.readMarker.pos.getOffset();
+    int off = base + 2;
+    return Math.max(0, Math.min(off, doc.getLength()));
+  }
+
+  public synchronized int messageOffsetById(TargetRef ref, String messageId) {
+    if (ref == null) return -1;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return -1;
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return -1;
+    return findLineStartByMessageId(doc, msgId);
+  }
+
+  public synchronized boolean isOwnMessage(TargetRef ref, String messageId) {
+    if (ref == null) return false;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return false;
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    int lineStart = findLineStartByMessageId(doc, msgId);
+    if (lineStart < 0) return false;
+
+    try {
+      int len = doc.getLength();
+      if (len <= 0) return false;
+      int safePos = Math.max(0, Math.min(lineStart, len - 1));
+      AttributeSet attrs = doc.getCharacterElement(safePos).getAttributes();
+      if (attrs == null) return false;
+      if (Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_OUTGOING))) return true;
+      return logDirectionFromAttrs(attrs) == LogDirection.OUT;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  public synchronized void applyMessageReaction(
+      TargetRef ref,
+      String targetMessageId,
+      String reaction,
+      String fromNick,
+      long tsEpochMs
+  ) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+    applyMessageReactionInternal(ref, doc, st, targetMessageId, reaction, fromNick, tsEpochMs);
+  }
+
+  public synchronized boolean applyMessageEdit(
+      TargetRef ref,
+      String targetMessageId,
+      String editedText,
+      String fromNick,
+      long tsEpochMs,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    if (ref == null) return false;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    if (targetMsgId.isEmpty()) return false;
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) return false;
+
+    AttributeSet attrs;
+    try {
+      attrs = doc.getCharacterElement(Math.max(0, Math.min(lineStart, Math.max(0, doc.getLength() - 1)))).getAttributes();
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    return replaceMessageLine(
+        ref,
+        doc,
+        lineStart,
+        attrs,
+        renderEditedText(editedText),
+        tsEpochMs,
+        replacementMessageId,
+        replacementIrcv3Tags);
+  }
+
+  public synchronized boolean applyMessageRedaction(
+      TargetRef ref,
+      String targetMessageId,
+      String fromNick,
+      long tsEpochMs,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    if (ref == null) return false;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null) return false;
+
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    if (targetMsgId.isEmpty()) return false;
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) return false;
+
+    AttributeSet attrs;
+    try {
+      attrs = doc.getCharacterElement(Math.max(0, Math.min(lineStart, Math.max(0, doc.getLength() - 1)))).getAttributes();
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    boolean replaced = replaceMessageLine(
+        ref,
+        doc,
+        lineStart,
+        attrs,
+        "[message redacted]",
+        tsEpochMs,
+        replacementMessageId,
+        replacementIrcv3Tags);
+    if (replaced && st != null) {
+      clearReactionStateForMessage(ref, doc, st, targetMsgId);
+    }
+    return replaced;
   }
 
   public synchronized int loadOlderInsertOffset(TargetRef ref) {
@@ -1363,11 +1696,21 @@ public void appendChatAt(TargetRef ref,
                          String text,
                          boolean outgoingLocalEcho,
                          long tsEpochMs) {
+  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+}
+
+public void appendChatAt(TargetRef ref,
+                         String from,
+                         String text,
+                         boolean outgoingLocalEcho,
+                         long tsEpochMs,
+                         String messageId,
+                         Map<String, String> ircv3Tags) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
 
   LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-  LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+  LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
   if (m != null) {
     onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
@@ -1385,8 +1728,117 @@ public void appendChatAt(TargetRef ref,
   SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
   applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
+  String normalizedMsgId = normalizeMessageId(messageId);
+  String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+  String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
+  if (!replyToMsgId.isBlank()) {
+    appendReplyContextLine(ref, from, replyToMsgId, tsEpochMs);
+  }
+
   appendLineInternal(ref, from, text, fs, ms, true, meta);
+
+  StyledDocument doc = docs.get(ref);
+  TranscriptState st = stateByTarget.get(ref);
+  if (doc != null && st != null && !normalizedMsgId.isBlank()) {
+    materializePendingReactionsForMessage(ref, doc, st, normalizedMsgId, tsEpochMs);
+  }
+  if (doc != null && st != null && !reactionToken.isBlank() && !replyToMsgId.isBlank()) {
+    applyMessageReactionInternal(ref, doc, st, replyToMsgId, reactionToken, from, tsEpochMs);
+  }
 }
+
+  public synchronized void appendPendingOutgoingChat(
+      TargetRef ref,
+      String pendingId,
+      String from,
+      String text,
+      long tsEpochMs
+  ) {
+    if (ref == null) return;
+    String pid = normalizePendingId(pendingId);
+    if (pid.isEmpty()) return;
+
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    breakPresenceRun(ref);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, LogDirection.OUT, from, tsEpochMs, null);
+    AttributeSet fromStyle = styles.from();
+    if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
+    applyOutgoingLineColor(fs, ms, true);
+    fs.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pid);
+    fs.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, "pending");
+    ms.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pid);
+    ms.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, "pending");
+
+    appendLineInternal(ref, from, Objects.toString(text, "") + " [pending]", fs, ms, true, meta);
+  }
+
+  public synchronized boolean resolvePendingOutgoingChat(
+      TargetRef ref,
+      String pendingId,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    if (ref == null) return false;
+    String pid = normalizePendingId(pendingId);
+    if (pid.isEmpty()) return false;
+
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    int lineStart = findLineStartByPendingId(doc, pid);
+    if (lineStart < 0) return false;
+    int lineEnd = lineEndOffsetForLineStart(doc, lineStart);
+    try {
+      doc.remove(lineStart, Math.max(0, lineEnd - lineStart));
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    long ts = tsEpochMs > 0 ? tsEpochMs : System.currentTimeMillis();
+    insertCanonicalOutgoingChatLineAt(ref, lineStart, from, text, ts, messageId, ircv3Tags);
+    return true;
+  }
+
+  public synchronized boolean failPendingOutgoingChat(
+      TargetRef ref,
+      String pendingId,
+      String from,
+      String text,
+      long tsEpochMs,
+      String reason
+  ) {
+    if (ref == null) return false;
+    String pid = normalizePendingId(pendingId);
+    if (pid.isEmpty()) return false;
+
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    int lineStart = findLineStartByPendingId(doc, pid);
+    if (lineStart < 0) return false;
+    int lineEnd = lineEndOffsetForLineStart(doc, lineStart);
+    try {
+      doc.remove(lineStart, Math.max(0, lineEnd - lineStart));
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    long ts = tsEpochMs > 0 ? tsEpochMs : System.currentTimeMillis();
+    insertFailedOutgoingChatLineAt(ref, lineStart, from, text, ts, reason);
+    return true;
+  }
   public synchronized int insertChatFromHistoryAt(TargetRef ref,
                                                   int insertAt,
                                                   String from,
@@ -1888,6 +2340,596 @@ public void appendChatAt(TargetRef ref,
     }
   }
 
+  private void removeReadMarkerControl(TargetRef ref, StyledDocument doc, TranscriptState st) {
+    if (ref == null || doc == null || st == null || st.readMarker == null) return;
+    try {
+      int len = doc.getLength();
+      int start = Math.max(0, Math.min(st.readMarker.pos.getOffset(), len));
+      int removeLen = 0;
+      if (start < len) {
+        removeLen = 1;
+      }
+      if ((start + removeLen) < len) {
+        try {
+          String maybeNl = doc.getText(start + removeLen, 1);
+          if ("\n".equals(maybeNl)) removeLen += 1;
+        } catch (Exception ignored) {
+        }
+      }
+      if (removeLen > 0) {
+        doc.remove(start, removeLen);
+        shiftCurrentPresenceBlock(ref, start, -removeLen);
+      }
+    } catch (Exception ignored) {
+    } finally {
+      st.readMarker = null;
+    }
+  }
+
+  private int findFirstUnreadLineStart(StyledDocument doc, long markerEpochMs) {
+    if (doc == null) return -1;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return -1;
+      int lineCount = root.getElementCount();
+      int len = doc.getLength();
+      for (int i = 0; i < lineCount; i++) {
+        Element line = root.getElement(i);
+        if (line == null) continue;
+        int start = Math.max(0, line.getStartOffset());
+        if (start >= len) continue;
+
+        AttributeSet attrs = doc.getCharacterElement(start).getAttributes();
+        if (!isConversationLine(attrs)) continue;
+
+        Long lineEpochMs = lineEpochMs(attrs);
+        if (lineEpochMs == null) continue;
+        if (lineEpochMs > markerEpochMs) return start;
+      }
+    } catch (Exception ignored) {
+    }
+    return -1;
+  }
+
+  private static boolean isConversationLine(AttributeSet attrs) {
+    if (attrs == null) return false;
+    Object rawKind = attrs.getAttribute(ChatStyles.ATTR_META_KIND);
+    if (rawKind == null) return false;
+    String kind = String.valueOf(rawKind).trim().toUpperCase(Locale.ROOT);
+    return "CHAT".equals(kind)
+        || "ACTION".equals(kind)
+        || "NOTICE".equals(kind)
+        || "SPOILER".equals(kind);
+  }
+
+  private static Long lineEpochMs(AttributeSet attrs) {
+    if (attrs == null) return null;
+    Object raw = attrs.getAttribute(ChatStyles.ATTR_META_EPOCH_MS);
+    if (raw instanceof Number n) {
+      return n.longValue();
+    }
+    if (raw == null) return null;
+    try {
+      String s = String.valueOf(raw).trim();
+      if (s.isEmpty()) return null;
+      return Long.parseLong(s);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private void appendReplyContextLine(TargetRef ref, String fromNick, String replyToMsgId, long tsEpochMs) {
+    String targetMsgId = normalizeMessageId(replyToMsgId);
+    if (targetMsgId.isEmpty()) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return;
+
+    ensureAtLineStart(doc);
+
+    Map<String, String> tags = Map.of("draft/reply", targetMsgId);
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, fromNick, tsEpochMs, null, targetMsgId, tags);
+    AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+    SimpleAttributeSet prefixStyle = withLineMeta(styles.status(), meta);
+    prefixStyle.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+    SimpleAttributeSet msgRefStyle = withLineMeta(styles.link(), meta);
+    msgRefStyle.addAttribute(ChatStyles.ATTR_MSG_REF, targetMsgId);
+
+    String from = Objects.toString(fromNick, "").trim();
+    String prefix = from.isEmpty() ? "-> Reply to " : ("-> " + from + " replied to ");
+
+    try {
+      if (ts != null && ts.enabled()) {
+        doc.insertString(doc.getLength(), ts.prefixAt(tsEpochMs), tsStyle);
+      }
+      doc.insertString(doc.getLength(), prefix, prefixStyle);
+      doc.insertString(doc.getLength(), targetMsgId, msgRefStyle);
+      doc.insertString(doc.getLength(), "\n", tsStyle);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private boolean replaceMessageLine(
+      TargetRef ref,
+      StyledDocument doc,
+      int lineStart,
+      AttributeSet existingAttrs,
+      String replacementText,
+      long tsEpochMs,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags
+  ) {
+    if (ref == null || doc == null || existingAttrs == null) return false;
+
+    LogKind kind = logKindFromAttrs(existingAttrs);
+    if (kind != LogKind.CHAT && kind != LogKind.NOTICE && kind != LogKind.ACTION) {
+      return false;
+    }
+
+    String from = Objects.toString(existingAttrs.getAttribute(ChatStyles.ATTR_META_FROM), "").trim();
+    LogDirection dir = logDirectionFromAttrs(existingAttrs);
+    boolean outgoingLocalEcho =
+        dir == LogDirection.OUT || Boolean.TRUE.equals(existingAttrs.getAttribute(ChatStyles.ATTR_OUTGOING));
+
+    long epochMs = tsEpochMs > 0 ? tsEpochMs : System.currentTimeMillis();
+    Long existingEpochMs = lineEpochMs(existingAttrs);
+    if (existingEpochMs != null && existingEpochMs > 0) {
+      epochMs = existingEpochMs;
+    }
+    noteEpochMs(ref, epochMs);
+
+    String existingMsgId =
+        normalizeMessageId(Objects.toString(existingAttrs.getAttribute(ChatStyles.ATTR_META_MSGID), ""));
+    String replacementMsgId = normalizeMessageId(replacementMessageId);
+    String msgIdForMeta = !existingMsgId.isBlank() ? existingMsgId : replacementMsgId;
+
+    Map<String, String> mergedTags = mergeIrcv3Tags(
+        parseIrcv3TagsDisplay(Objects.toString(existingAttrs.getAttribute(ChatStyles.ATTR_META_IRCV3_TAGS), "")),
+        replacementIrcv3Tags);
+    if (!replacementMsgId.isBlank() && !mergedTags.containsKey("msgid")) {
+      LinkedHashMap<String, String> augmented = new LinkedHashMap<>(mergedTags);
+      augmented.put("msgid", replacementMsgId);
+      mergedTags = augmented;
+    }
+
+    int lineEnd = lineEndOffsetForLineStart(doc, lineStart);
+    int removeLen = Math.max(0, lineEnd - lineStart);
+    if (removeLen <= 0) return false;
+    try {
+      doc.remove(lineStart, removeLen);
+    } catch (Exception ignored) {
+      return false;
+    }
+
+    LineMeta meta = buildLineMeta(ref, kind, dir, from, epochMs, null, msgIdForMeta, mergedTags);
+    String text = Objects.toString(replacementText, "");
+
+    if (kind == LogKind.ACTION) {
+      insertActionLineInternalAt(ref, lineStart, from, text, outgoingLocalEcho, meta);
+      return true;
+    }
+
+    AttributeSet fromStyle = (kind == LogKind.NOTICE) ? styles.noticeFrom() : styles.from();
+    if (kind == LogKind.CHAT && from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+    AttributeSet msgStyle = (kind == LogKind.NOTICE) ? styles.noticeMessage() : styles.message();
+
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(msgStyle, meta);
+    applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+    insertLineInternalAt(ref, lineStart, from, text, fs, ms, false, meta);
+    return true;
+  }
+
+  private int insertActionLineInternalAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      LineMeta meta
+  ) {
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
+    if (doc == null) return Math.max(0, insertAt);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    long tsEpochMs = (meta != null && meta.epochMs() != null && meta.epochMs() > 0)
+        ? meta.epochMs()
+        : System.currentTimeMillis();
+    String a = action == null ? "" : action;
+
+    try {
+      boolean timestampsIncludeChatMessages = false;
+      try {
+        timestampsIncludeChatMessages = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().timestampsIncludeChatMessages();
+      } catch (Exception ignored) {
+        timestampsIncludeChatMessages = false;
+      }
+
+      AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+      if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
+        String prefix = ts.prefixAt(tsEpochMs);
+        doc.insertString(pos, prefix, tsStyle);
+        pos += prefix.length();
+      }
+
+      AttributeSet msgStyle = withLineMeta(styles.actionMessage(), meta);
+      AttributeSet fromStyle = styles.actionFrom();
+      if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+        fromStyle = nickColors.forNick(from, fromStyle);
+      }
+
+      SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
+      SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+      applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+
+      doc.insertString(pos, "* ", ms);
+      pos += 2;
+      if (from != null && !from.isBlank()) {
+        doc.insertString(pos, from, fs);
+        pos += from.length();
+        doc.insertString(pos, " ", ms);
+        pos += 1;
+      }
+
+      if (renderer != null) {
+        pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
+      } else {
+        doc.insertString(pos, a, ms);
+        pos += a.length();
+      }
+
+      doc.insertString(pos, "\n", tsStyle);
+      pos += 1;
+    } catch (Exception ignored) {
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return pos;
+  }
+
+  private void clearReactionStateForMessage(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String targetMessageId
+  ) {
+    if (ref == null || doc == null || st == null) return;
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    if (targetMsgId.isEmpty()) return;
+
+    ReactionState state = st.reactionsByTargetMsgId.remove(targetMsgId);
+    if (state == null || state.control == null) return;
+
+    try {
+      int len = doc.getLength();
+      int start = Math.max(0, Math.min(state.control.pos.getOffset(), len));
+      int removeLen = 0;
+      if (start < len) removeLen = 1;
+      if ((start + removeLen) < len) {
+        try {
+          String maybeNl = doc.getText(start + removeLen, 1);
+          if ("\n".equals(maybeNl)) removeLen += 1;
+        } catch (Exception ignored) {
+        }
+      }
+      if (removeLen > 0) {
+        doc.remove(start, removeLen);
+        shiftCurrentPresenceBlock(ref, start, -removeLen);
+      }
+    } catch (Exception ignored) {
+    } finally {
+      state.control = null;
+    }
+  }
+
+  private static LogKind logKindFromAttrs(AttributeSet attrs) {
+    if (attrs == null) return LogKind.CHAT;
+    String raw = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_KIND), "").trim();
+    if (raw.isEmpty()) return LogKind.CHAT;
+    try {
+      return LogKind.valueOf(raw.toUpperCase(Locale.ROOT));
+    } catch (Exception ignored) {
+      return LogKind.CHAT;
+    }
+  }
+
+  private static LogDirection logDirectionFromAttrs(AttributeSet attrs) {
+    if (attrs == null) return LogDirection.IN;
+    String raw = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_DIRECTION), "").trim();
+    if (raw.isEmpty()) return LogDirection.IN;
+    try {
+      return LogDirection.valueOf(raw.toUpperCase(Locale.ROOT));
+    } catch (Exception ignored) {
+      return LogDirection.IN;
+    }
+  }
+
+  private static Map<String, String> parseIrcv3TagsDisplay(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    if (s.isEmpty()) return Map.of();
+    LinkedHashMap<String, String> out = new LinkedHashMap<>();
+    String[] parts = s.split(";");
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) continue;
+      int eq = p.indexOf('=');
+      if (eq < 0) {
+        out.put(p, "");
+      } else {
+        String k = p.substring(0, eq).trim();
+        String v = p.substring(eq + 1).trim();
+        if (!k.isEmpty()) out.put(k, v);
+      }
+    }
+    if (out.isEmpty()) return Map.of();
+    return out;
+  }
+
+  private static Map<String, String> mergeIrcv3Tags(Map<String, String> base, Map<String, String> overlay) {
+    Map<String, String> left = normalizeIrcv3Tags(base);
+    Map<String, String> right = normalizeIrcv3Tags(overlay);
+    if (left.isEmpty()) return right;
+    if (right.isEmpty()) return left;
+    LinkedHashMap<String, String> out = new LinkedHashMap<>(left);
+    out.putAll(right);
+    return out;
+  }
+
+  private static String renderEditedText(String text) {
+    String t = Objects.toString(text, "");
+    if (t.isBlank()) {
+      return "(edited)";
+    }
+    return t + " (edited)";
+  }
+
+  private void applyMessageReactionInternal(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String targetMessageId,
+      String reaction,
+      String fromNick,
+      long tsEpochMs
+  ) {
+    if (ref == null || doc == null || st == null) return;
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    String reactionToken = Objects.toString(reaction, "").trim();
+    String nick = Objects.toString(fromNick, "").trim();
+    if (targetMsgId.isEmpty() || reactionToken.isEmpty() || nick.isEmpty()) return;
+
+    ReactionState state = st.reactionsByTargetMsgId.computeIfAbsent(targetMsgId, k -> new ReactionState());
+    state.observe(reactionToken, nick);
+    if (state.control != null && state.control.component != null) {
+      try {
+        state.control.component.setReactions(state.reactionsSnapshot());
+      } catch (Exception ignored) {
+      }
+      return;
+    }
+
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) {
+      return;
+    }
+    insertReactionControlForMessage(ref, doc, st, targetMsgId, lineStart, state, tsEpochMs);
+  }
+
+  private void materializePendingReactionsForMessage(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String messageId,
+      long tsEpochMs
+  ) {
+    if (ref == null || doc == null || st == null) return;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return;
+
+    ReactionState state = st.reactionsByTargetMsgId.get(msgId);
+    if (state == null || state.isEmpty() || state.control != null) return;
+
+    int lineStart = findLineStartByMessageId(doc, msgId);
+    if (lineStart < 0) return;
+    insertReactionControlForMessage(ref, doc, st, msgId, lineStart, state, tsEpochMs);
+  }
+
+  private void insertReactionControlForMessage(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String targetMsgId,
+      int messageLineStart,
+      ReactionState state,
+      long tsEpochMs
+  ) {
+    if (ref == null || doc == null || st == null || state == null) return;
+    if (state.control != null) return;
+
+    int lineEnd = lineEndOffsetForLineStart(doc, messageLineStart);
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, lineEnd);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    MessageReactionsComponent comp = new MessageReactionsComponent();
+    Font f = safeTranscriptFont();
+    if (f != null) {
+      try {
+        comp.setTranscriptFont(f);
+      } catch (Exception ignored) {
+      }
+    }
+    comp.setReactions(state.reactionsSnapshot());
+
+    LineMeta meta = buildLineMeta(
+        ref,
+        LogKind.STATUS,
+        LogDirection.SYSTEM,
+        null,
+        tsEpochMs,
+        null,
+        targetMsgId,
+        Map.of("draft/react", "1"));
+
+    try {
+      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(pos, " ", attrs);
+      Position p = doc.createPosition(pos);
+      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      state.control = new ReactionSummaryControl(p, comp);
+    } catch (Exception ignored) {
+      state.control = null;
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+  }
+
+  private int findLineStartByMessageId(StyledDocument doc, String messageId) {
+    if (doc == null) return -1;
+    String want = normalizeMessageId(messageId);
+    if (want.isEmpty()) return -1;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return -1;
+      int len = doc.getLength();
+      for (int i = 0; i < root.getElementCount(); i++) {
+        Element line = root.getElement(i);
+        if (line == null) continue;
+        int start = Math.max(0, line.getStartOffset());
+        if (start >= len) continue;
+        AttributeSet attrs = doc.getCharacterElement(start).getAttributes();
+        String got = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_MSGID), "").trim();
+        if (want.equals(got)) return start;
+      }
+    } catch (Exception ignored) {
+    }
+    return -1;
+  }
+
+  private int lineEndOffsetForLineStart(StyledDocument doc, int lineStart) {
+    if (doc == null) return Math.max(0, lineStart);
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return Math.max(0, lineStart);
+      int idx = root.getElementIndex(Math.max(0, lineStart));
+      Element line = root.getElement(idx);
+      if (line == null) return Math.max(0, lineStart);
+      int end = line.getEndOffset();
+      return Math.max(0, Math.min(end, doc.getLength()));
+    } catch (Exception ignored) {
+      return Math.max(0, lineStart);
+    }
+  }
+
+  private int findLineStartByPendingId(StyledDocument doc, String pendingId) {
+    if (doc == null) return -1;
+    String want = normalizePendingId(pendingId);
+    if (want.isEmpty()) return -1;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return -1;
+      int len = doc.getLength();
+      for (int i = 0; i < root.getElementCount(); i++) {
+        Element line = root.getElement(i);
+        if (line == null) continue;
+        int start = Math.max(0, line.getStartOffset());
+        int end = Math.max(start, Math.min(line.getEndOffset(), len));
+        if (start >= end) continue;
+        for (int p = start; p < end; p++) {
+          AttributeSet attrs = doc.getCharacterElement(p).getAttributes();
+          String got = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_PENDING_ID), "").trim();
+          if (want.equals(got)) return start;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return -1;
+  }
+
+  private void insertCanonicalOutgoingChatLineAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    breakPresenceRun(ref);
+
+    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, LogDirection.OUT, from, tsEpochMs, null, messageId, ircv3Tags);
+
+    AttributeSet fromStyle = styles.from();
+    if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
+      fromStyle = nickColors.forNick(from, fromStyle);
+    }
+
+    SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
+    SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
+    applyOutgoingLineColor(fs, ms, true);
+
+    insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
+
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+    String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
+    if (doc != null && st != null && !normalizedMsgId.isBlank()) {
+      materializePendingReactionsForMessage(ref, doc, st, normalizedMsgId, tsEpochMs);
+    }
+    if (doc != null && st != null && !reactionToken.isBlank() && !replyToMsgId.isBlank()) {
+      applyMessageReactionInternal(ref, doc, st, replyToMsgId, reactionToken, from, tsEpochMs);
+    }
+  }
+
+  private void insertFailedOutgoingChatLineAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      long tsEpochMs,
+      String reason
+  ) {
+    ensureTargetExists(ref);
+    noteEpochMs(ref, tsEpochMs);
+    breakPresenceRun(ref);
+
+    String msg = Objects.toString(text, "") + " " + renderPendingFailure(reason);
+    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, LogDirection.OUT, from, tsEpochMs, null);
+    SimpleAttributeSet fs = withLineMeta(styles.error(), meta);
+    SimpleAttributeSet ms = withLineMeta(styles.error(), meta);
+    fs.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
+    ms.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
+    insertLineInternalAt(ref, insertAt, from, msg, fs, ms, false, meta);
+  }
+
+  private static String renderPendingFailure(String reason) {
+    String r = Objects.toString(reason, "").trim();
+    if (r.isEmpty()) return "[failed]";
+    if (r.length() > 120) {
+      r = r.substring(0, 117) + "...";
+    }
+    return "[failed: " + r + "]";
+  }
+
   private void applyOutgoingLineColor(SimpleAttributeSet fromStyle,
                                       SimpleAttributeSet msgStyle,
                                       boolean outgoingLocalEcho) {
@@ -2235,11 +3277,11 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   }
 
   public void appendAction(TargetRef ref, String from, String action, boolean outgoingLocalEcho) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null);
+    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null, "", Map.of());
   }
 
   public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs);
+    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of());
   }
   /**
    * Append an action (/me) with a timestamp, allowing embeds.
@@ -2249,7 +3291,17 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                              String action,
                              boolean outgoingLocalEcho,
                              long tsEpochMs) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs);
+    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public void appendActionAt(TargetRef ref,
+                             String from,
+                             String action,
+                             boolean outgoingLocalEcho,
+                             long tsEpochMs,
+                             String messageId,
+                             Map<String, String> ircv3Tags) {
+    appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs, messageId, ircv3Tags);
   }
 
   private void appendActionInternal(TargetRef ref,
@@ -2257,14 +3309,16 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                                     String action,
                                     boolean outgoingLocalEcho,
                                     boolean allowEmbeds,
-                                    Long epochMs) {
+                                    Long epochMs,
+                                    String messageId,
+                                    Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
     long tsEpochMs = epochMs != null ? epochMs : System.currentTimeMillis();
     noteEpochMs(ref, tsEpochMs);
 
-    LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null);
+    LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null, messageId, ircv3Tags);
 
     FilterEngine.Match m = hideMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
     if (m != null) {
@@ -2275,6 +3329,13 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     breakPresenceRun(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
+
+    String normalizedMsgId = normalizeMessageId(messageId);
+    String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+    String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
+    if (!replyToMsgId.isBlank()) {
+      appendReplyContextLine(ref, from, replyToMsgId, tsEpochMs);
+    }
 
     String a = action == null ? "" : action;
     ensureAtLineStart(doc);
@@ -2333,6 +3394,14 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
         linkPreviews.appendPreviews(ref, doc, a);
       }
     } catch (Exception ignored) {
+    }
+
+    TranscriptState st = stateByTarget.get(ref);
+    if (st != null && !normalizedMsgId.isBlank()) {
+      materializePendingReactionsForMessage(ref, doc, st, normalizedMsgId, tsEpochMs);
+    }
+    if (st != null && !reactionToken.isBlank() && !replyToMsgId.isBlank()) {
+      applyMessageReactionInternal(ref, doc, st, replyToMsgId, reactionToken, from, tsEpochMs);
     }
   }
 
@@ -2411,25 +3480,61 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
  * Append a notice with a timestamp, allowing embeds.
  */
 public void appendNoticeAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  appendNoticeAt(ref, from, text, tsEpochMs, "", Map.of());
+}
+
+public void appendNoticeAt(
+    TargetRef ref,
+    String from,
+    String text,
+    long tsEpochMs,
+    String messageId,
+    Map<String, String> ircv3Tags
+) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
-  LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+  LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
   if (m != null) {
     onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
     return;
   }
   breakPresenceRun(ref);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+  String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
+  if (!replyToMsgId.isBlank()) {
+    appendReplyContextLine(ref, from, replyToMsgId, tsEpochMs);
+  }
   appendLineInternal(ref, from, text, styles.noticeFrom(), styles.noticeMessage(), true, meta);
+  StyledDocument doc = docs.get(ref);
+  TranscriptState st = stateByTarget.get(ref);
+  if (doc != null && st != null && !normalizedMsgId.isBlank()) {
+    materializePendingReactionsForMessage(ref, doc, st, normalizedMsgId, tsEpochMs);
+  }
+  if (doc != null && st != null && !reactionToken.isBlank() && !replyToMsgId.isBlank()) {
+    applyMessageReactionInternal(ref, doc, st, replyToMsgId, reactionToken, from, tsEpochMs);
+  }
 }
 
 /**
  * Append a status line with a timestamp, allowing embeds.
  */
 public void appendStatusAt(TargetRef ref, String from, String text, long tsEpochMs) {
+  appendStatusAt(ref, from, text, tsEpochMs, "", Map.of());
+}
+
+public void appendStatusAt(
+    TargetRef ref,
+    String from,
+    String text,
+    long tsEpochMs,
+    String messageId,
+    Map<String, String> ircv3Tags
+) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
-  LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null);
+  LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
   if (m != null) {
     onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
@@ -2566,6 +3671,8 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
 
     LoadOlderControl loadOlderControl;
     HistoryDividerControl historyDivider;
+    ReadMarkerControl readMarker;
+    Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
   }
 
 
@@ -2713,6 +3820,50 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     }
   }
 
+  private static final class ReadMarkerControl {
+    final Position pos;
+    final HistoryDividerComponent component;
+
+    private ReadMarkerControl(Position pos, HistoryDividerComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
+  }
+
+  private static final class ReactionSummaryControl {
+    final Position pos;
+    final MessageReactionsComponent component;
+
+    private ReactionSummaryControl(Position pos, MessageReactionsComponent component) {
+      this.pos = pos;
+      this.component = component;
+    }
+  }
+
+  private static final class ReactionState {
+    final Map<String, LinkedHashSet<String>> nicksByReaction = new LinkedHashMap<>();
+    ReactionSummaryControl control;
+
+    void observe(String reaction, String nick) {
+      String token = Objects.toString(reaction, "").trim();
+      String n = Objects.toString(nick, "").trim();
+      if (token.isEmpty() || n.isEmpty()) return;
+      nicksByReaction.computeIfAbsent(token, k -> new LinkedHashSet<>()).add(n);
+    }
+
+    boolean isEmpty() {
+      return nicksByReaction.isEmpty();
+    }
+
+    Map<String, Collection<String>> reactionsSnapshot() {
+      LinkedHashMap<String, Collection<String>> out = new LinkedHashMap<>();
+      for (Map.Entry<String, LinkedHashSet<String>> e : nicksByReaction.entrySet()) {
+        out.put(e.getKey(), List.copyOf(e.getValue()));
+      }
+      return out;
+    }
+  }
+
   private static final class PresenceBlock {
     int startOffset;
     int endOffset;
@@ -2766,6 +3917,18 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       Object chan = old.getAttribute(ChatStyles.ATTR_CHANNEL);
       if (chan != null) {
         fresh.addAttribute(ChatStyles.ATTR_CHANNEL, chan);
+      }
+      Object msgRef = old.getAttribute(ChatStyles.ATTR_MSG_REF);
+      if (msgRef != null) {
+        fresh.addAttribute(ChatStyles.ATTR_MSG_REF, msgRef);
+      }
+      Object pendingId = old.getAttribute(ChatStyles.ATTR_META_PENDING_ID);
+      if (pendingId != null) {
+        fresh.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pendingId);
+      }
+      Object pendingState = old.getAttribute(ChatStyles.ATTR_META_PENDING_STATE);
+      if (pendingState != null) {
+        fresh.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, pendingState);
       }
       java.awt.Component comp = StyleConstants.getComponent(old);
       if (comp != null) {

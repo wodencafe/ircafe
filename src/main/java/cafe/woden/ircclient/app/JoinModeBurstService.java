@@ -81,6 +81,14 @@ public final class JoinModeBurstService {
     if (removed != null) removed.cancelFlushTimer();
   }
 
+  public void clearChannel(String serverId, String channel) {
+    if (channel == null || channel.isBlank()) return;
+    ModeKey key = ModeKey.of(serverId, channel);
+    JoinModeBuffer removed = joinModeBuffers.remove(key);
+    if (removed != null) removed.cancelFlushTimer();
+    joinModeSummaryPrintedMs.remove(key);
+  }
+
   
   public boolean shouldSuppressModesListedSummary(String serverId, String channel, boolean outputIsChannel) {
     if (channel == null || channel.isBlank()) return false;
