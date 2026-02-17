@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -15,6 +16,7 @@ import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
+import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -91,13 +93,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
 
-  // Center content swaps between transcript and UI-only per-server views (notifications, channel list).
+  // Center content swaps between transcript and UI-only per-server views.
   private static final String CARD_TRANSCRIPT = "transcript";
   private static final String CARD_NOTIFICATIONS = "notifications";
   private static final String CARD_CHANNEL_LIST = "channel-list";
+  private static final String CARD_DCC_TRANSFERS = "dcc-transfers";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel = new ChannelListPanel();
+  private final DccTransfersPanel dccTransfersPanel;
 
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private int lastTopicHeightPx = 58;
@@ -118,6 +122,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      NickContextMenuFactory nickContextMenuFactory,
                      ServerProxyResolver proxyResolver,
                      ChatHistoryService chatHistoryService,
+                     DccTransferStore dccTransferStore,
                      UiSettingsBus settingsBus,
                      CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
@@ -154,6 +159,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       public void promptIgnore(TargetRef ctx, String nick, boolean removing, boolean soft) {
         // Qualify to avoid resolving to the callback method itself.
         ChatDockable.this.promptIgnore(ctx, nick, findNickInfo(ctx, nick), removing, soft);
+      }
+
+      @Override
+      public void requestDccAction(TargetRef ctx, String nick, NickContextMenuFactory.DccAction action) {
+        ChatDockable.this.requestDccAction(ctx, nick, action);
       }
     });
 
@@ -195,10 +205,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       if (t == null || ch.isEmpty()) return;
       outboundBus.emit("/join " + ch);
     });
+    this.dccTransfersPanel = new DccTransfersPanel(java.util.Objects.requireNonNull(dccTransferStore, "dccTransferStore"));
+    this.dccTransfersPanel.setOnEmitCommand(line -> {
+      String cmd = Objects.toString(line, "").trim();
+      TargetRef t = activeTarget;
+      if (cmd.isEmpty() || t == null || !t.isDccTransfers()) return;
+      activationBus.activate(t);
+      armTailPinOnNextAppendIfAtBottom();
+      outboundBus.emit(cmd);
+    });
 
     centerCards.add(topicSplit, CARD_TRANSCRIPT);
     centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
     centerCards.add(channelListPanel, CARD_CHANNEL_LIST);
+    centerCards.add(dccTransfersPanel, CARD_DCC_TRANSFERS);
     add(centerCards, BorderLayout.CENTER);
     showTranscriptCard();
     hideTopicPanel();
@@ -274,7 +294,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     activeTarget = target;
 
-    // UI-only targets (e.g. Notifications, Channel List) do not have a transcript.
+    // UI-only targets do not have a transcript.
     if (target.isNotifications()) {
       showNotificationsCard(target.serverId());
       // Notifications doesn't accept input; clear any draft to avoid confusion.
@@ -285,6 +305,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.isChannelList()) {
       showChannelListCard(target.serverId());
       // Channel list doesn't accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isDccTransfers()) {
+      showDccTransfersCard(target.serverId());
+      // DCC transfers view doesn't accept input; clear any draft to avoid confusion.
       inputPanel.setDraftText("");
       updateTopicPanelForActiveTarget();
       return;
@@ -329,6 +356,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       channelListPanel.setServerId(serverId);
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_CHANNEL_LIST);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showDccTransfersCard(String serverId) {
+    try {
+      dccTransfersPanel.setServerId(serverId);
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_DCC_TRANSFERS);
     } catch (Exception ignored) {
     }
   }
@@ -714,6 +750,60 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     outboundBus.emit(cmd);
   }
 
+  private void requestDccAction(TargetRef ctx, String nick, NickContextMenuFactory.DccAction action) {
+    if (ctx == null) return;
+    if (action == null) return;
+
+    String n = Objects.toString(nick, "").trim();
+    if (n.isEmpty()) return;
+
+    switch (action) {
+      case CHAT -> emitDccCommand(ctx, "/dcc chat " + n);
+      case ACCEPT_CHAT -> emitDccCommand(ctx, "/dcc accept " + n);
+      case GET_FILE -> emitDccCommand(ctx, "/dcc get " + n);
+      case CLOSE_CHAT -> emitDccCommand(ctx, "/dcc close " + n);
+      case SEND_FILE -> promptAndSendDccFile(ctx, n);
+    }
+  }
+
+  private void promptAndSendDccFile(TargetRef ctx, String nick) {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Send File to " + nick);
+    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+
+    int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(this));
+    if (result != JFileChooser.APPROVE_OPTION) return;
+
+    java.io.File selected = chooser.getSelectedFile();
+    if (selected == null) return;
+
+    String path = Objects.toString(selected.getAbsolutePath(), "").trim();
+    if (path.isEmpty()) return;
+    if (path.indexOf('\r') >= 0 || path.indexOf('\n') >= 0) {
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Refusing file path containing newlines.",
+          "DCC Send",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    emitDccCommand(ctx, "/dcc send " + nick + " " + path);
+  }
+
+  private void emitDccCommand(TargetRef ctx, String line) {
+    String sid = Objects.toString(ctx == null ? "" : ctx.serverId(), "").trim();
+    String cmd = Objects.toString(line, "").trim();
+    if (sid.isEmpty() || cmd.isEmpty()) return;
+
+    activationBus.activate(ctx);
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    armTailPinOnNextAppendIfAtBottom();
+    outboundBus.emit(cmd);
+  }
+
   @Override
   protected boolean onNickClicked(String nick) {
     if (activeTarget == null || !activeTarget.isChannel()) return false;
@@ -999,6 +1089,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
     try {
       notificationsPanel.close();
+    } catch (Exception ignored) {
+    }
+    try {
+      dccTransfersPanel.close();
     } catch (Exception ignored) {
     }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.

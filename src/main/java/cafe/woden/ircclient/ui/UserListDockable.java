@@ -250,6 +250,9 @@ public class UserListDockable extends JPanel implements Dockable {
 
   private final PropertyChangeListener nickColorSettingsListener = this::onNickColorSettingsChanged;
 
+  private final TargetActivationBus activationBus;
+  private final OutboundLineBus outboundBus;
+
   private final IgnoreListService ignoreListService;
   private final IgnoreListDialog ignoreDialog;
   private final IgnoreStatusService ignoreStatusService;
@@ -264,6 +267,8 @@ public class UserListDockable extends JPanel implements Dockable {
                          NickColorSettingsBus nickColorSettingsBus,
                          IgnoreListService ignoreListService, IgnoreListDialog ignoreDialog,
                          IgnoreStatusService ignoreStatusService,
+                         TargetActivationBus activationBus,
+                         OutboundLineBus outboundBus,
                          NickContextMenuFactory nickContextMenuFactory) {
     super(new BorderLayout());
 
@@ -274,6 +279,8 @@ public class UserListDockable extends JPanel implements Dockable {
     this.ignoreDialog = ignoreDialog;
 
     this.ignoreStatusService = ignoreStatusService;
+    this.activationBus = activationBus;
+    this.outboundBus = outboundBus;
     this.nickContextMenu = (nickContextMenuFactory == null) ? null
         : nickContextMenuFactory.create(new NickContextMenuFactory.Callbacks() {
       @Override
@@ -304,6 +311,11 @@ public class UserListDockable extends JPanel implements Dockable {
       public void promptIgnore(TargetRef ctx, String nick, boolean removing, boolean soft) {
         if (ctx != null) setChannel(ctx);
         UserListDockable.this.promptIgnore(removing, soft);
+      }
+
+      @Override
+      public void requestDccAction(TargetRef ctx, String nick, NickContextMenuFactory.DccAction action) {
+        UserListDockable.this.requestDccAction(ctx, nick, action);
       }
     });
 
@@ -599,6 +611,60 @@ public class UserListDockable extends JPanel implements Dockable {
         userActions.onNext(new UserActionRequest(active, nick, action));
       }
     } catch (Exception ignored) {
+    }
+  }
+
+  private void requestDccAction(TargetRef ctx, String nick, NickContextMenuFactory.DccAction action) {
+    if (ctx == null) return;
+    if (action == null) return;
+
+    String n = Objects.toString(nick, "").trim();
+    if (n.isEmpty()) return;
+
+    switch (action) {
+      case CHAT -> emitDccCommand(ctx, "/dcc chat " + n);
+      case ACCEPT_CHAT -> emitDccCommand(ctx, "/dcc accept " + n);
+      case GET_FILE -> emitDccCommand(ctx, "/dcc get " + n);
+      case CLOSE_CHAT -> emitDccCommand(ctx, "/dcc close " + n);
+      case SEND_FILE -> promptAndSendDccFile(ctx, n);
+    }
+  }
+
+  private void promptAndSendDccFile(TargetRef ctx, String nick) {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Send File to " + nick);
+    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+
+    int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(this));
+    if (result != JFileChooser.APPROVE_OPTION) return;
+
+    java.io.File selected = chooser.getSelectedFile();
+    if (selected == null) return;
+
+    String path = Objects.toString(selected.getAbsolutePath(), "").trim();
+    if (path.isEmpty()) return;
+    if (path.indexOf('\r') >= 0 || path.indexOf('\n') >= 0) {
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Refusing file path containing newlines.",
+          "DCC Send",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    emitDccCommand(ctx, "/dcc send " + nick + " " + path);
+  }
+
+  private void emitDccCommand(TargetRef ctx, String line) {
+    String sid = Objects.toString(ctx == null ? "" : ctx.serverId(), "").trim();
+    String cmd = Objects.toString(line, "").trim();
+    if (sid.isEmpty() || cmd.isEmpty()) return;
+
+    if (activationBus != null) {
+      activationBus.activate(ctx);
+    }
+    if (outboundBus != null) {
+      outboundBus.emit(cmd);
     }
   }
 

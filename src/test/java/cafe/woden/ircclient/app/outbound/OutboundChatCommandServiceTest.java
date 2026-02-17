@@ -528,4 +528,20 @@ class OutboundChatCommandServiceTest {
     verify(ui).appendStatus(chan, "(help)", "/edit <msgid> <message>");
     verify(ui).appendStatus(chan, "(help)", "/redact <msgid> (alias: /delete)");
   }
+
+  @Test
+  void helpDccShowsCommandsAndUiHint() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+
+    service.handleHelp("dcc");
+
+    verify(ui).appendStatus(chan, "(help)", "/dcc chat <nick>");
+    verify(ui).appendStatus(chan, "(help)", "/dcc send <nick> <file-path>");
+    verify(ui).appendStatus(chan, "(help)", "/dcc accept <nick>");
+    verify(ui).appendStatus(chan, "(help)", "/dcc get <nick> [save-path]");
+    verify(ui).appendStatus(chan, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
+    verify(ui).appendStatus(chan, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
+    verify(ui).appendStatus(chan, "(help)", "UI: right-click a nick and use the DCC submenu.");
+  }
 }

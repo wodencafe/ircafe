@@ -677,6 +677,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
           appendRedactHelp(out);
           return;
         }
+        case "dcc" -> {
+          appendDccHelp(out);
+          return;
+        }
         default -> ui.appendStatus(out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
       }
     }
@@ -689,7 +693,18 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
     appendEditHelp(out);
     appendRedactHelp(out);
+    ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
     ui.appendStatus(out, "(help)", "Tip: /help edit or /help redact for focused details.");
+  }
+
+  private void appendDccHelp(TargetRef out) {
+    ui.appendStatus(out, "(help)", "/dcc chat <nick>");
+    ui.appendStatus(out, "(help)", "/dcc send <nick> <file-path>");
+    ui.appendStatus(out, "(help)", "/dcc accept <nick>");
+    ui.appendStatus(out, "(help)", "/dcc get <nick> [save-path]");
+    ui.appendStatus(out, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
+    ui.appendStatus(out, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
+    ui.appendStatus(out, "(help)", "UI: right-click a nick and use the DCC submenu.");
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {

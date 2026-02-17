@@ -16,6 +16,7 @@ public final class TargetRef {
 
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
   public static final String CHANNEL_LIST_TARGET = "__channel_list__";
+  public static final String DCC_TRANSFERS_TARGET = "__dcc_transfers__";
 
   private final String serverId;
   private final String target;
@@ -35,6 +36,10 @@ public final class TargetRef {
 
   public static TargetRef channelList(String serverId) {
     return new TargetRef(serverId, CHANNEL_LIST_TARGET);
+  }
+
+  public static TargetRef dccTransfers(String serverId) {
+    return new TargetRef(serverId, DCC_TRANSFERS_TARGET);
   }
 
   public String serverId() {
@@ -72,10 +77,14 @@ public final class TargetRef {
     return CHANNEL_LIST_TARGET.equals(key);
   }
 
+  public boolean isDccTransfers() {
+    return DCC_TRANSFERS_TARGET.equals(key);
+  }
+
   public boolean isUiOnly() {
     // UI-only targets are pseudo-buffers that do not represent a real IRC target.
     // "status" is a real transcript buffer in ircafe (and can accept raw server input).
-    return isNotifications() || isChannelList();
+    return isNotifications() || isChannelList() || isDccTransfers();
   }
 
   public boolean isChannel() {
@@ -96,6 +105,7 @@ public final class TargetRef {
     if (t.isEmpty()) return "";
     if (NOTIFICATIONS_TARGET.equals(t)) return NOTIFICATIONS_TARGET;
     if (CHANNEL_LIST_TARGET.equals(t)) return CHANNEL_LIST_TARGET;
+    if (DCC_TRANSFERS_TARGET.equals(t)) return DCC_TRANSFERS_TARGET;
     return t.toLowerCase(Locale.ROOT);
   }
 

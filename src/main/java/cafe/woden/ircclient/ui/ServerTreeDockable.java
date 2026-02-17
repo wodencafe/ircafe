@@ -70,6 +70,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
 
   private static final String STATUS_LABEL = "status";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
+  private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
@@ -905,6 +906,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       parent = sn.serverNode;
     } else if (ref.isChannelList()) {
       parent = sn.serverNode;
+    } else if (ref.isDccTransfers()) {
+      parent = sn.serverNode;
     } else if (ref.isChannel()) {
       parent = sn.serverNode;
     } else {
@@ -916,6 +919,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       leafLabel = "Notifications";
     } else if (ref.isChannelList()) {
       leafLabel = CHANNEL_LIST_LABEL;
+    } else if (ref.isDccTransfers()) {
+      leafLabel = DCC_TRANSFERS_LABEL;
     }
     DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, leafLabel));
     leaves.put(ref, leaf);
@@ -1168,8 +1173,8 @@ private void syncServers(List<ServerEntry> latest) {
 
     DefaultMutableTreeNode group = new DefaultMutableTreeNode(SOJU_NETWORKS_GROUP_LABEL);
 
-    // Insert right after the fixed leaves (status + notifications) and before PMs.
-    int insertIdx = 2;
+    // Insert right after fixed leaves (status + notifications + channel list + dcc transfers) and before PMs.
+    int insertIdx = 4;
     int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
     if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
     insertIdx = Math.min(insertIdx, originNodes.serverNode.getChildCount());
@@ -1198,8 +1203,8 @@ private void syncServers(List<ServerEntry> latest) {
 
     DefaultMutableTreeNode group = new DefaultMutableTreeNode(ZNC_NETWORKS_GROUP_LABEL);
 
-    // Insert right after the fixed leaves (status + notifications) and before PMs.
-    int insertIdx = 2;
+    // Insert right after fixed leaves (status + notifications + channel list + dcc transfers) and before PMs.
+    int insertIdx = 4;
     int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
     if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
     insertIdx = Math.min(insertIdx, originNodes.serverNode.getChildCount());
@@ -1365,9 +1370,14 @@ private void removeServerRoot(String serverId) {
     serverNode.insert(channelListLeaf, 2);
     leaves.put(channelListRef, channelListLeaf);
 
+    TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
+    DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
+    serverNode.insert(dccTransfersLeaf, 3);
+    leaves.put(dccTransfersRef, dccTransfersLeaf);
+
     serverNode.add(pmNode);
 
-    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, channelListRef);
+    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, channelListRef, dccTransfersRef);
     servers.put(id, sn);
 
     model.reload(root);
@@ -1478,17 +1488,20 @@ private void removeServerRoot(String serverId) {
     final TargetRef statusRef;
     final TargetRef notificationsRef;
     final TargetRef channelListRef;
+    final TargetRef dccTransfersRef;
 
     ServerNodes(DefaultMutableTreeNode serverNode,
         DefaultMutableTreeNode pmNode,
         TargetRef statusRef,
         TargetRef notificationsRef,
-        TargetRef channelListRef) {
+        TargetRef channelListRef,
+        TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
       this.statusRef = statusRef;
       this.notificationsRef = notificationsRef;
       this.channelListRef = channelListRef;
+      this.dccTransfersRef = dccTransfersRef;
     }
   }
 

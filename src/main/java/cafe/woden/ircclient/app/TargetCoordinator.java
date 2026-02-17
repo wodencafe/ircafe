@@ -403,6 +403,8 @@ public class TargetCoordinator {
       statusBarChannel = "Notifications";
     } else if (target.isChannelList()) {
       statusBarChannel = "Channel List";
+    } else if (target.isDccTransfers()) {
+      statusBarChannel = "DCC Transfers";
     }
     ui.setStatusBarChannel(statusBarChannel);
     ui.setStatusBarServer(serverDisplay(target.serverId()));

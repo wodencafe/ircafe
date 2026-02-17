@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.ConnectionCoordinator;
+import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
@@ -68,6 +69,7 @@ public class OutboundDccCommandService {
   private final IrcClientService irc;
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
+  private final DccTransferStore dccTransferStore;
 
   private final ExecutorService io;
 
@@ -81,11 +83,13 @@ public class OutboundDccCommandService {
       UiPort ui,
       IrcClientService irc,
       TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator) {
+      ConnectionCoordinator connectionCoordinator,
+      DccTransferStore dccTransferStore) {
     this.ui = ui;
     this.irc = irc;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
+    this.dccTransferStore = dccTransferStore;
     this.io = Executors.newCachedThreadPool(new NamedThreadFactory("ircafe-dcc-"));
   }
 
@@ -115,6 +119,7 @@ public class OutboundDccCommandService {
       case "msg" -> sendChatMessage(sid, out, n, arg);
       case "close" -> closeChatSessionByCommand(sid, out, n);
       case "list" -> listDccState(sid, out);
+      case "panel", "transfers" -> openDccTransfersPanel(sid);
       default -> {
         ui.appendStatus(out, DCC_TAG, "Unknown /dcc subcommand: " + sub);
         appendUsage(out);
@@ -202,19 +207,55 @@ public class OutboundDccCommandService {
       int port = listener.getLocalPort();
       String ctcp = "\u0001DCC CHAT chat " + ipAsLong + " " + port + "\u0001";
       ui.appendStatus(pm, DCC_TAG, "Offering DCC CHAT to " + n + " on " + advertised.getHostAddress() + ":" + port);
+      upsertTransfer(
+          sid,
+          n,
+          transferEntryId(sid, n, "chat-out"),
+          "Chat (outgoing)",
+          "Offering",
+          advertised.getHostAddress() + ":" + port,
+          null,
+          DccTransferStore.ActionHint.NONE);
 
       disposables.add(
           irc.sendPrivateMessage(sid, n, ctcp).subscribe(
               () -> {
                 ui.appendStatus(pm, DCC_TAG, "Offer sent. Waiting for " + n + " to connect…");
+                upsertTransfer(
+                    sid,
+                    n,
+                    transferEntryId(sid, n, "chat-out"),
+                    "Chat (outgoing)",
+                    "Waiting for peer",
+                    advertised.getHostAddress() + ":" + port,
+                    null,
+                    DccTransferStore.ActionHint.NONE);
                 io.execute(() -> awaitOutgoingChatConnection(sid, n, key, listener));
               },
               err -> {
                 removeListener(outgoingChatListeners, key, listener);
                 ui.appendError(pm, DCC_ERR_TAG, String.valueOf(err));
+                upsertTransfer(
+                    sid,
+                    n,
+                    transferEntryId(sid, n, "chat-out"),
+                    "Chat (outgoing)",
+                    "Failed to send offer",
+                    String.valueOf(err),
+                    null,
+                    DccTransferStore.ActionHint.NONE);
               }));
     } catch (Exception e) {
       ui.appendError(pm, DCC_ERR_TAG, "Could not start DCC chat listener: " + e.getMessage());
+      upsertTransfer(
+          sid,
+          n,
+          transferEntryId(sid, n, "chat-out"),
+          "Chat (outgoing)",
+          "Failed to listen",
+          e.getMessage(),
+          null,
+          DccTransferStore.ActionHint.NONE);
     }
   }
 
@@ -225,8 +266,26 @@ public class OutboundDccCommandService {
       startChatSession(sid, nick, socket, "connected (outgoing)");
     } catch (SocketTimeoutException e) {
       ui.appendStatus(pm, DCC_TAG, "DCC CHAT offer to " + nick + " timed out.");
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "chat-out"),
+          "Chat (outgoing)",
+          "Timed out",
+          "",
+          null,
+          DccTransferStore.ActionHint.NONE);
     } catch (Exception e) {
       ui.appendError(pm, DCC_ERR_TAG, "DCC CHAT accept failed: " + e.getMessage());
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "chat-out"),
+          "Chat (outgoing)",
+          "Failed",
+          e.getMessage(),
+          null,
+          DccTransferStore.ActionHint.NONE);
     } finally {
       removeListener(outgoingChatListeners, key, listener);
     }
@@ -295,19 +354,55 @@ public class OutboundDccCommandService {
       int port = listener.getLocalPort();
       String ctcp = "\u0001DCC SEND " + fileToken + " " + ipAsLong + " " + port + " " + size + "\u0001";
       ui.appendStatus(pm, DCC_TAG, "Offering file " + fileName + " (" + formatBytes(size) + ") to " + n);
+      upsertTransfer(
+          sid,
+          n,
+          transferEntryId(sid, n, "send-out"),
+          "Send file (outgoing)",
+          "Offering",
+          fileName + " (" + formatBytes(size) + ")",
+          0,
+          DccTransferStore.ActionHint.NONE);
 
       disposables.add(
           irc.sendPrivateMessage(sid, n, ctcp).subscribe(
               () -> {
                 ui.appendStatus(pm, DCC_TAG, "Offer sent. Waiting for " + n + " to connect…");
+                upsertTransfer(
+                    sid,
+                    n,
+                    transferEntryId(sid, n, "send-out"),
+                    "Send file (outgoing)",
+                    "Waiting for peer",
+                    fileName + " (" + formatBytes(size) + ")",
+                    0,
+                    DccTransferStore.ActionHint.NONE);
                 io.execute(() -> awaitOutgoingSendConnection(sid, n, key, listener, source, fileName, size));
               },
               err -> {
                 removeListener(outgoingSendListeners, key, listener);
                 ui.appendError(pm, DCC_ERR_TAG, String.valueOf(err));
+                upsertTransfer(
+                    sid,
+                    n,
+                    transferEntryId(sid, n, "send-out"),
+                    "Send file (outgoing)",
+                    "Failed to send offer",
+                    String.valueOf(err),
+                    0,
+                    DccTransferStore.ActionHint.NONE);
               }));
     } catch (Exception e) {
       ui.appendError(pm, DCC_ERR_TAG, "Could not start DCC send listener: " + e.getMessage());
+      upsertTransfer(
+          sid,
+          n,
+          transferEntryId(sid, n, "send-out"),
+          "Send file (outgoing)",
+          "Failed to listen",
+          e.getMessage(),
+          0,
+          DccTransferStore.ActionHint.NONE);
     }
   }
 
@@ -323,12 +418,48 @@ public class OutboundDccCommandService {
     try (ServerSocket ignored = listener; Socket socket = listener.accept()) {
       socket.setSoTimeout(IO_TIMEOUT_MS);
       ui.appendStatus(pm, DCC_TAG, nick + " connected. Sending " + displayName + "…");
-      sendFileToSocket(pm, socket, source, displayName, size);
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "send-out"),
+          "Send file (outgoing)",
+          "Transferring",
+          displayName + " (" + formatBytes(size) + ")",
+          0,
+          DccTransferStore.ActionHint.NONE);
+      sendFileToSocket(sid, nick, pm, socket, source, displayName, size);
       ui.appendStatus(pm, DCC_TAG, "DCC SEND complete: " + displayName + " (" + formatBytes(size) + ")");
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "send-out"),
+          "Send file (outgoing)",
+          "Completed",
+          displayName + " (" + formatBytes(size) + ")",
+          100,
+          DccTransferStore.ActionHint.NONE);
     } catch (SocketTimeoutException e) {
       ui.appendStatus(pm, DCC_TAG, "DCC SEND offer to " + nick + " timed out.");
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "send-out"),
+          "Send file (outgoing)",
+          "Timed out",
+          displayName + " (" + formatBytes(size) + ")",
+          null,
+          DccTransferStore.ActionHint.NONE);
     } catch (Exception e) {
       ui.appendError(pm, DCC_ERR_TAG, "DCC SEND failed: " + e.getMessage());
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "send-out"),
+          "Send file (outgoing)",
+          "Failed",
+          e.getMessage(),
+          null,
+          DccTransferStore.ActionHint.NONE);
     } finally {
       removeListener(outgoingSendListeners, key, listener);
     }
@@ -350,6 +481,15 @@ public class OutboundDccCommandService {
 
     TargetRef pm = ensurePmTarget(sid, n);
     ui.appendStatus(pm, DCC_TAG, "Connecting to DCC CHAT " + offer.host().getHostAddress() + ":" + offer.port() + " …");
+    upsertTransfer(
+        sid,
+        n,
+        transferEntryId(sid, n, "chat-in"),
+        "Chat (incoming)",
+        "Connecting",
+        offer.host().getHostAddress() + ":" + offer.port(),
+        null,
+        DccTransferStore.ActionHint.NONE);
 
     io.execute(() -> {
       Socket socket = new Socket();
@@ -360,6 +500,15 @@ public class OutboundDccCommandService {
       } catch (Exception e) {
         closeQuietly(socket);
         ui.appendError(pm, DCC_ERR_TAG, "DCC CHAT connect failed: " + e.getMessage());
+        upsertTransfer(
+            sid,
+            n,
+            transferEntryId(sid, n, "chat-in"),
+            "Chat (incoming)",
+            "Failed",
+            e.getMessage(),
+            null,
+            DccTransferStore.ActionHint.NONE);
       }
     });
   }
@@ -392,6 +541,17 @@ public class OutboundDccCommandService {
     pendingSendOffers.remove(key, offer);
     TargetRef pm = ensurePmTarget(sid, n);
     ui.appendStatus(pm, DCC_TAG, "Receiving " + offer.fileName() + " to " + destination + " …");
+    String localPath = destination.toAbsolutePath().normalize().toString();
+    upsertTransfer(
+        sid,
+        n,
+        transferEntryId(sid, n, "send-in"),
+        "Receive file (incoming)",
+        "Connecting",
+        offer.fileName() + " -> " + destination.getFileName(),
+        localPath,
+        0,
+        DccTransferStore.ActionHint.NONE);
 
     io.execute(() -> {
       boolean completed = false;
@@ -400,11 +560,31 @@ public class OutboundDccCommandService {
         if (parent != null) {
           Files.createDirectories(parent);
         }
-        receiveFileFromOffer(pm, offer, destination);
+        receiveFileFromOffer(sid, n, pm, offer, destination, localPath);
         completed = true;
         ui.appendStatus(pm, DCC_TAG, "DCC GET complete: " + destination.getFileName() + " (" + formatBytes(offer.size()) + ")");
+        upsertTransfer(
+            sid,
+            n,
+            transferEntryId(sid, n, "send-in"),
+            "Receive file (incoming)",
+            "Completed",
+            destination.getFileName() + " (" + formatBytes(offer.size()) + ")",
+            localPath,
+            100,
+            DccTransferStore.ActionHint.NONE);
       } catch (Exception e) {
         ui.appendError(pm, DCC_ERR_TAG, "DCC GET failed: " + e.getMessage());
+        upsertTransfer(
+            sid,
+            n,
+            transferEntryId(sid, n, "send-in"),
+            "Receive file (incoming)",
+            "Failed",
+            e.getMessage(),
+            localPath,
+            null,
+            DccTransferStore.ActionHint.NONE);
       } finally {
         if (!completed) {
           try {
@@ -412,6 +592,16 @@ public class OutboundDccCommandService {
           } catch (Exception ignored) {
           }
           pendingSendOffers.putIfAbsent(key, offer);
+          upsertTransfer(
+              sid,
+              n,
+              transferEntryId(sid, n, "send-in"),
+              "Receive file (incoming)",
+              "Offer pending",
+              offer.fileName() + " (" + formatBytes(offer.size()) + ")",
+              localPath,
+              0,
+              DccTransferStore.ActionHint.GET_FILE);
         }
       }
     });
@@ -503,6 +693,14 @@ public class OutboundDccCommandService {
     }
   }
 
+  private void openDccTransfersPanel(String sid) {
+    String serverId = normalizeToken(sid);
+    if (serverId.isEmpty()) return;
+    TargetRef panel = TargetRef.dccTransfers(serverId);
+    ui.ensureTargetExists(panel);
+    ui.selectTarget(panel);
+  }
+
   private void appendUsage(TargetRef out) {
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc chat <nick>");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc send <nick> <file-path>");
@@ -511,6 +709,7 @@ public class OutboundDccCommandService {
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc close <nick>");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc list");
+    ui.appendStatus(out, DCC_TAG, "Usage: /dcc panel");
   }
 
   private boolean consumeInboundChatOffer(
@@ -547,11 +746,22 @@ public class OutboundDccCommandService {
     }
 
     pendingChatOffers.put(peerKey(sid, fromNick), new PendingChatOffer(sid, fromNick, host, port, atOrNow(at)));
+    upsertTransfer(
+        sid,
+        fromNick,
+        transferEntryId(sid, fromNick, "chat-in"),
+        "Chat (incoming)",
+        "Offer received",
+        host.getHostAddress() + ":" + port,
+        null,
+        DccTransferStore.ActionHint.ACCEPT_CHAT);
     postInboundDccStatus(
         at,
         sid,
         fromNick,
-        "DCC CHAT offer from " + fromNick + " at " + host.getHostAddress() + ":" + port + ". Accept with /dcc accept " + fromNick,
+        "DCC CHAT offer from " + fromNick + " at " + host.getHostAddress() + ":" + port
+            + ". Accept with /dcc accept " + fromNick
+            + " or right-click nick -> DCC -> Accept Chat Offer.",
         spoiler);
     return true;
   }
@@ -579,12 +789,22 @@ public class OutboundDccCommandService {
     pendingSendOffers.put(
         peerKey(sid, fromNick),
         new PendingSendOffer(sid, fromNick, fileName, host, port, size, atOrNow(at)));
+    upsertTransfer(
+        sid,
+        fromNick,
+        transferEntryId(sid, fromNick, "send-in"),
+        "Receive file (incoming)",
+        "Offer received",
+        fileName + " (" + formatBytes(size) + ")",
+        0,
+        DccTransferStore.ActionHint.GET_FILE);
 
     postInboundDccStatus(
         at,
         sid,
         fromNick,
-        "DCC SEND offer from " + fromNick + ": " + fileName + " (" + formatBytes(size) + "). Accept with /dcc get " + fromNick,
+        "DCC SEND offer from " + fromNick + ": " + fileName + " (" + formatBytes(size) + "). Accept with /dcc get "
+            + fromNick + " or right-click nick -> DCC -> Get Pending File.",
         spoiler);
     return true;
   }
@@ -617,6 +837,37 @@ public class OutboundDccCommandService {
 
     TargetRef pm = ensurePmTarget(sid, nick);
     ui.appendStatus(pm, DCC_TAG, "DCC CHAT " + connectedText + " with " + nick + ".");
+    if (connectedText != null && connectedText.contains("outgoing")) {
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "chat-out"),
+          "Chat (outgoing)",
+          "Connected",
+          "",
+          null,
+          DccTransferStore.ActionHint.NONE);
+    }
+    if (connectedText != null && connectedText.contains("incoming")) {
+      upsertTransfer(
+          sid,
+          nick,
+          transferEntryId(sid, nick, "chat-in"),
+          "Chat (incoming)",
+          "Connected",
+          "",
+          null,
+          DccTransferStore.ActionHint.NONE);
+    }
+    upsertTransfer(
+        sid,
+        nick,
+        transferEntryId(sid, nick, "chat-active"),
+        "Chat",
+        "Active",
+        connectedText,
+        null,
+        DccTransferStore.ActionHint.CLOSE_CHAT);
 
     io.execute(() -> readDccChatLoop(key, session));
   }
@@ -636,10 +887,28 @@ public class OutboundDccCommandService {
       }
       if (!session.closing().get()) {
         ui.appendStatus(pm, DCC_TAG, session.nick() + " closed the DCC CHAT session.");
+        upsertTransfer(
+            session.serverId(),
+            session.nick(),
+            transferEntryId(session.serverId(), session.nick(), "chat-active"),
+            "Chat",
+            "Peer closed",
+            "",
+            null,
+            DccTransferStore.ActionHint.NONE);
       }
     } catch (Exception e) {
       if (!session.closing().get()) {
         ui.appendError(pm, DCC_ERR_TAG, "DCC chat connection lost: " + e.getMessage());
+        upsertTransfer(
+            session.serverId(),
+            session.nick(),
+            transferEntryId(session.serverId(), session.nick(), "chat-active"),
+            "Chat",
+            "Connection lost",
+            e.getMessage(),
+            null,
+            DccTransferStore.ActionHint.NONE);
       }
     } finally {
       chatSessions.remove(key, session);
@@ -657,10 +926,19 @@ public class OutboundDccCommandService {
       TargetRef pm = ensurePmTarget(sid, nick);
       ui.appendStatus(pm, DCC_TAG, message);
     }
+    upsertTransfer(
+        sid,
+        nick,
+        transferEntryId(sid, nick, "chat-active"),
+        "Chat",
+        "Closed",
+        "",
+        null,
+        DccTransferStore.ActionHint.NONE);
     return true;
   }
 
-  private void sendFileToSocket(TargetRef pm, Socket socket, Path source, String displayName, long size)
+  private void sendFileToSocket(String sid, String nick, TargetRef pm, Socket socket, Path source, String displayName, long size)
       throws IOException {
     long sent = 0L;
     int lastReportedPercent = -1;
@@ -675,13 +953,29 @@ public class OutboundDccCommandService {
         if (shouldReportProgress(lastReportedPercent, pct)) {
           lastReportedPercent = pct;
           ui.appendStatus(pm, DCC_TAG, "Sending " + displayName + " … " + pct + "%");
+          upsertTransfer(
+              sid,
+              nick,
+              transferEntryId(sid, nick, "send-out"),
+              "Send file (outgoing)",
+              "Transferring",
+              displayName + " (" + formatBytes(size) + ")",
+              pct,
+              DccTransferStore.ActionHint.NONE);
         }
       }
       out.flush();
     }
   }
 
-  private void receiveFileFromOffer(TargetRef pm, PendingSendOffer offer, Path destination) throws IOException {
+  private void receiveFileFromOffer(
+      String sid,
+      String nick,
+      TargetRef pm,
+      PendingSendOffer offer,
+      Path destination,
+      String localPath)
+      throws IOException {
     long expected = offer.size();
     long received = 0L;
     int lastReportedPercent = -1;
@@ -709,6 +1003,16 @@ public class OutboundDccCommandService {
           if (shouldReportProgress(lastReportedPercent, pct)) {
             lastReportedPercent = pct;
             ui.appendStatus(pm, DCC_TAG, "Receiving " + offer.fileName() + " … " + pct + "%");
+            upsertTransfer(
+                sid,
+                nick,
+                transferEntryId(sid, nick, "send-in"),
+                "Receive file (incoming)",
+                "Transferring",
+                offer.fileName() + " -> " + destination.getFileName(),
+                localPath,
+                pct,
+                DccTransferStore.ActionHint.NONE);
           }
         }
         fileOut.flush();
@@ -750,6 +1054,41 @@ public class OutboundDccCommandService {
     if (!target.equals(active)) {
       ui.markUnread(target);
     }
+  }
+
+  private void upsertTransfer(
+      String sid,
+      String nick,
+      String entryId,
+      String kind,
+      String status,
+      String detail,
+      Integer progressPercent,
+      DccTransferStore.ActionHint actionHint
+  ) {
+    upsertTransfer(sid, nick, entryId, kind, status, detail, "", progressPercent, actionHint);
+  }
+
+  private void upsertTransfer(
+      String sid,
+      String nick,
+      String entryId,
+      String kind,
+      String status,
+      String detail,
+      String localPath,
+      Integer progressPercent,
+      DccTransferStore.ActionHint actionHint
+  ) {
+    if (dccTransferStore == null) return;
+    dccTransferStore.upsert(sid, entryId, nick, kind, status, detail, localPath, progressPercent, actionHint);
+  }
+
+  private static String transferEntryId(String sid, String nick, String suffix) {
+    String server = normalizeToken(sid).toLowerCase(Locale.ROOT);
+    String peer = normalizeNick(nick).toLowerCase(Locale.ROOT);
+    String sfx = normalizeToken(suffix).toLowerCase(Locale.ROOT);
+    return server + "|" + peer + "|" + sfx;
   }
 
   private static void replaceListener(
