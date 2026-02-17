@@ -45,11 +45,12 @@ class LabeledResponseRoutingStateTest {
   @Test
   void rememberAndFindIfFreshReturnsPendingContext() {
     TargetRef origin = new TargetRef("libera", "#ircafe");
-    Instant at = Instant.parse("2026-02-16T00:00:00Z");
+    Instant at = Instant.now(); // or Instant.now().minus(Duration.ofMinutes(1))
     state.remember("libera", "req-1", origin, "WHO #ircafe", at);
 
     var found = state.findIfFresh("libera", "req-1", Duration.ofDays(1));
     assertNotNull(found);
+
     assertEquals(origin, found.originTarget());
     assertEquals("WHO #ircafe", found.requestPreview());
   }
