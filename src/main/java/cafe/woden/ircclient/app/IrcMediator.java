@@ -13,6 +13,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
@@ -58,6 +59,7 @@ public class IrcMediator {
   private final OutboundDccCommandService outboundDccCommandService;
   private final TargetCoordinator targetCoordinator;
   private final UiSettingsBus uiSettingsBus;
+  private final TrayNotificationService trayNotificationService;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -99,6 +101,7 @@ public class IrcMediator {
       OutboundDccCommandService outboundDccCommandService,
       TargetCoordinator targetCoordinator,
       UiSettingsBus uiSettingsBus,
+      TrayNotificationService trayNotificationService,
       NotificationRuleMatcher notificationRuleMatcher,
       UserInfoEnrichmentService userInfoEnrichmentService,
       WhoisRoutingState whoisRoutingState,
@@ -126,6 +129,7 @@ public class IrcMediator {
     this.outboundDccCommandService = outboundDccCommandService;
     this.targetCoordinator = targetCoordinator;
     this.uiSettingsBus = uiSettingsBus;
+    this.trayNotificationService = trayNotificationService;
     this.notificationRuleMatcher = notificationRuleMatcher;
     this.userInfoEnrichmentService = userInfoEnrichmentService;
     this.whoisRoutingState = whoisRoutingState;
@@ -503,9 +507,17 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           maybeRecordRuleMatch(sid, chan, active, ev.from(), ev.text());
         }
 
-        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.text())) {
-          ui.markHighlight(chan);
-          ui.recordHighlight(chan, ev.from());
+        boolean mention = containsSelfMention(sid, ev.from(), ev.text());
+        if (mention) {
+          if (!chan.equals(active)) {
+            ui.markHighlight(chan);
+            ui.recordHighlight(chan, ev.from());
+          }
+
+          try {
+            trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), ev.text());
+          } catch (Exception ignored) {
+          }
         }
       }
       case IrcEvent.ChannelAction ev -> {
@@ -531,9 +543,17 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           maybeRecordRuleMatch(sid, chan, active, ev.from(), ev.action());
         }
 
-        if (!chan.equals(active) && containsSelfMention(sid, ev.from(), ev.action())) {
-          ui.markHighlight(chan);
-          ui.recordHighlight(chan, ev.from());
+        boolean mention = containsSelfMention(sid, ev.from(), ev.action());
+        if (mention) {
+          if (!chan.equals(active)) {
+            ui.markHighlight(chan);
+            ui.recordHighlight(chan, ev.from());
+          }
+
+          try {
+            trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), "* " + ev.action());
+          } catch (Exception ignored) {
+          }
         }
       }
       case IrcEvent.ChannelModeChanged ev -> {
@@ -593,6 +613,11 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         } else {
           postTo(pm, true, d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), false, ev.messageId(), ev.ircv3Tags()));
         }
+
+        try {
+          trayNotificationService.notifyPrivateMessage(sid, ev.from(), ev.text());
+        } catch (Exception ignored) {
+        }
       }
       case IrcEvent.PrivateAction ev -> {
         TargetRef pm = new TargetRef(sid, ev.from());
@@ -607,6 +632,11 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
         } else {
           postTo(pm, true, d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), false, ev.messageId(), ev.ircv3Tags()));
+        }
+
+        try {
+          trayNotificationService.notifyPrivateMessage(sid, ev.from(), "* " + ev.action());
+        } catch (Exception ignored) {
         }
       }
       case IrcEvent.Notice ev -> {

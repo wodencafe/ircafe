@@ -129,6 +129,12 @@ public record IrcProperties(Client client, List<Server> servers) {
       Sasl sasl,
       List<String> autoJoin,
       /**
+       * Optional list of commands to run after connecting, similar to HexChat's "Perform" list.
+       *
+       * <p>Each entry is a single line. Later steps may add variable substitution and /sleep.
+       */
+      List<String> perform,
+      /**
        * Optional per-server proxy override.
        *
        * <p>If {@code null}, the server inherits {@code irc.client.proxy}.
@@ -173,6 +179,9 @@ public record IrcProperties(Client client, List<Server> servers) {
       }
       if (autoJoin == null) {
         autoJoin = List.of();
+      }
+      if (perform == null) {
+        perform = List.of();
       }
     }
   }

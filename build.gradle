@@ -62,6 +62,17 @@ dependencies {
 
     implementation "org.jsoup:jsoup:1.22.1"
 
+    // Better tray support on Linux/GNOME (AppIndicator/GtkStatusIcon fallback) + native menus.
+    // NOTE: Maven Central currently publishes 4.4 (README mentions 4.5, but it is not on Central).
+    implementation "com.dorkbox:SystemTray:4.4"
+
+    // Cross-platform desktop notification popups (toast-like). Used for Windows notifications.
+    implementation "com.dorkbox:Notify:4.5"
+
+    // DBus (Linux/GNOME) - used to implement clickable desktop notifications via org.freedesktop.Notifications.
+    implementation "com.github.hypfvieh:dbus-java-core:5.2.0"
+    implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:5.2.0"
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

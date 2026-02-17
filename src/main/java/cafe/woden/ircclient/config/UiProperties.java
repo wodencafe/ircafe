@@ -101,8 +101,69 @@ public record UiProperties(
 
     Filters filters,
 
-    Layout layout
+    Layout layout,
+
+    Tray tray
 ) {
+
+  /**
+   * System tray integration.
+   *
+   * <p>Defaults are intentionally "HexChat-ish": if the platform supports a tray,
+   * we show it, and the window close button hides the app instead of exiting.
+   */
+  public record Tray(
+      Boolean enabled,
+      Boolean closeToTray,
+      Boolean minimizeToTray,
+      Boolean startMinimized,
+
+      /** Show desktop notifications (balloons/toasts) for channel highlights. */
+      Boolean notifyHighlights,
+
+      /** Show desktop notifications (balloons/toasts) for private messages. */
+      Boolean notifyPrivateMessages,
+
+      /** Show desktop notifications (balloons/toasts) for connection state changes. */
+      Boolean notifyConnectionState,
+
+      /** Only show desktop notifications when the main window is not focused/active. */
+      Boolean notifyOnlyWhenUnfocused,
+
+      /** Only show desktop notifications when the main window is minimized or hidden to tray. */
+      Boolean notifyOnlyWhenMinimizedOrHidden,
+
+      /** If true, suppress notifications for the currently active buffer/target. */
+      Boolean notifySuppressWhenTargetActive,
+
+      /**
+       * On Linux desktops, prefer the D-Bus notification API (org.freedesktop.Notifications).
+       *
+       * <p>This enables click-to-open behavior on desktops that support notification actions.
+       * If unsupported, IRCafe will silently fall back to {@code notify-send}.
+       */
+      Boolean linuxDbusActionsEnabled
+  ) {
+    public Tray {
+      if (enabled == null) enabled = true;
+      if (closeToTray == null) closeToTray = true;
+      if (minimizeToTray == null) minimizeToTray = false;
+      if (startMinimized == null) startMinimized = false;
+
+      // Defaults are intentionally minimal: highlights + DMs are on, connectivity is off.
+      if (notifyHighlights == null) notifyHighlights = true;
+      if (notifyPrivateMessages == null) notifyPrivateMessages = true;
+      if (notifyConnectionState == null) notifyConnectionState = false;
+
+      // HexChat-ish defaults: notify when you're not actively looking at IRCafe.
+      if (notifyOnlyWhenUnfocused == null) notifyOnlyWhenUnfocused = true;
+      if (notifyOnlyWhenMinimizedOrHidden == null) notifyOnlyWhenMinimizedOrHidden = false;
+      if (notifySuppressWhenTargetActive == null) notifySuppressWhenTargetActive = true;
+
+      // Default to "on" - we only actually use D-Bus if the session supports actions.
+      if (linuxDbusActionsEnabled == null) linuxDbusActionsEnabled = true;
+    }
+  }
 
   /**
    * WeeChat-style message filters.

@@ -22,6 +22,9 @@ import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
+import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
+import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.beans.PropertyChangeListener;
 import java.awt.Color;
@@ -75,6 +78,7 @@ import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.JSeparator;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
@@ -110,6 +114,9 @@ public class PreferencesDialog {
   private final FilterSettingsBus filterSettingsBus;
   private final TranscriptRebuildService transcriptRebuildService;
   private final TargetCoordinator targetCoordinator;
+  private final TrayService trayService;
+  private final TrayNotificationService trayNotificationService;
+  private final GnomeDbusNotificationBackend gnomeDbusBackend;
 
   private JDialog dialog;
 
@@ -123,7 +130,10 @@ public class PreferencesDialog {
                            PircbotxIrcClientService ircClientService,
                            FilterSettingsBus filterSettingsBus,
                            TranscriptRebuildService transcriptRebuildService,
-                           TargetCoordinator targetCoordinator) {
+                           TargetCoordinator targetCoordinator,
+                           TrayService trayService,
+                           TrayNotificationService trayNotificationService,
+                           GnomeDbusNotificationBackend gnomeDbusBackend) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.runtimeConfig = runtimeConfig;
@@ -135,6 +145,9 @@ public class PreferencesDialog {
     this.filterSettingsBus = filterSettingsBus;
     this.transcriptRebuildService = transcriptRebuildService;
     this.targetCoordinator = targetCoordinator;
+    this.trayService = trayService;
+    this.trayNotificationService = trayNotificationService;
+    this.gnomeDbusBackend = gnomeDbusBackend;
   }
 
   public void open(Window owner) {
@@ -158,6 +171,7 @@ public class PreferencesDialog {
     ThemeControls theme = buildThemeControls(current, themeLabelById);
     FontControls fonts = buildFontControls(current, closeables);
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
+    TrayControls trayControls = buildTrayControls(current);
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
@@ -186,7 +200,7 @@ public class PreferencesDialog {
     FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
 
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
-    JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
+    JPanel startupPanel = buildStartupPanel(autoConnectOnStart, trayControls);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
@@ -204,6 +218,21 @@ public class PreferencesDialog {
       String fam = String.valueOf(fonts.fontFamily.getSelectedItem());
       int size = ((Number) fonts.fontSize.getValue()).intValue();
       boolean autoConnectV = autoConnectOnStart.isSelected();
+
+      boolean trayEnabledV = trayControls.enabled.isSelected();
+      boolean trayCloseToTrayV = trayEnabledV && trayControls.closeToTray.isSelected();
+      boolean trayMinimizeToTrayV = trayEnabledV && trayControls.minimizeToTray.isSelected();
+      boolean trayStartMinimizedV = trayEnabledV && trayControls.startMinimized.isSelected();
+
+      boolean trayNotifyHighlightsV = trayEnabledV && trayControls.notifyHighlights.isSelected();
+      boolean trayNotifyPrivateMessagesV = trayEnabledV && trayControls.notifyPrivateMessages.isSelected();
+      boolean trayNotifyConnectionStateV = trayEnabledV && trayControls.notifyConnectionState.isSelected();
+
+      boolean trayNotifyOnlyWhenUnfocusedV = trayEnabledV && trayControls.notifyOnlyWhenUnfocused.isSelected();
+      boolean trayNotifyOnlyWhenMinimizedOrHiddenV = trayEnabledV && trayControls.notifyOnlyWhenMinimizedOrHidden.isSelected();
+      boolean trayNotifySuppressWhenTargetActiveV = trayEnabledV && trayControls.notifySuppressWhenTargetActive.isSelected();
+
+      boolean trayLinuxDbusActionsEnabledV = trayEnabledV && trayControls.linuxDbusActions.isSelected();
 
       boolean timestampsEnabledV = timestamps.enabled.isSelected();
       boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
@@ -346,6 +375,19 @@ public class PreferencesDialog {
           fam,
           size,
           autoConnectV,
+          trayEnabledV,
+          trayCloseToTrayV,
+          trayMinimizeToTrayV,
+          trayStartMinimizedV,
+          trayNotifyHighlightsV,
+          trayNotifyPrivateMessagesV,
+          trayNotifyConnectionStateV,
+
+          trayNotifyOnlyWhenUnfocusedV,
+          trayNotifyOnlyWhenMinimizedOrHiddenV,
+          trayNotifySuppressWhenTargetActiveV,
+
+          trayLinuxDbusActionsEnabledV,
           imageEmbeds.enabled.isSelected(),
           imageEmbeds.collapsed.isSelected(),
           maxImageW,
@@ -389,6 +431,20 @@ public class PreferencesDialog {
       settingsBus.set(next);
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
       runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
+      runtimeConfig.rememberTrayEnabled(next.trayEnabled());
+      runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
+      runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
+      runtimeConfig.rememberTrayStartMinimized(next.trayStartMinimized());
+      runtimeConfig.rememberTrayNotifyHighlights(next.trayNotifyHighlights());
+      runtimeConfig.rememberTrayNotifyPrivateMessages(next.trayNotifyPrivateMessages());
+      runtimeConfig.rememberTrayNotifyConnectionState(next.trayNotifyConnectionState());
+      runtimeConfig.rememberTrayNotifyOnlyWhenUnfocused(next.trayNotifyOnlyWhenUnfocused());
+      runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(next.trayNotifyOnlyWhenMinimizedOrHidden());
+      runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(next.trayNotifySuppressWhenTargetActive());
+      runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
+      if (trayService != null) {
+        trayService.applySettings();
+      }
       runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
       runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
       runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
@@ -927,6 +983,144 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         "If disabled, IRCafe starts disconnected and you can connect manually using the Connect button.");
     return autoConnectOnStart;
   }
+
+
+  private TrayControls buildTrayControls(UiSettings current) {
+    JCheckBox enabled = new JCheckBox("Enable system tray icon", current.trayEnabled());
+    JCheckBox closeToTray = new JCheckBox("Close button hides to tray instead of exiting", current.trayCloseToTray());
+    JCheckBox minimizeToTray = new JCheckBox("Minimize button hides to tray", current.trayMinimizeToTray());
+    JCheckBox startMinimized = new JCheckBox("Start minimized to tray", current.trayStartMinimized());
+
+    JCheckBox notifyHighlights = new JCheckBox("Desktop notifications for highlights", current.trayNotifyHighlights());
+    JCheckBox notifyPrivateMessages = new JCheckBox("Desktop notifications for private messages", current.trayNotifyPrivateMessages());
+    JCheckBox notifyConnectionState = new JCheckBox("Desktop notifications for connection state", current.trayNotifyConnectionState());
+
+    JCheckBox notifyOnlyWhenUnfocused = new JCheckBox(
+        "Only notify when IRCafe is not focused",
+        current.trayNotifyOnlyWhenUnfocused()
+    );
+    JCheckBox notifyOnlyWhenMinimizedOrHidden = new JCheckBox(
+        "Only notify when minimized or hidden to tray",
+        current.trayNotifyOnlyWhenMinimizedOrHidden()
+    );
+    JCheckBox notifySuppressWhenTargetActive = new JCheckBox(
+        "Don't notify for the active buffer",
+        current.trayNotifySuppressWhenTargetActive()
+    );
+
+    boolean linuxTmp = false;
+    boolean linuxActionsSupportedTmp = false;
+    try {
+      linuxTmp = gnomeDbusBackend != null && gnomeDbusBackend.isLinux();
+      if (linuxTmp) {
+        GnomeDbusNotificationBackend.ProbeResult pr = gnomeDbusBackend.probe();
+        linuxActionsSupportedTmp = pr != null && pr.sessionBusReachable() && pr.actionsSupported();
+      }
+    } catch (Exception ignored) {
+    }
+
+    final boolean linux = linuxTmp;
+    final boolean linuxActionsSupported = linuxActionsSupportedTmp;
+
+    JCheckBox linuxDbusActions = new JCheckBox(
+        "Use Linux D-Bus notifications (click-to-open)",
+        linux && linuxActionsSupported && current.trayLinuxDbusActionsEnabled()
+    );
+    linuxDbusActions.setToolTipText(linux
+        ? (linuxActionsSupported
+            ? "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."
+            : "Click actions aren't available in this session (no D-Bus notification actions support detected).")
+        : "Linux only.");
+
+    JButton testNotification = new JButton("Test notification");
+    testNotification.setToolTipText("Send a test desktop notification (click to open IRCafe).\n" +
+        "This does not require highlight/PM notifications to be enabled.");
+    testNotification.addActionListener(e -> {
+      try {
+        if (trayNotificationService != null) {
+          trayNotificationService.notifyTest();
+        }
+      } catch (Throwable ignored) {
+      }
+    });
+
+    notifyHighlights.setToolTipText("Show a desktop notification when someone mentions your nick in a channel.");
+    notifyPrivateMessages.setToolTipText("Show a desktop notification when you receive a private message.");
+    notifyConnectionState.setToolTipText("Show a desktop notification when connecting/disconnecting.");
+
+    notifyOnlyWhenUnfocused.setToolTipText("Common HexChat behavior: only notify when IRCafe isn't the active window.");
+    notifyOnlyWhenMinimizedOrHidden.setToolTipText("Only notify when IRCafe is minimized or hidden to tray.");
+    notifySuppressWhenTargetActive.setToolTipText("If the message is in the currently selected buffer, suppress the notification.");
+
+    Runnable refreshEnabled = () -> {
+      boolean en = enabled.isSelected();
+      closeToTray.setEnabled(en);
+      minimizeToTray.setEnabled(en);
+      startMinimized.setEnabled(en);
+      notifyHighlights.setEnabled(en);
+      notifyPrivateMessages.setEnabled(en);
+      notifyConnectionState.setEnabled(en);
+
+      notifyOnlyWhenUnfocused.setEnabled(en);
+      notifyOnlyWhenMinimizedOrHidden.setEnabled(en);
+      notifySuppressWhenTargetActive.setEnabled(en);
+
+      linuxDbusActions.setEnabled(en && linux && linuxActionsSupported);
+      testNotification.setEnabled(en);
+
+      if (!en) {
+        closeToTray.setSelected(false);
+        minimizeToTray.setSelected(false);
+        startMinimized.setSelected(false);
+        notifyHighlights.setSelected(false);
+        notifyPrivateMessages.setSelected(false);
+        notifyConnectionState.setSelected(false);
+
+        notifyOnlyWhenUnfocused.setSelected(false);
+        notifyOnlyWhenMinimizedOrHidden.setSelected(false);
+        notifySuppressWhenTargetActive.setSelected(false);
+
+        linuxDbusActions.setSelected(false);
+      }
+
+      if (!(linux && linuxActionsSupported)) {
+        linuxDbusActions.setSelected(false);
+      }
+    };
+
+    enabled.addActionListener(e -> refreshEnabled.run());
+    refreshEnabled.run();
+
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    panel.add(enabled, "growx");
+    panel.add(closeToTray, "growx");
+    panel.add(minimizeToTray, "growx");
+    panel.add(startMinimized, "growx");
+    panel.add(new JLabel("Notifications:"), "gaptop 8");
+    panel.add(notifyHighlights, "growx");
+    panel.add(notifyPrivateMessages, "growx");
+    panel.add(notifyConnectionState, "growx");
+    panel.add(new JSeparator(), "growx");
+    panel.add(notifyOnlyWhenUnfocused, "growx");
+    panel.add(notifyOnlyWhenMinimizedOrHidden, "growx");
+    panel.add(notifySuppressWhenTargetActive, "growx");
+    panel.add(new JLabel("Linux:"), "gaptop 8");
+    panel.add(linuxDbusActions, "growx");
+    panel.add(testNotification, "w 180!");
+
+    if (linux && !linuxActionsSupported) {
+      panel.add(helpText("Linux notification actions were not detected for this session.\n" +
+          "IRCafe will fall back to notify-send."), "growx");
+    }
+    panel.add(helpText("Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."), "growx");
+
+    return new TrayControls(enabled, closeToTray, minimizeToTray, startMinimized,
+        notifyHighlights, notifyPrivateMessages, notifyConnectionState,
+        notifyOnlyWhenUnfocused, notifyOnlyWhenMinimizedOrHidden, notifySuppressWhenTargetActive,
+        linuxDbusActions, testNotification,
+        panel);
+  }
+
 
   private JCheckBox buildPresenceFoldsCheckbox(UiSettings current) {
     JCheckBox presenceFolds = new JCheckBox("Fold join/part/quit spam into a compact block");
@@ -1873,14 +2067,21 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return form;
   }
 
-  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]"));
+
+  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart, TrayControls trayControls) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]6[]12[]6[]6[]6[]6[]"));
     form.add(tabTitle("Startup & Connection"), "growx, wrap");
+
     form.add(sectionTitle("On launch"), "growx, wrap");
     form.add(autoConnectOnStart, "growx, wrap");
-    form.add(helpText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads."), "growx");
+    form.add(helpText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads."), "growx, wrap");
+
+    form.add(sectionTitle("System tray"), "growx, wrap");
+    form.add(trayControls.panel, "growx");
+
     return form;
   }
+
 
   private JPanel buildChatPanel(JCheckBox presenceFolds,
                                JCheckBox ctcpRequestsInActiveTarget,
@@ -2998,6 +3199,22 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {
+  }
+
+
+  private record TrayControls(JCheckBox enabled,
+                              JCheckBox closeToTray,
+                              JCheckBox minimizeToTray,
+                              JCheckBox startMinimized,
+                              JCheckBox notifyHighlights,
+                              JCheckBox notifyPrivateMessages,
+                              JCheckBox notifyConnectionState,
+                              JCheckBox notifyOnlyWhenUnfocused,
+                              JCheckBox notifyOnlyWhenMinimizedOrHidden,
+                              JCheckBox notifySuppressWhenTargetActive,
+                              JCheckBox linuxDbusActions,
+                              JButton testNotification,
+                              JPanel panel) {
   }
 
   private record ImageEmbedControls(JCheckBox enabled,

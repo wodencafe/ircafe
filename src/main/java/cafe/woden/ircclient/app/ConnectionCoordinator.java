@@ -7,6 +7,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.HashMap;
@@ -31,6 +32,7 @@ public class ConnectionCoordinator {
   private final ServerRegistry serverRegistry;
   private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
+  private final TrayNotificationService trayNotificationService;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   /** Per-server connection states (missing => {@link ConnectionState#DISCONNECTED}). */
@@ -43,13 +45,15 @@ public class ConnectionCoordinator {
       UiPort ui,
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig
+      RuntimeConfigStore runtimeConfig,
+      TrayNotificationService trayNotificationService
   ) {
     this.irc = irc;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
     this.serverCatalog = serverCatalog;
     this.runtimeConfig = runtimeConfig;
+    this.trayNotificationService = trayNotificationService;
 
     configuredServers.addAll(serverRegistry.serverIds());
     for (String sid : configuredServers) {
@@ -319,6 +323,11 @@ public class ConnectionCoordinator {
         if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
+
+        try {
+          trayNotificationService.notifyConnectionState(sid, "Connecting", msg);
+        } catch (Exception ignored) {
+        }
         updateConnectionUi();
         return ConnectivityChange.CHANGED;
       }
@@ -326,9 +335,15 @@ public class ConnectionCoordinator {
       case IrcEvent.Connected ev -> {
         setState(sid, ConnectionState.CONNECTED);
         ui.ensureTargetExists(status);
-        ui.appendStatus(status, "(conn)", "Connected as " + ev.nick());
+        String msg = "Connected as " + ev.nick();
+        ui.appendStatus(status, "(conn)", msg);
         ui.setChatCurrentNick(sid, ev.nick());
         runtimeConfig.rememberNick(sid, ev.nick());
+
+        try {
+          trayNotificationService.notifyConnectionState(sid, "Connected", msg);
+        } catch (Exception ignored) {
+        }
         updateConnectionUi();
         return ConnectivityChange.CHANGED;
       }
@@ -345,6 +360,11 @@ public class ConnectionCoordinator {
         if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
+
+        try {
+          trayNotificationService.notifyConnectionState(sid, "Reconnecting", msg);
+        } catch (Exception ignored) {
+        }
         updateConnectionUi();
         return ConnectivityChange.CHANGED;
       }
@@ -357,6 +377,11 @@ public class ConnectionCoordinator {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
         ui.setChatCurrentNick(sid, "");
+
+        try {
+          trayNotificationService.notifyConnectionState(sid, "Disconnected", ev.reason());
+        } catch (Exception ignored) {
+        }
         updateConnectionUi();
         return ConnectivityChange.CHANGED;
       }

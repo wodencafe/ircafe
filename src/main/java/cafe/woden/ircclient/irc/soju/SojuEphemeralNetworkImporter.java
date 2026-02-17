@@ -139,6 +139,7 @@ public class SojuEphemeralNetworkImporter {
         bouncer.realName(),
         updatedSasl,
         List.of(),
+        List.of(),
         bouncer.proxy()
     );
   }

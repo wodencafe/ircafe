@@ -1,0 +1,30 @@
+diff -ruN /mnt/data/ircafe_orig/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServerEditorDialog.java /mnt/data/ircafe/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServerEditorDialog.java
+--- /mnt/data/ircafe_orig/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServerEditorDialog.java	2026-01-28 06:15:14.000000000 +0000
++++ /mnt/data/ircafe/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServerEditorDialog.java	2026-01-28 06:21:29.934886913 +0000
+@@ -227,7 +227,9 @@
+     JPanel p = new JPanel(new BorderLayout(8, 8));
+     p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+     JLabel hint = new JLabel("One channel per line (e.g. #java)");
+-    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:disabled");
++    // Use the theme's disabled-foreground color ("disabled" is not a valid
++    // color token for FlatLaf styling).
++    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+     p.add(hint, BorderLayout.NORTH);
+     autoJoinArea.setLineWrap(true);
+     autoJoinArea.setWrapStyleWord(true);
+diff -ruN /mnt/data/ircafe_orig/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServersDialog.java /mnt/data/ircafe/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServersDialog.java
+--- /mnt/data/ircafe_orig/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServersDialog.java	2026-01-28 06:15:14.000000000 +0000
++++ /mnt/data/ircafe/ircafe-master/src/main/java/cafe/woden/ircclient/ui/servers/ServersDialog.java	2026-01-28 06:21:15.315765121 +0000
+@@ -58,7 +58,11 @@
+ 
+     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+     list.setCellRenderer(new ServerCellRenderer());
+-    list.putClientProperty(FlatClientProperties.STYLE, "arc:12;" );
++    // Note: JList does *not* support the generic "arc" style key (it throws
++    // FlatStylingSupport$UnknownStyleException). If you want rounded corners,
++    // apply arc to the JScrollPane border instead, and optionally round the
++    // selection highlight with selectionArc.
++    list.putClientProperty(FlatClientProperties.STYLE, "selectionArc:12;");
+ 
+     JScrollPane scroll = new JScrollPane(list);
+     scroll.setPreferredSize(new Dimension(520, 320));

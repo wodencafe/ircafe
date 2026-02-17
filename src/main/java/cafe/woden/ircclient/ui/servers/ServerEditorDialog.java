@@ -61,6 +61,8 @@ public class ServerEditorDialog extends JDialog {
 
   private final JTextArea autoJoinArea = new JTextArea(8, 30);
 
+  private final List<String> performSeed;
+
   // Per-server proxy override
   private final JCheckBox proxyOverrideBox = new JCheckBox("Override proxy for this server");
   private final JCheckBox proxyEnabledBox = new JCheckBox("Use SOCKS5 proxy");
@@ -112,6 +114,7 @@ public class ServerEditorDialog extends JDialog {
 
     // Seed values
     if (seed != null) {
+      performSeed = (seed.perform() == null) ? List.of() : List.copyOf(seed.perform());
       idField.setText(Objects.toString(seed.id(), ""));
       hostField.setText(Objects.toString(seed.host(), ""));
       portField.setText(String.valueOf(seed.port()));
@@ -134,6 +137,7 @@ public class ServerEditorDialog extends JDialog {
 
       seedProxy(seed.proxy());
     } else {
+      performSeed = List.of();
       tlsBox.setSelected(true);
       portField.setText("6697");
       portAuto = true;
@@ -674,6 +678,7 @@ public class ServerEditorDialog extends JDialog {
         realName,
         sasl,
         autoJoin,
+        performSeed,
         proxyOverride
     );
   }
