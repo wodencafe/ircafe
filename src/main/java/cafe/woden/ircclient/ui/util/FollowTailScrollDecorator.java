@@ -26,8 +26,12 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
   private static final AtomicInteger IDS = new AtomicInteger(0);
   private final int id = IDS.incrementAndGet();
 
-  private static final long INFO_INTERVAL_NS = TimeUnit.SECONDS.toNanos(1);
-  private volatile long lastInfoNs = 0L;
+  /**
+   * This class can emit a lot of state-change chatter while scrolling. Keep it
+   * at DEBUG so default INFO logging isn't spammy, and rate-limit it further.
+   */
+  private static final long DEBUG_INTERVAL_NS = TimeUnit.SECONDS.toNanos(1);
+  private volatile long lastDebugNs = 0L;
 
   private final JScrollPane scroll;
   private final JScrollBar bar;
@@ -93,16 +97,16 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
   }
 
   private void infoOnce(String reason) {
-    if (!log.isInfoEnabled()) return;
+    if (!log.isDebugEnabled()) return;
     long now = System.nanoTime();
-    if (now - lastInfoNs < INFO_INTERVAL_NS) return;
-    lastInfoNs = now;
+    if (now - lastDebugNs < DEBUG_INTERVAL_NS) return;
+    lastDebugNs = now;
     try {
       int max = bar.getMaximum();
       int extent = barModel.getExtent();
       int val = bar.getValue();
       boolean atBottomNow = (val + extent) >= (max - 2);
-      log.info("[FollowTail#{}] {} followTail={} forcePinOnce={} atBottomNow={} val={} extent={} max={} lastVal={} lastExtent={} lastMax={}",
+      log.debug("[FollowTail#{}] {} followTail={} forcePinOnce={} atBottomNow={} val={} extent={} max={} lastVal={} lastExtent={} lastMax={}",
           id,
           reason,
           safeIsFollowTail(),
@@ -115,21 +119,21 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
           lastBarExtent,
           lastBarMax);
     } catch (Throwable t) {
-      log.info("[FollowTail#{}] {} (unable to snapshot scroll state: {})", id, reason, t.toString());
+      log.debug("[FollowTail#{}] {} (unable to snapshot scroll state: {})", id, reason, t.toString());
     }
   }
 
   private void setFollowTailWithReason(boolean next, String reason) {
     boolean before = safeIsFollowTail();
     // NOTE: do not rate-limit transitions; they're rare and are exactly what we need.
-    if (before != next && log.isInfoEnabled()) {
-      log.info("[FollowTail#{}] followTail {} -> {} reason={}", id, before, next, reason);
+    if (before != next && log.isDebugEnabled()) {
+      log.debug("[FollowTail#{}] followTail {} -> {} reason={}", id, before, next, reason);
     }
     try {
       setFollowTail.accept(next);
     } catch (Throwable t) {
-      if (log.isInfoEnabled()) {
-        log.info("[FollowTail#{}] setFollowTail failed (reason={}): {}", id, reason, t.toString());
+      if (log.isDebugEnabled()) {
+        log.debug("[FollowTail#{}] setFollowTail failed (reason={}): {}", id, reason, t.toString());
       }
     }
   }
@@ -176,7 +180,9 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     }
 
     if (!follow && !forcePinOnce && atBottomNow) {
-      log.info("[FollowTail#{}] docMutation atBottomNow=true but followTail=false -> auto enable", id);
+      if (log.isDebugEnabled()) {
+        log.debug("[FollowTail#{}] docMutation atBottomNow=true but followTail=false -> auto enable", id);
+      }
       setFollowTailWithReason(true, "docMutation.atBottomAutoEnable");
       follow = true;
     }

@@ -93,6 +93,7 @@ public class UiSettingsBus {
         props.linkPreviewsCollapsedByDefault(),
         props.presenceFoldsEnabled(),
         props.ctcpRequestsInActiveTargetEnabled() == null || Boolean.TRUE.equals(props.ctcpRequestsInActiveTargetEnabled()),
+        props.typingIndicatorsEnabled(),
         timestampsEnabled,
         timestampFormat,
         timestampsIncludeChatMessages,

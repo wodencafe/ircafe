@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat.fold;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Insets;
+import java.beans.PropertyChangeListener;
 import java.util.Objects;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -16,6 +17,16 @@ import javax.swing.UIManager;
 public final class HistoryDividerComponent extends JPanel {
 
   private final JLabel label = new JLabel();
+
+  /**
+   * Embedded components inside a JTextPane don't always get their colors refreshed when the
+   * LookAndFeel is previewed/reverted (e.g., Preferences Cancel). Keep the divider's color synced
+   * with UI defaults.
+   */
+  private final PropertyChangeListener uiDefaultsListener = evt -> {
+    // Cheap enough to reapply for any UI defaults change.
+    applyTheme();
+  };
 
   public HistoryDividerComponent(String text) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -31,6 +42,36 @@ public final class HistoryDividerComponent extends JPanel {
 
     applyTheme();
     add(label);
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    try {
+      UIManager.addPropertyChangeListener(uiDefaultsListener);
+    } catch (Exception ignored) {
+    }
+    applyTheme();
+  }
+
+  @Override
+  public void removeNotify() {
+    try {
+      UIManager.removePropertyChangeListener(uiDefaultsListener);
+    } catch (Exception ignored) {
+    }
+    super.removeNotify();
+  }
+
+  @Override
+  public void updateUI() {
+    super.updateUI();
+    setOpaque(false);
+    try {
+      label.setOpaque(false);
+    } catch (Exception ignored) {
+    }
+    applyTheme();
   }
 
   public void setTranscriptFont(Font base) {

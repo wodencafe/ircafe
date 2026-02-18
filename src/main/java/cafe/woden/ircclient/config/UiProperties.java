@@ -87,6 +87,9 @@ public record UiProperties(
 
     Boolean presenceFoldsEnabled,
 
+    /** Enable IRCv3 typing indicators (send + display). */
+    Boolean typingIndicatorsEnabled,
+
     /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same server).
      * If disabled, they are routed to their origin target (channel/PM) instead.
@@ -517,6 +520,11 @@ if (historyPlaceholdersEnabledByDefault == null) {
     // Presence fold default: enabled.
     if (presenceFoldsEnabled == null) {
       presenceFoldsEnabled = true;
+    }
+
+    // Typing indicators default: enabled.
+    if (typingIndicatorsEnabled == null) {
+      typingIndicatorsEnabled = true;
     }
 
     // CTCP request routing default: show in the currently active target.

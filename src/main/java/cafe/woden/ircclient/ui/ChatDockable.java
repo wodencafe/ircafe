@@ -24,6 +24,8 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +53,12 @@ import java.util.Objects;
 @Component
 @Lazy
 public class ChatDockable extends ChatViewPanel implements Dockable {
+
+  private static final Logger log = LoggerFactory.getLogger(ChatDockable.class);
+
+  // Diagnostics: avoid spamming logs if the server doesn't support typing.
+  private final java.util.concurrent.atomic.AtomicBoolean typingUnavailableWarned =
+      new java.util.concurrent.atomic.AtomicBoolean(false);
 
   public static final String ID = "chat";
   private static final long READ_MARKER_SEND_COOLDOWN_MS = 3000L;
@@ -596,7 +604,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     String cap = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
-    if ("typing".equals(cap)) {
+    if ("typing".equals(cap) || "message-tags".equals(cap)) {
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         inputPanel.clearRemoteTypingIndicator();
       }
@@ -874,10 +882,27 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private void onLocalTypingStateChanged(String state) {
     TargetRef t = activeTarget;
     if (t == null || t.isStatus() || t.isUiOnly()) return;
-    if (irc == null || !irc.isTypingAvailable(t.serverId())) return;
+    if (irc == null) return;
+    if (!irc.isTypingAvailable(t.serverId())) {
+      String s = normalizeTypingState(state);
+      // Only warn once per session when the user is actively composing.
+      if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
+        String reason = Objects.toString(irc.typingAvailabilityReason(t.serverId()), "").trim();
+        if (reason.isEmpty()) reason = "not negotiated / not allowed";
+        log.info("[{}] typing indicators are enabled, but unavailable on this server ({})", t.serverId(), reason);
+      }
+      return;
+    }
+    typingUnavailableWarned.set(false);
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
-    irc.sendTyping(t.serverId(), t.target(), s).subscribe(() -> {}, err -> {});
+    irc.sendTyping(t.serverId(), t.target(), s).subscribe(
+        () -> {},
+        err -> {
+          if (log.isDebugEnabled()) {
+            log.debug("[{}] typing send failed (target={} state={}): {}", t.serverId(), t.target(), s, err.toString());
+          }
+        });
   }
 
   private static String normalizeTypingState(String state) {

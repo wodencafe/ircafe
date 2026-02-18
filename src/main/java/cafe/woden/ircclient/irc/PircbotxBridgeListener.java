@@ -1114,12 +1114,15 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean react = conn.draftReactCapAcked.get();
       boolean edit = conn.draftMessageEditCapAcked.get();
       boolean redaction = conn.draftMessageRedactionCapAcked.get();
-      boolean typing = conn.typingCapAcked.get();
+      boolean messageTags = conn.messageTagsCapAcked.get();
+      boolean typingCap = conn.typingCapAcked.get();
+      boolean typingTagAllowed = conn.typingClientTagAllowed.get();
+      boolean typing = messageTags && (typingTagAllowed || typingCap);
       boolean readMarker = conn.readMarkerCapAcked.get();
       log.info(
           "[{}] negotiated caps: server-time={} standard-replies={} echo-message={} cap-notify={} labeled-response={} "
               + "setname={} chghost={} draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
-              + "typing={} read-marker={} "
+              + "message-tags={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
               + "chathistory={} batch={} znc.in/playback={}",
           serverId,
           st,
@@ -1133,7 +1136,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           react,
           edit,
           redaction,
+          messageTags,
+          typingTagAllowed,
           typing,
+          typingCap,
           readMarker,
           ch,
           batch,
@@ -1143,6 +1149,18 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         String msg = "IRCv3 server-time was not negotiated; message ordering/timestamps may be less accurate (especially on reconnect/backlog).";
         log.warn("[{}] {}", serverId, msg);
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ServerTimeNotNegotiated(Instant.now(), msg)));
+      }
+
+      if (!typing && conn.typingMissingWarned.compareAndSet(false, true)) {
+        String reason;
+        if (!messageTags) {
+          reason = "message-tags not negotiated";
+        } else if (!(typingTagAllowed || typingCap)) {
+          reason = "server denies +typing via CLIENTTAGDENY";
+        } else {
+          reason = "unknown";
+        }
+        log.warn("[{}] IRCv3 typing indicators are unavailable ({})", serverId, reason);
       }
     }
 
@@ -1327,6 +1345,18 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
+        }
+
+        // IRCv3 client-only tags can be denied/allowed via RPL_ISUPPORT CLIENTTAGDENY.
+        // Typing indicators use the +typing client tag (delivered via TAGMSG), so we treat
+        // this as part of typing availability.
+        String clientTagDeny = PircbotxClientTagParsers.parseRpl005ClientTagDenyValue(rawLine);
+        if (clientTagDeny != null) {
+          boolean allowed = PircbotxClientTagParsers.isClientOnlyTagAllowed(clientTagDeny, "typing");
+          boolean prev = conn.typingClientTagAllowed.getAndSet(allowed);
+          if (prev != allowed) {
+            log.info("[{}] CLIENTTAGDENY -> typing allowed={} (raw={})", serverId, allowed, clientTagDeny);
+          }
         }
 
         emitServerResponseLine(event.getBot(), code, line);

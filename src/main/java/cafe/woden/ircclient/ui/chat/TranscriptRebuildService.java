@@ -47,6 +47,14 @@ public class TranscriptRebuildService {
     // If we can’t reload history, clearing would be destructive; skip.
     if (!canReload) return false;
 
+    // These rebuilds are rare and can look like "the UI randomly changed" (because we clear the
+    // visible transcript and replay recent history). Keep a breadcrumb at INFO, and make the
+    // call stack available at DEBUG for troubleshooting.
+    log.info("[rebuild] rebuilding transcript for {}", target);
+    if (log.isDebugEnabled()) {
+      log.debug("[rebuild] call stack", new RuntimeException("rebuild requested"));
+    }
+
     try {
       if (history != null) {
         history.reset(target);

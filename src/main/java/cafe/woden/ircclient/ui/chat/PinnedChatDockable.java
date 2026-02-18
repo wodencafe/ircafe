@@ -11,6 +11,8 @@ import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -40,6 +42,11 @@ import javax.swing.SwingUtilities;
  * the raw line into the shared outbound bus.
  */
 public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoCloseable {
+
+  private static final Logger log = LoggerFactory.getLogger(PinnedChatDockable.class);
+
+  private final java.util.concurrent.atomic.AtomicBoolean typingUnavailableWarned =
+      new java.util.concurrent.atomic.AtomicBoolean(false);
 
   private static final long READ_MARKER_SEND_COOLDOWN_MS = 3000L;
 
@@ -540,10 +547,31 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void onLocalTypingStateChanged(String state) {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null || !irc.isTypingAvailable(target.serverId())) return;
+    if (irc == null) return;
+    if (!irc.isTypingAvailable(target.serverId())) {
+      String s = normalizeTypingState(state);
+      if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
+        String reason = Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
+        if (reason.isEmpty()) reason = "not negotiated / not allowed";
+        log.info("[{}] typing indicators are enabled, but unavailable on this server ({})", target.serverId(), reason);
+      }
+      return;
+    }
+    typingUnavailableWarned.set(false);
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
-    irc.sendTyping(target.serverId(), target.target(), s).subscribe(() -> {}, err -> {});
+    irc.sendTyping(target.serverId(), target.target(), s).subscribe(
+        () -> {},
+        err -> {
+          if (log.isDebugEnabled()) {
+            log.debug(
+                "[{}] typing send failed (target={} state={}): {}",
+                target.serverId(),
+                target.target(),
+                s,
+                err.toString());
+          }
+        });
   }
 
   private static String normalizeTypingState(String state) {

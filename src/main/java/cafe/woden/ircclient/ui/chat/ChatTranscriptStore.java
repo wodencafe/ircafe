@@ -1198,6 +1198,8 @@ public class ChatTranscriptStore {
         st.historyDivider.component.setText(labelText);
       } catch (Exception ignored) {
       }
+      // If we already have a divider, it's no longer pending.
+      st.pendingHistoryDividerLabel = null;
       return st.historyDivider.component;
     }
 
@@ -1227,6 +1229,7 @@ public class ChatTranscriptStore {
       doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
       if (st != null) {
         st.historyDivider = new HistoryDividerControl(p, comp);
+        st.pendingHistoryDividerLabel = null;
       }
     } catch (Exception ignored) {
     }
@@ -1234,6 +1237,46 @@ public class ChatTranscriptStore {
     int delta = doc.getLength() - beforeLen;
     shiftCurrentPresenceBlock(ref, insertionStart, delta);
     return comp;
+  }
+
+  /**
+   * Mark that a history divider should be inserted before the next live append for this target.
+   * This is used when history is loaded into an otherwise-empty transcript.
+   */
+  public synchronized void markHistoryDividerPending(TargetRef ref, String labelText) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return;
+    if (st.historyDivider != null) return;
+    st.pendingHistoryDividerLabel = labelText;
+  }
+
+  /** Returns true if there is content after the given offset in the transcript document. */
+  public synchronized boolean hasContentAfterOffset(TargetRef ref, int offset) {
+    if (ref == null) return false;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+    return doc.getLength() > Math.max(0, offset);
+  }
+
+  private void flushPendingHistoryDividerIfNeeded(TargetRef ref, StyledDocument doc) {
+    if (ref == null || doc == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return;
+    if (st.historyDivider != null) {
+      st.pendingHistoryDividerLabel = null;
+      return;
+    }
+
+    String label = st.pendingHistoryDividerLabel;
+    if (label == null || label.isBlank()) return;
+
+    // Insert at the end of the current transcript (right before the live append that triggered
+    // this flush).
+    ensureHistoryDivider(ref, doc.getLength(), label);
+    st.pendingHistoryDividerLabel = null;
   }
 
   public synchronized void updateReadMarker(TargetRef ref, long markerEpochMs) {
@@ -1576,6 +1619,14 @@ public class ChatTranscriptStore {
                                   LineMeta meta) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+
+    // If history was loaded into an otherwise-empty transcript (e.g. transcript rebuild), we defer
+    // inserting the history divider until the next live append so it doesn't appear as a dangling
+    // row at the bottom.
+    if (allowEmbeds) {
+      flushPendingHistoryDividerIfNeeded(ref, doc);
+    }
+
     noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
     ensureAtLineStart(doc);
 
@@ -3671,6 +3722,14 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
 
     LoadOlderControl loadOlderControl;
     HistoryDividerControl historyDivider;
+
+    /**
+     * If we load history into an otherwise-empty transcript (e.g., transcript rebuild), we defer
+     * inserting the "History - <date>" divider until the next live append. This avoids leaving a
+     * confusing divider row at the very bottom when there's no "live" content below it.
+     */
+    String pendingHistoryDividerLabel;
+
     ReadMarkerControl readMarker;
     Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
   }

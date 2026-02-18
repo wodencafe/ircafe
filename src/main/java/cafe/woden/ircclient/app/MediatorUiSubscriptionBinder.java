@@ -17,6 +17,10 @@ public class MediatorUiSubscriptionBinder {
   ) {
     disposables.add(
         ui.targetSelections()
+            // Some UI refresh paths (e.g. LAF/theme updates) can cause the current selection
+            // to be re-emitted even when it has not actually changed. De-dupe to avoid
+            // re-running expensive side effects (history prefill, WHO refresh, etc.).
+            .distinctUntilChanged()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(targetCoordinator::onTargetSelected,
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString()))

@@ -331,11 +331,14 @@ public class PircbotxIrcClientService implements IrcClientService {
   public Completable sendTyping(String serverId, String target, String state) {
     return Completable.fromAction(() -> {
           PircbotxConnectionState c = conn(serverId);
-          if (c == null || !c.typingCapAcked.get()) {
-            throw new IllegalStateException("typing capability not negotiated: " + serverId);
-          }
-          if (c.botRef.get() == null) {
+          if (c == null || c.botRef.get() == null) {
             throw new IllegalStateException("Not connected: " + serverId);
+          }
+          if (!isTypingAvailable(serverId)) {
+            String reason = typingAvailabilityReason(serverId);
+            String suffix = (reason == null || reason.isBlank()) ? "" : (" (" + reason + ")");
+            throw new IllegalStateException(
+                "Typing indicators not available (requires message-tags and server allowing +typing)" + suffix + ": " + serverId);
           }
 
           String normalizedState = normalizeTypingState(state);
@@ -343,6 +346,9 @@ public class PircbotxIrcClientService implements IrcClientService {
 
           String dest = sanitizeTarget(target);
           String line = "@+typing=" + normalizedState + " TAGMSG " + dest;
+          if (log.isDebugEnabled()) {
+            log.debug("[{}] -> typing {} TAGMSG {}", serverId, normalizedState, dest);
+          }
           requireBot(serverId).sendRaw().rawLine(line);
         })
         .subscribeOn(Schedulers.io());
@@ -499,9 +505,40 @@ public class PircbotxIrcClientService implements IrcClientService {
   public boolean isTypingAvailable(String serverId) {
     try {
       PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.typingCapAcked.get();
+      if (c == null || c.botRef.get() == null) return false;
+
+      // Typing is a client-only tag (+typing) delivered via message-tags + TAGMSG.
+      // Networks may block specific client-only tags via RPL_ISUPPORT CLIENTTAGDENY.
+      boolean messageTags = c.messageTagsCapAcked.get();
+      boolean typingAllowed = c.typingClientTagAllowed.get() || c.typingCapAcked.get(); // legacy fallback
+      return messageTags && typingAllowed;
     } catch (Exception e) {
       return false;
+    }
+  }
+
+  @Override
+  public String typingAvailabilityReason(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      if (c == null) return "no connection state";
+      if (c.botRef.get() == null) return "not connected";
+
+      boolean messageTags = c.messageTagsCapAcked.get();
+      if (!messageTags) {
+        return "message-tags not negotiated";
+      }
+
+      boolean typingAllowed = c.typingClientTagAllowed.get();
+      boolean typingCap = c.typingCapAcked.get();
+      if (!(typingAllowed || typingCap)) {
+        return "server denies +typing via CLIENTTAGDENY";
+      }
+
+      // Available.
+      return "";
+    } catch (Exception e) {
+      return "error determining typing availability: " + e.getClass().getSimpleName();
     }
   }
 

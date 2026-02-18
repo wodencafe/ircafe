@@ -359,6 +359,9 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
       String typing = firstTag(tags, "typing", "+typing");
       if (!typing.isBlank()) {
+        if (log.isDebugEnabled()) {
+          log.debug("[{}] IRCv3 +typing tag: from={} target={} state={} cmd={}", serverId, nick, convTarget, typing, cmd);
+        }
         sink.accept(new ServerIrcEvent(serverId,
             new IrcEvent.UserTypingObserved(at, nick, convTarget, typing)));
       }
@@ -462,6 +465,12 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         boolean prev = conn.draftMessageRedactionCapAcked.getAndSet(enabled);
         if (prev != enabled) {
           log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "message-tags" -> {
+        boolean prev = conn.messageTagsCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: message-tags {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "typing" -> {

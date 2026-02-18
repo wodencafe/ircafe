@@ -899,6 +899,22 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTypingIndicatorsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("typingIndicatorsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist typing indicators setting to '{}'", file, e);
+    }
+  }
+
   // --- WeeChat-style filters (ircafe.ui.filters.*) ---
 
   public synchronized void rememberFiltersEnabledByDefault(boolean enabled) {

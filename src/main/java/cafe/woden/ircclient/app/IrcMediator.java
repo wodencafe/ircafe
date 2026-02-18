@@ -36,6 +36,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -43,6 +46,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class IrcMediator {
+  private static final Logger log = LoggerFactory.getLogger(IrcMediator.class);
   private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);
   private static final Duration LABELED_RESPONSE_TIMEOUT = Duration.ofSeconds(30);
 
@@ -76,6 +80,13 @@ public class IrcMediator {
   private final NotificationRuleMatcher notificationRuleMatcher;
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+  // Typing indicator diagnostics: keep a small de-dup cache so INFO logs stay readable.
+  private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
+  private static final long TYPING_LOG_DEDUP_MS = 5_000;
+  private static final int TYPING_LOG_MAX_KEYS = 512;
+
+  private record TypingLogState(String state, long atMs) {}
 
   @PostConstruct
   void init() {
@@ -944,6 +955,20 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         if (from.isEmpty()) from = "Someone";
         String state = Objects.toString(ev.state(), "").trim().toLowerCase(Locale.ROOT);
         if (state.isEmpty()) state = "active";
+
+        // Diagnostics: log inbound typing with dedupe so you can confirm the server is sending them.
+        boolean prefEnabled = false;
+        try {
+          prefEnabled = uiSettingsBus.get().typingIndicatorsEnabled();
+        } catch (Exception ignored) {
+        }
+        boolean typingAvailable = false;
+        try {
+          typingAvailable = irc != null && irc.isTypingAvailable(sid);
+        } catch (Exception ignored) {
+        }
+        maybeLogTypingObserved(sid, Objects.toString(ev.target(), ""), from, state, prefEnabled, typingAvailable);
+
         ui.showTypingIndicator(dest, from, state);
       }
 
@@ -1530,6 +1555,53 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     TargetRef active = targetCoordinator.getActiveTarget();
     if (active != null && Objects.equals(active.serverId(), sid)) return active;
     return status != null ? status : safeStatusTarget();
+  }
+
+  private void maybeLogTypingObserved(
+      String serverId,
+      String rawTarget,
+      String from,
+      String state,
+      boolean prefEnabled,
+      boolean typingAvailable
+  ) {
+    if (!log.isInfoEnabled()) return;
+
+    String sid = Objects.toString(serverId, "").trim();
+    String tgt = Objects.toString(rawTarget, "").trim();
+    String nick = Objects.toString(from, "").trim();
+    String st = Objects.toString(state, "").trim().toLowerCase(Locale.ROOT);
+    if (sid.isEmpty() || nick.isEmpty() || st.isEmpty()) return;
+
+    String key = sid + "|" + tgt + "|" + nick;
+    long now = System.currentTimeMillis();
+
+    TypingLogState prev = lastTypingByKey.get(key);
+    boolean stateChanged = prev == null || !Objects.equals(prev.state(), st);
+    boolean stale = prev == null || (now - prev.atMs()) >= TYPING_LOG_DEDUP_MS;
+
+    if (lastTypingByKey.size() > TYPING_LOG_MAX_KEYS) {
+      lastTypingByKey.clear();
+    }
+
+    if (stateChanged || stale || "done".equals(st)) {
+      lastTypingByKey.put(key, new TypingLogState(st, now));
+      log.info(
+          "[{}] typing observed: from={} target={} state={} (prefsEnabled={} typingAvailable={})",
+          sid,
+          nick,
+          tgt.isEmpty() ? "(unknown)" : tgt,
+          st,
+          prefEnabled,
+          typingAvailable);
+    } else if (log.isDebugEnabled()) {
+      log.debug(
+          "[{}] typing observed (repeat): from={} target={} state={}",
+          sid,
+          nick,
+          tgt.isEmpty() ? "(unknown)" : tgt,
+          st);
+    }
   }
 
   private void postTo(TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {

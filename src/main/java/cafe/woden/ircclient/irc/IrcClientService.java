@@ -193,6 +193,15 @@ public interface IrcClientService {
   }
 
   /**
+   * Human-readable diagnostic reason why IRCv3 typing indicators are unavailable.
+   *
+   * <p>Useful for logs and UI warnings.
+   */
+  default String typingAvailabilityReason(String serverId) {
+    return "";
+  }
+
+  /**
    * @return true if IRCv3 {@code read-marker} is negotiated on this connection.
    */
   default boolean isReadMarkerAvailable(String serverId) {

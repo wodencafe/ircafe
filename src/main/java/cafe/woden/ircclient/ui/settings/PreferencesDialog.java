@@ -478,6 +478,7 @@ public class PreferencesDialog {
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
+    JCheckBox typingIndicatorsEnabled = buildTypingIndicatorsCheckbox(current);
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
 
     HistoryControls history = buildHistoryControls(current, closeables);
@@ -501,7 +502,7 @@ public class PreferencesDialog {
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
-    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
+    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, typingIndicatorsEnabled, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications);
@@ -650,6 +651,7 @@ public class PreferencesDialog {
 
       boolean presenceFoldsV = presenceFolds.isSelected();
       boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
+      boolean typingIndicatorsEnabledV = typingIndicatorsEnabled.isSelected();
 
       boolean nickColoringEnabledV = nickColors.enabled.isSelected();
       double nickColorMinContrastV = ((Number) nickColors.minContrast.getValue()).doubleValue();
@@ -796,6 +798,7 @@ public class PreferencesDialog {
           linkPreviews.collapsed.isSelected(),
           presenceFoldsV,
           ctcpRequestsInActiveTargetV,
+          typingIndicatorsEnabledV,
           timestampsEnabledV,
           timestampFormatV,
           timestampsIncludeChatMessagesV,
@@ -890,6 +893,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
       runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(next.ctcpRequestsInActiveTargetEnabled());
+      runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
 
       if (nickColorSettingsBus != null) {
         nickColorSettingsBus.set(new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
@@ -1419,9 +1423,32 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private ThemeControls buildThemeControls(UiSettings current, Map<String, String> themeLabelById) {
-    JComboBox<String> theme = new JComboBox<>(themeLabelById.keySet().toArray(String[]::new));
+    // Ensure the currently configured theme is always present in the dropdown, even if it's a
+    // custom LookAndFeel class name (or an IntelliJ themes-pack id).
+    String curTheme = current != null ? current.theme() : null;
+    String matchKey = null;
+    for (String k : themeLabelById.keySet()) {
+      if (sameThemeInternal(k, curTheme)) {
+        matchKey = k;
+        break;
+      }
+    }
+
+    Map<String, String> map = themeLabelById;
+    if (matchKey == null && curTheme != null && !curTheme.isBlank()) {
+      java.util.LinkedHashMap<String, String> tmp = new java.util.LinkedHashMap<>();
+      tmp.put(curTheme, "Custom: " + curTheme);
+      tmp.putAll(themeLabelById);
+      map = tmp;
+      matchKey = curTheme;
+    }
+
+    final Map<String, String> labelMap = map;
+
+    JComboBox<String> theme = new JComboBox<>(labelMap.keySet().toArray(String[]::new));
     theme.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
-      JLabel l = new JLabel(themeLabelById.getOrDefault(value, value));
+      String key = value != null ? value : "";
+      JLabel l = new JLabel(labelMap.getOrDefault(key, key));
       l.setOpaque(true);
       if (isSelected) {
         l.setBackground(list.getSelectionBackground());
@@ -1433,7 +1460,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       l.setBorder(null);
       return l;
     });
-    theme.setSelectedItem(current.theme());
+    theme.setSelectedItem(matchKey != null ? matchKey : curTheme);
     return new ThemeControls(theme);
   }
 
@@ -1668,7 +1695,13 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
           Font candidate = new Font(family, baseFont.getStyle(), baseFont.getSize());
           // If the requested font isn't available (editable entry), keep the UI default.
           if (candidate != null && (candidate.getFamily().equalsIgnoreCase(family) || candidate.getName().equalsIgnoreCase(family))) {
-            label.setFont(candidate);
+            // Some families (e.g. symbol/icon fonts) can't display their own name and render as squares.
+            // If the font can't display the label text, fall back to the UI font so the name stays readable.
+            if (candidate.canDisplayUpTo(family) == -1) {
+              label.setFont(candidate);
+            } else {
+              label.setFont(baseFont);
+            }
           } else {
             label.setFont(baseFont);
           }
@@ -2033,6 +2066,13 @@ panel.add(subTabs, "growx, wmin 0");
     ctcp.setToolTipText("When enabled, inbound CTCP requests (e.g. VERSION, PING) are announced in the currently active chat tab.\n" +
         "When disabled, CTCP requests are routed to the target they came from (channel or PM).");
     return ctcp;
+  }
+
+  private JCheckBox buildTypingIndicatorsCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Enable typing indicators (IRCv3)");
+    cb.setSelected(current.typingIndicatorsEnabled());
+    cb.setToolTipText("When enabled, IRCafe will send and display IRCv3 typing indicators when the server supports them.");
+    return cb;
   }
 
   private NickColorControls buildNickColorControls(Window owner, List<AutoCloseable> closeables) {
@@ -3107,6 +3147,7 @@ panel.add(subTabs, "growx, wmin 0");
 
   private JPanel buildChatPanel(JCheckBox presenceFolds,
                                JCheckBox ctcpRequestsInActiveTarget,
+                               JCheckBox typingIndicatorsEnabled,
                                NickColorControls nickColors,
                                TimestampControls timestamps,
                                OutgoingColorControls outgoing) {
@@ -3119,6 +3160,9 @@ panel.add(subTabs, "growx, wmin 0");
 
     form.add(new JLabel("CTCP requests"), "aligny top");
     form.add(ctcpRequestsInActiveTarget, "alignx left");
+
+    form.add(new JLabel("Typing indicators"), "aligny top");
+    form.add(typingIndicatorsEnabled, "alignx left");
 
     form.add(new JLabel("Nick colors"), "aligny top");
     form.add(nickColors.panel, "growx");
@@ -3750,13 +3794,29 @@ panel.add(subTabs, "growx, wmin 0");
 
 
   private static String normalizeThemeIdInternal(String id) {
-    String s = java.util.Objects.toString(id, "").trim().toLowerCase();
+    String s = java.util.Objects.toString(id, "").trim();
     if (s.isEmpty()) return "dark";
-    return s;
+
+    // Preserve case for IntelliJ theme ids and raw LookAndFeel class names.
+    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
+    }
+    if (looksLikeClassNameInternal(s)) return s;
+
+    return s.toLowerCase();
   }
 
   private static boolean sameThemeInternal(String a, String b) {
     return normalizeThemeIdInternal(a).equals(normalizeThemeIdInternal(b));
+  }
+
+  private static boolean looksLikeClassNameInternal(String raw) {
+    if (raw == null) return false;
+    String s = raw.trim();
+    if (!s.contains(".")) return false;
+    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
+    String last = s.substring(s.lastIndexOf('.') + 1);
+    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
   }
 
 
@@ -6021,6 +6081,12 @@ panel.add(subTabs, "growx, wmin 0");
         prev != null ? prev.rules() : List.of(),
         overrides
     );
+
+    // If nothing changed, don't trigger a transcript rebuild. Pressing OK/Apply on the preferences
+    // dialog should be a no-op for the active transcript unless a setting meaningfully changed.
+    if (java.util.Objects.equals(prev, next)) {
+      return;
+    }
 
     filterSettingsBus.set(next);
     runtimeConfig.rememberFiltersEnabledByDefault(enabledByDefault);

@@ -85,7 +85,8 @@ public class ThemeSelectionDialog {
         new PackChoice("All packs", null),
         new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
         new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
-        new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE)
+        new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE),
+        new PackChoice("IntelliJ", ThemeManager.ThemePack.INTELLIJ)
     });
 
     JTextField search = new JTextField(14);
@@ -121,6 +122,7 @@ public class ThemeSelectionDialog {
           case SYSTEM -> "System";
           case FLATLAF -> "FlatLaf";
           case IRCAFE -> "IRCafe";
+          case INTELLIJ -> "IntelliJ";
         };
         String tone = switch (value.tone()) {
           case SYSTEM -> "System";
@@ -280,6 +282,13 @@ public class ThemeSelectionDialog {
   private static String normalizeThemeId(String id) {
     String s = Objects.toString(id, "").trim();
     if (s.isEmpty()) return "dark";
+
+    // Preserve case for IntelliJ theme ids and raw class names.
+    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
+    }
+    if (looksLikeClassName(s)) return s;
+
     return s.toLowerCase();
   }
 
@@ -298,5 +307,14 @@ public class ThemeSelectionDialog {
       dialog.dispose();
       dialog = null;
     }
+  }
+
+  private static boolean looksLikeClassName(String raw) {
+    if (raw == null) return false;
+    String s = raw.trim();
+    if (!s.contains(".")) return false;
+    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
+    String last = s.substring(s.lastIndexOf('.') + 1);
+    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
   }
 }
