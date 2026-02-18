@@ -17,11 +17,11 @@ import java.net.Socket;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
-import org.pircbotx.cap.SASLCapHandler;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.springframework.stereotype.Component;
 
@@ -107,16 +107,35 @@ public class PircbotxBotFactory {
       if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
     }
     if (s.sasl() != null && s.sasl().enabled()) {
-      if (!"PLAIN".equalsIgnoreCase(s.sasl().mechanism())) {
-        throw new IllegalStateException(
-            "Only SASL mechanism PLAIN is supported for now (got: " + s.sasl().mechanism() + ")"
-        );
+      String mech = (s.sasl().mechanism() == null) ? "PLAIN" : s.sasl().mechanism().trim();
+      String user = (s.sasl().username() == null) ? "" : s.sasl().username();
+      String secret = (s.sasl().password() == null) ? "" : s.sasl().password();
+      String mechUpper = mech.toUpperCase(Locale.ROOT);
+      boolean hasSecret = secret != null && !secret.isBlank();
+      boolean needsUser = switch (mechUpper) {
+        case "EXTERNAL" -> false;
+        case "AUTO" -> hasSecret;
+        default -> true;
+      };
+      boolean needsSecret = switch (mechUpper) {
+        case "EXTERNAL" -> false;
+        case "AUTO" -> false;
+        default -> true;
+      };
+
+      if (needsUser && user.isBlank()) {
+        throw new IllegalStateException("SASL enabled but username not set");
       }
-      if (s.sasl().username().isBlank() || s.sasl().password().isBlank()) {
-        throw new IllegalStateException("SASL enabled but username/password not set");
+      if (needsSecret && secret.isBlank()) {
+        throw new IllegalStateException("SASL enabled but secret not set");
       }
       builder.setCapEnabled(true);
-      builder.addCapHandler(new SASLCapHandler(s.sasl().username(), s.sasl().password()));
+      builder.addCapHandler(new MultiSaslCapHandler(
+          user,
+          secret,
+          mech,
+          s.sasl().disconnectOnFailure()
+      ));
     }
 
     return new PircBotX(builder.buildConfiguration());

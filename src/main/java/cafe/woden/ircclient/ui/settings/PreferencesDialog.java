@@ -22,20 +22,33 @@ import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
+import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
+import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
+import cafe.woden.ircclient.notify.sound.BuiltInSound;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
+import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.beans.PropertyChangeListener;
 import java.awt.Color;
 import java.awt.Font;
+import java.io.File;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.time.format.DateTimeFormatter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JColorChooser;
+import javax.swing.JFileChooser;
 import javax.swing.JTextField;
 import javax.swing.TransferHandler;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
@@ -51,6 +64,8 @@ import java.awt.Rectangle;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,14 +82,18 @@ import java.util.regex.Pattern;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JDialog;
+import javax.swing.JList;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.JSeparator;
+import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
@@ -101,6 +120,9 @@ public class PreferencesDialog {
 
   private final UiSettingsBus settingsBus;
   private final ThemeManager themeManager;
+  private final ThemeAccentSettingsBus accentSettingsBus;
+  private final ThemeTweakSettingsBus tweakSettingsBus;
+  private final ChatThemeSettingsBus chatThemeSettingsBus;
   private final RuntimeConfigStore runtimeConfig;
   private final LogProperties logProps;
   private final NickColorSettingsBus nickColorSettingsBus;
@@ -110,11 +132,19 @@ public class PreferencesDialog {
   private final FilterSettingsBus filterSettingsBus;
   private final TranscriptRebuildService transcriptRebuildService;
   private final TargetCoordinator targetCoordinator;
+  private final TrayService trayService;
+  private final TrayNotificationService trayNotificationService;
+  private final GnomeDbusNotificationBackend gnomeDbusBackend;
+  private final NotificationSoundSettingsBus notificationSoundSettingsBus;
+  private final NotificationSoundService notificationSoundService;
 
   private JDialog dialog;
 
   public PreferencesDialog(UiSettingsBus settingsBus,
                            ThemeManager themeManager,
+                           ThemeAccentSettingsBus accentSettingsBus,
+                           ThemeTweakSettingsBus tweakSettingsBus,
+                           ChatThemeSettingsBus chatThemeSettingsBus,
                            RuntimeConfigStore runtimeConfig,
                            LogProperties logProps,
                            NickColorSettingsBus nickColorSettingsBus,
@@ -123,9 +153,17 @@ public class PreferencesDialog {
                            PircbotxIrcClientService ircClientService,
                            FilterSettingsBus filterSettingsBus,
                            TranscriptRebuildService transcriptRebuildService,
-                           TargetCoordinator targetCoordinator) {
+                           TargetCoordinator targetCoordinator,
+                           TrayService trayService,
+                           TrayNotificationService trayNotificationService,
+                           GnomeDbusNotificationBackend gnomeDbusBackend,
+                           NotificationSoundSettingsBus notificationSoundSettingsBus,
+                           NotificationSoundService notificationSoundService) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
+    this.accentSettingsBus = accentSettingsBus;
+    this.tweakSettingsBus = tweakSettingsBus;
+    this.chatThemeSettingsBus = chatThemeSettingsBus;
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
     this.nickColorSettingsBus = nickColorSettingsBus;
@@ -135,6 +173,11 @@ public class PreferencesDialog {
     this.filterSettingsBus = filterSettingsBus;
     this.transcriptRebuildService = transcriptRebuildService;
     this.targetCoordinator = targetCoordinator;
+    this.trayService = trayService;
+    this.trayNotificationService = trayNotificationService;
+    this.gnomeDbusBackend = gnomeDbusBackend;
+    this.notificationSoundSettingsBus = notificationSoundSettingsBus;
+    this.notificationSoundService = notificationSoundService;
   }
 
   public void open(Window owner) {
@@ -157,7 +200,277 @@ public class PreferencesDialog {
 
     ThemeControls theme = buildThemeControls(current, themeLabelById);
     FontControls fonts = buildFontControls(current, closeables);
+    ThemeAccentSettings initialAccent = accentSettingsBus != null ? accentSettingsBus.get() : new ThemeAccentSettings(null, 70);
+    AccentControls accent = buildAccentControls(initialAccent);
+    ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+    TweakControls tweaks = buildTweakControls(initialTweaks);
+
+    ChatThemeSettings initialChatTheme = chatThemeSettingsBus != null
+        ? chatThemeSettingsBus.get()
+        : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+    ChatThemeControls chatTheme = buildChatThemeControls(initialChatTheme);
+
+    // Allow mousewheel selection cycling for Appearance-tab combos.
+    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(theme.combo)); } catch (Exception ignored) {}
+    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(chatTheme.preset)); } catch (Exception ignored) {}
+    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(tweaks.density)); } catch (Exception ignored) {}
+
+    // Live preview snapshot: used to rollback any preview-only changes on Cancel / window close.
+    final java.util.concurrent.atomic.AtomicReference<String> committedThemeId = new java.util.concurrent.atomic.AtomicReference<>(
+        normalizeThemeIdInternal(current != null ? current.theme() : null));
+    final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings = new java.util.concurrent.atomic.AtomicReference<>(current);
+    final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings = new java.util.concurrent.atomic.AtomicReference<>(
+        initialAccent != null ? initialAccent : new ThemeAccentSettings(null, 70));
+    final java.util.concurrent.atomic.AtomicReference<ThemeTweakSettings> committedTweakSettings = new java.util.concurrent.atomic.AtomicReference<>(
+        initialTweaks != null ? initialTweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+    final java.util.concurrent.atomic.AtomicReference<ChatThemeSettings> committedChatThemeSettings = new java.util.concurrent.atomic.AtomicReference<>(
+        initialChatTheme != null
+            ? initialChatTheme
+            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+
+    final java.util.concurrent.atomic.AtomicBoolean suppressLivePreview = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidAccentHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedAccentSettings.get() != null ? committedAccentSettings.get().accentColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatTimestampHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().timestampColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatSystemHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().systemColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatMentionHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().mentionBgColor() : null);
+
+    // Debounced live preview to avoid spamming full UI refreshes while sliders are dragged.
+    final javax.swing.Timer lafPreviewTimer = new javax.swing.Timer(140, null);
+    lafPreviewTimer.setRepeats(false);
+    final Runnable applyLafPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      if (themeManager == null) return;
+
+      String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
+      if (sel.isBlank()) return;
+
+      if (tweakSettingsBus != null) {
+        DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
+        String densityId = opt != null ? opt.id() : "cozy";
+        ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
+            ThemeTweakSettings.ThemeDensity.from(densityId),
+            tweaks.cornerRadius.getValue()
+        );
+        tweakSettingsBus.set(nextTweaks);
+      }
+
+      if (accentSettingsBus != null) {
+        String hex = null;
+        if (accent.enabled.isSelected()) {
+          String raw = accent.hex.getText();
+          raw = raw != null ? raw.trim() : "";
+
+          if (raw.isBlank()) {
+            lastValidAccentHex.set(null);
+            hex = null;
+          } else {
+            Color c = parseHexColorLenient(raw);
+            if (c != null) {
+              hex = toHex(c);
+              lastValidAccentHex.set(hex);
+            } else {
+              // If the user is mid-typing an invalid value, keep the last valid color.
+              hex = lastValidAccentHex.get();
+            }
+          }
+        }
+
+        ThemeAccentSettings nextAccent = new ThemeAccentSettings(hex, accent.strength.getValue());
+        accentSettingsBus.set(nextAccent);
+      }
+
+      themeManager.applyTheme(sel);
+    };
+    lafPreviewTimer.addActionListener(e -> applyLafPreview.run());
+    final Runnable scheduleLafPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      lafPreviewTimer.restart();
+    };
+
+    final javax.swing.Timer chatPreviewTimer = new javax.swing.Timer(120, null);
+    chatPreviewTimer.setRepeats(false);
+    final java.util.function.BiFunction<JTextField, java.util.concurrent.atomic.AtomicReference<String>, String> parseOptionalHex = (field, lastRef) -> {
+      String raw = field != null ? field.getText() : null;
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastRef.set(null);
+        return null;
+      }
+      Color c = parseHexColorLenient(raw);
+      if (c == null) {
+        return lastRef.get();
+      }
+      String hex = toHex(c);
+      lastRef.set(hex);
+      return hex;
+    };
+    final Runnable applyChatPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      if (themeManager == null) return;
+      if (chatThemeSettingsBus == null) return;
+
+      ChatThemeSettings.Preset presetV = (chatTheme.preset.getSelectedItem() instanceof ChatThemeSettings.Preset p)
+          ? p
+          : ChatThemeSettings.Preset.DEFAULT;
+
+      String tsHexV = parseOptionalHex.apply(chatTheme.timestamp.hex, lastValidChatTimestampHex);
+      String sysHexV = parseOptionalHex.apply(chatTheme.system.hex, lastValidChatSystemHex);
+      String menHexV = parseOptionalHex.apply(chatTheme.mention.hex, lastValidChatMentionHex);
+      int mentionStrengthV = chatTheme.mentionStrength.getValue();
+
+      ChatThemeSettings nextChatTheme = new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+      chatThemeSettingsBus.set(nextChatTheme);
+      themeManager.refreshChatStyles();
+    };
+    chatPreviewTimer.addActionListener(e -> applyChatPreview.run());
+    final Runnable scheduleChatPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      chatPreviewTimer.restart();
+    };
+
+    final javax.swing.Timer fontPreviewTimer = new javax.swing.Timer(120, null);
+    fontPreviewTimer.setRepeats(false);
+    final Runnable applyFontPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      UiSettings base = settingsBus != null ? settingsBus.get() : null;
+      if (base == null) return;
+
+      String fam = java.util.Objects.toString(fonts.fontFamily.getSelectedItem(), "").trim();
+      if (fam.isBlank()) fam = "Monospaced";
+      int size = ((Number) fonts.fontSize.getValue()).intValue();
+      if (size < 8) size = 8;
+      if (size > 48) size = 48;
+
+      settingsBus.set(base.withChatFontFamily(fam).withChatFontSize(size));
+    };
+    fontPreviewTimer.addActionListener(e -> applyFontPreview.run());
+    final Runnable scheduleFontPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      fontPreviewTimer.restart();
+    };
+
+    closeables.add(() -> {
+      lafPreviewTimer.stop();
+      chatPreviewTimer.stop();
+      fontPreviewTimer.stop();
+    });
+
+    final Runnable restoreCommittedAppearance = () -> {
+      if (themeManager == null) return;
+      suppressLivePreview.set(true);
+      try {
+        lafPreviewTimer.stop();
+        chatPreviewTimer.stop();
+        fontPreviewTimer.stop();
+
+        UiSettings ui = committedUiSettings.get();
+        if (ui != null) {
+          settingsBus.set(ui);
+        }
+        if (accentSettingsBus != null) {
+          ThemeAccentSettings a = committedAccentSettings.get();
+          accentSettingsBus.set(a != null ? a : new ThemeAccentSettings(null, 70));
+        }
+        if (tweakSettingsBus != null) {
+          ThemeTweakSettings tw = committedTweakSettings.get();
+          tweakSettingsBus.set(tw != null ? tw : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+        }
+        if (chatThemeSettingsBus != null) {
+          ChatThemeSettings ct = committedChatThemeSettings.get();
+          chatThemeSettingsBus.set(ct != null ? ct : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+        }
+
+        themeManager.applyTheme(committedThemeId.get());
+      } finally {
+        suppressLivePreview.set(false);
+      }
+    };
+
+    final boolean[] ignoreThemeComboEvents = new boolean[] { true };
+    theme.combo.addActionListener(e -> {
+      if (ignoreThemeComboEvents[0]) return;
+      scheduleLafPreview.run();
+    });
+    ignoreThemeComboEvents[0] = false;
+
+    // LAF + accent/tweak preview
+    accent.enabled.addActionListener(e -> scheduleLafPreview.run());
+    accent.strength.addChangeListener(e -> scheduleLafPreview.run());
+    accent.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = accent.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidAccentHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidAccentHex.set(toHex(c));
+      }
+      scheduleLafPreview.run();
+    }));
+    tweaks.density.addActionListener(e -> scheduleLafPreview.run());
+    tweaks.cornerRadius.addChangeListener(e -> scheduleLafPreview.run());
+
+    // Chat theme preview (transcript-only)
+    chatTheme.preset.addActionListener(e -> scheduleChatPreview.run());
+    chatTheme.mentionStrength.addChangeListener(e -> scheduleChatPreview.run());
+    chatTheme.timestamp.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = chatTheme.timestamp.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidChatTimestampHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidChatTimestampHex.set(toHex(c));
+      }
+      scheduleChatPreview.run();
+    }));
+    chatTheme.system.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = chatTheme.system.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidChatSystemHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidChatSystemHex.set(toHex(c));
+      }
+      scheduleChatPreview.run();
+    }));
+    chatTheme.mention.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = chatTheme.mention.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidChatMentionHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidChatMentionHex.set(toHex(c));
+      }
+      scheduleChatPreview.run();
+    }));
+
+    // Chat font preview
+    fonts.fontFamily.addActionListener(e -> scheduleFontPreview.run());
+    fonts.fontFamily.addItemListener(e -> {
+      if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+        scheduleFontPreview.run();
+      }
+    });
+    java.awt.Component ffEditor = fonts.fontFamily.getEditor() != null
+        ? fonts.fontFamily.getEditor().getEditorComponent()
+        : null;
+    if (ffEditor instanceof JTextField tf) {
+      tf.getDocument().addDocumentListener(new SimpleDocListener(scheduleFontPreview));
+    }
+    fonts.fontSize.addChangeListener(e -> scheduleFontPreview.run());
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
+    NotificationSoundSettings soundSettings = notificationSoundSettingsBus != null
+        ? notificationSoundSettingsBus.get()
+        : new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
+    TrayControls trayControls = buildTrayControls(current, soundSettings);
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
@@ -185,8 +498,9 @@ public class PreferencesDialog {
 
     FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
 
-    JPanel appearancePanel = buildAppearancePanel(theme, fonts);
+    JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
+    JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
@@ -203,7 +517,121 @@ public class PreferencesDialog {
       String t = String.valueOf(theme.combo.getSelectedItem());
       String fam = String.valueOf(fonts.fontFamily.getSelectedItem());
       int size = ((Number) fonts.fontSize.getValue()).intValue();
+
+      ThemeTweakSettings prevTweaks = tweakSettingsBus != null
+          ? tweakSettingsBus.get()
+          : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+      DensityOption densityOpt = (DensityOption) tweaks.density.getSelectedItem();
+      String densityIdV = densityOpt != null ? densityOpt.id() : "cozy";
+      int cornerRadiusV = tweaks.cornerRadius.getValue();
+      ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
+          ThemeTweakSettings.ThemeDensity.from(densityIdV),
+          cornerRadiusV
+      );
+      boolean tweaksChanged = !java.util.Objects.equals(prevTweaks, nextTweaks);
+
+      ThemeAccentSettings prevAccent = accentSettingsBus != null ? accentSettingsBus.get() : new ThemeAccentSettings(null, 70);
+      boolean accentOverrideEnabledV = accent.enabled.isSelected();
+      int accentStrengthV = accent.strength.getValue();
+      String accentHexV = null;
+      if (accentOverrideEnabledV) {
+        Color parsed = parseHexColorLenient(accent.hex.getText());
+        if (parsed == null) {
+          JOptionPane.showMessageDialog(dialog,
+              "Accent color must be a hex value like #RRGGBB.",
+              "Invalid accent color",
+              JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+        accentHexV = toHex(parsed);
+      }
+      ThemeAccentSettings nextAccent = new ThemeAccentSettings(accentHexV, accentStrengthV);
+      boolean accentChanged = !java.util.Objects.equals(prevAccent, nextAccent);
+
+      ChatThemeSettings prevChatTheme = chatThemeSettingsBus != null
+          ? chatThemeSettingsBus.get()
+          : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+
+      ChatThemeSettings.Preset presetV = (ChatThemeSettings.Preset) chatTheme.preset.getSelectedItem();
+      if (presetV == null) presetV = ChatThemeSettings.Preset.DEFAULT;
+
+      String tsHexV = chatTheme.timestamp.hex.getText();
+      tsHexV = tsHexV != null ? tsHexV.trim() : "";
+      if (tsHexV.isBlank()) tsHexV = null;
+      if (tsHexV != null) {
+        Color c = parseHexColorLenient(tsHexV);
+        if (c == null) {
+          JOptionPane.showMessageDialog(dialog,
+              "Chat timestamp color must be a hex value like #RRGGBB (or blank for default).",
+              "Invalid chat timestamp color",
+              JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+        tsHexV = toHex(c);
+      }
+
+      String sysHexV = chatTheme.system.hex.getText();
+      sysHexV = sysHexV != null ? sysHexV.trim() : "";
+      if (sysHexV.isBlank()) sysHexV = null;
+      if (sysHexV != null) {
+        Color c = parseHexColorLenient(sysHexV);
+        if (c == null) {
+          JOptionPane.showMessageDialog(dialog,
+              "Chat system color must be a hex value like #RRGGBB (or blank for default).",
+              "Invalid chat system color",
+              JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+        sysHexV = toHex(c);
+      }
+
+      String menHexV = chatTheme.mention.hex.getText();
+      menHexV = menHexV != null ? menHexV.trim() : "";
+      if (menHexV.isBlank()) menHexV = null;
+      if (menHexV != null) {
+        Color c = parseHexColorLenient(menHexV);
+        if (c == null) {
+          JOptionPane.showMessageDialog(dialog,
+              "Mention highlight color must be a hex value like #RRGGBB (or blank for default).",
+              "Invalid mention highlight color",
+              JOptionPane.ERROR_MESSAGE);
+          return;
+        }
+        menHexV = toHex(c);
+      }
+
+      int mentionStrengthV = chatTheme.mentionStrength.getValue();
+      ChatThemeSettings nextChatTheme = new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+      boolean chatThemeChanged = !java.util.Objects.equals(prevChatTheme, nextChatTheme);
+
       boolean autoConnectV = autoConnectOnStart.isSelected();
+
+      boolean trayEnabledV = trayControls.enabled.isSelected();
+      boolean trayCloseToTrayV = trayEnabledV && trayControls.closeToTray.isSelected();
+      boolean trayMinimizeToTrayV = trayEnabledV && trayControls.minimizeToTray.isSelected();
+      boolean trayStartMinimizedV = trayEnabledV && trayControls.startMinimized.isSelected();
+
+      boolean trayNotifyHighlightsV = trayEnabledV && trayControls.notifyHighlights.isSelected();
+      boolean trayNotifyPrivateMessagesV = trayEnabledV && trayControls.notifyPrivateMessages.isSelected();
+      boolean trayNotifyConnectionStateV = trayEnabledV && trayControls.notifyConnectionState.isSelected();
+
+      boolean trayNotifyOnlyWhenUnfocusedV = trayEnabledV && trayControls.notifyOnlyWhenUnfocused.isSelected();
+      boolean trayNotifyOnlyWhenMinimizedOrHiddenV = trayEnabledV && trayControls.notifyOnlyWhenMinimizedOrHidden.isSelected();
+      boolean trayNotifySuppressWhenTargetActiveV = trayEnabledV && trayControls.notifySuppressWhenTargetActive.isSelected();
+
+      boolean trayLinuxDbusActionsEnabledV = trayEnabledV && trayControls.linuxDbusActions.isSelected();
+
+      boolean trayNotificationSoundsEnabledV = trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
+      BuiltInSound selectedSoundV = (BuiltInSound) trayControls.notificationSound.getSelectedItem();
+      String trayNotificationSoundIdV = selectedSoundV != null ? selectedSoundV.name() : BuiltInSound.NOTIF_1.name();
+
+      boolean trayNotificationSoundUseCustomV = trayControls.notificationSoundUseCustom.isSelected();
+      String trayNotificationSoundCustomPathV = trayControls.notificationSoundCustomPath.getText();
+      trayNotificationSoundCustomPathV = trayNotificationSoundCustomPathV != null ? trayNotificationSoundCustomPathV.trim() : "";
+      if (trayNotificationSoundCustomPathV.isBlank()) trayNotificationSoundCustomPathV = null;
+      if (trayNotificationSoundUseCustomV && trayNotificationSoundCustomPathV == null) {
+        trayNotificationSoundUseCustomV = false;
+      }
 
       boolean timestampsEnabledV = timestamps.enabled.isSelected();
       boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
@@ -346,6 +774,19 @@ public class PreferencesDialog {
           fam,
           size,
           autoConnectV,
+          trayEnabledV,
+          trayCloseToTrayV,
+          trayMinimizeToTrayV,
+          trayStartMinimizedV,
+          trayNotifyHighlightsV,
+          trayNotifyPrivateMessagesV,
+          trayNotifyConnectionStateV,
+
+          trayNotifyOnlyWhenUnfocusedV,
+          trayNotifyOnlyWhenMinimizedOrHiddenV,
+          trayNotifySuppressWhenTargetActiveV,
+
+          trayLinuxDbusActionsEnabledV,
           imageEmbeds.enabled.isSelected(),
           imageEmbeds.collapsed.isSelected(),
           maxImageW,
@@ -387,8 +828,59 @@ public class PreferencesDialog {
       boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
       settingsBus.set(next);
+
+      if (accentSettingsBus != null) {
+        accentSettingsBus.set(nextAccent);
+      }
+      runtimeConfig.rememberAccentColor(nextAccent.accentColor());
+      runtimeConfig.rememberAccentStrength(nextAccent.strength());
+
+      if (tweakSettingsBus != null) {
+        tweakSettingsBus.set(nextTweaks);
+      }
+
+      if (chatThemeSettingsBus != null && chatThemeChanged) {
+        chatThemeSettingsBus.set(nextChatTheme);
+      }
+      runtimeConfig.rememberUiDensity(nextTweaks.densityId());
+      runtimeConfig.rememberCornerRadius(nextTweaks.cornerRadius());
+
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
+      // Chat theme (transcript-only palette)
+      runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
+      runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
+      runtimeConfig.rememberChatSystemColor(nextChatTheme.systemColor());
+      runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
+      runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
       runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
+      runtimeConfig.rememberTrayEnabled(next.trayEnabled());
+      runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
+      runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
+      runtimeConfig.rememberTrayStartMinimized(next.trayStartMinimized());
+      runtimeConfig.rememberTrayNotifyHighlights(next.trayNotifyHighlights());
+      runtimeConfig.rememberTrayNotifyPrivateMessages(next.trayNotifyPrivateMessages());
+      runtimeConfig.rememberTrayNotifyConnectionState(next.trayNotifyConnectionState());
+      runtimeConfig.rememberTrayNotifyOnlyWhenUnfocused(next.trayNotifyOnlyWhenUnfocused());
+      runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(next.trayNotifyOnlyWhenMinimizedOrHidden());
+      runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(next.trayNotifySuppressWhenTargetActive());
+      runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
+
+      if (notificationSoundSettingsBus != null) {
+        notificationSoundSettingsBus.set(new NotificationSoundSettings(
+            trayNotificationSoundsEnabledV,
+            trayNotificationSoundIdV,
+            trayNotificationSoundUseCustomV,
+            trayNotificationSoundCustomPathV
+        ));
+      }
+      runtimeConfig.rememberTrayNotificationSoundsEnabled(trayNotificationSoundsEnabledV);
+      runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
+      runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
+      runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+
+      if (trayService != null) {
+        trayService.applySettings();
+      }
       runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
       runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
       runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
@@ -457,14 +949,36 @@ public class PreferencesDialog {
       runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
       NetTlsContext.configure(trustAllTlsV);
 
-      if (themeChanged) {
-        themeManager.applyTheme(next.theme());
+      if (themeManager != null) {
+        if (themeChanged || accentChanged || tweaksChanged) {
+          // Full UI refresh (also triggers a chat restyle)
+          themeManager.applyTheme(next.theme());
+        } else if (chatThemeChanged) {
+          // Only the transcript palette changed
+          themeManager.refreshChatStyles();
+        }
       }
+
+      // Update committed snapshot for live preview rollback (Cancel/window close).
+      committedThemeId.set(normalizeThemeIdInternal(next.theme()));
+      committedUiSettings.set(next);
+      committedAccentSettings.set(nextAccent);
+      committedTweakSettings.set(nextTweaks);
+      committedChatThemeSettings.set(nextChatTheme);
+      lastValidAccentHex.set(nextAccent.accentColor());
+      lastValidChatTimestampHex.set(nextChatTheme.timestampColor());
+      lastValidChatSystemHex.set(nextChatTheme.systemColor());
+      lastValidChatMentionHex.set(nextChatTheme.mentionBgColor());
     };
 
     apply.addActionListener(e -> doApply.run());
     final JDialog d = createDialog(owner);
     this.dialog = d;
+    d.addWindowListener(new java.awt.event.WindowAdapter() {
+      @Override public void windowClosing(java.awt.event.WindowEvent e) {
+        restoreCommittedAppearance.run();
+      }
+    });
 
     final CloseableScope scope = DialogCloseableScopeDecorator.install(d);
     closeables.forEach(scope::add);
@@ -476,16 +990,21 @@ public class PreferencesDialog {
       doApply.run();
       d.dispose();
     });
-    cancel.addActionListener(e -> d.dispose());
+    cancel.addActionListener(e -> {
+      restoreCommittedAppearance.run();
+      d.dispose();
+    });
 
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
+    buttons.setBorder(BorderFactory.createEmptyBorder(8, 12, 12, 12));
     buttons.add(apply);
     buttons.add(ok);
     buttons.add(cancel);
     JTabbedPane tabs = new DynamicTabbedPane();
 
     tabs.addTab("Appearance", wrapTab(appearancePanel));
-    tabs.addTab("Startup & Connection", wrapTab(startupPanel));
+    tabs.addTab("Startup", wrapTab(startupPanel));
+    tabs.addTab("Tray & Notifications", wrapTab(trayPanel));
     tabs.addTab("Chat", wrapTab(chatPanel));
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
@@ -497,7 +1016,9 @@ public class PreferencesDialog {
     d.setLayout(new BorderLayout());
     d.add(tabs, BorderLayout.CENTER);
     d.add(buttons, BorderLayout.SOUTH);
-    d.setMinimumSize(new Dimension(520, 240));
+    // A tiny minimum size makes "dynamic tab sizing" feel jarring (some tabs would shrink the whole dialog
+    // to near-nothing). Keep a comfortable baseline so tabs like Network don't open comically short.
+    d.setMinimumSize(new Dimension(680, 540));
     installDynamicTabSizing(d, tabs, owner);
     d.setLocationRelativeTo(owner);
     d.setVisible(true);
@@ -680,8 +1201,17 @@ public class PreferencesDialog {
         ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
     );
     scroll.setBorder(null);
+    scroll.setViewportBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     return scroll;
+  }
+
+  private static JPanel padSubTab(JComponent panel) {
+    JPanel wrapper = new JPanel(new BorderLayout());
+    wrapper.setOpaque(false);
+    wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    wrapper.add(panel, BorderLayout.NORTH);
+    return wrapper;
   }
 
   /**
@@ -907,6 +1437,202 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return new ThemeControls(theme);
   }
 
+  private AccentControls buildAccentControls(ThemeAccentSettings current) {
+    ThemeAccentSettings cur = current != null ? current : new ThemeAccentSettings(null, 70);
+
+    JCheckBox enabled = new JCheckBox("Override theme accent");
+    enabled.setToolTipText("If enabled, your chosen accent is blended into the current theme. Changes preview live; Apply/OK saves.");
+    enabled.setSelected(cur.enabled());
+
+    JTextField hex = new JTextField(cur.accentColor() != null ? cur.accentColor() : "", 10);
+    hex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#RRGGBB");
+
+    JButton pick = new JButton("Pick…");
+    JButton clear = new JButton("Clear");
+
+    JSlider strength = new JSlider(0, 100, cur.strength());
+    strength.setPaintTicks(true);
+    strength.setMajorTickSpacing(25);
+    strength.setMinorTickSpacing(5);
+    strength.setSnapToTicks(false);
+    strength.setToolTipText("0 = theme default, 100 = fully your chosen accent");
+
+    Runnable updatePickIcon = () -> {
+      Color c = parseHexColorLenient(hex.getText());
+      if (c != null) {
+        pick.setIcon(new ColorSwatch(c, 14, 14));
+        pick.setText(toHex(c));
+      } else {
+        pick.setIcon(null);
+        pick.setText("Pick…");
+      }
+    };
+
+    Runnable applyEnabledState = () -> {
+      boolean en = enabled.isSelected();
+      hex.setEnabled(en);
+      pick.setEnabled(en);
+      clear.setEnabled(en);
+      strength.setEnabled(en);
+      if (!en) {
+        pick.setIcon(null);
+        pick.setText("Pick…");
+      } else {
+        updatePickIcon.run();
+      }
+    };
+
+    pick.addActionListener(e -> {
+      Color initial = parseHexColorLenient(hex.getText());
+      Color chosen = showColorPickerDialog(SwingUtilities.getWindowAncestor(pick),
+          "Choose Accent Color",
+          initial,
+          preferredPreviewBackground());
+      if (chosen != null) {
+        hex.setText(toHex(chosen));
+        updatePickIcon.run();
+      }
+    });
+
+    clear.addActionListener(e -> {
+      hex.setText("");
+      updatePickIcon.run();
+    });
+
+    enabled.addActionListener(e -> applyEnabledState.run());
+    hex.getDocument().addDocumentListener(new SimpleDocListener(updatePickIcon));
+
+    JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]6[]", "[]"));
+    row.setOpaque(false);
+    row.add(enabled, "span 3, wrap");
+    row.add(hex, "w 110!");
+    row.add(pick);
+    row.add(clear);
+
+    applyEnabledState.run();
+
+    return new AccentControls(enabled, hex, pick, clear, strength, row, applyEnabledState);
+  }
+
+  private ChatThemeControls buildChatThemeControls(ChatThemeSettings current) {
+    JComboBox<ChatThemeSettings.Preset> preset = new JComboBox<>(ChatThemeSettings.Preset.values());
+    preset.setRenderer(new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        JLabel c = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+        ChatThemeSettings.Preset p = (value instanceof ChatThemeSettings.Preset pr) ? pr : ChatThemeSettings.Preset.DEFAULT;
+        c.setText(switch (p) {
+          case DEFAULT -> "Default (follow theme)";
+          case SOFT -> "Soft";
+          case ACCENTED -> "Accented";
+          case HIGH_CONTRAST -> "High contrast";
+        });
+        return c;
+      }
+    });
+    preset.setSelectedItem(current != null ? current.preset() : ChatThemeSettings.Preset.DEFAULT);
+
+    ColorField timestamp = buildOptionalColorField(current != null ? current.timestampColor() : null, "Pick a timestamp color");
+    ColorField system = buildOptionalColorField(current != null ? current.systemColor() : null, "Pick a system/status color");
+    ColorField mention = buildOptionalColorField(current != null ? current.mentionBgColor() : null, "Pick a mention highlight color");
+
+    int ms = current != null ? current.mentionStrength() : 35;
+    JSlider mentionStrength = new JSlider(0, 100, Math.max(0, Math.min(100, ms)));
+    // Keep this compact (no tick labels) to avoid forcing scrollbars in the Appearance tab.
+    mentionStrength.setMajorTickSpacing(25);
+    mentionStrength.setMinorTickSpacing(5);
+    mentionStrength.setPaintTicks(false);
+    mentionStrength.setPaintLabels(false);
+    mentionStrength.setToolTipText("How strong the mention highlight is when using the preset highlight (0-100). Defaults to 35.");
+
+    return new ChatThemeControls(preset, timestamp, system, mention, mentionStrength);
+  }
+
+  private ColorField buildOptionalColorField(String initialHex, String pickerTitle) {
+    JTextField hex = new JTextField();
+    hex.setColumns(10);
+    hex.setToolTipText("Leave blank to use the preset/theme default.");
+
+    String raw = initialHex != null ? initialHex.trim() : "";
+    hex.setText(raw);
+
+    JButton pick = new JButton("Pick");
+    JButton clear = new JButton("Clear");
+
+    Runnable updateIcon = () -> {
+      Color c = parseHexColorLenient(hex.getText());
+      if (c == null) {
+        pick.setIcon(null);
+        pick.setText("Pick");
+      } else {
+        pick.setText("");
+        pick.setIcon(createColorSwatchIcon(c, 14, 14, preferredPreviewBackground()));
+      }
+    };
+
+    pick.addActionListener(e -> {
+      Color initial = parseHexColorLenient(hex.getText());
+      if (initial == null) {
+        initial = UIManager.getColor("Label.foreground");
+      }
+      Color chosen = showColorPickerDialog(SwingUtilities.getWindowAncestor(pick), pickerTitle, initial, preferredPreviewBackground());
+      if (chosen != null) {
+        hex.setText(toHex(chosen));
+        updateIcon.run();
+      }
+    });
+
+    clear.addActionListener(e -> {
+      hex.setText("");
+      updateIcon.run();
+    });
+
+    hex.getDocument().addDocumentListener(new DocumentListener() {
+      @Override public void insertUpdate(DocumentEvent e) { updateIcon.run(); }
+      @Override public void removeUpdate(DocumentEvent e) { updateIcon.run(); }
+      @Override public void changedUpdate(DocumentEvent e) { updateIcon.run(); }
+    });
+
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx", "[grow]6[]6[]"));
+    panel.add(hex, "growx");
+    panel.add(pick);
+    panel.add(clear);
+
+    updateIcon.run();
+    return new ColorField(hex, pick, clear, panel, updateIcon);
+  }
+
+
+
+
+  private TweakControls buildTweakControls(ThemeTweakSettings current) {
+    ThemeTweakSettings cur = current != null ? current : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+
+    DensityOption[] opts = new DensityOption[] {
+        new DensityOption("compact", "Compact"),
+        new DensityOption("cozy", "Cozy (default)"),
+        new DensityOption("spacious", "Spacious")
+    };
+
+    JComboBox<DensityOption> density = new JComboBox<>(opts);
+    density.setToolTipText("Changes the overall UI spacing / row height. Changes preview live; Apply/OK saves.");
+    String curId = cur.densityId();
+    for (DensityOption o : opts) {
+      if (o != null && o.id().equalsIgnoreCase(curId)) {
+        density.setSelectedItem(o);
+        break;
+      }
+    }
+
+    JSlider cornerRadius = new JSlider(0, 20, cur.cornerRadius());
+    cornerRadius.setPaintTicks(true);
+    cornerRadius.setMajorTickSpacing(5);
+    cornerRadius.setMinorTickSpacing(1);
+    cornerRadius.setToolTipText("Controls rounded corner radius for buttons/fields/etc. Changes preview live; Apply/OK saves.");
+
+    return new TweakControls(density, cornerRadius);
+  }
+
   private FontControls buildFontControls(UiSettings current, List<AutoCloseable> closeables) {
     String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
     Arrays.sort(families, String.CASE_INSENSITIVE_ORDER);
@@ -914,6 +1640,45 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JComboBox<String> fontFamily = new JComboBox<>(families);
     fontFamily.setEditable(true);
     fontFamily.setSelectedItem(current.chatFontFamily());
+
+    // Allow scrolling through the font list while hovering with the mousewheel.
+    if (closeables != null) {
+      try {
+        closeables.add(MouseWheelDecorator.decorateComboBoxSelection(fontFamily));
+      } catch (Exception ignored) {
+        // best-effort
+      }
+    } else {
+      try {
+        MouseWheelDecorator.decorateComboBoxSelection(fontFamily);
+      } catch (Exception ignored) {
+        // best-effort
+      }
+    }
+
+    // Render each family name using its own font in the dropdown.
+    Font baseFont = fontFamily.getFont();
+    fontFamily.setRenderer(new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+
+        String family = value != null ? value.toString() : "";
+        if (!family.isBlank()) {
+          Font candidate = new Font(family, baseFont.getStyle(), baseFont.getSize());
+          // If the requested font isn't available (editable entry), keep the UI default.
+          if (candidate != null && (candidate.getFamily().equalsIgnoreCase(family) || candidate.getName().equalsIgnoreCase(family))) {
+            label.setFont(candidate);
+          } else {
+            label.setFont(baseFont);
+          }
+        } else {
+          label.setFont(baseFont);
+        }
+
+        return label;
+      }
+    });
 
     JSpinner fontSize = numberSpinner(current.chatFontSize(), 8, 48, 1, closeables);
 
@@ -927,6 +1692,332 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         "If disabled, IRCafe starts disconnected and you can connect manually using the Connect button.");
     return autoConnectOnStart;
   }
+
+  private String importNotificationSoundFileToRuntimeDir(File source) throws Exception {
+    if (source == null) return null;
+
+    String name = Objects.toString(source.getName(), "").trim();
+    if (name.isBlank()) throw new IllegalArgumentException("Invalid file name");
+
+    String lower = name.toLowerCase(Locale.ROOT);
+    boolean mp3 = lower.endsWith(".mp3");
+    boolean wav = lower.endsWith(".wav");
+    if (!mp3 && !wav) {
+      throw new IllegalArgumentException("Only .mp3 and .wav are supported");
+    }
+
+    Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
+    Path base = cfg != null ? cfg.getParent() : null;
+    if (base == null) {
+      throw new IllegalStateException("Runtime config directory is unavailable");
+    }
+
+    Path soundsDir = base.resolve("sounds");
+    Files.createDirectories(soundsDir);
+
+    // Sanitize filename for portability.
+    String sanitized = name.replaceAll("[^A-Za-z0-9._-]+", "_");
+    if (sanitized.isBlank()) {
+      sanitized = mp3 ? "notification.mp3" : "notification.wav";
+    }
+
+    String ext = mp3 ? "mp3" : "wav";
+    String baseName = sanitized;
+    int dot = sanitized.lastIndexOf('.');
+    if (dot > 0) {
+      baseName = sanitized.substring(0, dot);
+    }
+
+    Path dest = soundsDir.resolve(baseName + "." + ext);
+    int i = 2;
+    while (Files.exists(dest)) {
+      dest = soundsDir.resolve(baseName + "-" + i + "." + ext);
+      i++;
+    }
+
+    Files.copy(source.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+    // Store relative to the runtime config directory.
+    return "sounds/" + dest.getFileName();
+  }
+
+
+  private TrayControls buildTrayControls(UiSettings current, NotificationSoundSettings soundSettings) {
+    if (soundSettings == null) {
+      soundSettings = new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
+    }
+    JCheckBox enabled = new JCheckBox("Enable system tray icon", current.trayEnabled());
+    JCheckBox closeToTray = new JCheckBox("Close button hides to tray instead of exiting", current.trayCloseToTray());
+    JCheckBox minimizeToTray = new JCheckBox("Minimize button hides to tray", current.trayMinimizeToTray());
+    JCheckBox startMinimized = new JCheckBox("Start minimized to tray", current.trayStartMinimized());
+
+    JCheckBox notifyHighlights = new JCheckBox("Desktop notifications for highlights", current.trayNotifyHighlights());
+    JCheckBox notifyPrivateMessages = new JCheckBox("Desktop notifications for private messages", current.trayNotifyPrivateMessages());
+    JCheckBox notifyConnectionState = new JCheckBox("Desktop notifications for connection state", current.trayNotifyConnectionState());
+
+    JCheckBox notifyOnlyWhenUnfocused = new JCheckBox(
+        "Only notify when IRCafe is not focused",
+        current.trayNotifyOnlyWhenUnfocused()
+    );
+    JCheckBox notifyOnlyWhenMinimizedOrHidden = new JCheckBox(
+        "Only notify when minimized or hidden to tray",
+        current.trayNotifyOnlyWhenMinimizedOrHidden()
+    );
+    JCheckBox notifySuppressWhenTargetActive = new JCheckBox(
+        "Don't notify for the active buffer",
+        current.trayNotifySuppressWhenTargetActive()
+    );
+
+    boolean linuxTmp = false;
+    boolean linuxActionsSupportedTmp = false;
+    try {
+      linuxTmp = gnomeDbusBackend != null && gnomeDbusBackend.isLinux();
+      if (linuxTmp) {
+        GnomeDbusNotificationBackend.ProbeResult pr = gnomeDbusBackend.probe();
+        linuxActionsSupportedTmp = pr != null && pr.sessionBusReachable() && pr.actionsSupported();
+      }
+    } catch (Exception ignored) {
+    }
+
+    final boolean linux = linuxTmp;
+    final boolean linuxActionsSupported = linuxActionsSupportedTmp;
+
+    JCheckBox linuxDbusActions = new JCheckBox(
+        "Use Linux D-Bus notifications (click-to-open)",
+        linux && linuxActionsSupported && current.trayLinuxDbusActionsEnabled()
+    );
+    linuxDbusActions.setToolTipText(linux
+        ? (linuxActionsSupported
+            ? "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."
+            : "Click actions aren't available in this session (no D-Bus notification actions support detected).")
+        : "Linux only.");
+
+    JButton testNotification = new JButton("Test notification");
+    testNotification.setToolTipText("Send a test desktop notification (click to open IRCafe).\n" +
+        "This does not require highlight/PM notifications to be enabled.");
+    testNotification.addActionListener(e -> {
+      try {
+        if (trayNotificationService != null) {
+          trayNotificationService.notifyTest();
+        }
+      } catch (Throwable ignored) {
+      }
+    });
+
+    notifyHighlights.setToolTipText("Show a desktop notification when someone mentions your nick in a channel.");
+    notifyPrivateMessages.setToolTipText("Show a desktop notification when you receive a private message.");
+    notifyConnectionState.setToolTipText("Show a desktop notification when connecting/disconnecting.");
+
+    notifyOnlyWhenUnfocused.setToolTipText("Common HexChat behavior: only notify when IRCafe isn't the active window.");
+    notifyOnlyWhenMinimizedOrHidden.setToolTipText("Only notify when IRCafe is minimized or hidden to tray.");
+    notifySuppressWhenTargetActive.setToolTipText("If the message is in the currently selected buffer, suppress the notification.");
+
+    JCheckBox notificationSoundsEnabled = new JCheckBox(
+        "Play sound with desktop notifications",
+        soundSettings.enabled()
+    );
+    notificationSoundsEnabled.setToolTipText("Plays a short sound whenever IRCafe shows a desktop notification.");
+
+    JCheckBox notificationSoundUseCustom = new JCheckBox(
+        "Use custom sound file",
+        soundSettings.useCustom()
+    );
+    notificationSoundUseCustom.setToolTipText("If enabled, IRCafe will play a custom file stored next to your runtime config.\n" +
+        "Supported formats: MP3, WAV.");
+
+    JTextField notificationSoundCustomPath = new JTextField(Objects.toString(soundSettings.customPath(), ""));
+    notificationSoundCustomPath.setEditable(false);
+    notificationSoundCustomPath.setToolTipText("Custom sound path (relative to the runtime config directory).\n" +
+        "Click Browse... to import a file.");
+
+    JComboBox<BuiltInSound> notificationSound = new JComboBox<>(BuiltInSound.values());
+    notificationSound.setSelectedItem(BuiltInSound.fromId(soundSettings.soundId()));
+    notificationSound.setToolTipText("Choose which bundled sound to use for notifications.");
+
+    JButton browseCustomSound = new JButton("Browse...");
+    browseCustomSound.setToolTipText("Choose an MP3 or WAV file and copy it into IRCafe's runtime config directory.");
+    browseCustomSound.addActionListener(e -> {
+      try {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(true);
+        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+        int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustomSound));
+        if (result != JFileChooser.APPROVE_OPTION) return;
+
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        String rel = importNotificationSoundFileToRuntimeDir(f);
+        if (rel != null && !rel.isBlank()) {
+          notificationSoundCustomPath.setText(rel);
+          notificationSoundUseCustom.setSelected(true);
+        }
+      } catch (Exception ex) {
+        javax.swing.JOptionPane.showMessageDialog(
+            SwingUtilities.getWindowAncestor(browseCustomSound),
+            "Could not import sound file.\n\n" + ex.getMessage(),
+            "Import failed",
+            javax.swing.JOptionPane.ERROR_MESSAGE
+        );
+      }
+    });
+
+    JButton clearCustomSound = new JButton("Clear");
+    clearCustomSound.setToolTipText("Stop using a custom file and revert to bundled sounds.");
+    clearCustomSound.addActionListener(e -> {
+      notificationSoundUseCustom.setSelected(false);
+      notificationSoundCustomPath.setText("");
+    });
+
+    JButton testSound = new JButton("Test sound");
+    testSound.setToolTipText("Play the selected sound.");
+    testSound.addActionListener(e -> {
+      try {
+        if (notificationSoundService != null) {
+          if (notificationSoundUseCustom.isSelected()) {
+            String rel = notificationSoundCustomPath.getText();
+            rel = rel != null ? rel.trim() : "";
+            if (!rel.isBlank()) {
+              notificationSoundService.previewCustom(rel);
+            }
+          } else {
+            BuiltInSound s = (BuiltInSound) notificationSound.getSelectedItem();
+            notificationSoundService.preview(s);
+          }
+        }
+      } catch (Throwable ignored) {
+      }
+    });
+
+    Runnable refreshEnabled = () -> {
+      boolean en = enabled.isSelected();
+      closeToTray.setEnabled(en);
+      minimizeToTray.setEnabled(en);
+      startMinimized.setEnabled(en);
+      notifyHighlights.setEnabled(en);
+      notifyPrivateMessages.setEnabled(en);
+      notifyConnectionState.setEnabled(en);
+
+      notifyOnlyWhenUnfocused.setEnabled(en);
+      notifyOnlyWhenMinimizedOrHidden.setEnabled(en);
+      notifySuppressWhenTargetActive.setEnabled(en);
+
+      linuxDbusActions.setEnabled(en && linux && linuxActionsSupported);
+      testNotification.setEnabled(en);
+
+      notificationSoundsEnabled.setEnabled(en);
+
+      boolean snd = en && notificationSoundsEnabled.isSelected();
+      notificationSoundUseCustom.setEnabled(snd);
+
+      boolean useCustom = snd && notificationSoundUseCustom.isSelected();
+      notificationSoundCustomPath.setEnabled(snd);
+      browseCustomSound.setEnabled(snd);
+
+      String rel = notificationSoundCustomPath.getText();
+      rel = rel != null ? rel.trim() : "";
+      clearCustomSound.setEnabled(snd && !rel.isBlank());
+
+      notificationSound.setEnabled(snd && !useCustom);
+      testSound.setEnabled(snd);
+
+      if (!en) {
+        closeToTray.setSelected(false);
+        minimizeToTray.setSelected(false);
+        startMinimized.setSelected(false);
+        notifyHighlights.setSelected(false);
+        notifyPrivateMessages.setSelected(false);
+        notifyConnectionState.setSelected(false);
+
+        notifyOnlyWhenUnfocused.setSelected(false);
+        notifyOnlyWhenMinimizedOrHidden.setSelected(false);
+        notifySuppressWhenTargetActive.setSelected(false);
+
+        linuxDbusActions.setSelected(false);
+
+        notificationSoundsEnabled.setSelected(false);
+      }
+
+      if (!(linux && linuxActionsSupported)) {
+        linuxDbusActions.setSelected(false);
+      }
+    };
+
+    enabled.addActionListener(e -> refreshEnabled.run());
+    notificationSoundsEnabled.addActionListener(e -> refreshEnabled.run());
+    notificationSoundUseCustom.addActionListener(e -> refreshEnabled.run());
+    refreshEnabled.run();
+
+JPanel trayTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+trayTab.setOpaque(false);
+trayTab.add(enabled, "growx");
+trayTab.add(closeToTray, "growx");
+trayTab.add(minimizeToTray, "growx");
+trayTab.add(startMinimized, "growx, wrap");
+trayTab.add(helpText("Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."), "growx");
+
+JPanel notificationsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+notificationsTab.setOpaque(false);
+notificationsTab.add(notifyHighlights, "growx");
+notificationsTab.add(notifyPrivateMessages, "growx");
+notificationsTab.add(notifyConnectionState, "growx");
+notificationsTab.add(new JSeparator(), "growx, gaptop 8");
+notificationsTab.add(notifyOnlyWhenUnfocused, "growx");
+notificationsTab.add(notifyOnlyWhenMinimizedOrHidden, "growx");
+notificationsTab.add(notifySuppressWhenTargetActive, "growx, wrap");
+notificationsTab.add(testNotification, "w 180!");
+notificationsTab.add(helpText("Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."), "growx");
+
+JPanel soundsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+soundsTab.setOpaque(false);
+soundsTab.add(notificationSoundsEnabled, "growx");
+soundsTab.add(notificationSoundUseCustom, "growx, wrap");
+soundsTab.add(new JLabel("Custom file:"), "split 4");
+soundsTab.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
+soundsTab.add(browseCustomSound, "w 110!");
+soundsTab.add(clearCustomSound, "w 80!, wrap");
+soundsTab.add(new JLabel("Built-in:"), "split 3");
+soundsTab.add(notificationSound, "w 240!");
+soundsTab.add(testSound, "w 120!, wrap");
+
+Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
+Path base = cfg != null ? cfg.getParent() : null;
+if (base != null) {
+  soundsTab.add(helpText("Custom sounds are copied to: " + base.resolve("sounds") + "\n" +
+      "Tip: Use small files (short MP3/WAV) for snappy notifications."), "growx");
+}
+
+JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+linuxTab.setOpaque(false);
+linuxTab.add(linuxDbusActions, "growx, wrap");
+if (!linux) {
+  linuxTab.add(helpText("Linux only."), "growx");
+} else if (!linuxActionsSupported) {
+  linuxTab.add(helpText("Linux notification actions were not detected for this session.\n" +
+      "IRCafe will fall back to notify-send."), "growx");
+} else {
+  linuxTab.add(helpText("Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."), "growx");
+}
+
+JTabbedPane subTabs = new JTabbedPane();
+subTabs.addTab("Tray", padSubTab(trayTab));
+subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
+subTabs.addTab("Sounds", padSubTab(soundsTab));
+subTabs.addTab("Linux / Advanced", padSubTab(linuxTab));
+
+JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+panel.setOpaque(false);
+panel.add(subTabs, "growx, wmin 0");
+    return new TrayControls(enabled, closeToTray, minimizeToTray, startMinimized,
+        notifyHighlights, notifyPrivateMessages, notifyConnectionState,
+        notifyOnlyWhenUnfocused, notifyOnlyWhenMinimizedOrHidden, notifySuppressWhenTargetActive,
+        linuxDbusActions, testNotification,
+        notificationSoundsEnabled, notificationSoundUseCustom, notificationSoundCustomPath, browseCustomSound, clearCustomSound,
+        notificationSound, testSound,
+        panel);
+  }
+
 
   private JCheckBox buildPresenceFoldsCheckbox(UiSettings current) {
     JCheckBox presenceFolds = new JCheckBox("Fold join/part/quit spam into a compact block");
@@ -1224,8 +2315,10 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     outgoingPick.addActionListener(e -> {
       Color currentColor = parseHexColor(outgoingColorHex.getText());
       if (currentColor == null) currentColor = parseHexColor(current.clientLineColor());
+      if (currentColor == null) currentColor = UIManager.getColor("Label.foreground");
       if (currentColor == null) currentColor = Color.WHITE;
-      Color chosen = JColorChooser.showDialog(dialog, "Choose Outgoing Message Color", currentColor);
+
+      Color chosen = showColorPickerDialog(dialog, "Choose Outgoing Message Color", currentColor, preferredPreviewBackground());
       if (chosen != null) {
         outgoingColorHex.setText(toHex(chosen));
       }
@@ -1274,15 +2367,28 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   private NetworkAdvancedControls buildNetworkAdvancedControls(UiSettings current, List<AutoCloseable> closeables) {
     IrcProperties.Proxy p = NetProxyContext.settings();
     if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
-    JPanel networkPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]6[]6[]6[]"));
+    // Network grew vertically as we added options. Keep it compact by splitting into sub-tabs.
+    // Let the inner sub-tabs consume vertical space so this tab doesn't feel "short".
+    JPanel networkPanel = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]0[grow,fill]"));
     JPanel userLookupsPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
 
-    networkPanel.add(tabTitle("Network"), "span 2, growx, wmin 0, wrap");
-    networkPanel.add(sectionTitle("SOCKS5 proxy"), "span 2, growx, wmin 0, wrap");
-    networkPanel.add(helpText(
+    // ---- Proxy tab ----
+    JPanel proxyTab = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    proxyTab.setOpaque(false);
+
+    JPanel proxyHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    proxyHeader.setOpaque(false);
+    proxyHeader.add(sectionTitle("SOCKS5 proxy"), "growx, wmin 0");
+    proxyHeader.add(whyHelpButton(
+        "SOCKS5 proxy",
         "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n" +
-            "Heads up: proxy credentials are stored in your runtime config file in plain text."),
-        "span 2, growx, wmin 0, wrap");
+            "Heads up: proxy credentials are stored in your runtime config file in plain text."
+    ), "align right");
+    proxyTab.add(proxyHeader, "span 2, growx, wmin 0, wrap");
+
+    JTextArea proxyBlurb = subtleInfoText();
+    proxyBlurb.setText("Routes IRC + embeds through SOCKS5. Use remote DNS if local DNS is blocked.");
+    proxyTab.add(proxyBlurb, "span 2, growx, wmin 0, wrap");
 
     JCheckBox proxyEnabled = new JCheckBox("Use SOCKS5 proxy");
     proxyEnabled.setSelected(p.enabled());
@@ -1303,10 +2409,11 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
     JPasswordField proxyPassword = new JPasswordField(Objects.toString(p.password(), ""));
     proxyPassword.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "(optional)");
-    char defaultEcho = proxyPassword.getEchoChar();
-    JCheckBox showPassword = new JCheckBox("Show");
+    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
+    // Some FlatLaf versions prefer the STYLE flag; keep both for compatibility.
+    proxyPassword.putClientProperty("JPasswordField.showRevealButton", true);
+    proxyPassword.putClientProperty(FlatClientProperties.STYLE, "showRevealButton:true;");
     JButton clearPassword = new JButton("Clear");
-    showPassword.addActionListener(e -> proxyPassword.setEchoChar(showPassword.isSelected() ? (char) 0 : defaultEcho));
     clearPassword.addActionListener(e -> proxyPassword.setText(""));
 
     int connectTimeoutSec = (int) Math.max(1, p.connectTimeoutMs() / 1000L);
@@ -1314,10 +2421,9 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JSpinner connectTimeoutSeconds = numberSpinner(connectTimeoutSec, 1, 300, 1, closeables);
     JSpinner readTimeoutSeconds = numberSpinner(readTimeoutSec, 1, 600, 1, closeables);
 
-    JPanel passwordRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]6[]", "[]"));
+    JPanel passwordRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     passwordRow.setOpaque(false);
     passwordRow.add(proxyPassword, "growx, pushx, wmin 0");
-    passwordRow.add(showPassword);
     passwordRow.add(clearPassword);
 
     Runnable updateProxyEnabledState = () -> {
@@ -1327,7 +2433,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       proxyRemoteDns.setEnabled(enabled);
       proxyUsername.setEnabled(enabled);
       proxyPassword.setEnabled(enabled);
-      showPassword.setEnabled(enabled);
       clearPassword.setEnabled(enabled);
       connectTimeoutSeconds.setEnabled(enabled);
       readTimeoutSeconds.setEnabled(enabled);
@@ -1335,39 +2440,63 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     proxyEnabled.addActionListener(e -> updateProxyEnabledState.run());
     updateProxyEnabledState.run();
 
-    networkPanel.add(proxyEnabled, "span 2, wrap");
-    networkPanel.add(new JLabel("Host:"));
-    networkPanel.add(proxyHost, "growx, wmin 0");
-    networkPanel.add(new JLabel("Port:"));
-    networkPanel.add(proxyPort, "w 110!");
-    networkPanel.add(new JLabel(""));
-    networkPanel.add(proxyRemoteDnsRow, "growx, wmin 0");
-    networkPanel.add(new JLabel("Username:"));
-    networkPanel.add(proxyUsername, "growx, wmin 0");
-    networkPanel.add(new JLabel("Password:"));
-    networkPanel.add(passwordRow, "growx, wmin 0");
-    networkPanel.add(new JLabel("Connect timeout (sec):"));
-    networkPanel.add(connectTimeoutSeconds, "w 110!");
-    networkPanel.add(new JLabel("Read timeout (sec):"));
-    networkPanel.add(readTimeoutSeconds, "w 110!");
-    networkPanel.add(sectionTitle("TLS / SSL"), "span 2, growx, wmin 0, wrap");
-    networkPanel.add(helpText(
+    proxyTab.add(proxyEnabled, "span 2, wrap");
+    proxyTab.add(new JLabel("Host:"));
+    proxyTab.add(proxyHost, "growx, wmin 0");
+    proxyTab.add(new JLabel("Port:"));
+    proxyTab.add(proxyPort, "w 110!");
+    proxyTab.add(new JLabel(""));
+    proxyTab.add(proxyRemoteDnsRow, "growx, wmin 0");
+    proxyTab.add(new JLabel("Username:"));
+    proxyTab.add(proxyUsername, "growx, wmin 0");
+    proxyTab.add(new JLabel("Password:"));
+    proxyTab.add(passwordRow, "growx, wmin 0");
+    proxyTab.add(new JLabel("Connect timeout (sec):"));
+    proxyTab.add(connectTimeoutSeconds, "w 110!");
+    proxyTab.add(new JLabel("Read timeout (sec):"));
+    proxyTab.add(readTimeoutSeconds, "w 110!");
+
+    // ---- TLS tab ----
+    JPanel tlsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]"));
+    tlsTab.setOpaque(false);
+    JPanel tlsHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    tlsHeader.setOpaque(false);
+    tlsHeader.add(sectionTitle("TLS / SSL"), "growx, wmin 0");
+    tlsHeader.add(whyHelpButton(
+        "TLS / SSL (Trust all certificates)",
         "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n" +
             "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n" +
-            "Only enable this if you understand the risk (MITM becomes trivial)."),
-        "span 2, growx, wmin 0, wrap");
+            "Only enable this if you understand the risk (MITM becomes trivial)."
+    ), "align right");
+    tlsTab.add(tlsHeader, "growx, wmin 0, wrap");
+
+    JTextArea tlsBlurb = subtleInfoText();
+    tlsBlurb.setText("If enabled, certificate validation is skipped (insecure). Only use for debugging.");
+    tlsTab.add(tlsBlurb, "growx, wmin 0, wrap");
 
     JCheckBox trustAllTlsCertificates = new JCheckBox();
     trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
     JComponent trustAllTlsRow = wrapCheckBox(trustAllTlsCertificates, "Trust all TLS/SSL certificates (insecure)");
-    networkPanel.add(trustAllTlsRow, "span 2, growx, wmin 0, wrap");
-    networkPanel.add(sectionTitle("Connection heartbeat"), "span 2, growx, wmin 0, wrap");
-    networkPanel.add(helpText(
+    tlsTab.add(trustAllTlsRow, "growx, wmin 0, wrap");
+
+    // ---- Heartbeat tab ----
+    JPanel heartbeatTab = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    heartbeatTab.setOpaque(false);
+    JPanel heartbeatHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    heartbeatHeader.setOpaque(false);
+    heartbeatHeader.add(sectionTitle("Connection heartbeat"), "growx, wmin 0");
+    heartbeatHeader.add(whyHelpButton(
+        "Connection heartbeat",
         "IRCafe can detect 'silent' disconnects by monitoring inbound traffic.\n" +
             "If no IRC messages are received for the configured timeout, IRCafe will close the socket\n" +
             "and let the reconnect logic take over (if enabled).\n\n" +
             "Tip: If your network is very quiet, increase the timeout."
-    ), "span 2, growx, wmin 0, wrap");
+    ), "align right");
+    heartbeatTab.add(heartbeatHeader, "span 2, growx, wmin 0, wrap");
+
+    JTextArea heartbeatBlurb = subtleInfoText();
+    heartbeatBlurb.setText("Detects silent disconnects by closing idle sockets so reconnect can kick in.");
+    heartbeatTab.add(heartbeatBlurb, "span 2, growx, wmin 0, wrap");
 
     IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
     if (hb == null) hb = new IrcProperties.Heartbeat(true, 15_000, 360_000);
@@ -1389,11 +2518,28 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     heartbeatEnabled.addActionListener(e -> updateHeartbeatEnabledState.run());
     updateHeartbeatEnabledState.run();
 
-    networkPanel.add(heartbeatEnabledRow, "span 2, growx, wmin 0, wrap");
-    networkPanel.add(new JLabel("Check period (sec):"));
-    networkPanel.add(heartbeatCheckPeriodSeconds, "w 110!");
-    networkPanel.add(new JLabel("Timeout (sec):"));
-    networkPanel.add(heartbeatTimeoutSeconds, "w 110!");
+    heartbeatTab.add(heartbeatEnabledRow, "span 2, growx, wmin 0, wrap");
+    heartbeatTab.add(new JLabel("Check period (sec):"));
+    heartbeatTab.add(heartbeatCheckPeriodSeconds, "w 110!");
+    heartbeatTab.add(new JLabel("Timeout (sec):"));
+    heartbeatTab.add(heartbeatTimeoutSeconds, "w 110!");
+
+    JTabbedPane networkTabs = new JTabbedPane();
+    networkTabs.addTab("Proxy", padSubTab(proxyTab));
+    networkTabs.addTab("TLS", padSubTab(tlsTab));
+    networkTabs.addTab("Heartbeat", padSubTab(heartbeatTab));
+
+    JPanel networkIntro = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]6[]", "[]"));
+    networkIntro.setOpaque(false);
+    networkIntro.add(tabTitle("Network"), "growx, wmin 0");
+    networkIntro.add(whyHelpButton(
+        "Network settings",
+        "These settings affect how IRCafe connects to networks and fetches external content (link previews, embedded images, etc).\n\n" +
+            "Tip: Most users only touch Proxy. Leave TLS trust-all off unless you're debugging."
+    ), "align right");
+
+    networkPanel.add(networkIntro, "growx, wmin 0, wrap");
+    networkPanel.add(networkTabs, "grow, push, wmin 0");
 
     ProxyControls proxyControls = new ProxyControls(
         proxyEnabled,
@@ -1402,7 +2548,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         proxyRemoteDns,
         proxyUsername,
         proxyPassword,
-        showPassword,
         clearPassword,
         connectTimeoutSeconds,
         readTimeoutSeconds
@@ -1428,7 +2573,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     );
     userLookupsIntro.add(userLookupsBlurb, "growx, wmin 0");
     userLookupsIntro.add(userLookupsHelp, "align right");
-    userLookupsPanel.add(userLookupsIntro, "growx, wrap");
     JPanel lookupPresetPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
     lookupPresetPanel.setOpaque(false);
 
@@ -1458,7 +2602,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     lookupPresetPanel.add(new JLabel("Rate limit preset:"));
     lookupPresetPanel.add(lookupPreset, "w 220!");
     lookupPresetPanel.add(lookupPresetHint, "span 2, growx, wmin 0, wrap");
-    userLookupsPanel.add(lookupPresetPanel, "growx, wrap");
     JPanel hostmaskPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
     hostmaskPanel.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createTitledBorder("Hostmask discovery"),
@@ -1828,8 +2971,17 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     updateHostmaskState.run();
     updateEnrichmentState.run();
 
-    userLookupsPanel.add(hostmaskPanel, "growx, wrap");
-    userLookupsPanel.add(enrichmentPanel, "growx, wrap");
+    JTabbedPane lookupsTabs = new JTabbedPane();
+    JPanel lookupsOverview = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]10[]"));
+    lookupsOverview.setOpaque(false);
+    lookupsOverview.add(userLookupsIntro, "growx, wmin 0, wrap");
+    lookupsOverview.add(lookupPresetPanel, "growx, wmin 0, wrap");
+
+    lookupsTabs.addTab("Overview", padSubTab(lookupsOverview));
+    lookupsTabs.addTab("Hostmask discovery", padSubTab(hostmaskPanel));
+    lookupsTabs.addTab("Roster enrichment", padSubTab(enrichmentPanel));
+
+    userLookupsPanel.add(lookupsTabs, "growx, wmin 0, wrap");
 
     UserhostControls userhostControls = new UserhostControls(
         userhostEnabled,
@@ -1856,13 +3008,74 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return new NetworkAdvancedControls(proxyControls, userhostControls, enrichmentControls, heartbeatControls, trustAllTlsCertificates, networkPanel, userLookupsPanel);
   }
 
-  private JPanel buildAppearancePanel(ThemeControls theme, FontControls fonts) {
+  private JPanel buildAppearancePanel(ThemeControls theme, AccentControls accent, ChatThemeControls chatTheme, FontControls fonts, TweakControls tweaks) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
 
     form.add(tabTitle("Appearance"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Theme"));
     form.add(theme.combo, "growx");
+
+    form.add(new JLabel("Accent"));
+    form.add(accent.panel, "growx");
+
+    form.add(new JLabel("Accent strength"));
+    form.add(accent.strength, "growx");
+
+    form.add(new JLabel("Chat theme preset"));
+    form.add(chatTheme.preset, "growx");
+
+    form.add(new JLabel("Chat timestamp color"));
+    form.add(chatTheme.timestamp.panel, "growx");
+
+    form.add(new JLabel("Chat system color"));
+    form.add(chatTheme.system.panel, "growx");
+
+    form.add(new JLabel("Mention highlight"));
+    form.add(chatTheme.mention.panel, "growx");
+
+    form.add(new JLabel("Mention strength"));
+    form.add(chatTheme.mentionStrength, "growx");
+
+    form.add(new JLabel("Density"));
+    form.add(tweaks.density, "growx");
+
+    form.add(new JLabel("Corner radius"));
+    form.add(tweaks.cornerRadius, "growx");
+
+    JButton reset = new JButton("Reset to defaults");
+    reset.setToolTipText("Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
+    reset.addActionListener(e -> {
+      theme.combo.setSelectedItem("dark");
+      fonts.fontFamily.setSelectedItem("Monospaced");
+      fonts.fontSize.setValue(12);
+      accent.enabled.setSelected(false);
+      accent.hex.setText("");
+      accent.strength.setValue(70);
+      // LAF tweak defaults
+      for (int i = 0; i < tweaks.density.getItemCount(); i++) {
+        DensityOption o = tweaks.density.getItemAt(i);
+        if (o != null && "cozy".equalsIgnoreCase(o.id())) {
+          tweaks.density.setSelectedIndex(i);
+          break;
+        }
+      }
+      tweaks.cornerRadius.setValue(10);
+
+      // Chat theme
+      chatTheme.preset.setSelectedItem(ChatThemeSettings.Preset.DEFAULT);
+      chatTheme.timestamp.hex.setText("");
+      chatTheme.system.hex.setText("");
+      chatTheme.mention.hex.setText("");
+      chatTheme.mentionStrength.setValue(35);
+      chatTheme.timestamp.updateIcon.run();
+      chatTheme.system.updateIcon.run();
+      chatTheme.mention.updateIcon.run();
+
+      accent.applyEnabledState.run();
+    });
+    form.add(new JLabel(""));
+    form.add(reset, "alignx left");
 
     form.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Font family"));
@@ -1875,12 +3088,22 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
   private JPanel buildStartupPanel(JCheckBox autoConnectOnStart) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]"));
-    form.add(tabTitle("Startup & Connection"), "growx, wrap");
+    form.add(tabTitle("Startup"), "growx, wrap");
+
     form.add(sectionTitle("On launch"), "growx, wrap");
     form.add(autoConnectOnStart, "growx, wrap");
-    form.add(helpText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads."), "growx");
+    form.add(helpText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads."), "growx, wrap");
+
     return form;
   }
+
+  private JPanel buildTrayNotificationsPanel(TrayControls trayControls) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]"));
+    form.add(tabTitle("Tray & Notifications"), "growx, wrap");
+    form.add(trayControls.panel, "growx");
+    return form;
+  }
+
 
   private JPanel buildChatPanel(JCheckBox presenceFolds,
                                JCheckBox ctcpRequestsInActiveTarget,
@@ -2149,24 +3372,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
       int row = notifications.table.getSelectedRow();
       if (row < 0) return;
-
-      String raw = notifications.model.highlightFgAt(row);
-      Color currentColor = parseHexColor(raw);
-      if (currentColor == null && raw != null && raw.trim().startsWith("#") && raw.trim().length() == 4) {
-        String s = raw.trim().substring(1);
-        char r = s.charAt(0), g = s.charAt(1), b = s.charAt(2);
-        currentColor = parseHexColor("#" + r + r + g + g + b + b);
-      }
-      if (currentColor == null) {
-        Color def = UIManager.getColor("TextPane.foreground");
-        if (def == null) def = UIManager.getColor("Label.foreground");
-        currentColor = def != null ? def : Color.WHITE;
-      }
-
-      Color chosen = JColorChooser.showDialog(dialog, "Choose Rule Highlight Color", currentColor);
-      if (chosen != null) {
-        notifications.model.setHighlightFg(row, toHex(chosen));
-      }
+      pickNotificationRuleColor(notifications, row);
     });
 
     clearColor.addActionListener(e -> {
@@ -2180,6 +3386,35 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       int row = notifications.table.getSelectedRow();
       if (row < 0) return;
       notifications.model.setHighlightFg(row, null);
+    });
+
+
+    // Double-click on a Color cell to pick a color (faster than using the button bar).
+    notifications.table.addMouseListener(new java.awt.event.MouseAdapter() {
+      @Override
+      public void mouseClicked(java.awt.event.MouseEvent e) {
+        if (e == null) return;
+        if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
+        if (e.getClickCount() != 2) return;
+
+        int viewRow = notifications.table.rowAtPoint(e.getPoint());
+        int viewCol = notifications.table.columnAtPoint(e.getPoint());
+        if (viewRow < 0 || viewCol < 0) return;
+
+        int modelCol = notifications.table.convertColumnIndexToModel(viewCol);
+        if (modelCol != NotificationRulesTableModel.COL_COLOR) return;
+
+        if (notifications.table.isEditing()) {
+          try {
+            notifications.table.getCellEditor().stopCellEditing();
+          } catch (Exception ignored) {
+          }
+        }
+
+        int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+        notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+        pickNotificationRuleColor(notifications, modelRow);
+      }
     });
 
     panel.add(new JLabel("Rules"));
@@ -2514,6 +3749,17 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   private record RuleMatch(int start, int end) {}
 
 
+  private static String normalizeThemeIdInternal(String id) {
+    String s = java.util.Objects.toString(id, "").trim().toLowerCase();
+    if (s.isEmpty()) return "dark";
+    return s;
+  }
+
+  private static boolean sameThemeInternal(String a, String b) {
+    return normalizeThemeIdInternal(a).equals(normalizeThemeIdInternal(b));
+  }
+
+
   private static JDialog createDialog(Window owner) {
     final JDialog d = new JDialog(owner, "Preferences", JDialog.ModalityType.APPLICATION_MODAL);
     d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
@@ -2552,6 +3798,279 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     } catch (Exception ignored) {
       return null;
     }
+
+  }
+
+
+  private static final int MAX_RECENT_COLORS = 12;
+  private static final Deque<String> RECENT_COLOR_HEX = new ArrayDeque<>();
+
+  private static Color parseHexColorLenient(String raw) {
+    Color c = parseHexColor(raw);
+    if (c != null) return c;
+    if (raw == null) return null;
+
+    String s = raw.trim();
+    if (s.startsWith("#")) s = s.substring(1).trim();
+    if (s.length() != 3) return null;
+
+    char r = s.charAt(0);
+    char g = s.charAt(1);
+    char b = s.charAt(2);
+    return parseHexColor("#" + r + r + g + g + b + b);
+  }
+
+  private static Color preferredPreviewBackground() {
+    Color bg = UIManager.getColor("TextPane.background");
+    if (bg == null) bg = UIManager.getColor("TextArea.background");
+    if (bg == null) bg = UIManager.getColor("Table.background");
+    if (bg == null) bg = UIManager.getColor("Panel.background");
+    return bg != null ? bg : new Color(30, 30, 30);
+  }
+
+  private static Icon createColorSwatchIcon(Color color, int w, int h, Color previewBackground) {
+    // Simple swatch icon used in compact pickers/buttons.
+    return new ColorSwatch(color, w, h);
+  }
+
+  private void pickNotificationRuleColor(NotificationRulesControls notifications, int row) {
+    if (notifications == null) return;
+    if (row < 0 || row >= notifications.model.getRowCount()) return;
+
+    String raw = notifications.model.highlightFgAt(row);
+    Color currentColor = parseHexColorLenient(raw);
+    if (currentColor == null) {
+      Color def = UIManager.getColor("TextPane.foreground");
+      if (def == null) def = UIManager.getColor("Label.foreground");
+      currentColor = def != null ? def : Color.WHITE;
+    }
+
+    Color chosen = showColorPickerDialog(dialog, "Choose Rule Highlight Color", currentColor, preferredPreviewBackground());
+    if (chosen != null) {
+      notifications.model.setHighlightFg(row, toHex(chosen));
+    }
+  }
+
+  private static void rememberRecentColorHex(String hex) {
+    if (hex == null) return;
+    String s = hex.trim().toUpperCase(Locale.ROOT);
+    if (s.isEmpty()) return;
+    if (!s.startsWith("#")) s = "#" + s;
+    if (s.length() == 4) {
+      // Expand #RGB -> #RRGGBB
+      char r = s.charAt(1);
+      char g = s.charAt(2);
+      char b = s.charAt(3);
+      s = "#" + r + r + g + g + b + b;
+    }
+    if (s.length() != 7) return;
+
+    final String needle = s;
+
+    synchronized (RECENT_COLOR_HEX) {
+      RECENT_COLOR_HEX.removeIf(v -> v != null && v.equalsIgnoreCase(needle));
+      RECENT_COLOR_HEX.addFirst(needle);
+      while (RECENT_COLOR_HEX.size() > MAX_RECENT_COLORS) {
+        RECENT_COLOR_HEX.removeLast();
+      }
+    }
+  }
+
+  private static List<String> snapshotRecentColorHex() {
+    synchronized (RECENT_COLOR_HEX) {
+      return new ArrayList<>(RECENT_COLOR_HEX);
+    }
+  }
+
+  private static JButton colorSwatchButton(Color c, Consumer<Color> onPick) {
+    JButton b = new JButton();
+    b.setFocusable(false);
+    b.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
+    b.setContentAreaFilled(false);
+    b.setIcon(new ColorSwatch(c, 18, 18));
+    b.setToolTipText(toHex(c));
+    b.addActionListener(e -> {
+      if (onPick != null) onPick.accept(c);
+    });
+    return b;
+  }
+
+  private static double contrastRatio(Color fg, Color bg) {
+    if (fg == null || bg == null) return 0.0;
+
+    double l1 = relativeLuminance(fg);
+    double l2 = relativeLuminance(bg);
+    if (l1 < l2) {
+      double t = l1;
+      l1 = l2;
+      l2 = t;
+    }
+    return (l1 + 0.05) / (l2 + 0.05);
+  }
+
+  private static double relativeLuminance(Color c) {
+    double r = srgbToLinear(c.getRed());
+    double g = srgbToLinear(c.getGreen());
+    double b = srgbToLinear(c.getBlue());
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  }
+
+  private static double srgbToLinear(int channel) {
+    double v = channel / 255.0;
+    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  private static Color showColorPickerDialog(Window owner, String title, Color initial, Color previewBackground) {
+    Color bg = previewBackground != null ? previewBackground : preferredPreviewBackground();
+    Color init = initial != null ? initial : Color.WHITE;
+
+    // A compact "hex + palette + preview" picker; way less chaotic than the stock Swing chooser.
+    final JDialog d = new JDialog(owner, title, JDialog.ModalityType.APPLICATION_MODAL);
+    d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+    final Color[] current = new Color[] { init };
+    final Color[] result = new Color[1];
+
+    JLabel preview = new JLabel(" IRCafe preview ");
+    preview.setOpaque(true);
+    preview.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+    preview.setBackground(bg);
+
+    JLabel contrast = new JLabel();
+    contrast.setFont(UIManager.getFont("Label.smallFont"));
+
+    JTextField hex = new JTextField(toHex(init), 10);
+    hex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#RRGGBB");
+
+    JLabel hexStatus = new JLabel(" ");
+    hexStatus.setFont(UIManager.getFont("Label.smallFont"));
+
+    JButton more = new JButton("More…");
+    JButton ok = new JButton("OK");
+    JButton cancel = new JButton("Cancel");
+
+    final boolean[] internalUpdate = new boolean[] { false };
+
+    Runnable updatePreview = () -> {
+      Color fg = current[0];
+      preview.setForeground(fg);
+      preview.setText(" IRCafe preview  " + toHex(fg));
+      double cr = contrastRatio(fg, bg);
+      String verdict = cr >= 4.5 ? "OK" : (cr >= 3.0 ? "Low" : "Bad");
+      contrast.setText(String.format(Locale.ROOT, "Contrast: %.1f (%s)", cr, verdict));
+      ok.setEnabled(fg != null);
+    };
+
+    Consumer<Color> setColor = c -> {
+      if (c == null) return;
+      current[0] = c;
+      internalUpdate[0] = true;
+      hex.setText(toHex(c));
+      internalUpdate[0] = false;
+      hexStatus.setText(" ");
+      updatePreview.run();
+    };
+
+    hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      if (internalUpdate[0]) return;
+
+      Color parsed = parseHexColorLenient(hex.getText());
+      if (parsed == null) {
+        hexStatus.setText("Invalid hex (use #RRGGBB or #RGB)");
+        ok.setEnabled(false);
+        return;
+      }
+      current[0] = parsed;
+      hexStatus.setText(" ");
+      updatePreview.run();
+    }));
+
+    JPanel palette = new JPanel(new MigLayout("insets 0, wrap 8, gap 6", "[]", "[]"));
+    Color[] colors = new Color[] {
+        new Color(0xFFFFFF), new Color(0xD9D9D9), new Color(0xA6A6A6), new Color(0x4D4D4D), new Color(0x000000), new Color(0xFF6B6B), new Color(0xFFA94D), new Color(0xFFD43B),
+        new Color(0x69DB7C), new Color(0x38D9A9), new Color(0x22B8CF), new Color(0x4DABF7), new Color(0x748FFC), new Color(0x9775FA), new Color(0xDA77F2), new Color(0xF783AC),
+        new Color(0xC92A2A), new Color(0xE8590C), new Color(0xF08C00), new Color(0x2F9E44), new Color(0x0CA678), new Color(0x1098AD), new Color(0x1971C2), new Color(0x5F3DC4)
+    };
+    for (Color c : colors) {
+      palette.add(colorSwatchButton(c, setColor));
+    }
+
+    JPanel recent = new JPanel(new MigLayout("insets 0, wrap 8, gap 6", "[]", "[]"));
+    Runnable refreshRecent = () -> {
+      recent.removeAll();
+      List<String> rec = snapshotRecentColorHex();
+      if (rec.isEmpty()) {
+        recent.add(helpText("No recent colors yet."), "span 8");
+      } else {
+        for (String hx : rec) {
+          Color c = parseHexColorLenient(hx);
+          if (c == null) continue;
+          recent.add(colorSwatchButton(c, setColor));
+        }
+      }
+      recent.revalidate();
+      recent.repaint();
+    };
+    refreshRecent.run();
+
+    more.addActionListener(e -> {
+      Color picked = JColorChooser.showDialog(d, "More Colors", current[0] != null ? current[0] : init);
+      if (picked != null) setColor.accept(picked);
+    });
+
+    ok.addActionListener(e -> {
+      if (current[0] == null) return;
+      result[0] = current[0];
+      rememberRecentColorHex(toHex(current[0]));
+      d.dispose();
+    });
+
+    cancel.addActionListener(e -> {
+      result[0] = null;
+      d.dispose();
+    });
+
+    JPanel content = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
+    content.add(preview, "span 2, growx, wrap");
+    content.add(contrast, "span 2, growx, wrap");
+
+    content.add(new JLabel("Hex"));
+    JPanel hexRow = new JPanel(new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]6[nogrid]6[nogrid]", "[]2[]"));
+    hexRow.setOpaque(false);
+    hexRow.add(hex, "w 110!");
+    hexRow.add(more);
+    hexRow.add(new JLabel(), "push");
+    hexRow.add(hexStatus, "span 3, growx");
+    content.add(hexRow, "growx, wrap");
+
+    content.add(new JLabel("Palette"), "aligny top");
+    content.add(palette, "growx, wrap");
+
+    content.add(new JLabel("Recent"), "aligny top");
+    content.add(recent, "growx, wrap");
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+    buttons.add(cancel);
+    buttons.add(ok);
+
+    JPanel outer = new JPanel(new BorderLayout());
+    outer.add(content, BorderLayout.CENTER);
+    outer.add(buttons, BorderLayout.SOUTH);
+
+    d.setContentPane(outer);
+    d.getRootPane().setDefaultButton(ok);
+    d.getRootPane().registerKeyboardAction(
+        ev -> cancel.doClick(),
+        javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+        JComponent.WHEN_IN_FOCUSED_WINDOW
+    );
+
+    updatePreview.run();
+    d.pack();
+    d.setLocationRelativeTo(owner);
+    d.setVisible(true);
+
+    return result[0];
   }
 
   private enum LookupRatePreset {
@@ -2994,10 +4513,52 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     }
   }
 
+  private record AccentControls(JCheckBox enabled, JTextField hex, JButton pick, JButton clear, JSlider strength, JPanel panel, Runnable applyEnabledState) {
+  }
+
+  private record ColorField(JTextField hex, JButton pick, JButton clear, JPanel panel, Runnable updateIcon) {}
+
+  private record ChatThemeControls(JComboBox<ChatThemeSettings.Preset> preset, ColorField timestamp, ColorField system, ColorField mention, JSlider mentionStrength) {}
+
+
   private record ThemeControls(JComboBox<String> combo) {
   }
 
   private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {
+  }
+
+
+  private record DensityOption(String id, String label) {
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
+  private record TweakControls(JComboBox<DensityOption> density, JSlider cornerRadius) {
+  }
+
+
+  private record TrayControls(JCheckBox enabled,
+                              JCheckBox closeToTray,
+                              JCheckBox minimizeToTray,
+                              JCheckBox startMinimized,
+                              JCheckBox notifyHighlights,
+                              JCheckBox notifyPrivateMessages,
+                              JCheckBox notifyConnectionState,
+                              JCheckBox notifyOnlyWhenUnfocused,
+                              JCheckBox notifyOnlyWhenMinimizedOrHidden,
+                              JCheckBox notifySuppressWhenTargetActive,
+                              JCheckBox linuxDbusActions,
+                              JButton testNotification,
+                              JCheckBox notificationSoundsEnabled,
+                              JCheckBox notificationSoundUseCustom,
+                              JTextField notificationSoundCustomPath,
+                              JButton browseCustomSound,
+                              JButton clearCustomSound,
+                              JComboBox<BuiltInSound> notificationSound,
+                              JButton testSound,
+                              JPanel panel) {
   }
 
   private record ImageEmbedControls(JCheckBox enabled,
@@ -3066,7 +4627,6 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
                                JCheckBox remoteDns,
                                JTextField username,
                                JPasswordField password,
-                               JCheckBox showPassword,
                                JButton clearPassword,
                                JSpinner connectTimeoutSeconds,
                                JSpinner readTimeoutSeconds) {
@@ -4316,12 +5876,36 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private JPanel buildFiltersPanel(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", "[][grow]"));
 
     panel.add(tabTitle("Filters"), "growx, wrap");
-    panel.add(c.filtersEnabledByDefault, "growx, wrap");
+    panel.add(new JLabel("Filters only affect transcript rendering; messages are still logged."), "growx, wrap 12");
+
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.addTab("General", buildFiltersGeneralTab(c));
+    tabs.addTab("Placeholders", buildFiltersPlaceholdersTab(c));
+    tabs.addTab("History", buildFiltersHistoryTab(c));
+    tabs.addTab("Overrides", buildFiltersOverridesTab(c));
+    tabs.addTab("Rules", buildFiltersRulesTab(c));
+
+    panel.add(tabs, "grow");
+    return panel;
+  }
+
+  private JPanel buildFiltersGeneralTab(FilterControls c) {
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+
+    panel.add(c.filtersEnabledByDefault, "growx, wrap 8");
+    panel.add(new JLabel("When disabled, rules and placeholders are ignored unless a scope override enables them."), "growx, wrap");
+
+    return panel;
+  }
+
+  private JPanel buildFiltersPlaceholdersTab(FilterControls c) {
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+
     panel.add(c.placeholdersEnabledByDefault, "growx, wrap");
-    panel.add(c.placeholdersCollapsedByDefault, "growx, wrap");
+    panel.add(c.placeholdersCollapsedByDefault, "growx, wrap 12");
 
     JPanel previewRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     previewRow.add(new JLabel("Placeholder preview lines:"), "split 2");
@@ -4329,53 +5913,69 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     panel.add(previewRow, "growx, wrap");
 
     JPanel runCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
-    runCapRow.add(new JLabel("Max hidden lines per placeholder run:"), "split 2");
+    runCapRow.add(new JLabel("Max hidden lines per run:"), "split 2");
     runCapRow.add(c.placeholderMaxLinesPerRun, "w 80!");
     panel.add(runCapRow, "growx, wrap");
-    panel.add(new JLabel("0 = unlimited. Prevents a single placeholder from representing an enormous filtered run."), "growx, wrap");
+    panel.add(new JLabel("0 = unlimited. Prevents a single placeholder from representing an enormous filtered run."), "growx, wrap 12");
 
     JPanel tooltipTagsRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     tooltipTagsRow.add(new JLabel("Tooltip tag limit:"), "split 2");
     tooltipTagsRow.add(c.placeholderTooltipMaxTags, "w 80!");
     panel.add(tooltipTagsRow, "growx, wrap");
-    panel.add(new JLabel("0 = hide tags in the tooltip (rule + count still shown)."), "growx, wrap 12");
+    panel.add(new JLabel("0 = hide tags in the tooltip (rule + count still shown)."), "growx, wrap");
 
-    panel.add(c.historyPlaceholdersEnabledByDefault, "growx, wrap");
+    return panel;
+  }
+
+  private JPanel buildFiltersHistoryTab(FilterControls c) {
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+
+    panel.add(c.historyPlaceholdersEnabledByDefault, "growx, wrap 12");
 
     JPanel historyCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     historyCapRow.add(new JLabel("History placeholder run cap per batch:"), "split 2");
     historyCapRow.add(c.historyPlaceholderMaxRunsPerBatch, "w 80!");
     panel.add(historyCapRow, "growx, wrap");
-    panel.add(new JLabel("0 = unlimited. Limits how many filtered placeholder/hint runs appear per history load."), "growx, wrap 12");
+    panel.add(new JLabel("0 = unlimited. Limits how many filtered placeholder/hint runs appear per history load."), "growx, wrap");
 
-    panel.add(tabTitle("Overrides"), "growx, wrap");
-    panel.add(new JLabel("Overrides apply by scope pattern. Most specific match wins."), "growx, wrap");
+    return panel;
+  }
+
+  private JPanel buildFiltersOverridesTab(FilterControls c) {
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+
+    panel.add(new JLabel("Overrides apply by scope pattern. Most specific match wins."), "growx, wrap 12");
 
     JScrollPane tableScroll = new JScrollPane(c.overridesTable);
-    tableScroll.setPreferredSize(new Dimension(480, 180));
-    panel.add(tableScroll, "growx, wrap");
+    tableScroll.setPreferredSize(new Dimension(520, 220));
+    panel.add(tableScroll, "growx, wrap 8");
 
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     buttons.add(c.addOverride);
     buttons.add(c.removeOverride);
-    panel.add(buttons, "growx, wrap");
+    panel.add(buttons, "growx, wrap 8");
 
-    panel.add(new JLabel("Tip: You can also manage overrides via /filter override ... and export with /filter export."), "growx, wrap 12");
+    panel.add(new JLabel("Tip: You can also manage overrides via /filter override ... and export with /filter export."), "growx, wrap");
 
-    panel.add(tabTitle("Rules"), "growx, wrap");
-    panel.add(new JLabel("Rules affect transcript rendering only (they do not prevent logging)."), "growx, wrap");
+    return panel;
+  }
+
+  private JPanel buildFiltersRulesTab(FilterControls c) {
+    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+
+    panel.add(new JLabel("Rules affect transcript rendering only (they do not prevent logging)."), "growx, wrap 12");
 
     JScrollPane rulesScroll = new JScrollPane(c.rulesTable);
-    rulesScroll.setPreferredSize(new Dimension(720, 220));
-    panel.add(rulesScroll, "growx, wrap");
+    rulesScroll.setPreferredSize(new Dimension(760, 260));
+    panel.add(rulesScroll, "growx, wrap 8");
 
-    JPanel ruleButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    JPanel ruleButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     ruleButtons.add(c.addRule);
     ruleButtons.add(c.editRule);
     ruleButtons.add(c.deleteRule);
     ruleButtons.add(c.moveRuleUp);
     ruleButtons.add(c.moveRuleDown);
-    panel.add(ruleButtons, "growx, wrap");
+    panel.add(ruleButtons, "growx, wrap 8");
 
     panel.add(new JLabel("Tip: You can also manage rules via /filter add|del|set and export with /filter export."), "growx, wrap");
 

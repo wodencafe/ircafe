@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;
 import java.awt.Color;
 import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
@@ -11,6 +13,8 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class ChatStyles {
+
+  private final ChatThemeSettingsBus chatThemeSettings;
 
   public static final String ATTR_URL = "chat.url";
   public static final String ATTR_CHANNEL = "chat.channel";
@@ -70,7 +74,8 @@ public class ChatStyles {
   private SimpleAttributeSet actionFromStyle;
   private SimpleAttributeSet actionMsgStyle;
 
-  public ChatStyles() {
+  public ChatStyles(ChatThemeSettingsBus chatThemeSettings) {
+    this.chatThemeSettings = chatThemeSettings;
     reload();
   }
 
@@ -80,6 +85,9 @@ public class ChatStyles {
     Color dim = UIManager.getColor("Label.disabledForeground");
     Color bg = UIManager.getColor("TextPane.background");
 
+    if (fg == null) fg = UIManager.getColor("Label.foreground");
+    if (bg == null) bg = UIManager.getColor("Panel.background");
+
     Color link = UIManager.getColor("Component.linkColor");
     if (link == null) link = UIManager.getColor("Label.foreground");
 
@@ -88,22 +96,84 @@ public class ChatStyles {
     if (warn == null) warn = new Color(0xF0B000);
     if (err == null) err = new Color(0xD05050);
 
-    // Mention highlight: a subtle background based on selection.
     Color selBg = UIManager.getColor("TextPane.selectionBackground");
-    Color mentionBg = selBg != null ? mix(selBg, bg, 0.35) : mix(new Color(0x6AA2FF), bg, 0.20);
 
-    tsStyle = attrs(STYLE_TIMESTAMP, dim, bg, false, false);
+    ChatThemeSettings s = chatThemeSettings != null ? chatThemeSettings.get() : null;
+    ChatThemeSettings.Preset preset = s != null ? s.preset() : ChatThemeSettings.Preset.DEFAULT;
+
+    // Best-effort "accent" fallback (used by ACCENTED/HIGH_CONTRAST presets)
+    Color accent = UIManager.getColor("@accentColor");
+    if (accent == null) accent = UIManager.getColor("Component.focusColor");
+    if (accent == null) accent = link;
+
+    int mentionStrength = s != null ? s.mentionStrength() : 35;
+    double mentionWeight = Math.max(0.0, Math.min(1.0, mentionStrength / 100.0));
+
+    // Base colors derived from preset.
+    Color tsFg = dim;
+    Color sysFg = dim;
+    Color mentionBase = selBg != null ? selBg : new Color(0x6AA2FF);
+
+    switch (preset) {
+      case SOFT -> {
+        tsFg = mix(dim, bg, 0.55);
+        sysFg = mix(dim, bg, 0.50);
+        mentionBase = mix(mentionBase, bg, 0.65);
+      }
+      case ACCENTED -> {
+        tsFg = mix(accent, fg, 0.45);
+        sysFg = mix(accent, dim != null ? dim : fg, 0.25);
+        mentionBase = mix(accent, bg, 0.25);
+      }
+      case HIGH_CONTRAST -> {
+        tsFg = fg;
+        sysFg = fg;
+        mentionBase = selBg != null ? selBg : accent;
+      }
+      default -> {
+        // DEFAULT
+      }
+    }
+
+    // Explicit overrides win.
+    if (s != null && s.timestampColor() != null) {
+      Color o = parseHexColor(s.timestampColor());
+      if (o != null) tsFg = o;
+    }
+    if (s != null && s.systemColor() != null) {
+      Color o = parseHexColor(s.systemColor());
+      if (o != null) sysFg = o;
+    }
+
+    Color mentionBg;
+    if (s != null && s.mentionBgColor() != null) {
+      Color o = parseHexColor(s.mentionBgColor());
+      mentionBg = o != null ? o : mix(mentionBase, bg, mentionWeight);
+    } else {
+      // Mention highlight: a subtle background derived from the preset.
+      mentionBg = mix(mentionBase, bg, mentionWeight);
+    }
+
+    Color mentionFg = fg;
+    if (mentionFg != null && mentionBg != null) {
+      double cr = contrastRatio(mentionFg, mentionBg);
+      if (cr > 0.0 && cr < 3.0) {
+        mentionFg = bestTextColor(mentionBg, mentionFg);
+      }
+    }
+
+    tsStyle = attrs(STYLE_TIMESTAMP, tsFg, bg, false, false);
     fromStyle = attrs(STYLE_FROM, fg, bg, true, false);
     msgStyle = attrs(STYLE_MESSAGE, fg, bg, false, false);
     noticeFromStyle = attrs(STYLE_NOTICE_FROM, warn, bg, true, false);
     noticeMsgStyle = attrs(STYLE_NOTICE_MESSAGE, warn, bg, false, false);
-    statusStyle = attrs(STYLE_STATUS, dim, bg, false, true);
+    statusStyle = attrs(STYLE_STATUS, sysFg, bg, false, true);
     errorStyle = attrs(STYLE_ERROR, err, bg, true, false);
 
     linkStyle = attrs(STYLE_LINK, link, bg, false, false);
     StyleConstants.setUnderline(linkStyle, true);
 
-    mentionStyle = attrs(STYLE_MENTION, fg, mentionBg, false, false);
+    mentionStyle = attrs(STYLE_MENTION, mentionFg, mentionBg, false, false);
 
     // /me ACTION lines
     actionFromStyle = attrs(STYLE_ACTION_FROM, fg, bg, true, true);
@@ -169,5 +239,71 @@ public class ChatStyles {
 
   private static int clamp(int v) {
     return Math.max(0, Math.min(255, v));
+  }
+
+  private static Color parseHexColor(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() == 3) {
+      // #RGB -> #RRGGBB
+      char r = s.charAt(0);
+      char g = s.charAt(1);
+      char b = s.charAt(2);
+      s = "" + r + r + g + g + b + b;
+    }
+    if (s.length() != 6) return null;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      return new Color(rgb);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static Color bestTextColor(Color bg, Color currentFg) {
+    if (bg == null) return currentFg != null ? currentFg : Color.BLACK;
+
+    Color black = Color.BLACK;
+    Color white = Color.WHITE;
+
+    double crBlack = contrastRatio(black, bg);
+    double crWhite = contrastRatio(white, bg);
+
+    Color best = crBlack >= crWhite ? black : white;
+    double bestCr = Math.max(crBlack, crWhite);
+
+    if (currentFg != null) {
+      double crCur = contrastRatio(currentFg, bg);
+      if (crCur >= bestCr) return currentFg;
+    }
+    return best;
+  }
+
+  private static double contrastRatio(Color fg, Color bg) {
+    if (fg == null || bg == null) return 0.0;
+
+    double l1 = relativeLuminance(fg);
+    double l2 = relativeLuminance(bg);
+    if (l1 < l2) {
+      double t = l1;
+      l1 = l2;
+      l2 = t;
+    }
+    return (l1 + 0.05) / (l2 + 0.05);
+  }
+
+  private static double relativeLuminance(Color c) {
+    double r = srgbToLinear(c.getRed());
+    double g = srgbToLinear(c.getGreen());
+    double b = srgbToLinear(c.getBlue());
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  }
+
+  private static double srgbToLinear(int channel) {
+    double v = channel / 255.0;
+    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
   }
 }

@@ -32,6 +32,7 @@ class SojuEphemeralNetworkImporterTest {
         "Real",
         sasl,
         List.of(),
+        List.of(),
         null);
 
     IrcProperties props = new IrcProperties(null, List.of(bouncer));
@@ -72,6 +73,7 @@ class SojuEphemeralNetworkImporterTest {
         "Real",
         sasl,
         List.of(),
+        List.of(),
         null);
 
     IrcProperties props = new IrcProperties(null, List.of(bouncer));
@@ -109,6 +111,7 @@ class SojuEphemeralNetworkImporterTest {
         "user",
         "Real",
         sasl,
+        List.of(),
         List.of(),
         null);
 
@@ -152,6 +155,7 @@ class SojuEphemeralNetworkImporterTest {
         "user",
         "Real",
         sasl,
+        List.of(),
         List.of(),
         null);
 

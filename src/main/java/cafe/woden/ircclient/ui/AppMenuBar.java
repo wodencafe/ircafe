@@ -3,13 +3,18 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
+import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
+import cafe.woden.ircclient.ui.settings.UiSettings;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
+import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -17,10 +22,17 @@ import io.github.andrewauclair.moderndocking.app.Docking;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.beans.PropertyChangeListener;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
@@ -52,6 +64,9 @@ public class AppMenuBar extends JMenuBar {
                     NickColorOverridesDialog nickColorOverridesDialog,
                     IgnoreListDialog ignoreListDialog,
                     ThemeSelectionDialog themeSelectionDialog,
+                    ThemeManager themeManager,
+                    UiSettingsBus settingsBus,
+                    RuntimeConfigStore runtimeConfig,
                     ServerDialogs serverDialogs,
                     UiProperties uiProps,
                     ChatDockable chat,
@@ -82,12 +97,40 @@ public class AppMenuBar extends JMenuBar {
     // Settings
     JMenu settings = new JMenu("Settings");
 
+    JMenu themeMenu = new JMenu("Theme");
+    ButtonGroup themeGroup = new ButtonGroup();
+    Map<String, JRadioButtonMenuItem> themeItems = new LinkedHashMap<>();
+
+    for (ThemeManager.ThemeOption opt : themeManager.featuredThemes()) {
+      if (opt == null) continue;
+      JRadioButtonMenuItem item = new JRadioButtonMenuItem(opt.label());
+      item.addActionListener(e -> applyThemeQuick(opt.id(), themeManager, settingsBus, runtimeConfig));
+      themeGroup.add(item);
+      themeMenu.add(item);
+      themeItems.put(opt.id(), item);
+    }
+
+    themeMenu.addSeparator();
     JMenuItem themeSelector = new JMenuItem("Theme Selector...");
     themeSelector.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       themeSelectionDialog.open(w);
     });
-    settings.add(themeSelector);
+    themeMenu.add(themeSelector);
+
+    Runnable syncThemeChecks = () -> {
+      String currentTheme = normalizeThemeId(settingsBus.get() != null ? settingsBus.get().theme() : null);
+      themeItems.forEach((id, mi) -> mi.setSelected(normalizeThemeId(id).equals(currentTheme)));
+    };
+    syncThemeChecks.run();
+    PropertyChangeListener themeListener = evt -> {
+      if (UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) {
+        syncThemeChecks.run();
+      }
+    };
+    settingsBus.addListener(themeListener);
+
+    settings.add(themeMenu);
 
     JMenuItem nickColors = new JMenuItem("Nick Colors...");
     nickColors.addActionListener(e -> {
@@ -210,7 +253,8 @@ public class AppMenuBar extends JMenuBar {
         SwingUtilities.getWindowAncestor(this),
         "IRCafe\nA modern Java IRC client.",
         "About IRCafe",
-        javax.swing.JOptionPane.INFORMATION_MESSAGE));
+        javax.swing.JOptionPane.INFORMATION_MESSAGE,
+        AppIcons.aboutIcon()));
     help.add(about);
 
     add(file);
@@ -362,5 +406,31 @@ public class AppMenuBar extends JMenuBar {
       w.requestFocus();
     }
     c.requestFocusInWindow();
+  }
+
+  private static void applyThemeQuick(String themeId,
+                                     ThemeManager themeManager,
+                                     UiSettingsBus settingsBus,
+                                     RuntimeConfigStore runtimeConfig) {
+    String next = normalizeThemeId(themeId);
+    UiSettings cur = settingsBus != null ? settingsBus.get() : null;
+    if (cur == null) return;
+
+    if (!normalizeThemeId(cur.theme()).equals(next)) {
+      UiSettings updated = cur.withTheme(next);
+      settingsBus.set(updated);
+      if (runtimeConfig != null) {
+        runtimeConfig.rememberUiSettings(updated.theme(), updated.chatFontFamily(), updated.chatFontSize());
+      }
+      if (themeManager != null) {
+        themeManager.applyTheme(next);
+      }
+    }
+  }
+
+  private static String normalizeThemeId(String id) {
+    String s = Objects.toString(id, "").trim();
+    if (s.isEmpty()) return "dark";
+    return s.toLowerCase(Locale.ROOT);
   }
 }

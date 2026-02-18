@@ -1,11 +1,29 @@
 import org.panteleyev.jpackage.ImageType
+import org.gradle.internal.os.OperatingSystem
 
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.1'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'org.panteleyev.jpackageplugin' version '1.7.6'
+
+    // Clean + consistent
+    id "com.diffplug.spotless" version "8.2.1"
+
+    // Supply-chain / security
+    id "org.owasp.dependencycheck" version "12.2.0"
+    id "org.cyclonedx.bom" version "3.2.0"
+
+    // Keep deps tidy
+    id "com.autonomousapps.dependency-analysis" version "3.5.1"
+    id "com.github.ben-manes.versions" version "0.53.0"
+
+    id "com.github.spotbugs" version "6.4.8"
+    //id "net.ltgt.errorprone" version "5.0.0"
+    id "de.thetaphi.forbiddenapis" version "3.10"
+    id "com.github.jk1.dependency-license-report" version "3.1.1"
 }
+
 
 group = 'cafe.woden'
 
@@ -29,7 +47,66 @@ configurations {
     }
 }
 
+spotless {
+    java {
+        target "src/**/*.java"
+        googleJavaFormat("1.34.1")
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    format("misc") {
+        target "*.md", ".gitignore", "gradle.properties", "settings.gradle", "build.gradle"
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+tasks.named("check") { dependsOn("spotlessCheck") }
+tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+    reports {
+        html.required = true
+        xml.required = false
+    }
+}
+tasks.named("check") { dependsOn("spotbugsMain") }
+
+dependencyCheck {
+    failBuildOnCVSS = 8.0
+    formats = ["HTML", "JSON"]
+    suppressionFile = "config/dependency-check-suppressions.xml"
+}
+
+dependencyAnalysis {
+    issues {
+        all {
+            onAny {
+                severity("fail")
+            }
+        }
+    }
+}
+
+tasks.named("cyclonedxDirectBom") {
+    includeConfigs = ["runtimeClasspath"]
+
+    jsonOutput = file("$buildDir/reports/ircafe-sbom.json")
+
+}
+
+tasks.named("cyclonedxBom") {
+    jsonOutput = file("$buildDir/reports/ircafe-sbom-aggregate.json")
+}
+
+if (System.getenv("CI") == "true") {
+    tasks.named("check") { dependsOn("dependencyCheckAnalyze") }
+}
+
 dependencies {
+    //errorprone 'com.google.errorprone:error_prone_core:2.46.0'
+    implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
+    implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
+    implementation 'com.googlecode.soundlibs:tritonus-share:0.3.7.4'
+
     implementation 'org.springframework.boot:spring-boot-starter'
 
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -61,6 +138,17 @@ dependencies {
     implementation "com.miglayout:miglayout-swing:11.4.2"
 
     implementation "org.jsoup:jsoup:1.22.1"
+
+    // Better tray support on Linux/GNOME (AppIndicator/GtkStatusIcon fallback) + native menus.
+    // NOTE: Maven Central currently publishes 4.4 (README mentions 4.5, but it is not on Central).
+    implementation "com.dorkbox:SystemTray:4.4"
+
+    // Cross-platform desktop notification popups (toast-like). Used for Windows notifications.
+    implementation "com.dorkbox:Notify:4.5"
+
+    // DBus (Linux/GNOME) - used to implement clickable desktop notifications via org.freedesktop.Notifications.
+    implementation "com.github.hypfvieh:dbus-java-core:5.2.0"
+    implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:5.2.0"
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -154,5 +242,18 @@ jpackage {
         macPackageIdentifier = "cafe.woden.ircafe"
         macPackageName = "IRCafe"
         macAppCategory = "public.app-category.utilities"
+    }
+}
+
+// Best-effort packaging icon.
+// Windows prefers .ico; Linux prefers .png; macOS generally prefers .icns (not included by default).
+afterEvaluate {
+    def jp = project.extensions.findByName("jpackage")
+    if (jp == null) return
+
+    def os = OperatingSystem.current()
+    def iconFile = (os.isWindows()) ? file("packaging/ircafe.ico") : (os.isLinux() ? file("packaging/ircafe.png") : null)
+    if (iconFile != null && iconFile.exists() && jp.metaClass.hasProperty(jp, "icon")) {
+        jp.icon = iconFile
     }
 }

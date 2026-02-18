@@ -9,6 +9,28 @@ public record UiSettings(
 
     boolean autoConnectOnStart,
 
+    boolean trayEnabled,
+
+    boolean trayCloseToTray,
+
+    boolean trayMinimizeToTray,
+
+    boolean trayStartMinimized,
+
+    boolean trayNotifyHighlights,
+
+    boolean trayNotifyPrivateMessages,
+
+    boolean trayNotifyConnectionState,
+
+    boolean trayNotifyOnlyWhenUnfocused,
+
+    boolean trayNotifyOnlyWhenMinimizedOrHidden,
+
+    boolean trayNotifySuppressWhenTargetActive,
+
+    boolean trayLinuxDbusActionsEnabled,
+
     boolean imageEmbedsEnabled,
     boolean imageEmbedsCollapsedByDefault,
 
@@ -86,6 +108,24 @@ public record UiSettings(
     if (theme == null || theme.isBlank()) theme = "dark";
     if (chatFontFamily == null || chatFontFamily.isBlank()) chatFontFamily = "Monospaced";
     if (chatFontSize <= 0) chatFontSize = 12;
+
+    // Tray settings: if the tray is disabled, ensure tray behaviors are off too.
+    if (!trayEnabled) {
+      trayCloseToTray = false;
+      trayMinimizeToTray = false;
+      trayStartMinimized = false;
+
+      trayNotifyHighlights = false;
+      trayNotifyPrivateMessages = false;
+      trayNotifyConnectionState = false;
+
+      trayNotifyOnlyWhenUnfocused = false;
+      trayNotifyOnlyWhenMinimizedOrHidden = false;
+      trayNotifySuppressWhenTargetActive = false;
+
+      trayLinuxDbusActionsEnabled = false;
+    }
+
     if (imageEmbedsMaxWidthPx < 0) imageEmbedsMaxWidthPx = 0;
     if (imageEmbedsMaxHeightPx < 0) imageEmbedsMaxHeightPx = 0;
 
@@ -178,6 +218,11 @@ public record UiSettings(
       int userhostMaxNicksPerCommand
   ) {
     this(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        // Tray defaults (older call sites)
+        true, true, false, false,
+        true, true, false,
+        true, false, true,
+        true,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -216,6 +261,8 @@ public record UiSettings(
 
   public UiSettings withTheme(String nextTheme) {
     return new UiSettings(nextTheme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -235,6 +282,8 @@ public record UiSettings(
 
   public UiSettings withChatFontFamily(String family) {
     return new UiSettings(theme, family, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -254,6 +303,8 @@ public record UiSettings(
 
   public UiSettings withChatFontSize(int size) {
     return new UiSettings(theme, chatFontFamily, size, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -273,6 +324,8 @@ public record UiSettings(
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         enabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -292,6 +345,8 @@ public record UiSettings(
 
   public UiSettings withImageEmbedsCollapsedByDefault(boolean collapsed) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, collapsed, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -311,6 +366,8 @@ public record UiSettings(
 
   public UiSettings withImageEmbedsMaxWidthPx(int maxWidthPx) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, Math.max(0, maxWidthPx), imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -330,6 +387,8 @@ public record UiSettings(
 
   public UiSettings withImageEmbedsMaxHeightPx(int maxHeightPx) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, Math.max(0, maxHeightPx), imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -349,6 +408,8 @@ public record UiSettings(
 
   public UiSettings withLinkPreviewsEnabled(boolean enabled) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         enabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -368,6 +429,8 @@ public record UiSettings(
 
   public UiSettings withLinkPreviewsCollapsedByDefault(boolean collapsed) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, collapsed,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -387,6 +450,8 @@ public record UiSettings(
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         enabled, ctcpRequestsInActiveTargetEnabled,
@@ -406,6 +471,8 @@ public record UiSettings(
 
   public UiSettings withTimestampsEnabled(boolean enabled) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -425,6 +492,8 @@ public record UiSettings(
 
   public UiSettings withTimestampFormat(String format) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -444,6 +513,8 @@ public record UiSettings(
 
   public UiSettings withTimestampsIncludeChatMessages(boolean enabled) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -468,6 +539,8 @@ public record UiSettings(
 
   public UiSettings withAutoConnectOnStart(boolean enabled) {
     return new UiSettings(theme, chatFontFamily, chatFontSize, enabled,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,

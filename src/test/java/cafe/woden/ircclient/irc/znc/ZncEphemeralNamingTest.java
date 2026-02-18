@@ -79,6 +79,7 @@ class ZncEphemeralNamingTest {
         "real",
         sasl,
         List.of(),
+        List.of(),
         null
     );
   }

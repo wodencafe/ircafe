@@ -135,6 +135,7 @@ public class ZncEphemeralNetworkImporter {
         bouncer.realName(),
         updatedSasl,
         List.of(),
+        List.of(),
         bouncer.proxy()
     );
   }

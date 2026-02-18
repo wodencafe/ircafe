@@ -7,6 +7,8 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.ui.icons.AppIcons;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,7 @@ public class MainFrame extends JFrame {
 
   private final StatusBar statusBar;
   private final UiProperties uiProps;
+  private final TrayService trayService;
 
   // Dockables (Spring beans)
   private final ServerTreeDockable serverTree;
@@ -52,6 +55,7 @@ public class MainFrame extends JFrame {
       IrcMediator controller,
       AppMenuBar menuBar,
       UiProperties uiProps,
+      TrayService trayService,
       ServerTreeDockable serverTree,
       ChatDockable chat,
       UserListDockable users,
@@ -62,11 +66,19 @@ public class MainFrame extends JFrame {
   ) {
     super(AppVersion.appNameWithVersion());
     this.uiProps = uiProps;
+    this.trayService = trayService;
     this.serverTree = serverTree;
     this.chat = chat;
     this.users = users;
     this.terminal = terminal;
     this.statusBar = statusBar;
+
+    // Window/taskbar icon (best-effort, cross-platform).
+    try {
+      setIconImages(AppIcons.windowIcons());
+      AppIcons.tryInstallTaskbarIcon();
+    } catch (Throwable ignored) {
+    }
 
     setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
     setSize(1100, 700);
@@ -182,9 +194,34 @@ public class MainFrame extends JFrame {
       }
     });
 
+
+
+    addWindowStateListener(e -> {
+      // optionally minimize to tray instead of the taskbar.
+      if (trayService == null) return;
+      int newState = e.getNewState();
+      if ((newState & java.awt.Frame.ICONIFIED) == java.awt.Frame.ICONIFIED) {
+        if (trayService.shouldMinimizeToTray() && !trayService.isExitRequested()) {
+          SwingUtilities.invokeLater(() -> {
+            try {
+              setVisible(false);
+              trayService.maybeShowCloseBalloon();
+            } catch (Exception ignored) {
+            }
+          });
+        }
+      }
+    });
+
     addWindowListener(new WindowAdapter() {
       @Override
       public void windowClosing(WindowEvent e) {
+        // HexChat-style: close button hides to tray (when supported/enabled).
+        if (trayService != null && trayService.shouldCloseToTray() && !trayService.isExitRequested()) {
+          setVisible(false);
+          trayService.maybeShowCloseBalloon();
+          return;
+        }
         try {
           setVisible(false);
           dispose();

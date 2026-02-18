@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import java.awt.Font;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -15,8 +16,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ircafe.ui")
 public record UiProperties(
     String theme,
+    String accentColor,
+    Integer accentStrength,
+    String density,
+    Integer cornerRadius,
     String chatFontFamily,
     int chatFontSize,
+
+    String chatThemePreset,
+    String chatTimestampColor,
+    String chatSystemColor,
+    String chatMentionBgColor,
+    Integer chatMentionStrength,
 
     Boolean autoConnectOnStart,
 
@@ -101,8 +112,95 @@ public record UiProperties(
 
     Filters filters,
 
-    Layout layout
+    Layout layout,
+
+    Tray tray
 ) {
+
+  /**
+   * System tray integration.
+   *
+   * <p>Defaults are intentionally "HexChat-ish": if the platform supports a tray,
+   * we show it, and the window close button hides the app instead of exiting.
+   */
+  public record Tray(
+      Boolean enabled,
+      Boolean closeToTray,
+      Boolean minimizeToTray,
+      Boolean startMinimized,
+
+      /** Show desktop notifications (balloons/toasts) for channel highlights. */
+      Boolean notifyHighlights,
+
+      /** Show desktop notifications (balloons/toasts) for private messages. */
+      Boolean notifyPrivateMessages,
+
+      /** Show desktop notifications (balloons/toasts) for connection state changes. */
+      Boolean notifyConnectionState,
+
+      /** Only show desktop notifications when the main window is not focused/active. */
+      Boolean notifyOnlyWhenUnfocused,
+
+      /** Only show desktop notifications when the main window is minimized or hidden to tray. */
+      Boolean notifyOnlyWhenMinimizedOrHidden,
+
+      /** If true, suppress notifications for the currently active buffer/target. */
+      Boolean notifySuppressWhenTargetActive,
+
+      /**
+       * On Linux desktops, prefer the D-Bus notification API (org.freedesktop.Notifications).
+       *
+       * <p>This enables click-to-open behavior on desktops that support notification actions.
+       * If unsupported, IRCafe will silently fall back to {@code notify-send}.
+       */
+      Boolean linuxDbusActionsEnabled,
+
+      /** Play a sound alongside desktop notifications. */
+      Boolean notificationSoundsEnabled,
+
+      /** The built-in sound id (BuiltInSound enum name) used for notifications. */
+      String notificationSound,
+
+      /** If true, play a custom sound file from the runtime config directory instead of a bundled sound. */
+      Boolean notificationSoundUseCustom,
+
+      /** Relative path under the runtime config directory for the custom sound file (e.g. "sounds/my.mp3"). */
+      String notificationSoundCustomPath
+  ) {
+    public Tray {
+      if (enabled == null) enabled = true;
+      if (closeToTray == null) closeToTray = true;
+      if (minimizeToTray == null) minimizeToTray = false;
+      if (startMinimized == null) startMinimized = false;
+
+      // Defaults are intentionally minimal: highlights + DMs are on, connectivity is off.
+      if (notifyHighlights == null) notifyHighlights = true;
+      if (notifyPrivateMessages == null) notifyPrivateMessages = true;
+      if (notifyConnectionState == null) notifyConnectionState = false;
+
+      // HexChat-ish defaults: notify when you're not actively looking at IRCafe.
+      if (notifyOnlyWhenUnfocused == null) notifyOnlyWhenUnfocused = true;
+      if (notifyOnlyWhenMinimizedOrHidden == null) notifyOnlyWhenMinimizedOrHidden = false;
+      if (notifySuppressWhenTargetActive == null) notifySuppressWhenTargetActive = true;
+
+      // Default to "on" - we only actually use D-Bus if the session supports actions.
+      if (linuxDbusActionsEnabled == null) linuxDbusActionsEnabled = true;
+
+      // Keep Phase-2 behavior (on) unless explicitly disabled.
+      if (notificationSoundsEnabled == null) notificationSoundsEnabled = true;
+      if (notificationSound == null || notificationSound.isBlank()) notificationSound = "NOTIF_1";
+
+      if (notificationSoundUseCustom == null) notificationSoundUseCustom = false;
+      if (notificationSoundCustomPath != null && notificationSoundCustomPath.isBlank()) {
+        notificationSoundCustomPath = null;
+      }
+
+      // If the user toggles custom on but no path exists, fall back to bundled.
+      if (Boolean.TRUE.equals(notificationSoundUseCustom) && notificationSoundCustomPath == null) {
+        notificationSoundUseCustom = false;
+      }
+    }
+  }
 
   /**
    * WeeChat-style message filters.
@@ -289,6 +387,34 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (theme == null || theme.isBlank()) {
       theme = "dark";
     }
+
+    // Optional: override the theme's accent color. When unset, the theme's built-in accent is used.
+    if (accentColor != null && accentColor.isBlank()) accentColor = null;
+    accentColor = normalizeHexOrNull(accentColor);
+
+    // Chat theme overrides (optional)
+    if (chatThemePreset != null && chatThemePreset.isBlank()) chatThemePreset = null;
+    if (chatThemePreset != null) chatThemePreset = chatThemePreset.trim();
+    chatTimestampColor = normalizeHexOrNull(chatTimestampColor);
+    chatSystemColor = normalizeHexOrNull(chatSystemColor);
+    chatMentionBgColor = normalizeHexOrNull(chatMentionBgColor);
+    if (chatMentionStrength == null) chatMentionStrength = 35;
+    chatMentionStrength = Math.max(0, Math.min(100, chatMentionStrength));
+
+    if (accentStrength == null) accentStrength = 70;
+    if (accentStrength < 0) accentStrength = 0;
+    if (accentStrength > 100) accentStrength = 100;
+
+    // Global LAF tweaks (cheap wins).
+    if (density == null || density.isBlank()) density = "cozy";
+    density = density.trim().toLowerCase(Locale.ROOT);
+    if (!density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
+      density = "cozy";
+    }
+
+    if (cornerRadius == null) cornerRadius = 10;
+    if (cornerRadius < 0) cornerRadius = 0;
+    if (cornerRadius > 20) cornerRadius = 20;
     if (chatFontFamily == null || chatFontFamily.isBlank()) {
       chatFontFamily = Font.MONOSPACED;
     }
@@ -432,6 +558,24 @@ if (historyPlaceholdersEnabledByDefault == null) {
       return String.format("#%02X%02X%02X", r, g, b);
     } catch (Exception ignored) {
       return fb;
+    }
+  }
+
+  static String normalizeHexOrNull(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() != 6) return null;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      int r = (rgb >> 16) & 0xFF;
+      int g = (rgb >> 8) & 0xFF;
+      int b = (rgb) & 0xFF;
+      return String.format("#%02X%02X%02X", r, g, b);
+    } catch (Exception ignored) {
+      return null;
     }
   }
 

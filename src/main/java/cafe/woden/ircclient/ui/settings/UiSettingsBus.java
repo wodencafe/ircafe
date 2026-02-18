@@ -21,10 +21,26 @@ public class UiSettingsBus {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
     UiProperties.UserInfoEnrichment ue = props.userInfoEnrichment();
     UiProperties.Timestamps ts = props.timestamps();
+    UiProperties.Tray tray = props.tray();
 
     boolean timestampsEnabled = ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
     String timestampFormat = ts != null ? ts.format() : "HH:mm:ss";
     boolean timestampsIncludeChatMessages = ts != null && Boolean.TRUE.equals(ts.includeChatMessages());
+
+    boolean trayEnabled = tray == null || tray.enabled() == null || Boolean.TRUE.equals(tray.enabled());
+    boolean trayCloseToTray = tray == null || tray.closeToTray() == null || Boolean.TRUE.equals(tray.closeToTray());
+    boolean trayMinimizeToTray = tray != null && Boolean.TRUE.equals(tray.minimizeToTray());
+    boolean trayStartMinimized = tray != null && Boolean.TRUE.equals(tray.startMinimized());
+
+    boolean trayNotifyHighlights = tray == null || tray.notifyHighlights() == null || Boolean.TRUE.equals(tray.notifyHighlights());
+    boolean trayNotifyPrivateMessages = tray == null || tray.notifyPrivateMessages() == null || Boolean.TRUE.equals(tray.notifyPrivateMessages());
+    boolean trayNotifyConnectionState = tray != null && Boolean.TRUE.equals(tray.notifyConnectionState());
+
+    boolean trayNotifyOnlyWhenUnfocused = tray == null || tray.notifyOnlyWhenUnfocused() == null || Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
+    boolean trayNotifyOnlyWhenMinimizedOrHidden = tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenMinimizedOrHidden());
+    boolean trayNotifySuppressWhenTargetActive = tray == null || tray.notifySuppressWhenTargetActive() == null || Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
+
+    boolean trayLinuxDbusActionsEnabled = tray == null || tray.linuxDbusActionsEnabled() == null || Boolean.TRUE.equals(tray.linuxDbusActionsEnabled());
 
     boolean enrichmentEnabled = ue != null && Boolean.TRUE.equals(ue.enabled());
     boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
@@ -54,6 +70,20 @@ public class UiSettingsBus {
         props.chatFontFamily(),
         props.chatFontSize(),
         props.autoConnectOnStart() == null || Boolean.TRUE.equals(props.autoConnectOnStart()),
+        trayEnabled,
+        trayCloseToTray,
+        trayMinimizeToTray,
+        trayStartMinimized,
+        trayNotifyHighlights,
+        trayNotifyPrivateMessages,
+        trayNotifyConnectionState,
+
+        trayNotifyOnlyWhenUnfocused,
+        trayNotifyOnlyWhenMinimizedOrHidden,
+        trayNotifySuppressWhenTargetActive,
+
+        trayLinuxDbusActionsEnabled,
+
         props.imageEmbedsEnabled(),
         props.imageEmbedsCollapsedByDefault(),
         props.imageEmbedsMaxWidthPx(),

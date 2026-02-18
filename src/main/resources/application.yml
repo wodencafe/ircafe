@@ -78,6 +78,44 @@ ircafe:
     layout:
       serverDockWidthPx: 240
       userDockWidthPx: 140
+
+    # System tray integration
+    tray:
+      # If true (default), show a system tray icon when supported by the OS.
+      enabled: true
+      # If true (default), the window close button hides IRCafe to the tray instead of exiting.
+      closeToTray: true
+      # If true, minimizing the window hides IRCafe to the tray. Default: false.
+      minimizeToTray: false
+      # If true, start hidden (tray icon only). Default: false.
+      startMinimized: false
+      # Desktop notifications for highlights. Default: true.
+      notifyHighlights: true
+      # Desktop notifications for private messages. Default: true.
+      notifyPrivateMessages: true
+      # Desktop notifications for connection state changes. Default: false.
+      notifyConnectionState: false
+      # Only notify when the main window is not focused/active. Default: true.
+      notifyOnlyWhenUnfocused: true
+      # Only notify when the main window is minimized or hidden to tray. Default: false.
+      notifyOnlyWhenMinimizedOrHidden: false
+      # Suppress notifications for the currently active buffer/target. Default: true.
+      notifySuppressWhenTargetActive: true
+      # Linux only: prefer D-Bus notifications with click actions (falls back to notify-send). Default: true.
+      linuxDbusActionsEnabled: true
+
+      # Play a sound alongside desktop notifications. Default: true.
+      notificationSoundsEnabled: true
+
+      # Which bundled sound to use (BuiltInSound enum name).
+      # Valid values: NOTIF_1 .. NOTIF_21
+      notificationSound: "NOTIF_1"
+
+      # Optional: use a custom file stored under the runtime config directory.
+      # If enabled, IRCafe plays `notificationSoundCustomPath` instead of a bundled sound.
+      # Supported formats: MP3, WAV.
+      # notificationSoundUseCustom: false
+      # notificationSoundCustomPath: "sounds/my-notification.mp3"
     # Optional: custom palette (hex strings). If omitted, uses built-in 32-color palette.
     # nickColors:
     #   - "#E57373"
@@ -192,3 +230,10 @@ irc:
 
       autoJoin:
         - "#test"
+
+      # "Perform" list: commands to run right after a successful connect.
+      # Lines starting with "/" will be treated as IRCafe commands; others may be treated as raw IRC.
+      # (Execution is implemented in the next step.)
+      # perform:
+      #   - "/msg NickServ IDENTIFY yourpassword"
+      #   - "/mode $me +i"

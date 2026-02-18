@@ -23,6 +23,7 @@ import java.util.Optional;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -56,10 +57,24 @@ public class ServerEditorDialog extends JDialog {
 
   private final JCheckBox saslEnabledBox = new JCheckBox("Enable SASL");
   private final JTextField saslUserField = new JTextField();
-  private final JTextField saslPassField = new JTextField();
-  private final JComboBox<String> saslMechanism = new JComboBox<>(new String[]{"PLAIN"});
+  /**
+   * SASL secret (password / key material). Use a password field so we don't echo secrets in plain text.
+   */
+  private final JPasswordField saslPassField = new JPasswordField();
+  private final JComboBox<String> saslMechanism = new JComboBox<>(new String[]{
+      "AUTO",
+      "PLAIN",
+      "SCRAM-SHA-256",
+      "SCRAM-SHA-1",
+      "EXTERNAL",
+      "ECDSA-NIST256P-CHALLENGE"
+  });
+
+  private final JLabel saslHintLabel = new JLabel();
 
   private final JTextArea autoJoinArea = new JTextArea(8, 30);
+
+  private final List<String> performSeed;
 
   // Per-server proxy override
   private final JCheckBox proxyOverrideBox = new JCheckBox("Override proxy for this server");
@@ -112,6 +127,7 @@ public class ServerEditorDialog extends JDialog {
 
     // Seed values
     if (seed != null) {
+      performSeed = (seed.perform() == null) ? List.of() : List.copyOf(seed.perform());
       idField.setText(Objects.toString(seed.id(), ""));
       hostField.setText(Objects.toString(seed.host(), ""));
       portField.setText(String.valueOf(seed.port()));
@@ -134,6 +150,7 @@ public class ServerEditorDialog extends JDialog {
 
       seedProxy(seed.proxy());
     } else {
+      performSeed = List.of();
       tlsBox.setSelected(true);
       portField.setText("6697");
       portAuto = true;
@@ -150,11 +167,20 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(loginField, "ircafe");
     applyFieldStyle(realNameField, "IRCafe User");
     applyFieldStyle(saslUserField, "account");
-    applyFieldStyle(saslPassField, "password");
+    applyFieldStyle(saslPassField, "password / key");
+    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
+    // Using the string key avoids any compile-time dependency on FlatLaf constants.
+    saslPassField.putClientProperty("JPasswordField.showRevealButton", true);
+    // FlatLaf also supports a STYLE flag; keep both for compatibility.
+    appendStyle(saslPassField, "showRevealButton:true");
     applyFieldStyle(proxyHostField, "127.0.0.1");
     applyFieldStyle(proxyPortField, "1080");
     applyFieldStyle(proxyUserField, "(optional)");
     applyFieldStyle(proxyPassField, "(optional)");
+    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
+    proxyPassField.putClientProperty("JPasswordField.showRevealButton", true);
+    // FlatLaf also supports a STYLE flag; keep both for compatibility.
+    appendStyle(proxyPassField, "showRevealButton:true");
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
@@ -168,6 +194,7 @@ public class ServerEditorDialog extends JDialog {
     });
 
     saslEnabledBox.addActionListener(e -> updateSaslEnabled());
+    saslMechanism.addActionListener(e -> updateSaslEnabled());
     updateSaslEnabled();
 
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
@@ -504,7 +531,7 @@ public class ServerEditorDialog extends JDialog {
     addRow(p, g, 2, "Port", portRow);
     addRow(p, g, 3, "Server password", serverPassField);
 
-    g.gridy = 4;
+    g.gridy = 5;
     g.gridx = 0;
     g.gridwidth = 2;
     g.weighty = 1.0;
@@ -544,10 +571,19 @@ public class ServerEditorDialog extends JDialog {
 
     g.gridwidth = 1;
     addRow(p, g, 1, "Username", saslUserField);
-    addRow(p, g, 2, "Password", saslPassField);
+    addRow(p, g, 2, "Secret", saslPassField);
     addRow(p, g, 3, "Mechanism", saslMechanism);
 
+    saslHintLabel.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    saslHintLabel.setText(" ");
     g.gridy = 4;
+    g.gridx = 0;
+    g.gridwidth = 2;
+    g.weightx = 1.0;
+    g.fill = GridBagConstraints.HORIZONTAL;
+    p.add(saslHintLabel, g);
+
+    g.gridy = 5;
     g.gridx = 0;
     g.gridwidth = 2;
     g.weighty = 1.0;
@@ -571,9 +607,57 @@ public class ServerEditorDialog extends JDialog {
 
   private void updateSaslEnabled() {
     boolean en = saslEnabledBox.isSelected();
-    saslUserField.setEnabled(en);
-    saslPassField.setEnabled(en);
     saslMechanism.setEnabled(en);
+
+    String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
+    String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
+
+    // Default: username + secret are enabled when SASL is enabled.
+    boolean userEnabled = en;
+    boolean secretEnabled = en;
+
+    String hint;
+    String secretPlaceholder;
+
+    switch (mechUpper) {
+      case "EXTERNAL" -> {
+        // TLS client certificate auth; secret is unused.
+        secretEnabled = false;
+        secretPlaceholder = "(ignored)";
+        hint = "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.";
+      }
+      case "ECDSA-NIST256P-CHALLENGE" -> {
+        secretPlaceholder = "base64 PKCS#8 EC private key";
+        hint = "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.";
+      }
+      case "SCRAM-SHA-256" -> {
+        secretPlaceholder = "password";
+        hint = "SCRAM-SHA-256 (recommended). Secret = password.";
+      }
+      case "SCRAM-SHA-1" -> {
+        secretPlaceholder = "password";
+        hint = "SCRAM-SHA-1. Secret = password.";
+      }
+      case "AUTO" -> {
+        secretPlaceholder = "password (leave blank for EXTERNAL)";
+        hint = "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.";
+      }
+      default -> {
+        secretPlaceholder = "password";
+        hint = "PLAIN. Secret = password.";
+      }
+    }
+
+    saslUserField.setEnabled(userEnabled);
+    saslPassField.setEnabled(secretEnabled);
+
+    // Make the hint wrap nicely.
+    String html = "<html><body style='width: 520px'>" + hint + "</body></html>";
+    saslHintLabel.setText(en ? html : " ");
+    saslHintLabel.setToolTipText(hint);
+
+    // Update placeholder dynamically.
+    saslPassField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, secretPlaceholder);
   }
 
   private void maybeAdjustPortForTls() {
@@ -624,10 +708,29 @@ public class ServerEditorDialog extends JDialog {
     IrcProperties.Server.Sasl sasl;
     if (saslEnabledBox.isSelected()) {
       String u = trim(saslUserField.getText());
-      String p = Objects.toString(saslPassField.getText(), "");
+      // JPasswordField stores secret as a char[]. Convert only when building the immutable config object.
+      String p = new String(saslPassField.getPassword());
       String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-      if (u.isEmpty()) throw new IllegalArgumentException("SASL username is required when SASL is enabled");
-      if (p.isBlank()) throw new IllegalArgumentException("SASL password is required when SASL is enabled");
+
+      String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
+      boolean hasSecret = !p.isBlank();
+      boolean needsUser = switch (mechUpper) {
+        case "EXTERNAL" -> false;
+        case "AUTO" -> hasSecret;
+        default -> true;
+      };
+      boolean needsSecret = switch (mechUpper) {
+        case "EXTERNAL" -> false;
+        case "AUTO" -> false;
+        default -> true;
+      };
+
+      if (needsUser && u.isEmpty()) {
+        throw new IllegalArgumentException("SASL username is required for mechanism " + mechUpper);
+      }
+      if (needsSecret && p.isBlank()) {
+        throw new IllegalArgumentException("SASL secret is required for mechanism " + mechUpper);
+      }
       sasl = new IrcProperties.Server.Sasl(true, u, p, mech, null);
     } else {
       sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
@@ -674,6 +777,7 @@ public class ServerEditorDialog extends JDialog {
         realName,
         sasl,
         autoJoin,
+        performSeed,
         proxyOverride
     );
   }
@@ -681,6 +785,19 @@ public class ServerEditorDialog extends JDialog {
   private static void applyFieldStyle(JTextField f, String placeholder) {
     f.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, placeholder);
     f.putClientProperty(FlatClientProperties.STYLE, "arc:10;");
+  }
+
+  private static void appendStyle(JComponent c, String styleSnippet) {
+    if (c == null || styleSnippet == null) return;
+    String snip = styleSnippet.trim();
+    if (snip.isBlank()) return;
+
+    Object existing = c.getClientProperty(FlatClientProperties.STYLE);
+    String s = existing != null ? existing.toString().trim() : "";
+    if (!s.isBlank() && !s.endsWith(";")) s = s + ";";
+    s = s + snip;
+    if (!s.endsWith(";")) s = s + ";";
+    c.putClientProperty(FlatClientProperties.STYLE, s);
   }
 
   private static GridBagConstraints baseGbc() {
