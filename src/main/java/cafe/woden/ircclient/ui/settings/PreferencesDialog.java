@@ -199,29 +199,273 @@ public class PreferencesDialog {
     List<AutoCloseable> closeables = new ArrayList<>();
 
     ThemeControls theme = buildThemeControls(current, themeLabelById);
+    FontControls fonts = buildFontControls(current, closeables);
+    ThemeAccentSettings initialAccent = accentSettingsBus != null ? accentSettingsBus.get() : new ThemeAccentSettings(null, 70);
+    AccentControls accent = buildAccentControls(initialAccent);
+    ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+    TweakControls tweaks = buildTweakControls(initialTweaks);
+
+    ChatThemeSettings initialChatTheme = chatThemeSettingsBus != null
+        ? chatThemeSettingsBus.get()
+        : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+    ChatThemeControls chatTheme = buildChatThemeControls(initialChatTheme);
+
+    // Allow mousewheel selection cycling for Appearance-tab combos.
+    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(theme.combo)); } catch (Exception ignored) {}
+    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(chatTheme.preset)); } catch (Exception ignored) {}
+    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(tweaks.density)); } catch (Exception ignored) {}
+
+    // Live preview snapshot: used to rollback any preview-only changes on Cancel / window close.
     final java.util.concurrent.atomic.AtomicReference<String> committedThemeId = new java.util.concurrent.atomic.AtomicReference<>(
         normalizeThemeIdInternal(current != null ? current.theme() : null));
+    final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings = new java.util.concurrent.atomic.AtomicReference<>(current);
+    final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings = new java.util.concurrent.atomic.AtomicReference<>(
+        initialAccent != null ? initialAccent : new ThemeAccentSettings(null, 70));
+    final java.util.concurrent.atomic.AtomicReference<ThemeTweakSettings> committedTweakSettings = new java.util.concurrent.atomic.AtomicReference<>(
+        initialTweaks != null ? initialTweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+    final java.util.concurrent.atomic.AtomicReference<ChatThemeSettings> committedChatThemeSettings = new java.util.concurrent.atomic.AtomicReference<>(
+        initialChatTheme != null
+            ? initialChatTheme
+            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+
+    final java.util.concurrent.atomic.AtomicBoolean suppressLivePreview = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidAccentHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedAccentSettings.get() != null ? committedAccentSettings.get().accentColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatTimestampHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().timestampColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatSystemHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().systemColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatMentionHex = new java.util.concurrent.atomic.AtomicReference<>(
+        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().mentionBgColor() : null);
+
+    // Debounced live preview to avoid spamming full UI refreshes while sliders are dragged.
+    final javax.swing.Timer lafPreviewTimer = new javax.swing.Timer(140, null);
+    lafPreviewTimer.setRepeats(false);
+    final Runnable applyLafPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      if (themeManager == null) return;
+
+      String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
+      if (sel.isBlank()) return;
+
+      if (tweakSettingsBus != null) {
+        DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
+        String densityId = opt != null ? opt.id() : "cozy";
+        ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
+            ThemeTweakSettings.ThemeDensity.from(densityId),
+            tweaks.cornerRadius.getValue()
+        );
+        tweakSettingsBus.set(nextTweaks);
+      }
+
+      if (accentSettingsBus != null) {
+        String hex = null;
+        if (accent.enabled.isSelected()) {
+          String raw = accent.hex.getText();
+          raw = raw != null ? raw.trim() : "";
+
+          if (raw.isBlank()) {
+            lastValidAccentHex.set(null);
+            hex = null;
+          } else {
+            Color c = parseHexColorLenient(raw);
+            if (c != null) {
+              hex = toHex(c);
+              lastValidAccentHex.set(hex);
+            } else {
+              // If the user is mid-typing an invalid value, keep the last valid color.
+              hex = lastValidAccentHex.get();
+            }
+          }
+        }
+
+        ThemeAccentSettings nextAccent = new ThemeAccentSettings(hex, accent.strength.getValue());
+        accentSettingsBus.set(nextAccent);
+      }
+
+      themeManager.applyTheme(sel);
+    };
+    lafPreviewTimer.addActionListener(e -> applyLafPreview.run());
+    final Runnable scheduleLafPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      lafPreviewTimer.restart();
+    };
+
+    final javax.swing.Timer chatPreviewTimer = new javax.swing.Timer(120, null);
+    chatPreviewTimer.setRepeats(false);
+    final java.util.function.BiFunction<JTextField, java.util.concurrent.atomic.AtomicReference<String>, String> parseOptionalHex = (field, lastRef) -> {
+      String raw = field != null ? field.getText() : null;
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastRef.set(null);
+        return null;
+      }
+      Color c = parseHexColorLenient(raw);
+      if (c == null) {
+        return lastRef.get();
+      }
+      String hex = toHex(c);
+      lastRef.set(hex);
+      return hex;
+    };
+    final Runnable applyChatPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      if (themeManager == null) return;
+      if (chatThemeSettingsBus == null) return;
+
+      ChatThemeSettings.Preset presetV = (chatTheme.preset.getSelectedItem() instanceof ChatThemeSettings.Preset p)
+          ? p
+          : ChatThemeSettings.Preset.DEFAULT;
+
+      String tsHexV = parseOptionalHex.apply(chatTheme.timestamp.hex, lastValidChatTimestampHex);
+      String sysHexV = parseOptionalHex.apply(chatTheme.system.hex, lastValidChatSystemHex);
+      String menHexV = parseOptionalHex.apply(chatTheme.mention.hex, lastValidChatMentionHex);
+      int mentionStrengthV = chatTheme.mentionStrength.getValue();
+
+      ChatThemeSettings nextChatTheme = new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+      chatThemeSettingsBus.set(nextChatTheme);
+      themeManager.refreshChatStyles();
+    };
+    chatPreviewTimer.addActionListener(e -> applyChatPreview.run());
+    final Runnable scheduleChatPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      chatPreviewTimer.restart();
+    };
+
+    final javax.swing.Timer fontPreviewTimer = new javax.swing.Timer(120, null);
+    fontPreviewTimer.setRepeats(false);
+    final Runnable applyFontPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      UiSettings base = settingsBus != null ? settingsBus.get() : null;
+      if (base == null) return;
+
+      String fam = java.util.Objects.toString(fonts.fontFamily.getSelectedItem(), "").trim();
+      if (fam.isBlank()) fam = "Monospaced";
+      int size = ((Number) fonts.fontSize.getValue()).intValue();
+      if (size < 8) size = 8;
+      if (size > 48) size = 48;
+
+      settingsBus.set(base.withChatFontFamily(fam).withChatFontSize(size));
+    };
+    fontPreviewTimer.addActionListener(e -> applyFontPreview.run());
+    final Runnable scheduleFontPreview = () -> {
+      if (suppressLivePreview.get()) return;
+      fontPreviewTimer.restart();
+    };
+
+    closeables.add(() -> {
+      lafPreviewTimer.stop();
+      chatPreviewTimer.stop();
+      fontPreviewTimer.stop();
+    });
+
+    final Runnable restoreCommittedAppearance = () -> {
+      if (themeManager == null) return;
+      suppressLivePreview.set(true);
+      try {
+        lafPreviewTimer.stop();
+        chatPreviewTimer.stop();
+        fontPreviewTimer.stop();
+
+        UiSettings ui = committedUiSettings.get();
+        if (ui != null) {
+          settingsBus.set(ui);
+        }
+        if (accentSettingsBus != null) {
+          ThemeAccentSettings a = committedAccentSettings.get();
+          accentSettingsBus.set(a != null ? a : new ThemeAccentSettings(null, 70));
+        }
+        if (tweakSettingsBus != null) {
+          ThemeTweakSettings tw = committedTweakSettings.get();
+          tweakSettingsBus.set(tw != null ? tw : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+        }
+        if (chatThemeSettingsBus != null) {
+          ChatThemeSettings ct = committedChatThemeSettings.get();
+          chatThemeSettingsBus.set(ct != null ? ct : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+        }
+
+        themeManager.applyTheme(committedThemeId.get());
+      } finally {
+        suppressLivePreview.set(false);
+      }
+    };
+
     final boolean[] ignoreThemeComboEvents = new boolean[] { true };
     theme.combo.addActionListener(e -> {
       if (ignoreThemeComboEvents[0]) return;
-      String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
-      if (sel.isBlank()) return;
-      // Live preview: apply immediately, but do not persist until Apply/OK
-      if (!sameThemeInternal(committedThemeId.get(), sel)) {
-        themeManager.applyTheme(sel);
-      }
+      scheduleLafPreview.run();
     });
     ignoreThemeComboEvents[0] = false;
 
-    FontControls fonts = buildFontControls(current, closeables);
-    AccentControls accent = buildAccentControls(accentSettingsBus != null ? accentSettingsBus.get() : new ThemeAccentSettings(null, 70));
-    TweakControls tweaks = buildTweakControls(tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+    // LAF + accent/tweak preview
+    accent.enabled.addActionListener(e -> scheduleLafPreview.run());
+    accent.strength.addChangeListener(e -> scheduleLafPreview.run());
+    accent.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = accent.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidAccentHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidAccentHex.set(toHex(c));
+      }
+      scheduleLafPreview.run();
+    }));
+    tweaks.density.addActionListener(e -> scheduleLafPreview.run());
+    tweaks.cornerRadius.addChangeListener(e -> scheduleLafPreview.run());
 
-    ChatThemeControls chatTheme = buildChatThemeControls(
-        chatThemeSettingsBus != null
-            ? chatThemeSettingsBus.get()
-            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35)
-    );
+    // Chat theme preview (transcript-only)
+    chatTheme.preset.addActionListener(e -> scheduleChatPreview.run());
+    chatTheme.mentionStrength.addChangeListener(e -> scheduleChatPreview.run());
+    chatTheme.timestamp.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = chatTheme.timestamp.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidChatTimestampHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidChatTimestampHex.set(toHex(c));
+      }
+      scheduleChatPreview.run();
+    }));
+    chatTheme.system.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = chatTheme.system.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidChatSystemHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidChatSystemHex.set(toHex(c));
+      }
+      scheduleChatPreview.run();
+    }));
+    chatTheme.mention.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      String raw = chatTheme.mention.hex.getText();
+      raw = raw != null ? raw.trim() : "";
+      if (raw.isBlank()) {
+        lastValidChatMentionHex.set(null);
+      } else {
+        Color c = parseHexColorLenient(raw);
+        if (c != null) lastValidChatMentionHex.set(toHex(c));
+      }
+      scheduleChatPreview.run();
+    }));
+
+    // Chat font preview
+    fonts.fontFamily.addActionListener(e -> scheduleFontPreview.run());
+    fonts.fontFamily.addItemListener(e -> {
+      if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+        scheduleFontPreview.run();
+      }
+    });
+    java.awt.Component ffEditor = fonts.fontFamily.getEditor() != null
+        ? fonts.fontFamily.getEditor().getEditorComponent()
+        : null;
+    if (ffEditor instanceof JTextField tf) {
+      tf.getDocument().addDocumentListener(new SimpleDocListener(scheduleFontPreview));
+    }
+    fonts.fontSize.addChangeListener(e -> scheduleFontPreview.run());
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
     NotificationSoundSettings soundSettings = notificationSoundSettingsBus != null
         ? notificationSoundSettingsBus.get()
@@ -705,14 +949,26 @@ public class PreferencesDialog {
       runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
       NetTlsContext.configure(trustAllTlsV);
 
-      if (themeChanged || accentChanged || tweaksChanged) {
-        // Full UI refresh (also triggers a chat restyle)
-        themeManager.applyTheme(next.theme());
-        committedThemeId.set(normalizeThemeIdInternal(next.theme()));
-      } else if (chatThemeChanged) {
-        // Only the transcript palette changed
-        themeManager.refreshChatStyles();
+      if (themeManager != null) {
+        if (themeChanged || accentChanged || tweaksChanged) {
+          // Full UI refresh (also triggers a chat restyle)
+          themeManager.applyTheme(next.theme());
+        } else if (chatThemeChanged) {
+          // Only the transcript palette changed
+          themeManager.refreshChatStyles();
+        }
       }
+
+      // Update committed snapshot for live preview rollback (Cancel/window close).
+      committedThemeId.set(normalizeThemeIdInternal(next.theme()));
+      committedUiSettings.set(next);
+      committedAccentSettings.set(nextAccent);
+      committedTweakSettings.set(nextTweaks);
+      committedChatThemeSettings.set(nextChatTheme);
+      lastValidAccentHex.set(nextAccent.accentColor());
+      lastValidChatTimestampHex.set(nextChatTheme.timestampColor());
+      lastValidChatSystemHex.set(nextChatTheme.systemColor());
+      lastValidChatMentionHex.set(nextChatTheme.mentionBgColor());
     };
 
     apply.addActionListener(e -> doApply.run());
@@ -720,11 +976,7 @@ public class PreferencesDialog {
     this.dialog = d;
     d.addWindowListener(new java.awt.event.WindowAdapter() {
       @Override public void windowClosing(java.awt.event.WindowEvent e) {
-        String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
-        String committed = committedThemeId.get();
-        if (!sameThemeInternal(committed, sel)) {
-          themeManager.applyTheme(committed);
-        }
+        restoreCommittedAppearance.run();
       }
     });
 
@@ -739,11 +991,7 @@ public class PreferencesDialog {
       d.dispose();
     });
     cancel.addActionListener(e -> {
-      String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
-      String committed = committedThemeId.get();
-      if (!sameThemeInternal(committed, sel)) {
-        themeManager.applyTheme(committed);
-      }
+      restoreCommittedAppearance.run();
       d.dispose();
     });
 
@@ -1191,7 +1439,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     ThemeAccentSettings cur = current != null ? current : new ThemeAccentSettings(null, 70);
 
     JCheckBox enabled = new JCheckBox("Override theme accent");
-    enabled.setToolTipText("If enabled, your chosen accent is blended into the current theme. Apply/OK to commit.");
+    enabled.setToolTipText("If enabled, your chosen accent is blended into the current theme. Changes preview live; Apply/OK saves.");
     enabled.setSelected(cur.enabled());
 
     JTextField hex = new JTextField(cur.accentColor() != null ? cur.accentColor() : "", 10);
@@ -1365,7 +1613,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     };
 
     JComboBox<DensityOption> density = new JComboBox<>(opts);
-    density.setToolTipText("Changes the overall UI spacing / row height. Apply/OK to commit.");
+    density.setToolTipText("Changes the overall UI spacing / row height. Changes preview live; Apply/OK saves.");
     String curId = cur.densityId();
     for (DensityOption o : opts) {
       if (o != null && o.id().equalsIgnoreCase(curId)) {
@@ -1378,7 +1626,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     cornerRadius.setPaintTicks(true);
     cornerRadius.setMajorTickSpacing(5);
     cornerRadius.setMinorTickSpacing(1);
-    cornerRadius.setToolTipText("Controls rounded corner radius for buttons/fields/etc. Apply/OK to commit.");
+    cornerRadius.setToolTipText("Controls rounded corner radius for buttons/fields/etc. Changes preview live; Apply/OK saves.");
 
     return new TweakControls(density, cornerRadius);
   }
@@ -1390,6 +1638,45 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JComboBox<String> fontFamily = new JComboBox<>(families);
     fontFamily.setEditable(true);
     fontFamily.setSelectedItem(current.chatFontFamily());
+
+    // Allow scrolling through the font list while hovering with the mousewheel.
+    if (closeables != null) {
+      try {
+        closeables.add(MouseWheelDecorator.decorateComboBoxSelection(fontFamily));
+      } catch (Exception ignored) {
+        // best-effort
+      }
+    } else {
+      try {
+        MouseWheelDecorator.decorateComboBoxSelection(fontFamily);
+      } catch (Exception ignored) {
+        // best-effort
+      }
+    }
+
+    // Render each family name using its own font in the dropdown.
+    Font baseFont = fontFamily.getFont();
+    fontFamily.setRenderer(new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+
+        String family = value != null ? value.toString() : "";
+        if (!family.isBlank()) {
+          Font candidate = new Font(family, baseFont.getStyle(), baseFont.getSize());
+          // If the requested font isn't available (editable entry), keep the UI default.
+          if (candidate != null && (candidate.getFamily().equalsIgnoreCase(family) || candidate.getName().equalsIgnoreCase(family))) {
+            label.setFont(candidate);
+          } else {
+            label.setFont(baseFont);
+          }
+        } else {
+          label.setFont(baseFont);
+        }
+
+        return label;
+      }
+    });
 
     JSpinner fontSize = numberSpinner(current.chatFontSize(), 8, 48, 1, closeables);
 
@@ -2703,7 +2990,7 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(tweaks.cornerRadius, "growx");
 
     JButton reset = new JButton("Reset to defaults");
-    reset.setToolTipText("Revert the appearance controls to default values. Changes apply only when you click Apply/OK.");
+    reset.setToolTipText("Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
     reset.addActionListener(e -> {
       theme.combo.setSelectedItem("dark");
       fonts.fontFamily.setSelectedItem("Monospaced");
