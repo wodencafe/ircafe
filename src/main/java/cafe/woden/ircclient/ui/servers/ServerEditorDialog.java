@@ -23,6 +23,7 @@ import java.util.Optional;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -56,7 +57,10 @@ public class ServerEditorDialog extends JDialog {
 
   private final JCheckBox saslEnabledBox = new JCheckBox("Enable SASL");
   private final JTextField saslUserField = new JTextField();
-  private final JTextField saslPassField = new JTextField();
+  /**
+   * SASL secret (password / key material). Use a password field so we don't echo secrets in plain text.
+   */
+  private final JPasswordField saslPassField = new JPasswordField();
   private final JComboBox<String> saslMechanism = new JComboBox<>(new String[]{
       "AUTO",
       "PLAIN",
@@ -164,10 +168,19 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(realNameField, "IRCafe User");
     applyFieldStyle(saslUserField, "account");
     applyFieldStyle(saslPassField, "password / key");
+    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
+    // Using the string key avoids any compile-time dependency on FlatLaf constants.
+    saslPassField.putClientProperty("JPasswordField.showRevealButton", true);
+    // FlatLaf also supports a STYLE flag; keep both for compatibility.
+    appendStyle(saslPassField, "showRevealButton:true");
     applyFieldStyle(proxyHostField, "127.0.0.1");
     applyFieldStyle(proxyPortField, "1080");
     applyFieldStyle(proxyUserField, "(optional)");
     applyFieldStyle(proxyPassField, "(optional)");
+    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
+    proxyPassField.putClientProperty("JPasswordField.showRevealButton", true);
+    // FlatLaf also supports a STYLE flag; keep both for compatibility.
+    appendStyle(proxyPassField, "showRevealButton:true");
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
@@ -695,7 +708,8 @@ public class ServerEditorDialog extends JDialog {
     IrcProperties.Server.Sasl sasl;
     if (saslEnabledBox.isSelected()) {
       String u = trim(saslUserField.getText());
-      String p = Objects.toString(saslPassField.getText(), "");
+      // JPasswordField stores secret as a char[]. Convert only when building the immutable config object.
+      String p = new String(saslPassField.getPassword());
       String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
 
       String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
@@ -771,6 +785,19 @@ public class ServerEditorDialog extends JDialog {
   private static void applyFieldStyle(JTextField f, String placeholder) {
     f.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, placeholder);
     f.putClientProperty(FlatClientProperties.STYLE, "arc:10;");
+  }
+
+  private static void appendStyle(JComponent c, String styleSnippet) {
+    if (c == null || styleSnippet == null) return;
+    String snip = styleSnippet.trim();
+    if (snip.isBlank()) return;
+
+    Object existing = c.getClientProperty(FlatClientProperties.STYLE);
+    String s = existing != null ? existing.toString().trim() : "";
+    if (!s.isBlank() && !s.endsWith(";")) s = s + ";";
+    s = s + snip;
+    if (!s.endsWith(";")) s = s + ";";
+    c.putClientProperty(FlatClientProperties.STYLE, s);
   }
 
   private static GridBagConstraints baseGbc() {
