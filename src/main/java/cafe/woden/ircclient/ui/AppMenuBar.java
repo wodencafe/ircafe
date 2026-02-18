@@ -10,6 +10,7 @@ import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
 import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
+import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -210,7 +211,8 @@ public class AppMenuBar extends JMenuBar {
         SwingUtilities.getWindowAncestor(this),
         "IRCafe\nA modern Java IRC client.",
         "About IRCafe",
-        javax.swing.JOptionPane.INFORMATION_MESSAGE));
+        javax.swing.JOptionPane.INFORMATION_MESSAGE,
+        AppIcons.aboutIcon()));
     help.add(about);
 
     add(file);

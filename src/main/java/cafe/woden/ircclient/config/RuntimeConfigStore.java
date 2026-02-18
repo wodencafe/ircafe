@@ -366,6 +366,83 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTrayNotificationSoundsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      tray.put("notificationSoundsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.notificationSoundsEnabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTrayNotificationSound(String soundId) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(soundId, "").trim();
+      if (v.isEmpty()) v = "NOTIF_1";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      tray.put("notificationSound", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.notificationSound setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTrayNotificationSoundUseCustom(boolean useCustom) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      tray.put("notificationSoundUseCustom", useCustom);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.notificationSoundUseCustom setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTrayNotificationSoundCustomPath(String relativePath) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(relativePath, "").trim();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      if (v.isEmpty()) {
+        tray.remove("notificationSoundCustomPath");
+      } else {
+        tray.put("notificationSoundCustomPath", v);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.notificationSoundCustomPath setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberNotificationRuleCooldownSeconds(int seconds) {
     try {
       if (file.toString().isBlank()) return;

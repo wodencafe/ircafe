@@ -103,6 +103,19 @@ ircafe:
       notifySuppressWhenTargetActive: true
       # Linux only: prefer D-Bus notifications with click actions (falls back to notify-send). Default: true.
       linuxDbusActionsEnabled: true
+
+      # Play a sound alongside desktop notifications. Default: true.
+      notificationSoundsEnabled: true
+
+      # Which bundled sound to use (BuiltInSound enum name).
+      # Valid values: NOTIF_1 .. NOTIF_21
+      notificationSound: "NOTIF_1"
+
+      # Optional: use a custom file stored under the runtime config directory.
+      # If enabled, IRCafe plays `notificationSoundCustomPath` instead of a bundled sound.
+      # Supported formats: MP3, WAV.
+      # notificationSoundUseCustom: false
+      # notificationSoundCustomPath: "sounds/my-notification.mp3"
     # Optional: custom palette (hex strings). If omitted, uses built-in 32-color palette.
     # nickColors:
     #   - "#E57373"

@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.tray;
 
+import cafe.woden.ircclient.ui.icons.AppIcons;
+
 import javax.imageio.ImageIO;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -57,6 +59,12 @@ final class TrayIconFactory {
   }
 
   static InputStream createDefaultTrayIconPngStream() {
+    // Prefer bundled tray icon (looks consistent with the app icon).
+    InputStream bundled = AppIcons.trayPngStream();
+    if (bundled != null) {
+      return bundled;
+    }
+
     try {
       BufferedImage img = (BufferedImage) createDefaultTrayImage();
       ByteArrayOutputStream out = new ByteArrayOutputStream(8 * 1024);

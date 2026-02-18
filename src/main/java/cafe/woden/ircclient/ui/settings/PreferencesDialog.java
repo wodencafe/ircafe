@@ -25,20 +25,30 @@ import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
+import cafe.woden.ircclient.notify.sound.BuiltInSound;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
+import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.beans.PropertyChangeListener;
 import java.awt.Color;
 import java.awt.Font;
+import java.io.File;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.time.format.DateTimeFormatter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JColorChooser;
+import javax.swing.JFileChooser;
 import javax.swing.JTextField;
 import javax.swing.TransferHandler;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
@@ -117,6 +127,8 @@ public class PreferencesDialog {
   private final TrayService trayService;
   private final TrayNotificationService trayNotificationService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
+  private final NotificationSoundSettingsBus notificationSoundSettingsBus;
+  private final NotificationSoundService notificationSoundService;
 
   private JDialog dialog;
 
@@ -133,7 +145,9 @@ public class PreferencesDialog {
                            TargetCoordinator targetCoordinator,
                            TrayService trayService,
                            TrayNotificationService trayNotificationService,
-                           GnomeDbusNotificationBackend gnomeDbusBackend) {
+                           GnomeDbusNotificationBackend gnomeDbusBackend,
+                           NotificationSoundSettingsBus notificationSoundSettingsBus,
+                           NotificationSoundService notificationSoundService) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.runtimeConfig = runtimeConfig;
@@ -148,6 +162,8 @@ public class PreferencesDialog {
     this.trayService = trayService;
     this.trayNotificationService = trayNotificationService;
     this.gnomeDbusBackend = gnomeDbusBackend;
+    this.notificationSoundSettingsBus = notificationSoundSettingsBus;
+    this.notificationSoundService = notificationSoundService;
   }
 
   public void open(Window owner) {
@@ -171,7 +187,10 @@ public class PreferencesDialog {
     ThemeControls theme = buildThemeControls(current, themeLabelById);
     FontControls fonts = buildFontControls(current, closeables);
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
-    TrayControls trayControls = buildTrayControls(current);
+    NotificationSoundSettings soundSettings = notificationSoundSettingsBus != null
+        ? notificationSoundSettingsBus.get()
+        : new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
+    TrayControls trayControls = buildTrayControls(current, soundSettings);
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
@@ -200,7 +219,8 @@ public class PreferencesDialog {
     FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
 
     JPanel appearancePanel = buildAppearancePanel(theme, fonts);
-    JPanel startupPanel = buildStartupPanel(autoConnectOnStart, trayControls);
+    JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
+    JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
@@ -233,6 +253,18 @@ public class PreferencesDialog {
       boolean trayNotifySuppressWhenTargetActiveV = trayEnabledV && trayControls.notifySuppressWhenTargetActive.isSelected();
 
       boolean trayLinuxDbusActionsEnabledV = trayEnabledV && trayControls.linuxDbusActions.isSelected();
+
+      boolean trayNotificationSoundsEnabledV = trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
+      BuiltInSound selectedSoundV = (BuiltInSound) trayControls.notificationSound.getSelectedItem();
+      String trayNotificationSoundIdV = selectedSoundV != null ? selectedSoundV.name() : BuiltInSound.NOTIF_1.name();
+
+      boolean trayNotificationSoundUseCustomV = trayControls.notificationSoundUseCustom.isSelected();
+      String trayNotificationSoundCustomPathV = trayControls.notificationSoundCustomPath.getText();
+      trayNotificationSoundCustomPathV = trayNotificationSoundCustomPathV != null ? trayNotificationSoundCustomPathV.trim() : "";
+      if (trayNotificationSoundCustomPathV.isBlank()) trayNotificationSoundCustomPathV = null;
+      if (trayNotificationSoundUseCustomV && trayNotificationSoundCustomPathV == null) {
+        trayNotificationSoundUseCustomV = false;
+      }
 
       boolean timestampsEnabledV = timestamps.enabled.isSelected();
       boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
@@ -442,6 +474,20 @@ public class PreferencesDialog {
       runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(next.trayNotifyOnlyWhenMinimizedOrHidden());
       runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(next.trayNotifySuppressWhenTargetActive());
       runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
+
+      if (notificationSoundSettingsBus != null) {
+        notificationSoundSettingsBus.set(new NotificationSoundSettings(
+            trayNotificationSoundsEnabledV,
+            trayNotificationSoundIdV,
+            trayNotificationSoundUseCustomV,
+            trayNotificationSoundCustomPathV
+        ));
+      }
+      runtimeConfig.rememberTrayNotificationSoundsEnabled(trayNotificationSoundsEnabledV);
+      runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
+      runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
+      runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+
       if (trayService != null) {
         trayService.applySettings();
       }
@@ -541,7 +587,8 @@ public class PreferencesDialog {
     JTabbedPane tabs = new DynamicTabbedPane();
 
     tabs.addTab("Appearance", wrapTab(appearancePanel));
-    tabs.addTab("Startup & Connection", wrapTab(startupPanel));
+    tabs.addTab("Startup", wrapTab(startupPanel));
+    tabs.addTab("Tray & Notifications", wrapTab(trayPanel));
     tabs.addTab("Chat", wrapTab(chatPanel));
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
@@ -984,8 +1031,59 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return autoConnectOnStart;
   }
 
+  private String importNotificationSoundFileToRuntimeDir(File source) throws Exception {
+    if (source == null) return null;
 
-  private TrayControls buildTrayControls(UiSettings current) {
+    String name = Objects.toString(source.getName(), "").trim();
+    if (name.isBlank()) throw new IllegalArgumentException("Invalid file name");
+
+    String lower = name.toLowerCase(Locale.ROOT);
+    boolean mp3 = lower.endsWith(".mp3");
+    boolean wav = lower.endsWith(".wav");
+    if (!mp3 && !wav) {
+      throw new IllegalArgumentException("Only .mp3 and .wav are supported");
+    }
+
+    Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
+    Path base = cfg != null ? cfg.getParent() : null;
+    if (base == null) {
+      throw new IllegalStateException("Runtime config directory is unavailable");
+    }
+
+    Path soundsDir = base.resolve("sounds");
+    Files.createDirectories(soundsDir);
+
+    // Sanitize filename for portability.
+    String sanitized = name.replaceAll("[^A-Za-z0-9._-]+", "_");
+    if (sanitized.isBlank()) {
+      sanitized = mp3 ? "notification.mp3" : "notification.wav";
+    }
+
+    String ext = mp3 ? "mp3" : "wav";
+    String baseName = sanitized;
+    int dot = sanitized.lastIndexOf('.');
+    if (dot > 0) {
+      baseName = sanitized.substring(0, dot);
+    }
+
+    Path dest = soundsDir.resolve(baseName + "." + ext);
+    int i = 2;
+    while (Files.exists(dest)) {
+      dest = soundsDir.resolve(baseName + "-" + i + "." + ext);
+      i++;
+    }
+
+    Files.copy(source.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+    // Store relative to the runtime config directory.
+    return "sounds/" + dest.getFileName();
+  }
+
+
+  private TrayControls buildTrayControls(UiSettings current, NotificationSoundSettings soundSettings) {
+    if (soundSettings == null) {
+      soundSettings = new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
+    }
     JCheckBox enabled = new JCheckBox("Enable system tray icon", current.trayEnabled());
     JCheckBox closeToTray = new JCheckBox("Close button hides to tray instead of exiting", current.trayCloseToTray());
     JCheckBox minimizeToTray = new JCheckBox("Minimize button hides to tray", current.trayMinimizeToTray());
@@ -1052,6 +1150,84 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     notifyOnlyWhenMinimizedOrHidden.setToolTipText("Only notify when IRCafe is minimized or hidden to tray.");
     notifySuppressWhenTargetActive.setToolTipText("If the message is in the currently selected buffer, suppress the notification.");
 
+    JCheckBox notificationSoundsEnabled = new JCheckBox(
+        "Play sound with desktop notifications",
+        soundSettings.enabled()
+    );
+    notificationSoundsEnabled.setToolTipText("Plays a short sound whenever IRCafe shows a desktop notification.");
+
+    JCheckBox notificationSoundUseCustom = new JCheckBox(
+        "Use custom sound file",
+        soundSettings.useCustom()
+    );
+    notificationSoundUseCustom.setToolTipText("If enabled, IRCafe will play a custom file stored next to your runtime config.\n" +
+        "Supported formats: MP3, WAV.");
+
+    JTextField notificationSoundCustomPath = new JTextField(Objects.toString(soundSettings.customPath(), ""));
+    notificationSoundCustomPath.setEditable(false);
+    notificationSoundCustomPath.setToolTipText("Custom sound path (relative to the runtime config directory).\n" +
+        "Click Browse... to import a file.");
+
+    JComboBox<BuiltInSound> notificationSound = new JComboBox<>(BuiltInSound.values());
+    notificationSound.setSelectedItem(BuiltInSound.fromId(soundSettings.soundId()));
+    notificationSound.setToolTipText("Choose which bundled sound to use for notifications.");
+
+    JButton browseCustomSound = new JButton("Browse...");
+    browseCustomSound.setToolTipText("Choose an MP3 or WAV file and copy it into IRCafe's runtime config directory.");
+    browseCustomSound.addActionListener(e -> {
+      try {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(true);
+        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+        int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustomSound));
+        if (result != JFileChooser.APPROVE_OPTION) return;
+
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        String rel = importNotificationSoundFileToRuntimeDir(f);
+        if (rel != null && !rel.isBlank()) {
+          notificationSoundCustomPath.setText(rel);
+          notificationSoundUseCustom.setSelected(true);
+        }
+      } catch (Exception ex) {
+        javax.swing.JOptionPane.showMessageDialog(
+            SwingUtilities.getWindowAncestor(browseCustomSound),
+            "Could not import sound file.\n\n" + ex.getMessage(),
+            "Import failed",
+            javax.swing.JOptionPane.ERROR_MESSAGE
+        );
+      }
+    });
+
+    JButton clearCustomSound = new JButton("Clear");
+    clearCustomSound.setToolTipText("Stop using a custom file and revert to bundled sounds.");
+    clearCustomSound.addActionListener(e -> {
+      notificationSoundUseCustom.setSelected(false);
+      notificationSoundCustomPath.setText("");
+    });
+
+    JButton testSound = new JButton("Test sound");
+    testSound.setToolTipText("Play the selected sound.");
+    testSound.addActionListener(e -> {
+      try {
+        if (notificationSoundService != null) {
+          if (notificationSoundUseCustom.isSelected()) {
+            String rel = notificationSoundCustomPath.getText();
+            rel = rel != null ? rel.trim() : "";
+            if (!rel.isBlank()) {
+              notificationSoundService.previewCustom(rel);
+            }
+          } else {
+            BuiltInSound s = (BuiltInSound) notificationSound.getSelectedItem();
+            notificationSoundService.preview(s);
+          }
+        }
+      } catch (Throwable ignored) {
+      }
+    });
+
     Runnable refreshEnabled = () -> {
       boolean en = enabled.isSelected();
       closeToTray.setEnabled(en);
@@ -1068,6 +1244,22 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       linuxDbusActions.setEnabled(en && linux && linuxActionsSupported);
       testNotification.setEnabled(en);
 
+      notificationSoundsEnabled.setEnabled(en);
+
+      boolean snd = en && notificationSoundsEnabled.isSelected();
+      notificationSoundUseCustom.setEnabled(snd);
+
+      boolean useCustom = snd && notificationSoundUseCustom.isSelected();
+      notificationSoundCustomPath.setEnabled(snd);
+      browseCustomSound.setEnabled(snd);
+
+      String rel = notificationSoundCustomPath.getText();
+      rel = rel != null ? rel.trim() : "";
+      clearCustomSound.setEnabled(snd && !rel.isBlank());
+
+      notificationSound.setEnabled(snd && !useCustom);
+      testSound.setEnabled(snd);
+
       if (!en) {
         closeToTray.setSelected(false);
         minimizeToTray.setSelected(false);
@@ -1081,6 +1273,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         notifySuppressWhenTargetActive.setSelected(false);
 
         linuxDbusActions.setSelected(false);
+
+        notificationSoundsEnabled.setSelected(false);
       }
 
       if (!(linux && linuxActionsSupported)) {
@@ -1089,35 +1283,76 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     };
 
     enabled.addActionListener(e -> refreshEnabled.run());
+    notificationSoundsEnabled.addActionListener(e -> refreshEnabled.run());
+    notificationSoundUseCustom.addActionListener(e -> refreshEnabled.run());
     refreshEnabled.run();
 
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    panel.add(enabled, "growx");
-    panel.add(closeToTray, "growx");
-    panel.add(minimizeToTray, "growx");
-    panel.add(startMinimized, "growx");
-    panel.add(new JLabel("Notifications:"), "gaptop 8");
-    panel.add(notifyHighlights, "growx");
-    panel.add(notifyPrivateMessages, "growx");
-    panel.add(notifyConnectionState, "growx");
-    panel.add(new JSeparator(), "growx");
-    panel.add(notifyOnlyWhenUnfocused, "growx");
-    panel.add(notifyOnlyWhenMinimizedOrHidden, "growx");
-    panel.add(notifySuppressWhenTargetActive, "growx");
-    panel.add(new JLabel("Linux:"), "gaptop 8");
-    panel.add(linuxDbusActions, "growx");
-    panel.add(testNotification, "w 180!");
+JPanel trayTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+trayTab.setOpaque(false);
+trayTab.add(enabled, "growx");
+trayTab.add(closeToTray, "growx");
+trayTab.add(minimizeToTray, "growx");
+trayTab.add(startMinimized, "growx, wrap");
+trayTab.add(helpText("Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."), "growx");
 
-    if (linux && !linuxActionsSupported) {
-      panel.add(helpText("Linux notification actions were not detected for this session.\n" +
-          "IRCafe will fall back to notify-send."), "growx");
-    }
-    panel.add(helpText("Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."), "growx");
+JPanel notificationsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+notificationsTab.setOpaque(false);
+notificationsTab.add(notifyHighlights, "growx");
+notificationsTab.add(notifyPrivateMessages, "growx");
+notificationsTab.add(notifyConnectionState, "growx");
+notificationsTab.add(new JSeparator(), "growx, gaptop 8");
+notificationsTab.add(notifyOnlyWhenUnfocused, "growx");
+notificationsTab.add(notifyOnlyWhenMinimizedOrHidden, "growx");
+notificationsTab.add(notifySuppressWhenTargetActive, "growx, wrap");
+notificationsTab.add(testNotification, "w 180!");
+notificationsTab.add(helpText("Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."), "growx");
 
+JPanel soundsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+soundsTab.setOpaque(false);
+soundsTab.add(notificationSoundsEnabled, "growx");
+soundsTab.add(notificationSoundUseCustom, "growx, wrap");
+soundsTab.add(new JLabel("Custom file:"), "split 4");
+soundsTab.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
+soundsTab.add(browseCustomSound, "w 110!");
+soundsTab.add(clearCustomSound, "w 80!, wrap");
+soundsTab.add(new JLabel("Built-in:"), "split 3");
+soundsTab.add(notificationSound, "w 240!");
+soundsTab.add(testSound, "w 120!, wrap");
+
+Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
+Path base = cfg != null ? cfg.getParent() : null;
+if (base != null) {
+  soundsTab.add(helpText("Custom sounds are copied to: " + base.resolve("sounds") + "\n" +
+      "Tip: Use small files (short MP3/WAV) for snappy notifications."), "growx");
+}
+
+JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+linuxTab.setOpaque(false);
+linuxTab.add(linuxDbusActions, "growx, wrap");
+if (!linux) {
+  linuxTab.add(helpText("Linux only."), "growx");
+} else if (!linuxActionsSupported) {
+  linuxTab.add(helpText("Linux notification actions were not detected for this session.\n" +
+      "IRCafe will fall back to notify-send."), "growx");
+} else {
+  linuxTab.add(helpText("Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."), "growx");
+}
+
+JTabbedPane subTabs = new JTabbedPane();
+subTabs.addTab("Tray", trayTab);
+subTabs.addTab("Desktop notifications", notificationsTab);
+subTabs.addTab("Sounds", soundsTab);
+subTabs.addTab("Linux / Advanced", linuxTab);
+
+JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+panel.setOpaque(false);
+panel.add(subTabs, "growx, wmin 0");
     return new TrayControls(enabled, closeToTray, minimizeToTray, startMinimized,
         notifyHighlights, notifyPrivateMessages, notifyConnectionState,
         notifyOnlyWhenUnfocused, notifyOnlyWhenMinimizedOrHidden, notifySuppressWhenTargetActive,
         linuxDbusActions, testNotification,
+        notificationSoundsEnabled, notificationSoundUseCustom, notificationSoundCustomPath, browseCustomSound, clearCustomSound,
+        notificationSound, testSound,
         panel);
   }
 
@@ -2067,18 +2302,21 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return form;
   }
 
-
-  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart, TrayControls trayControls) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]6[]12[]6[]6[]6[]6[]"));
-    form.add(tabTitle("Startup & Connection"), "growx, wrap");
+  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]"));
+    form.add(tabTitle("Startup"), "growx, wrap");
 
     form.add(sectionTitle("On launch"), "growx, wrap");
     form.add(autoConnectOnStart, "growx, wrap");
     form.add(helpText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads."), "growx, wrap");
 
-    form.add(sectionTitle("System tray"), "growx, wrap");
-    form.add(trayControls.panel, "growx");
+    return form;
+  }
 
+  private JPanel buildTrayNotificationsPanel(TrayControls trayControls) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]"));
+    form.add(tabTitle("Tray & Notifications"), "growx, wrap");
+    form.add(trayControls.panel, "growx");
     return form;
   }
 
@@ -3214,6 +3452,13 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
                               JCheckBox notifySuppressWhenTargetActive,
                               JCheckBox linuxDbusActions,
                               JButton testNotification,
+                              JCheckBox notificationSoundsEnabled,
+                              JCheckBox notificationSoundUseCustom,
+                              JTextField notificationSoundCustomPath,
+                              JButton browseCustomSound,
+                              JButton clearCustomSound,
+                              JComboBox<BuiltInSound> notificationSound,
+                              JButton testSound,
                               JPanel panel) {
   }
 

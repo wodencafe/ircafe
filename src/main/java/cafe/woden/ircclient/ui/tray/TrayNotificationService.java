@@ -6,6 +6,7 @@ import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import dorkbox.notify.Notify;
 import dorkbox.notify.Position;
 import dorkbox.notify.Theme;
@@ -57,6 +58,7 @@ public class TrayNotificationService {
   private final ObjectProvider<TargetCoordinator> targetCoordinatorProvider;
   private final ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
+  private final NotificationSoundService soundService;
   private final FlowableProcessor<NotificationRequest> requests;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final Map<String, Long> lastContentAtMs = new ConcurrentHashMap<>();
@@ -67,7 +69,8 @@ public class TrayNotificationService {
       ObjectProvider<MainFrame> mainFrameProvider,
       ObjectProvider<TargetCoordinator> targetCoordinatorProvider,
       ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
-      ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider
+      ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
+      NotificationSoundService soundService
   ) {
     this.settingsBus = settingsBus;
     this.trayServiceProvider = trayServiceProvider;
@@ -75,6 +78,7 @@ public class TrayNotificationService {
     this.targetCoordinatorProvider = targetCoordinatorProvider;
     this.serverTreeProvider = serverTreeProvider;
     this.gnomeDbusProvider = gnomeDbusProvider;
+    this.soundService = soundService;
 
     this.requests = PublishProcessor.<NotificationRequest>create().toSerialized();
     installRateLimiterPipeline();
@@ -226,6 +230,12 @@ public class TrayNotificationService {
   private void sendNow(NotificationRequest req) {
     if (req == null) return;
     try {
+      // Phase 2: single global sound for all delivered tray notifications.
+      // This uses the same rate-limited/deduped pipeline as the tray popup itself.
+      if (soundService != null) {
+        soundService.play();
+      }
+
       if (tryWindowsToastPopup(req.title(), req.body(), req.onClick())) return;
       if (tryLinuxNotifySend(req.title(), req.body(), req.onClick())) return;
       if (tryMacOsascript(req.title(), req.body())) return;

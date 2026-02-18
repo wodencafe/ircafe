@@ -32,6 +32,7 @@ import org.springframework.context.annotation.Bean;
 public class IrcSwingApp {
   public static void main(String[] args) {
     ConsoleTeeHub.install();
+
     new SpringApplicationBuilder(IrcSwingApp.class)
         .headless(false)
         .run(args);

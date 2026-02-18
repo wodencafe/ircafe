@@ -142,7 +142,19 @@ public record UiProperties(
        * <p>This enables click-to-open behavior on desktops that support notification actions.
        * If unsupported, IRCafe will silently fall back to {@code notify-send}.
        */
-      Boolean linuxDbusActionsEnabled
+      Boolean linuxDbusActionsEnabled,
+
+      /** Play a sound alongside desktop notifications. */
+      Boolean notificationSoundsEnabled,
+
+      /** The built-in sound id (BuiltInSound enum name) used for notifications. */
+      String notificationSound,
+
+      /** If true, play a custom sound file from the runtime config directory instead of a bundled sound. */
+      Boolean notificationSoundUseCustom,
+
+      /** Relative path under the runtime config directory for the custom sound file (e.g. "sounds/my.mp3"). */
+      String notificationSoundCustomPath
   ) {
     public Tray {
       if (enabled == null) enabled = true;
@@ -162,6 +174,20 @@ public record UiProperties(
 
       // Default to "on" - we only actually use D-Bus if the session supports actions.
       if (linuxDbusActionsEnabled == null) linuxDbusActionsEnabled = true;
+
+      // Keep Phase-2 behavior (on) unless explicitly disabled.
+      if (notificationSoundsEnabled == null) notificationSoundsEnabled = true;
+      if (notificationSound == null || notificationSound.isBlank()) notificationSound = "NOTIF_1";
+
+      if (notificationSoundUseCustom == null) notificationSoundUseCustom = false;
+      if (notificationSoundCustomPath != null && notificationSoundCustomPath.isBlank()) {
+        notificationSoundCustomPath = null;
+      }
+
+      // If the user toggles custom on but no path exists, fall back to bundled.
+      if (Boolean.TRUE.equals(notificationSoundUseCustom) && notificationSoundCustomPath == null) {
+        notificationSoundUseCustom = false;
+      }
     }
   }
 

@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.ui.icons.AppIcons;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +72,13 @@ public class MainFrame extends JFrame {
     this.users = users;
     this.terminal = terminal;
     this.statusBar = statusBar;
+
+    // Window/taskbar icon (best-effort, cross-platform).
+    try {
+      setIconImages(AppIcons.windowIcons());
+      AppIcons.tryInstallTaskbarIcon();
+    } catch (Throwable ignored) {
+    }
 
     setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
     setSize(1100, 700);
