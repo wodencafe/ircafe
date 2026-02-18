@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import java.awt.Font;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -15,8 +16,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ircafe.ui")
 public record UiProperties(
     String theme,
+    String accentColor,
+    Integer accentStrength,
+    String density,
+    Integer cornerRadius,
     String chatFontFamily,
     int chatFontSize,
+
+    String chatThemePreset,
+    String chatTimestampColor,
+    String chatSystemColor,
+    String chatMentionBgColor,
+    Integer chatMentionStrength,
 
     Boolean autoConnectOnStart,
 
@@ -376,6 +387,34 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (theme == null || theme.isBlank()) {
       theme = "dark";
     }
+
+    // Optional: override the theme's accent color. When unset, the theme's built-in accent is used.
+    if (accentColor != null && accentColor.isBlank()) accentColor = null;
+    accentColor = normalizeHexOrNull(accentColor);
+
+    // Chat theme overrides (optional)
+    if (chatThemePreset != null && chatThemePreset.isBlank()) chatThemePreset = null;
+    if (chatThemePreset != null) chatThemePreset = chatThemePreset.trim();
+    chatTimestampColor = normalizeHexOrNull(chatTimestampColor);
+    chatSystemColor = normalizeHexOrNull(chatSystemColor);
+    chatMentionBgColor = normalizeHexOrNull(chatMentionBgColor);
+    if (chatMentionStrength == null) chatMentionStrength = 35;
+    chatMentionStrength = Math.max(0, Math.min(100, chatMentionStrength));
+
+    if (accentStrength == null) accentStrength = 70;
+    if (accentStrength < 0) accentStrength = 0;
+    if (accentStrength > 100) accentStrength = 100;
+
+    // Global LAF tweaks (cheap wins).
+    if (density == null || density.isBlank()) density = "cozy";
+    density = density.trim().toLowerCase(Locale.ROOT);
+    if (!density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
+      density = "cozy";
+    }
+
+    if (cornerRadius == null) cornerRadius = 10;
+    if (cornerRadius < 0) cornerRadius = 0;
+    if (cornerRadius > 20) cornerRadius = 20;
     if (chatFontFamily == null || chatFontFamily.isBlank()) {
       chatFontFamily = Font.MONOSPACED;
     }
@@ -519,6 +558,24 @@ if (historyPlaceholdersEnabledByDefault == null) {
       return String.format("#%02X%02X%02X", r, g, b);
     } catch (Exception ignored) {
       return fb;
+    }
+  }
+
+  static String normalizeHexOrNull(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() != 6) return null;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      int r = (rgb >> 16) & 0xFF;
+      int g = (rgb >> 8) & 0xFF;
+      int b = (rgb) & 0xFF;
+      return String.format("#%02X%02X%02X", r, g, b);
+    } catch (Exception ignored) {
+      return null;
     }
   }
 

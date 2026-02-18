@@ -5,34 +5,39 @@ import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.GridLayout;
 import java.awt.Window;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.awt.event.ActionListener;
+import java.util.Arrays;
 import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
-import javax.swing.JSlider;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
 public class ThemeSelectionDialog {
+
+  private record ToneChoice(String label, ThemeManager.ThemeTone tone) {
+    @Override public String toString() { return label; }
+  }
+
+  private record PackChoice(String label, ThemeManager.ThemePack pack) {
+    @Override public String toString() { return label; }
+  }
 
   private final ThemeManager themeManager;
   private final UiSettingsBus settingsBus;
@@ -65,11 +70,46 @@ public class ThemeSelectionDialog {
     committedThemeId = normalizeThemeId(cur != null ? cur.theme() : null);
     previewThemeId = committedThemeId;
 
+    ThemeManager.ThemeOption[] allThemes = themeManager.supportedThemes();
+
     DefaultListModel<ThemeManager.ThemeOption> model = new DefaultListModel<>();
-    ThemeManager.ThemeOption[] opts = themeManager.supportedThemes();
-    for (ThemeManager.ThemeOption opt : opts) {
-      model.addElement(opt);
-    }
+
+    JComboBox<ToneChoice> toneFilter = new JComboBox<>(new ToneChoice[] {
+        new ToneChoice("All", null),
+        new ToneChoice("Dark", ThemeManager.ThemeTone.DARK),
+        new ToneChoice("Light", ThemeManager.ThemeTone.LIGHT),
+        new ToneChoice("System", ThemeManager.ThemeTone.SYSTEM)
+    });
+
+    JComboBox<PackChoice> packFilter = new JComboBox<>(new PackChoice[] {
+        new PackChoice("All packs", null),
+        new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
+        new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
+        new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE)
+    });
+
+    JTextField search = new JTextField(14);
+    search.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Search themes");
+
+    Runnable refresh = () -> {
+      String keepId = normalizeThemeId(selectedThemeId());
+      rebuildModel(model, allThemes, (ToneChoice) toneFilter.getSelectedItem(),
+          (PackChoice) packFilter.getSelectedItem(), search.getText());
+      selectThemeInList(keepId);
+    };
+
+    ActionListener filterListener = e -> refresh.run();
+    toneFilter.addActionListener(filterListener);
+    packFilter.addActionListener(filterListener);
+    search.getDocument().addDocumentListener(new DocumentListener() {
+      @Override public void insertUpdate(DocumentEvent e) { refresh.run(); }
+      @Override public void removeUpdate(DocumentEvent e) { refresh.run(); }
+      @Override public void changedUpdate(DocumentEvent e) { refresh.run(); }
+    });
+
+    // initial fill
+    rebuildModel(model, allThemes, (ToneChoice) toneFilter.getSelectedItem(),
+        (PackChoice) packFilter.getSelectedItem(), search.getText());
 
     themeList = new JList<>(model);
     themeList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -77,25 +117,50 @@ public class ThemeSelectionDialog {
       JLabel l = (JLabel) new DefaultListCellRenderer()
           .getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
       if (value != null) {
-        l.setText(value.label());
+        String pack = switch (value.pack()) {
+          case SYSTEM -> "System";
+          case FLATLAF -> "FlatLaf";
+          case IRCAFE -> "IRCafe";
+        };
+        String tone = switch (value.tone()) {
+          case SYSTEM -> "System";
+          case DARK -> "Dark";
+          case LIGHT -> "Light";
+        };
+        l.setText("<html>" + esc(value.label()) + " <span style='color:gray'>&mdash; " + pack + "</span></html>");
+        l.setToolTipText(tone + " theme \u00B7 " + pack + " pack");
       }
       return l;
     });
 
-    selectThemeInList(previewThemeId);
+    selectThemeInList(committedThemeId);
+
     themeList.addListSelectionListener(e -> {
       if (e.getValueIsAdjusting()) return;
-      queuePreviewTheme(selectedThemeId());
+      String next = normalizeThemeId(selectedThemeId());
+      if (next.isBlank()) return;
+      if (!sameTheme(previewThemeId, next)) {
+        themeManager.applyTheme(next);
+        previewThemeId = next;
+      }
     });
+
+    JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    filterBar.add(new JLabel("Tone"));
+    filterBar.add(toneFilter);
+    filterBar.add(new JLabel("Pack"));
+    filterBar.add(packFilter);
+    filterBar.add(search);
 
     JScrollPane listScroll = new JScrollPane(themeList);
     listScroll.setPreferredSize(new Dimension(250, 280));
 
     JPanel listPanel = new JPanel(new BorderLayout(8, 8));
-    listPanel.add(new JLabel("Themes"), BorderLayout.NORTH);
+    JPanel header = new JPanel(new BorderLayout(0, 6));
+    header.add(new JLabel("Themes"), BorderLayout.NORTH);
+    header.add(filterBar, BorderLayout.SOUTH);
+    listPanel.add(header, BorderLayout.NORTH);
     listPanel.add(listScroll, BorderLayout.CENTER);
-
-    JPanel previewPanel = buildPreviewPanel();
 
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
@@ -107,22 +172,18 @@ public class ThemeSelectionDialog {
       commitSelectedTheme();
       closeDialog();
     });
-    cancel.addActionListener(e -> {
-      restoreCommittedTheme();
-      closeDialog();
-    });
+    cancel.addActionListener(e -> closeDialog());
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
     buttons.add(apply);
     buttons.add(ok);
     buttons.add(cancel);
 
-    JLabel help = new JLabel("Select a theme to preview it live. Apply/OK saves it; Cancel restores the last saved theme.");
+    JLabel help = new JLabel("Select a theme to preview it live. Click Apply/OK to save your selection.");
     help.putClientProperty(FlatClientProperties.STYLE, "font: -1");
 
     JPanel center = new JPanel(new BorderLayout(12, 0));
     center.add(listPanel, BorderLayout.WEST);
-    center.add(previewPanel, BorderLayout.CENTER);
 
     JPanel root = new JPanel(new BorderLayout(10, 10));
     root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -131,93 +192,40 @@ public class ThemeSelectionDialog {
     root.add(buttons, BorderLayout.SOUTH);
 
     dialog = new JDialog(owner, "Theme Selector", JDialog.ModalityType.APPLICATION_MODAL);
-    dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-    dialog.addWindowListener(new WindowAdapter() {
-      @Override
-      public void windowClosing(WindowEvent e) {
-        restoreCommittedTheme();
+    dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+    dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+      @Override public void windowClosing(java.awt.event.WindowEvent e) {
+        closeDialog();
       }
     });
     dialog.setContentPane(root);
     dialog.pack();
-    dialog.setMinimumSize(new Dimension(760, 430));
+    dialog.setMinimumSize(new Dimension(420, 430));
     dialog.setLocationRelativeTo(owner);
     dialog.setVisible(true);
   }
 
-  private JPanel buildPreviewPanel() {
-    JPanel preview = new JPanel(new BorderLayout(10, 10));
-    preview.setBorder(BorderFactory.createTitledBorder("Live Preview"));
+  private static void rebuildModel(DefaultListModel<ThemeManager.ThemeOption> model,
+                                  ThemeManager.ThemeOption[] all,
+                                  ToneChoice toneChoice,
+                                  PackChoice packChoice,
+                                  String queryRaw) {
+    ThemeManager.ThemeTone tone = toneChoice != null ? toneChoice.tone() : null;
+    ThemeManager.ThemePack pack = packChoice != null ? packChoice.pack() : null;
+    String q = Objects.toString(queryRaw, "").trim().toLowerCase();
 
-    JPanel top = new JPanel(new BorderLayout(8, 8));
-    JLabel header = new JLabel("IRCafe Preview");
-    header.putClientProperty(FlatClientProperties.STYLE, "font: +2 bold");
-    JLabel status = new JLabel("Connected to irc.example.net #cafe");
-    status.setHorizontalAlignment(SwingConstants.RIGHT);
-    top.add(header, BorderLayout.WEST);
-    top.add(status, BorderLayout.EAST);
-
-    JPanel controls = new JPanel(new GridLayout(0, 2, 8, 8));
-    controls.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
-    controls.add(new JLabel("Message"));
-    controls.add(new JTextField("Hello from theme preview"));
-
-    controls.add(new JLabel("Nickname color"));
-    JComboBox<String> nickColor = new JComboBox<>(new String[] {"Default", "Blue", "Orange"});
-    nickColor.setSelectedIndex(1);
-    controls.add(nickColor);
-
-    controls.add(new JLabel("Unread marker"));
-    JCheckBox unread = new JCheckBox("Enabled", true);
-    controls.add(unread);
-
-    controls.add(new JLabel("History load"));
-    JSlider load = new JSlider(0, 100, 35);
-    controls.add(load);
-
-    controls.add(new JLabel("Network usage"));
-    JProgressBar p = new JProgressBar(0, 100);
-    p.setValue(62);
-    p.setStringPainted(true);
-    controls.add(p);
-
-    JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-    actions.setBorder(BorderFactory.createEmptyBorder(0, 12, 10, 12));
-    JButton primary = new JButton("Send");
-    primary.putClientProperty(FlatClientProperties.BUTTON_TYPE, "primary");
-    actions.add(primary);
-    actions.add(new JButton("Reconnect"));
-    actions.add(new JButton("Open Preferences"));
-
-    JPanel body = new JPanel(new BorderLayout(8, 8));
-    body.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
-    body.add(controls, BorderLayout.NORTH);
-    body.add(actions, BorderLayout.SOUTH);
-
-    preview.add(top, BorderLayout.NORTH);
-    preview.add(body, BorderLayout.CENTER);
-    return preview;
+    model.clear();
+    Arrays.stream(all)
+        .filter(o -> o != null)
+        .filter(o -> tone == null || o.tone() == tone)
+        .filter(o -> pack == null || o.pack() == pack)
+        .filter(o -> q.isEmpty() || o.label().toLowerCase().contains(q) || o.id().toLowerCase().contains(q))
+        .forEach(model::addElement);
   }
 
-  private void applyPreviewTheme(String id) {
-    String next = normalizeThemeId(id);
-    if (sameTheme(next, previewThemeId)) return;
-    themeManager.applyTheme(next);
-    previewThemeId = next;
-  }
-
-  private void queuePreviewTheme(String id) {
-    String next = normalizeThemeId(id);
-    SwingUtilities.invokeLater(() -> {
-      if (dialog == null || !dialog.isShowing()) return;
-      applyPreviewTheme(next);
-    });
-  }
-
-  private void restoreCommittedTheme() {
-    if (sameTheme(previewThemeId, committedThemeId)) return;
-    themeManager.applyTheme(committedThemeId);
-    previewThemeId = committedThemeId;
+  private static String esc(String s) {
+    if (s == null) return "";
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 
   private void commitSelectedTheme() {
@@ -233,12 +241,10 @@ public class ThemeSelectionDialog {
       runtimeConfig.rememberUiSettings(updated.theme(), updated.chatFontFamily(), updated.chatFontSize());
     }
 
-    if (!sameTheme(previewThemeId, next)) {
+    if (!sameTheme(committedThemeId, next)) {
       themeManager.applyTheme(next);
-      previewThemeId = next;
+      committedThemeId = next;
     }
-
-    committedThemeId = next;
   }
 
   private void selectThemeInList(String id) {
@@ -283,6 +289,12 @@ public class ThemeSelectionDialog {
 
   private void closeDialog() {
     if (dialog != null) {
+      String committed = normalizeThemeId(committedThemeId);
+      String preview = normalizeThemeId(previewThemeId);
+      if (!sameTheme(committed, preview)) {
+        themeManager.applyTheme(committed);
+        previewThemeId = committed;
+      }
       dialog.dispose();
       dialog = null;
     }

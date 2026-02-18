@@ -6,7 +6,10 @@ import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import java.awt.Color;
+import java.awt.Insets;
 import java.awt.Window;
+import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +24,23 @@ public class ThemeManager {
 
   private static final Logger log = LoggerFactory.getLogger(ThemeManager.class);
 
-  public record ThemeOption(String id, String label) {}
+  public enum ThemeTone {
+    SYSTEM,
+    DARK,
+    LIGHT
+  }
+
+  public enum ThemePack {
+    SYSTEM,
+    FLATLAF,
+    IRCAFE
+  }
+
+  public record ThemeOption(String id, String label, ThemeTone tone, ThemePack pack, boolean featured) {
+    public boolean isDark() {
+      return tone == ThemeTone.DARK;
+    }
+  }
 
   private static final Map<String, String> ORANGE_DARK_DEFAULTS = Map.ofEntries(
       Map.entry("@background", "#2F241E"),
@@ -312,46 +331,62 @@ public class ThemeManager {
   );
 
   private static final ThemeOption[] THEMES = new ThemeOption[] {
-      new ThemeOption("system", "Native (System)"),
-      new ThemeOption("dark", "Flat Dark"),
-      new ThemeOption("darcula", "Flat Darcula"),
-      new ThemeOption("blue-dark", "Flat Blue (Dark)"),
-      new ThemeOption("graphite-mono", "Graphite Mono"),
-      new ThemeOption("forest-dark", "Forest Dark"),
-      new ThemeOption("high-contrast-dark", "High Contrast Dark"),
-      new ThemeOption("ruby-night", "Ruby Night"),
-      new ThemeOption("violet-nebula", "Violet Nebula"),
-      new ThemeOption("solarized-dark", "Solarized Dark"),
-      new ThemeOption("sunset-dark", "Sunset Dark"),
-      new ThemeOption("terminal-amber", "Terminal Amber"),
-      new ThemeOption("teal-deep", "Teal Deep"),
-      new ThemeOption("orange", "Flat Orange (Dark)"),
-      new ThemeOption("light", "Flat Light"),
-      new ThemeOption("arctic-light", "Arctic Light"),
-      new ThemeOption("blue-light", "Flat Blue (Light)"),
-      new ThemeOption("mint-light", "Mint Light"),
-      new ThemeOption("nordic-light", "Nordic Light"),
-      new ThemeOption("solarized-light", "Solarized Light")
+      new ThemeOption("system", "Native (System)", ThemeTone.SYSTEM, ThemePack.SYSTEM, true),
+
+      // FlatLaf base themes
+      new ThemeOption("dark", "Flat Dark", ThemeTone.DARK, ThemePack.FLATLAF, true),
+      new ThemeOption("darcula", "Flat Darcula", ThemeTone.DARK, ThemePack.FLATLAF, true),
+      new ThemeOption("light", "Flat Light", ThemeTone.LIGHT, ThemePack.FLATLAF, true),
+
+      // IRCafe curated variants
+      new ThemeOption("blue-dark", "Flat Blue (Dark)", ThemeTone.DARK, ThemePack.IRCAFE, true),
+      new ThemeOption("violet-nebula", "Violet Nebula", ThemeTone.DARK, ThemePack.IRCAFE, true),
+      new ThemeOption("high-contrast-dark", "High Contrast Dark", ThemeTone.DARK, ThemePack.IRCAFE, true),
+      new ThemeOption("graphite-mono", "Graphite Mono", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("forest-dark", "Forest Dark", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("ruby-night", "Ruby Night", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("solarized-dark", "Solarized Dark", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("sunset-dark", "Sunset Dark", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("terminal-amber", "Terminal Amber", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("teal-deep", "Teal Deep", ThemeTone.DARK, ThemePack.IRCAFE, false),
+      new ThemeOption("orange", "Flat Orange (Dark)", ThemeTone.DARK, ThemePack.IRCAFE, false),
+
+      new ThemeOption("nordic-light", "Nordic Light", ThemeTone.LIGHT, ThemePack.IRCAFE, true),
+      new ThemeOption("blue-light", "Flat Blue (Light)", ThemeTone.LIGHT, ThemePack.IRCAFE, true),
+      new ThemeOption("arctic-light", "Arctic Light", ThemeTone.LIGHT, ThemePack.IRCAFE, false),
+      new ThemeOption("mint-light", "Mint Light", ThemeTone.LIGHT, ThemePack.IRCAFE, false),
+      new ThemeOption("solarized-light", "Solarized Light", ThemeTone.LIGHT, ThemePack.IRCAFE, false)
   };
 
   private final ChatStyles chatStyles;
   private final ChatTranscriptStore transcripts;
   private final UiSettingsBus settingsBus;
+  private final ThemeAccentSettingsBus accentSettingsBus;
+  private final ThemeTweakSettingsBus tweakSettingsBus;
 
-  public ThemeManager(ChatStyles chatStyles, ChatTranscriptStore transcripts, UiSettingsBus settingsBus) {
+  public ThemeManager(ChatStyles chatStyles, ChatTranscriptStore transcripts, UiSettingsBus settingsBus, ThemeAccentSettingsBus accentSettingsBus, ThemeTweakSettingsBus tweakSettingsBus) {
     this.chatStyles = chatStyles;
     this.transcripts = transcripts;
     this.settingsBus = settingsBus;
+    this.accentSettingsBus = accentSettingsBus;
+    this.tweakSettingsBus = tweakSettingsBus;
   }
 
   public ThemeOption[] supportedThemes() {
     return THEMES.clone();
   }
 
+  public ThemeOption[] featuredThemes() {
+    return java.util.Arrays.stream(THEMES)
+        .filter(ThemeOption::featured)
+        .toArray(ThemeOption[]::new);
+  }
+
   public void installLookAndFeel(String themeId) {
     runOnEdt(() -> {
       setLookAndFeel(themeId);
-      applyCommonTweaks();
+      applyCommonTweaks(tweakSettingsBus != null ? tweakSettingsBus.get() : null);
+      applyAccentOverrides(accentSettingsBus != null ? accentSettingsBus.get() : null);
 
       // Ensure chat styles pick up the correct UI defaults for the chosen LAF.
       chatStyles.reload();
@@ -361,7 +396,8 @@ public class ThemeManager {
   public void applyTheme(String themeId) {
     runOnEdt(() -> {
       setLookAndFeel(themeId);
-      applyCommonTweaks();
+      applyCommonTweaks(tweakSettingsBus != null ? tweakSettingsBus.get() : null);
+      applyAccentOverrides(accentSettingsBus != null ? accentSettingsBus.get() : null);
 
       // FlatLaf can update all windows; we also run a componentTreeUI update for safety.
       try {
@@ -386,6 +422,20 @@ public class ThemeManager {
       transcripts.restyleAllDocuments();
     });
   }
+
+  public void refreshChatStyles() {
+    runOnEdt(() -> {
+      try {
+        chatStyles.reload();
+      } catch (Exception ignored) {
+      }
+      try {
+        transcripts.restyleAllDocuments();
+      } catch (Exception ignored) {
+      }
+    });
+  }
+
 
   private void setLookAndFeel(String themeId) {
     String id = normalize(themeId);
@@ -483,13 +533,171 @@ public class ThemeManager {
     }
   }
 
-  private void applyCommonTweaks() {
+  private void applyCommonTweaks(ThemeTweakSettings tweaks) {
+    ThemeTweakSettings t = tweaks != null ? tweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+
     // Rounded corners and a softer modern vibe.
-    UIManager.put("Component.arc", 10);
-    UIManager.put("Button.arc", 10);
-    UIManager.put("TextComponent.arc", 10);
+    int arc = t.cornerRadius();
+    UIManager.put("Component.arc", arc);
+    UIManager.put("Button.arc", arc);
+    UIManager.put("TextComponent.arc", arc);
+    UIManager.put("ProgressBar.arc", arc);
+    UIManager.put("ScrollPane.arc", arc);
+
+    // Density presets (padding/row-height). Keep it simple and global.
+    ThemeTweakSettings.ThemeDensity d = t.density();
+    int rowHeight = switch (d) {
+      case COMPACT -> 20;
+      case SPACIOUS -> 28;
+      default -> 24;
+    };
+
+    UIManager.put("Tree.rowHeight", rowHeight);
+    UIManager.put("Table.rowHeight", rowHeight);
+    UIManager.put("List.cellHeight", rowHeight);
+
+    Insets buttonMargin = switch (d) {
+      case COMPACT -> new Insets(4, 10, 4, 10);
+      case SPACIOUS -> new Insets(8, 14, 8, 14);
+      default -> new Insets(6, 12, 6, 12);
+    };
+
+    Insets textMargin = switch (d) {
+      case COMPACT -> new Insets(4, 6, 4, 6);
+      case SPACIOUS -> new Insets(8, 10, 8, 10);
+      default -> new Insets(6, 8, 6, 8);
+    };
+
+    UIManager.put("Button.margin", buttonMargin);
+    UIManager.put("ToggleButton.margin", buttonMargin);
+    UIManager.put("RadioButton.margin", buttonMargin);
+    UIManager.put("CheckBox.margin", buttonMargin);
+
+    UIManager.put("TextComponent.margin", textMargin);
+    UIManager.put("TextField.margin", textMargin);
+    UIManager.put("PasswordField.margin", textMargin);
+    UIManager.put("TextArea.margin", textMargin);
+
+    // FlatLaf supports a few "padding" defaults. Unknown keys are ignored.
+    UIManager.put("ComboBox.padding", textMargin);
   }
 
+
+
+  private void applyAccentOverrides(ThemeAccentSettings accent) {
+    if (accent == null || !accent.enabled()) return;
+
+    Color chosen = parseHexColor(accent.accentColor());
+    if (chosen == null) return;
+
+    Color themeAccent = UIManager.getColor("@accentColor");
+    if (themeAccent == null) themeAccent = UIManager.getColor("Component.focusColor");
+    if (themeAccent == null) themeAccent = new Color(0x6A, 0xA2, 0xFF);
+
+    double s = Math.max(0, Math.min(100, accent.strength())) / 100.0;
+    Color blended = mix(themeAccent, chosen, s);
+
+    boolean dark = isDark(UIManager.getColor("Panel.background"));
+    Color focus = dark ? lighten(blended, 0.20) : darken(blended, 0.10);
+    Color link = dark ? lighten(blended, 0.28) : darken(blended, 0.12);
+
+    // Core FlatLaf accent keys (accept Color values).
+    UIManager.put("@accentColor", blended);
+    UIManager.put("@accentBaseColor", blended);
+    UIManager.put("@accentBase2Color", focus);
+
+    // A few Swing defaults that "feel" like the accent.
+    UIManager.put("Component.focusColor", focus);
+    UIManager.put("Component.linkColor", link);
+
+    // Selection colors: blend accent into the existing background.
+    Color bg = UIManager.getColor("TextComponent.background");
+    if (bg == null) bg = UIManager.getColor("Panel.background");
+    if (bg == null) bg = dark ? new Color(0x22, 0x22, 0x22) : new Color(0xF6, 0xF6, 0xF6);
+
+    double selMix = dark ? 0.55 : 0.35;
+    Color selectionBg = mix(bg, blended, selMix);
+    Color selectionFg = bestTextColor(selectionBg);
+
+    UIManager.put("TextComponent.selectionBackground", selectionBg);
+    UIManager.put("TextComponent.selectionForeground", selectionFg);
+    UIManager.put("List.selectionBackground", selectionBg);
+    UIManager.put("List.selectionForeground", selectionFg);
+    UIManager.put("Table.selectionBackground", selectionBg);
+    UIManager.put("Table.selectionForeground", selectionFg);
+    UIManager.put("Tree.selectionBackground", selectionBg);
+    UIManager.put("Tree.selectionForeground", selectionFg);
+  }
+
+  private static Color parseHexColor(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+
+    if (s.length() == 3) {
+      char r = s.charAt(0);
+      char g = s.charAt(1);
+      char b = s.charAt(2);
+      s = "" + r + r + g + g + b + b;
+    }
+
+    if (s.length() != 6) return null;
+
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      return new Color(rgb);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static Color mix(Color a, Color b, double t) {
+    if (a == null) return b;
+    if (b == null) return a;
+    double tt = Math.max(0, Math.min(1, t));
+    int r = (int) Math.round(a.getRed() + (b.getRed() - a.getRed()) * tt);
+    int g = (int) Math.round(a.getGreen() + (b.getGreen() - a.getGreen()) * tt);
+    int bl = (int) Math.round(a.getBlue() + (b.getBlue() - a.getBlue()) * tt);
+    return new Color(clamp255(r), clamp255(g), clamp255(bl));
+  }
+
+  private static Color lighten(Color c, double amount) {
+    return mix(c, Color.WHITE, amount);
+  }
+
+  private static Color darken(Color c, double amount) {
+    return mix(c, Color.BLACK, amount);
+  }
+
+  private static int clamp255(int v) {
+    return Math.max(0, Math.min(255, v));
+  }
+
+  private static boolean isDark(Color c) {
+    if (c == null) return true;
+    double lum = relativeLuminance(c);
+    return lum < 0.45;
+  }
+
+  private static double relativeLuminance(Color c) {
+    // sRGB relative luminance
+    double r = srgbToLinear(c.getRed() / 255.0);
+    double g = srgbToLinear(c.getGreen() / 255.0);
+    double b = srgbToLinear(c.getBlue() / 255.0);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  private static double srgbToLinear(double v) {
+    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  private static Color bestTextColor(Color bg) {
+    if (bg == null) return Color.WHITE;
+    return relativeLuminance(bg) > 0.55 ? Color.BLACK : Color.WHITE;
+  }
   private static String normalize(String s) {
     if (s == null) return "dark";
     return s.trim().toLowerCase();
