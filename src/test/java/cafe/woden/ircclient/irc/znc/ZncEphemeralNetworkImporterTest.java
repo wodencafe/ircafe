@@ -32,6 +32,7 @@ class ZncEphemeralNetworkImporterTest {
         "Real",
         sasl,
         List.of(),
+        List.of(),
         null
     );
 
@@ -71,6 +72,7 @@ class ZncEphemeralNetworkImporterTest {
         "Real",
         sasl,
         List.of(),
+        List.of(),
         null
     );
 
@@ -108,6 +110,7 @@ class ZncEphemeralNetworkImporterTest {
         "user",
         "Real",
         sasl,
+        List.of(),
         List.of(),
         null
     );

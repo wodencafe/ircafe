@@ -22,6 +22,7 @@ class SojuEphemeralNamingTest {
         "Real",
         sasl,
         List.of(),
+        List.of(),
         null);
 
     SojuNetwork net = new SojuNetwork("soju", "123", "libera", java.util.Map.of("name", "libera"));
@@ -46,6 +47,7 @@ class SojuEphemeralNamingTest {
         "Real",
         sasl,
         List.of(),
+        List.of(),
         null);
 
     SojuNetwork net = new SojuNetwork("soju", "9", "oftc", java.util.Map.of());
@@ -65,6 +67,7 @@ class SojuEphemeralNamingTest {
         "user",
         "Real",
         new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null),
+        List.of(),
         List.of(),
         null);
 
