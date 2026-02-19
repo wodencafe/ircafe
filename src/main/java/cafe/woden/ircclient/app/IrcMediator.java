@@ -81,7 +81,7 @@ public class IrcMediator {
 
   private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
 
-  // Typing indicator diagnostics: keep a small de-dup cache so INFO logs stay readable.
+  // Dedup cache
   private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
   private static final long TYPING_LOG_DEDUP_MS = 5_000;
   private static final int TYPING_LOG_MAX_KEYS = 512;
@@ -956,7 +956,6 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         String state = Objects.toString(ev.state(), "").trim().toLowerCase(Locale.ROOT);
         if (state.isEmpty()) state = "active";
 
-        // Diagnostics: log inbound typing with dedupe so you can confirm the server is sending them.
         boolean prefEnabled = false;
         try {
           prefEnabled = uiSettingsBus.get().typingIndicatorsEnabled();
