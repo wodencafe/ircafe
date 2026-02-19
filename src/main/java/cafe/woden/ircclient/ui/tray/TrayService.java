@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import javax.swing.SwingUtilities;
 
 /**
- * System tray integration (HexChat-style).
+ * System tray integration (HexChat-style options).
  */
 @Component
 @Lazy

@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.nickcolors;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -88,6 +89,15 @@ public class NickColorOverridesDialog {
     JButton remove = new JButton("Remove");
     JButton clear = new JButton("Clear");
 
+    add.setIcon(SvgIcons.action("plus", 16));
+    add.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    edit.setIcon(SvgIcons.action("edit", 16));
+    edit.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+    remove.setIcon(SvgIcons.action("trash", 16));
+    remove.setDisabledIcon(SvgIcons.actionDisabled("trash", 16));
+    clear.setIcon(SvgIcons.action("close", 16));
+    clear.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
+
     edit.setEnabled(false);
     remove.setEnabled(false);
     clear.setEnabled(model.getRowCount() > 0);
@@ -171,6 +181,13 @@ public class NickColorOverridesDialog {
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
+
+    apply.setIcon(SvgIcons.action("check", 16));
+    apply.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    ok.setIcon(SvgIcons.action("check", 16));
+    ok.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    cancel.setIcon(SvgIcons.action("close", 16));
+    cancel.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
     apply.putClientProperty(FlatClientProperties.BUTTON_TYPE, "primary");
 
     Runnable doApply = () -> {

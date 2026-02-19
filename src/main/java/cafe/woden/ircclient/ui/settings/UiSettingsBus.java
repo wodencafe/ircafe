@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.settings;
 
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
@@ -17,7 +18,7 @@ public class UiSettingsBus {
   private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
   private volatile UiSettings current;
 
-  public UiSettingsBus(UiProperties props) {
+  public UiSettingsBus(UiProperties props, RuntimeConfigStore runtimeConfig) {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
     UiProperties.UserInfoEnrichment ue = props.userInfoEnrichment();
     UiProperties.Timestamps ts = props.timestamps();
@@ -28,7 +29,22 @@ public class UiSettingsBus {
     boolean timestampsIncludeChatMessages = ts != null && Boolean.TRUE.equals(ts.includeChatMessages());
 
     boolean trayEnabled = tray == null || tray.enabled() == null || Boolean.TRUE.equals(tray.enabled());
-    boolean trayCloseToTray = tray == null || tray.closeToTray() == null || Boolean.TRUE.equals(tray.closeToTray());
+
+    // Migration rule:
+    // - New installs default to "close exits" (closeToTray=false)
+    // - Existing installs keep legacy behavior (closeToTray=true) unless explicitly configured
+    boolean trayCloseToTray;
+    var persistedCloseToTray = runtimeConfig.readTrayCloseToTrayIfPresent();
+    if (persistedCloseToTray.isPresent()) {
+      trayCloseToTray = Boolean.TRUE.equals(persistedCloseToTray.get());
+    } else if (runtimeConfig.runtimeConfigFileExistedOnStartup()) {
+      trayCloseToTray = true;
+      // Persist once so the behavior is stable across future versions.
+      runtimeConfig.rememberTrayCloseToTray(true);
+    } else {
+      trayCloseToTray = false;
+    }
+
     boolean trayMinimizeToTray = tray != null && Boolean.TRUE.equals(tray.minimizeToTray());
     boolean trayStartMinimized = tray != null && Boolean.TRUE.equals(tray.startMinimized());
 

@@ -39,6 +39,18 @@ java {
 
 springBoot {
     mainClass = 'cafe.woden.ircclient.IrcSwingApp'
+
+    // Generate META-INF/build-info.properties (build.version, build.time, ...)
+    // so the UI can display version + build date.
+    buildInfo()
+}
+
+// Ensure build-info exists for bootRun/IDE runs too.
+tasks.matching { it.name == 'bootRun' }.configureEach {
+    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
+}
+tasks.matching { it.name == 'processResources' }.configureEach {
+    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
 }
 
 configurations {

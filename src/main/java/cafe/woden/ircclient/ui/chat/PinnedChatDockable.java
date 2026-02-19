@@ -428,6 +428,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   @Override
   public String getTabText() {
+    if (target.isStatus()) return "Server";
     return target.target();
   }
 

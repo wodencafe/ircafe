@@ -176,7 +176,12 @@ public final class MessageReactionsComponent extends JPanel {
   private static Color resolveChipBackground() {
     Color sel = UIManager.getColor("TextPane.selectionBackground");
     Color bg = UIManager.getColor("TextPane.background");
-    if (sel == null && bg == null) return new Color(0xDDDDDD);
+    if (sel == null && bg == null) {
+      // Best-effort fallback to avoid hard-coded colors clashing with theme-pack themes.
+      Color pbg = UIManager.getColor("Panel.background");
+      if (pbg == null) pbg = UIManager.getColor("control");
+      return pbg != null ? pbg : new Color(0xDDDDDD);
+    }
     if (sel == null) return bg;
     if (bg == null) return sel;
     int r = (int) Math.round(sel.getRed() * 0.28 + bg.getRed() * 0.72);
@@ -188,7 +193,11 @@ public final class MessageReactionsComponent extends JPanel {
   private static Color resolveChipBorderColor() {
     Color c = UIManager.getColor("Component.borderColor");
     if (c == null) c = UIManager.getColor("Separator.foreground");
-    if (c == null) c = new Color(0xA0A0A0);
+    if (c == null) {
+      Color fg = UIManager.getColor("Label.foreground");
+      if (fg == null) fg = Color.DARK_GRAY;
+      c = new Color(fg.getRed(), fg.getGreen(), fg.getBlue(), 90);
+    }
     return c;
   }
 

@@ -2,10 +2,12 @@ package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import java.awt.Color;
 import java.awt.Insets;
 import java.awt.Window;
@@ -366,6 +368,7 @@ public class ThemeManager {
   };
 
   private static volatile ThemeOption[] CACHED_THEMES;
+  private static volatile ThemeOption[] CACHED_THEMES_WITH_ALL_INTELLIJ;
 
   private static ThemeOption[] allThemes() {
     ThemeOption[] cached = CACHED_THEMES;
@@ -380,6 +383,51 @@ public class ThemeManager {
     cached = out.toArray(ThemeOption[]::new);
     CACHED_THEMES = cached;
     return cached;
+  }
+
+  /**
+   * Themes for the searchable Theme Selector dialog.
+   *
+   * <p>When {@code includeAllIntelliJThemes} is true, this expands to include the entire IntelliJ
+   * Themes Pack list (potentially hundreds of themes). We keep {@link #supportedThemes()} curated
+   * so that menus and dropdowns stay compact.
+   */
+  public ThemeOption[] themesForPicker(boolean includeAllIntelliJThemes) {
+    if (!includeAllIntelliJThemes) {
+      return supportedThemes();
+    }
+
+    ThemeOption[] cached = CACHED_THEMES_WITH_ALL_INTELLIJ;
+    if (cached != null) return cached.clone();
+
+    List<ThemeOption> out = new ArrayList<>();
+    Collections.addAll(out, BASE_THEMES);
+
+    // Include all IntelliJ themes (not curated) for the picker.
+    List<IntelliJThemePack.PackTheme> pack = IntelliJThemePack.listThemes();
+    if (!pack.isEmpty()) {
+      Set<String> seen = new HashSet<>();
+      // Seed with existing ids so we don't accidentally duplicate.
+      for (ThemeOption o : out) {
+        if (o != null && o.id() != null) seen.add(o.id());
+      }
+
+      for (IntelliJThemePack.PackTheme t : pack) {
+        if (t == null || t.id() == null || t.id().isBlank()) continue;
+        if (!seen.add(t.id())) continue;
+        ThemeTone tone = t.dark() ? ThemeTone.DARK : ThemeTone.LIGHT;
+        out.add(new ThemeOption(
+            t.id(),
+            "IntelliJ: " + t.label(),
+            tone,
+            ThemePack.INTELLIJ,
+            false));
+      }
+    }
+
+    cached = out.toArray(ThemeOption[]::new);
+    CACHED_THEMES_WITH_ALL_INTELLIJ = cached;
+    return cached.clone();
   }
 
   private static List<ThemeOption> buildCuratedIntelliJThemes() {
@@ -403,7 +451,8 @@ public class ThemeManager {
         "cobalt"
     };
 
-    // Hard cap so we don't flood the app with hundreds of themes until we build a proper searchable picker.
+    // Hard cap so we don't flood menus/dropdowns with hundreds of themes.
+    // (The Theme Selector dialog can optionally show the full IntelliJ Themes Pack list.)
     final int MAX = 16;
 
     Set<String> chosenIds = new HashSet<>();
@@ -492,33 +541,138 @@ public class ThemeManager {
 
   public void applyTheme(String themeId) {
     runOnEdt(() -> {
-      setLookAndFeel(themeId);
-      applyCommonTweaks(tweakSettingsBus != null ? tweakSettingsBus.get() : null);
-      applyAccentOverrides(accentSettingsBus != null ? accentSettingsBus.get() : null);
-
-      // FlatLaf can update all windows; we also run a componentTreeUI update for safety.
+      boolean snap = false;
       try {
-        FlatLaf.updateUI();
+        // Only animate if there is at least one showing window.
+        for (Window w : Window.getWindows()) {
+          if (w != null && w.isShowing()) {
+            FlatAnimatedLafChange.showSnapshot();
+            snap = true;
+            break;
+          }
+        }
       } catch (Exception ignored) {
+        snap = false;
       }
 
-      for (Window w : Window.getWindows()) {
+      try {
+        setLookAndFeel(themeId);
+        applyCommonTweaks(tweakSettingsBus != null ? tweakSettingsBus.get() : null);
+        applyAccentOverrides(accentSettingsBus != null ? accentSettingsBus.get() : null);
+
+        // FlatLaf can update all windows; we also run a componentTreeUI update for safety.
         try {
-          SwingUtilities.updateComponentTreeUI(w);
-          w.invalidate();
-          w.repaint();
+          FlatLaf.updateUI();
         } catch (Exception ignored) {
+        }
+
+        for (Window w : Window.getWindows()) {
+          try {
+            SwingUtilities.updateComponentTreeUI(w);
+            w.invalidate();
+            w.repaint();
+          } catch (Exception ignored) {
+          }
+        }
+
+        // Re-apply any explicit fonts after LAF update.
+        try {
+          settingsBus.refresh();
+        } catch (Exception ignored) {
+        }
+
+        // Recompute chat attribute sets from new UI defaults and re-style existing docs.
+        try {
+          chatStyles.reload();
+        } catch (Exception ignored) {
+        }
+        try {
+          transcripts.restyleAllDocuments();
+        } catch (Exception ignored) {
+        }
+      } finally {
+        if (snap) {
+          try {
+            FlatAnimatedLafChange.hideSnapshotWithAnimation();
+          } catch (Exception ignored) {
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Apply accent/tweak UI defaults without changing the current Look & Feel.
+   * Used for live preview (e.g. accent slider/color) to avoid the heavier LAF reset.
+   */
+  public void applyAppearance(boolean animate) {
+    runOnEdt(() -> {
+      boolean snap = false;
+
+      if (animate) {
+        try {
+          // Only animate if there is at least one showing window.
+          for (Window w : Window.getWindows()) {
+            if (w != null && w.isShowing()) {
+              FlatAnimatedLafChange.showSnapshot();
+              snap = true;
+              break;
+            }
+          }
+        } catch (Exception ignored) {
+          snap = false;
         }
       }
 
-      // Re-apply any explicit fonts after LAF update.
-      settingsBus.refresh();
+      try {
+        applyCommonTweaks(tweakSettingsBus != null ? tweakSettingsBus.get() : null);
+        applyAccentOverrides(accentSettingsBus != null ? accentSettingsBus.get() : null);
+        SvgIcons.clearCache();
 
-      // Recompute chat attribute sets from new UI defaults and re-style existing docs.
-      chatStyles.reload();
-      transcripts.restyleAllDocuments();
+        try {
+          FlatLaf.updateUI();
+        } catch (Exception ignored) {
+        }
+
+        for (Window w : Window.getWindows()) {
+          try {
+            SwingUtilities.updateComponentTreeUI(w);
+            w.invalidate();
+            w.repaint();
+          } catch (Exception ignored) {
+          }
+        }
+
+        // Re-apply any explicit fonts after UI defaults update.
+        try {
+          settingsBus.refresh();
+        } catch (Exception ignored) {
+        }
+
+        // Recompute chat attribute sets from new UI defaults and re-style existing docs.
+        try {
+          chatStyles.reload();
+        } catch (Exception ignored) {
+        }
+        try {
+          transcripts.restyleAllDocuments();
+        } catch (Exception ignored) {
+        }
+      } finally {
+        if (snap) {
+          try {
+            FlatAnimatedLafChange.hideSnapshotWithAnimation();
+          } catch (Exception ignored) {
+          }
+        }
+      }
     });
   }
+
+  public void applyAppearance() {
+    applyAppearance(true);
+  }
+
 
   public void refreshChatStyles() {
     runOnEdt(() -> {
@@ -536,7 +690,8 @@ public class ThemeManager {
 
   private void setLookAndFeel(String themeId) {
     String raw = themeId != null ? themeId.trim() : "";
-    if (raw.isEmpty()) raw = "dark";
+    // Default to Darcula (our preferred "A" default) when no theme is configured.
+    if (raw.isEmpty()) raw = "darcula";
 
     String lower = raw.toLowerCase(Locale.ROOT);
 
@@ -635,7 +790,8 @@ public class ThemeManager {
           solarizedLight.setExtraDefaults(SOLARIZED_LIGHT_DEFAULTS);
           UIManager.setLookAndFeel(solarizedLight);
         }
-        default -> UIManager.setLookAndFeel(new FlatDarkLaf());
+        // Fail soft to Darcula instead of FlatDark so bad/unknown ids still look polished.
+        default -> UIManager.setLookAndFeel(new FlatDarculaLaf());
       }
     } catch (Exception e) {
       // Fail soft; keep existing LAF.
@@ -722,7 +878,7 @@ public class ThemeManager {
 
     Color themeAccent = UIManager.getColor("@accentColor");
     if (themeAccent == null) themeAccent = UIManager.getColor("Component.focusColor");
-    if (themeAccent == null) themeAccent = new Color(0x6A, 0xA2, 0xFF);
+    if (themeAccent == null) themeAccent = new Color(0x2D, 0x6B, 0xFF);
 
     double s = Math.max(0, Math.min(100, accent.strength())) / 100.0;
     Color blended = mix(themeAccent, chosen, s);
@@ -743,7 +899,8 @@ public class ThemeManager {
     // Selection colors: blend accent into the existing background.
     Color bg = UIManager.getColor("TextComponent.background");
     if (bg == null) bg = UIManager.getColor("Panel.background");
-    if (bg == null) bg = dark ? new Color(0x22, 0x22, 0x22) : new Color(0xF6, 0xF6, 0xF6);
+    if (bg == null) bg = UIManager.getColor("control");
+    if (bg == null) bg = dark ? Color.DARK_GRAY : Color.LIGHT_GRAY;
 
     double selMix = dark ? 0.55 : 0.35;
     Color selectionBg = mix(bg, blended, selMix);

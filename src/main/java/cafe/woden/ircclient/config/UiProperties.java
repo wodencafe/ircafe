@@ -120,11 +120,18 @@ public record UiProperties(
     Tray tray
 ) {
 
+  /** App defaults used when no runtime overrides exist. */
+  public static final String DEFAULT_THEME = "darcula";
+  /** IRCafe brand accent (cobalt). */
+  public static final String DEFAULT_ACCENT_COLOR = "#2D6BFF";
+  /** 0..100 blend between theme accent and chosen accent. */
+  public static final int DEFAULT_ACCENT_STRENGTH = 100;
+
   /**
    * System tray integration.
    *
-   * <p>Defaults are intentionally "HexChat-ish": if the platform supports a tray,
-   * we show it, and the window close button hides the app instead of exiting.
+   * <p>Defaults are intentionally conservative: if the platform supports a tray,
+   * we show it, but the window close button still exits by default.
    */
   public record Tray(
       Boolean enabled,
@@ -172,7 +179,7 @@ public record UiProperties(
   ) {
     public Tray {
       if (enabled == null) enabled = true;
-      if (closeToTray == null) closeToTray = true;
+      if (closeToTray == null) closeToTray = false;
       if (minimizeToTray == null) minimizeToTray = false;
       if (startMinimized == null) startMinimized = false;
 
@@ -388,12 +395,18 @@ if (historyPlaceholdersEnabledByDefault == null) {
 
   public UiProperties {
     if (theme == null || theme.isBlank()) {
-      theme = "dark";
+      theme = DEFAULT_THEME;
     }
 
-    // Optional: override the theme's accent color. When unset, the theme's built-in accent is used.
-    if (accentColor != null && accentColor.isBlank()) accentColor = null;
-    accentColor = normalizeHexOrNull(accentColor);
+    // Accent defaults to IRCafe cobalt. Users can disable the override explicitly by setting an empty string.
+    // (Runtime persistence removes the key when disabled.)
+    if (accentColor == null) {
+      accentColor = DEFAULT_ACCENT_COLOR;
+    } else if (accentColor.isBlank()) {
+      accentColor = null;
+    } else {
+      accentColor = normalizeHexOrNull(accentColor);
+    }
 
     // Chat theme overrides (optional)
     if (chatThemePreset != null && chatThemePreset.isBlank()) chatThemePreset = null;
@@ -404,7 +417,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (chatMentionStrength == null) chatMentionStrength = 35;
     chatMentionStrength = Math.max(0, Math.min(100, chatMentionStrength));
 
-    if (accentStrength == null) accentStrength = 70;
+    if (accentStrength == null) accentStrength = DEFAULT_ACCENT_STRENGTH;
     if (accentStrength < 0) accentStrength = 0;
     if (accentStrength > 100) accentStrength = 100;
 

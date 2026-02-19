@@ -35,6 +35,8 @@ public class RuntimeConfigStore {
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
+  /** True if the runtime config file existed before this process started creating/initializing it. */
+  private final boolean fileExistedOnStartup;
 
   public RuntimeConfigStore(
       @Value("${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}") String filePath,
@@ -42,6 +44,14 @@ public class RuntimeConfigStore {
   ) {
     this.file = Paths.get(Objects.requireNonNullElse(filePath, "").trim());
     this.defaults = defaults;
+
+    boolean existed = false;
+    try {
+      existed = !this.file.toString().isBlank() && Files.exists(this.file);
+    } catch (Exception ignored) {
+      existed = false;
+    }
+    this.fileExistedOnStartup = existed;
 
     DumperOptions opts = new DumperOptions();
     opts.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
@@ -54,6 +64,56 @@ public class RuntimeConfigStore {
     this.yaml = new Yaml(opts);
 
     ensureFileExistsWithServers();
+  }
+
+  /**
+   * Returns true if the runtime config file already existed when IRCafe started.
+   *
+   * <p>This is used for one-time migrations where we want to preserve legacy behavior for existing installs,
+   * while using new defaults for first-time installs.
+   */
+  public boolean runtimeConfigFileExistedOnStartup() {
+    return fileExistedOnStartup;
+  }
+
+  /**
+   * Reads {@code ircafe.ui.tray.closeToTray} only if it is explicitly present in the runtime config file.
+   *
+   * <p>If the key is absent (or the file doesn't exist), returns {@link Optional#empty()}.
+   */
+  public synchronized Optional<Boolean> readTrayCloseToTrayIfPresent() {
+    try {
+      if (file.toString().isBlank()) return Optional.empty();
+      if (!Files.exists(file)) return Optional.empty();
+
+      Map<String, Object> doc = loadFile();
+
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
+
+      Object trayObj = ui.get("tray");
+      if (!(trayObj instanceof Map<?, ?> tray)) return Optional.empty();
+
+      if (!tray.containsKey("closeToTray")) return Optional.empty();
+
+      Object v = tray.get("closeToTray");
+      if (v == null) return Optional.empty();
+
+      if (v instanceof Boolean b) return Optional.of(b);
+      if (v instanceof String s) {
+        String t = s.trim();
+        if (t.equalsIgnoreCase("true")) return Optional.of(Boolean.TRUE);
+        if (t.equalsIgnoreCase("false")) return Optional.of(Boolean.FALSE);
+      }
+
+      return Optional.empty();
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read tray.closeToTray from '{}'", file, e);
+      return Optional.empty();
+    }
   }
 
   public Path runtimeConfigPath() {
@@ -170,12 +230,10 @@ public class RuntimeConfigStore {
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
+      // Persist "disabled" explicitly as an empty string so app defaults don't re-enable the accent on restart.
+      // (UiProperties treats blank as "no override".)
       String c = accentColor != null ? accentColor.trim() : "";
-      if (c.isEmpty()) {
-        ui.remove("accentColor");
-      } else {
-        ui.put("accentColor", c);
-      }
+      ui.put("accentColor", c);
 
       writeFile(doc);
     } catch (Exception e) {
@@ -198,6 +256,41 @@ public class RuntimeConfigStore {
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist accentStrength setting to '{}'", file, e);
     }
+  }
+
+  /**
+   * Persists the docking/layout widths so the user's side-dock sizing survives restart.
+   *
+   * <p>Stored under {@code ircafe.ui.layout}.
+   */
+  public synchronized void rememberDockLayoutWidths(Integer serverDockWidthPx, Integer userDockWidthPx) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> layout = getOrCreateMap(ui, "layout");
+
+      if (serverDockWidthPx != null && serverDockWidthPx > 0) {
+        layout.put("serverDockWidthPx", serverDockWidthPx);
+      }
+      if (userDockWidthPx != null && userDockWidthPx > 0) {
+        layout.put("userDockWidthPx", userDockWidthPx);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist dock layout widths to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberServerDockWidthPx(int serverDockWidthPx) {
+    rememberDockLayoutWidths(serverDockWidthPx, null);
+  }
+
+  public synchronized void rememberUserDockWidthPx(int userDockWidthPx) {
+    rememberDockLayoutWidths(null, userDockWidthPx);
   }
 
   public synchronized void rememberUiDensity(String density) {
@@ -2092,7 +2185,7 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
         sasl.put("mechanism", s.sasl().mechanism());
       }
       // Persist only when diverging from the default strict behavior.
-      // Default (when omitted) is: disconnectOnFailure = true when enabled.
+      // Default (when omitted) is: disconnectOnFailure = true.
       if (s.sasl().disconnectOnFailure() != null && !s.sasl().disconnectOnFailure()) {
         sasl.put("disconnectOnFailure", false);
       }

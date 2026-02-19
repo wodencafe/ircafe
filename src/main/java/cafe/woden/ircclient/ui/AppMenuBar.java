@@ -15,6 +15,7 @@ import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -85,6 +86,8 @@ public class AppMenuBar extends JMenuBar {
     // File
     JMenu file = new JMenu("File");
     JMenuItem exit = new JMenuItem("Exit");
+    exit.setIcon(SvgIcons.action("exit", 16));
+    exit.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
     exit.addActionListener(e -> shutdownCoordinator.shutdown());
     file.add(exit);
 
@@ -112,6 +115,8 @@ public class AppMenuBar extends JMenuBar {
 
     themeMenu.addSeparator();
     JMenuItem themeSelector = new JMenuItem("Theme Selector...");
+    themeSelector.setIcon(SvgIcons.action("theme", 16));
+    themeSelector.setDisabledIcon(SvgIcons.actionDisabled("theme", 16));
     themeSelector.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       themeSelectionDialog.open(w);
@@ -133,18 +138,24 @@ public class AppMenuBar extends JMenuBar {
     settings.add(themeMenu);
 
     JMenuItem nickColors = new JMenuItem("Nick Colors...");
+    nickColors.setIcon(SvgIcons.action("palette", 16));
+    nickColors.setDisabledIcon(SvgIcons.actionDisabled("palette", 16));
     nickColors.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       nickColorOverridesDialog.open(w);
     });
 
     JMenuItem prefs = new JMenuItem("Preferences...");
+    prefs.setIcon(SvgIcons.action("settings", 16));
+    prefs.setDisabledIcon(SvgIcons.actionDisabled("settings", 16));
     prefs.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       preferencesDialog.open(w);
     });
 
     JMenuItem ignoreLists = new JMenuItem("Ignore Lists...");
+    ignoreLists.setIcon(SvgIcons.action("ban", 16));
+    ignoreLists.setDisabledIcon(SvgIcons.actionDisabled("ban", 16));
     ignoreLists.addActionListener(e -> {
       if (ignoreListDialog == null) return;
       Window w = SwingUtilities.getWindowAncestor(this);
@@ -163,24 +174,32 @@ public class AppMenuBar extends JMenuBar {
     JMenu window = new JMenu("Window");
 
     JMenuItem reopenServersDock = new JMenuItem("Reopen Servers Dock");
+    reopenServersDock.setIcon(SvgIcons.action("dock-left", 16));
+    reopenServersDock.setDisabledIcon(SvgIcons.actionDisabled("dock-left", 16));
     reopenServersDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_1,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     reopenServersDock.addActionListener(e -> ensureSideDockVisible(
         serverTree, DockingRegion.WEST));
 
     JMenuItem reopenUsersDock = new JMenuItem("Reopen Users Dock");
+    reopenUsersDock.setIcon(SvgIcons.action("dock-right", 16));
+    reopenUsersDock.setDisabledIcon(SvgIcons.actionDisabled("dock-right", 16));
     reopenUsersDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_2,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     reopenUsersDock.addActionListener(e -> ensureSideDockVisible(
         users, DockingRegion.EAST));
 
     JMenuItem reopenTerminalDock = new JMenuItem("Open Terminal Dock");
+    reopenTerminalDock.setIcon(SvgIcons.action("dock-bottom", 16));
+    reopenTerminalDock.setDisabledIcon(SvgIcons.actionDisabled("dock-bottom", 16));
     reopenTerminalDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_3,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     reopenTerminalDock.addActionListener(e -> ensureBottomDockVisible(
         terminal, DockingRegion.SOUTH));
 
     JMenuItem resetLayout = new JMenuItem("Reset Dock Layout");
+    resetLayout.setIcon(SvgIcons.action("refresh", 16));
+    resetLayout.setDisabledIcon(SvgIcons.actionDisabled("refresh", 16));
     resetLayout.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     resetLayout.addActionListener(e -> resetDockLayout());
@@ -219,12 +238,18 @@ public class AppMenuBar extends JMenuBar {
     // Node actions come from the server tree controller.
     // Enabled/disabled state updates automatically based on the tree selection.
     JMenuItem moveNodeUp = new JMenuItem(serverTree.moveNodeUpAction());
+    moveNodeUp.setIcon(SvgIcons.action("arrow-up", 16));
+    moveNodeUp.setDisabledIcon(SvgIcons.actionDisabled("arrow-up", 16));
     moveNodeUp.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_UP,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     JMenuItem moveNodeDown = new JMenuItem(serverTree.moveNodeDownAction());
+    moveNodeDown.setIcon(SvgIcons.action("arrow-down", 16));
+    moveNodeDown.setDisabledIcon(SvgIcons.actionDisabled("arrow-down", 16));
     moveNodeDown.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     JMenuItem closeNode = new JMenuItem(serverTree.closeNodeAction());
+    closeNode.setIcon(SvgIcons.action("close", 16));
+    closeNode.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
     closeNode.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
     window.add(moveNodeUp);
     window.add(moveNodeDown);
@@ -234,11 +259,15 @@ public class AppMenuBar extends JMenuBar {
     // Servers
     JMenu servers = new JMenu("Servers");
     JMenuItem addServer = new JMenuItem("Add Server...");
+    addServer.setIcon(SvgIcons.action("plus", 16));
+    addServer.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
     addServer.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       serverDialogs.openAddServer(w);
     });
     JMenuItem editServers = new JMenuItem("Edit Servers...");
+    editServers.setIcon(SvgIcons.action("edit", 16));
+    editServers.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
     editServers.addActionListener(e -> {
       Window w = SwingUtilities.getWindowAncestor(this);
       serverDialogs.openManageServers(w);
@@ -249,6 +278,8 @@ public class AppMenuBar extends JMenuBar {
     // Help
     JMenu help = new JMenu("Help");
     JMenuItem about = new JMenuItem("About");
+    about.setIcon(SvgIcons.action("info", 16));
+    about.setDisabledIcon(SvgIcons.actionDisabled("info", 16));
     about.addActionListener(e -> javax.swing.JOptionPane.showMessageDialog(
         SwingUtilities.getWindowAncestor(this),
         "IRCafe\nA modern Java IRC client.",

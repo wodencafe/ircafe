@@ -86,6 +86,20 @@ public final class IntelliJThemePack {
     String s = idOrClassName.trim();
     String className = s.startsWith(ID_PREFIX) ? s.substring(ID_PREFIX.length()).trim() : s;
 
+    // First try the class name as-is.
+    if (tryInstallExact(className)) return true;
+
+    // If the class name was persisted with the wrong case (e.g. older builds lowercased it),
+    // try to resolve it case-insensitively against the theme pack's known classes.
+    String resolved = resolveThemeClassNameIgnoreCase(className);
+    if (resolved != null && !resolved.equals(className)) {
+      return tryInstallExact(resolved);
+    }
+
+    return false;
+  }
+
+  private static boolean tryInstallExact(String className) {
     try {
       Class<?> clazz = Class.forName(className);
       Object inst = clazz.getDeclaredConstructor().newInstance();
@@ -100,6 +114,17 @@ public final class IntelliJThemePack {
       log.debug("[ircafe] Failed to install IntelliJ theme LAF {}: {}", className, t.toString());
       return false;
     }
+  }
+
+  private static String resolveThemeClassNameIgnoreCase(String className) {
+    if (className == null || className.isBlank()) return null;
+    for (PackTheme t : listThemes()) {
+      if (t == null) continue;
+      if (t.lafClassName() != null && t.lafClassName().equalsIgnoreCase(className)) {
+        return t.lafClassName();
+      }
+    }
+    return null;
   }
 
   private static String callString(Object target, String method) {

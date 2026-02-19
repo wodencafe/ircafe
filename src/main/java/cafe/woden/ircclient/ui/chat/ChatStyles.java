@@ -91,8 +91,22 @@ public class ChatStyles {
     Color link = UIManager.getColor("Component.linkColor");
     if (link == null) link = UIManager.getColor("Label.foreground");
 
-    Color warn = UIManager.getColor("Component.warningColor");
-    Color err = UIManager.getColor("Component.errorColor");
+    // Theme-aware warning/error colors. FlatLaf exposes various keys depending on component type
+    // and whether we're using outline/border colors. Try several common ones before falling back.
+    Color warn = firstNonNull(
+        UIManager.getColor("Component.warningColor"),
+        UIManager.getColor("Component.warning.outlineColor"),
+        UIManager.getColor("Component.warning.borderColor"),
+        UIManager.getColor("Component.warning.focusedBorderColor"),
+        UIManager.getColor("Component.warning.focusColor")
+    );
+    Color err = firstNonNull(
+        UIManager.getColor("Component.errorColor"),
+        UIManager.getColor("Component.error.outlineColor"),
+        UIManager.getColor("Component.error.borderColor"),
+        UIManager.getColor("Component.error.focusedBorderColor"),
+        UIManager.getColor("Component.error.focusColor")
+    );
     if (warn == null) warn = new Color(0xF0B000);
     if (err == null) err = new Color(0xD05050);
 
@@ -112,7 +126,9 @@ public class ChatStyles {
     // Base colors derived from preset.
     Color tsFg = dim;
     Color sysFg = dim;
-    Color mentionBase = selBg != null ? selBg : new Color(0x6AA2FF);
+    // Mention base: prefer selection background (theme-native). If not available, prefer accent.
+    // Avoid hard-coded colors where possible to prevent clashes with theme pack themes.
+    Color mentionBase = selBg != null ? selBg : accent;
 
     switch (preset) {
       case SOFT -> {
@@ -305,5 +321,14 @@ public class ChatStyles {
   private static double srgbToLinear(int channel) {
     double v = channel / 255.0;
     return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  @SafeVarargs
+  private static <T> T firstNonNull(T... values) {
+    if (values == null) return null;
+    for (T v : values) {
+      if (v != null) return v;
+    }
+    return null;
   }
 }

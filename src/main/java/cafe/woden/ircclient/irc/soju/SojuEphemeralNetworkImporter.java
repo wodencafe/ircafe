@@ -65,6 +65,12 @@ public class SojuEphemeralNetworkImporter {
 
     IrcProperties.Server server = buildEphemeralServer(bouncer, d);
 
+    // If the user has chosen to persist this network entry, don't keep an ephemeral duplicate.
+    if (serverRegistry.containsId(server.id())) {
+      ephemeralServers.remove(server.id());
+      return;
+    }
+
     Optional<IrcProperties.Server> existingOpt = ephemeralServers.find(server.id());
     boolean same = existingOpt.isPresent() && existingOpt.get().equals(server);
     boolean sameOrigin = ephemeralServers.originOf(server.id()).map(o -> o.equals(bouncerId)).orElse(false);

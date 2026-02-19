@@ -107,7 +107,8 @@ public record UiSettings(
 ) {
 
   public UiSettings {
-    if (theme == null || theme.isBlank()) theme = "dark";
+    // Preferred default theme (A): Darcula.
+    if (theme == null || theme.isBlank()) theme = "darcula";
     if (chatFontFamily == null || chatFontFamily.isBlank()) chatFontFamily = "Monospaced";
     if (chatFontSize <= 0) chatFontSize = 12;
 

@@ -140,11 +140,9 @@ public class MessageInputPanel extends JPanel {
     typingPauseTimer.setRepeats(false);
     typingActiveKeepAliveTimer.setRepeats(true);
     remoteTypingHintTimer.setRepeats(false);
-    setPreferredSize(new Dimension(10, 34));
     hintPopupPanel.setOpaque(true);
-    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(new Color(0, 0, 0, 64)),
-        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+    // Border is (re)applied in applyHintPopupTheme() so it follows the active theme.
+    hintPopupPanel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
     hintPopupLabel.setOpaque(false);
     hintPopupLabel.setHorizontalAlignment(SwingConstants.LEFT);
     hintPopupPanel.add(hintPopupLabel, BorderLayout.CENTER);
