@@ -83,8 +83,8 @@ ircafe:
     tray:
       # If true (default), show a system tray icon when supported by the OS.
       enabled: true
-      # If true (default), the window close button hides IRCafe to the tray instead of exiting.
-      closeToTray: true
+      # If true, the window close button hides IRCafe to the tray instead of exiting. Default: false.
+      closeToTray: false
       # If true, minimizing the window hides IRCafe to the tray. Default: false.
       minimizeToTray: false
       # If true, start hidden (tray icon only). Default: false.
@@ -223,7 +223,7 @@ irc:
         username: "${IRCAFE_SASL_USERNAME:}"
         password: "${IRCAFE_SASL_PASSWORD:}"
         mechanism: "PLAIN"
-        # If true (default when SASL is enabled), a SASL auth failure will immediately disconnect
+        # If true (default), a SASL auth failure will immediately disconnect
         # and surface the error to the UI. Set false if SASL is optional and you want to stay
         # connected even when SASL fails.
         # disconnectOnFailure: true

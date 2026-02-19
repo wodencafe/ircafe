@@ -24,6 +24,8 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +53,12 @@ import java.util.Objects;
 @Component
 @Lazy
 public class ChatDockable extends ChatViewPanel implements Dockable {
+
+  private static final Logger log = LoggerFactory.getLogger(ChatDockable.class);
+
+  // Diagnostics: avoid spamming logs if the server doesn't support typing.
+  private final java.util.concurrent.atomic.AtomicBoolean typingUnavailableWarned =
+      new java.util.concurrent.atomic.AtomicBoolean(false);
 
   public static final String ID = "chat";
   private static final long READ_MARKER_SEND_COOLDOWN_MS = 3000L;
@@ -273,6 +281,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Keep an initial view state so the first auto-scroll behaves.
     this.activeTarget = new TargetRef("default", "status");
     stateByTarget.put(activeTarget, new ViewState());
+    updateDockTitle();
   }
 
   @Override
@@ -298,6 +307,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
 
     activeTarget = target;
+    updateDockTitle();
 
     // UI-only targets do not have a transcript.
     if (target.isNotifications()) {
@@ -596,7 +606,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     String cap = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
-    if ("typing".equals(cap)) {
+    if ("typing".equals(cap) || "message-tags".equals(cap)) {
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         inputPanel.clearRemoteTypingIndicator();
       }
@@ -874,10 +884,27 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private void onLocalTypingStateChanged(String state) {
     TargetRef t = activeTarget;
     if (t == null || t.isStatus() || t.isUiOnly()) return;
-    if (irc == null || !irc.isTypingAvailable(t.serverId())) return;
+    if (irc == null) return;
+    if (!irc.isTypingAvailable(t.serverId())) {
+      String s = normalizeTypingState(state);
+      // Only warn once per session when the user is actively composing.
+      if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
+        String reason = Objects.toString(irc.typingAvailabilityReason(t.serverId()), "").trim();
+        if (reason.isEmpty()) reason = "not negotiated / not allowed";
+        log.info("[{}] typing indicators are enabled, but unavailable on this server ({})", t.serverId(), reason);
+      }
+      return;
+    }
+    typingUnavailableWarned.set(false);
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
-    irc.sendTyping(t.serverId(), t.target(), s).subscribe(() -> {}, err -> {});
+    irc.sendTyping(t.serverId(), t.target(), s).subscribe(
+        () -> {},
+        err -> {
+          if (log.isDebugEnabled()) {
+            log.debug("[{}] typing send failed (target={} state={}): {}", t.serverId(), t.target(), s, err.toString());
+          }
+        });
   }
 
   private static String normalizeTypingState(String state) {
@@ -956,7 +983,62 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   @Override
   public String getTabText() {
-    return "Chat";
+    TargetRef t = activeTarget;
+    if (t == null) return "Chat";
+    if (t.isNotifications()) return "Notifications";
+    if (t.isChannelList()) return "Channel List";
+    if (t.isDccTransfers()) return "DCC Transfers";
+    if (t.isStatus()) return "Server";
+    String name = t.target();
+    if (name == null || name.isBlank()) return "Chat";
+    return name;
+  }
+
+  private void updateDockTitle() {
+    try {
+      String title = getTabText();
+      if (title == null || title.isBlank()) title = "Chat";
+      if (!Objects.equals(getName(), title)) {
+        setName(title);
+      }
+
+      // ModernDocking caches Dockable#getTabText when rendering tab groups.
+      // Some versions expose Docking.updateTabText(...) for this, but the single-app
+      // facade doesn't always include it. So we defensively update the tab title
+      // ourselves when we're inside a JTabbedPane.
+      SwingUtilities.invokeLater(this::updateTabTitleIfTabbed);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void updateTabTitleIfTabbed() {
+    try {
+      String title = getTabText();
+      if (title == null || title.isBlank()) title = "Chat";
+
+      JTabbedPane tabs = (JTabbedPane) SwingUtilities.getAncestorOfClass(JTabbedPane.class, this);
+      if (tabs == null) return;
+
+      int idx = tabs.indexOfComponent(this);
+      if (idx < 0) {
+        // Dockables are sometimes wrapped; locate the tab whose component contains us.
+        for (int i = 0; i < tabs.getTabCount(); i++) {
+          java.awt.Component c = tabs.getComponentAt(i);
+          if (c == null) continue;
+          if (c == this || SwingUtilities.isDescendingFrom(this, c)) {
+            idx = i;
+            break;
+          }
+        }
+      }
+
+      if (idx >= 0 && idx < tabs.getTabCount()) {
+        if (!Objects.equals(tabs.getTitleAt(idx), title)) {
+          tabs.setTitleAt(idx, title);
+        }
+      }
+    } catch (Exception ignored) {
+    }
   }
 
   @Override

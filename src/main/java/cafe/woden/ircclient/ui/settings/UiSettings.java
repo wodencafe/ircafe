@@ -47,6 +47,8 @@ public record UiSettings(
 
     boolean ctcpRequestsInActiveTargetEnabled,
 
+    boolean typingIndicatorsEnabled,
+
     boolean timestampsEnabled,
 
     String timestampFormat,
@@ -105,7 +107,8 @@ public record UiSettings(
 ) {
 
   public UiSettings {
-    if (theme == null || theme.isBlank()) theme = "dark";
+    // Preferred default theme (A): Darcula.
+    if (theme == null || theme.isBlank()) theme = "darcula";
     if (chatFontFamily == null || chatFontFamily.isBlank()) chatFontFamily = "Monospaced";
     if (chatFontSize <= 0) chatFontSize = 12;
 
@@ -226,6 +229,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        true,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, 500,
         clientLineColorEnabled, clientLineColor,
@@ -266,6 +270,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -287,6 +292,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -308,6 +314,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -329,6 +336,7 @@ public record UiSettings(
         enabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -350,6 +358,7 @@ public record UiSettings(
         imageEmbedsEnabled, collapsed, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -371,6 +380,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, Math.max(0, maxWidthPx), imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -392,6 +402,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, Math.max(0, maxHeightPx), imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -413,6 +424,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         enabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -434,6 +446,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, collapsed,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -455,6 +468,29 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         enabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
+        timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
+        chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
+        clientLineColorEnabled, clientLineColor,
+
+        userhostDiscoveryEnabled, userhostMinIntervalSeconds, userhostMaxCommandsPerMinute, userhostNickCooldownMinutes, userhostMaxNicksPerCommand,
+
+        userInfoEnrichmentEnabled, userInfoEnrichmentUserhostMinIntervalSeconds, userInfoEnrichmentUserhostMaxCommandsPerMinute,
+        userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
+        userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
+        userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        notificationRuleCooldownSeconds,
+        notificationRules);
+  }
+
+  public UiSettings withTypingIndicatorsEnabled(boolean enabled) {
+    return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
+        trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
+        trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
+        linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
+        presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        enabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -476,6 +512,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         enabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -497,6 +534,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, format, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -518,6 +556,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, enabled,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -544,6 +583,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,

@@ -18,6 +18,7 @@ public final class DockingTuner {
   private static final String CLIENT_PROP_WEST_LOCKED = "ircafe.lockWestDockWidth";
   private static final String CLIENT_PROP_EAST_LOCKED = "ircafe.lockEastDockWidth";
   private static final String CLIENT_PROP_ADJUSTING = "ircafe.splitAdjusting";
+  private static final String CLIENT_PROP_PERSIST_WIDTH_PREFIX = "ircafe.persistDockWidth.";
 
   private static final Logger log = LoggerFactory.getLogger(DockingTuner.class);
 
@@ -192,6 +193,53 @@ public final class DockingTuner {
       // Inverted split: dockable is on the LEFT; seed as a left-width lock.
       installWestWidthLock(best.split(), seedWidthPx);
     }
+  }
+
+  /**
+   * Watches the split pane that controls {@code dockable}'s width and calls {@code onWidthPx}
+   * when the user drags the divider.
+   *
+   * <p>This ignores programmatic divider adjustments performed by this class (see {@link #setDividerLocationSafely}).
+   */
+  public static void watchDockWidthOnUserResize(Window window, Component dockable, java.util.function.IntConsumer onWidthPx) {
+    if (window == null || dockable == null || onWidthPx == null) return;
+
+    SplitCandidate best = findBestSplitPane(window, dockable, JSplitPane.HORIZONTAL_SPLIT);
+    if (best == null) return;
+
+    JSplitPane split = best.split();
+    String key = CLIENT_PROP_PERSIST_WIDTH_PREFIX + System.identityHashCode(dockable);
+    if (Boolean.TRUE.equals(split.getClientProperty(key))) return;
+    split.putClientProperty(key, Boolean.TRUE);
+
+    split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+      if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_ADJUSTING))) return;
+
+      // Divider move events can fire before the split/dock bounds have fully settled.
+      // Persist a *stable* "side width" derived from the split pane (not the dockable's inner width),
+      // because the dockable is usually wrapped in tabs/padding and can be narrower than the split side.
+      SwingUtilities.invokeLater(() -> {
+        int w = -1;
+
+        if (best.side() == Side.LEFT) {
+          // DividerLocation is measured from the left edge and corresponds to the LEFT side width.
+          w = split.getDividerLocation();
+        } else if (best.side() == Side.RIGHT) {
+          // Compute the RIGHT side width from the divider location.
+          int total = split.getWidth();
+          if (total > 0) {
+            int divider = split.getDividerSize();
+            int loc = split.getDividerLocation();
+            w = Math.max(0, total - divider - loc);
+          }
+        }
+
+        // Fallback: best-effort dockable width (still better than nothing).
+        if (w <= 0) w = dockable.getWidth();
+
+        if (w > 0) onWidthPx.accept(w);
+      });
+});
   }
 
   /** Finds the "best" split pane to tune for a dockable. */

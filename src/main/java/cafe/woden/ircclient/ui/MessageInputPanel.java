@@ -60,6 +60,9 @@ public class MessageInputPanel extends JPanel {
   private final JPanel composeBanner = new JPanel(new BorderLayout(6, 0));
   private final JLabel composeBannerLabel = new JLabel();
   private final JButton composeBannerCancel = new JButton("Cancel");
+
+  private final JPanel typingBanner = new JPanel(new BorderLayout());
+  private final JLabel typingBannerLabel = new JLabel();
   private final UndoManager undo = new UndoManager();
   private static final int UNDO_GROUP_WINDOW_MS = 800;
   private final Timer undoGroupTimer = new Timer(UNDO_GROUP_WINDOW_MS, e -> endCompoundEdit());
@@ -101,11 +104,18 @@ public class MessageInputPanel extends JPanel {
   private volatile Consumer<String> onDraftChanged = t -> {};
   private volatile Consumer<String> onTypingStateChanged = s -> {};
   private static final int TYPING_PAUSE_MS = 5000;
+  // IRCv3 typing indicators are ephemeral; many clients expire "active" after ~5–6 seconds.
+  // To keep the indicator alive during long compositions, periodically re-emit "active".
+  private static final int TYPING_ACTIVE_KEEPALIVE_MS = 3000;
   private static final int REMOTE_TYPING_HINT_MS = 5000;
   private final Timer typingPauseTimer = new Timer(TYPING_PAUSE_MS, e -> onTypingPauseElapsed());
+  private final Timer typingActiveKeepAliveTimer = new Timer(TYPING_ACTIVE_KEEPALIVE_MS, e -> onTypingActiveKeepAliveElapsed());
   private final Timer remoteTypingHintTimer = new Timer(REMOTE_TYPING_HINT_MS, e -> clearRemoteTypingIndicator());
   private String lastEmittedTypingState = "done";
   private String remoteTypingHint = "";
+
+  // Track the last applied setting so we can react specifically to "toggle OFF".
+  private boolean lastTypingIndicatorsEnabled = true;
   private final UiSettingsBus settingsBus;
   private final CommandHistoryStore historyStore;
   private int historyOffset = -1;
@@ -128,12 +138,11 @@ public class MessageInputPanel extends JPanel {
     this.historyStore = historyStore;
     undoGroupTimer.setRepeats(false);
     typingPauseTimer.setRepeats(false);
+    typingActiveKeepAliveTimer.setRepeats(true);
     remoteTypingHintTimer.setRepeats(false);
-    setPreferredSize(new Dimension(10, 34));
     hintPopupPanel.setOpaque(true);
-    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(new Color(0, 0, 0, 64)),
-        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+    // Border is (re)applied in applyHintPopupTheme() so it follows the active theme.
+    hintPopupPanel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
     hintPopupLabel.setOpaque(false);
     hintPopupLabel.setHorizontalAlignment(SwingConstants.LEFT);
     hintPopupPanel.add(hintPopupLabel, BorderLayout.CENTER);
@@ -151,9 +160,23 @@ public class MessageInputPanel extends JPanel {
     composeBanner.add(composeBannerCancel, BorderLayout.EAST);
     composeBanner.setVisible(false);
 
+    typingBanner.setOpaque(false);
+    typingBanner.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+    typingBannerLabel.setText("");
+    // FlatLaf will render this a bit subtler if available; otherwise it's a normal label.
+    typingBannerLabel.putClientProperty("FlatLaf.styleClass", "small");
+    typingBanner.add(typingBannerLabel, BorderLayout.CENTER);
+    typingBanner.setVisible(false);
+
     JPanel center = new JPanel(new BorderLayout(0, 2));
     center.setOpaque(false);
-    center.add(composeBanner, BorderLayout.NORTH);
+
+    JPanel bannerStack = new JPanel();
+    bannerStack.setOpaque(false);
+    bannerStack.setLayout(new BoxLayout(bannerStack, BoxLayout.Y_AXIS));
+    bannerStack.add(composeBanner);
+    bannerStack.add(typingBanner);
+    center.add(bannerStack, BorderLayout.NORTH);
     center.add(input, BorderLayout.CENTER);
     add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
@@ -192,7 +215,9 @@ public class MessageInputPanel extends JPanel {
     });
 
     input.addCaretListener(e -> updateHint());
-    applySettings(settingsBus.get());
+    UiSettings initial = settingsBus.get();
+    lastTypingIndicatorsEnabled = initial != null && initial.typingIndicatorsEnabled();
+    applySettings(initial);
     input.addActionListener(e -> emit());
     send.addActionListener(e -> emit());
 
@@ -805,10 +830,20 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       input.setFont(f);
       send.setFont(f);
       hintPopupLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      typingBannerLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
       applyHintPopupTheme();
       refreshHintPopup();
     } catch (Exception ignored) {
     }
+
+    // If typing indicators were just toggled OFF, immediately emit DONE (cleanup)
+    // and hide any remote banner.
+    boolean enabledNow = s.typingIndicatorsEnabled();
+    if (lastTypingIndicatorsEnabled && !enabledNow) {
+      flushTypingDone();
+      clearRemoteTypingIndicator();
+    }
+    lastTypingIndicatorsEnabled = enabledNow;
   }
 
   private void applyHintPopupTheme() {
@@ -982,10 +1017,6 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     return Collections.unmodifiableList(deduped);
   }
   private void updateHint() {
-    if (remoteTypingHint != null && !remoteTypingHint.isBlank()) {
-      showHintText(remoteTypingHint, false);
-      return;
-    }
     if (!input.isEnabled() || !input.isEditable()) {
       clearHintPopup();
       return;
@@ -1097,10 +1128,15 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     String text = input.getText();
     if (text == null || text.isBlank()) {
       typingPauseTimer.stop();
+      typingActiveKeepAliveTimer.stop();
       emitTypingState("done");
       return;
     }
     emitTypingState("active");
+    // Start keepalive when we enter/are in the active state; do not restart on every keystroke.
+    if (!typingActiveKeepAliveTimer.isRunning()) {
+      typingActiveKeepAliveTimer.start();
+    }
     typingPauseTimer.restart();
   }
 
@@ -1108,10 +1144,27 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     if (!input.isEnabled() || !input.isEditable()) return;
     String text = input.getText();
     if (text == null || text.isBlank()) {
+      typingActiveKeepAliveTimer.stop();
       emitTypingState("done");
       return;
     }
+    typingActiveKeepAliveTimer.stop();
     emitTypingState("paused");
+  }
+
+  private void onTypingActiveKeepAliveElapsed() {
+    // Only re-emit while we're still in an active compose.
+    if (!"active".equals(lastEmittedTypingState)) return;
+    if (!input.isEnabled() || !input.isEditable()) return;
+    String text = input.getText();
+    if (text == null || text.isBlank()) {
+      typingPauseTimer.stop();
+      typingActiveKeepAliveTimer.stop();
+      emitTypingState("done");
+      return;
+    }
+    // Force a repeat "active" emission to keep remote indicators alive.
+    emitTypingState("active", true);
   }
   private static String currentToken(String text, int caretPos) {
     if (text == null || text.isEmpty()) return "";
@@ -1328,6 +1381,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
 
   public void flushTypingDone() {
     typingPauseTimer.stop();
+    typingActiveKeepAliveTimer.stop();
     emitTypingState("done");
   }
 
@@ -1346,9 +1400,21 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   }
 
   private void emitTypingState(String state) {
+    emitTypingState(state, false);
+  }
+
+  private void emitTypingState(String state, boolean allowRepeat) {
     String normalized = normalizeTypingState(state);
     if (normalized.isEmpty()) return;
-    if (normalized.equals(lastEmittedTypingState)) return;
+
+    // Preferences gating: if typing indicators are disabled, never emit ACTIVE/PAUSED.
+    // Still allow DONE to flow through as a cleanup signal so we can clear any existing
+    // indicator on the server / other clients.
+    if (!settingsBus.get().typingIndicatorsEnabled() && !"done".equals(normalized)) {
+      return;
+    }
+
+    if (!allowRepeat && normalized.equals(lastEmittedTypingState)) return;
     lastEmittedTypingState = normalized;
     try {
       onTypingStateChanged.accept(normalized);
@@ -1368,6 +1434,9 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
   }
 
   public void showRemoteTypingIndicator(String nick, String state) {
+    if (!settingsBus.get().typingIndicatorsEnabled()) {
+      return;
+    }
     String n = nick == null ? "" : nick.trim();
     if (n.isEmpty()) return;
     String s = normalizeTypingState(state);
@@ -1376,14 +1445,23 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       clearRemoteTypingIndicator();
       return;
     }
-    remoteTypingHint = "paused".equals(s) ? (n + " paused typing...") : (n + " is typing...");
+    remoteTypingHint = "paused".equals(s) ? (n + " paused typing…") : (n + " is typing…");
     remoteTypingHintTimer.restart();
-    updateHint();
+    typingBannerLabel.setText(remoteTypingHint);
+    typingBanner.setVisible(true);
+    typingBanner.revalidate();
+    typingBanner.repaint();
   }
 
   public void clearRemoteTypingIndicator() {
     remoteTypingHintTimer.stop();
     remoteTypingHint = "";
+    typingBannerLabel.setText("");
+    typingBanner.setVisible(false);
+    typingBanner.revalidate();
+    typingBanner.repaint();
+
+    // Old behavior used the hint popup; ensure completions can re-appear.
     updateHint();
   }
 
@@ -1508,6 +1586,7 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     historyScratch = null;
     historySearchPrefix = null;
     typingPauseTimer.stop();
+    typingActiveKeepAliveTimer.stop();
     clearReplyComposeInternal(false, false);
     programmaticEdit = true;
     try {

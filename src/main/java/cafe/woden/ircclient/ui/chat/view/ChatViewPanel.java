@@ -13,6 +13,7 @@ import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.net.ProxyPlan;
+import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Font;
@@ -31,6 +32,7 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
@@ -66,6 +68,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
     chat.setEditable(false);
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    applyChatBackground();
     decorators.add(ViewportWrapRevalidateDecorator.decorate(scroll.getViewport(), chat));
     if (this.settingsBus != null) {
       applySettings(this.settingsBus.get());
@@ -121,6 +124,32 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         this::onMessageReferenceClicked,
         this::onTranscriptClicked
     ));
+  }
+
+  @Override
+  public void updateUI() {
+    super.updateUI();
+    // Keep the scrollpane/viewport/panel background matched to the transcript background.
+    // This prevents the subtle "paper on cardboard" mismatch on many LAFs.
+    SwingUtilities.invokeLater(this::applyChatBackground);
+  }
+
+  private void applyChatBackground() {
+    try {
+      Color bg = UIManager.getColor("TextPane.background");
+      if (bg == null) {
+        bg = chat.getBackground();
+      }
+      if (bg == null) {
+        return;
+      }
+
+      chat.setBackground(bg);
+      scroll.getViewport().setBackground(bg);
+      scroll.setBackground(bg);
+      setBackground(bg);
+    } catch (Exception ignored) {
+    }
   }
 
   @Override

@@ -141,7 +141,7 @@ public class ChatDockManager {
     String cap = java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
-    if ("typing".equals(cap)) {
+    if ("typing".equals(cap) || "message-tags".equals(cap)) {
       clearTypingIndicatorsForServer(sid);
       return;
     }

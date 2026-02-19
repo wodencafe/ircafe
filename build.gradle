@@ -39,6 +39,18 @@ java {
 
 springBoot {
     mainClass = 'cafe.woden.ircclient.IrcSwingApp'
+
+    // Generate META-INF/build-info.properties (build.version, build.time, ...)
+    // so the UI can display version + build date.
+    buildInfo()
+}
+
+// Ensure build-info exists for bootRun/IDE runs too.
+tasks.matching { it.name == 'bootRun' }.configureEach {
+    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
+}
+tasks.matching { it.name == 'processResources' }.configureEach {
+    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
 }
 
 configurations {
@@ -127,8 +139,11 @@ dependencies {
     implementation "io.github.andrewauclair:modern-docking-single-app:1.4.1"
     implementation "io.github.andrewauclair:modern-docking-ui:1.4.1"
 
-    implementation "com.formdev:flatlaf:3.7"
-    implementation "com.formdev:flatlaf-extras:3.7"
+    def flatlafVersion = (project.findProperty('flatlafVersion') ?: '3.7').toString()
+
+    implementation "com.formdev:flatlaf:${flatlafVersion}"
+    implementation "com.formdev:flatlaf-extras:${flatlafVersion}"
+    implementation "com.formdev:flatlaf-intellij-themes:${flatlafVersion}"
 
     implementation "com.fifesoft:autocomplete:3.3.3"
 

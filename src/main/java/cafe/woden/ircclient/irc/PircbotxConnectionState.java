@@ -106,6 +106,14 @@ final class PircbotxConnectionState {
   final AtomicBoolean draftReactCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageEditCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageRedactionCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean messageTagsCapAcked = new AtomicBoolean(false);
+
+  /**
+   * Whether the server allows the IRCv3 {@code +typing} client-only tag, per RPL_ISUPPORT CLIENTTAGDENY.
+   *
+   * <p>Default is {@code true} (i.e. allow), which matches the "missing or empty CLIENTTAGDENY" default.
+   */
+  final AtomicBoolean typingClientTagAllowed = new AtomicBoolean(true);
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
 
@@ -128,6 +136,9 @@ final class PircbotxConnectionState {
   // Warn once per application run if server-time wasn't negotiated on this server.
   final AtomicBoolean serverTimeMissingWarned = new AtomicBoolean(false);
 
+  // Warn once per connection if typing isn't available.
+  final AtomicBoolean typingMissingWarned = new AtomicBoolean(false);
+
   // One-time connect log summary of negotiated caps.
   final AtomicBoolean capSummaryLogged = new AtomicBoolean(false);
 
@@ -148,11 +159,14 @@ final class PircbotxConnectionState {
     draftReactCapAcked.set(false);
     draftMessageEditCapAcked.set(false);
     draftMessageRedactionCapAcked.set(false);
+    messageTagsCapAcked.set(false);
+    typingClientTagAllowed.set(true);
     typingCapAcked.set(false);
     readMarkerCapAcked.set(false);
     sojuBouncerNetworksCapAcked.set(false);
     serverTimeCapAcked.set(false);
     standardRepliesCapAcked.set(false);
     capSummaryLogged.set(false);
+    typingMissingWarned.set(false);
   }
 }

@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.ui.settings;
 
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
@@ -87,6 +89,7 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.JDialog;
 import javax.swing.JList;
 import javax.swing.JLabel;
+import javax.swing.ListCellRenderer;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
@@ -200,7 +203,9 @@ public class PreferencesDialog {
 
     ThemeControls theme = buildThemeControls(current, themeLabelById);
     FontControls fonts = buildFontControls(current, closeables);
-    ThemeAccentSettings initialAccent = accentSettingsBus != null ? accentSettingsBus.get() : new ThemeAccentSettings(null, 70);
+    ThemeAccentSettings initialAccent = accentSettingsBus != null
+        ? accentSettingsBus.get()
+        : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
     AccentControls accent = buildAccentControls(initialAccent);
     ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
     TweakControls tweaks = buildTweakControls(initialTweaks);
@@ -218,9 +223,12 @@ public class PreferencesDialog {
     // Live preview snapshot: used to rollback any preview-only changes on Cancel / window close.
     final java.util.concurrent.atomic.AtomicReference<String> committedThemeId = new java.util.concurrent.atomic.AtomicReference<>(
         normalizeThemeIdInternal(current != null ? current.theme() : null));
+    final java.util.concurrent.atomic.AtomicReference<String> lastPreviewThemeId = new java.util.concurrent.atomic.AtomicReference<>(committedThemeId.get());
     final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings = new java.util.concurrent.atomic.AtomicReference<>(current);
     final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings = new java.util.concurrent.atomic.AtomicReference<>(
-        initialAccent != null ? initialAccent : new ThemeAccentSettings(null, 70));
+        initialAccent != null
+            ? initialAccent
+            : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
     final java.util.concurrent.atomic.AtomicReference<ThemeTweakSettings> committedTweakSettings = new java.util.concurrent.atomic.AtomicReference<>(
         initialTweaks != null ? initialTweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
     final java.util.concurrent.atomic.AtomicReference<ChatThemeSettings> committedChatThemeSettings = new java.util.concurrent.atomic.AtomicReference<>(
@@ -284,7 +292,15 @@ public class PreferencesDialog {
         accentSettingsBus.set(nextAccent);
       }
 
-      themeManager.applyTheme(sel);
+      if (!java.util.Objects.equals(sel, lastPreviewThemeId.get())) {
+        themeManager.applyTheme(sel);
+        lastPreviewThemeId.set(sel);
+      } else {
+        themeManager.applyAppearance(true);
+      }
+
+      // Theme switches can change the "Theme" accent color; refresh the preview pill.
+      try { accent.updateChip.run(); } catch (Exception ignored) {}
     };
     lafPreviewTimer.addActionListener(e -> applyLafPreview.run());
     final Runnable scheduleLafPreview = () -> {
@@ -374,7 +390,9 @@ public class PreferencesDialog {
         }
         if (accentSettingsBus != null) {
           ThemeAccentSettings a = committedAccentSettings.get();
-          accentSettingsBus.set(a != null ? a : new ThemeAccentSettings(null, 70));
+          accentSettingsBus.set(a != null
+              ? a
+              : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
         }
         if (tweakSettingsBus != null) {
           ThemeTweakSettings tw = committedTweakSettings.get();
@@ -385,7 +403,13 @@ public class PreferencesDialog {
           chatThemeSettingsBus.set(ct != null ? ct : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
         }
 
-        themeManager.applyTheme(committedThemeId.get());
+        String committed = committedThemeId.get();
+        if (java.util.Objects.equals(committed, lastPreviewThemeId.get())) {
+          themeManager.applyAppearance(true);
+        } else {
+          themeManager.applyTheme(committed);
+          lastPreviewThemeId.set(committed);
+        }
       } finally {
         suppressLivePreview.set(false);
       }
@@ -400,6 +424,7 @@ public class PreferencesDialog {
 
     // LAF + accent/tweak preview
     accent.enabled.addActionListener(e -> scheduleLafPreview.run());
+    accent.preset.addActionListener(e -> scheduleLafPreview.run());
     accent.strength.addChangeListener(e -> scheduleLafPreview.run());
     accent.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
       String raw = accent.hex.getText();
@@ -478,6 +503,7 @@ public class PreferencesDialog {
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
+    JCheckBox typingIndicatorsEnabled = buildTypingIndicatorsCheckbox(current);
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
 
     HistoryControls history = buildHistoryControls(current, closeables);
@@ -501,7 +527,7 @@ public class PreferencesDialog {
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
-    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
+    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, typingIndicatorsEnabled, nickColors, timestamps, outgoing);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications);
@@ -510,6 +536,13 @@ public class PreferencesDialog {
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
+
+    apply.setIcon(SvgIcons.action("check", 16));
+    apply.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    ok.setIcon(SvgIcons.action("check", 16));
+    ok.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    cancel.setIcon(SvgIcons.action("close", 16));
+    cancel.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
 
     attachNotificationRuleValidation(notifications, apply, ok);
 
@@ -530,7 +563,9 @@ public class PreferencesDialog {
       );
       boolean tweaksChanged = !java.util.Objects.equals(prevTweaks, nextTweaks);
 
-      ThemeAccentSettings prevAccent = accentSettingsBus != null ? accentSettingsBus.get() : new ThemeAccentSettings(null, 70);
+      ThemeAccentSettings prevAccent = accentSettingsBus != null
+          ? accentSettingsBus.get()
+          : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
       boolean accentOverrideEnabledV = accent.enabled.isSelected();
       int accentStrengthV = accent.strength.getValue();
       String accentHexV = null;
@@ -650,6 +685,7 @@ public class PreferencesDialog {
 
       boolean presenceFoldsV = presenceFolds.isSelected();
       boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
+      boolean typingIndicatorsEnabledV = typingIndicatorsEnabled.isSelected();
 
       boolean nickColoringEnabledV = nickColors.enabled.isSelected();
       double nickColorMinContrastV = ((Number) nickColors.minContrast.getValue()).doubleValue();
@@ -796,6 +832,7 @@ public class PreferencesDialog {
           linkPreviews.collapsed.isSelected(),
           presenceFoldsV,
           ctcpRequestsInActiveTargetV,
+          typingIndicatorsEnabledV,
           timestampsEnabledV,
           timestampFormatV,
           timestampsIncludeChatMessagesV,
@@ -890,6 +927,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
       runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(next.ctcpRequestsInActiveTargetEnabled());
+      runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
 
       if (nickColorSettingsBus != null) {
         nickColorSettingsBus.set(new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
@@ -1092,14 +1130,24 @@ public class PreferencesDialog {
     int maxW = Math.max(usable.width - margin, d.getMinimumSize().width);
     int maxH = Math.max(usable.height - margin, d.getMinimumSize().height);
 
-    // Some tabs (especially those wrapped in JScrollPane) can slightly under-report
-    // their preferred height, resulting in an unnecessary vertical scrollbar.
-    // Nudge the dialog just enough to avoid that when it fits comfortably.
-    nudgeToAvoidUnnecessaryVerticalScroll(d, maxH);
-
+    // First clamp to usable bounds + minimum size.
     Dimension size = d.getSize();
     int w = Math.max(d.getMinimumSize().width, Math.min(size.width, maxW));
     int h = Math.max(d.getMinimumSize().height, Math.min(size.height, maxH));
+    if (w != size.width || h != size.height) {
+      d.setSize(w, h);
+      d.validate();
+    }
+
+    // Some tabs (especially those wrapped in JScrollPane and/or containing wrapped help text)
+    // can slightly under-report their preferred height, resulting in an unnecessary vertical
+    // scrollbar. Nudge after the clamp so the viewport width/word-wrapping is final.
+    nudgeToAvoidUnnecessaryVerticalScroll(d, maxH);
+
+    // Re-clamp in case the nudge bumped us over the usable bounds.
+    size = d.getSize();
+    w = Math.max(d.getMinimumSize().width, Math.min(size.width, maxW));
+    h = Math.max(d.getMinimumSize().height, Math.min(size.height, maxH));
     if (w != size.width || h != size.height) {
       d.setSize(w, h);
       d.validate();
@@ -1147,7 +1195,7 @@ public class PreferencesDialog {
 
     // Only nudge if the missing amount is small-ish (we're fixing "almost fits" cases).
     // If the view is truly huge, we keep the scroll.
-    if (missing > 120) return;
+    if (missing > 220) return;
 
     Dimension dialogSize = d.getSize();
     int targetH = Math.min(maxDialogHeight, dialogSize.height + missing);
@@ -1419,9 +1467,32 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private ThemeControls buildThemeControls(UiSettings current, Map<String, String> themeLabelById) {
-    JComboBox<String> theme = new JComboBox<>(themeLabelById.keySet().toArray(String[]::new));
+    // Ensure the currently configured theme is always present in the dropdown, even if it's a
+    // custom LookAndFeel class name (or an IntelliJ themes-pack id).
+    String curTheme = normalizeThemeIdInternal(current != null ? current.theme() : null);
+    String matchKey = null;
+    for (String k : themeLabelById.keySet()) {
+      if (sameThemeInternal(k, curTheme)) {
+        matchKey = k;
+        break;
+      }
+    }
+
+    Map<String, String> map = themeLabelById;
+    if (matchKey == null && curTheme != null && !curTheme.isBlank()) {
+      java.util.LinkedHashMap<String, String> tmp = new java.util.LinkedHashMap<>();
+      tmp.put(curTheme, "Custom: " + curTheme);
+      tmp.putAll(themeLabelById);
+      map = tmp;
+      matchKey = curTheme;
+    }
+
+    final Map<String, String> labelMap = map;
+
+    JComboBox<String> theme = new JComboBox<>(labelMap.keySet().toArray(String[]::new));
     theme.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
-      JLabel l = new JLabel(themeLabelById.getOrDefault(value, value));
+      String key = value != null ? value : "";
+      JLabel l = new JLabel(labelMap.getOrDefault(key, key));
       l.setOpaque(true);
       if (isSelected) {
         l.setBackground(list.getSelectionBackground());
@@ -1433,16 +1504,37 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       l.setBorder(null);
       return l;
     });
-    theme.setSelectedItem(current.theme());
+    theme.setSelectedItem(matchKey != null ? matchKey : curTheme);
     return new ThemeControls(theme);
   }
 
   private AccentControls buildAccentControls(ThemeAccentSettings current) {
-    ThemeAccentSettings cur = current != null ? current : new ThemeAccentSettings(null, 70);
+    ThemeAccentSettings cur = current != null
+        ? current
+        : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
 
     JCheckBox enabled = new JCheckBox("Override theme accent");
     enabled.setToolTipText("If enabled, your chosen accent is blended into the current theme. Changes preview live; Apply/OK saves.");
     enabled.setSelected(cur.enabled());
+
+    // Presets keep this easy for normal users, but we still expose a hex field for power users.
+    JComboBox<AccentPreset> preset = new JComboBox<>(AccentPreset.values());
+    preset.setRenderer(new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        JLabel c = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+        AccentPreset p = (value instanceof AccentPreset ap) ? ap : AccentPreset.THEME_DEFAULT;
+        c.setText(p.label);
+        Color col = p.colorOrNull();
+        if (col != null) {
+          c.setIcon(new ColorSwatch(col, 12, 12));
+        } else {
+          c.setIcon(null);
+        }
+        return c;
+      }
+    });
+    preset.setToolTipText("Quick accent presets. 'Custom…' opens a color picker.");
 
     JTextField hex = new JTextField(cur.accentColor() != null ? cur.accentColor() : "", 10);
     hex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#RRGGBB");
@@ -1457,16 +1549,112 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     strength.setSnapToTicks(false);
     strength.setToolTipText("0 = theme default, 100 = fully your chosen accent");
 
+    // Tiny inline “pill” preview used next to the Accent label.
+    JLabel chip = new JLabel();
+    chip.setOpaque(true);
+    chip.setFont(chip.getFont().deriveFont(Math.max(11f, chip.getFont().getSize2D() - 1f)));
+    // FlatLaf styling for JLabel does not support borderWidth/borderColor style keys.
+    // Use a single 'border:' style entry (insets, color, thickness, arc) to get a rounded pill.
+    chip.putClientProperty(
+        FlatClientProperties.STYLE,
+        "border: 2,8,2,8, $Component.borderColor, 1, 999; background: $Panel.background;"
+    );
+
     Runnable updatePickIcon = () -> {
       Color c = parseHexColorLenient(hex.getText());
       if (c != null) {
         pick.setIcon(new ColorSwatch(c, 14, 14));
-        pick.setText(toHex(c));
+        pick.setText("");
+        pick.setToolTipText(toHex(c));
       } else {
         pick.setIcon(null);
         pick.setText("Pick…");
+        pick.setToolTipText("Pick an accent color");
       }
     };
+
+    Runnable updateChip = () -> {
+      boolean en = enabled.isSelected();
+
+      // What color should we show?
+      Color bg;
+      String text;
+      String tip;
+
+      if (!en) {
+        // Try to show the current theme’s accent color when override is off.
+        bg = UIManager.getColor("Component.accentColor");
+        if (bg == null) bg = UIManager.getColor("Component.focusColor");
+        if (bg == null) bg = UIManager.getColor("Focus.color");
+        if (bg == null) bg = UIManager.getColor("Actions.Blue");
+        if (bg == null) bg = UIManager.getColor("Button.default.focusColor");
+        if (bg == null) bg = parseHexColorLenient(UiProperties.DEFAULT_ACCENT_COLOR);
+        if (bg == null) bg = new Color(0x2D6BFF);
+        text = "Theme";
+        tip = "Theme accent • " + strength.getValue() + "%";
+      } else {
+        String raw = hex.getText();
+        raw = raw != null ? raw.trim() : "";
+        Color chosen = parseHexColorLenient(raw);
+        bg = chosen != null ? chosen : parseHexColorLenient(UiProperties.DEFAULT_ACCENT_COLOR);
+        if (bg == null) bg = new Color(0x2D6BFF);
+
+        AccentPreset p = (AccentPreset) preset.getSelectedItem();
+        if (p == null) p = AccentPreset.fromHexOrCustom(ThemeAccentSettings.normalizeHexOrNull(raw));
+
+        text = switch (p) {
+          case IRCAFE_COBALT -> "Cobalt";
+          case INDIGO -> "Indigo";
+          case VIOLET -> "Violet";
+          case CUSTOM -> "Custom";
+          case THEME_DEFAULT -> "Theme";
+        };
+        tip = "Accent override: " + (chosen != null ? toHex(chosen) : "(invalid)") + " • " + strength.getValue() + "%";
+      }
+
+      chip.setText(text);
+      chip.setBackground(bg);
+      chip.setForeground(contrastTextColor(bg));
+      chip.setToolTipText(tip);
+    };
+
+    java.util.concurrent.atomic.AtomicBoolean adjusting = new java.util.concurrent.atomic.AtomicBoolean(false);
+    java.util.concurrent.atomic.AtomicReference<AccentPreset> lastPreset = new java.util.concurrent.atomic.AtomicReference<>();
+
+    Runnable syncPresetFromHex = () -> {
+      if (adjusting.get()) return;
+      if (!enabled.isSelected()) {
+        adjusting.set(true);
+        try {
+          preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
+        } finally {
+          adjusting.set(false);
+        }
+        lastPreset.set(AccentPreset.THEME_DEFAULT);
+        return;
+      }
+
+      String norm = ThemeAccentSettings.normalizeHexOrNull(hex.getText());
+      AccentPreset next = AccentPreset.fromHexOrCustom(norm);
+      adjusting.set(true);
+      try {
+        preset.setSelectedItem(next);
+      } finally {
+        adjusting.set(false);
+      }
+      lastPreset.set(next);
+    };
+
+    // Initialize preset based on current value.
+    if (!cur.enabled()) {
+      preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
+      lastPreset.set(AccentPreset.THEME_DEFAULT);
+    } else {
+      String norm = ThemeAccentSettings.normalizeHexOrNull(cur.accentColor());
+      AccentPreset init = AccentPreset.fromHexOrCustom(norm);
+      preset.setSelectedItem(init);
+      lastPreset.set(init);
+    }
 
     Runnable applyEnabledState = () -> {
       boolean en = enabled.isSelected();
@@ -1480,6 +1668,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       } else {
         updatePickIcon.run();
       }
+      updateChip.run();
     };
 
     pick.addActionListener(e -> {
@@ -1491,27 +1680,116 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       if (chosen != null) {
         hex.setText(toHex(chosen));
         updatePickIcon.run();
+        syncPresetFromHex.run();
+        updateChip.run();
       }
     });
 
     clear.addActionListener(e -> {
-      hex.setText("");
+      adjusting.set(true);
+      try {
+        enabled.setSelected(false);
+        preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
+        hex.setText("");
+      } finally {
+        adjusting.set(false);
+      }
       updatePickIcon.run();
+      applyEnabledState.run();
+      updateChip.run();
+    });
+
+    preset.addActionListener(e -> {
+      if (adjusting.get()) return;
+      AccentPreset p = (AccentPreset) preset.getSelectedItem();
+      if (p == null) return;
+
+      // Preserve prior preset to revert if user cancels "Custom…".
+      AccentPreset prev = lastPreset.get() != null ? lastPreset.get() : AccentPreset.THEME_DEFAULT;
+      boolean prevEnabled = enabled.isSelected();
+      String prevHex = hex.getText();
+
+      adjusting.set(true);
+      try {
+        if (p == AccentPreset.THEME_DEFAULT) {
+          enabled.setSelected(false);
+          // Keep hex around for convenience, but we won't apply it while disabled.
+        } else if (p == AccentPreset.CUSTOM) {
+          enabled.setSelected(true);
+        } else {
+          enabled.setSelected(true);
+          if (p.hex != null) {
+            hex.setText(p.hex);
+          }
+        }
+      } finally {
+        adjusting.set(false);
+      }
+
+      applyEnabledState.run();
+
+      if (p == AccentPreset.CUSTOM) {
+        Color initial = parseHexColorLenient(hex.getText());
+        Color chosen = showColorPickerDialog(SwingUtilities.getWindowAncestor(preset),
+            "Choose Accent Color",
+            initial,
+            preferredPreviewBackground());
+        if (chosen == null) {
+          // Revert selection if canceled.
+          adjusting.set(true);
+          try {
+            preset.setSelectedItem(prev);
+            enabled.setSelected(prevEnabled);
+            hex.setText(prevHex);
+          } finally {
+            adjusting.set(false);
+          }
+          lastPreset.set(prev);
+          applyEnabledState.run();
+          updateChip.run();
+          return;
+        }
+        hex.setText(toHex(chosen));
+        updatePickIcon.run();
+        syncPresetFromHex.run();
+        updateChip.run();
+      } else {
+        // Keep "last" in sync for cancel logic.
+        lastPreset.set(p);
+        updateChip.run();
+      }
     });
 
     enabled.addActionListener(e -> applyEnabledState.run());
-    hex.getDocument().addDocumentListener(new SimpleDocListener(updatePickIcon));
+    enabled.addActionListener(e -> syncPresetFromHex.run());
+    enabled.addActionListener(e -> updateChip.run());
+    hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
+      updatePickIcon.run();
+      syncPresetFromHex.run();
+      updateChip.run();
+    }));
+    strength.addChangeListener(e -> updateChip.run());
 
-    JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]6[]", "[]"));
+    JPanel row = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]"));
     row.setOpaque(false);
-    row.add(enabled, "span 3, wrap");
-    row.add(hex, "w 110!");
-    row.add(pick);
-    row.add(clear);
+
+    JPanel top = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]10[grow,fill]", "[]"));
+    top.setOpaque(false);
+    top.add(enabled, "growx");
+    top.add(preset, "growx, wmin 0");
+    row.add(top, "growx, wrap");
+
+    JPanel bottom = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]6[]", "[]"));
+    bottom.setOpaque(false);
+    bottom.add(hex, "w 110!");
+    bottom.add(pick);
+    bottom.add(clear);
+    row.add(bottom, "growx");
 
     applyEnabledState.run();
+    updateChip.run();
 
-    return new AccentControls(enabled, hex, pick, clear, strength, row, applyEnabledState);
+    return new AccentControls(enabled, preset, hex, pick, clear, strength, chip, row, applyEnabledState, syncPresetFromHex, updateChip);
   }
 
   private ChatThemeControls buildChatThemeControls(ChatThemeSettings current) {
@@ -1656,27 +1934,69 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       }
     }
 
-    // Render each family name using its own font in the dropdown.
+    // Two-column font preview:
+    //   Left  = family name in the UI font (always readable)
+    //   Right = short sample rendered in that family (when possible)
     Font baseFont = fontFamily.getFont();
-    fontFamily.setRenderer(new DefaultListCellRenderer() {
-      @Override
-      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-        JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+    final String sampleText = "AaBbYyZz 0123";
+    fontFamily.setRenderer(new ListCellRenderer<>() {
+      private final JPanel panel = new JPanel(new BorderLayout(8, 0));
+      private final JLabel left = new JLabel();
+      private final JLabel right = new JLabel();
 
-        String family = value != null ? value.toString() : "";
+      {
+        panel.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        left.setOpaque(false);
+        right.setOpaque(false);
+        right.setHorizontalAlignment(SwingConstants.RIGHT);
+        panel.add(left, BorderLayout.WEST);
+        panel.add(right, BorderLayout.EAST);
+        panel.setOpaque(true);
+      }
+
+      @Override
+      public java.awt.Component getListCellRendererComponent(JList<? extends String> list, String value, int index, boolean isSelected, boolean cellHasFocus) {
+        String family = value != null ? value : "";
+
+        // Colors
+        Color bg;
+        Color fg;
+        if (list != null) {
+          bg = isSelected ? list.getSelectionBackground() : list.getBackground();
+          fg = isSelected ? list.getSelectionForeground() : list.getForeground();
+        } else {
+          bg = UIManager.getColor("ComboBox.background");
+          fg = UIManager.getColor("ComboBox.foreground");
+        }
+        panel.setBackground(bg);
+        left.setForeground(fg);
+        right.setForeground(fg);
+
+        // Left column: always readable
+        left.setText(family);
+        left.setFont(baseFont);
+
+        // Right column: sample preview (only if the family can actually render it)
+        String preview = "";
+        Font previewFont = baseFont;
         if (!family.isBlank()) {
           Font candidate = new Font(family, baseFont.getStyle(), baseFont.getSize());
           // If the requested font isn't available (editable entry), keep the UI default.
           if (candidate != null && (candidate.getFamily().equalsIgnoreCase(family) || candidate.getName().equalsIgnoreCase(family))) {
-            label.setFont(candidate);
-          } else {
-            label.setFont(baseFont);
+            if (candidate.canDisplayUpTo(sampleText) == -1) {
+              preview = sampleText;
+              previewFont = candidate;
+            } else {
+              // If it can't render even the basic sample, don't show tofu squares.
+              preview = "";
+              previewFont = baseFont;
+            }
           }
-        } else {
-          label.setFont(baseFont);
         }
+        right.setText(preview);
+        right.setFont(previewFont);
 
-        return label;
+        return panel;
       }
     });
 
@@ -2033,6 +2353,13 @@ panel.add(subTabs, "growx, wmin 0");
     ctcp.setToolTipText("When enabled, inbound CTCP requests (e.g. VERSION, PING) are announced in the currently active chat tab.\n" +
         "When disabled, CTCP requests are routed to the target they came from (channel or PM).");
     return ctcp;
+  }
+
+  private JCheckBox buildTypingIndicatorsCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Enable typing indicators (IRCv3)");
+    cb.setSelected(current.typingIndicatorsEnabled());
+    cb.setToolTipText("When enabled, IRCafe will send and display IRCv3 typing indicators when the server supports them.");
+    return cb;
   }
 
   private NickColorControls buildNickColorControls(Window owner, List<AutoCloseable> closeables) {
@@ -2437,8 +2764,42 @@ panel.add(subTabs, "growx, wmin 0");
       connectTimeoutSeconds.setEnabled(enabled);
       readTimeoutSeconds.setEnabled(enabled);
     };
-    proxyEnabled.addActionListener(e -> updateProxyEnabledState.run());
+
+    Runnable validateProxyInputs = () -> {
+      // FlatLaf outlines: highlight invalid fields without adding noisy labels.
+      if (!proxyEnabled.isSelected()) {
+        proxyHost.putClientProperty("JComponent.outline", null);
+        proxyUsername.putClientProperty("JComponent.outline", null);
+        proxyPassword.putClientProperty("JComponent.outline", null);
+        return;
+      }
+
+      String host = Objects.toString(proxyHost.getText(), "").trim();
+      proxyHost.putClientProperty("JComponent.outline", host.isBlank() ? "error" : null);
+
+      String user = Objects.toString(proxyUsername.getText(), "").trim();
+      String pass = new String(proxyPassword.getPassword()).trim();
+
+      // SOCKS5 auth is username+password. If only one is provided, warn.
+      boolean hasUser = !user.isBlank();
+      boolean hasPass = !pass.isBlank();
+      boolean mismatch = hasUser ^ hasPass;
+
+      Object outline = mismatch ? "warning" : null;
+      proxyUsername.putClientProperty("JComponent.outline", outline);
+      proxyPassword.putClientProperty("JComponent.outline", outline);
+    };
+
+    proxyEnabled.addActionListener(e -> {
+      updateProxyEnabledState.run();
+      validateProxyInputs.run();
+    });
     updateProxyEnabledState.run();
+
+    proxyHost.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
+    proxyUsername.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
+    proxyPassword.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
+    validateProxyInputs.run();
 
     proxyTab.add(proxyEnabled, "span 2, wrap");
     proxyTab.add(new JLabel("Host:"));
@@ -3016,7 +3377,11 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(new JLabel("Theme"));
     form.add(theme.combo, "growx");
 
-    form.add(new JLabel("Accent"));
+    JPanel accentLabel = new JPanel(new MigLayout("insets 0", "[]6[]", "[]"));
+    accentLabel.setOpaque(false);
+    accentLabel.add(new JLabel("Accent"));
+    accentLabel.add(accent.chip);
+    form.add(accentLabel);
     form.add(accent.panel, "growx");
 
     form.add(new JLabel("Accent strength"));
@@ -3046,12 +3411,13 @@ panel.add(subTabs, "growx, wmin 0");
     JButton reset = new JButton("Reset to defaults");
     reset.setToolTipText("Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
     reset.addActionListener(e -> {
-      theme.combo.setSelectedItem("dark");
+      theme.combo.setSelectedItem("darcula");
       fonts.fontFamily.setSelectedItem("Monospaced");
       fonts.fontSize.setValue(12);
-      accent.enabled.setSelected(false);
-      accent.hex.setText("");
-      accent.strength.setValue(70);
+      accent.preset.setSelectedItem(AccentPreset.IRCAFE_COBALT);
+      accent.enabled.setSelected(true);
+      accent.hex.setText(UiProperties.DEFAULT_ACCENT_COLOR);
+      accent.strength.setValue(UiProperties.DEFAULT_ACCENT_STRENGTH);
       // LAF tweak defaults
       for (int i = 0; i < tweaks.density.getItemCount(); i++) {
         DensityOption o = tweaks.density.getItemAt(i);
@@ -3073,6 +3439,7 @@ panel.add(subTabs, "growx, wmin 0");
       chatTheme.mention.updateIcon.run();
 
       accent.applyEnabledState.run();
+      accent.syncPresetFromHex.run();
     });
     form.add(new JLabel(""));
     form.add(reset, "alignx left");
@@ -3107,6 +3474,7 @@ panel.add(subTabs, "growx, wmin 0");
 
   private JPanel buildChatPanel(JCheckBox presenceFolds,
                                JCheckBox ctcpRequestsInActiveTarget,
+                               JCheckBox typingIndicatorsEnabled,
                                NickColorControls nickColors,
                                TimestampControls timestamps,
                                OutgoingColorControls outgoing) {
@@ -3119,6 +3487,9 @@ panel.add(subTabs, "growx, wmin 0");
 
     form.add(new JLabel("CTCP requests"), "aligny top");
     form.add(ctcpRequestsInActiveTarget, "alignx left");
+
+    form.add(new JLabel("Typing indicators"), "aligny top");
+    form.add(typingIndicatorsEnabled, "alignx left");
 
     form.add(new JLabel("Nick colors"), "aligny top");
     form.add(nickColors.panel, "growx");
@@ -3506,6 +3877,12 @@ panel.add(subTabs, "growx, wmin 0");
   private static Color errorForeground() {
     Color c = UIManager.getColor("Label.errorForeground");
     if (c != null) return c;
+    c = UIManager.getColor("Component.errorColor");
+    if (c != null) return c;
+    c = UIManager.getColor("Component.error.outlineColor");
+    if (c != null) return c;
+    c = UIManager.getColor("Component.error.borderColor");
+    if (c != null) return c;
     c = UIManager.getColor("Component.error.focusedBorderColor");
     if (c != null) return c;
     return new Color(180, 0, 0);
@@ -3750,13 +4127,29 @@ panel.add(subTabs, "growx, wmin 0");
 
 
   private static String normalizeThemeIdInternal(String id) {
-    String s = java.util.Objects.toString(id, "").trim().toLowerCase();
-    if (s.isEmpty()) return "dark";
-    return s;
+    String s = java.util.Objects.toString(id, "").trim();
+    if (s.isEmpty()) return "darcula";
+
+    // Preserve case for IntelliJ theme ids and raw LookAndFeel class names.
+    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
+    }
+    if (looksLikeClassNameInternal(s)) return s;
+
+    return s.toLowerCase();
   }
 
   private static boolean sameThemeInternal(String a, String b) {
     return normalizeThemeIdInternal(a).equals(normalizeThemeIdInternal(b));
+  }
+
+  private static boolean looksLikeClassNameInternal(String raw) {
+    if (raw == null) return false;
+    String s = raw.trim();
+    if (!s.contains(".")) return false;
+    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
+    String last = s.substring(s.lastIndexOf('.') + 1);
+    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
   }
 
 
@@ -3818,6 +4211,16 @@ panel.add(subTabs, "growx, wmin 0");
     char g = s.charAt(1);
     char b = s.charAt(2);
     return parseHexColor("#" + r + r + g + g + b + b);
+  }
+
+  private static Color contrastTextColor(Color bg) {
+    if (bg == null) return UIManager.getColor("Label.foreground");
+    // Relative luminance (sRGB-ish) for a quick black/white choice.
+    double r = bg.getRed() / 255.0;
+    double g = bg.getGreen() / 255.0;
+    double b = bg.getBlue() / 255.0;
+    double y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return y < 0.55 ? Color.WHITE : Color.BLACK;
   }
 
   private static Color preferredPreviewBackground() {
@@ -4505,7 +4908,12 @@ panel.add(subTabs, "growx, wmin 0");
       try {
         g.setColor(color);
         g.fillRect(x, y, w, h);
-        g.setColor(new Color(0, 0, 0, 80));
+	        Color border = c != null ? c.getForeground() : null;
+	        if (border == null) border = UIManager.getColor("Component.borderColor");
+	        if (border == null) border = UIManager.getColor("Separator.foreground");
+	        if (border == null) border = Color.BLACK;
+	        border = new Color(border.getRed(), border.getGreen(), border.getBlue(), 120);
+	        g.setColor(border);
         g.drawRect(x, y, w - 1, h - 1);
       } finally {
         g.setColor(old);
@@ -4513,7 +4921,46 @@ panel.add(subTabs, "growx, wmin 0");
     }
   }
 
-  private record AccentControls(JCheckBox enabled, JTextField hex, JButton pick, JButton clear, JSlider strength, JPanel panel, Runnable applyEnabledState) {
+  private enum AccentPreset {
+    THEME_DEFAULT("Theme default", null),
+    IRCAFE_COBALT("IRCafe cobalt", UiProperties.DEFAULT_ACCENT_COLOR),
+    INDIGO("Indigo", "#4F46E5"),
+    VIOLET("Violet", "#7C3AED"),
+    CUSTOM("Custom…", null);
+
+    final String label;
+    final String hex;
+
+    AccentPreset(String label, String hex) {
+      this.label = label;
+      this.hex = hex;
+    }
+
+    Color colorOrNull() {
+      if (hex == null) return null;
+      return parseHexColorLenient(hex);
+    }
+
+    static AccentPreset fromHexOrCustom(String normalizedHex) {
+      if (normalizedHex == null || normalizedHex.isBlank()) return CUSTOM;
+      for (AccentPreset p : values()) {
+        if (p.hex != null && p.hex.equalsIgnoreCase(normalizedHex)) return p;
+      }
+      return CUSTOM;
+    }
+  }
+
+  private record AccentControls(JCheckBox enabled,
+                               JComboBox<AccentPreset> preset,
+                               JTextField hex,
+                               JButton pick,
+                               JButton clear,
+                               JSlider strength,
+                               JComponent chip,
+                               JPanel panel,
+                               Runnable applyEnabledState,
+                               Runnable syncPresetFromHex,
+                               Runnable updateChip) {
   }
 
   private record ColorField(JTextField hex, JButton pick, JButton clear, JPanel panel, Runnable updateIcon) {}
@@ -6021,6 +6468,12 @@ panel.add(subTabs, "growx, wmin 0");
         prev != null ? prev.rules() : List.of(),
         overrides
     );
+
+    // If nothing changed, don't trigger a transcript rebuild. Pressing OK/Apply on the preferences
+    // dialog should be a no-op for the active transcript unless a setting meaningfully changed.
+    if (java.util.Objects.equals(prev, next)) {
+      return;
+    }
 
     filterSettingsBus.set(next);
     runtimeConfig.rememberFiltersEnabledByDefault(enabledByDefault);

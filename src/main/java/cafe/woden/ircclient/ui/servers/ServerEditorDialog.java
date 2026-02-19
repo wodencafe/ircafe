@@ -5,6 +5,7 @@ import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
 import cafe.woden.ircclient.net.NetTlsContext;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -93,7 +94,37 @@ public class ServerEditorDialog extends JDialog {
   private final JButton saveBtn = new JButton("Save");
   private final JButton cancelBtn = new JButton("Cancel");
 
+  /**
+   * When a proxy test succeeds, we paint "success" outlines on relevant fields.
+   * We only keep the success state while the tested inputs remain unchanged.
+   */
+  private ProxyTestSnapshot lastProxyTestOk;
+
   private boolean portAuto = true;
+
+  private record ProxyTestSnapshot(
+      boolean override,
+      boolean proxyEnabled,
+      String proxyHost,
+      String proxyPort,
+      String proxyUser,
+      int proxyPassHash,
+      String connectTimeoutMs,
+      String readTimeoutMs
+  ) {
+    static ProxyTestSnapshot capture(ServerEditorDialog d) {
+      return new ProxyTestSnapshot(
+          d.proxyOverrideBox.isSelected(),
+          d.proxyEnabledBox.isSelected(),
+          trim(d.proxyHostField.getText()),
+          trim(d.proxyPortField.getText()),
+          trim(d.proxyUserField.getText()),
+          java.util.Arrays.hashCode(d.proxyPassField.getPassword()),
+          trim(d.proxyConnectTimeoutMsField.getText()),
+          trim(d.proxyReadTimeoutMsField.getText())
+      );
+    }
+  }
 
   public ServerEditorDialog(Window parent, String title, IrcProperties.Server seed) {
     super(parent, title, ModalityType.APPLICATION_MODAL);
@@ -114,6 +145,10 @@ public class ServerEditorDialog extends JDialog {
     actions.add(javax.swing.Box.createHorizontalGlue());
     saveBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, "primary");
     cancelBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, "default");
+    saveBtn.setIcon(SvgIcons.action("check", 16));
+    saveBtn.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    cancelBtn.setIcon(SvgIcons.action("close", 16));
+    cancelBtn.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
     actions.add(cancelBtn);
     actions.add(javax.swing.Box.createHorizontalStrut(8));
     actions.add(saveBtn);
@@ -188,9 +223,9 @@ public class ServerEditorDialog extends JDialog {
     // Auto-update default port when toggling TLS, if the user hasn't customized it.
     tlsBox.addActionListener(e -> maybeAdjustPortForTls());
     portField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; }
-      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; }
-      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; }
+      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; updateValidation(); }
+      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; updateValidation(); }
+      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; updateValidation(); }
     });
 
     saslEnabledBox.addActionListener(e -> updateSaslEnabled());
@@ -200,6 +235,26 @@ public class ServerEditorDialog extends JDialog {
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
     proxyEnabledBox.addActionListener(e -> updateProxyEnabled());
     updateProxyEnabled();
+
+    // Live validation outlines + Save button state.
+    Runnable validate = this::updateValidation;
+    javax.swing.event.DocumentListener vdl = new SimpleDocListener(validate);
+    idField.getDocument().addDocumentListener(vdl);
+    hostField.getDocument().addDocumentListener(vdl);
+    // portField already has a listener for portAuto; it also calls updateValidation().
+    nickField.getDocument().addDocumentListener(vdl);
+
+    saslUserField.getDocument().addDocumentListener(vdl);
+    saslPassField.getDocument().addDocumentListener(vdl);
+
+    proxyHostField.getDocument().addDocumentListener(vdl);
+    proxyPortField.getDocument().addDocumentListener(vdl);
+    proxyUserField.getDocument().addDocumentListener(vdl);
+    proxyPassField.getDocument().addDocumentListener(vdl);
+    proxyConnectTimeoutMsField.getDocument().addDocumentListener(vdl);
+    proxyReadTimeoutMsField.getDocument().addDocumentListener(vdl);
+
+    updateValidation();
 
     setPreferredSize(new Dimension(640, 520));
     pack();
@@ -239,6 +294,8 @@ public class ServerEditorDialog extends JDialog {
     JPanel testRow = new JPanel();
     testRow.setLayout(new javax.swing.BoxLayout(testRow, javax.swing.BoxLayout.X_AXIS));
     proxyTestBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, "default");
+    proxyTestBtn.setIcon(SvgIcons.action("refresh", 16));
+    proxyTestBtn.setDisabledIcon(SvgIcons.actionDisabled("refresh", 16));
     testRow.add(proxyTestBtn);
     testRow.add(javax.swing.Box.createHorizontalStrut(10));
     proxyStatusLabel.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
@@ -312,11 +369,17 @@ public class ServerEditorDialog extends JDialog {
     proxyReadTimeoutMsField.setEnabled(override);
 
     proxyTestBtn.setEnabled(true);
+
+    updateValidation();
   }
 
   private void onTestProxy() {
     proxyStatusLabel.setText("Testing…");
     proxyTestBtn.setEnabled(false);
+
+    // Clear any previous "success" state while we re-test.
+    lastProxyTestOk = null;
+    updateValidation();
 
     final String host = trim(hostField.getText());
     final String portText = trim(portField.getText());
@@ -375,6 +438,11 @@ public class ServerEditorDialog extends JDialog {
           TestResult r = get();
           if (r.ok) {
             proxyStatusLabel.setText("OK (" + r.elapsedMs + " ms)");
+
+            // Mark the tested proxy inputs as "known good" until they change.
+            lastProxyTestOk = ProxyTestSnapshot.capture(ServerEditorDialog.this);
+            updateValidation();
+
             JOptionPane.showMessageDialog(ServerEditorDialog.this,
                 "Connection test succeeded.\n\n" +
                     "TLS: " + (tls ? "yes" : "no") + "\n" +
@@ -384,6 +452,8 @@ public class ServerEditorDialog extends JDialog {
                 JOptionPane.INFORMATION_MESSAGE);
           } else {
             proxyStatusLabel.setText("Failed: " + r.shortMessage());
+            lastProxyTestOk = null;
+            updateValidation();
             JOptionPane.showMessageDialog(ServerEditorDialog.this,
                 "Connection test failed.\n\n" + r.longMessage(),
                 "Proxy test",
@@ -391,6 +461,8 @@ public class ServerEditorDialog extends JDialog {
           }
         } catch (Exception e) {
           proxyStatusLabel.setText("Failed");
+          lastProxyTestOk = null;
+          updateValidation();
           JOptionPane.showMessageDialog(ServerEditorDialog.this,
               "Connection test failed.\n\n" + e,
               "Proxy test",
@@ -658,7 +730,209 @@ public class ServerEditorDialog extends JDialog {
 
     // Update placeholder dynamically.
     saslPassField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, secretPlaceholder);
+
+    updateValidation();
   }
+
+
+  // FlatLaf validation outlines.
+  private static final String OUTLINE_PROP = "JComponent.outline";
+  private static final String OUTLINE_ERROR = "error";
+  private static final String OUTLINE_WARNING = "warning";
+  private static final String OUTLINE_SUCCESS = "success";
+
+  private static void setOutline(JComponent c, String outline) {
+    c.putClientProperty(OUTLINE_PROP, outline);
+  }
+
+  private static void clearOutline(JComponent c) {
+    c.putClientProperty(OUTLINE_PROP, null);
+  }
+
+  private static void setError(JComponent c, boolean on) {
+    setOutline(c, on ? OUTLINE_ERROR : null);
+  }
+
+  private static void setWarning(JComponent c, boolean on) {
+    setOutline(c, on ? OUTLINE_WARNING : null);
+  }
+
+  private static void setSuccess(JComponent c, boolean on) {
+    Object cur = c.getClientProperty(OUTLINE_PROP);
+    if (on) {
+      // Only paint success if nothing else (error/warning) is currently displayed.
+      if (cur == null) setOutline(c, OUTLINE_SUCCESS);
+    } else {
+      if (Objects.equals(cur, OUTLINE_SUCCESS)) clearOutline(c);
+    }
+  }
+
+  private static boolean isPositiveLong(String s) {
+    try {
+      long v = Long.parseLong(trim(s));
+      return v > 0;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private static boolean isValidPort(String s) {
+    try {
+      int p = Integer.parseInt(trim(s));
+      return p > 0 && p <= 65535;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private void updateValidation() {
+    boolean ok = true;
+
+    boolean idBad = trim(idField.getText()).isEmpty();
+    setError(idField, idBad);
+    ok &= !idBad;
+
+    boolean hostBad = trim(hostField.getText()).isEmpty();
+    setError(hostField, hostBad);
+    ok &= !hostBad;
+
+    boolean portBad = !isValidPort(portField.getText());
+    setError(portField, portBad);
+    ok &= !portBad;
+
+    boolean nickBad = trim(nickField.getText()).isEmpty();
+    setError(nickField, nickBad);
+    ok &= !nickBad;
+
+    // SASL validation
+    if (!saslEnabledBox.isSelected()) {
+      clearOutline(saslUserField);
+      clearOutline(saslPassField);
+    } else {
+      String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
+      String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
+
+      String u = trim(saslUserField.getText());
+      String p = new String(saslPassField.getPassword());
+      boolean hasSecret = !p.isBlank();
+
+      boolean needsUser = switch (mechUpper) {
+        case "EXTERNAL" -> false;
+        case "AUTO" -> hasSecret;
+        default -> true;
+      };
+      boolean needsSecret = switch (mechUpper) {
+        case "EXTERNAL" -> false;
+        case "AUTO" -> false;
+        default -> true;
+      };
+
+      boolean userBad = needsUser && u.isEmpty();
+      boolean secretBad = needsSecret && p.isBlank();
+
+      // Even if the fields are disabled (e.g. EXTERNAL), we clear outlines.
+      if (!saslUserField.isEnabled()) userBad = false;
+      if (!saslPassField.isEnabled()) secretBad = false;
+
+      setError(saslUserField, userBad);
+      setError(saslPassField, secretBad);
+
+      ok &= !userBad;
+      ok &= !secretBad;
+    }
+
+    // Proxy override validation
+    if (!proxyOverrideBox.isSelected()) {
+      clearOutline(proxyHostField);
+      clearOutline(proxyPortField);
+      clearOutline(proxyUserField);
+      clearOutline(proxyPassField);
+      clearOutline(proxyConnectTimeoutMsField);
+      clearOutline(proxyReadTimeoutMsField);
+    } else {
+      // Timeouts: optional (blank falls back), but warn if user typed something invalid.
+      String cto = trim(proxyConnectTimeoutMsField.getText());
+      String rto = trim(proxyReadTimeoutMsField.getText());
+      boolean ctoWarn = !cto.isEmpty() && !isPositiveLong(cto);
+      boolean rtoWarn = !rto.isEmpty() && !isPositiveLong(rto);
+      setWarning(proxyConnectTimeoutMsField, ctoWarn);
+      setWarning(proxyReadTimeoutMsField, rtoWarn);
+
+      if (!proxyEnabledBox.isSelected()) {
+        clearOutline(proxyHostField);
+        clearOutline(proxyPortField);
+        clearOutline(proxyUserField);
+        clearOutline(proxyPassField);
+      } else {
+        boolean pHostBad = trim(proxyHostField.getText()).isEmpty();
+        boolean pPortBad = !isValidPort(proxyPortField.getText());
+
+        setError(proxyHostField, pHostBad);
+        setError(proxyPortField, pPortBad);
+
+        ok &= !pHostBad;
+        ok &= !pPortBad;
+
+        // Auth mismatch warning (user XOR pass).
+        String user = trim(proxyUserField.getText());
+        String pass = new String(proxyPassField.getPassword()).trim();
+        boolean hasUser = !user.isEmpty();
+        boolean hasPass = !pass.isEmpty();
+        boolean mismatch = hasUser ^ hasPass;
+
+        setWarning(proxyUserField, mismatch);
+        setWarning(proxyPassField, mismatch);
+      }
+    }
+
+    // If a proxy test previously succeeded, keep success outlines only while inputs remain unchanged.
+    applyProxyTestSuccessDecoration();
+
+    saveBtn.setEnabled(ok);
+    saveBtn.setToolTipText(ok ? null : "Fix highlighted fields to enable Save.");
+  }
+
+  private void applyProxyTestSuccessDecoration() {
+    // Clear success outlines by default.
+    setSuccess(proxyHostField, false);
+    setSuccess(proxyPortField, false);
+    setSuccess(proxyConnectTimeoutMsField, false);
+    setSuccess(proxyReadTimeoutMsField, false);
+
+    if (lastProxyTestOk == null) return;
+
+    ProxyTestSnapshot now = ProxyTestSnapshot.capture(this);
+    if (!lastProxyTestOk.equals(now)) {
+      lastProxyTestOk = null;
+      return;
+    }
+
+    // Only paint success when the relevant proxy fields are enabled (per-server override + proxy enabled).
+    if (!proxyHostField.isEnabled() || !proxyPortField.isEnabled()) return;
+
+    // If the proxy fields have an error/warning outline, don't overwrite it.
+    setSuccess(proxyHostField, true);
+    setSuccess(proxyPortField, true);
+
+    // Timeouts are part of the test config too; mark them success if user entered valid values or left blank.
+    boolean ctoOk = trim(proxyConnectTimeoutMsField.getText()).isEmpty() || isPositiveLong(proxyConnectTimeoutMsField.getText());
+    boolean rtoOk = trim(proxyReadTimeoutMsField.getText()).isEmpty() || isPositiveLong(proxyReadTimeoutMsField.getText());
+    setSuccess(proxyConnectTimeoutMsField, ctoOk);
+    setSuccess(proxyReadTimeoutMsField, rtoOk);
+  }
+
+  private static final class SimpleDocListener implements javax.swing.event.DocumentListener {
+    private final Runnable onChange;
+
+    private SimpleDocListener(Runnable onChange) {
+      this.onChange = onChange;
+    }
+
+    @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onChange.run(); }
+    @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { onChange.run(); }
+    @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { onChange.run(); }
+  }
+
 
   private void maybeAdjustPortForTls() {
     if (!portAuto) return;

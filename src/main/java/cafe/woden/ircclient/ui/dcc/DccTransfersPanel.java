@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.dcc;
 import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.app.DccTransferStore.ActionHint;
 import cafe.woden.ircclient.app.DccTransferStore.Entry;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
 import java.awt.Cursor;
@@ -65,6 +66,16 @@ public final class DccTransfersPanel extends JPanel implements AutoCloseable {
     title.setBorder(BorderFactory.createEmptyBorder(8, 10, 2, 10));
     title.setFont(title.getFont().deriveFont(Font.BOLD));
     subtitle.setBorder(BorderFactory.createEmptyBorder(0, 10, 8, 10));
+
+    // SVG action icons
+    actionButton.setIcon(SvgIcons.action("terminal", 16));
+    actionButton.setDisabledIcon(SvgIcons.actionDisabled("terminal", 16));
+    openPmButton.setIcon(SvgIcons.action("dock-right", 16));
+    openPmButton.setDisabledIcon(SvgIcons.actionDisabled("dock-right", 16));
+    copyPathButton.setIcon(SvgIcons.action("copy", 16));
+    copyPathButton.setDisabledIcon(SvgIcons.actionDisabled("copy", 16));
+    refreshButton.setIcon(SvgIcons.action("refresh", 16));
+    refreshButton.setDisabledIcon(SvgIcons.actionDisabled("refresh", 16));
 
     JPanel header = new JPanel(new BorderLayout());
     header.add(title, BorderLayout.NORTH);

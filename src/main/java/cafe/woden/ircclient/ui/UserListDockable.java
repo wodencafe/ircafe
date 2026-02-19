@@ -11,6 +11,8 @@ import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.ListContextMenuDecorator;
@@ -37,107 +39,15 @@ import java.util.Objects;
 public class UserListDockable extends JPanel implements Dockable {
   public static final String ID = "users";
 
-  // Subtle account indicator icons for the user list.
-  // ● filled dot = logged in; ○ hollow dot = logged out; ◌ dotted circle = unknown.
-  private static final Icon ACCOUNT_LOGGED_IN_ICON = new AccountDotIcon(true, false);
-  private static final Icon ACCOUNT_LOGGED_OUT_ICON = new AccountDotIcon(false, false);
-  private static final Icon ACCOUNT_UNKNOWN_ICON = new AccountGlyphIcon("◌");
+  private static final int ACCOUNT_ICON_SIZE = 10;
 
-  private static final class AccountDotIcon implements Icon {
-    private final boolean filled;
-    private final boolean innerDot;
-
-    private AccountDotIcon(boolean filled, boolean innerDot) {
-      this.filled = filled;
-      this.innerDot = innerDot;
-    }
-
-    @Override public int getIconWidth() { return 10; }
-    @Override public int getIconHeight() { return 10; }
-
-    @Override
-    public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
-      java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-      try {
-        g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-
-        java.awt.Color fg = null;
-        if (c instanceof javax.swing.JLabel lbl) {
-          fg = lbl.getForeground();
-        }
-        if (fg == null) fg = g2.getColor();
-        if (fg == null) fg = java.awt.Color.GRAY;
-
-        // Use the label foreground but slightly transparent so it stays "quiet".
-        java.awt.Color dot = new java.awt.Color(fg.getRed(), fg.getGreen(), fg.getBlue(), 170);
-        g2.setColor(dot);
-
-        int d = 6;
-        int xx = x + 2;
-        int yy = y + 2;
-        if (filled) {
-          g2.fillOval(xx, yy, d, d);
-        } else {
-          g2.setStroke(new java.awt.BasicStroke(1.2f));
-          g2.drawOval(xx, yy, d, d);
-        }
-
-        // For UNKNOWN state, draw a small center dot inside the hollow circle.
-        if (innerDot) {
-          int d2 = 2;
-          int cx = xx + (d - d2) / 2;
-          int cy = yy + (d - d2) / 2;
-          g2.fillOval(cx, cy, d2, d2);
-        }
-      } finally {
-        g2.dispose();
-      }
-    }
-  }
-
-
-  private static final class AccountGlyphIcon implements Icon {
-    private final String glyph;
-
-    private AccountGlyphIcon(String glyph) {
-      this.glyph = glyph;
-    }
-
-    @Override public int getIconWidth() { return 10; }
-    @Override public int getIconHeight() { return 10; }
-
-    @Override
-    public void paintIcon(java.awt.Component c, java.awt.Graphics g, int x, int y) {
-      java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-      try {
-        java.awt.Color fg = null;
-        java.awt.Font font = null;
-        if (c instanceof javax.swing.JLabel lbl) {
-          fg = lbl.getForeground();
-          font = lbl.getFont();
-        }
-        if (fg == null) fg = g2.getColor();
-        if (fg == null) fg = java.awt.Color.GRAY;
-        if (font == null) font = g2.getFont();
-        if (font == null) font = new java.awt.Font("Dialog", java.awt.Font.PLAIN, 10);
-
-        // Use the label foreground but slightly transparent so it stays "quiet".
-        java.awt.Color quiet = new java.awt.Color(fg.getRed(), fg.getGreen(), fg.getBlue(), 170);
-        g2.setColor(quiet);
-
-        float size = Math.min(10f, font.getSize2D());
-        java.awt.Font f2 = font.deriveFont(java.awt.Font.PLAIN, size);
-        g2.setFont(f2);
-        java.awt.FontMetrics fm = g2.getFontMetrics(f2);
-
-        int w = fm.stringWidth(glyph);
-        int xx = x + (getIconWidth() - w) / 2;
-        int yy = y + (getIconHeight() - fm.getHeight()) / 2 + fm.getAscent();
-        g2.drawString(glyph, xx, yy);
-      } finally {
-        g2.dispose();
-      }
-    }
+  private static Icon accountIcon(AccountState state) {
+    AccountState s = state != null ? state : AccountState.UNKNOWN;
+    return switch (s) {
+      case LOGGED_IN -> SvgIcons.icon("account-in", ACCOUNT_ICON_SIZE, Palette.QUIET);
+      case LOGGED_OUT -> SvgIcons.icon("account-out", ACCOUNT_ICON_SIZE, Palette.QUIET);
+      default -> SvgIcons.icon("account-unknown", ACCOUNT_ICON_SIZE, Palette.QUIET);
+    };
   }
 
 
@@ -337,13 +247,7 @@ public class UserListDockable extends JPanel implements Dockable {
       AccountState acct = (value == null || value.accountState() == null) ? AccountState.UNKNOWN : value.accountState();
 
       // Account indicator (logged in/out/unknown).
-      if (acct == AccountState.LOGGED_IN) {
-        lbl.setIcon(ACCOUNT_LOGGED_IN_ICON);
-      } else if (acct == AccountState.LOGGED_OUT) {
-        lbl.setIcon(ACCOUNT_LOGGED_OUT_ICON);
-      } else {
-        lbl.setIcon(ACCOUNT_UNKNOWN_ICON);
-      }
+      lbl.setIcon(accountIcon(acct));
       lbl.setIconTextGap(6);
       if (mark.ignore) display += "  [IGN]";
       if (mark.softIgnore) display += "  [SOFT]";

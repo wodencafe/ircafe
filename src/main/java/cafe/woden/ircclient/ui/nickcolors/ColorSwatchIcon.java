@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
 import javax.swing.Icon;
+import javax.swing.UIManager;
 
 class ColorSwatchIcon implements Icon {
   private final Color color;
@@ -32,7 +33,12 @@ class ColorSwatchIcon implements Icon {
     try {
       g.setColor(color);
       g.fillRect(x, y, w, h);
-      g.setColor(new Color(0, 0, 0, 80));
+      Color border = c != null ? c.getForeground() : null;
+      if (border == null) border = UIManager.getColor("Component.borderColor");
+      if (border == null) border = UIManager.getColor("Separator.foreground");
+      if (border == null) border = Color.BLACK;
+      border = new Color(border.getRed(), border.getGreen(), border.getBlue(), 120);
+      g.setColor(border);
       g.drawRect(x, y, w - 1, h - 1);
     } finally {
       g.setColor(old);

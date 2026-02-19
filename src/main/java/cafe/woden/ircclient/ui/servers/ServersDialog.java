@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servers;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
@@ -67,6 +68,16 @@ public class ServersDialog extends JDialog {
     buttons.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
 
     // FlatLaf button types (keep as strings for compatibility across FlatLaf versions).
+    // SVG action icons (crisp on HiDPI; recolored by theme).
+    addBtn.setIcon(SvgIcons.action("plus", 16));
+    addBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    editBtn.setIcon(SvgIcons.action("edit", 16));
+    editBtn.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+    removeBtn.setIcon(SvgIcons.action("trash", 16));
+    removeBtn.setDisabledIcon(SvgIcons.actionDisabled("trash", 16));
+    closeBtn.setIcon(SvgIcons.action("close", 16));
+    closeBtn.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
+
     addBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, "default");
     editBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, "default");
     removeBtn.putClientProperty(FlatClientProperties.BUTTON_TYPE, "danger");

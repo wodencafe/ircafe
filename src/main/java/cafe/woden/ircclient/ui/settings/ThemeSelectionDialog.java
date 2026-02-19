@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -13,6 +14,7 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -22,6 +24,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import org.springframework.context.annotation.Lazy;
@@ -48,6 +51,9 @@ public class ThemeSelectionDialog {
   private String committedThemeId;
   private String previewThemeId;
 
+  private Timer previewTimer;
+  private String pendingPreviewThemeId;
+
   public ThemeSelectionDialog(ThemeManager themeManager, UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
     this.themeManager = themeManager;
     this.settingsBus = settingsBus;
@@ -70,7 +76,12 @@ public class ThemeSelectionDialog {
     committedThemeId = normalizeThemeId(cur != null ? cur.theme() : null);
     previewThemeId = committedThemeId;
 
-    ThemeManager.ThemeOption[] allThemes = themeManager.supportedThemes();
+    // Use curated themes by default, but allow the selector to expand to all IntelliJ themes.
+    // This keeps menus/dropdowns compact while still letting power users browse everything.
+    JCheckBox allIntelliJ = new JCheckBox("All IntelliJ themes");
+    allIntelliJ.setToolTipText("Loads the full IntelliJ Themes Pack list (large). Use search to find themes quickly.");
+
+    ThemeManager.ThemeOption[] allThemes = themeManager.themesForPicker(false);
 
     DefaultListModel<ThemeManager.ThemeOption> model = new DefaultListModel<>();
 
@@ -85,22 +96,29 @@ public class ThemeSelectionDialog {
         new PackChoice("All packs", null),
         new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
         new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
-        new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE)
+        new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE),
+        new PackChoice("IntelliJ", ThemeManager.ThemePack.INTELLIJ)
     });
 
     JTextField search = new JTextField(14);
     search.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Search themes");
 
+    JLabel count = new JLabel();
+    count.putClientProperty(FlatClientProperties.STYLE, "font: -1; foreground: $Label.disabledForeground");
+
     Runnable refresh = () -> {
       String keepId = normalizeThemeId(selectedThemeId());
-      rebuildModel(model, allThemes, (ToneChoice) toneFilter.getSelectedItem(),
+      ThemeManager.ThemeOption[] pool = themeManager.themesForPicker(allIntelliJ.isSelected());
+      rebuildModel(model, pool, (ToneChoice) toneFilter.getSelectedItem(),
           (PackChoice) packFilter.getSelectedItem(), search.getText());
+      count.setText("Showing " + model.getSize() + " of " + pool.length);
       selectThemeInList(keepId);
     };
 
     ActionListener filterListener = e -> refresh.run();
     toneFilter.addActionListener(filterListener);
     packFilter.addActionListener(filterListener);
+    allIntelliJ.addActionListener(filterListener);
     search.getDocument().addDocumentListener(new DocumentListener() {
       @Override public void insertUpdate(DocumentEvent e) { refresh.run(); }
       @Override public void removeUpdate(DocumentEvent e) { refresh.run(); }
@@ -110,6 +128,7 @@ public class ThemeSelectionDialog {
     // initial fill
     rebuildModel(model, allThemes, (ToneChoice) toneFilter.getSelectedItem(),
         (PackChoice) packFilter.getSelectedItem(), search.getText());
+    count.setText("Showing " + model.getSize() + " of " + allThemes.length);
 
     themeList = new JList<>(model);
     themeList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -121,6 +140,7 @@ public class ThemeSelectionDialog {
           case SYSTEM -> "System";
           case FLATLAF -> "FlatLaf";
           case IRCAFE -> "IRCafe";
+          case INTELLIJ -> "IntelliJ";
         };
         String tone = switch (value.tone()) {
           case SYSTEM -> "System";
@@ -135,14 +155,15 @@ public class ThemeSelectionDialog {
 
     selectThemeInList(committedThemeId);
 
+    // NOTE: Applying a LookAndFeel *inside* the list selection callback can cause the list UI
+    // to be uninstalled while Swing is still dispatching the same selection event.
+    // BasicListUI's internal handler then sees a null "list" and throws an NPE.
+    //
+    // Fix: debounce + defer the live preview until after the current event finishes.
+    ensurePreviewTimer();
     themeList.addListSelectionListener(e -> {
       if (e.getValueIsAdjusting()) return;
-      String next = normalizeThemeId(selectedThemeId());
-      if (next.isBlank()) return;
-      if (!sameTheme(previewThemeId, next)) {
-        themeManager.applyTheme(next);
-        previewThemeId = next;
-      }
+      schedulePreview(normalizeThemeId(selectedThemeId()));
     });
 
     JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -150,7 +171,9 @@ public class ThemeSelectionDialog {
     filterBar.add(toneFilter);
     filterBar.add(new JLabel("Pack"));
     filterBar.add(packFilter);
+    filterBar.add(allIntelliJ);
     filterBar.add(search);
+    filterBar.add(count);
 
     JScrollPane listScroll = new JScrollPane(themeList);
     listScroll.setPreferredSize(new Dimension(250, 280));
@@ -165,6 +188,13 @@ public class ThemeSelectionDialog {
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
+
+    apply.setIcon(SvgIcons.action("check", 16));
+    apply.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    ok.setIcon(SvgIcons.action("check", 16));
+    ok.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
+    cancel.setIcon(SvgIcons.action("close", 16));
+    cancel.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
     apply.putClientProperty(FlatClientProperties.BUTTON_TYPE, "primary");
 
     apply.addActionListener(e -> commitSelectedTheme());
@@ -260,6 +290,14 @@ public class ThemeSelectionDialog {
     }
     for (int i = 0; i < themeList.getModel().getSize(); i++) {
       ThemeManager.ThemeOption opt = themeList.getModel().getElementAt(i);
+      if (opt != null && sameTheme(opt.id(), "darcula")) {
+        themeList.setSelectedIndex(i);
+        themeList.ensureIndexIsVisible(i);
+        return;
+      }
+    }
+    for (int i = 0; i < themeList.getModel().getSize(); i++) {
+      ThemeManager.ThemeOption opt = themeList.getModel().getElementAt(i);
       if (opt != null && sameTheme(opt.id(), "dark")) {
         themeList.setSelectedIndex(i);
         themeList.ensureIndexIsVisible(i);
@@ -279,7 +317,14 @@ public class ThemeSelectionDialog {
 
   private static String normalizeThemeId(String id) {
     String s = Objects.toString(id, "").trim();
-    if (s.isEmpty()) return "dark";
+    if (s.isEmpty()) return "darcula";
+
+    // Preserve case for IntelliJ theme ids and raw class names.
+    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
+    }
+    if (looksLikeClassName(s)) return s;
+
     return s.toLowerCase();
   }
 
@@ -289,6 +334,7 @@ public class ThemeSelectionDialog {
 
   private void closeDialog() {
     if (dialog != null) {
+      stopPreviewTimer();
       String committed = normalizeThemeId(committedThemeId);
       String preview = normalizeThemeId(previewThemeId);
       if (!sameTheme(committed, preview)) {
@@ -298,5 +344,63 @@ public class ThemeSelectionDialog {
       dialog.dispose();
       dialog = null;
     }
+  }
+
+  private void ensurePreviewTimer() {
+    if (previewTimer != null) return;
+
+    // Debounce live previews so quick scrolling/searching doesn't thrash LookAndFeel updates.
+    // Timer events run on the EDT.
+    previewTimer = new Timer(175, e -> applyPendingPreview());
+    previewTimer.setRepeats(false);
+  }
+
+  private void schedulePreview(String next) {
+    if (dialog == null || !dialog.isShowing() || themeList == null) return;
+
+    String wanted = normalizeThemeId(next);
+    if (sameTheme(previewThemeId, wanted)) return;
+
+    pendingPreviewThemeId = wanted;
+    ensurePreviewTimer();
+    previewTimer.restart();
+  }
+
+  private void applyPendingPreview() {
+    if (dialog == null || !dialog.isShowing() || themeList == null) return;
+    String pending = normalizeThemeId(pendingPreviewThemeId);
+    if (pending.isBlank()) return;
+
+    // Only preview if the pending theme is still the current selection.
+    String current = normalizeThemeId(selectedThemeId());
+    if (!sameTheme(current, pending)) return;
+    if (sameTheme(previewThemeId, pending)) return;
+
+    // Defer one more turn just to ensure we never apply LAF while Swing is mid-dispatch.
+    SwingUtilities.invokeLater(() -> {
+      if (dialog == null || !dialog.isShowing() || themeList == null) return;
+      String stillSelected = normalizeThemeId(selectedThemeId());
+      if (!sameTheme(stillSelected, pending)) return;
+      if (sameTheme(previewThemeId, pending)) return;
+
+      themeManager.applyTheme(pending);
+      previewThemeId = pending;
+    });
+  }
+
+  private void stopPreviewTimer() {
+    if (previewTimer != null) {
+      previewTimer.stop();
+    }
+    pendingPreviewThemeId = null;
+  }
+
+  private static boolean looksLikeClassName(String raw) {
+    if (raw == null) return false;
+    String s = raw.trim();
+    if (!s.contains(".")) return false;
+    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
+    String last = s.substring(s.lastIndexOf('.') + 1);
+    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
   }
 }

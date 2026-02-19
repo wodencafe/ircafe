@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.app.AppVersion;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
@@ -43,6 +44,7 @@ public class MainFrame extends JFrame {
 
   private final StatusBar statusBar;
   private final UiProperties uiProps;
+  private final RuntimeConfigStore runtimeConfigStore;
   private final TrayService trayService;
 
   // Dockables (Spring beans)
@@ -55,6 +57,7 @@ public class MainFrame extends JFrame {
       IrcMediator controller,
       AppMenuBar menuBar,
       UiProperties uiProps,
+      RuntimeConfigStore runtimeConfigStore,
       TrayService trayService,
       ServerTreeDockable serverTree,
       ChatDockable chat,
@@ -64,8 +67,9 @@ public class MainFrame extends JFrame {
       StatusBar statusBar,
       ApplicationShutdownCoordinator shutdownCoordinator
   ) {
-    super(AppVersion.appNameWithVersion());
+    super(AppVersion.windowTitle());
     this.uiProps = uiProps;
+    this.runtimeConfigStore = runtimeConfigStore;
     this.trayService = trayService;
     this.serverTree = serverTree;
     this.chat = chat;
@@ -127,6 +131,77 @@ public class MainFrame extends JFrame {
     final long startupStabilizationDeadlineNanos =
         System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(900);
 
+    // Persist user-resized dock widths (debounced) so they survive restart.
+    final int[] pendingServerDockWidth = new int[] { -1 };
+    final int[] pendingUsersDockWidth = new int[] { -1 };
+
+    int initialServerDockWidth = DEFAULT_SERVER_DOCK_WIDTH_PX;
+    int initialUsersDockWidth = DEFAULT_USERS_DOCK_WIDTH_PX;
+    if (uiProps != null && uiProps.layout() != null) {
+      initialServerDockWidth = uiProps.layout().serverDockWidthPx();
+      initialUsersDockWidth = uiProps.layout().userDockWidthPx();
+    }
+    final int[] lastSavedServerDockWidth = new int[] { initialServerDockWidth };
+    final int[] lastSavedUsersDockWidth = new int[] { initialUsersDockWidth };
+
+    final Timer persistServerDockTimer = new Timer(350, e -> {
+      int w = pendingServerDockWidth[0];
+      if (w <= 0) return;
+      // Clamp to keep configs sane.
+      int clamped = Math.max(120, Math.min(1200, w));
+      if (Math.abs(clamped - lastSavedServerDockWidth[0]) < 2) return;
+      lastSavedServerDockWidth[0] = clamped;
+      if (runtimeConfigStore != null) {
+        runtimeConfigStore.rememberServerDockWidthPx(clamped);
+      }
+    });
+    persistServerDockTimer.setRepeats(false);
+
+    final Timer persistUsersDockTimer = new Timer(350, e -> {
+      int w = pendingUsersDockWidth[0];
+      if (w <= 0) return;
+      int clamped = Math.max(120, Math.min(1200, w));
+      if (Math.abs(clamped - lastSavedUsersDockWidth[0]) < 2) return;
+      lastSavedUsersDockWidth[0] = clamped;
+      if (runtimeConfigStore != null) {
+        runtimeConfigStore.rememberUserDockWidthPx(clamped);
+      }
+    });
+    persistUsersDockTimer.setRepeats(false);
+
+    // If the app closes quickly after a divider drag, the debounce timers might not have fired yet.
+    // Flush any pending widths on close so the user's last drag is not lost.
+    Runnable flushPendingDockWidths = () -> {
+      try {
+        persistServerDockTimer.stop();
+        persistUsersDockTimer.stop();
+      } catch (Exception ignored) {
+      }
+
+      int sw = pendingServerDockWidth[0];
+      if (sw > 0) {
+        int clamped = Math.max(120, Math.min(1200, sw));
+        if (Math.abs(clamped - lastSavedServerDockWidth[0]) >= 2) {
+          lastSavedServerDockWidth[0] = clamped;
+          if (runtimeConfigStore != null) {
+            runtimeConfigStore.rememberServerDockWidthPx(clamped);
+          }
+        }
+      }
+
+      int uw = pendingUsersDockWidth[0];
+      if (uw > 0) {
+        int clamped = Math.max(120, Math.min(1200, uw));
+        if (Math.abs(clamped - lastSavedUsersDockWidth[0]) >= 2) {
+          lastSavedUsersDockWidth[0] = clamped;
+          if (runtimeConfigStore != null) {
+            runtimeConfigStore.rememberUserDockWidthPx(clamped);
+          }
+        }
+      }
+    };
+
+
     Runnable applyDockLocks = () -> {
       int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
       int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
@@ -176,6 +251,17 @@ public class MainFrame extends JFrame {
       // (often too-wide) startup layout and then fight our initial sizing.
       DockingTuner.lockWestDockWidth(this, serverTree, serverPx);
       DockingTuner.lockEastDockWidth(this, users, usersPx);
+
+      // Watch for user divider drags and persist the resulting widths.
+      DockingTuner.watchDockWidthOnUserResize(this, serverTree, w -> {
+        // Ignore transient startup wobble; real user drags are still captured.
+        pendingServerDockWidth[0] = w;
+        persistServerDockTimer.restart();
+      });
+      DockingTuner.watchDockWidthOnUserResize(this, users, w -> {
+        pendingUsersDockWidth[0] = w;
+        persistUsersDockTimer.restart();
+      });
     };
 
     // Apply once after the initial docking layout.
@@ -216,7 +302,8 @@ public class MainFrame extends JFrame {
     addWindowListener(new WindowAdapter() {
       @Override
       public void windowClosing(WindowEvent e) {
-        // HexChat-style: close button hides to tray (when supported/enabled).
+        flushPendingDockWidths.run();
+        // Optional "close-to-tray": close button hides to tray (when supported/enabled).
         if (trayService != null && trayService.shouldCloseToTray() && !trayService.isExitRequested()) {
           setVisible(false);
           trayService.maybeShowCloseBalloon();

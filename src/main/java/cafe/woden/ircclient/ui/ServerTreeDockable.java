@@ -7,6 +7,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -67,21 +68,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 
 import jakarta.annotation.PreDestroy;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 
 @org.springframework.stereotype.Component
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable {
   private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
 
-  private static final String STATUS_LABEL = "status";
+  // UI label for the per-server "status" transcript target.
+  // The target id remains "status" internally; this is just what the user sees in the tree.
+  private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
-  private static final Icon CHANNEL_ICON = new ChannelPoundIcon(13, 13);
-  private static final Icon PM_ONLINE_ICON = new PrivateMessageStatusIcon(true, 13, 13);
-  private static final Icon PM_OFFLINE_ICON = new PrivateMessageStatusIcon(false, 13, 13);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
 
@@ -185,6 +187,7 @@ private static final class InsertionLine {
   private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin = new HashMap<>();
 
   private final NotificationStore notificationStore;
+  private final ServerDialogs serverDialogs;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
 
@@ -194,13 +197,15 @@ private static final class InsertionLine {
       ZncAutoConnectStore zncAutoConnect,
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
-      NotificationStore notificationStore) {
+      NotificationStore notificationStore,
+      ServerDialogs serverDialogs) {
     super(new BorderLayout());
 
     this.serverCatalog = serverCatalog;
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
+    this.serverDialogs = serverDialogs;
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -544,6 +549,42 @@ private static final class InsertionLine {
           || state == ConnectionState.RECONNECTING);
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
+
+      // Ephemeral servers can be promoted to persisted servers. This is especially useful for
+      // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
+      boolean ephemeral = serverCatalog != null
+          && serverCatalog.findEntry(serverId).map(ServerEntry::ephemeral).orElse(false);
+      if (ephemeral) {
+        menu.addSeparator();
+        JMenuItem save = new JMenuItem("Save \"" + pretty + "\"…");
+        save.setIcon(SvgIcons.action("plus", 16));
+        save.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+        save.setEnabled(serverDialogs != null);
+        save.addActionListener(ev -> {
+          if (serverDialogs == null) return;
+          Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+          serverDialogs.openSaveEphemeralServer(w, serverId);
+        });
+        menu.add(save);
+      }
+
+      // Only show server editing for the primary, configured server entries directly under the IRC root.
+      if (canReorder) {
+        boolean editable = serverDialogs != null
+            && serverCatalog != null
+            && serverCatalog.findEntry(serverId).map(se -> !se.ephemeral()).orElse(false);
+
+        menu.addSeparator();
+        JMenuItem edit = new JMenuItem("Edit \"" + pretty + "\"…");
+        edit.setIcon(SvgIcons.action("edit", 16));
+        edit.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+        edit.setEnabled(editable);
+        edit.addActionListener(ev -> {
+          Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+          serverDialogs.openEditServer(w, serverId);
+        });
+        menu.add(edit);
+      }
 
       if (isSojuEphemeralServer(serverId)) {
         String originId = sojuOriginByServerId.get(serverId);
@@ -1200,9 +1241,12 @@ private void syncServers(List<ServerEntry> latest) {
 
       // If a soju network was discovered from a configured bouncer server, label that server's
       // status tab as "Bouncer Control" for clarity.
-      if (e.ephemeral() && id.startsWith("soju:")) {
+      if (id.startsWith("soju:")) {
         String origin = Objects.toString(e.originId(), "").trim();
-        if (!origin.isEmpty()) {
+        if (origin.isEmpty()) {
+          origin = parseOriginFromCompoundServerId(id, "soju:");
+        }
+        if (origin != null && !origin.isBlank()) {
           nextSojuBouncerControl.add(origin);
           nextSojuOrigins.put(id, origin);
         }
@@ -1210,9 +1254,12 @@ private void syncServers(List<ServerEntry> latest) {
 
       // If a ZNC network was discovered from a configured bouncer server, label that server's
       // status tab as "Bouncer Control" for clarity.
-      if (e.ephemeral() && id.startsWith("znc:")) {
+      if (id.startsWith("znc:")) {
         String origin = Objects.toString(e.originId(), "").trim();
-        if (!origin.isEmpty()) {
+        if (origin.isEmpty()) {
+          origin = parseOriginFromCompoundServerId(id, "znc:");
+        }
+        if (origin != null && !origin.isBlank()) {
           nextZncBouncerControl.add(origin);
           nextZncOrigins.put(id, origin);
         }
@@ -1524,6 +1571,9 @@ private void removeServerRoot(String serverId) {
     DefaultMutableTreeNode parent = root;
     if (id.startsWith("soju:")) {
       String origin = sojuOriginByServerId.get(id);
+      if (origin == null || origin.isBlank()) {
+        origin = parseOriginFromCompoundServerId(id, "soju:");
+      }
       if (origin != null && !origin.isBlank()) {
         // Ensure the origin server exists so we can nest beneath it.
         if (!servers.containsKey(origin)) {
@@ -1534,6 +1584,9 @@ private void removeServerRoot(String serverId) {
       }
     } else if (id.startsWith("znc:")) {
       String origin = zncOriginByServerId.get(id);
+      if (origin == null || origin.isBlank()) {
+        origin = parseOriginFromCompoundServerId(id, "znc:");
+      }
       if (origin != null && !origin.isBlank()) {
         // Ensure the origin server exists so we can nest beneath it.
         if (!servers.containsKey(origin)) {
@@ -1583,6 +1636,18 @@ private void removeServerRoot(String serverId) {
     tree.expandPath(new TreePath(serverNode.getPath()));
     refreshNotificationsCount(id);
     return sn;
+  }
+
+  /** Extract the origin server id from compound ids like {@code soju:<origin>:<network>} */
+  private static String parseOriginFromCompoundServerId(String serverId, String prefix) {
+    String id = Objects.toString(serverId, "").trim();
+    String p = Objects.toString(prefix, "").trim();
+    if (id.isEmpty() || p.isEmpty() || !id.startsWith(p)) return null;
+    int start = p.length();
+    int nextColon = id.indexOf(':', start);
+    if (nextColon <= start) return null;
+    String origin = id.substring(start, nextColon).trim();
+    return origin.isEmpty() ? null : origin;
   }
 
   private String statusLeafLabelForServer(String serverId) {
@@ -1732,11 +1797,15 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setFont(base.deriveFont(Font.PLAIN));
         }
         if (nd.ref != null && nd.ref.isChannel()) {
-          setIcon(CHANNEL_ICON);
-          setDisabledIcon(CHANNEL_ICON);
+          Icon icon = SvgIcons.icon("channel", 13, Palette.TREE);
+          Icon disabled = SvgIcons.icon("channel", 13, Palette.TREE_DISABLED);
+          setIcon(icon);
+          setDisabledIcon(disabled);
         } else if (isPrivateMessageTarget(nd.ref)) {
           boolean online = Boolean.TRUE.equals(privateMessageOnlineByTarget.get(nd.ref));
-          Icon icon = online ? PM_ONLINE_ICON : PM_OFFLINE_ICON;
+          String name = online ? "pm-online" : "pm-offline";
+          Palette pal = online ? Palette.TREE_PM_ONLINE : Palette.TREE_PM_OFFLINE;
+          Icon icon = SvgIcons.icon(name, 13, pal);
           setIcon(icon);
           setDisabledIcon(icon);
         }
@@ -1755,180 +1824,6 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     }
 
     return c;
-  }
-}
-
-private static final class ChannelPoundIcon implements Icon {
-  private final int width;
-  private final int height;
-
-  private ChannelPoundIcon(int width, int height) {
-    this.width = Math.max(10, width);
-    this.height = Math.max(10, height);
-  }
-
-  @Override
-  public int getIconWidth() {
-    return width;
-  }
-
-  @Override
-  public int getIconHeight() {
-    return height;
-  }
-
-  @Override
-  public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
-    Graphics2D g2 = (Graphics2D) g.create();
-    try {
-      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-
-      Color fg = (c != null && c.getForeground() != null)
-          ? c.getForeground()
-          : UIManager.getColor("Tree.textForeground");
-      if (fg == null) fg = Color.GRAY;
-
-      Color bg = (c != null && c.getBackground() != null)
-          ? c.getBackground()
-          : UIManager.getColor("Tree.background");
-      if (bg == null) bg = new Color(0, 0, 0, 0);
-
-      float strokeW = Math.max(1.6f, Math.min(width, height) * 0.16f);
-      Stroke stroke = new BasicStroke(strokeW, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-      g2.setStroke(stroke);
-
-      int left = x + Math.round(width * 0.33f);
-      int right = x + Math.round(width * 0.67f);
-      int top = y + Math.round(height * 0.12f);
-      int bottom = y + Math.round(height * 0.88f);
-      int midA = y + Math.round(height * 0.40f);
-      int midB = y + Math.round(height * 0.63f);
-      int startX = x + Math.round(width * 0.12f);
-      int endX = x + Math.round(width * 0.88f);
-      int slant = Math.max(1, Math.round(width * 0.08f));
-
-      // Subtle depth pass to make the glyph feel less flat across themes.
-      g2.setColor(mix(fg, bg, 0.50f, 180));
-      g2.drawLine(left + 1, top + 1, left + 1, bottom + 1);
-      g2.drawLine(right + 1, top + 1, right + 1, bottom + 1);
-      g2.drawLine(startX + 1, midA + 1, endX + 1, midA - slant + 1);
-      g2.drawLine(startX + 1, midB + 1, endX + 1, midB - slant + 1);
-
-      // Foreground pass: fancy hash with a slight diagonal crossbar slant.
-      g2.setColor(fg);
-      g2.drawLine(left, top, left, bottom);
-      g2.drawLine(right, top, right, bottom);
-      g2.drawLine(startX, midA, endX, midA - slant);
-      g2.drawLine(startX, midB, endX, midB - slant);
-    } finally {
-      g2.dispose();
-    }
-  }
-
-  private static Color mix(Color a, Color b, float ratioA, int alpha) {
-    float ra = Math.max(0f, Math.min(1f, ratioA));
-    float rb = 1f - ra;
-    int r = Math.round(a.getRed() * ra + b.getRed() * rb);
-    int g = Math.round(a.getGreen() * ra + b.getGreen() * rb);
-    int bl = Math.round(a.getBlue() * ra + b.getBlue() * rb);
-    int al = Math.max(0, Math.min(255, alpha));
-    return new Color(r, g, bl, al);
-  }
-}
-
-private static final class PrivateMessageStatusIcon implements Icon {
-  private final boolean online;
-  private final int width;
-  private final int height;
-
-  private PrivateMessageStatusIcon(boolean online, int width, int height) {
-    this.online = online;
-    this.width = Math.max(10, width);
-    this.height = Math.max(10, height);
-  }
-
-  @Override
-  public int getIconWidth() {
-    return width;
-  }
-
-  @Override
-  public int getIconHeight() {
-    return height;
-  }
-
-  @Override
-  public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
-    Graphics2D g2 = (Graphics2D) g.create();
-    try {
-      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-
-      Color fg = (c != null && c.getForeground() != null)
-          ? c.getForeground()
-          : UIManager.getColor("Tree.textForeground");
-      if (fg == null) fg = Color.GRAY;
-
-      Color bg = (c != null && c.getBackground() != null)
-          ? c.getBackground()
-          : UIManager.getColor("Tree.background");
-      if (bg == null) bg = new Color(0, 0, 0, 0);
-
-      float strokeW = Math.max(1.4f, Math.min(width, height) * 0.13f);
-      g2.setStroke(new BasicStroke(strokeW, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-      int bubbleX = x + 1;
-      int bubbleY = y + Math.round(height * 0.16f);
-      int bubbleW = Math.max(6, Math.round(width * 0.72f));
-      int bubbleH = Math.max(5, Math.round(height * 0.58f));
-      int arc = Math.max(4, Math.round(height * 0.28f));
-
-      Color stroke = mix(fg, bg, 0.88f, 240);
-      g2.setColor(stroke);
-      g2.drawRoundRect(bubbleX, bubbleY, bubbleW, bubbleH, arc, arc);
-
-      int tailBaseX = bubbleX + Math.round(bubbleW * 0.30f);
-      int tailBaseY = bubbleY + bubbleH;
-      int tailTipX = tailBaseX - Math.max(1, Math.round(width * 0.10f));
-      int tailTipY = tailBaseY + Math.max(1, Math.round(height * 0.14f));
-      g2.drawLine(tailBaseX, tailBaseY, tailTipX, tailTipY);
-      g2.drawLine(tailTipX, tailTipY, tailBaseX + Math.max(2, Math.round(width * 0.13f)), tailBaseY);
-
-      int dotD = Math.max(4, Math.round(Math.min(width, height) * 0.30f));
-      int dotX = x + width - dotD - 1;
-      int dotY = y + height - dotD - 1;
-
-      Color dot = online ? onlineDotColor(fg, bg) : offlineDotColor(fg, bg);
-      g2.setColor(dot);
-      g2.fillOval(dotX, dotY, dotD, dotD);
-
-      g2.setColor(mix(bg, dot, 0.72f, 230));
-      g2.drawOval(dotX, dotY, dotD, dotD);
-    } finally {
-      g2.dispose();
-    }
-  }
-
-  private static Color onlineDotColor(Color fg, Color bg) {
-    Color candidate = UIManager.getColor("Actions.Green");
-    if (candidate == null) candidate = UIManager.getColor("Component.successColor");
-    if (candidate == null) candidate = new Color(46, 163, 94);
-    return mix(candidate, mix(fg, bg, 0.20f, 255), 0.90f, 245);
-  }
-
-  private static Color offlineDotColor(Color fg, Color bg) {
-    return mix(fg, bg, 0.36f, 225);
-  }
-
-  private static Color mix(Color a, Color b, float ratioA, int alpha) {
-    float ra = Math.max(0f, Math.min(1f, ratioA));
-    float rb = 1f - ra;
-    int r = Math.round(a.getRed() * ra + b.getRed() * rb);
-    int g = Math.round(a.getGreen() * ra + b.getGreen() * rb);
-    int bl = Math.round(a.getBlue() * ra + b.getBlue() * rb);
-    int al = Math.max(0, Math.min(255, alpha));
-    return new Color(r, g, bl, al);
   }
 }
 

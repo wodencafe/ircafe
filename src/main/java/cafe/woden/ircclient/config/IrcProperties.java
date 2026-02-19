@@ -152,7 +152,7 @@ public record IrcProperties(Client client, List<Server> servers) {
          * The client will disconnect and surface the error. If false, the client may remain
          * connected without SASL (useful for networks where SASL is optional).
          *
-         * <p>If omitted, defaults to {@code true} when {@code enabled} is true.
+         * <p>If omitted, defaults to {@code true}.
          */
         Boolean disconnectOnFailure
     ) {
@@ -161,8 +161,8 @@ public record IrcProperties(Client client, List<Server> servers) {
           mechanism = "PLAIN";
         }
         if (disconnectOnFailure == null) {
-          // Strict default when SASL is in use.
-          disconnectOnFailure = enabled;
+          // Strict default.
+          disconnectOnFailure = true;
         }
       }
     }

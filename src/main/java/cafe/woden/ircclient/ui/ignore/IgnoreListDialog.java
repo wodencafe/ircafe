@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.ignore;
 
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -95,6 +96,8 @@ public class IgnoreListDialog {
     tabs.setSelectedIndex(initialTab == Tab.SOFT_IGNORE ? 1 : 0);
 
     JButton close = new JButton("Close");
+    close.setIcon(SvgIcons.action("close", 16));
+    close.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
     close.addActionListener(e -> dialog.dispose());
 
     JCheckBox hardCtcpToggle = new JCheckBox("Hard ignore includes CTCP");
@@ -155,6 +158,13 @@ public class IgnoreListDialog {
     JButton add = new JButton("Add...");
     JButton remove = new JButton("Remove");
     JButton copy = new JButton("Copy");
+
+    add.setIcon(SvgIcons.action("plus", 16));
+    add.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    remove.setIcon(SvgIcons.action("trash", 16));
+    remove.setDisabledIcon(SvgIcons.actionDisabled("trash", 16));
+    copy.setIcon(SvgIcons.action("copy", 16));
+    copy.setDisabledIcon(SvgIcons.actionDisabled("copy", 16));
 
     remove.setEnabled(false);
     copy.setEnabled(false);

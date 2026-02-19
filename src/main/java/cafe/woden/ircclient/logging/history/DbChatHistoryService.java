@@ -365,6 +365,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     final int limitFinal = limit;
 
+    // If the transcript already has content, avoid re-inserting the most recent DB rows
+    // (which will include lines from *this* session). Instead, only fetch rows strictly
+    // older than what the user already has on screen.
+    final java.util.OptionalLong earliestExistingTs = transcripts.earliestTimestampEpochMs(target);
+
     // NOTE: We intentionally do *not* require an empty transcript.
     // In practice, live join/mode/status lines can arrive quickly and make the transcript non-empty
     // before the async history fetch completes, which would otherwise race and skip history entirely.
@@ -378,13 +383,27 @@ public final class DbChatHistoryService implements ChatHistoryService {
       LogCursor cursorCandidate;
       boolean hasMore;
       try {
-        rows = repo.fetchRecentRows(serverId, tgt, limitFinal);
+        if (earliestExistingTs.isPresent()) {
+          long beforeTs = earliestExistingTs.getAsLong();
+          // beforeId=0 => exclude rows at exactly beforeTs, ensuring we only get strictly older.
+          rows = repo.fetchOlderRows(serverId, tgt, beforeTs, 0L, limitFinal);
+        } else {
+          rows = repo.fetchRecentRows(serverId, tgt, limitFinal);
+        }
       } catch (Exception e) {
         log.warn("History fetch failed for {} / {}", serverId, tgt, e);
         return;
       }
 
-      if (rows == null || rows.isEmpty()) return;
+      if (rows == null || rows.isEmpty()) {
+        // Prevent repeated selection events (e.g. UI refreshes) from later causing a confusing
+        // "History" divider when there isn't actually any older history to insert.
+        if (earliestExistingTs.isPresent()) {
+          oldestCursor.put(target, new LogCursor(earliestExistingTs.getAsLong(), 0L));
+          noMoreOlder.put(target, Boolean.TRUE);
+        }
+        return;
+      }
 
       // Oldest in this batch is the last (since newest-first ordering).
       LogRow batchOldest = rows.get(rows.size() - 1);
@@ -438,7 +457,17 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
           if (inserted > 0) {
             try {
-              transcripts.ensureHistoryDivider(target, pos, historyDividerLabel(newestHistoryTs));
+              String label = historyDividerLabel(newestHistoryTs);
+              boolean hasAfter = transcripts.hasContentAfterOffset(target, pos);
+              log.debug("[history] {} insertedHistoryLines={} posAfter={} hasAfter={} divider={}",
+                  target, inserted, pos, hasAfter, hasAfter ? "insert" : "pending");
+              if (hasAfter) {
+                transcripts.ensureHistoryDivider(target, pos, label);
+              } else {
+                // If there's nothing below the history we just inserted (e.g., transcript rebuild),
+                // defer the divider until the next live append.
+                transcripts.markHistoryDividerPending(target, label);
+              }
             } catch (Exception ignored) {
             }
           }
