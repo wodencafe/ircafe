@@ -144,16 +144,57 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
 private static String rawLineFromEvent(Object event) {
   if (event == null) return null;
-  try {
-    Object line = reflectCall(event, "getLine");
-    if (line != null) return String.valueOf(line);
-  } catch (Exception ignored) {
-  }
+
   try {
     Object raw = reflectCall(event, "getRawLine");
-    if (raw != null) return String.valueOf(raw);
+    String s = toRawIrcLine(raw);
+    if (s != null) return s;
   } catch (Exception ignored) {
   }
+
+  try {
+    Object line = reflectCall(event, "getLine");
+    String s = toRawIrcLine(line);
+    if (s != null) return s;
+  } catch (Exception ignored) {
+  }
+
+  try {
+    Object raw = reflectCall(event, "getRaw");
+    String s = toRawIrcLine(raw);
+    if (s != null) return s;
+  } catch (Exception ignored) {
+  }
+
+  return null;
+}
+
+private static String toRawIrcLine(Object maybeLine) {
+  if (maybeLine == null) return null;
+
+  if (maybeLine instanceof String s) {
+    String t = s.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  // PircBotX uses several internal line types; extract the raw line via reflection if possible.
+  for (String m : new String[]{"getRawLine", "getLine", "getRaw", "rawLine", "line"}) {
+    try {
+      Object nested = reflectCall(maybeLine, m);
+      if (nested == null || nested == maybeLine) continue;
+      String s = toRawIrcLine(nested);
+      if (s != null) return s;
+    } catch (Exception ignored) {
+    }
+  }
+
+  // Last resort: only accept toString() if it looks like an IRC line.
+  try {
+    String t = String.valueOf(maybeLine).trim();
+    if (t.startsWith("@") || t.startsWith(":")) return t;
+  } catch (Exception ignored) {
+  }
+
   return null;
 }
 
@@ -191,6 +232,22 @@ private static String derivePrivateConversationTarget(String botNick, String fro
   // Otherwise (including echo-message), the conversation key is the destination.
   return d;
 }
+
+private static boolean isZncPlayStarCursorCommand(String msg) {
+  String m = Objects.toString(msg, "").trim();
+  if (m.isEmpty()) return false;
+  String[] parts = m.split("\\s+");
+  if (parts.length < 3) return false;
+  if (!"play".equalsIgnoreCase(parts[0])) return false;
+  if (!"*".equals(parts[1])) return false;
+  String n = parts[2];
+  if (n.isEmpty()) return false;
+  for (int i = 0; i < n.length(); i++) {
+    if (!Character.isDigit(n.charAt(i))) return false;
+  }
+  return true;
+}
+
 
   private static boolean isChatHistoryBatchType(String type) {
     if (type == null) return false;
@@ -672,6 +729,22 @@ public void onPrivateMessage(PrivateMessageEvent event) {
       String msg = PircbotxUtil.safeStr(event::getMessage, "");
       String action = PircbotxUtil.parseCtcpAction(msg);
 
+      boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+      if (fromSelf) {
+        // Don't show our internal ZNC playback bootstrap line.
+        if (isZncPlayStarCursorCommand(msg)) {
+          return;
+        }
+        if (pmDest != null) {
+          if ("*playback".equalsIgnoreCase(pmDest) && msg != null && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
+            return;
+          }
+          if ("*status".equalsIgnoreCase(pmDest) && msg != null && msg.equalsIgnoreCase("ListNetworks")) {
+            return;
+          }
+        }
+      }
+
       String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
       String target = (buf.target == null || buf.target.isBlank()) ? convTarget : buf.target;
 
@@ -701,13 +774,20 @@ public void onPrivateMessage(PrivateMessageEvent event) {
   } catch (Exception ignored) {
   }
 
-  // Suppress our own internal ZNC control messages that might be echoed back (echo-message).
-  if (fromSelf && pmDest != null) {
-    if ("*playback".equalsIgnoreCase(pmDest) && msg != null && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
+  // Suppress our own internal ZNC control messages that might be echoed back (echo-message)
+  // or replayed by servers that emulate ZNC playback (e.g., Ergo).
+  if (fromSelf) {
+    // "play * <cursor>" is a control line we send to bootstrap playback; never show it as chat.
+    if (isZncPlayStarCursorCommand(msg)) {
       return;
     }
-    if ("*status".equalsIgnoreCase(pmDest) && msg != null && msg.equalsIgnoreCase("ListNetworks")) {
-      return;
+    if (pmDest != null) {
+      if ("*playback".equalsIgnoreCase(pmDest) && msg != null && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
+        return;
+      }
+      if ("*status".equalsIgnoreCase(pmDest) && msg != null && msg.equalsIgnoreCase("ListNetworks")) {
+        return;
+      }
     }
   }
 
@@ -988,12 +1068,17 @@ if (!target.startsWith("#") && !target.startsWith("&")) {
 }
 
 boolean fromSelf = !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
-if (fromSelf && dest != null) {
-  if ("*playback".equalsIgnoreCase(dest) && payload.toLowerCase(java.util.Locale.ROOT).startsWith("play ")) {
+if (fromSelf) {
+  if (isZncPlayStarCursorCommand(payload)) {
     return;
   }
-  if ("*status".equalsIgnoreCase(dest) && payload.equalsIgnoreCase("ListNetworks")) {
-    return;
+  if (dest != null) {
+    if ("*playback".equalsIgnoreCase(dest) && payload.toLowerCase(java.util.Locale.ROOT).startsWith("play ")) {
+      return;
+    }
+    if ("*status".equalsIgnoreCase(dest) && payload.equalsIgnoreCase("ListNetworks")) {
+      return;
+    }
   }
 }
 
