@@ -718,6 +718,16 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
 
+
+// Some servers (and bouncers) may echo our own CTCP requests back to us (echo-message).
+// We should not treat those as inbound requests, or we can end up replying to ourselves.
+try {
+  if (bot != null && bot.getNick() != null && fromNick != null && fromNick.equalsIgnoreCase(bot.getNick())) {
+    return true;
+  }
+} catch (Exception ignored) {
+}
+
     if ("VERSION".equals(cmd)) {
       String v = (version == null) ? "IRCafe" : version;
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");

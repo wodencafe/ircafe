@@ -202,6 +202,9 @@ public class MessageInputPanel extends JPanel {
     autoCompletion.setTriggerKey(KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0));
     autoCompletion.install(input);
 
+    installNickCompletionAddressingSuffix();
+    installAutoCompletionUiRefreshOnLafChange();
+
     installHistoryKeybindings();
     input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
       @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
@@ -817,6 +820,167 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     if (settingsBus != null) settingsBus.removeListener(settingsListener);
     super.removeNotify();
   }
+
+private void installNickCompletionAddressingSuffix() {
+  try {
+    KeyStroke ks = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0);
+    InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
+    Object key = (im == null) ? null : im.get(ks);
+    if (key == null) return;
+    ActionMap am = input.getActionMap();
+    Action delegate = (am == null) ? null : am.get(key);
+    if (delegate == null) return;
+
+    // Wrap the AutoCompletion trigger action so we can apply IRC-style "nick: " addressing
+    // when the completion occurs as the first word in the line.
+    am.put(key, new AbstractAction() {
+      @Override public void actionPerformed(ActionEvent e) {
+        String beforeText = input.getText();
+        int beforeCaret = input.getCaretPosition();
+        delegate.actionPerformed(e);
+        SwingUtilities.invokeLater(() -> maybeAppendNickAddressSuffix(beforeText, beforeCaret));
+      }
+    });
+  } catch (Exception ignored) {
+  }
+}
+
+private void maybeAppendNickAddressSuffix(String beforeText, int beforeCaret) {
+  try {
+    if (beforeText == null) beforeText = "";
+
+    // Only apply when the user was tab-completing inside the first word.
+    int startBefore = firstNonWhitespace(beforeText);
+    if (startBefore < 0) return;
+    int endBefore = wordEnd(beforeText, startBefore);
+    if (beforeCaret > endBefore) return;
+
+    String afterText = input.getText();
+    if (afterText == null) afterText = "";
+    int afterCaret = input.getCaretPosition();
+
+    if (afterText.equals(beforeText) && afterCaret == beforeCaret) return; // no change -> no completion
+
+    // Don't do this for slash-commands.
+    String trimmed = afterText.stripLeading();
+    if (trimmed.startsWith("/")) return;
+
+    int start = firstNonWhitespace(afterText);
+    if (start < 0) return;
+    int end = wordEnd(afterText, start);
+    if (end <= start) return;
+
+    // Only if caret is at/after the nick we just completed.
+    if (afterCaret < end) return;
+
+    String nick = afterText.substring(start, end);
+    if (nick.isBlank()) return;
+    if (!isKnownNick(nick)) return;
+
+    // If already addressed like "nick:" or "nick,", do nothing.
+    if (end < afterText.length()) {
+      char ch = afterText.charAt(end);
+      if (ch == ':' || ch == ',') return;
+      if (!Character.isWhitespace(ch)) return; // only add when nick is followed by whitespace
+    }
+
+    // Normalize whitespace after the nick into exactly ": ".
+    int wsEnd = end;
+    while (wsEnd < afterText.length() && Character.isWhitespace(afterText.charAt(wsEnd))) wsEnd++;
+
+    endCompoundEdit();
+    javax.swing.text.Document doc = input.getDocument();
+    if (wsEnd > end) {
+      doc.remove(end, wsEnd - end);
+    }
+    doc.insertString(end, ": ", null);
+    input.setCaretPosition(end + 2);
+  } catch (Exception ignored) {
+  }
+}
+
+private boolean isKnownNick(String candidate) {
+  if (candidate == null) return false;
+  for (String n : nickSnapshot) {
+    if (n != null && n.equalsIgnoreCase(candidate)) return true;
+  }
+  return false;
+}
+
+private static int firstNonWhitespace(String s) {
+  if (s == null) return -1;
+  for (int i = 0; i < s.length(); i++) {
+    if (!Character.isWhitespace(s.charAt(i))) return i;
+  }
+  return -1;
+}
+
+private static int wordEnd(String s, int start) {
+  if (s == null || start < 0) return 0;
+  int i = start;
+  while (i < s.length() && !Character.isWhitespace(s.charAt(i))) i++;
+  return i;
+}
+
+private final PropertyChangeListener lafListener = evt -> {
+  if (!"lookAndFeel".equals(evt.getPropertyName())) return;
+  SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
+};
+
+private void installAutoCompletionUiRefreshOnLafChange() {
+  try {
+    UIManager.addPropertyChangeListener(lafListener);
+  } catch (Exception ignored) {
+  }
+  // Remove listener when this component is disposed.
+  addHierarchyListener(e -> {
+    long flags = e.getChangeFlags();
+    if ((flags & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
+    if (isDisplayable()) return;
+    try {
+      UIManager.removePropertyChangeListener(lafListener);
+    } catch (Exception ignored) {
+    }
+  });
+}
+
+private void refreshAutoCompletionUi() {
+  try {
+    // Hide any active popups to prevent UI delegates from being mid-event.
+    try {
+            java.lang.reflect.Method m = autoCompletion.getClass().getMethod("hideChildWindows");
+            m.setAccessible(true);
+            m.invoke(autoCompletion);
+          } catch (Throwable ignored) {
+          }
+ArrayList<Window> windows = new ArrayList<>();
+    try {
+      Class<?> c = autoCompletion.getClass();
+      while (c != null && c != Object.class) {
+        for (Field f : c.getDeclaredFields()) {
+          if (!Window.class.isAssignableFrom(f.getType())) continue;
+          f.setAccessible(true);
+          Object v = f.get(autoCompletion);
+          if (v instanceof Window w) windows.add(w);
+        }
+        c = c.getSuperclass();
+      }
+    } catch (Throwable ignored) {
+    }
+
+    for (Window w : windows) {
+      try {
+        SwingUtilities.updateComponentTreeUI(w);
+        w.invalidate();
+        w.validate();
+        w.repaint();
+      } catch (Throwable ignored) {
+      }
+    }
+  } catch (Exception ignored) {
+  }
+}
+
   private void onSettingsChanged(PropertyChangeEvent evt) {
     if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
     if (evt.getNewValue() instanceof UiSettings s) {
