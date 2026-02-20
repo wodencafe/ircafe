@@ -267,8 +267,267 @@ afterEvaluate {
     if (jp == null) return
 
     def os = OperatingSystem.current()
-    def iconFile = (os.isWindows()) ? file("packaging/ircafe.ico") : (os.isLinux() ? file("packaging/ircafe.png") : null)
+    // Prefer the source-controlled PNG in resources for Linux.
+    // (packaging/ is optional and may not exist in this repo.)
+    def iconFile = (os.isWindows()) ? file("packaging/ircafe.ico") : (os.isLinux() ? file("src/main/resources/icons/ircafe_512.png") : null)
     if (iconFile != null && iconFile.exists() && jp.metaClass.hasProperty(jp, "icon")) {
         jp.icon = iconFile
     }
+}
+
+def isLinux = OperatingSystem.current().isLinux()
+def appName = "IRCafe"
+def appImageDir = layout.buildDirectory.dir("dist/${appName}")
+def desktopFileName = "${appName}.desktop"
+
+// Where the user plans to install the app image (used to embed absolute Exec/Icon paths).
+// Override with: -PappInstallDir=/opt/IRCafe (default) or any other prefix.
+def appInstallDir = (findProperty("appInstallDir") ?: "/opt/${appName}").toString()
+
+tasks.register("copyLinuxAppImageIconToLib", Copy) {
+    onlyIf { isLinux }
+    from("src/main/resources/icons/ircafe_512.png")
+    into(appImageDir.map { new File(it.asFile, "lib") })
+    rename { "${appName}.png" }
+}
+
+tasks.register("generateLinuxDesktopEntry") {
+    onlyIf { isLinux }
+    doLast {
+        def outDir = appImageDir.get().asFile
+        outDir.mkdirs()
+
+        def desktopFile = new File(outDir, desktopFileName)
+        desktopFile.setText("""[Desktop Entry]
+Version=1.0
+Type=Application
+Name=${appName}
+Comment=${project.description}
+Exec=${appInstallDir}/bin/${appName}
+Icon=${appInstallDir}/lib/${appName}.png
+Categories=Network;
+Terminal=false
+StartupWMClass=${appName}
+""".stripIndent(), "UTF-8")
+    }
+}
+
+tasks.register("generateLinuxInstallScript") {
+    onlyIf { isLinux }
+    doLast {
+        def outDir = appImageDir.get().asFile
+        outDir.mkdirs()
+
+        def installScript = new File(outDir, "install.sh")
+        def script = '''#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="@@APP_NAME@@"
+APP_DESC="@@APP_DESC@@"
+
+usage() {
+  cat <<USAGE
+Usage: ./install.sh [INSTALL_DIR]
+
+Installs the @@APP_NAME@@ app-image and a .desktop launcher.
+
+If INSTALL_DIR is omitted:
+  - when run as root:   /opt/@@APP_NAME@@
+  - when run as a user: $HOME/.local/opt/@@APP_NAME@@
+
+Examples:
+  sudo ./install.sh              # installs to /opt/@@APP_NAME@@, desktop entry system-wide
+  sudo ./install.sh /opt/@@APP_NAME@@
+  ./install.sh                   # installs to ~/.local/opt/@@APP_NAME@@, desktop entry for current user
+  ./install.sh ~/.local/opt/@@APP_NAME@@
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+DEST_DIR="${1:-}"
+if [[ -z "$DEST_DIR" ]]; then
+  if [[ "${EUID}" -eq 0 ]]; then
+    DEST_DIR="/opt/@@APP_NAME@@"
+  else
+    DEST_DIR="${HOME}/.local/opt/@@APP_NAME@@"
+  fi
+fi
+
+if [[ "${EUID}" -ne 0 && "$DEST_DIR" == /opt/* ]]; then
+  echo "Refusing to install to $DEST_DIR without root privileges. Try: sudo ./install.sh $DEST_DIR" >&2
+  exit 1
+fi
+
+if [[ "$SRC_DIR" == "$DEST_DIR" ]]; then
+  echo "Already installed at $DEST_DIR"
+else
+  mkdir -p "$(dirname "$DEST_DIR")"
+
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$SRC_DIR/" "$DEST_DIR/"
+  else
+    rm -rf "$DEST_DIR"
+    mkdir -p "$DEST_DIR"
+    cp -a "$SRC_DIR/." "$DEST_DIR/"
+  fi
+fi
+
+if [[ "${EUID}" -eq 0 ]]; then
+  DESKTOP_DIR="/usr/share/applications"
+else
+  DESKTOP_DIR="${HOME}/.local/share/applications"
+fi
+mkdir -p "$DESKTOP_DIR"
+
+DESKTOP_FILE="$DESKTOP_DIR/@@APP_NAME@@.desktop"
+cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=@@APP_NAME@@
+Comment=$APP_DESC
+Exec=$DEST_DIR/bin/@@APP_NAME@@
+Icon=$DEST_DIR/lib/@@APP_NAME@@.png
+Categories=Network;
+Terminal=false
+StartupWMClass=@@APP_NAME@@
+EOF
+chmod 0644 "$DESKTOP_FILE"
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "$DESKTOP_DIR" || true
+fi
+
+echo "Installed @@APP_NAME@@ to: $DEST_DIR"
+echo "Desktop entry:       $DESKTOP_FILE"
+echo "You may need to log out/in (or restart your shell) for the launcher to appear."
+'''
+
+        def appDesc = project.description.toString().replace('"', '\\"')
+        def rendered = script
+            .replace('@@APP_NAME@@', appName)
+            .replace('@@APP_DESC@@', appDesc)
+
+        installScript.setText(rendered.stripIndent(), "UTF-8")
+
+        // Ensure script is executable in the build output.
+        installScript.setExecutable(true)
+    }
+}
+
+tasks.register("generateLinuxUninstallScript") {
+    onlyIf { isLinux }
+    doLast {
+        def outDir = appImageDir.get().asFile
+        outDir.mkdirs()
+
+        def uninstallScript = new File(outDir, "uninstall.sh")
+        def script = '''#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="@@APP_NAME@@"
+
+usage() {
+  cat <<USAGE
+Usage: ./uninstall.sh [INSTALL_DIR]
+
+Removes the @@APP_NAME@@ app-image installation and its .desktop launcher.
+
+If INSTALL_DIR is omitted:
+  - when run as root:   /opt/@@APP_NAME@@
+  - when run as a user: $HOME/.local/opt/@@APP_NAME@@
+
+Examples:
+  sudo ./uninstall.sh              # removes /opt/@@APP_NAME@@ and /usr/share/applications/@@APP_NAME@@.desktop
+  sudo ./uninstall.sh /opt/@@APP_NAME@@
+  ./uninstall.sh                   # removes ~/.local/opt/@@APP_NAME@@ and ~/.local/share/applications/@@APP_NAME@@.desktop
+  ./uninstall.sh ~/.local/opt/@@APP_NAME@@
+
+Note:
+  This does NOT remove your user data/config (logs, history DB, preferences).
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+DEST_DIR="${1:-}"
+if [[ -z "$DEST_DIR" ]]; then
+  if [[ "${EUID}" -eq 0 ]]; then
+    DEST_DIR="/opt/@@APP_NAME@@"
+  else
+    DEST_DIR="${HOME}/.local/opt/@@APP_NAME@@"
+  fi
+fi
+
+if [[ "${EUID}" -ne 0 && "$DEST_DIR" == /opt/* ]]; then
+  echo "Refusing to remove $DEST_DIR without root privileges. Try: sudo ./uninstall.sh $DEST_DIR" >&2
+  exit 1
+fi
+
+if [[ "${EUID}" -eq 0 ]]; then
+  DESKTOP_DIR="/usr/share/applications"
+else
+  DESKTOP_DIR="${HOME}/.local/share/applications"
+fi
+
+DESKTOP_FILE="$DESKTOP_DIR/@@APP_NAME@@.desktop"
+rm -f "$DESKTOP_FILE" || true
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "$DESKTOP_DIR" || true
+fi
+
+rm -rf "$DEST_DIR" || true
+
+echo "Uninstalled @@APP_NAME@@ from: $DEST_DIR"
+echo "Removed desktop entry: $DESKTOP_FILE"
+'''
+
+        def rendered = script.replace('@@APP_NAME@@', appName)
+        uninstallScript.setText(rendered.stripIndent(), "UTF-8")
+        uninstallScript.setExecutable(true)
+    }
+}
+
+tasks.register("installLinuxDesktopEntry") {
+    onlyIf { isLinux }
+    dependsOn("jpackage")
+
+    doLast {
+        def outDir = appImageDir.get().asFile
+        def desktopFile = new File(outDir, desktopFileName)
+        if (!desktopFile.exists()) {
+            throw new GradleException("Desktop entry was not generated: ${desktopFile}")
+        }
+
+        def home = System.getProperty("user.home")
+        def applicationsDir = new File(home, ".local/share/applications")
+        applicationsDir.mkdirs()
+
+        copy {
+            from(desktopFile)
+            into(applicationsDir)
+            fileMode = 0644
+        }
+
+        // Best-effort cache refresh. These tools may not exist on all distros.
+        exec {
+            ignoreExitValue = true
+            commandLine("bash", "-lc", "command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database ${applicationsDir.absolutePath} || true")
+        }
+    }
+}
+
+// When building a Linux app image, always include icon + .desktop alongside the output.
+tasks.named("jpackage").configure {
+    finalizedBy("copyLinuxAppImageIconToLib", "generateLinuxDesktopEntry", "generateLinuxInstallScript", "generateLinuxUninstallScript")
 }
