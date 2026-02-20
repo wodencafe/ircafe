@@ -84,6 +84,10 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
+  private static final int TREE_NODE_ICON_SIZE = 13;
+  private static final int SERVER_ACTION_BUTTON_SIZE = 16;
+  private static final int SERVER_ACTION_BUTTON_ICON_SIZE = 12;
+  private static final int SERVER_ACTION_BUTTON_MARGIN = 6;
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
 
@@ -118,6 +122,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
   private volatile InsertionLine insertionLine;
+  private String hoveredServerActionServerId = "";
 
 private static final class InsertionLine {
   final int x1;
@@ -143,6 +148,7 @@ private static final class InsertionLine {
     protected void paintComponent(Graphics g) {
       super.paintComponent(g);
       ServerTreeDockable.this.paintInsertionLine(g);
+      ServerTreeDockable.this.paintHoveredServerAction(g);
     }
 
     @Override
@@ -296,6 +302,37 @@ private static final class InsertionLine {
       }
     };
     tree.addTreeSelectionListener(tsl);
+
+    MouseAdapter hoverServerActionListener = new MouseAdapter() {
+      @Override
+      public void mouseMoved(MouseEvent e) {
+        updateHoveredServerAction(e);
+      }
+
+      @Override
+      public void mouseDragged(MouseEvent e) {
+        updateHoveredServerAction(null);
+      }
+
+      @Override
+      public void mouseExited(MouseEvent e) {
+        updateHoveredServerAction(null);
+      }
+
+      @Override
+      public void mousePressed(MouseEvent e) {
+        if (maybeHandleHoveredServerActionClick(e)) return;
+        updateHoveredServerAction(e);
+      }
+
+      @Override
+      public void mouseReleased(MouseEvent e) {
+        updateHoveredServerAction(e);
+      }
+    };
+    tree.addMouseMotionListener(hoverServerActionListener);
+    tree.addMouseListener(hoverServerActionListener);
+
     MouseAdapter popupListener = new MouseAdapter() {
       @Override
       public void mousePressed(MouseEvent e) {
@@ -518,6 +555,211 @@ private static final class InsertionLine {
     });
   }
 
+  private ConnectionState connectionStateForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return ConnectionState.DISCONNECTED;
+    return serverStates.getOrDefault(sid, ConnectionState.DISCONNECTED);
+  }
+
+  private static boolean canConnectServer(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return st == ConnectionState.DISCONNECTED;
+  }
+
+  private static boolean canDisconnectServer(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return st == ConnectionState.CONNECTING
+        || st == ConnectionState.CONNECTED
+        || st == ConnectionState.RECONNECTING;
+  }
+
+  private static String serverStateLabel(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return switch (st) {
+      case CONNECTED -> "Connected";
+      case CONNECTING -> "Connecting";
+      case RECONNECTING -> "Reconnecting";
+      case DISCONNECTING -> "Disconnecting";
+      case DISCONNECTED -> "Disconnected";
+    };
+  }
+
+  private static String serverNodeIconName(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return switch (st) {
+      case CONNECTED -> "check";
+      case CONNECTING, RECONNECTING, DISCONNECTING -> "refresh";
+      case DISCONNECTED -> "terminal";
+    };
+  }
+
+  private static Palette serverNodeIconPalette(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return switch (st) {
+      case CONNECTED, CONNECTING, RECONNECTING -> Palette.TREE;
+      case DISCONNECTED, DISCONNECTING -> Palette.TREE_DISABLED;
+    };
+  }
+
+  private static String serverActionIconName(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return switch (st) {
+      case DISCONNECTED -> "plus";
+      case CONNECTING, CONNECTED, RECONNECTING -> "close";
+      case DISCONNECTING -> "refresh";
+    };
+  }
+
+  private String serverIdAt(int x, int y) {
+    TreePath path = tree.getPathForLocation(x, y);
+    if (path == null) return "";
+    Object last = path.getLastPathComponent();
+    if (!(last instanceof DefaultMutableTreeNode node) || !isServerNode(node)) return "";
+    return Objects.toString(node.getUserObject(), "").trim();
+  }
+
+  private TreePath serverPathForId(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return null;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null || sn.serverNode == null || sn.serverNode.getPath() == null) return null;
+    return new TreePath(sn.serverNode.getPath());
+  }
+
+  private Rectangle serverActionButtonBoundsForPath(TreePath path) {
+    if (path == null) return null;
+    Rectangle row = tree.getPathBounds(path);
+    if (row == null) return null;
+    Rectangle vr = tree.getVisibleRect();
+    if (vr == null || vr.isEmpty()) return null;
+    if (row.y + row.height < vr.y || row.y > vr.y + vr.height) return null;
+
+    int size = SERVER_ACTION_BUTTON_SIZE;
+    int x = vr.x + vr.width - SERVER_ACTION_BUTTON_MARGIN - size;
+    int y = row.y + Math.max(0, (row.height - size) / 2);
+    if (x < vr.x + SERVER_ACTION_BUTTON_MARGIN) x = vr.x + SERVER_ACTION_BUTTON_MARGIN;
+    return new Rectangle(x, y, size, size);
+  }
+
+  private Rectangle serverActionButtonBoundsForServer(String serverId) {
+    return serverActionButtonBoundsForPath(serverPathForId(serverId));
+  }
+
+  private void updateHoveredServerAction(MouseEvent event) {
+    String next = "";
+    if (event != null) {
+      next = serverIdAt(event.getX(), event.getY());
+      if (next.isEmpty()) {
+        String current = Objects.toString(hoveredServerActionServerId, "").trim();
+        if (!current.isEmpty()) {
+          Rectangle btn = serverActionButtonBoundsForServer(current);
+          if (btn != null && btn.contains(event.getPoint())) {
+            next = current;
+          }
+        }
+      }
+    }
+
+    if (Objects.equals(next, hoveredServerActionServerId)) {
+      if (!next.isEmpty()) {
+        Rectangle btn = serverActionButtonBoundsForServer(next);
+        if (btn != null) tree.repaint(btn);
+      }
+      return;
+    }
+
+    hoveredServerActionServerId = next;
+    tree.repaint();
+  }
+
+  private boolean maybeHandleHoveredServerActionClick(MouseEvent event) {
+    if (event == null) return false;
+    if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
+
+    String sid = Objects.toString(hoveredServerActionServerId, "").trim();
+    if (sid.isEmpty()) return false;
+
+    Rectangle btn = serverActionButtonBoundsForServer(sid);
+    if (btn == null || !btn.contains(event.getPoint())) return false;
+
+    ConnectionState state = connectionStateForServer(sid);
+    if (canConnectServer(state)) {
+      connectServerRequests.onNext(sid);
+    } else if (canDisconnectServer(state)) {
+      disconnectServerRequests.onNext(sid);
+    }
+
+    event.consume();
+    tree.repaint(btn);
+    return true;
+  }
+
+  private void paintHoveredServerAction(Graphics g) {
+    String sid = Objects.toString(hoveredServerActionServerId, "").trim();
+    if (sid.isEmpty()) return;
+
+    Rectangle btn = serverActionButtonBoundsForServer(sid);
+    if (btn == null) return;
+
+    ConnectionState state = connectionStateForServer(sid);
+    boolean enabled = canConnectServer(state) || canDisconnectServer(state);
+
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+      Color base = UIManager.getColor("Button.background");
+      if (base == null) base = UIManager.getColor("Panel.background");
+      if (base == null) base = Color.LIGHT_GRAY;
+
+      Color border = UIManager.getColor("Component.borderColor");
+      if (border == null) border = UIManager.getColor("Separator.foreground");
+      if (border == null) border = Color.GRAY;
+
+      java.awt.Point mp = null;
+      try {
+        mp = tree.getMousePosition();
+      } catch (Exception ignored) {
+      }
+      boolean hot = mp != null && btn.contains(mp);
+
+      Color fill = withAlpha(base, enabled ? 220 : 170);
+      if (hot && enabled) {
+        Color accent = UIManager.getColor("@accentColor");
+        if (accent == null) accent = UIManager.getColor("Component.focusColor");
+        if (accent != null) {
+          fill = withAlpha(accent, 64);
+          border = withAlpha(accent, 185);
+        } else {
+          fill = withAlpha(base, 240);
+        }
+      }
+
+      g2.setColor(fill);
+      g2.fillRoundRect(btn.x, btn.y, btn.width, btn.height, 8, 8);
+      g2.setColor(withAlpha(border, 200));
+      g2.drawRoundRect(btn.x, btn.y, btn.width - 1, btn.height - 1, 8, 8);
+
+      Icon actionIcon = SvgIcons.icon(
+          serverActionIconName(state),
+          SERVER_ACTION_BUTTON_ICON_SIZE,
+          enabled ? Palette.ACTION : Palette.ACTION_DISABLED);
+      if (actionIcon != null) {
+        int ix = btn.x + (btn.width - actionIcon.getIconWidth()) / 2;
+        int iy = btn.y + (btn.height - actionIcon.getIconHeight()) / 2;
+        actionIcon.paintIcon(tree, g2, ix, iy);
+      }
+    } finally {
+      g2.dispose();
+    }
+  }
+
+  private static Color withAlpha(Color c, int alpha) {
+    Color base = c == null ? Color.GRAY : c;
+    int a = Math.max(0, Math.min(255, alpha));
+    return new Color(base.getRed(), base.getGreen(), base.getBlue(), a);
+  }
+
   private JPopupMenu buildPopupMenu(TreePath path) {
     if (path == null) return null;
 
@@ -529,7 +771,7 @@ private static final class InsertionLine {
 
       String pretty = prettyServerLabel(serverId);
 
-      ConnectionState state = serverStates.getOrDefault(serverId, ConnectionState.DISCONNECTED);
+      ConnectionState state = connectionStateForServer(serverId);
       JPopupMenu menu = new JPopupMenu();
       boolean canReorder = isRootServerNode(node);
       if (canReorder) {
@@ -539,14 +781,12 @@ private static final class InsertionLine {
       }
 
       JMenuItem connectOne = new JMenuItem("Connect \"" + pretty + "\"");
-      connectOne.setEnabled(state == ConnectionState.DISCONNECTED);
+      connectOne.setEnabled(canConnectServer(state));
       connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
       menu.add(connectOne);
 
       JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + pretty + "\"");
-      disconnectOne.setEnabled(state == ConnectionState.CONNECTING
-          || state == ConnectionState.CONNECTED
-          || state == ConnectionState.RECONNECTING);
+      disconnectOne.setEnabled(canDisconnectServer(state));
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
 
@@ -872,6 +1112,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       clearPrivateMessageOnlineStates(serverId);
     } else {
       serverStates.put(serverId, st);
+    }
+
+    ServerNodes sn = servers.get(serverId);
+    if (sn != null && sn.serverNode != null) {
+      model.nodeChanged(sn.serverNode);
+    }
+    if (Objects.equals(hoveredServerActionServerId, serverId)) {
+      tree.repaint();
     }
   }
 
@@ -1487,10 +1735,11 @@ private void syncServers(List<ServerEntry> latest) {
     }
 
     if (uo instanceof String serverId && isServerNode(node) && isSojuEphemeralServer(serverId)) {
+      String stateTip = "State: " + serverStateLabel(connectionStateForServer(serverId)) + ".";
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
       boolean auto = !origin.isEmpty() && sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, display);
-      String tip = "Discovered from soju; not saved.";
+      String tip = stateTip + " Discovered from soju; not saved.";
       if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
       if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
@@ -1498,14 +1747,25 @@ private void syncServers(List<ServerEntry> latest) {
     }
 
     if (uo instanceof String serverId && isServerNode(node) && isZncEphemeralServer(serverId)) {
+      String stateTip = "State: " + serverStateLabel(connectionStateForServer(serverId)) + ".";
       String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
       boolean auto = !origin.isEmpty() && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display);
-      String tip = "Discovered from ZNC; not saved.";
+      String tip = stateTip + " Discovered from ZNC; not saved.";
       if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
       if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
       return tip;
+    }
+
+    if (uo instanceof String serverId && isServerNode(node)) {
+      ConnectionState state = connectionStateForServer(serverId);
+      String action = canConnectServer(state)
+          ? "Click the row action to connect."
+          : canDisconnectServer(state)
+              ? "Click the row action to disconnect."
+              : "Connection state is changing.";
+      return "State: " + serverStateLabel(state) + ". " + action;
     }
 
     return null;
@@ -1532,6 +1792,10 @@ private void syncServers(List<ServerEntry> latest) {
 private void removeServerRoot(String serverId) {
   ServerNodes sn = servers.remove(serverId);
   if (sn == null) return;
+
+  if (Objects.equals(hoveredServerActionServerId, serverId)) {
+    hoveredServerActionServerId = "";
+  }
 
   serverStates.remove(serverId);
   clearPrivateMessageOnlineStates(serverId);
@@ -1772,6 +2036,13 @@ private void removeServerRoot(String serverId) {
   
 
 private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
+  private void setTreeIcon(String name) {
+    Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
+    Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
+    setIcon(icon);
+    setDisabledIcon(disabled);
+  }
+
   @Override
   public java.awt.Component getTreeCellRendererComponent(
       JTree tree,
@@ -1797,17 +2068,22 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setFont(base.deriveFont(Font.PLAIN));
         }
         if (nd.ref != null && nd.ref.isChannel()) {
-          Icon icon = SvgIcons.icon("channel", 13, Palette.TREE);
-          Icon disabled = SvgIcons.icon("channel", 13, Palette.TREE_DISABLED);
-          setIcon(icon);
-          setDisabledIcon(disabled);
+          setTreeIcon("channel");
         } else if (isPrivateMessageTarget(nd.ref)) {
           boolean online = Boolean.TRUE.equals(privateMessageOnlineByTarget.get(nd.ref));
           String name = online ? "pm-online" : "pm-offline";
           Palette pal = online ? Palette.TREE_PM_ONLINE : Palette.TREE_PM_OFFLINE;
-          Icon icon = SvgIcons.icon(name, 13, pal);
+          Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, pal);
           setIcon(icon);
           setDisabledIcon(icon);
+        } else if (nd.ref != null && nd.ref.isStatus()) {
+          setTreeIcon("terminal");
+        } else if (nd.ref != null && nd.ref.isNotifications()) {
+          setTreeIcon("info");
+        } else if (nd.ref != null && nd.ref.isChannelList()) {
+          setTreeIcon("add");
+        } else if (nd.ref != null && nd.ref.isDccTransfers()) {
+          setTreeIcon("dock-right");
         }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(prettyServerLabel(id));
@@ -1816,6 +2092,19 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         } else {
           setFont(base.deriveFont(Font.PLAIN));
         }
+        ConnectionState state = connectionStateForServer(id);
+        String iconName = serverNodeIconName(state);
+        Palette palette = serverNodeIconPalette(state);
+        Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
+        Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
+        setIcon(icon);
+        setDisabledIcon(disabled);
+      } else if (isPrivateMessagesGroupNode(node)) {
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("account-unknown");
+      } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("dock-left");
       } else {
         setFont(base.deriveFont(Font.PLAIN));
       }
