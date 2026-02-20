@@ -1617,6 +1617,22 @@ public class ChatTranscriptStore {
                                   AttributeSet msgStyle,
                                   boolean allowEmbeds,
                                   LineMeta meta) {
+    appendLineInternal(ref, from, text, fromStyle, msgStyle, allowEmbeds, meta, null, null);
+  }
+
+  /**
+   * Like {@link #appendLineInternal(TargetRef, String, String, AttributeSet, AttributeSet, boolean, LineMeta)}
+   * but optionally inserts an inline Swing component at the end of the line (before the newline).
+   */
+  private synchronized void appendLineInternal(TargetRef ref,
+                                              String from,
+                                              String text,
+                                              AttributeSet fromStyle,
+                                              AttributeSet msgStyle,
+                                              boolean allowEmbeds,
+                                              LineMeta meta,
+                                              java.awt.Component tailComponent,
+                                              AttributeSet tailAttrs) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
 
@@ -1663,6 +1679,13 @@ public class ChatTranscriptStore {
 
       AttributeSet base = msgStyle2;
       renderer.insertRichText(doc, ref, text, base);
+
+      if (tailComponent != null) {
+        SimpleAttributeSet a = new SimpleAttributeSet(tailAttrs != null ? tailAttrs : msgStyle2);
+        a = withLineMeta(a, meta);
+        StyleConstants.setComponent(a, tailComponent);
+        doc.insertString(doc.getLength(), " ", a);
+      }
 
       doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
 
@@ -1827,7 +1850,19 @@ public void appendChatAt(TargetRef ref,
     ms.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pid);
     ms.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, "pending");
 
-    appendLineInternal(ref, from, Objects.toString(text, "") + " [pending]", fs, ms, true, meta);
+    // Replace the old textual "[pending]" suffix with an inline spinner indicator.
+    java.awt.Color spinnerColor = null;
+    try {
+      spinnerColor = StyleConstants.getForeground(ms);
+    } catch (Exception ignored) {
+      spinnerColor = null;
+    }
+    OutgoingSendIndicator.PendingSpinner spinner = new OutgoingSendIndicator.PendingSpinner(spinnerColor);
+    SimpleAttributeSet tail = new SimpleAttributeSet(ms);
+    tail.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pid);
+    tail.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, "pending");
+
+    appendLineInternal(ref, from, Objects.toString(text, ""), fs, ms, true, meta, spinner, tail);
   }
 
   public synchronized boolean resolvePendingOutgoingChat(
@@ -2936,7 +2971,31 @@ public void appendChatAt(TargetRef ref,
     SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
     applyOutgoingLineColor(fs, ms, true);
 
-    insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
+    int after = insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
+
+    // Inline delivery confirmation dot that fades away.
+    try {
+      StyledDocument docForDot = docs.get(ref);
+      if (docForDot != null) {
+        int insertPos = Math.max(0, Math.min(after - 1, docForDot.getLength()));
+        if (insertPos >= 0 && insertPos <= docForDot.getLength()) {
+          java.awt.Color green = new java.awt.Color(0x2ecc71);
+          final OutgoingSendIndicator.ConfirmedDot[] holder = new OutgoingSendIndicator.ConfirmedDot[1];
+          holder[0] = new OutgoingSendIndicator.ConfirmedDot(green, 200, 900, () -> {
+            try {
+              removeInlineComponentNear(docForDot, holder[0]);
+            } catch (Exception ignored) {
+            }
+          });
+
+          SimpleAttributeSet attrs = new SimpleAttributeSet(ms);
+          attrs = withLineMeta(attrs, meta);
+          StyleConstants.setComponent(attrs, holder[0]);
+          docForDot.insertString(insertPos, " ", attrs);
+        }
+      }
+    } catch (Exception ignored) {
+    }
 
     StyledDocument doc = docs.get(ref);
     TranscriptState st = stateByTarget.get(ref);
@@ -2949,6 +3008,71 @@ public void appendChatAt(TargetRef ref,
     if (doc != null && st != null && !reactionToken.isBlank() && !replyToMsgId.isBlank()) {
       applyMessageReactionInternal(ref, doc, st, replyToMsgId, reactionToken, from, tsEpochMs);
     }
+  }
+
+  /**
+   * Removes a single embedded Swing component placeholder character from a transcript document.
+   * Used by the outbound delivery indicator once its fade-out completes.
+   */
+  private boolean removeInlineComponentNear(StyledDocument doc, java.awt.Component expected) {
+    if (doc == null || expected == null) return false;
+    if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+      final boolean[] ok = new boolean[] {false};
+      try {
+        javax.swing.SwingUtilities.invokeAndWait(() -> ok[0] = removeInlineComponentNear(doc, expected));
+      } catch (Exception ignored) {
+        return false;
+      }
+      return ok[0];
+    }
+
+    synchronized (ChatTranscriptStore.this) {
+      try {
+        int len = doc.getLength();
+        if (len <= 0) return false;
+
+        // Scan near the end first (recent outgoing messages), then fall back to full scan.
+        int start = Math.max(0, len - 4096);
+        int off = findInlineComponentOffset(doc, start, len - 1, expected);
+        if (off < 0) {
+          off = findInlineComponentOffset(doc, 0, len - 1, expected);
+        }
+        if (off < 0) return false;
+
+        doc.remove(off, 1);
+        return true;
+      } catch (Exception ignored) {
+        return false;
+      }
+    }
+  }
+
+  private static int findInlineComponentOffset(StyledDocument doc,
+                                               int start,
+                                               int end,
+                                               java.awt.Component expected) {
+    if (doc == null || expected == null) return -1;
+    int len = doc.getLength();
+    if (len <= 0) return -1;
+
+    int s = Math.max(0, Math.min(start, len - 1));
+    int e = Math.max(0, Math.min(end, len - 1));
+    if (e < s) {
+      int tmp = s;
+      s = e;
+      e = tmp;
+    }
+    for (int i = s; i <= e; i++) {
+      try {
+        Element el = doc.getCharacterElement(i);
+        if (el == null) continue;
+        AttributeSet as = el.getAttributes();
+        Object comp = as != null ? StyleConstants.getComponent(as) : null;
+        if (comp == expected) return i;
+      } catch (Exception ignored) {
+      }
+    }
+    return -1;
   }
 
   private void insertFailedOutgoingChatLineAt(

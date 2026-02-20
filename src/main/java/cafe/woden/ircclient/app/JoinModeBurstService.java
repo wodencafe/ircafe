@@ -1,9 +1,18 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.app.util.RestartableRxTimer;
+import io.reactivex.rxjava3.core.Scheduler;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import jakarta.annotation.PreDestroy;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Join-burst mode suppression.
@@ -15,15 +24,46 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public final class JoinModeBurstService {
+  private static final Logger log = LoggerFactory.getLogger(JoinModeBurstService.class);
+
   private final UiPort ui;
   private final ModeFormattingService modeFormattingService;
+
+  // Keep scheduling out of the EDT. SwingUiPort already marshals UI calls onto the EDT.
+  private final ScheduledExecutorService joinModeExec;
+  private final Scheduler joinModeScheduler;
 
   private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs = new ConcurrentHashMap<>();
 
   public JoinModeBurstService(UiPort ui, ModeFormattingService modeFormattingService) {
-    this.ui = ui;
-    this.modeFormattingService = modeFormattingService;
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.modeFormattingService = Objects.requireNonNull(modeFormattingService, "modeFormattingService");
+
+    this.joinModeExec = Executors.newSingleThreadScheduledExecutor(r -> {
+      Thread t = new Thread(r, "ircafe-joinmode-burst");
+      t.setDaemon(true);
+      return t;
+    });
+    this.joinModeScheduler = Schedulers.from(joinModeExec);
+  }
+
+  @PreDestroy
+  void shutdown() {
+    // Best-effort cleanup.
+    try {
+      for (JoinModeBuffer b : joinModeBuffers.values()) {
+        if (b != null) b.dispose();
+      }
+      joinModeBuffers.clear();
+      joinModeSummaryPrintedMs.clear();
+    } catch (Exception ignored) {
+    }
+
+    try {
+      joinModeExec.shutdownNow();
+    } catch (Exception ignored) {
+    }
   }
 
   
@@ -35,18 +75,16 @@ public final class JoinModeBurstService {
     // Always overwrite: the latest join wins.
     joinModeSummaryPrintedMs.remove(key);
 
-    joinModeBuffers.put(key, new JoinModeBuffer());
+    JoinModeBuffer next = new JoinModeBuffer(joinModeScheduler);
+    JoinModeBuffer prev = joinModeBuffers.put(key, next);
+    if (prev != null) prev.dispose();
 
     // Fallback flush: if we already collected any join-burst flags, print soon after join.
     // IMPORTANT: do NOT discard an empty buffer here; some networks delay MODE for a couple seconds.
-    javax.swing.Timer t = new javax.swing.Timer(1500, e -> flushJoinModesIfAny(serverId, channel, false));
-    t.setRepeats(false);
-    t.start();
+    next.scheduleFallback(() -> flushJoinModesIfAny(serverId, channel, false));
 
     // Cleanup: if we never receive join-burst modes, don't keep the empty buffer forever.
-    javax.swing.Timer cleanup = new javax.swing.Timer(15000, e -> flushJoinModesIfAny(serverId, channel, true));
-    cleanup.setRepeats(false);
-    cleanup.start();
+    next.scheduleCleanup(() -> flushJoinModesIfAny(serverId, channel, true));
   }
 
   /**
@@ -78,14 +116,14 @@ public final class JoinModeBurstService {
     if (channel == null || channel.isBlank()) return;
     ModeKey key = ModeKey.of(serverId, channel);
     JoinModeBuffer removed = joinModeBuffers.remove(key);
-    if (removed != null) removed.cancelFlushTimer();
+    if (removed != null) removed.dispose();
   }
 
   public void clearChannel(String serverId, String channel) {
     if (channel == null || channel.isBlank()) return;
     ModeKey key = ModeKey.of(serverId, channel);
     JoinModeBuffer removed = joinModeBuffers.remove(key);
-    if (removed != null) removed.cancelFlushTimer();
+    if (removed != null) removed.dispose();
     joinModeSummaryPrintedMs.remove(key);
   }
 
@@ -117,14 +155,14 @@ public final class JoinModeBurstService {
     if (buf.isEmpty()) {
       if (finalizeIfEmpty) {
         joinModeBuffers.remove(key, buf);
-        buf.cancelFlushTimer();
+        buf.dispose();
       }
       return;
     }
 
     // We have something to print; finalize this join-burst.
     joinModeBuffers.remove(key, buf);
-    buf.cancelFlushTimer();
+    buf.dispose();
 
     TargetRef chanTarget = new TargetRef(serverId, channel);
     ui.ensureTargetExists(chanTarget);
@@ -143,7 +181,7 @@ public final class JoinModeBurstService {
     for (Map.Entry<ModeKey, JoinModeBuffer> e : joinModeBuffers.entrySet()) {
       if (sid.equals(e.getKey().serverId())) {
         JoinModeBuffer buf = joinModeBuffers.remove(e.getKey());
-        if (buf != null) buf.cancelFlushTimer();
+        if (buf != null) buf.dispose();
       }
     }
 
@@ -169,22 +207,45 @@ public final class JoinModeBurstService {
     private final java.util.LinkedHashSet<Character> plus = new java.util.LinkedHashSet<>();
     private final java.util.LinkedHashSet<Character> minus = new java.util.LinkedHashSet<>();
 
-    // Debounce flush so we print once shortly after the join-mode burst settles.
-    private javax.swing.Timer flushTimer;
+    private final RestartableRxTimer debouncedFlush;
+    private final RestartableRxTimer fallbackFlush;
+    private final RestartableRxTimer cleanupFlush;
+
+    JoinModeBuffer(Scheduler scheduler) {
+      // If the scheduler rejects work during shutdown, just drop it quietly.
+      this.debouncedFlush = new RestartableRxTimer(
+          scheduler,
+          err -> log.debug("[JoinModeBurst] flush timer error", err)
+      );
+      this.fallbackFlush = new RestartableRxTimer(
+          scheduler,
+          err -> log.debug("[JoinModeBurst] fallback timer error", err)
+      );
+      this.cleanupFlush = new RestartableRxTimer(
+          scheduler,
+          err -> log.debug("[JoinModeBurst] cleanup timer error", err)
+      );
+    }
 
     void bumpFlush(Runnable flush) {
       if (flush == null) return;
-      if (flushTimer != null) flushTimer.stop();
-      flushTimer = new javax.swing.Timer(200, e -> flush.run());
-      flushTimer.setRepeats(false);
-      flushTimer.start();
+      debouncedFlush.restart(200, flush);
     }
 
-    void cancelFlushTimer() {
-      if (flushTimer != null) {
-        flushTimer.stop();
-        flushTimer = null;
-      }
+    void scheduleFallback(Runnable flush) {
+      if (flush == null) return;
+      fallbackFlush.restart(1500, flush);
+    }
+
+    void scheduleCleanup(Runnable flush) {
+      if (flush == null) return;
+      cleanupFlush.restart(15000, flush);
+    }
+
+    void dispose() {
+      debouncedFlush.stop();
+      fallbackFlush.stop();
+      cleanupFlush.stop();
     }
 
     boolean tryAdd(String details) {

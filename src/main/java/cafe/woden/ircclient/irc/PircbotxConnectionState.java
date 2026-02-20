@@ -20,6 +20,7 @@ import org.pircbotx.PircBotX;
 final class PircbotxConnectionState {
   final String serverId;
   final AtomicReference<PircBotX> botRef = new AtomicReference<>();
+  final AtomicReference<String> selfNickHint = new AtomicReference<>("");
 
   final AtomicLong lastInboundMs = new AtomicLong(0);
   final AtomicBoolean localTimeoutEmitted = new AtomicBoolean(false);

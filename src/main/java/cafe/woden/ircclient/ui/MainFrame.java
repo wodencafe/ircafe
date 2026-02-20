@@ -15,9 +15,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.github.andrewauclair.moderndocking.app.Docking;
+import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.RootDockingPanel;
 
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -101,6 +103,7 @@ public class MainFrame extends JFrame {
       }
     });
 
+    resetDockingRuntime("startup");
     Docking.initialize(this);
     // DockingUI.initialize(); // TODO: Investigate this.
 
@@ -108,10 +111,10 @@ public class MainFrame extends JFrame {
     add(root, BorderLayout.CENTER);
     add(statusBar, BorderLayout.SOUTH);
 
-    Docking.registerDockable(chat);
-    Docking.registerDockable(serverTree);
-    Docking.registerDockable(users);
-    Docking.registerDockable(terminal);
+    registerDockableIfNeeded(chat);
+    registerDockableIfNeeded(serverTree);
+    registerDockableIfNeeded(users);
+    registerDockableIfNeeded(terminal);
 
     // First dock must be to an empty root container.
     Docking.dock(chat, this);
@@ -319,5 +322,44 @@ public class MainFrame extends JFrame {
     });
 
     // Note: the mediator self-starts via @PostConstruct when the UI beans are created.
+  }
+
+  @PreDestroy
+  void shutdownDocking() {
+    resetDockingRuntime("shutdown");
+  }
+
+  private void registerDockableIfNeeded(Dockable dockable) {
+    if (dockable == null) return;
+
+    String persistentId;
+    try {
+      persistentId = dockable.getPersistentID();
+    } catch (Exception e) {
+      Docking.registerDockable(dockable);
+      return;
+    }
+
+    if (persistentId != null && !persistentId.isBlank() && Docking.isDockableRegistered(persistentId)) {
+      return;
+    }
+
+    try {
+      Docking.registerDockable(dockable);
+    } catch (RuntimeException e) {
+      if (persistentId != null && !persistentId.isBlank() && Docking.isDockableRegistered(persistentId)) {
+        log.debug("docking: duplicate registration ignored for id={}", persistentId);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  private void resetDockingRuntime(String phase) {
+    try {
+      Docking.uninitialize();
+    } catch (Exception e) {
+      log.debug("docking: uninitialize skipped during {} ({})", phase, e.toString());
+    }
   }
 }

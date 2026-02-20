@@ -141,17 +141,107 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     return p;
   }
 
+  /** Best-effort resolve of our current nick (prefers UserBot nick when available). */
+  private static String resolveBotNick(PircBotX bot) {
+    if (bot == null) return "";
+
+    // Prefer UserBot nick, since it tends to reflect the *current* nick (including alt-nick fallback).
+    try {
+      if (bot.getUserBot() != null) {
+        String ub = bot.getUserBot().getNick();
+        if (ub != null && !ub.isBlank()) return ub.trim();
+      }
+    } catch (Exception ignored) {
+    }
+
+    try {
+      String n = PircbotxUtil.safeStr(bot::getNick, "");
+      if (n != null && !n.isBlank()) return n.trim();
+    } catch (Exception ignored) {
+    }
+
+    // Last resort: poke configuration via reflection (PircBotX versions differ).
+    try {
+      Object cfg = reflectCall(bot, "getConfiguration");
+      Object n = reflectCall(cfg, "getNick");
+      if (n != null) {
+        String s = String.valueOf(n);
+        if (!s.isBlank()) return s.trim();
+      }
+    } catch (Exception ignored) {
+    }
+    return "";
+  }
+
   /** True when an inbound event is actually our own message echoed back (IRCv3 echo-message). */
   private static boolean isSelfEchoed(PircBotX bot, String fromNick) {
     try {
-      if (bot == null) return false;
-      String botNick = bot.getNick();
-      if (botNick == null || botNick.isBlank()) return false;
       if (fromNick == null || fromNick.isBlank()) return false;
-      return fromNick.equalsIgnoreCase(botNick);
+
+      String botNick = resolveBotNick(bot);
+      if (!botNick.isBlank() && fromNick.equalsIgnoreCase(botNick)) return true;
+
+      // Sometimes UserBot nick is available even when botNick isn't.
+      try {
+        if (bot != null && bot.getUserBot() != null) {
+          String ub = bot.getUserBot().getNick();
+          if (ub != null && !ub.isBlank() && fromNick.equalsIgnoreCase(ub)) return true;
+        }
+      } catch (Exception ignored) {
+      }
+
+      return false;
     } catch (Exception ignored) {
       return false;
     }
+  }
+
+  private static boolean looksLikeSelfNickHint(String nick) {
+    if (nick == null) return false;
+    String n = nick.trim();
+    if (n.isBlank()) return false;
+    if ("*".equals(n)) return false;
+    if (PircbotxLineParseUtil.looksNumeric(n)) return false;
+    if (PircbotxLineParseUtil.looksLikeChannel(n)) return false;
+    if (n.indexOf(' ') >= 0) return false;
+    return true;
+  }
+
+  private void rememberSelfNickHint(String nick) {
+    if (!looksLikeSelfNickHint(nick)) return;
+    String n = nick.trim();
+    conn.selfNickHint.set(n);
+  }
+
+  private boolean nickMatchesSelf(PircBotX bot, String nick) {
+    if (nick == null || nick.isBlank()) return false;
+    String n = nick.trim();
+
+    String hinted = conn.selfNickHint.get();
+    if (hinted != null && !hinted.isBlank() && n.equalsIgnoreCase(hinted.trim())) {
+      return true;
+    }
+
+    String fromBot = resolveBotNick(bot);
+    if (!fromBot.isBlank() && n.equalsIgnoreCase(fromBot.trim())) {
+      rememberSelfNickHint(fromBot);
+      return true;
+    }
+
+    return false;
+  }
+
+  private String resolveSelfNick(PircBotX bot) {
+    String hinted = conn.selfNickHint.get();
+    if (looksLikeSelfNickHint(hinted)) {
+      return hinted.trim();
+    }
+    String fromBot = resolveBotNick(bot);
+    if (!fromBot.isBlank()) {
+      rememberSelfNickHint(fromBot);
+      return fromBot;
+    }
+    return "";
   }
 
   private static boolean isCtcpWrapped(String msg) {
@@ -217,24 +307,43 @@ private static String toRawIrcLine(Object maybeLine) {
 }
 
 private static String privmsgTargetFromEvent(Object event) {
-  try {
-    String raw = rawLineFromEvent(event);
-    if (raw == null || raw.isBlank()) return null;
-    String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(raw);
-    ParsedIrcLine pl = parseIrcLine(normalized);
-    if (pl == null) return null;
-    if (pl.command() == null) return null;
-    String cmd = pl.command().trim().toUpperCase(Locale.ROOT);
-    if (!"PRIVMSG".equals(cmd) && !"NOTICE".equals(cmd)) return null;
-    if (pl.params() == null || pl.params().isEmpty()) return null;
-    String dest = pl.params().get(0);
-    if (dest == null) return null;
-    dest = dest.trim();
-    return dest.isEmpty() ? null : dest;
-  } catch (Exception ignored) {
+    // Best effort: parse the raw IRC line first.
+    try {
+      String raw = rawLineFromEvent(event);
+      String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(raw);
+      ParsedIrcLine p = parseIrcLine(normalized);
+      if (p != null
+          && p.command() != null
+          && ("PRIVMSG".equalsIgnoreCase(p.command()) || "NOTICE".equalsIgnoreCase(p.command()))
+          && !p.params().isEmpty()) {
+        return p.params().get(0);
+      }
+    } catch (Exception ignored) {
+    }
+
+    // Fallback: try reflective access to a target/recipient property.
+    try {
+      Object t = reflectCall(event, "getTarget");
+      if (t == null) t = reflectCall(event, "getRecipient");
+      if (t == null) t = reflectCall(event, "getMessageTarget");
+      if (t == null) t = reflectCall(event, "getMessageTargetName");
+      if (t == null) t = reflectCall(event, "getDestination");
+
+      if (t instanceof Channel) {
+        return ((Channel) t).getName();
+      }
+      if (t instanceof User) {
+        return ((User) t).getNick();
+      }
+      if (t != null) {
+        String s = String.valueOf(t);
+        if (!s.isBlank()) return s.trim();
+      }
+    } catch (Exception ignored) {
+    }
+
     return null;
   }
-}
 
 private static String derivePrivateConversationTarget(String botNick, String fromNick, String dest) {
   String from = fromNick == null ? "" : fromNick.trim();
@@ -617,11 +726,7 @@ private static boolean isZncPlayStarCursorCommand(String msg) {
 public void onAction(ActionEvent event) {
   touchInbound();
 
-  String botNick = "";
-  try {
-    if (event != null && event.getBot() != null) botNick = String.valueOf(event.getBot().getNick());
-  } catch (Exception ignored) {
-  }
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
   String pmDest = privmsgTargetFromEvent(event);
 
   Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
@@ -730,12 +835,7 @@ public void onAction(ActionEvent event) {
 public void onPrivateMessage(PrivateMessageEvent event) {
   touchInbound();
 
-  String botNick = "";
-  try {
-    if (event != null && event.getBot() != null) botNick = String.valueOf(event.getBot().getNick());
-  } catch (Exception ignored) {
-  }
-
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
   String pmDest = privmsgTargetFromEvent(event);
 
   Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
@@ -848,7 +948,7 @@ public void onPrivateMessage(PrivateMessageEvent event) {
     return;
   }
 
-  if (ctcpHandler.handle(event.getBot(), from, msg)) return;
+  // CTCP auto-replies are handled in onGenericCTCP/onFinger so we can safely ignore echo-message copies.
 
   bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg, messageId, ircv3Tags)));
 }
@@ -914,68 +1014,199 @@ public void onPrivateMessage(PrivateMessageEvent event) {
     }
 
     @Override
-    public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
-      touchInbound();
-      Instant at = inboundAt(event);
-      log.info("CTCP: {}", event);
+public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
+  touchInbound();
+  Instant at = inboundAt(event);
+  log.info("CTCP: {}", event);
 
-      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+  String botNickDirect = resolveBotNick(event != null ? event.getBot() : null);
+  String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "";
+  if (from == null) from = "";
+  from = from.trim();
+  String rawLine = rawLineFromEvent(event);
+  String normalizedRaw = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+  ParsedIrcLine rawParsed = parseIrcLine(normalizedRaw);
+  String rawFrom = (rawParsed == null) ? "" : nickFromPrefix(rawParsed.prefix());
+  if (from.isBlank() && !rawFrom.isBlank()) {
+    from = rawFrom;
+  }
+  if (from.isBlank()) from = "server";
+  String rawCmd = (rawParsed != null && rawParsed.command() != null) ? rawParsed.command().toUpperCase(Locale.ROOT) : "";
+  boolean rawIsNotice = "NOTICE".equals(rawCmd);
+  boolean rawIsPrivmsg = "PRIVMSG".equals(rawCmd);
+  String selfHintBefore = Objects.toString(conn.selfNickHint.get(), "").trim();
+  boolean fromSelf = nickMatchesSelf(event != null ? event.getBot() : null, from);
+  boolean rawFromSelf = nickMatchesSelf(event != null ? event.getBot() : null, rawFrom);
+  boolean selfEcho = isSelfEchoed(event != null ? event.getBot() : null, from);
+  String selfHintAfter = Objects.toString(conn.selfNickHint.get(), "").trim();
 
-      // Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
-      if (isSelfEchoed(event != null ? event.getBot() : null, from)) {
-        return;
-      }
-      String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
+  log.debug(
+      "[{}] CTCPDBG pre cmdClass={} from={} rawFrom={} rawCmd={} selfHintBefore={} selfHintAfter={} botNick={} botNickDirect={} fromSelf={} rawFromSelf={} selfEcho={} raw={}",
+      serverId,
+      (event == null) ? "null" : event.getClass().getSimpleName(),
+      from,
+      rawFrom,
+      rawCmd,
+      selfHintBefore,
+      selfHintAfter,
+      botNick,
+      botNickDirect,
+      fromSelf,
+      rawFromSelf,
+      selfEcho,
+      normalizedRaw);
 
-      if (event != null && event.getUser() != null) {
-        String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
-        maybeEmitHostmaskObserved(ch, event.getUser());
-      }
+  // Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
+  if (fromSelf) {
+    log.debug("[{}] CTCPDBG drop reason=self-from from={}", serverId, from);
+    return;
+  }
+  if (rawFromSelf) {
+    log.debug("[{}] CTCPDBG drop reason=self-raw-from rawFrom={}", serverId, rawFrom);
+    return;
+  }
+  if (selfEcho) {
+    log.debug("[{}] CTCPDBG drop reason=self-echo from={}", serverId, from);
+    return;
+  }
 
-      String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-      String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
-      String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
-      cmd = cmd.toUpperCase(Locale.ROOT);
-      String arg = null;
-      try {
-        java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
-        Object v = m.invoke(event);
-        if (v != null) arg = v.toString();
-      } catch (Exception ignored) {
-      }
-
-      bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.CtcpRequestReceived(at, from, cmd, arg, channel)
-      ));
-
-      super.onGenericCTCP(event);
+  // For private CTCP, only treat it as "incoming to us" if the destination is our nick.
+  // This prevents echo-message copies of our own outbound CTCP requests (dest=otherNick) from being processed.
+  String pmDest = null;
+  if (event != null && event.getChannel() == null) {
+    pmDest = privmsgTargetFromEvent(event);
+    if ((pmDest == null || pmDest.isBlank()) && rawParsed != null && rawParsed.params() != null && !rawParsed.params().isEmpty()) {
+      pmDest = rawParsed.params().get(0);
     }
+    boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+    boolean destMismatch = pmDestKnown && !botNick.isBlank() && !pmDest.equalsIgnoreCase(botNick);
+    log.debug(
+        "[{}] CTCPDBG route channel={} pmDest={} pmDestKnown={} botNick={} rawIsPrivmsg={} rawIsNotice={} destMismatch={}",
+        serverId,
+        event.getChannel(),
+        pmDest,
+        pmDestKnown,
+        botNick,
+        rawIsPrivmsg,
+        rawIsNotice,
+        destMismatch);
+    if (log.isDebugEnabled()) {
+      log.debug("[{}] CTCP parsed rawCmd={} pmDest={} from={} botNick={} raw={}",
+          serverId, rawCmd, pmDest, from, botNick, normalizedRaw);
+    }
+    if (destMismatch) {
+      log.debug("[{}] CTCPDBG drop reason=dest-not-self pmDest={} botNick={}", serverId, pmDest, botNick);
+      return;
+    }
+  }
+
+  if (event != null && event.getUser() != null) {
+    String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
+    maybeEmitHostmaskObserved(ch, event.getUser());
+  }
+
+  String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+  String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
+  String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
+  cmd = cmd.toUpperCase(Locale.ROOT);
+
+  String arg = null;
+  try {
+    java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
+    Object v = m.invoke(event);
+    if (v != null) arg = v.toString();
+  } catch (Exception ignored) {
+  }
+
+  bus.onNext(new ServerIrcEvent(serverId,
+      new IrcEvent.CtcpRequestReceived(at, from, cmd, arg, channel)
+  ));
+
+  // Auto-reply only for private CTCP that is actually addressed to us.
+  // PircBotX 2.3.1 emits these CTCP events from PRIVMSG parsing.
+  // If destination parsing is unavailable (e.g. raw line hidden), treat private non-self CTCP as addressed to us.
+  boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+  boolean shouldAutoReply = event != null
+      && event.getChannel() == null
+      && !botNick.isBlank()
+      && (!pmDestKnown || pmDest.equalsIgnoreCase(botNick));
+  log.debug(
+      "[{}] CTCPDBG autoreply-eval shouldAutoReply={} pmDest={} pmDestKnown={} botNick={} rawIsPrivmsg={} rawIsNotice={} cmd={} arg={}",
+      serverId,
+      shouldAutoReply,
+      pmDest,
+      pmDestKnown,
+      botNick,
+      rawIsPrivmsg,
+      rawIsNotice,
+      cmd,
+      arg);
+  if (shouldAutoReply) {
+    String wrapped = "\u0001" + cmd + ((arg != null && !arg.isBlank()) ? (" " + arg) : "") + "\u0001";
+    log.debug("[{}] CTCPDBG autoreply-send to={} wrapped={}", serverId, from, wrapped.replace('\u0001', '|'));
+    ctcpHandler.handle(event.getBot(), from, wrapped);
+  }
+}
+
     @Override
-    public void onFinger(FingerEvent event) throws Exception {
-      touchInbound();
-      Instant at = inboundAt(event);
-      log.info("CTCP (FINGER): {}", event);
+public void onFinger(FingerEvent event) throws Exception {
+  touchInbound();
+  Instant at = inboundAt(event);
+  log.info("CTCP: {}", event);
 
-      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+  String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "";
+  if (from == null) from = "";
+  from = from.trim();
+  String rawLine = rawLineFromEvent(event);
+  String normalizedRaw = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+  ParsedIrcLine rawParsed = parseIrcLine(normalizedRaw);
+  String rawFrom = (rawParsed == null) ? "" : nickFromPrefix(rawParsed.prefix());
+  if (from.isBlank() && !rawFrom.isBlank()) {
+    from = rawFrom;
+  }
+  if (from.isBlank()) from = "server";
 
-      // Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
-      if (isSelfEchoed(event != null ? event.getBot() : null, from)) {
-        return;
-      }
-      String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
+  if (nickMatchesSelf(event != null ? event.getBot() : null, from)) {
+    return;
+  }
+  if (nickMatchesSelf(event != null ? event.getBot() : null, rawFrom)) {
+    return;
+  }
+  if (isSelfEchoed(event != null ? event.getBot() : null, from)) {
+    return;
+  }
 
-      if (event != null && event.getUser() != null) {
-        String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
-        maybeEmitHostmaskObserved(ch, event.getUser());
-      }
-
-      String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-      bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.CtcpRequestReceived(at, from, "FINGER", null, channel)
-      ));
-
-      super.onFinger(event);
+  String pmDest = null;
+  if (event != null && event.getChannel() == null) {
+    pmDest = privmsgTargetFromEvent(event);
+    if ((pmDest == null || pmDest.isBlank()) && rawParsed != null && rawParsed.params() != null && !rawParsed.params().isEmpty()) {
+      pmDest = rawParsed.params().get(0);
     }
+    boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+    if (pmDestKnown && !botNick.isBlank() && !pmDest.equalsIgnoreCase(botNick)) {
+      return;
+    }
+  }
+
+  if (event != null && event.getUser() != null) {
+    String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
+    maybeEmitHostmaskObserved(ch, event.getUser());
+  }
+
+  String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+  bus.onNext(new ServerIrcEvent(serverId,
+      new IrcEvent.CtcpRequestReceived(at, from, "FINGER", null, channel)
+  ));
+
+  boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+  if (event != null && event.getChannel() == null && !botNick.isBlank()
+      && (!pmDestKnown || pmDest.equalsIgnoreCase(botNick))) {
+    ctcpHandler.handle(event.getBot(), from, "\u0001FINGER\u0001");
+  }
+}
+
 
 
 
@@ -1042,6 +1273,15 @@ public void onPrivateMessage(PrivateMessageEvent event) {
       if (l != null) line = String.valueOf(l);
       if (line == null || line.isBlank()) line = String.valueOf(event);
       String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+      ParsedIrcLine parsedRawLine = parseIrcLine(rawLine);
+      if (parsedRawLine != null
+          && parsedRawLine.command() != null
+          && PircbotxLineParseUtil.looksNumeric(parsedRawLine.command())
+          && parsedRawLine.params() != null
+          && !parsedRawLine.params().isEmpty()) {
+        // For server numerics, the first param is typically the recipient nick (us).
+        rememberSelfNickHint(parsedRawLine.params().get(0));
+      }
 
       if (handleBatchControlLine(line, rawLine)) {
         return;
@@ -1057,11 +1297,8 @@ public void onPrivateMessage(PrivateMessageEvent event) {
             Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
             if (at == null) at = Instant.now();
             String from = nickFromPrefix(pl.prefix());
-            String botNick = "";
-            try {
-              if (event != null && event.getBot() != null) botNick = String.valueOf(event.getBot().getNick());
-            } catch (Exception ignored) {
-            }
+
+            String botNick = resolveSelfNick(event != null ? event.getBot() : null);
             if (botNick == null) botNick = "";
             String trailing = pl.trailing();
             if (trailing == null) trailing = "";
@@ -1504,6 +1741,19 @@ if (fromSelf) {
       } catch (Exception ex) {
         return;
       }
+      try {
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) {
+          String raw = PircbotxLineParseUtil.normalizeIrcLineForParsing(String.valueOf(l));
+          ParsedIrcLine pl = parseIrcLine(raw);
+          if (pl != null && pl.params() != null && !pl.params().isEmpty()) {
+            // Server numerics are generally addressed to us in param[0].
+            rememberSelfNickHint(pl.params().get(0));
+          }
+        }
+      } catch (Exception ignored) {
+      }
       if (code == ERR_SASL_FAIL
           || code == ERR_SASL_TOO_LONG
           || code == ERR_SASL_ABORTED
@@ -1902,8 +2152,23 @@ if (code == 302 || code == 352 || code == 354) {
       if (channel != null) maybeEmitHostmaskObserved(channel.getName(), event.getUser());
 
       String nick = event.getUser() == null ? null : event.getUser().getNick();
+      boolean selfJoin = isSelf(event.getBot(), nick);
+      if (log.isDebugEnabled()) {
+        String hint = Objects.toString(conn.selfNickHint.get(), "");
+        String botNick = resolveBotNick(event.getBot());
+        String channelName = (channel == null) ? "" : channel.getName();
+        log.debug(
+            "[{}] JOIN route chan={} nick={} selfJoin={} selfHint={} botNick={}",
+            serverId,
+            channelName,
+            nick,
+            selfJoin,
+            hint,
+            botNick
+        );
+      }
 
-      if (isSelf(event.getBot(), nick)) {
+      if (selfJoin) {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.JoinedChannel(Instant.now(), channel.getName())));
       } else {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserJoinedChannel(
@@ -2196,13 +2461,21 @@ if (code == 302 || code == 352 || code == 354) {
     @Override
     public void onNickChange(NickChangeEvent event) {
       touchInbound();
+      String oldNick = PircbotxUtil.safeStr(event::getOldNick, "");
+      String newNick = PircbotxUtil.safeStr(event::getNewNick, "");
+      String hinted = conn.selfNickHint.get();
+      if ((!hinted.isBlank() && oldNick.equalsIgnoreCase(hinted))
+          || isSelf(event.getBot(), oldNick)
+          || isSelf(event.getBot(), newNick)) {
+        rememberSelfNickHint(newNick);
+      }
       try {
         maybeEmitHostmaskObserved("", event.getUser());
       } catch (Exception ignored) {}
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickChanged(
           Instant.now(),
-          event.getOldNick(),
-          event.getNewNick()
+          oldNick,
+          newNick
       )));
 
       try {
@@ -2211,8 +2484,8 @@ if (code == 302 || code == 352 || code == 354) {
             bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserNickChangedChannel(
                 Instant.now(),
                 ch.getName(),
-                event.getOldNick(),
-                event.getNewNick()
+                oldNick,
+                newNick
             )));
           } catch (Exception ignored) {}
           emitRoster(ch);
@@ -2272,7 +2545,7 @@ if (code == 302 || code == 352 || code == 354) {
     @Override public void onSuperOp(SuperOpEvent event) { emitRoster(event.getChannel()); }
 
     private boolean isSelf(PircBotX bot, String nick) {
-      return nick != null && nick.equalsIgnoreCase(bot.getNick());
+      return nickMatchesSelf(bot, nick);
     }
 
     private void refreshRosterByName(PircBotX bot, String channelName) {

@@ -126,6 +126,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           c.reconnectAttempts.set(0);
 
           IrcProperties.Server s = serverCatalog.require(serverId);
+          c.selfNickHint.set(Objects.toString(s.nick(), "").trim());
 
           // ZNC detection uses CAP/004/*status heuristics, but we can still parse the
           // configured login now (user[@client]/network) so logs and discovery logic have
@@ -709,15 +710,52 @@ public class PircbotxIrcClientService implements IrcClientService {
     if (message == null || message.length() < 2) return false;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return false;
 
+    String n1 = null;
+    String n2 = null;
+    String n3 = null;
+
     // Some servers may echo our own outbound CTCP requests back to us (IRCv3 echo-message).
     // Never treat those as inbound CTCP requests, or we'll reply to ourselves.
     try {
-      String botNick = bot != null ? bot.getNick() : null;
-      if (botNick != null && fromNick != null && fromNick.equalsIgnoreCase(botNick)) {
-        return true; // consumed
+      if (fromNick != null && !fromNick.isBlank()) {
+        String from = fromNick.trim();
+
+        try {
+          n1 = PircbotxUtil.safeStr(bot::getNick, null);
+        } catch (Exception ignored) {
+        }
+        try {
+          if (bot.getUserBot() != null) n2 = bot.getUserBot().getNick();
+        } catch (Exception ignored) {
+        }
+        try {
+          Object cfg = bot.getConfiguration();
+          if (cfg != null) {
+            try {
+              java.lang.reflect.Method m = cfg.getClass().getMethod("getNick");
+              Object n = m.invoke(cfg);
+              if (n != null) n3 = String.valueOf(n);
+            } catch (Exception ignored) {
+            }
+          }
+        } catch (Exception ignored) {
+        }
+
+        boolean selfEcho = (n1 != null && !n1.isBlank() && from.equalsIgnoreCase(n1.trim()))
+            || (n2 != null && !n2.isBlank() && from.equalsIgnoreCase(n2.trim()))
+            || (n3 != null && !n3.isBlank() && from.equalsIgnoreCase(n3.trim()));
+        if (selfEcho) {
+          log.debug(
+              "[ircafe] CTCPDBG service-drop-self from={} n1={} n2={} n3={} message={}",
+              from,
+              Objects.toString(n1, ""),
+              Objects.toString(n2, ""),
+              Objects.toString(n3, ""),
+              message.replace('\u0001', '|'));
+          return true;
+        }
       }
     } catch (Exception ignored) {
-      // fail open
     }
 
     String inner = message.substring(1, message.length() - 1).trim();
@@ -728,9 +766,20 @@ public class PircbotxIrcClientService implements IrcClientService {
     if (sp >= 0) cmd = inner.substring(0, sp);
 
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
+    log.debug(
+        "[ircafe] CTCPDBG service-eval from={} cmd={} inner={} n1={} n2={} n3={}",
+        Objects.toString(fromNick, ""),
+        cmd,
+        inner,
+        Objects.toString(n1, ""),
+        Objects.toString(n2, ""),
+        Objects.toString(n3, ""));
     if ("VERSION".equals(cmd)) {
       String v = (version == null) ? "IRCafe" : version;
-      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");
+      log.debug("[ircafe] CTCPDBG service-send cmd=VERSION to={} payload={}",
+          Objects.toString(fromNick, ""),
+          ("VERSION " + v));
+      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "VERSION " + v + "");
       return true;
     }
 
@@ -738,14 +787,18 @@ public class PircbotxIrcClientService implements IrcClientService {
       String payload = "";
       int sp2 = inner.indexOf(' ');
       if (sp2 >= 0 && sp2 + 1 < inner.length()) payload = inner.substring(sp2 + 1).trim();
-      String body = payload.isEmpty() ? "\u0001PING\u0001" : "\u0001PING " + payload + "\u0001";
+      String body = payload.isEmpty() ? "PING" : "PING " + payload + "";
+      log.debug("[ircafe] CTCPDBG service-send cmd=PING to={} payload={}",
+          Objects.toString(fromNick, ""),
+          body.replace('\u0001', '|'));
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), body);
       return true;
     }
 
     if ("TIME".equals(cmd)) {
       String now = java.time.ZonedDateTime.now().toString();
-      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "\u0001TIME " + now + "\u0001");
+      log.debug("[ircafe] CTCPDBG service-send cmd=TIME to={} payload=TIME {}", Objects.toString(fromNick, ""), now);
+      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "TIME " + now + "");
       return true;
     }
 

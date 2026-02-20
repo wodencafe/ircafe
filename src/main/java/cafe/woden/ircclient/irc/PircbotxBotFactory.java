@@ -22,7 +22,12 @@ import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
+import org.pircbotx.hooks.CoreHooks;
 import org.pircbotx.hooks.ListenerAdapter;
+import org.pircbotx.hooks.events.FingerEvent;
+import org.pircbotx.hooks.events.PingEvent;
+import org.pircbotx.hooks.events.TimeEvent;
+import org.pircbotx.hooks.events.VersionEvent;
 import org.springframework.stereotype.Component;
 
 /**
@@ -96,6 +101,8 @@ public class PircbotxBotFactory {
         .setAutoNickChange(true)
         .setAutoReconnect(false)
         .addListener(listener);
+    // Keep core behavior (PING, NickServ flows, etc.) but disable automatic CTCP replies.
+    builder.replaceCoreHooksListener(new NoAutoCtcpCoreHooks());
     configureCapHandlers(builder);
     applyMessageDelay(builder, DEFAULT_MESSAGE_DELAY_MS);
 
@@ -217,6 +224,20 @@ public class PircbotxBotFactory {
       }
     }
     return null;
+  }
+
+  private static final class NoAutoCtcpCoreHooks extends CoreHooks {
+    @Override
+    public void onVersion(VersionEvent event) {}
+
+    @Override
+    public void onTime(TimeEvent event) {}
+
+    @Override
+    public void onPing(PingEvent event) {}
+
+    @Override
+    public void onFinger(FingerEvent event) {}
   }
 
   /** Direct socket factory that bypasses any JVM global SOCKS properties. */
