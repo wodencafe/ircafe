@@ -709,6 +709,17 @@ public class PircbotxIrcClientService implements IrcClientService {
     if (message == null || message.length() < 2) return false;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return false;
 
+    // Some servers may echo our own outbound CTCP requests back to us (IRCv3 echo-message).
+    // Never treat those as inbound CTCP requests, or we'll reply to ourselves.
+    try {
+      String botNick = bot != null ? bot.getNick() : null;
+      if (botNick != null && fromNick != null && fromNick.equalsIgnoreCase(botNick)) {
+        return true; // consumed
+      }
+    } catch (Exception ignored) {
+      // fail open
+    }
+
     String inner = message.substring(1, message.length() - 1).trim();
     if (inner.isEmpty()) return false;
 
@@ -717,17 +728,6 @@ public class PircbotxIrcClientService implements IrcClientService {
     if (sp >= 0) cmd = inner.substring(0, sp);
 
     cmd = cmd.trim().toUpperCase(Locale.ROOT);
-
-
-// Some servers (and bouncers) may echo our own CTCP requests back to us (echo-message).
-// We should not treat those as inbound requests, or we can end up replying to ourselves.
-try {
-  if (bot != null && bot.getNick() != null && fromNick != null && fromNick.equalsIgnoreCase(bot.getNick())) {
-    return true;
-  }
-} catch (Exception ignored) {
-}
-
     if ("VERSION".equals(cmd)) {
       String v = (version == null) ? "IRCafe" : version;
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "\u0001VERSION " + v + "\u0001");

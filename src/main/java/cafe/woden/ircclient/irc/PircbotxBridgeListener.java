@@ -141,6 +141,24 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     return p;
   }
 
+  /** True when an inbound event is actually our own message echoed back (IRCv3 echo-message). */
+  private static boolean isSelfEchoed(PircBotX bot, String fromNick) {
+    try {
+      if (bot == null) return false;
+      String botNick = bot.getNick();
+      if (botNick == null || botNick.isBlank()) return false;
+      if (fromNick == null || fromNick.isBlank()) return false;
+      return fromNick.equalsIgnoreCase(botNick);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static boolean isCtcpWrapped(String msg) {
+    if (msg == null || msg.length() < 2) return false;
+    return msg.charAt(0) == 0x01 && msg.charAt(msg.length() - 1) == 0x01;
+  }
+
 
 private static String rawLineFromEvent(Object event) {
   if (event == null) return null;
@@ -824,6 +842,12 @@ public void onPrivateMessage(PrivateMessageEvent event) {
     return;
   }
 
+  // If echo-message is enabled, our own outbound CTCP requests can come back as inbound.
+  // Never treat those as inbound requests, and never show them.
+  if (fromSelf && isCtcpWrapped(msg)) {
+    return;
+  }
+
   if (ctcpHandler.handle(event.getBot(), from, msg)) return;
 
   bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg, messageId, ircv3Tags)));
@@ -897,15 +921,10 @@ public void onPrivateMessage(PrivateMessageEvent event) {
 
       String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
 
-
-// Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
-try {
-  String botNick = (event != null && event.getBot() != null) ? String.valueOf(event.getBot().getNick()) : "";
-  if (!botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick)) {
-    return;
-  }
-} catch (Exception ignored) {
-}
+      // Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
+      if (isSelfEchoed(event != null ? event.getBot() : null, from)) {
+        return;
+      }
       String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
 
       if (event != null && event.getUser() != null) {
@@ -938,6 +957,11 @@ try {
       log.info("CTCP (FINGER): {}", event);
 
       String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
+
+      // Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
+      if (isSelfEchoed(event != null ? event.getBot() : null, from)) {
+        return;
+      }
       String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
 
       if (event != null && event.getUser() != null) {
