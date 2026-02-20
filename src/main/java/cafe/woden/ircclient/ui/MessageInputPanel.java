@@ -8,6 +8,8 @@ import org.fife.ui.autocomplete.AutoCompletion;
 import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import java.lang.reflect.Field;
 import java.awt.datatransfer.Clipboard;
@@ -40,6 +42,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
 public class MessageInputPanel extends JPanel {
+  private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
+  private static final boolean DEBUG_HINT_POPUP = Boolean.getBoolean("ircafe.debug.hintPopup");
   public static final String ID = "input";
   private final JTextField input = new JTextField();
   private final JButton send = new JButton("Send");
@@ -98,6 +102,18 @@ public class MessageInputPanel extends JPanel {
    */
   private final FastCompletionProvider completionProvider = new FastCompletionProvider();
   private final AutoCompletion autoCompletion = new AutoCompletion(completionProvider);
+  // AutoCompletion popups are lazily created and may cache UI defaults; mark dirty on theme changes.
+  private volatile boolean autoCompletionUiDirty = true;
+
+  // When TAB shows a multi-choice completion popup, the actual completion text is inserted later
+  // (after the user picks an item). We "arm" a one-shot suffix append so the chosen nick becomes
+  // "nick: " when it is the first word in the message.
+  private volatile boolean pendingNickAddressSuffix = false;
+  private volatile String pendingNickAddressBeforeText = "";
+  private volatile int pendingNickAddressBeforeCaret = 0;
+  private volatile long pendingNickAddressSetAtMs = 0L;
+  private static final int PENDING_NICK_SUFFIX_TIMEOUT_MS = 5000;
+
   private volatile List<String> nickSnapshot = List.of();
   private final FlowableProcessor<String> outbound = PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
@@ -105,14 +121,18 @@ public class MessageInputPanel extends JPanel {
   private volatile Consumer<String> onTypingStateChanged = s -> {};
   private static final int TYPING_PAUSE_MS = 5000;
   // IRCv3 typing indicators are ephemeral; many clients expire "active" after ~5–6 seconds.
-  // To keep the indicator alive during long compositions, periodically re-emit "active".
-  private static final int TYPING_ACTIVE_KEEPALIVE_MS = 3000;
+  // We throttle "active" emissions to avoid spamming while still keeping the indicator alive.
+  // IMPORTANT: do not schedule repeating "active" keepalives; that causes "active" to continue
+  // after the user stops typing (until PAUSED fires). Emit "active" only from user edits.
+  private static final int TYPING_ACTIVE_THROTTLE_MS = 3000;
   private static final int REMOTE_TYPING_HINT_MS = 5000;
   private final Timer typingPauseTimer = new Timer(TYPING_PAUSE_MS, e -> onTypingPauseElapsed());
-  private final Timer typingActiveKeepAliveTimer = new Timer(TYPING_ACTIVE_KEEPALIVE_MS, e -> onTypingActiveKeepAliveElapsed());
   private final Timer remoteTypingHintTimer = new Timer(REMOTE_TYPING_HINT_MS, e -> clearRemoteTypingIndicator());
   private String lastEmittedTypingState = "done";
   private String remoteTypingHint = "";
+
+  private long lastUserEditAtMs = 0L;
+  private long lastActiveSentAtMs = 0L;
 
   // Track the last applied setting so we can react specifically to "toggle OFF".
   private boolean lastTypingIndicatorsEnabled = true;
@@ -138,7 +158,6 @@ public class MessageInputPanel extends JPanel {
     this.historyStore = historyStore;
     undoGroupTimer.setRepeats(false);
     typingPauseTimer.setRepeats(false);
-    typingActiveKeepAliveTimer.setRepeats(true);
     remoteTypingHintTimer.setRepeats(false);
     hintPopupPanel.setOpaque(true);
     // Border is (re)applied in applyHintPopupTheme() so it follows the active theme.
@@ -182,8 +201,8 @@ public class MessageInputPanel extends JPanel {
     add(right, BorderLayout.EAST);
     input.addComponentListener(hintAnchorListener);
     addComponentListener(hintAnchorListener);
-    addHierarchyListener(e -> {
-      long flags = e.getChangeFlags();
+    addHierarchyListener(evt -> {
+      long flags = evt.getChangeFlags();
       if ((flags & (HierarchyEvent.SHOWING_CHANGED | HierarchyEvent.DISPLAYABILITY_CHANGED)) != 0) {
         if (isShowing()) {
           refreshHintPopup();
@@ -229,11 +248,13 @@ public class MessageInputPanel extends JPanel {
       @Override public void focusGained(FocusEvent e) {
         fireActivated();
         updateHint();
+    autoCompletionUiDirty = true;
       }
       @Override public void focusLost(FocusEvent e) {
         endCompoundEdit();
         flushTypingDone();
         updateHint();
+    autoCompletionUiDirty = true;
       }
     };
     input.addFocusListener(focusAdapter);
@@ -361,7 +382,7 @@ public class MessageInputPanel extends JPanel {
     int menuMask;
     try {
       menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
-    } catch (Exception e) {
+    } catch (Exception ex) {
       menuMask = KeyEvent.CTRL_DOWN_MASK;
     }
     InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
@@ -566,9 +587,11 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     discardAllUndoEdits();
     try {
       input.setCaretPosition(input.getDocument().getLength());
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
     updateHint();
+    autoCompletionUiDirty = true;
   }
 
   private boolean maybeRouteHistoryKeyToAutocomplete(boolean up) {
@@ -632,7 +655,8 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       // But users still expect Ctrl+Z to work immediately; the action will finalize the group first.
       undoAction.setEnabled(undo.canUndo() || activeCompoundEdit != null);
       redoAction.setEnabled(undo.canRedo());
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
   private void installInputContextMenu() {
@@ -644,7 +668,8 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
       int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
       undoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask));
       redoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | KeyEvent.SHIFT_DOWN_MASK));
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
     final JMenuItem cutItem = new JMenuItem("Cut");
     cutItem.addActionListener(e -> input.cut());
@@ -683,7 +708,8 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     clearItem.setToolTipText("Ctrl+L");
     try {
       clearItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK));
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
     final JMenuItem selectAllItem = new JMenuItem("Select All");
     selectAllItem.addActionListener(e -> {
@@ -717,7 +743,8 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     try {
       historyPrevItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0));
       historyNextItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0));
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
     historyPrevItem.setToolTipText("Up / Ctrl+P / Alt+Up");
     historyNextItem.setToolTipText("Down / Ctrl+N / Alt+Down");
@@ -813,6 +840,10 @@ im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircaf
     super.addNotify();
     if (settingsBus != null) settingsBus.addListener(settingsListener);
     updateHint();
+    autoCompletionUiDirty = true;
+    // AutoCompletion popups are created lazily; try to refresh if present, otherwise keep dirty
+    // so the first TAB-triggered popup can be refreshed once without flicker.
+    SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
   }
   @Override
   public void removeNotify() {
@@ -838,50 +869,87 @@ private void installNickCompletionAddressingSuffix() {
         String beforeText = input.getText();
         int beforeCaret = input.getCaretPosition();
         delegate.actionPerformed(e);
-        SwingUtilities.invokeLater(() -> maybeAppendNickAddressSuffix(beforeText, beforeCaret));
-      }
+
+        // The completion popup is created lazily inside AutoCompletion and may cache
+        // UI defaults at creation time. If the user has changed theme/appearance (accent, etc.)
+        // without reloading this input panel, refresh the popup window UI on the next tick.
+        SwingUtilities.invokeLater(() -> {
+          // Refresh the completion popup UI only when needed (first creation or after a theme change).
+          // Doing this on every TAB causes visible flicker because it can touch the owner window.
+          if (autoCompletionUiDirty) {
+            if (refreshAutoCompletionUiIfPresent(false)) {
+              autoCompletionUiDirty = false;
+            }
+          }
+
+          boolean appended = maybeAppendNickAddressSuffix(beforeText, beforeCaret);
+          if (!appended) {
+            String afterText = input.getText();
+            int afterCaret = input.getCaretPosition();
+            boolean completionOccurred = !(Objects.equals(afterText, beforeText) && afterCaret == beforeCaret);
+
+            // If TAB only opened a multi-choice completion popup, the completion text is inserted later.
+            // Arm a one-shot suffix append so the chosen nick becomes "nick: " when it's the first word.
+            pendingNickAddressSuffix = false;
+            if (!completionOccurred && isEligibleForNickAddressSuffix(beforeText, beforeCaret)) {
+              String prefix = firstWordPrefix(beforeText);
+              if (hasNickPrefixMatch(prefix)) {
+                pendingNickAddressSuffix = true;
+                pendingNickAddressBeforeText = beforeText;
+                pendingNickAddressBeforeCaret = beforeCaret;
+                pendingNickAddressSetAtMs = System.currentTimeMillis();
+              }
+            }
+          } else {
+            pendingNickAddressSuffix = false;
+          }
+        });
+}
     });
+
+    installPendingNickAddressSuffixListener();
+
   } catch (Exception ignored) {
   }
 }
 
-private void maybeAppendNickAddressSuffix(String beforeText, int beforeCaret) {
+private boolean maybeAppendNickAddressSuffix(String beforeText, int beforeCaret) {
   try {
     if (beforeText == null) beforeText = "";
 
     // Only apply when the user was tab-completing inside the first word.
     int startBefore = firstNonWhitespace(beforeText);
-    if (startBefore < 0) return;
+    if (startBefore < 0) return false;
     int endBefore = wordEnd(beforeText, startBefore);
-    if (beforeCaret > endBefore) return;
+    if (beforeCaret > endBefore) return false;
 
     String afterText = input.getText();
     if (afterText == null) afterText = "";
     int afterCaret = input.getCaretPosition();
 
-    if (afterText.equals(beforeText) && afterCaret == beforeCaret) return; // no change -> no completion
+    if (afterText.equals(beforeText) && afterCaret == beforeCaret) return false; // no change -> no completion
 
     // Don't do this for slash-commands.
     String trimmed = afterText.stripLeading();
-    if (trimmed.startsWith("/")) return;
+    if (trimmed.startsWith("/")) return false;
 
     int start = firstNonWhitespace(afterText);
-    if (start < 0) return;
+    if (start < 0) return false;
     int end = wordEnd(afterText, start);
-    if (end <= start) return;
+    if (end <= start) return false;
 
     // Only if caret is at/after the nick we just completed.
-    if (afterCaret < end) return;
+    if (afterCaret < end) return false;
 
     String nick = afterText.substring(start, end);
-    if (nick.isBlank()) return;
-    if (!isKnownNick(nick)) return;
+    if (nick.isBlank()) return false;
+    if (!isKnownNick(nick)) return false;
 
     // If already addressed like "nick:" or "nick,", do nothing.
     if (end < afterText.length()) {
       char ch = afterText.charAt(end);
-      if (ch == ':' || ch == ',') return;
-      if (!Character.isWhitespace(ch)) return; // only add when nick is followed by whitespace
+      if (ch == ':' || ch == ',') return false;
+      if (!Character.isWhitespace(ch)) return false; // only add when nick is followed by whitespace
     }
 
     // Normalize whitespace after the nick into exactly ": ".
@@ -895,7 +963,9 @@ private void maybeAppendNickAddressSuffix(String beforeText, int beforeCaret) {
     }
     doc.insertString(end, ": ", null);
     input.setCaretPosition(end + 2);
+    return true;
   } catch (Exception ignored) {
+    return false;
   }
 }
 
@@ -906,6 +976,93 @@ private boolean isKnownNick(String candidate) {
   }
   return false;
 }
+
+private static boolean isEligibleForNickAddressSuffix(String beforeText, int beforeCaret) {
+  if (beforeText == null) beforeText = "";
+  // Don't do this for slash-commands.
+  String trimmed = beforeText.stripLeading();
+  if (trimmed.startsWith("/")) return false;
+
+  int startBefore = firstNonWhitespace(beforeText);
+  if (startBefore < 0) return false;
+  int endBefore = wordEnd(beforeText, startBefore);
+  return beforeCaret <= endBefore;
+}
+
+private static String firstWordPrefix(String text) {
+  if (text == null) return "";
+  int start = firstNonWhitespace(text);
+  if (start < 0) return "";
+  int end = wordEnd(text, start);
+  if (end <= start) return "";
+  return text.substring(start, end);
+}
+
+private boolean hasNickPrefixMatch(String prefix) {
+  if (prefix == null) return false;
+  String p = prefix.strip();
+  if (p.isEmpty()) return false;
+  String pLower = p.toLowerCase(Locale.ROOT);
+  for (String n : nickSnapshot) {
+    if (n == null) continue;
+    if (n.toLowerCase(Locale.ROOT).startsWith(pLower)) return true;
+  }
+  return false;
+}
+
+private void installPendingNickAddressSuffixListener() {
+  try {
+    input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+      @Override public void insertUpdate(DocumentEvent e) { maybeAppendPendingNickSuffixAsync(); }
+      @Override public void removeUpdate(DocumentEvent e) { maybeAppendPendingNickSuffixAsync(); }
+      @Override public void changedUpdate(DocumentEvent e) { maybeAppendPendingNickSuffixAsync(); }
+    });
+  } catch (Exception ignored) {
+  }
+}
+
+private void maybeAppendPendingNickSuffixAsync() {
+  if (!pendingNickAddressSuffix) return;
+
+  long now = System.currentTimeMillis();
+  if (now - pendingNickAddressSetAtMs > PENDING_NICK_SUFFIX_TIMEOUT_MS) {
+    pendingNickAddressSuffix = false;
+    return;
+  }
+
+  String t = input.getText();
+  if (t == null) {
+    pendingNickAddressSuffix = false;
+    return;
+  }
+  if (t.stripLeading().startsWith("/")) {
+    pendingNickAddressSuffix = false;
+    return;
+  }
+
+  int start = firstNonWhitespace(t);
+  if (start < 0) {
+    pendingNickAddressSuffix = false;
+    return;
+  }
+  int end = wordEnd(t, start);
+  int caret = input.getCaretPosition();
+
+  // If the user has already moved past the first word, stop waiting.
+  if (caret > end + 1) {
+    pendingNickAddressSuffix = false;
+    return;
+  }
+
+  SwingUtilities.invokeLater(() -> {
+    if (!pendingNickAddressSuffix) return;
+    boolean appended = maybeAppendNickAddressSuffix(pendingNickAddressBeforeText, pendingNickAddressBeforeCaret);
+    if (appended) {
+      pendingNickAddressSuffix = false;
+    }
+  });
+}
+
 
 private static int firstNonWhitespace(String s) {
   if (s == null) return -1;
@@ -924,6 +1081,7 @@ private static int wordEnd(String s, int start) {
 
 private final PropertyChangeListener lafListener = evt -> {
   if (!"lookAndFeel".equals(evt.getPropertyName())) return;
+  autoCompletionUiDirty = true;
   SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
 };
 
@@ -933,27 +1091,41 @@ private void installAutoCompletionUiRefreshOnLafChange() {
   } catch (Exception ignored) {
   }
   // Remove listener when this component is disposed.
-  addHierarchyListener(e -> {
-    long flags = e.getChangeFlags();
+  addHierarchyListener(evt -> {
+    long flags = evt.getChangeFlags();
     if ((flags & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
     if (isDisplayable()) return;
     try {
       UIManager.removePropertyChangeListener(lafListener);
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   });
 }
 
 private void refreshAutoCompletionUi() {
+  // Theme/LAF changes: refresh any existing completion popups. If none exist yet,
+  // keep the dirty flag so the first TAB-created popup can be refreshed once.
+  if (refreshAutoCompletionUiIfPresent(true)) {
+    autoCompletionUiDirty = false;
+  }
+}
+
+private boolean refreshAutoCompletionUiIfPresent(boolean hideFirst) {
   try {
-    // Hide any active popups to prevent UI delegates from being mid-event.
-    try {
-            java.lang.reflect.Method m = autoCompletion.getClass().getMethod("hideChildWindows");
-            m.setAccessible(true);
-            m.invoke(autoCompletion);
-          } catch (Throwable ignored) {
-          }
-ArrayList<Window> windows = new ArrayList<>();
+    Window owner = SwingUtilities.getWindowAncestor(this);
+
+    if (hideFirst) {
+      // Hide any active popups to prevent UI delegates from being mid-event.
+      try {
+        java.lang.reflect.Method m = autoCompletion.getClass().getMethod("hideChildWindows");
+        m.setAccessible(true);
+        m.invoke(autoCompletion);
+      } catch (Throwable ignored) {
+      }
+    }
+
+    ArrayList<Window> windows = new ArrayList<>();
     try {
       Class<?> c = autoCompletion.getClass();
       while (c != null && c != Object.class) {
@@ -968,18 +1140,29 @@ ArrayList<Window> windows = new ArrayList<>();
     } catch (Throwable ignored) {
     }
 
+    int updated = 0;
     for (Window w : windows) {
+      if (w == null) continue;
+      // Avoid reapplying UI to the main application frame (causes visible flicker).
+      if (owner != null && w == owner) continue;
+      if (w instanceof Frame) continue;
+
       try {
         SwingUtilities.updateComponentTreeUI(w);
         w.invalidate();
         w.validate();
         w.repaint();
+        updated++;
       } catch (Throwable ignored) {
       }
     }
+
+    return updated > 0;
   } catch (Exception ignored) {
+    return false;
   }
 }
+
 
   private void onSettingsChanged(PropertyChangeEvent evt) {
     if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
@@ -997,7 +1180,12 @@ ArrayList<Window> windows = new ArrayList<>();
       typingBannerLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
       applyHintPopupTheme();
       refreshHintPopup();
-    } catch (Exception ignored) {
+      // Mark completion popup UI dirty when appearance changes (e.g., accent sliders).
+      // Refresh existing popup windows if present.
+      autoCompletionUiDirty = true;
+      SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
 
     // If typing indicators were just toggled OFF, immediately emit DONE (cleanup)
@@ -1011,22 +1199,67 @@ ArrayList<Window> windows = new ArrayList<>();
   }
 
   private void applyHintPopupTheme() {
-    Color textBg = UIManager.getColor("TextPane.background");
-    if (textBg == null) textBg = input.getBackground();
+    // Base the hint styling on the *actual* input component, not generic TextPane defaults.
+    // Some LAFs/themes (or custom overrides) may differ between TextPane and TextField colors.
+    Color textBg = input.getBackground();
+    if (textBg == null) textBg = UIManager.getColor("TextField.background");
+    if (textBg == null) textBg = UIManager.getColor("TextComponent.background");
     if (textBg == null) textBg = UIManager.getColor("Panel.background");
     if (textBg == null) textBg = new Color(245, 245, 245);
 
-    Color textFg = UIManager.getColor("TextPane.foreground");
-    if (textFg == null) textFg = input.getForeground();
+    Color textFg = input.getForeground();
+    if (textFg == null) textFg = UIManager.getColor("TextField.foreground");
+    if (textFg == null) textFg = UIManager.getColor("TextComponent.foreground");
     if (textFg == null) textFg = UIManager.getColor("Label.foreground");
     if (textFg == null) textFg = Color.DARK_GRAY;
 
-    Color selBg = UIManager.getColor("TextPane.selectionBackground");
+    Color selBg = UIManager.getColor("TextField.selectionBackground");
+    if (selBg == null) selBg = UIManager.getColor("TextComponent.selectionBackground");
     if (selBg == null) selBg = UIManager.getColor("List.selectionBackground");
+    if (selBg == null) {
+      try {
+        selBg = input.getSelectionColor();
+      } catch (Exception ignored) {
+      }
+    }
 
     // Subtle tint so the hint is distinct but still theme-native.
-    Color hintBg = (selBg == null) ? textBg : mix(textBg, selBg, 0.22);
-    Color border = UIManager.getColor("Component.borderColor");
+    Color hintBg = (selBg == null) ? textBg : mix(textBg, selBg, 0.18);
+
+    Color border = UIManager.getColor("TextField.borderColor");
+
+    if (DEBUG_HINT_POPUP) {
+      try {
+        log.info("[HintPopupDebug] LAF={} ({})",
+            UIManager.getLookAndFeel() != null ? UIManager.getLookAndFeel().getName() : "null",
+            UIManager.getLookAndFeel() != null ? UIManager.getLookAndFeel().getClass().getName() : "null");
+        log.info("[HintPopupDebug] input.bg={} input.fg={} input.sel={}",
+            colorToString(input.getBackground()),
+            colorToString(input.getForeground()),
+            colorToString(input.getSelectionColor()));
+        for (String k : new String[]{
+            "TextField.background", "TextField.foreground", "TextField.selectionBackground",
+            "TextPane.background", "TextPane.foreground",
+            "TextComponent.background", "TextComponent.foreground", "TextComponent.selectionBackground",
+            "Panel.background", "Label.foreground",
+            "ToolTip.background", "ToolTip.foreground",
+            "TextField.borderColor", "Component.borderColor", "Separator.foreground"
+        }) {
+          Object v = UIManager.get(k);
+          if (v instanceof Color c) {
+            log.info("[HintPopupDebug] UIManager[{}] = {}", k, colorToString(c));
+          } else if (v != null) {
+            log.info("[HintPopupDebug] UIManager[{}] = {} ({})", k, v, v.getClass().getName());
+          } else {
+            log.info("[HintPopupDebug] UIManager[{}] = null", k);
+          }
+        }
+        log.info("[HintPopupDebug] computed hintBg={} border={}", colorToString(hintBg), colorToString(border));
+      } catch (Exception e) {
+        log.warn("[HintPopupDebug] failed to log UI values", e);
+      }
+    }
+    if (border == null) border = UIManager.getColor("Component.borderColor");
     if (border == null) border = UIManager.getColor("Separator.foreground");
     if (border == null) border = new Color(textFg.getRed(), textFg.getGreen(), textFg.getBlue(), 120);
 
@@ -1037,7 +1270,13 @@ ArrayList<Window> windows = new ArrayList<>();
         BorderFactory.createEmptyBorder(4, 8, 4, 8)));
   }
 
-  private static Color mix(Color a, Color b, double wb) {
+  
+  private static String colorToString(Color c) {
+    if (c == null) return "null";
+    return String.format("#%02X%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue(), c.getAlpha());
+  }
+
+private static Color mix(Color a, Color b, double wb) {
     if (a == null) return b;
     if (b == null) return a;
     double w = Math.max(0.0, Math.min(1.0, wb));
@@ -1151,6 +1390,7 @@ ArrayList<Window> windows = new ArrayList<>();
     if (cleaned.isEmpty()) {
       completionProvider.replaceCompletions(List.of());
       updateHint();
+    autoCompletionUiDirty = true;
       return;
     }
     ArrayList<Completion> completions = new ArrayList<>(cleaned.size());
@@ -1159,6 +1399,7 @@ ArrayList<Window> windows = new ArrayList<>();
     }
     completionProvider.replaceCompletions(completions);
     updateHint();
+    autoCompletionUiDirty = true;
   }
   private static List<String> cleanNickList(List<String> nicks) {
     if (nicks == null || nicks.isEmpty()) return List.of();
@@ -1212,6 +1453,9 @@ ArrayList<Window> windows = new ArrayList<>();
     }
     hintPopupText = text;
     hintPopupLabel.setText(text);
+    if (DEBUG_HINT_POPUP && !Objects.equals(hintPopupShownText, text)) {
+      log.info("[HintPopupDebug] hint=" + text);
+    }
     hintPopupLabel.setToolTipText(isCompletionHint ? "Press Tab for nick completion" : null);
     refreshHintPopup();
   }
@@ -1252,9 +1496,19 @@ ArrayList<Window> windows = new ArrayList<>();
           && Objects.equals(hintPopupShownText, hintPopupText);
       if (unchanged) return;
 
+      applyHintPopupTheme();
       hideHintPopup();
       hintPopup = PopupFactory.getSharedInstance().getPopup(this, hintPopupPanel, x, y);
       hintPopup.show();
+      if (DEBUG_HINT_POPUP) {
+        log.info("[HintPopupDebug] show popup class={} at ({},{}) pref={} panel.bg={} label.fg={} panel.opaque={}",
+            hintPopup != null ? hintPopup.getClass().getName() : "null",
+            x, y,
+            pref,
+            colorToString(hintPopupPanel.getBackground()),
+            colorToString(hintPopupLabel.getForeground()),
+            hintPopupPanel.isOpaque());
+      }
       hintPopupX = x;
       hintPopupY = y;
       hintPopupShownText = hintPopupText;
@@ -1280,6 +1534,7 @@ ArrayList<Window> windows = new ArrayList<>();
 
   private void onDraftDocumentChanged() {
     updateHint();
+    autoCompletionUiDirty = true;
     fireDraftChanged();
     maybeExitHistoryBrowseOnUserEdit();
     if (!programmaticEdit) {
@@ -1289,17 +1544,35 @@ ArrayList<Window> windows = new ArrayList<>();
 
   private void fireTypingStateFromUserEdit() {
     if (!input.isEnabled() || !input.isEditable()) return;
+    long now = System.currentTimeMillis();
     String text = input.getText();
     if (text == null || text.isBlank()) {
       typingPauseTimer.stop();
-      typingActiveKeepAliveTimer.stop();
+      lastUserEditAtMs = 0L;
+      lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;
     }
-    emitTypingState("active");
-    // Start keepalive when we enter/are in the active state; do not restart on every keystroke.
-    if (!typingActiveKeepAliveTimer.isRunning()) {
-      typingActiveKeepAliveTimer.start();
+
+    // Slash commands should not broadcast typing indicators.
+    // (User request: do not send typing indicators when the first character is '/'.)
+    if (text.startsWith("/")) {
+      typingPauseTimer.stop();
+      lastUserEditAtMs = 0L;
+      lastActiveSentAtMs = 0L;
+      emitTypingState("done");
+      return;
+    }
+    lastUserEditAtMs = now;
+
+    // Emit ACTIVE only from user edits, throttled. This prevents queued/periodic ACTIVE messages
+    // from being sent after the user stops typing (before PAUSED fires).
+    if (!"active".equals(lastEmittedTypingState)) {
+      emitTypingState("active");
+      lastActiveSentAtMs = now;
+    } else if ((now - lastActiveSentAtMs) >= TYPING_ACTIVE_THROTTLE_MS) {
+      emitTypingState("active", true);
+      lastActiveSentAtMs = now;
     }
     typingPauseTimer.restart();
   }
@@ -1308,27 +1581,19 @@ ArrayList<Window> windows = new ArrayList<>();
     if (!input.isEnabled() || !input.isEditable()) return;
     String text = input.getText();
     if (text == null || text.isBlank()) {
-      typingActiveKeepAliveTimer.stop();
+      lastUserEditAtMs = 0L;
+      lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;
     }
-    typingActiveKeepAliveTimer.stop();
-    emitTypingState("paused");
-  }
 
-  private void onTypingActiveKeepAliveElapsed() {
-    // Only re-emit while we're still in an active compose.
-    if (!"active".equals(lastEmittedTypingState)) return;
-    if (!input.isEnabled() || !input.isEditable()) return;
-    String text = input.getText();
-    if (text == null || text.isBlank()) {
-      typingPauseTimer.stop();
-      typingActiveKeepAliveTimer.stop();
+    if (text.startsWith("/")) {
+      lastUserEditAtMs = 0L;
+      lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;
     }
-    // Force a repeat "active" emission to keep remote indicators alive.
-    emitTypingState("active", true);
+    emitTypingState("paused");
   }
   private static String currentToken(String text, int caretPos) {
     if (text == null || text.isEmpty()) return "";
@@ -1457,7 +1722,8 @@ ArrayList<Window> windows = new ArrayList<>();
 
     try {
       menu.show(input, Math.max(0, input.getWidth() - 8), input.getHeight());
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
 
@@ -1545,21 +1811,24 @@ ArrayList<Window> windows = new ArrayList<>();
 
   public void flushTypingDone() {
     typingPauseTimer.stop();
-    typingActiveKeepAliveTimer.stop();
+    lastUserEditAtMs = 0L;
+    lastActiveSentAtMs = 0L;
     emitTypingState("done");
   }
 
   private void fireDraftChanged() {
     try {
       onDraftChanged.accept(getDraftText());
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
 
   private void fireActivated() {
     try {
       onActivated.run();
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
 
@@ -1582,7 +1851,8 @@ ArrayList<Window> windows = new ArrayList<>();
     lastEmittedTypingState = normalized;
     try {
       onTypingStateChanged.accept(normalized);
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
 
@@ -1627,6 +1897,7 @@ ArrayList<Window> windows = new ArrayList<>();
 
     // Old behavior used the hint popup; ensure completions can re-appear.
     updateHint();
+    autoCompletionUiDirty = true;
   }
 
   /**
@@ -1737,6 +2008,7 @@ ArrayList<Window> windows = new ArrayList<>();
       clearReplyComposeInternal(false, false);
     }
     updateHint();
+    autoCompletionUiDirty = true;
   }
   public String getDraftText() {
     if (historyOffset >= 0) {
@@ -1750,7 +2022,8 @@ ArrayList<Window> windows = new ArrayList<>();
     historyScratch = null;
     historySearchPrefix = null;
     typingPauseTimer.stop();
-    typingActiveKeepAliveTimer.stop();
+    lastUserEditAtMs = 0L;
+    lastActiveSentAtMs = 0L;
     clearReplyComposeInternal(false, false);
     programmaticEdit = true;
     try {
@@ -1760,6 +2033,7 @@ ArrayList<Window> windows = new ArrayList<>();
     }
     discardAllUndoEdits();
     updateHint();
+    autoCompletionUiDirty = true;
   }
 
   public void focusInput() {
@@ -1767,7 +2041,8 @@ ArrayList<Window> windows = new ArrayList<>();
     input.requestFocusInWindow();
     try {
       input.setCaretPosition(input.getDocument().getLength());
-    } catch (Exception ignored) {
+    } catch (Exception ex) {
+      log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
 }
