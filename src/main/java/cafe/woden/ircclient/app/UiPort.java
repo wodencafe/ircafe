@@ -89,6 +89,14 @@ Flowable<TargetRef> targetActivations();
   void setServerConnectionState(String serverId, ConnectionState state);
 
   /**
+   * Update desired connection intent for a server.
+   *
+   * <p>{@code true} means the app should keep this server online; {@code false} means it should
+   * stay disconnected.</p>
+   */
+  default void setServerDesiredOnline(String serverId, boolean desiredOnline) {}
+
+  /**
    * Update best-effort online state for a private-message target icon in the server tree.
    */
   default void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {}

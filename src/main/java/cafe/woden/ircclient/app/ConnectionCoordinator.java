@@ -38,6 +38,9 @@ public class ConnectionCoordinator {
   /** Per-server connection states (missing => {@link ConnectionState#DISCONNECTED}). */
   private final Map<String, ConnectionState> states = new HashMap<>();
 
+  /** Per-server desired online intent (missing => false/offline). */
+  private final Set<String> desiredOnline = new HashSet<>();
+
   private final Set<String> configuredServers = new HashSet<>();
 
   public ConnectionCoordinator(
@@ -99,59 +102,14 @@ public class ConnectionCoordinator {
     }
 
     for (String sid : serverIds) {
-      setState(sid, ConnectionState.CONNECTING);
-
-      TargetRef status = new TargetRef(sid, "status");
-      ui.ensureTargetExists(status);
-      ui.appendStatus(status, "(conn)", "Connecting…");
-
-      disposables.add(
-          irc.connect(sid)
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  () -> {},
-                  err -> {
-                    ui.appendError(status, "(conn-error)", String.valueOf(err));
-                    ui.appendStatus(status, "(conn)", "Connect failed");
-                    setState(sid, ConnectionState.DISCONNECTED);
-                    updateConnectionUi();
-                  }
-              )
-      );
+      requestConnect(sid, false);
     }
-
-    updateConnectionUi();
   }
 
   public void connectOne(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-
-    if (!serverCatalog.containsId(sid)) {
-      ui.appendError(new TargetRef("default", "status"), "(conn)", "Unknown server: " + sid);
-      return;
-    }
-
-    TargetRef status = new TargetRef(sid, "status");
-    ui.ensureTargetExists(status);
-    ui.appendStatus(status, "(conn)", "Connecting…");
-
-    setState(sid, ConnectionState.CONNECTING);
-    updateConnectionUi();
-
-    disposables.add(
-        irc.connect(sid)
-            .observeOn(SwingEdt.scheduler())
-            .subscribe(
-                () -> {},
-                err -> {
-                  ui.appendError(status, "(conn-error)", String.valueOf(err));
-                  ui.appendStatus(status, "(conn)", "Connect failed");
-                  setState(sid, ConnectionState.DISCONNECTED);
-                  updateConnectionUi();
-                }
-            )
-    );
+    String sid = normalizedKnownServerId(serverId, "(conn)");
+    if (sid == null) return;
+    requestConnect(sid, true);
   }
 
   public void disconnectAll() {
@@ -162,24 +120,8 @@ public class ConnectionCoordinator {
     Set<String> serverIds = serverRegistry.serverIds();
 
     for (String sid : serverIds) {
-      if (stateOf(sid) != ConnectionState.DISCONNECTED) {
-        setState(sid, ConnectionState.DISCONNECTING);
-      }
-
-      TargetRef status = new TargetRef(sid, "status");
-      ui.appendStatus(status, "(conn)", "Disconnecting…");
-
-      disposables.add(
-          irc.disconnect(sid, reason)
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  () -> {},
-                  err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
-              )
-      );
+      requestDisconnect(sid, reason, false);
     }
-
-    updateConnectionUi();
   }
 
   public void disconnectOne(String serverId) {
@@ -187,28 +129,9 @@ public class ConnectionCoordinator {
   }
 
   public void disconnectOne(String serverId, String reason) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-    if (!serverCatalog.containsId(sid)) {
-      ui.appendError(new TargetRef("default", "status"), "(disc)", "Unknown server: " + sid);
-      return;
-    }
-
-    TargetRef status = new TargetRef(sid, "status");
-    ui.ensureTargetExists(status);
-    ui.appendStatus(status, "(conn)", "Disconnecting…");
-
-    setState(sid, ConnectionState.DISCONNECTING);
-    updateConnectionUi();
-
-    disposables.add(
-        irc.disconnect(sid, reason)
-            .observeOn(SwingEdt.scheduler())
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
-            )
-    );
+    String sid = normalizedKnownServerId(serverId, "(disc)");
+    if (sid == null) return;
+    requestDisconnect(sid, reason, true);
   }
 
   public void reconnectAll() {
@@ -225,15 +148,19 @@ public class ConnectionCoordinator {
   }
 
   public void reconnectOne(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-    if (!serverCatalog.containsId(sid)) {
-      ui.appendError(new TargetRef("default", "status"), "(reconnect)", "Unknown server: " + sid);
-      return;
-    }
+    String sid = normalizedKnownServerId(serverId, "(reconnect)");
+    if (sid == null) return;
 
     TargetRef status = new TargetRef(sid, "status");
     ui.ensureTargetExists(status);
+    setDesiredOnline(sid, true);
+
+    if (stateOf(sid) == ConnectionState.DISCONNECTING) {
+      ui.appendStatus(status, "(conn)", "Reconnect requested; waiting for disconnect to finish…");
+      updateConnectionUi();
+      return;
+    }
+
     ui.appendStatus(status, "(conn)", "Reconnecting…");
 
     setState(sid, ConnectionState.RECONNECTING);
@@ -258,6 +185,93 @@ public class ConnectionCoordinator {
     );
   }
 
+  private String normalizedKnownServerId(String serverId, String tag) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return null;
+    if (!serverCatalog.containsId(sid)) {
+      ui.appendError(new TargetRef("default", "status"), tag, "Unknown server: " + sid);
+      return null;
+    }
+    return sid;
+  }
+
+  private void requestConnect(String sid, boolean announceQueued) {
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty()) return;
+
+    TargetRef status = new TargetRef(id, "status");
+    ui.ensureTargetExists(status);
+    setDesiredOnline(id, true);
+
+    ConnectionState current = stateOf(id);
+    if (current == ConnectionState.CONNECTED
+        || current == ConnectionState.CONNECTING
+        || current == ConnectionState.RECONNECTING) {
+      updateConnectionUi();
+      return;
+    }
+
+    if (current == ConnectionState.DISCONNECTING) {
+      if (announceQueued) {
+        ui.appendStatus(status, "(conn)", "Connect requested; waiting for disconnect to finish…");
+      }
+      updateConnectionUi();
+      return;
+    }
+
+    ui.appendStatus(status, "(conn)", "Connecting…");
+    setState(id, ConnectionState.CONNECTING);
+
+    disposables.add(
+        irc.connect(id)
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                () -> {},
+                err -> {
+                  ui.appendError(status, "(conn-error)", String.valueOf(err));
+                  ui.appendStatus(status, "(conn)", "Connect failed");
+                  setState(id, ConnectionState.DISCONNECTED);
+                  updateConnectionUi();
+                }
+            )
+    );
+
+    updateConnectionUi();
+  }
+
+  private void requestDisconnect(String sid, String reason, boolean announceWhenAlreadyOffline) {
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty()) return;
+
+    TargetRef status = new TargetRef(id, "status");
+    ui.ensureTargetExists(status);
+    setDesiredOnline(id, false);
+
+    ConnectionState current = stateOf(id);
+    boolean transitioning =
+        current == ConnectionState.CONNECTED
+            || current == ConnectionState.CONNECTING
+            || current == ConnectionState.RECONNECTING;
+
+    if (transitioning) {
+      setState(id, ConnectionState.DISCONNECTING);
+      ui.appendStatus(status, "(conn)", "Disconnecting…");
+    } else if (current == ConnectionState.DISCONNECTED && announceWhenAlreadyOffline) {
+      ui.appendStatus(status, "(conn)", "Already disconnected");
+    }
+
+    disposables.add(
+        irc.disconnect(id, reason)
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
+            )
+    );
+
+    updateConnectionUi();
+  }
+
   public void onServersUpdated(List<IrcProperties.Server> latest, TargetRef activeTarget) {
     Set<String> current = new HashSet<>();
     if (latest != null) {
@@ -279,6 +293,7 @@ public class ConnectionCoordinator {
 
     for (String sid : removed) {
       if (sid == null || sid.isBlank()) continue;
+      setDesiredOnline(sid, false);
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
         TargetRef status = new TargetRef(fallback, "status");
@@ -288,6 +303,7 @@ public class ConnectionCoordinator {
       if (stateOf(sid) != ConnectionState.DISCONNECTED) {
         TargetRef status = new TargetRef(sid, "status");
         ui.appendStatus(status, "(servers)", "Server removed from configuration; disconnecting…");
+        setDesiredOnline(sid, false);
         disposables.add(
             irc.disconnect(sid)
                 .observeOn(SwingEdt.scheduler())
@@ -305,27 +321,43 @@ public class ConnectionCoordinator {
     for (String sid : added) {
       if (sid == null || sid.isBlank()) continue;
       ui.ensureTargetExists(new TargetRef(sid, "status"));
+      setDesiredOnline(sid, false);
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
     }
 
     updateConnectionUi();
   }
+
   public ConnectivityChange handleConnectivityEvent(String sid, IrcEvent e, TargetRef activeTarget) {
-    TargetRef status = new TargetRef(sid, "status");
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty() || e == null) return ConnectivityChange.NONE;
+
+    TargetRef status = new TargetRef(id, "status");
+    ConnectionState previous = stateOf(id);
 
     switch (e) {
       case IrcEvent.Connecting ev -> {
-        setState(sid, ConnectionState.CONNECTING);
+        if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
+          ui.ensureTargetExists(status);
+          ui.appendStatus(status, "(conn)", "Connection attempt suppressed (server set offline)");
+          requestDisconnect(id, null, false);
+          return ConnectivityChange.CHANGED;
+        }
+        if (!isDesiredOnline(id)) {
+          setDesiredOnline(id, true);
+        }
+
+        setState(id, ConnectionState.CONNECTING);
         ui.ensureTargetExists(status);
         String msg = "Connecting to " + ev.serverHost() + ":" + ev.serverPort();
         if (ev.nick() != null && !ev.nick().isBlank()) msg += " as " + ev.nick();
         ui.appendStatus(status, "(conn)", msg);
-        if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
+        if (activeTarget != null && Objects.equals(activeTarget.serverId(), id) && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
 
         try {
-          trayNotificationService.notifyConnectionState(sid, "Connecting", msg);
+          trayNotificationService.notifyConnectionState(id, "Connecting", msg);
         } catch (Exception ignored) {
         }
         updateConnectionUi();
@@ -333,15 +365,25 @@ public class ConnectionCoordinator {
       }
 
       case IrcEvent.Connected ev -> {
-        setState(sid, ConnectionState.CONNECTED);
+        if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
+          ui.ensureTargetExists(status);
+          ui.appendStatus(status, "(conn)", "Connected while marked offline; disconnecting…");
+          requestDisconnect(id, null, false);
+          return ConnectivityChange.CHANGED;
+        }
+        if (!isDesiredOnline(id)) {
+          setDesiredOnline(id, true);
+        }
+
+        setState(id, ConnectionState.CONNECTED);
         ui.ensureTargetExists(status);
         String msg = "Connected as " + ev.nick();
         ui.appendStatus(status, "(conn)", msg);
-        ui.setChatCurrentNick(sid, ev.nick());
-        runtimeConfig.rememberNick(sid, ev.nick());
+        ui.setChatCurrentNick(id, ev.nick());
+        runtimeConfig.rememberNick(id, ev.nick());
 
         try {
-          trayNotificationService.notifyConnectionState(sid, "Connected", msg);
+          trayNotificationService.notifyConnectionState(id, "Connected", msg);
         } catch (Exception ignored) {
         }
         updateConnectionUi();
@@ -349,7 +391,14 @@ public class ConnectionCoordinator {
       }
 
       case IrcEvent.Reconnecting ev -> {
-        setState(sid, ConnectionState.RECONNECTING);
+        if (!isDesiredOnline(id)) {
+          ui.ensureTargetExists(status);
+          ui.appendStatus(status, "(conn)", "Reconnect suppressed (server set offline)");
+          requestDisconnect(id, null, false);
+          return ConnectivityChange.CHANGED;
+        }
+
+        setState(id, ConnectionState.RECONNECTING);
         ui.ensureTargetExists(status);
         long sec = Math.max(0, ev.delayMs() / 1000);
         String msg = "Reconnecting in " + sec + "s (attempt " + ev.attempt() + ")";
@@ -357,12 +406,12 @@ public class ConnectionCoordinator {
           msg += " — " + ev.reason();
         }
         ui.appendStatus(status, "(conn)", msg);
-        if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
+        if (activeTarget != null && Objects.equals(activeTarget.serverId(), id) && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
 
         try {
-          trayNotificationService.notifyConnectionState(sid, "Reconnecting", msg);
+          trayNotificationService.notifyConnectionState(id, "Reconnecting", msg);
         } catch (Exception ignored) {
         }
         updateConnectionUi();
@@ -370,19 +419,28 @@ public class ConnectionCoordinator {
       }
 
       case IrcEvent.Disconnected ev -> {
-        setState(sid, ConnectionState.DISCONNECTED);
+        setState(id, ConnectionState.DISCONNECTED);
         String msg = "Disconnected: " + ev.reason();
         ui.appendStatus(status, "(conn)", msg);
-        if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid) && !activeTarget.isStatus()) {
+        if (activeTarget != null && Objects.equals(activeTarget.serverId(), id) && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
-        ui.setChatCurrentNick(sid, "");
+        ui.setChatCurrentNick(id, "");
 
         try {
-          trayNotificationService.notifyConnectionState(sid, "Disconnected", ev.reason());
+          trayNotificationService.notifyConnectionState(id, "Disconnected", ev.reason());
         } catch (Exception ignored) {
         }
-        updateConnectionUi();
+
+        boolean reconnectAfterDisconnect =
+            isDesiredOnline(id)
+                && previous == ConnectionState.DISCONNECTING
+                && serverCatalog.containsId(id);
+        if (reconnectAfterDisconnect) {
+          requestConnect(id, false);
+        } else {
+          updateConnectionUi();
+        }
         return ConnectivityChange.CHANGED;
       }
 
@@ -395,6 +453,19 @@ public class ConnectionCoordinator {
   private ConnectionState stateOf(String sid) {
     if (sid == null) return ConnectionState.DISCONNECTED;
     return states.getOrDefault(sid, ConnectionState.DISCONNECTED);
+  }
+
+  private boolean isDesiredOnline(String sid) {
+    if (sid == null) return false;
+    return desiredOnline.contains(sid);
+  }
+
+  private void setDesiredOnline(String sid, boolean desired) {
+    if (sid == null) return;
+    boolean old = desiredOnline.contains(sid);
+    if (desired == old) return;
+    if (desired) desiredOnline.add(sid); else desiredOnline.remove(sid);
+    ui.setServerDesiredOnline(sid, desired);
   }
 
   private void setState(String sid, ConnectionState state) {
@@ -422,8 +493,10 @@ public class ConnectionCoordinator {
     int connecting = 0;
     int reconnecting = 0;
     int disconnecting = 0;
+    int desired = 0;
 
     for (String sid : ids) {
+      if (isDesiredOnline(sid)) desired++;
       ConnectionState st = stateOf(sid);
       switch (st) {
         case CONNECTED -> connected++;
@@ -435,9 +508,8 @@ public class ConnectionCoordinator {
       }
     }
 
-    int disconnected = total - (connected + connecting + reconnecting + disconnecting);
-    boolean connectEnabled = disconnected > 0 && disconnecting == 0;
-    boolean disconnectEnabled = (connected + connecting + reconnecting) > 0 && disconnecting == 0;
+    boolean connectEnabled = desired < total;
+    boolean disconnectEnabled = desired > 0;
 
     ui.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
 

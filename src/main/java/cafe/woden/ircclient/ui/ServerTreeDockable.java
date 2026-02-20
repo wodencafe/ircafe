@@ -176,6 +176,7 @@ private static final class InsertionLine {
   private final Map<TargetRef, Boolean> privateMessageOnlineByTarget = new HashMap<>();
 
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
+  private final Map<String, Boolean> serverDesiredOnline = new HashMap<>();
 
   private final ServerCatalog serverCatalog;
 
@@ -215,6 +216,18 @@ private static final class InsertionLine {
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
+    this.connectBtn.setText("");
+    this.connectBtn.setIcon(SvgIcons.action("plus", 16));
+    this.connectBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    this.connectBtn.setToolTipText("Connect all disconnected servers");
+    this.connectBtn.setFocusable(false);
+    this.connectBtn.setPreferredSize(new Dimension(26, 26));
+    this.disconnectBtn.setText("");
+    this.disconnectBtn.setIcon(SvgIcons.action("close", 16));
+    this.disconnectBtn.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
+    this.disconnectBtn.setToolTipText("Disconnect connected/connecting servers");
+    this.disconnectBtn.setFocusable(false);
+    this.disconnectBtn.setPreferredSize(new Dimension(26, 26));
     JPanel header = new JPanel();
     header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
     header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
@@ -222,8 +235,6 @@ private static final class InsertionLine {
     header.add(connectBtn);
     header.add(Box.createHorizontalStrut(6));
     header.add(disconnectBtn);
-    header.add(Box.createHorizontalStrut(10));
-    header.add(statusLabel);
     header.add(Box.createHorizontalGlue());
 
     add(header, BorderLayout.NORTH);
@@ -561,6 +572,12 @@ private static final class InsertionLine {
     return serverStates.getOrDefault(sid, ConnectionState.DISCONNECTED);
   }
 
+  private boolean desiredOnlineForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    return Boolean.TRUE.equals(serverDesiredOnline.get(sid));
+  }
+
   private static boolean canConnectServer(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return st == ConnectionState.DISCONNECTED;
@@ -582,6 +599,64 @@ private static final class InsertionLine {
       case DISCONNECTING -> "Disconnecting";
       case DISCONNECTED -> "Disconnected";
     };
+  }
+
+  private static String serverDesiredIntentLabel(boolean desiredOnline) {
+    return desiredOnline ? "Online" : "Offline";
+  }
+
+  private static boolean isOnlineState(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return st == ConnectionState.CONNECTED
+        || st == ConnectionState.CONNECTING
+        || st == ConnectionState.RECONNECTING;
+  }
+
+  private static String serverDesiredBadge(ConnectionState state, boolean desiredOnline) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    boolean online = isOnlineState(st);
+    if (desiredOnline && !online) {
+      if (st == ConnectionState.DISCONNECTING) return " [connect queued]";
+      return " [wanted online]";
+    }
+    if (!desiredOnline && online) {
+      return " [disconnect queued]";
+    }
+    return "";
+  }
+
+  private static String serverIntentQueueTip(ConnectionState state, boolean desiredOnline) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    boolean online = isOnlineState(st);
+    if (desiredOnline && st == ConnectionState.DISCONNECTING) {
+      return "Connect is queued until the current disconnect finishes.";
+    }
+    if (desiredOnline && st == ConnectionState.DISCONNECTED) {
+      return "Wanted online; waiting for a successful connect attempt.";
+    }
+    if (!desiredOnline && online) {
+      return "Disconnect is queued.";
+    }
+    return "";
+  }
+
+  private static String serverActionHint(ConnectionState state) {
+    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
+    return canConnectServer(st)
+        ? "Click the row action to connect."
+        : canDisconnectServer(st)
+            ? "Click the row action to disconnect."
+            : "Connection state is changing.";
+  }
+
+  private String serverNodeDisplayLabel(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return sid;
+    String base = prettyServerLabel(sid);
+    ConnectionState state = connectionStateForServer(sid);
+    boolean desired = desiredOnlineForServer(sid);
+    String badge = serverDesiredBadge(state, desired);
+    return badge.isEmpty() ? base : (base + badge);
   }
 
   private static String serverNodeIconName(ConnectionState state) {
@@ -612,6 +687,15 @@ private static final class InsertionLine {
 
   private String serverIdAt(int x, int y) {
     TreePath path = tree.getPathForLocation(x, y);
+    if (path == null) {
+      TreePath closest = tree.getClosestPathForLocation(x, y);
+      if (closest != null) {
+        Rectangle row = tree.getPathBounds(closest);
+        if (row != null && y >= row.y && y < (row.y + row.height)) {
+          path = closest;
+        }
+      }
+    }
     if (path == null) return "";
     Object last = path.getLastPathComponent();
     if (!(last instanceof DefaultMutableTreeNode node) || !isServerNode(node)) return "";
@@ -1123,8 +1207,33 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
   }
 
+  public void setServerDesiredOnline(String serverId, boolean desiredOnline) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    boolean prev = Boolean.TRUE.equals(serverDesiredOnline.get(sid));
+    if (desiredOnline == prev) return;
+    if (desiredOnline) {
+      serverDesiredOnline.put(sid, Boolean.TRUE);
+    } else {
+      serverDesiredOnline.remove(sid);
+    }
+
+    ServerNodes sn = servers.get(sid);
+    if (sn != null && sn.serverNode != null) {
+      model.nodeChanged(sn.serverNode);
+    }
+    if (Objects.equals(hoveredServerActionServerId, sid)) {
+      tree.repaint();
+    }
+  }
+
   public void setStatusText(String text) {
-    statusLabel.setText(Objects.toString(text, ""));
+    String t = Objects.toString(text, "").trim();
+    statusLabel.setText(t);
+    String suffix = t.isEmpty() ? "" : (" Current: " + t);
+    connectBtn.setToolTipText("Connect all disconnected servers." + suffix);
+    disconnectBtn.setToolTipText("Disconnect connected/connecting servers." + suffix);
   }
 
   
@@ -1735,11 +1844,17 @@ private void syncServers(List<ServerEntry> latest) {
     }
 
     if (uo instanceof String serverId && isServerNode(node) && isSojuEphemeralServer(serverId)) {
-      String stateTip = "State: " + serverStateLabel(connectionStateForServer(serverId)) + ".";
+      ConnectionState state = connectionStateForServer(serverId);
+      boolean desired = desiredOnlineForServer(serverId);
+      String stateTip = "State: " + serverStateLabel(state) + ".";
+      String intentTip = " Intent: " + serverDesiredIntentLabel(desired) + ".";
+      String queueTip = serverIntentQueueTip(state, desired);
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
       boolean auto = !origin.isEmpty() && sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, display);
-      String tip = stateTip + " Discovered from soju; not saved.";
+      String tip = stateTip + intentTip;
+      if (!queueTip.isBlank()) tip += " " + queueTip;
+      tip += " Discovered from soju; not saved.";
       if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
       if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
@@ -1747,11 +1862,17 @@ private void syncServers(List<ServerEntry> latest) {
     }
 
     if (uo instanceof String serverId && isServerNode(node) && isZncEphemeralServer(serverId)) {
-      String stateTip = "State: " + serverStateLabel(connectionStateForServer(serverId)) + ".";
+      ConnectionState state = connectionStateForServer(serverId);
+      boolean desired = desiredOnlineForServer(serverId);
+      String stateTip = "State: " + serverStateLabel(state) + ".";
+      String intentTip = " Intent: " + serverDesiredIntentLabel(desired) + ".";
+      String queueTip = serverIntentQueueTip(state, desired);
       String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
       boolean auto = !origin.isEmpty() && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display);
-      String tip = stateTip + " Discovered from ZNC; not saved.";
+      String tip = stateTip + intentTip;
+      if (!queueTip.isBlank()) tip += " " + queueTip;
+      tip += " Discovered from ZNC; not saved.";
       if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
       if (display != null && !display.isBlank()) tip += " Network: " + display + ".";
@@ -1760,12 +1881,12 @@ private void syncServers(List<ServerEntry> latest) {
 
     if (uo instanceof String serverId && isServerNode(node)) {
       ConnectionState state = connectionStateForServer(serverId);
-      String action = canConnectServer(state)
-          ? "Click the row action to connect."
-          : canDisconnectServer(state)
-              ? "Click the row action to disconnect."
-              : "Connection state is changing.";
-      return "State: " + serverStateLabel(state) + ". " + action;
+      boolean desired = desiredOnlineForServer(serverId);
+      String queueTip = serverIntentQueueTip(state, desired);
+      String action = serverActionHint(state);
+      String base = "State: " + serverStateLabel(state) + ". Intent: " + serverDesiredIntentLabel(desired) + ".";
+      if (!queueTip.isBlank()) return base + " " + queueTip + " " + action;
+      return base + " " + action;
     }
 
     return null;
@@ -1798,6 +1919,7 @@ private void removeServerRoot(String serverId) {
   }
 
   serverStates.remove(serverId);
+  serverDesiredOnline.remove(serverId);
   clearPrivateMessageOnlineStates(serverId);
   leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
 
@@ -2086,7 +2208,7 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("dock-right");
         }
       } else if (uo instanceof String id && isServerNode(node)) {
-        setText(prettyServerLabel(id));
+        setText(serverNodeDisplayLabel(id));
         if (ephemeralServerIds.contains(id)) {
           setFont(base.deriveFont(Font.ITALIC));
         } else {

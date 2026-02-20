@@ -175,6 +175,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void setServerDesiredOnline(String serverId, boolean desiredOnline) {
+    delegate.setServerDesiredOnline(serverId, desiredOnline);
+  }
+
+  @Override
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
     delegate.setPrivateMessageOnlineState(serverId, nick, online);
   }
