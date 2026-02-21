@@ -89,6 +89,20 @@ public final class ChatFindBarDecorator implements AutoCloseable {
     }
   }
 
+  public void findNext() {
+    if (!bar.isVisible()) {
+      open();
+    }
+    bar.find(true);
+  }
+
+  public void findPrevious() {
+    if (!bar.isVisible()) {
+      open();
+    }
+    bar.find(false);
+  }
+
   public void onDocumentSwapped() {
     bar.onDocumentSwapped();
   }

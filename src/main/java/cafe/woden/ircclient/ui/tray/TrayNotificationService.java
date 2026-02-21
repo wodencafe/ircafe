@@ -113,6 +113,31 @@ public class TrayNotificationService {
     notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
   }
 
+  public void notifyInvite(String serverId, String channel, String fromNick, String reason) {
+    UiSettings s = settingsBus.get();
+    if (!s.trayEnabled() || !s.trayNotifyPrivateMessages()) return;
+
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    String from = Objects.toString(fromNick, "").trim();
+    String rsn = Objects.toString(reason, "").trim();
+
+    String title = "Invite" + (!ch.isBlank() ? " to " + ch : "");
+    StringBuilder body = new StringBuilder();
+    if (!from.isBlank()) {
+      body.append(from).append(" invited you");
+    } else {
+      body.append("Channel invitation");
+    }
+    if (!sid.isBlank()) body.append(" on ").append(sid);
+    if (!rsn.isBlank()) body.append(": ").append(safeBody(rsn));
+
+    TargetRef target = safeTargetRef(serverId, "status", "status");
+    if (!passesNotifyConditions(target)) return;
+    String targetKey = targetKey(serverId, ch.isBlank() ? "status" : ch);
+    notifyAsync(targetKey, contentKey(targetKey, title, body.toString()), title, body.toString(), () -> openTarget(target));
+  }
+
   public void notifyConnectionState(String serverId, String state, String detail) {
     UiSettings s = settingsBus.get();
     if (!s.trayEnabled() || !s.trayNotifyConnectionState()) return;

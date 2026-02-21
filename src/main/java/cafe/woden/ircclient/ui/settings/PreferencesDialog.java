@@ -28,6 +28,7 @@ import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
+import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
@@ -141,6 +142,7 @@ public class PreferencesDialog {
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
   private final NotificationSoundService notificationSoundService;
+  private final ServerDialogs serverDialogs;
 
   private JDialog dialog;
 
@@ -162,7 +164,8 @@ public class PreferencesDialog {
                            TrayNotificationService trayNotificationService,
                            GnomeDbusNotificationBackend gnomeDbusBackend,
                            NotificationSoundSettingsBus notificationSoundSettingsBus,
-                           NotificationSoundService notificationSoundService) {
+                           NotificationSoundService notificationSoundService,
+                           ServerDialogs serverDialogs) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
@@ -182,6 +185,7 @@ public class PreferencesDialog {
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
     this.notificationSoundService = notificationSoundService;
+    this.serverDialogs = serverDialogs;
   }
 
   public void open(Window owner) {
@@ -953,6 +957,8 @@ public class PreferencesDialog {
       applyFilterSettingsFromUi(filters);
       runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
       runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
+      runtimeConfig.rememberChatLoggingLogPrivateMessages(logging.logPrivateMessages.isSelected());
+      runtimeConfig.rememberChatLoggingSavePrivateMessageList(logging.savePrivateMessageList.isSelected());
       runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
       runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(logging.dbNextToConfig.isSelected());
 
@@ -2629,6 +2635,8 @@ panel.add(subTabs, "growx, wmin 0");
   private LoggingControls buildLoggingControls(LogProperties logProps, List<AutoCloseable> closeables) {
     boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
     boolean logSoftIgnoredCurrent = logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
+    boolean logPrivateMessagesCurrent = logProps == null || Boolean.TRUE.equals(logProps.logPrivateMessages());
+    boolean savePrivateMessageListCurrent = logProps == null || Boolean.TRUE.equals(logProps.savePrivateMessageList());
 
     JCheckBox loggingEnabled = new JCheckBox("Enable chat logging (store messages to local DB)");
     loggingEnabled.setSelected(loggingEnabledCurrent);
@@ -2641,6 +2649,17 @@ panel.add(subTabs, "growx, wmin 0");
     loggingSoftIgnore.setToolTipText("If enabled, messages that are soft-ignored (spoiler-covered) are still stored,\n" +
         "and will re-load as spoiler-covered lines in history.");
     loggingSoftIgnore.setEnabled(loggingEnabled.isSelected());
+
+    JCheckBox loggingPrivateMessages = new JCheckBox("Save private-message history");
+    loggingPrivateMessages.setSelected(logPrivateMessagesCurrent);
+    loggingPrivateMessages.setToolTipText("If enabled, PM/query messages are stored in the local history database.\n" +
+        "If disabled, only non-PM targets are persisted.");
+    loggingPrivateMessages.setEnabled(loggingEnabled.isSelected());
+
+    JCheckBox savePrivateMessageList = new JCheckBox("Save private-message chat list");
+    savePrivateMessageList.setSelected(savePrivateMessageListCurrent);
+    savePrivateMessageList.setToolTipText("If enabled, PM/query targets are remembered and re-opened after reconnect/restart.\n" +
+        "The per-server PM list is managed in Servers -> Edit -> Auto-Join.");
 
     boolean keepForeverCurrent = logProps == null || Boolean.TRUE.equals(logProps.keepForever());
     int retentionDaysCurrent = (logProps != null && logProps.retentionDays() != null) ? Math.max(0, logProps.retentionDays()) : 0;
@@ -2690,6 +2709,7 @@ panel.add(subTabs, "growx, wmin 0");
     Runnable updateLoggingEnabledState = () -> {
       boolean en = loggingEnabled.isSelected();
       loggingSoftIgnore.setEnabled(en);
+      loggingPrivateMessages.setEnabled(en);
       dbBaseName.setEnabled(true);
       dbNextToConfig.setEnabled(true);
       updateRetentionUi.run();
@@ -2697,7 +2717,27 @@ panel.add(subTabs, "growx, wmin 0");
     loggingEnabled.addActionListener(e -> updateLoggingEnabledState.run());
     updateLoggingEnabledState.run();
 
-    return new LoggingControls(loggingEnabled, loggingSoftIgnore, keepForever, retentionDays, dbBaseName, dbNextToConfig, loggingInfo);
+    JButton managePmList = new JButton("Open Server Auto-Join Settings…");
+    managePmList.setIcon(SvgIcons.action("settings", 16));
+    managePmList.setDisabledIcon(SvgIcons.actionDisabled("settings", 16));
+    managePmList.setEnabled(serverDialogs != null);
+    managePmList.addActionListener(e -> {
+      if (serverDialogs == null) return;
+      Window owner = dialog != null ? dialog : SwingUtilities.getWindowAncestor(managePmList);
+      serverDialogs.openManageServers(owner);
+    });
+
+    return new LoggingControls(
+        loggingEnabled,
+        loggingSoftIgnore,
+        loggingPrivateMessages,
+        savePrivateMessageList,
+        managePmList,
+        keepForever,
+        retentionDays,
+        dbBaseName,
+        dbNextToConfig,
+        loggingInfo);
   }
 
   private OutgoingColorControls buildOutgoingColorControls(UiSettings current) {
@@ -3790,6 +3830,10 @@ panel.add(subTabs, "growx, wmin 0");
     panel.add(logging.info, "span 2, growx, wmin 0, wrap");
     panel.add(logging.enabled, "span 2, alignx left, wrap");
     panel.add(logging.logSoftIgnored, "span 2, alignx left, wrap");
+    panel.add(logging.logPrivateMessages, "span 2, alignx left, wrap");
+    panel.add(logging.savePrivateMessageList, "span 2, alignx left, wrap");
+    panel.add(new JLabel("PM list settings"));
+    panel.add(logging.managePrivateMessageList, "alignx left, wrap");
     panel.add(logging.keepForever, "span 2, alignx left, wrap");
     panel.add(new JLabel("Retention (days)"));
     panel.add(logging.retentionDays, "w 110!, wrap");
@@ -3880,8 +3924,8 @@ panel.add(subTabs, "growx, wmin 0");
     JButton pickColor = new JButton("Color…");
     JButton clearColor = new JButton("Clear color");
 
-    pickColor.setToolTipText("Choose a foreground highlight color for this rule.");
-    clearColor.setToolTipText("Clear the rule's foreground highlight color.");
+    pickColor.setToolTipText("Choose a highlight color for this rule.");
+    clearColor.setToolTipText("Clear the rule's highlight color.");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
@@ -5311,6 +5355,9 @@ panel.add(subTabs, "growx, wmin 0");
 
   private record LoggingControls(JCheckBox enabled,
                                 JCheckBox logSoftIgnored,
+                                JCheckBox logPrivateMessages,
+                                JCheckBox savePrivateMessageList,
+                                JButton managePrivateMessageList,
                                 JCheckBox keepForever,
                                 JSpinner retentionDays,
                                 JTextField dbBaseName,

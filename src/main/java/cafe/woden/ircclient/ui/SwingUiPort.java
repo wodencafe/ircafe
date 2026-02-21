@@ -388,6 +388,29 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags,
+      String notificationRuleHighlightColor
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendChatAt(
+        target,
+        from,
+        text,
+        outgoingLocalEcho,
+        ts,
+        messageId,
+        ircv3Tags,
+        notificationRuleHighlightColor));
+  }
+
+  @Override
   public void appendPendingOutgoingChat(
       TargetRef target,
       String pendingId,
@@ -475,6 +498,29 @@ public class SwingUiPort implements UiPort {
   ) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.appendActionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+  }
+
+  @Override
+  public void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags,
+      String notificationRuleHighlightColor
+  ) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.appendActionAt(
+        target,
+        from,
+        action,
+        outgoingLocalEcho,
+        ts,
+        messageId,
+        ircv3Tags,
+        notificationRuleHighlightColor));
   }
 
   @Override

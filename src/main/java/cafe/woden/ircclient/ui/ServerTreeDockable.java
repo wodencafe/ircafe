@@ -5,6 +5,8 @@ import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -183,6 +185,8 @@ private static final class InsertionLine {
   private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
 
   private final ServerCatalog serverCatalog;
+  private final RuntimeConfigStore runtimeConfig;
+  private final LogProperties logProps;
 
   private final SojuAutoConnectStore sojuAutoConnect;
 
@@ -204,6 +208,8 @@ private static final class InsertionLine {
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
+      RuntimeConfigStore runtimeConfig,
+      LogProperties logProps,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect,
       ConnectButton connectBtn,
@@ -213,6 +219,8 @@ private static final class InsertionLine {
     super(new BorderLayout());
 
     this.serverCatalog = serverCatalog;
+    this.runtimeConfig = runtimeConfig;
+    this.logProps = logProps;
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
@@ -1629,6 +1637,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     leaves.put(ref, leaf);
     if (isPrivateMessageTarget(ref)) {
       privateMessageOnlineByTarget.putIfAbsent(ref, Boolean.FALSE);
+      if (shouldPersistPrivateMessageList()) {
+        runtimeConfig.rememberPrivateMessageTarget(ref.serverId(), ref.target());
+      }
     }
     int idx;
     if (ref.isChannel() && parent == sn.serverNode) {
@@ -1664,6 +1675,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (node == null) return;
     if (isPrivateMessageTarget(ref)) {
       privateMessageOnlineByTarget.remove(ref);
+      if (shouldPersistPrivateMessageList()) {
+        runtimeConfig.forgetPrivateMessageTarget(ref.serverId(), ref.target());
+      }
     }
 
     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
@@ -2040,6 +2054,10 @@ private void syncServers(List<ServerEntry> latest) {
       ServerNodes sn = servers.get(id);
       if (sn != null) model.nodeChanged(sn.serverNode);
     }
+  }
+
+  private boolean shouldPersistPrivateMessageList() {
+    return runtimeConfig != null && logProps != null && Boolean.TRUE.equals(logProps.savePrivateMessageList());
   }
 
 private void removeServerRoot(String serverId) {

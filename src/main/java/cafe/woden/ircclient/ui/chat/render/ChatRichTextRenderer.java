@@ -94,6 +94,8 @@ public class ChatRichTextRenderer {
   private void insertRichTextPlain(InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet base)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
+    Color ruleBg = notificationRuleBg(base);
+    boolean hasRuleBg = ruleBg != null;
 
     Matcher m = URL_PATTERN.matcher(text);
     int last = 0;
@@ -109,6 +111,10 @@ public class ChatRichTextRenderer {
       SimpleAttributeSet linkAttr = new SimpleAttributeSet(base);
       linkAttr.addAttributes(styles.link());
       linkAttr.addAttribute(ChatStyles.ATTR_URL, normalizeUrl(parts.url));
+      if (hasRuleBg) {
+        linkAttr.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, ruleBg);
+        StyleConstants.setBackground(linkAttr, ruleBg);
+      }
 
       // If this segment has explicit mIRC colors, keep them (don't let the theme link color override).
       if (hasIrcColors(base)) {
@@ -142,6 +148,8 @@ public class ChatRichTextRenderer {
   private void insertWithMentions(InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet baseStyle)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
+    Color ruleBg = notificationRuleBg(baseStyle);
+    boolean hasRuleBg = ruleBg != null;
 
     // Only color nick mentions if the nick exists in the channel user list.
     Set<String> channelNicks = Set.of();
@@ -165,6 +173,10 @@ public class ChatRichTextRenderer {
           SimpleAttributeSet chanAttr = new SimpleAttributeSet(baseStyle);
           chanAttr.addAttributes(styles.link());
           chanAttr.addAttribute(ChatStyles.ATTR_CHANNEL, chan.channel);
+          if (hasRuleBg) {
+            chanAttr.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, ruleBg);
+            StyleConstants.setBackground(chanAttr, ruleBg);
+          }
 
           if (hasIrcColors(baseStyle)) {
             Color fg = StyleConstants.getForeground(baseStyle);
@@ -204,6 +216,10 @@ public class ChatRichTextRenderer {
           // Mention background is always allowed; per-nick foreground only if it's a channel nick.
           SimpleAttributeSet mention = new SimpleAttributeSet(baseStyle);
           mention.addAttributes(styles.mention());
+          if (hasRuleBg) {
+            mention.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, ruleBg);
+            StyleConstants.setBackground(mention, ruleBg);
+          }
 
           if (!hasOverrideFg && !hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
             mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
@@ -263,6 +279,13 @@ public class ChatRichTextRenderer {
     return attrs.getAttribute(ChatStyles.ATTR_IRC_FG) != null
         || attrs.getAttribute(ChatStyles.ATTR_IRC_BG) != null
         || Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_IRC_REVERSE));
+  }
+
+  private static Color notificationRuleBg(AttributeSet attrs) {
+    if (attrs == null) return null;
+    Object raw = attrs.getAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG);
+    if (raw instanceof Color c) return c;
+    return null;
   }
 
   private static boolean isNickChar(char c) {

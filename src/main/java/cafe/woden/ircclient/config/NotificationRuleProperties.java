@@ -15,7 +15,7 @@ public record NotificationRuleProperties(
     String pattern,
     Boolean caseSensitive,
     Boolean wholeWord,
-    /** Optional per-rule foreground highlight color as a hex string (e.g. "#FF00FF"). */
+    /** Optional per-rule highlight color as a hex string (e.g. "#FF00FF"). */
     String highlightFg
 ) {
 

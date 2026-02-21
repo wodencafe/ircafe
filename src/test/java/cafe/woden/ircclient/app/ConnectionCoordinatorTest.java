@@ -13,15 +13,19 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ConnectionCoordinatorTest {
+
+  private static final LogProperties LOG_PROPS = new LogProperties(false, true, true, true, true, 0, null);
 
   @Test
   void queuedConnectDuringDisconnectReconnectsAfterDisconnectedEvent() {
@@ -44,6 +48,7 @@ class ConnectionCoordinatorTest {
             serverRegistry,
             serverCatalog,
             runtimeConfig,
+            LOG_PROPS,
             trayNotificationService);
 
     coordinator.connectOne("libera");
@@ -82,6 +87,7 @@ class ConnectionCoordinatorTest {
             serverRegistry,
             serverCatalog,
             runtimeConfig,
+            LOG_PROPS,
             trayNotificationService);
 
     coordinator.connectOne("libera");
@@ -117,6 +123,7 @@ class ConnectionCoordinatorTest {
             serverRegistry,
             serverCatalog,
             runtimeConfig,
+            LOG_PROPS,
             trayNotificationService);
 
     coordinator.handleConnectivityEvent(
@@ -148,6 +155,7 @@ class ConnectionCoordinatorTest {
             serverRegistry,
             serverCatalog,
             runtimeConfig,
+            LOG_PROPS,
             trayNotificationService);
     coordinator.connectOne("libera");
 
@@ -157,5 +165,38 @@ class ConnectionCoordinatorTest {
         null);
 
     verify(ui, atLeastOnce()).setServerConnectionDiagnostics(eq("libera"), eq("Ping timeout"), any());
+  }
+
+  @Test
+  void connectedEventRestoresSavedPrivateMessageTargets() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
+    when(serverCatalog.containsId("libera")).thenReturn(true);
+    when(runtimeConfig.readPrivateMessageTargets("libera")).thenReturn(List.of("Alice", "Bob"));
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.handleConnectivityEvent(
+        "libera",
+        new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "alice-me"),
+        null);
+
+    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
+    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));
+    verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
   }
 }

@@ -7,10 +7,12 @@ package cafe.woden.ircclient.app.notifications;
  * @param matchedText the matched substring (group 0 for regex rules)
  * @param start start index in the message (inclusive)
  * @param end end index in the message (exclusive)
+ * @param highlightColor optional per-rule highlight color (hex, e.g. "#FFCC66")
  */
 public record NotificationRuleMatch(
     String ruleLabel,
     String matchedText,
     int start,
-    int end
+    int end,
+    String highlightColor
 ) {}

@@ -163,6 +163,54 @@ public class CommandParser {
       return new ParsedInput.Invite(nick, channel);
     }
 
+    if (matchesCommand(line, "/invites")) {
+      String serverId = argAfter(line, "/invites");
+      return new ParsedInput.InviteList(serverId);
+    }
+
+    if (matchesCommand(line, "/invjoin") || matchesCommand(line, "/invitejoin")) {
+      String token = matchesCommand(line, "/invjoin")
+          ? argAfter(line, "/invjoin")
+          : argAfter(line, "/invitejoin");
+      return new ParsedInput.InviteJoin(token);
+    }
+
+    if (matchesCommand(line, "/invignore") || matchesCommand(line, "/inviteignore")) {
+      String token = matchesCommand(line, "/invignore")
+          ? argAfter(line, "/invignore")
+          : argAfter(line, "/inviteignore");
+      return new ParsedInput.InviteIgnore(token);
+    }
+
+    if (matchesCommand(line, "/invwhois") || matchesCommand(line, "/invitewhois")) {
+      String token = matchesCommand(line, "/invwhois")
+          ? argAfter(line, "/invwhois")
+          : argAfter(line, "/invitewhois");
+      return new ParsedInput.InviteWhois(token);
+    }
+
+    if (matchesCommand(line, "/invblock") || matchesCommand(line, "/inviteblock")) {
+      String token = matchesCommand(line, "/invblock")
+          ? argAfter(line, "/invblock")
+          : argAfter(line, "/inviteblock");
+      return new ParsedInput.InviteBlock(token);
+    }
+
+    if (matchesCommand(line, "/inviteautojoin")
+        || matchesCommand(line, "/invautojoin")
+        || matchesCommand(line, "/ajinvite")) {
+      String mode;
+      if (matchesCommand(line, "/inviteautojoin")) {
+        mode = argAfter(line, "/inviteautojoin");
+      } else if (matchesCommand(line, "/invautojoin")) {
+        mode = argAfter(line, "/invautojoin");
+      } else {
+        mode = argAfter(line, "/ajinvite");
+        if (mode.isEmpty()) mode = "toggle";
+      }
+      return new ParsedInput.InviteAutoJoin(mode);
+    }
+
     if (matchesCommand(line, "/names")) {
       String channel = argAfter(line, "/names");
       return new ParsedInput.Names(channel);
@@ -365,11 +413,22 @@ public class CommandParser {
 
     String[] toks = r.split("\\s+", 3);
     if (toks.length == 0) return new ParsedInput.Join("", "");
+    String first = toks[0].trim();
+    if (isJoinInviteOption(first)) {
+      if (toks.length == 1) return new ParsedInput.InviteJoin("last");
+      if (toks.length == 2) return new ParsedInput.InviteJoin(toks[1].trim());
+      return new ParsedInput.InviteJoin((toks[1] + " " + toks[2]).trim());
+    }
     if (toks.length > 2) return new ParsedInput.Join("", "");
 
-    String channel = toks[0].trim();
+    String channel = first;
     String key = toks.length > 1 ? toks[1].trim() : "";
     return new ParsedInput.Join(channel, key);
+  }
+
+  private static boolean isJoinInviteOption(String token) {
+    if (token == null) return false;
+    return "-invite".equalsIgnoreCase(token.trim()) || "-i".equalsIgnoreCase(token.trim());
   }
 
   private static ParsedInput parseWhowasInput(String rest) {

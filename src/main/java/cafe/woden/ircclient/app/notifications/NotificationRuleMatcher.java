@@ -79,7 +79,7 @@ public class NotificationRuleMatcher {
         if (p == null) continue; // invalid regex skipped during compile
         Matcher m = p.matcher(message);
         if (m.find()) {
-          out.add(new NotificationRuleMatch(rule.label(), m.group(), m.start(), m.end()));
+          out.add(new NotificationRuleMatch(rule.label(), m.group(), m.start(), m.end(), rule.highlightFg()));
         }
         continue;
       }
@@ -99,7 +99,12 @@ public class NotificationRuleMatcher {
               : message.regionMatches(true, tok.start, pat, 0, plen);
 
           if (ok) {
-            out.add(new NotificationRuleMatch(rule.label(), message.substring(tok.start, tok.end), tok.start, tok.end));
+            out.add(new NotificationRuleMatch(
+                rule.label(),
+                message.substring(tok.start, tok.end),
+                tok.start,
+                tok.end,
+                rule.highlightFg()));
             break;
           }
         }
@@ -114,7 +119,12 @@ public class NotificationRuleMatcher {
         }
 
         if (idx >= 0) {
-          out.add(new NotificationRuleMatch(rule.label(), message.substring(idx, idx + pat.length()), idx, idx + pat.length()));
+          out.add(new NotificationRuleMatch(
+              rule.label(),
+              message.substring(idx, idx + pat.length()),
+              idx,
+              idx + pat.length(),
+              rule.highlightFg()));
         }
       }
     }

@@ -26,7 +26,8 @@ import org.junit.jupiter.api.Test;
 class LoggingUiPortDecoratorTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
-  private static final LogProperties LOGGING_ON = new LogProperties(true, true, true, 0, null);
+  private static final LogProperties LOGGING_ON = new LogProperties(true, true, true, true, true, 0, null);
+  private static final LogProperties LOGGING_PM_OFF = new LogProperties(true, true, false, true, true, 0, null);
 
   @Test
   void appendChatAtWithMetadataPersistsMessageIdentity() throws Exception {
@@ -173,9 +174,26 @@ class LoggingUiPortDecoratorTest {
     verify(delegate).appendSpoilerChatAt(target, at, "eve", "hidden", "spoiler-1", tags);
   }
 
+  @Test
+  void privateMessageLoggingCanBeDisabledIndependently() {
+    UiPort delegate = mock(UiPort.class);
+    AtomicReference<LogLine> captured = new AtomicReference<>();
+    LoggingUiPortDecorator d = newDecorator(delegate, captured, LOGGING_PM_OFF);
+
+    TargetRef pm = new TargetRef("srv", "alice");
+    d.appendChat(pm, "alice", "hello", false);
+
+    assertNull(captured.get());
+    verify(delegate).appendChat(pm, "alice", "hello", false);
+  }
+
   private static LoggingUiPortDecorator newDecorator(UiPort delegate, AtomicReference<LogLine> captured) {
+    return newDecorator(delegate, captured, LOGGING_ON);
+  }
+
+  private static LoggingUiPortDecorator newDecorator(UiPort delegate, AtomicReference<LogLine> captured, LogProperties props) {
     ChatLogWriter writer = captured::set;
-    return new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+    return new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), props);
   }
 
   private static Map<String, Object> meta(LogLine line) throws Exception {

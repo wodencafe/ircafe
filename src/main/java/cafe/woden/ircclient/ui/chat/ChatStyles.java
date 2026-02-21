@@ -29,6 +29,8 @@ public class ChatStyles {
   /** Integer foreground mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_FG = "chat.irc.fg";
   public static final String ATTR_OVERRIDE_FG = "chat.override.fg";
+  /** Per-line notification-rule highlight background color (java.awt.Color). */
+  public static final String ATTR_NOTIFICATION_RULE_BG = "chat.notification.rule.bg";
   
   public static final String ATTR_OUTGOING = "chat.outgoing";
 

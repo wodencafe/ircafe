@@ -100,6 +100,27 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchInviteActionCommandsRouteToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.InviteList("libera"));
+    verify(chat).handleInviteList("libera");
+
+    dispatcher.dispatch(disposables, new ParsedInput.InviteJoin("12"));
+    verify(chat).handleInviteJoin(disposables, "12");
+
+    dispatcher.dispatch(disposables, new ParsedInput.InviteIgnore("12"));
+    verify(chat).handleInviteIgnore("12");
+
+    dispatcher.dispatch(disposables, new ParsedInput.InviteWhois("12"));
+    verify(chat).handleInviteWhois(disposables, "12");
+
+    dispatcher.dispatch(disposables, new ParsedInput.InviteBlock("12"));
+    verify(chat).handleInviteBlock("12");
+
+    dispatcher.dispatch(disposables, new ParsedInput.InviteAutoJoin("on"));
+    verify(chat).handleInviteAutoJoin("on");
+  }
+
+  @Test
   void dispatchNamesRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Names("#ircafe"));
     verify(chat).handleNames(disposables, "#ircafe");

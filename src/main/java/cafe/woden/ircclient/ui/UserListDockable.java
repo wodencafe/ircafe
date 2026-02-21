@@ -446,6 +446,14 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     return Objects.toString(ni.nick(), "").trim();
   }
 
+  public String selectedNick() {
+    try {
+      return selectedNick(list.getSelectedIndex());
+    } catch (Exception ignored) {
+      return "";
+    }
+  }
+
   private void promptIgnore(boolean removing, boolean soft) {
     try {
       if (active == null || active.serverId() == null || active.serverId().isBlank()) return;

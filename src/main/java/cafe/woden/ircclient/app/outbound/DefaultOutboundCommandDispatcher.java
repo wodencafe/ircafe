@@ -61,6 +61,12 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.Topic cmd -> outboundChatCommandService.handleTopic(disposables, cmd.first(), cmd.rest());
       case ParsedInput.Kick cmd -> outboundChatCommandService.handleKick(disposables, cmd.channel(), cmd.nick(), cmd.reason());
       case ParsedInput.Invite cmd -> outboundChatCommandService.handleInvite(disposables, cmd.nick(), cmd.channel());
+      case ParsedInput.InviteList cmd -> outboundChatCommandService.handleInviteList(cmd.serverId());
+      case ParsedInput.InviteJoin cmd -> outboundChatCommandService.handleInviteJoin(disposables, cmd.inviteToken());
+      case ParsedInput.InviteIgnore cmd -> outboundChatCommandService.handleInviteIgnore(cmd.inviteToken());
+      case ParsedInput.InviteWhois cmd -> outboundChatCommandService.handleInviteWhois(disposables, cmd.inviteToken());
+      case ParsedInput.InviteBlock cmd -> outboundChatCommandService.handleInviteBlock(cmd.inviteToken());
+      case ParsedInput.InviteAutoJoin cmd -> outboundChatCommandService.handleInviteAutoJoin(cmd.mode());
       case ParsedInput.Names cmd -> outboundChatCommandService.handleNames(disposables, cmd.channel());
       case ParsedInput.Who cmd -> outboundChatCommandService.handleWho(disposables, cmd.args());
       case ParsedInput.ListCmd cmd -> outboundChatCommandService.handleList(disposables, cmd.args());

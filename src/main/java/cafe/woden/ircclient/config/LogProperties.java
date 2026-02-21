@@ -8,6 +8,12 @@ public record LogProperties(
 
     Boolean logSoftIgnoredLines,
 
+    /** Whether PM/query messages are persisted in the local chat log DB. */
+    Boolean logPrivateMessages,
+
+    /** Whether PM/query targets are remembered and restored into the chat list. */
+    Boolean savePrivateMessageList,
+
     Boolean keepForever,
 
     /**
@@ -39,6 +45,8 @@ public record LogProperties(
   public LogProperties {
     if (enabled == null) enabled = Boolean.FALSE;
     if (logSoftIgnoredLines == null) logSoftIgnoredLines = Boolean.TRUE;
+    if (logPrivateMessages == null) logPrivateMessages = Boolean.TRUE;
+    if (savePrivateMessageList == null) savePrivateMessageList = Boolean.TRUE;
     if (keepForever == null) keepForever = Boolean.TRUE;
     if (retentionDays == null || retentionDays <= 0) retentionDays = 0;
     if (hsqldb == null) hsqldb = new Hsqldb("ircafe-chatlog", Boolean.TRUE);

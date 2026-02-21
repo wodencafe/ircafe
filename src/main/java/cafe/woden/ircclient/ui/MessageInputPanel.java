@@ -9,6 +9,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -20,6 +23,7 @@ import java.beans.PropertyChangeListener;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javax.swing.text.BadLocationException;
 public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
   public static final String ID = "input";
@@ -512,6 +516,193 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
     historySupport.setDraftText(text);
   }
 
+  public boolean isInputEditable() {
+    return input.isEnabled() && input.isEditable();
+  }
+
+  public boolean canUndo() {
+    if (!isInputEditable()) return false;
+    undoSupport.refreshActions();
+    Action action = undoSupport.getUndoAction();
+    return action != null && action.isEnabled();
+  }
+
+  public boolean canRedo() {
+    if (!isInputEditable()) return false;
+    undoSupport.refreshActions();
+    Action action = undoSupport.getRedoAction();
+    return action != null && action.isEnabled();
+  }
+
+  public boolean undo() {
+    if (!canUndo()) return false;
+    Action action = undoSupport.getUndoAction();
+    if (action == null || !action.isEnabled()) return false;
+    action.actionPerformed(new ActionEvent(input, ActionEvent.ACTION_PERFORMED, "menuUndo"));
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean redo() {
+    if (!canRedo()) return false;
+    Action action = undoSupport.getRedoAction();
+    if (action == null || !action.isEnabled()) return false;
+    action.actionPerformed(new ActionEvent(input, ActionEvent.ACTION_PERFORMED, "menuRedo"));
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean canCut() {
+    return isInputEditable() && hasSelection();
+  }
+
+  public boolean cutSelection() {
+    if (!canCut()) return false;
+    input.cut();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean canCopy() {
+    return input.isEnabled() && hasSelection();
+  }
+
+  public boolean copySelection() {
+    if (!canCopy()) return false;
+    input.copy();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean canPaste() {
+    return isInputEditable() && clipboardHasText();
+  }
+
+  public boolean pasteFromClipboard() {
+    if (!canPaste()) return false;
+    input.paste();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean canDeleteForward() {
+    if (!isInputEditable()) return false;
+    if (hasSelection()) return true;
+    int caret = input.getCaretPosition();
+    return caret < input.getDocument().getLength();
+  }
+
+  public boolean deleteForward() {
+    if (!canDeleteForward()) return false;
+    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+    try {
+      if (start != end) {
+        input.getDocument().remove(start, end - start);
+        input.setCaretPosition(start);
+      } else {
+        int caret = input.getCaretPosition();
+        input.getDocument().remove(caret, 1);
+      }
+      input.requestFocusInWindow();
+      return true;
+    } catch (BadLocationException ex) {
+      return false;
+    }
+  }
+
+  public boolean canSelectAllInput() {
+    if (!input.isEnabled()) return false;
+    int len = input.getDocument().getLength();
+    if (len <= 0) return false;
+    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+    return !(start == 0 && end == len);
+  }
+
+  public boolean selectAllInput() {
+    if (!canSelectAllInput()) return false;
+    input.selectAll();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean canClearInput() {
+    return isInputEditable() && input.getDocument().getLength() > 0;
+  }
+
+  public boolean clearInput() {
+    if (!canClearInput()) return false;
+    historySupport.clearBrowseState();
+    input.setText("");
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean isHistoryMenuEnabled() {
+    return historySupport.menuState(isInputEditable()).menuEnabled;
+  }
+
+  public boolean canHistoryPrev() {
+    return historySupport.menuState(isInputEditable()).canPrev;
+  }
+
+  public boolean canHistoryNext() {
+    return historySupport.menuState(isInputEditable()).canNext;
+  }
+
+  public boolean canClearCommandHistory() {
+    return historySupport.menuState(isInputEditable()).canClear;
+  }
+
+  public boolean historyPrev() {
+    if (!canHistoryPrev()) return false;
+    historySupport.browsePrev();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean historyNext() {
+    if (!canHistoryNext()) return false;
+    historySupport.browseNext();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean clearCommandHistory() {
+    if (!canClearCommandHistory()) return false;
+    historySupport.clearHistory();
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean insertTextAtCaret(String text) {
+    String t = Objects.toString(text, "");
+    if (t.isEmpty()) return false;
+    if (!isInputEditable()) return false;
+    input.replaceSelection(t);
+    input.requestFocusInWindow();
+    return true;
+  }
+
+  public boolean insertPrefixOrWrapSelection(String prefix, String suffix) {
+    String p = Objects.toString(prefix, "");
+    String s = Objects.toString(suffix, "");
+    if (p.isEmpty() && s.isEmpty()) return false;
+    if (!isInputEditable()) return false;
+
+    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+    if (start < end) {
+      String selected = Objects.toString(input.getSelectedText(), "");
+      input.replaceSelection(p + selected + s);
+    } else {
+      input.replaceSelection(p);
+    }
+    input.requestFocusInWindow();
+    return true;
+  }
+
   public void focusInput() {
     if (!input.isEnabled()) return;
     input.requestFocusInWindow();
@@ -519,6 +710,23 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
       input.setCaretPosition(input.getDocument().getLength());
     } catch (Exception ex) {
       log.warn("[MessageInputPanel] remove LAF listener failed", ex);
+    }
+  }
+
+  private boolean hasSelection() {
+    int start = Math.min(input.getSelectionStart(), input.getSelectionEnd());
+    int end = Math.max(input.getSelectionStart(), input.getSelectionEnd());
+    return start != end;
+  }
+
+  private static boolean clipboardHasText() {
+    try {
+      Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+      if (clipboard == null) return false;
+      Transferable transfer = clipboard.getContents(null);
+      return transfer != null && transfer.isDataFlavorSupported(DataFlavor.stringFlavor);
+    } catch (Exception ignored) {
+      return false;
     }
   }
 }

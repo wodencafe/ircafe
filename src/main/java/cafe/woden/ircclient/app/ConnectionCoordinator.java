@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
@@ -32,6 +33,7 @@ public class ConnectionCoordinator {
   private final ServerRegistry serverRegistry;
   private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
+  private final LogProperties logProps;
   private final TrayNotificationService trayNotificationService;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -55,6 +57,7 @@ public class ConnectionCoordinator {
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
       RuntimeConfigStore runtimeConfig,
+      LogProperties logProps,
       TrayNotificationService trayNotificationService
   ) {
     this.irc = irc;
@@ -62,6 +65,7 @@ public class ConnectionCoordinator {
     this.serverRegistry = serverRegistry;
     this.serverCatalog = serverCatalog;
     this.runtimeConfig = runtimeConfig;
+    this.logProps = logProps;
     this.trayNotificationService = trayNotificationService;
 
     configuredServers.addAll(serverRegistry.serverIds());
@@ -403,7 +407,7 @@ public class ConnectionCoordinator {
         String msg = "Connected as " + ev.nick();
         ui.appendStatus(status, "(conn)", msg);
         ui.setChatCurrentNick(id, ev.nick());
-        runtimeConfig.rememberNick(id, ev.nick());
+        restorePrivateMessageTargets(id);
 
         try {
           trayNotificationService.notifyConnectionState(id, "Connected", msg);
@@ -501,6 +505,20 @@ public class ConnectionCoordinator {
     if (desired == old) return;
     if (desired) desiredOnline.add(sid); else desiredOnline.remove(sid);
     ui.setServerDesiredOnline(sid, desired);
+  }
+
+  private void restorePrivateMessageTargets(String serverId) {
+    if (runtimeConfig == null || logProps == null || !Boolean.TRUE.equals(logProps.savePrivateMessageList())) {
+      return;
+    }
+    for (String nick : runtimeConfig.readPrivateMessageTargets(serverId)) {
+      String n = Objects.toString(nick, "").trim();
+      if (n.isEmpty()) continue;
+      try {
+        ui.ensureTargetExists(new TargetRef(serverId, n));
+      } catch (Exception ignored) {
+      }
+    }
   }
 
   private void setState(String sid, ConnectionState state) {

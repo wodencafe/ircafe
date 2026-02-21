@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servers;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
@@ -74,6 +75,7 @@ public class ServerEditorDialog extends JDialog {
   private final JLabel saslHintLabel = new JLabel();
 
   private final JTextArea autoJoinArea = new JTextArea(8, 30);
+  private final JTextArea autoJoinPmArea = new JTextArea(6, 30);
 
   private final List<String> performSeed;
 
@@ -180,7 +182,9 @@ public class ServerEditorDialog extends JDialog {
         saslMechanism.setSelectedItem(Objects.toString(seed.sasl().mechanism(), "PLAIN"));
       }
 
-      autoJoinArea.setText(String.join("\n", seed.autoJoin() == null ? List.of() : seed.autoJoin()));
+      List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
+      autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
+      autoJoinPmArea.setText(String.join("\n", AutoJoinEntryCodec.privateMessageNicks(autoJoinSeed)));
       portAuto = false; // user likely set explicitly
 
       seedProxy(seed.proxy());
@@ -219,6 +223,7 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
+    autoJoinPmArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "NickServ\nfriend_nick");
 
     // Auto-update default port when toggling TLS, if the user hasn't customized it.
     tlsBox.addActionListener(e -> maybeAdjustPortForTls());
@@ -666,14 +671,31 @@ public class ServerEditorDialog extends JDialog {
   private JPanel buildAutoJoinPanel() {
     JPanel p = new JPanel(new BorderLayout(8, 8));
     p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-    JLabel hint = new JLabel("One channel per line (e.g. #java)");
+    JLabel hint = new JLabel("<html>Channels and PM targets restored after connect.<br/>One entry per line.</html>");
     hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     p.add(hint, BorderLayout.NORTH);
+
+    JPanel center = new JPanel(new java.awt.GridLayout(2, 1, 0, 8));
+
+    JPanel channels = new JPanel(new BorderLayout(6, 6));
+    channels.add(new JLabel("Auto-join channels"), BorderLayout.NORTH);
     autoJoinArea.setLineWrap(true);
     autoJoinArea.setWrapStyleWord(true);
     JScrollPane sc = new JScrollPane(autoJoinArea);
     sc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    p.add(sc, BorderLayout.CENTER);
+    channels.add(sc, BorderLayout.CENTER);
+    center.add(channels);
+
+    JPanel pms = new JPanel(new BorderLayout(6, 6));
+    pms.add(new JLabel("Auto-open private messages"), BorderLayout.NORTH);
+    autoJoinPmArea.setLineWrap(true);
+    autoJoinPmArea.setWrapStyleWord(true);
+    JScrollPane pmSc = new JScrollPane(autoJoinPmArea);
+    pmSc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
+    pms.add(pmSc, BorderLayout.CENTER);
+    center.add(pms);
+
+    p.add(center, BorderLayout.CENTER);
     return p;
   }
 
@@ -1015,6 +1037,13 @@ public class ServerEditorDialog extends JDialog {
       String ch = trim(line);
       if (ch.isEmpty()) continue;
       autoJoin.add(ch);
+    }
+    for (String line : Objects.toString(autoJoinPmArea.getText(), "").split("\\R")) {
+      String pmNick = trim(line);
+      if (pmNick.isEmpty()) continue;
+      String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(pmNick);
+      if (encoded.isEmpty()) continue;
+      autoJoin.add(encoded);
     }
 
     IrcProperties.Proxy proxyOverride = null;

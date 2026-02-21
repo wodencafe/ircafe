@@ -20,6 +20,7 @@ import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
+import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -33,9 +34,15 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.KeyStroke;
+import javax.swing.JLabel;
+import javax.swing.JComboBox;
 import javax.swing.SwingUtilities;
+import javax.swing.event.MenuEvent;
+import javax.swing.event.MenuListener;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -54,6 +61,30 @@ public class AppMenuBar extends JMenuBar {
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
   private static final int DEFAULT_TERMINAL_DOCK_HEIGHT_PX = 220;
+  private static final String IRC_BOLD = String.valueOf((char) 0x02);
+  private static final String IRC_COLOR = String.valueOf((char) 0x03);
+  private static final String IRC_RESET = String.valueOf((char) 0x0F);
+  private static final String IRC_REVERSE = String.valueOf((char) 0x16);
+  private static final String IRC_ITALIC = String.valueOf((char) 0x1D);
+  private static final String IRC_UNDERLINE = String.valueOf((char) 0x1F);
+  private static final String[] IRC_COLOR_NAMES = new String[] {
+      "White",
+      "Black",
+      "Navy",
+      "Green",
+      "Red",
+      "Maroon",
+      "Purple",
+      "Orange",
+      "Yellow",
+      "Light Green",
+      "Teal",
+      "Light Cyan",
+      "Light Blue",
+      "Pink",
+      "Gray",
+      "Light Gray"
+  };
 
   private final UiProperties uiProps;
   private final ChatDockable chat;
@@ -74,6 +105,7 @@ public class AppMenuBar extends JMenuBar {
                     ServerTreeDockable serverTree,
                     UserListDockable users,
                     TerminalDockable terminal,
+                    ActiveInputRouter activeInputRouter,
                     TargetCoordinator targetCoordinator,
                     ApplicationShutdownCoordinator shutdownCoordinator) {
 
@@ -91,11 +123,275 @@ public class AppMenuBar extends JMenuBar {
     exit.addActionListener(e -> shutdownCoordinator.shutdown());
     file.add(exit);
 
-    // Edit (placeholder for future)
-    JMenu edit = new JMenu("Edit");
+    int menuMask = menuShortcutMask();
 
-    // Insert (placeholder for future)
+    // Edit
+    JMenu edit = new JMenu("Edit");
+    JMenuItem undo = new JMenuItem("Undo");
+    undo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask));
+    undo.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::undo)) {
+        beep();
+      }
+    });
+
+    JMenuItem redo = new JMenuItem("Redo");
+    redo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | InputEvent.SHIFT_DOWN_MASK));
+    redo.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::redo)) {
+        beep();
+      }
+    });
+
+    JMenuItem cut = new JMenuItem("Cut");
+    cut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X, menuMask));
+    cut.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::cutSelection)) {
+        beep();
+      }
+    });
+
+    JMenuItem copy = new JMenuItem("Copy");
+    copy.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C, menuMask));
+    copy.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::copySelection)) {
+        beep();
+      }
+    });
+
+    JMenuItem paste = new JMenuItem("Paste");
+    paste.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_V, menuMask));
+    paste.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::pasteFromClipboard)) {
+        beep();
+      }
+    });
+
+    JMenuItem delete = new JMenuItem("Delete");
+    delete.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0));
+    delete.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::deleteForward)) {
+        beep();
+      }
+    });
+
+    JMenuItem selectAll = new JMenuItem("Select All");
+    selectAll.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_A, menuMask));
+    selectAll.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::selectAllInput)) {
+        beep();
+      }
+    });
+
+    JMenuItem clearInput = new JMenuItem("Clear Input");
+    clearInput.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK));
+    clearInput.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::clearInput)) {
+        beep();
+      }
+    });
+
+    JMenuItem findInCurrentBuffer = new JMenuItem("Find in Current Buffer");
+    findInCurrentBuffer.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, KeyEvent.CTRL_DOWN_MASK));
+    findInCurrentBuffer.addActionListener(e -> chat.openFindBar());
+
+    JMenuItem findNext = new JMenuItem("Find Next");
+    findNext.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0));
+    findNext.addActionListener(e -> chat.findNextInTranscript());
+
+    JMenuItem findPrevious = new JMenuItem("Find Previous");
+    findPrevious.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK));
+    findPrevious.addActionListener(e -> chat.findPreviousInTranscript());
+
+    JMenu commandHistory = new JMenu("Command History");
+    JMenuItem commandHistoryPrev = new JMenuItem("Previous");
+    commandHistoryPrev.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0));
+    commandHistoryPrev.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::historyPrev)) {
+        beep();
+      }
+    });
+
+    JMenuItem commandHistoryNext = new JMenuItem("Next");
+    commandHistoryNext.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0));
+    commandHistoryNext.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::historyNext)) {
+        beep();
+      }
+    });
+
+    JMenuItem commandHistoryClear = new JMenuItem("Clear");
+    commandHistoryClear.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, MessageInputPanel::clearCommandHistory)) {
+        beep();
+      }
+    });
+
+    commandHistory.add(commandHistoryPrev);
+    commandHistory.add(commandHistoryNext);
+    commandHistory.addSeparator();
+    commandHistory.add(commandHistoryClear);
+
+    edit.add(undo);
+    edit.add(redo);
+    edit.addSeparator();
+    edit.add(cut);
+    edit.add(copy);
+    edit.add(paste);
+    edit.add(delete);
+    edit.add(selectAll);
+    edit.addSeparator();
+    edit.add(clearInput);
+    edit.addSeparator();
+    edit.add(findInCurrentBuffer);
+    edit.add(findNext);
+    edit.add(findPrevious);
+    edit.addSeparator();
+    edit.add(commandHistory);
+    edit.addMenuListener(new MenuListener() {
+      @Override
+      public void menuSelected(MenuEvent e) {
+        MessageInputPanel panel = activeInputPanel(activeInputRouter);
+        boolean hasInput = panel != null;
+
+        undo.setEnabled(hasInput && panel.canUndo());
+        redo.setEnabled(hasInput && panel.canRedo());
+        cut.setEnabled(hasInput && panel.canCut());
+        copy.setEnabled(hasInput && panel.canCopy());
+        paste.setEnabled(hasInput && panel.canPaste());
+        delete.setEnabled(hasInput && panel.canDeleteForward());
+        selectAll.setEnabled(hasInput && panel.canSelectAllInput());
+        clearInput.setEnabled(hasInput && panel.canClearInput());
+
+        commandHistory.setEnabled(hasInput && panel.isHistoryMenuEnabled());
+        commandHistoryPrev.setEnabled(hasInput && panel.canHistoryPrev());
+        commandHistoryNext.setEnabled(hasInput && panel.canHistoryNext());
+        commandHistoryClear.setEnabled(hasInput && panel.canClearCommandHistory());
+
+        findInCurrentBuffer.setEnabled(chat != null);
+        findNext.setEnabled(chat != null);
+        findPrevious.setEnabled(chat != null);
+      }
+
+      @Override
+      public void menuDeselected(MenuEvent e) {
+      }
+
+      @Override
+      public void menuCanceled(MenuEvent e) {
+      }
+    });
+
+    // Insert
     JMenu insert = new JMenu("Insert");
+    JMenu formatting = new JMenu("Formatting");
+    JMenu nickTarget = new JMenu("Nick/Target");
+
+    JMenuItem insertBold = new JMenuItem("Bold");
+    insertBold.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, panel -> panel.insertPrefixOrWrapSelection(IRC_BOLD, IRC_BOLD))) {
+        beep();
+      }
+    });
+    JMenuItem insertItalic = new JMenuItem("Italic");
+    insertItalic.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, panel -> panel.insertPrefixOrWrapSelection(IRC_ITALIC, IRC_ITALIC))) {
+        beep();
+      }
+    });
+    JMenuItem insertUnderline = new JMenuItem("Underline");
+    insertUnderline.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, panel -> panel.insertPrefixOrWrapSelection(IRC_UNDERLINE, IRC_UNDERLINE))) {
+        beep();
+      }
+    });
+    JMenuItem insertReverse = new JMenuItem("Reverse");
+    insertReverse.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, panel -> panel.insertPrefixOrWrapSelection(IRC_REVERSE, IRC_REVERSE))) {
+        beep();
+      }
+    });
+    JMenuItem insertColor = new JMenuItem("Color...");
+    insertColor.addActionListener(e -> {
+      MessageInputPanel panel = activeInputPanel(activeInputRouter);
+      if (panel == null || !panel.isInputEditable()) {
+        beep();
+        return;
+      }
+      IrcColorSelection color = promptIrcColorSelection();
+      if (color == null) return;
+
+      boolean ok;
+      if (color.foreground() == null) {
+        ok = panel.insertTextAtCaret(IRC_COLOR);
+      } else {
+        ok = panel.insertPrefixOrWrapSelection(buildIrcColorPrefix(color), IRC_COLOR);
+      }
+      if (!ok) beep();
+    });
+    JMenuItem insertResetFormatting = new JMenuItem("Reset Formatting");
+    insertResetFormatting.addActionListener(e -> {
+      if (!insertIntoActiveInput(activeInputRouter, panel -> panel.insertTextAtCaret(IRC_RESET))) {
+        beep();
+      }
+    });
+
+    formatting.add(insertBold);
+    formatting.add(insertItalic);
+    formatting.add(insertUnderline);
+    formatting.add(insertReverse);
+    formatting.addSeparator();
+    formatting.add(insertColor);
+    formatting.add(insertResetFormatting);
+
+    JMenuItem insertSelectedNick = new JMenuItem("Insert Selected Nick");
+    insertSelectedNick.addActionListener(e -> {
+      String nick = resolveSelectedNick(users, targetCoordinator);
+      if (nick.isEmpty() || !insertIntoActiveInput(activeInputRouter, panel -> panel.insertTextAtCaret(nick))) {
+        beep();
+      }
+    });
+    JMenuItem insertCurrentChannel = new JMenuItem("Insert Current Channel");
+    insertCurrentChannel.addActionListener(e -> {
+      String channel = resolveCurrentChannel(targetCoordinator);
+      if (channel.isEmpty() || !insertIntoActiveInput(activeInputRouter, panel -> panel.insertTextAtCaret(channel))) {
+        beep();
+      }
+    });
+    JMenuItem insertCurrentServer = new JMenuItem("Insert Current Server");
+    insertCurrentServer.addActionListener(e -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      if (sid.isEmpty() || !insertIntoActiveInput(activeInputRouter, panel -> panel.insertTextAtCaret(sid))) {
+        beep();
+      }
+    });
+
+    nickTarget.add(insertSelectedNick);
+    nickTarget.add(insertCurrentChannel);
+    nickTarget.add(insertCurrentServer);
+
+    insert.add(formatting);
+    insert.add(nickTarget);
+    insert.addMenuListener(new MenuListener() {
+      @Override
+      public void menuSelected(MenuEvent e) {
+        MessageInputPanel panel = activeInputPanel(activeInputRouter);
+        boolean editable = panel != null && panel.isInputEditable();
+        formatting.setEnabled(editable);
+        nickTarget.setEnabled(editable);
+        insertSelectedNick.setEnabled(editable && !resolveSelectedNick(users, targetCoordinator).isEmpty());
+        insertCurrentChannel.setEnabled(editable && !resolveCurrentChannel(targetCoordinator).isEmpty());
+        insertCurrentServer.setEnabled(editable && !resolveCurrentServerId(targetCoordinator).isEmpty());
+      }
+
+      @Override
+      public void menuDeselected(MenuEvent e) {
+      }
+
+      @Override
+      public void menuCanceled(MenuEvent e) {
+      }
+    });
 
     // Settings
     JMenu settings = new JMenu("Settings");
@@ -301,12 +597,54 @@ public class AppMenuBar extends JMenuBar {
     Window root = SwingUtilities.getWindowAncestor(this);
     if (root == null) return;
 
-    // Ensure the main chat dock exists, then restore the two side docks.
-    if (isDetached(chat)) {
-      dockSafe(chat, root);
+    // Reset to startup-style layout:
+    // chat in the center, servers on the left, users on the right.
+    restoreStartupLayout(root);
+  }
+
+  private void restoreStartupLayout(Window root) {
+    if (root == null) return;
+
+    // First dock must be chat-to-root (same anchor style as startup).
+    dockSafe(chat, root);
+
+    try {
+      Docking.display(chat);
+    } catch (Exception ignored) {
+      try {
+        Docking.display(chat);
+      } catch (Exception ignoredAgain) {
+      }
     }
-    ensureSideDockVisible(serverTree, DockingRegion.WEST);
-    ensureSideDockVisible(users, DockingRegion.EAST);
+
+    // Force a fresh side-dock arrangement so stale split geometry doesn't leak into reset.
+    try {
+      if (Docking.isDocked(serverTree)) {
+        Docking.undock(serverTree);
+      }
+    } catch (Exception ignored) {
+    }
+    try {
+      if (Docking.isDocked(users)) {
+        Docking.undock(users);
+      }
+    } catch (Exception ignored) {
+    }
+
+    // Mirror startup proportions from MainFrame:
+    // west=0.22, east=0.82 (east is divider location, not width share).
+    dockSafe(serverTree, chat, DockingRegion.WEST, DEFAULT_SERVER_DOCK_PROPORTION);
+    dockSafe(users, chat, DockingRegion.EAST, 1.0 - DEFAULT_USERS_DOCK_PROPORTION);
+    try {
+      Docking.display(serverTree);
+      Docking.display(users);
+    } catch (Exception ignored) {
+    }
+
+    // Re-apply split-pane sizing/locks (px-based) after re-docking.
+    // Run a short stabilization loop because ModernDocking may rebuild split panes over several EDT ticks.
+    SwingUtilities.invokeLater(() -> applySideDockLocksWithStabilization(root));
+    bringToFront(chat);
   }
 
   private void ensureSideDockVisible(Dockable dockable, DockingRegion region) {
@@ -409,7 +747,7 @@ public class AppMenuBar extends JMenuBar {
     Docking.dock(dockable, anchor, region, proportion);
   }
 
-  private void applySideDockLocks(Window root) {
+  private boolean applySideDockLocks(Window root) {
     int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
     int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
     if (uiProps != null && uiProps.layout() != null) {
@@ -418,10 +756,29 @@ public class AppMenuBar extends JMenuBar {
     }
 
     // Best-effort: nudge to our configured defaults, then lock the dividers.
-    DockingTuner.applyInitialWestDockWidth(root, (java.awt.Component) serverTree, serverPx);
-    DockingTuner.applyInitialEastDockWidth(root, (java.awt.Component) users, usersPx);
+    boolean west = DockingTuner.applyInitialWestDockWidth(root, (java.awt.Component) serverTree, serverPx);
+    boolean east = DockingTuner.applyInitialEastDockWidth(root, (java.awt.Component) users, usersPx);
     DockingTuner.lockWestDockWidth(root, (java.awt.Component) serverTree, serverPx);
     DockingTuner.lockEastDockWidth(root, (java.awt.Component) users, usersPx);
+    return west && east;
+  }
+
+  private void applySideDockLocksWithStabilization(Window root) {
+    if (root == null) return;
+
+    boolean done = applySideDockLocks(root);
+    if (done) return;
+
+    final int[] passes = new int[] { 0 };
+    javax.swing.Timer settle = new javax.swing.Timer(110, null);
+    settle.addActionListener(e -> {
+      passes[0]++;
+      boolean stable = applySideDockLocks(root);
+      if (stable || passes[0] >= 10) {
+        settle.stop();
+      }
+    });
+    settle.start();
   }
 
   private boolean isDetached(Dockable dockable) {
@@ -438,6 +795,135 @@ public class AppMenuBar extends JMenuBar {
     }
     c.requestFocusInWindow();
   }
+
+  private MessageInputPanel activeInputPanel(ActiveInputRouter activeInputRouter) {
+    if (activeInputRouter == null) return null;
+    return activeInputRouter.active();
+  }
+
+  private static boolean insertIntoActiveInput(
+      ActiveInputRouter activeInputRouter,
+      java.util.function.Function<MessageInputPanel, Boolean> operation) {
+    if (activeInputRouter == null || operation == null) return false;
+    MessageInputPanel panel = activeInputRouter.active();
+    if (panel == null) return false;
+    try {
+      return Boolean.TRUE.equals(operation.apply(panel));
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static String resolveSelectedNick(UserListDockable users, TargetCoordinator targetCoordinator) {
+    String nick = users == null ? "" : Objects.toString(users.selectedNick(), "").trim();
+    if (!nick.isEmpty()) return nick;
+
+    TargetRef at = targetCoordinator == null ? null : targetCoordinator.getActiveTarget();
+    if (at != null && !at.isStatus() && !at.isUiOnly() && !at.isChannel()) {
+      return Objects.toString(at.target(), "").trim();
+    }
+    return "";
+  }
+
+  private static String resolveCurrentChannel(TargetCoordinator targetCoordinator) {
+    TargetRef at = targetCoordinator == null ? null : targetCoordinator.getActiveTarget();
+    if (at == null || !at.isChannel()) return "";
+    return Objects.toString(at.target(), "").trim();
+  }
+
+  private static String resolveCurrentServerId(TargetCoordinator targetCoordinator) {
+    TargetRef at = targetCoordinator == null ? null : targetCoordinator.getActiveTarget();
+    String sid = at == null ? "" : Objects.toString(at.serverId(), "").trim();
+    if (!sid.isEmpty()) return sid;
+
+    if (targetCoordinator != null) {
+      TargetRef status = targetCoordinator.safeStatusTarget();
+      if (status != null) sid = Objects.toString(status.serverId(), "").trim();
+    }
+    return sid;
+  }
+
+  private IrcColorSelection promptIrcColorSelection() {
+    Window owner = SwingUtilities.getWindowAncestor(this);
+
+    String[] fgOptions = new String[IRC_COLOR_NAMES.length + 1];
+    fgOptions[0] = "(Clear Colors)";
+    for (int i = 0; i < IRC_COLOR_NAMES.length; i++) {
+      fgOptions[i + 1] = formatIrcColorOption(i);
+    }
+
+    String[] bgOptions = new String[IRC_COLOR_NAMES.length + 1];
+    bgOptions[0] = "(No Background)";
+    for (int i = 0; i < IRC_COLOR_NAMES.length; i++) {
+      bgOptions[i + 1] = formatIrcColorOption(i);
+    }
+
+    JComboBox<String> fgCombo = new JComboBox<>(fgOptions);
+    JComboBox<String> bgCombo = new JComboBox<>(bgOptions);
+    fgCombo.setSelectedIndex(4 + 1); // red default
+    bgCombo.setSelectedIndex(0);
+
+    java.util.function.Consumer<Boolean> setBgEnabled = enabled -> {
+      bgCombo.setEnabled(Boolean.TRUE.equals(enabled));
+      if (!Boolean.TRUE.equals(enabled)) {
+        bgCombo.setSelectedIndex(0);
+      }
+    };
+    setBgEnabled.accept(true);
+    fgCombo.addActionListener(e -> setBgEnabled.accept(fgCombo.getSelectedIndex() > 0));
+
+    JPanel panel = new JPanel(new java.awt.GridLayout(0, 2, 8, 6));
+    panel.add(new JLabel("Foreground:"));
+    panel.add(fgCombo);
+    panel.add(new JLabel("Background:"));
+    panel.add(bgCombo);
+
+    int result = JOptionPane.showConfirmDialog(
+        owner != null ? owner : this,
+        panel,
+        "Insert IRC Color",
+        JOptionPane.OK_CANCEL_OPTION,
+        JOptionPane.PLAIN_MESSAGE);
+    if (result != JOptionPane.OK_OPTION) return null;
+
+    Integer fg = fgCombo.getSelectedIndex() <= 0 ? null : (fgCombo.getSelectedIndex() - 1);
+    Integer bg = bgCombo.getSelectedIndex() <= 0 ? null : (bgCombo.getSelectedIndex() - 1);
+    if (fg == null) bg = null;
+    return new IrcColorSelection(fg, bg);
+  }
+
+  private static String buildIrcColorPrefix(IrcColorSelection color) {
+    if (color == null || color.foreground() == null) return IRC_COLOR;
+    StringBuilder sb = new StringBuilder(8);
+    sb.append(IRC_COLOR);
+    sb.append(String.format(Locale.ROOT, "%02d", color.foreground()));
+    if (color.background() != null) {
+      sb.append(',').append(String.format(Locale.ROOT, "%02d", color.background()));
+    }
+    return sb.toString();
+  }
+
+  private static String formatIrcColorOption(int idx) {
+    if (idx < 0 || idx >= IRC_COLOR_NAMES.length) return "";
+    return String.format(Locale.ROOT, "%02d %s", idx, IRC_COLOR_NAMES[idx]);
+  }
+
+  private static int menuShortcutMask() {
+    try {
+      return Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    } catch (Exception ignored) {
+      return InputEvent.CTRL_DOWN_MASK;
+    }
+  }
+
+  private static void beep() {
+    try {
+      Toolkit.getDefaultToolkit().beep();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private record IrcColorSelection(Integer foreground, Integer background) {}
 
   private static void applyThemeQuick(String themeId,
                                      ThemeManager themeManager,

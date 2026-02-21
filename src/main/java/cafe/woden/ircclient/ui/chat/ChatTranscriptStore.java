@@ -292,6 +292,7 @@ public class ChatTranscriptStore {
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_ID);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_ACTION);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_NOTIFICATION_RULE_BG);
     return a;
   }
 
@@ -1793,7 +1794,7 @@ public void appendChatAt(TargetRef ref,
                          String text,
                          boolean outgoingLocalEcho,
                          long tsEpochMs) {
-  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of(), null);
 }
 
 public void appendChatAt(TargetRef ref,
@@ -1803,6 +1804,17 @@ public void appendChatAt(TargetRef ref,
                          long tsEpochMs,
                          String messageId,
                          Map<String, String> ircv3Tags) {
+  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags, null);
+}
+
+public void appendChatAt(TargetRef ref,
+                         String from,
+                         String text,
+                         boolean outgoingLocalEcho,
+                         long tsEpochMs,
+                         String messageId,
+                         Map<String, String> ircv3Tags,
+                         String notificationRuleHighlightColor) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
 
@@ -1824,6 +1836,7 @@ public void appendChatAt(TargetRef ref,
   SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
   SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
   applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+  applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
   String normalizedMsgId = normalizeMessageId(messageId);
   String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
@@ -3158,6 +3171,22 @@ public void appendChatAt(TargetRef ref,
     }
   }
 
+  private void applyNotificationRuleHighlightColor(SimpleAttributeSet fromStyle,
+                                                   SimpleAttributeSet msgStyle,
+                                                   String rawColor) {
+    Color c = parseHexColor(rawColor);
+    if (c == null) return;
+
+    if (fromStyle != null) {
+      fromStyle.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, c);
+      StyleConstants.setBackground(fromStyle, c);
+    }
+    if (msgStyle != null) {
+      msgStyle.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, c);
+      StyleConstants.setBackground(msgStyle, c);
+    }
+  }
+
   private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
     if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
     restyleAllDocumentsCoalesced();
@@ -3481,11 +3510,11 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   }
 
   public void appendAction(TargetRef ref, String from, String action, boolean outgoingLocalEcho) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null, "", Map.of());
+    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null, "", Map.of(), null);
   }
 
   public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of());
+    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of(), null);
   }
   /**
    * Append an action (/me) with a timestamp, allowing embeds.
@@ -3495,7 +3524,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                              String action,
                              boolean outgoingLocalEcho,
                              long tsEpochMs) {
-    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of(), null);
   }
 
   public void appendActionAt(TargetRef ref,
@@ -3505,7 +3534,27 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                              long tsEpochMs,
                              String messageId,
                              Map<String, String> ircv3Tags) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs, messageId, ircv3Tags);
+    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags, null);
+  }
+
+  public void appendActionAt(TargetRef ref,
+                             String from,
+                             String action,
+                             boolean outgoingLocalEcho,
+                             long tsEpochMs,
+                             String messageId,
+                             Map<String, String> ircv3Tags,
+                             String notificationRuleHighlightColor) {
+    appendActionInternal(
+        ref,
+        from,
+        action,
+        outgoingLocalEcho,
+        true,
+        tsEpochMs,
+        messageId,
+        ircv3Tags,
+        notificationRuleHighlightColor);
   }
 
   private void appendActionInternal(TargetRef ref,
@@ -3515,7 +3564,8 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                                     boolean allowEmbeds,
                                     Long epochMs,
                                     String messageId,
-                                    Map<String, String> ircv3Tags) {
+                                    Map<String, String> ircv3Tags,
+                                    String notificationRuleHighlightColor) {
     ensureTargetExists(ref);
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
@@ -3571,6 +3621,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
       SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+      applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
       doc.insertString(doc.getLength(), "* ", ms);
       if (from != null && !from.isBlank()) {
@@ -4269,6 +4320,12 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       if (pendingState != null) {
         fresh.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, pendingState);
       }
+      Color ruleBg = null;
+      Object ruleBgObj = old.getAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG);
+      if (ruleBgObj instanceof Color c) {
+        ruleBg = c;
+        fresh.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, c);
+      }
       java.awt.Component comp = StyleConstants.getComponent(old);
       if (comp != null) {
         StyleConstants.setComponent(fresh, comp);
@@ -4331,6 +4388,9 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
         Color tmp = finalFg;
         finalFg = finalBg;
         finalBg = tmp;
+      }
+      if (ruleBg != null) {
+        finalBg = ruleBg;
       }
       if (finalFg != null) StyleConstants.setForeground(fresh, finalFg);
       if (finalBg != null) StyleConstants.setBackground(fresh, finalBg);

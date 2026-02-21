@@ -17,6 +17,7 @@ class PircbotxBotFactoryCapabilitiesTest {
     List<String> caps = (List<String>) f.get(null);
     assertTrue(caps.contains("echo-message"));
     assertTrue(caps.contains("cap-notify"));
+    assertTrue(caps.contains("invite-notify"));
     assertTrue(caps.contains("labeled-response"));
     assertTrue(caps.contains("standard-replies"));
     assertTrue(caps.contains("setname"));

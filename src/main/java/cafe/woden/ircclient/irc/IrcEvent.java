@@ -317,8 +317,31 @@ public sealed interface IrcEvent permits
   /** Local user was kicked from a channel. */
   record KickedFromChannel(Instant at, String channel, String by, String reason) implements IrcEvent {}
 
-  /** Local user was invited to a channel. */
-  record InvitedToChannel(Instant at, String channel, String from) implements IrcEvent {}
+  /**
+   * Local user (or invite-notify observer) received an INVITE event.
+   *
+   * <p>{@code invitee} is usually empty for classic library-level invite events, and set for raw
+   * invite-notify lines.
+   */
+  record InvitedToChannel(
+      Instant at,
+      String channel,
+      String from,
+      String invitee,
+      String reason,
+      boolean inviteNotify
+  ) implements IrcEvent {
+    public InvitedToChannel {
+      channel = Objects.toString(channel, "").trim();
+      from = Objects.toString(from, "").trim();
+      invitee = Objects.toString(invitee, "").trim();
+      reason = Objects.toString(reason, "").trim();
+    }
+
+    public InvitedToChannel(Instant at, String channel, String from) {
+      this(at, channel, from, "", "", false);
+    }
+  }
 
   
   record UserQuitChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}

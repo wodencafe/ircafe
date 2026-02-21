@@ -161,6 +161,24 @@ Flowable<TargetRef> targetActivations();
   }
 
   /**
+   * Append a chat message line with optional notification-rule highlight background.
+   *
+   * <p>Implementations may ignore the color when unsupported.
+   */
+  default void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags,
+      String notificationRuleHighlightColor
+  ) {
+    appendChatAt(target, at, from, text, outgoingLocalEcho, messageId, ircv3Tags);
+  }
+
+  /**
    * Append an outbound chat line in a temporary "pending send" state while waiting for server echo.
    */
   default void appendPendingOutgoingChat(
@@ -250,6 +268,24 @@ Flowable<TargetRef> targetActivations();
       Map<String, String> ircv3Tags
   ) {
     appendActionAt(target, at, from, action, outgoingLocalEcho);
+  }
+
+  /**
+   * Append an action line with optional notification-rule highlight background.
+   *
+   * <p>Implementations may ignore the color when unsupported.
+   */
+  default void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags,
+      String notificationRuleHighlightColor
+  ) {
+    appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
   void appendPresence(TargetRef target, PresenceEvent event);
