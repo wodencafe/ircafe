@@ -292,6 +292,7 @@ public class ChatTranscriptStore {
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_ID);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_ACTION);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_NOTIFICATION_RULE_BG);
     return a;
   }
 
@@ -1551,6 +1552,17 @@ public class ChatTranscriptStore {
     StyledDocument doc = docs.get(ref);
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
+    boolean includePresenceTimestamps = shouldIncludePresenceTimestamps();
+    String presenceTimestampPrefix = "";
+    if (includePresenceTimestamps && ts != null && ts.enabled()) {
+      try {
+        presenceTimestampPrefix = ts.prefixNow();
+      } catch (Exception ignored) {
+        presenceTimestampPrefix = "";
+      }
+    }
+    PresenceFoldComponent.Entry foldEntry = new PresenceFoldComponent.Entry(presenceTimestampPrefix, event);
+
     boolean foldsEnabled = true;
     try {
       foldsEnabled = uiSettings == null || uiSettings.get() == null || uiSettings.get().presenceFoldsEnabled();
@@ -1562,10 +1574,10 @@ public class ChatTranscriptStore {
       st.currentPresenceBlock = null;
       ensureAtLineStart(doc);
       try {
-        if (ts != null && ts.enabled()) {
-          doc.insertString(doc.getLength(), ts.prefixNow(), withLineMeta(styles.timestamp(), meta));
+        if (!presenceTimestampPrefix.isBlank()) {
+          doc.insertString(doc.getLength(), presenceTimestampPrefix, withLineMeta(styles.timestamp(), meta));
         }
-        AttributeSet base = withLineMeta(styles.status(), meta);
+        AttributeSet base = withLineMeta(styles.presence(), meta);
         renderer.insertRichText(doc, ref, event.displayText(), base);
         doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
       } catch (Exception ignored2) {
@@ -1574,19 +1586,19 @@ public class ChatTranscriptStore {
     }
     if (st.currentPresenceBlock != null && st.currentPresenceBlock.folded
         && st.currentPresenceBlock.component != null) {
-      st.currentPresenceBlock.entries.add(event);
-      st.currentPresenceBlock.component.addEntry(event);
+      st.currentPresenceBlock.entries.add(foldEntry);
+      st.currentPresenceBlock.component.addEntry(foldEntry);
       return;
     }
     ensureAtLineStart(doc);
     int startOffset = doc.getLength();
 
     try {
-      if (ts != null && ts.enabled()) {
-        doc.insertString(doc.getLength(), ts.prefixNow(), withLineMeta(styles.timestamp(), meta));
+      if (!presenceTimestampPrefix.isBlank()) {
+        doc.insertString(doc.getLength(), presenceTimestampPrefix, withLineMeta(styles.timestamp(), meta));
       }
 
-      AttributeSet base = withLineMeta(styles.status(), meta);
+      AttributeSet base = withLineMeta(styles.presence(), meta);
       renderer.insertRichText(doc, ref, event.displayText(), base);
       doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
     } catch (Exception ignored) {
@@ -1602,7 +1614,7 @@ public class ChatTranscriptStore {
       block.endOffset = endOffset;
     }
 
-    block.entries.add(event);
+    block.entries.add(foldEntry);
     if (!block.folded && block.entries.size() == 2) {
       foldBlock(doc, ref, block);
     }
@@ -1662,18 +1674,24 @@ public class ChatTranscriptStore {
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
       boolean timestampsIncludeChatMessages = false;
+      boolean timestampsIncludePresenceMessages = false;
       try {
         timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
             && uiSettings.get().timestampsIncludeChatMessages();
+        timestampsIncludePresenceMessages = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().timestampsIncludePresenceMessages();
       } catch (Exception ignored) {
         timestampsIncludeChatMessages = false;
+        timestampsIncludePresenceMessages = false;
       }
 
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
+          || (timestampsIncludePresenceMessages && ChatStyles.STYLE_PRESENCE.equals(styleId))
           || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(doc.getLength(), prefix, tsStyle);
@@ -1776,7 +1794,7 @@ public void appendChatAt(TargetRef ref,
                          String text,
                          boolean outgoingLocalEcho,
                          long tsEpochMs) {
-  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of(), null);
 }
 
 public void appendChatAt(TargetRef ref,
@@ -1786,6 +1804,17 @@ public void appendChatAt(TargetRef ref,
                          long tsEpochMs,
                          String messageId,
                          Map<String, String> ircv3Tags) {
+  appendChatAt(ref, from, text, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags, null);
+}
+
+public void appendChatAt(TargetRef ref,
+                         String from,
+                         String text,
+                         boolean outgoingLocalEcho,
+                         long tsEpochMs,
+                         String messageId,
+                         Map<String, String> ircv3Tags,
+                         String notificationRuleHighlightColor) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
 
@@ -1807,6 +1836,7 @@ public void appendChatAt(TargetRef ref,
   SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
   SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
   applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+  applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
   String normalizedMsgId = normalizeMessageId(messageId);
   String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
@@ -2333,18 +2363,24 @@ public void appendChatAt(TargetRef ref,
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
       boolean timestampsIncludeChatMessages = false;
+      boolean timestampsIncludePresenceMessages = false;
       try {
         timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
             && uiSettings.get().timestampsIncludeChatMessages();
+        timestampsIncludePresenceMessages = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().timestampsIncludePresenceMessages();
       } catch (Exception ignored) {
         timestampsIncludeChatMessages = false;
+        timestampsIncludePresenceMessages = false;
       }
 
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
+          || (timestampsIncludePresenceMessages && ChatStyles.STYLE_PRESENCE.equals(styleId))
           || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(pos, prefix, tsStyle);
@@ -3135,6 +3171,22 @@ public void appendChatAt(TargetRef ref,
     }
   }
 
+  private void applyNotificationRuleHighlightColor(SimpleAttributeSet fromStyle,
+                                                   SimpleAttributeSet msgStyle,
+                                                   String rawColor) {
+    Color c = parseHexColor(rawColor);
+    if (c == null) return;
+
+    if (fromStyle != null) {
+      fromStyle.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, c);
+      StyleConstants.setBackground(fromStyle, c);
+    }
+    if (msgStyle != null) {
+      msgStyle.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, c);
+      StyleConstants.setBackground(msgStyle, c);
+    }
+  }
+
   private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
     if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
     restyleAllDocumentsCoalesced();
@@ -3458,11 +3510,11 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
   }
 
   public void appendAction(TargetRef ref, String from, String action, boolean outgoingLocalEcho) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null, "", Map.of());
+    appendActionInternal(ref, from, action, outgoingLocalEcho, true, null, "", Map.of(), null);
   }
 
   public void appendActionFromHistory(TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of());
+    appendActionInternal(ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of(), null);
   }
   /**
    * Append an action (/me) with a timestamp, allowing embeds.
@@ -3472,7 +3524,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                              String action,
                              boolean outgoingLocalEcho,
                              long tsEpochMs) {
-    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of(), null);
   }
 
   public void appendActionAt(TargetRef ref,
@@ -3482,7 +3534,27 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                              long tsEpochMs,
                              String messageId,
                              Map<String, String> ircv3Tags) {
-    appendActionInternal(ref, from, action, outgoingLocalEcho, true, tsEpochMs, messageId, ircv3Tags);
+    appendActionAt(ref, from, action, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags, null);
+  }
+
+  public void appendActionAt(TargetRef ref,
+                             String from,
+                             String action,
+                             boolean outgoingLocalEcho,
+                             long tsEpochMs,
+                             String messageId,
+                             Map<String, String> ircv3Tags,
+                             String notificationRuleHighlightColor) {
+    appendActionInternal(
+        ref,
+        from,
+        action,
+        outgoingLocalEcho,
+        true,
+        tsEpochMs,
+        messageId,
+        ircv3Tags,
+        notificationRuleHighlightColor);
   }
 
   private void appendActionInternal(TargetRef ref,
@@ -3492,7 +3564,8 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
                                     boolean allowEmbeds,
                                     Long epochMs,
                                     String messageId,
-                                    Map<String, String> ircv3Tags) {
+                                    Map<String, String> ircv3Tags,
+                                    String notificationRuleHighlightColor) {
     ensureTargetExists(ref);
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
@@ -3548,6 +3621,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
       SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+      applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
       doc.insertString(doc.getLength(), "* ", ms);
       if (from != null && !from.isBlank()) {
@@ -3750,7 +3824,17 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, meta);
+    appendLineInternal(ref, null, displayText, styles.presence(), styles.presence(), false, meta);
+  }
+
+  private boolean shouldIncludePresenceTimestamps() {
+    try {
+      return uiSettings != null
+          && uiSettings.get() != null
+          && uiSettings.get().timestampsIncludePresenceMessages();
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private void breakPresenceRun(TargetRef ref) {
@@ -3800,9 +3884,9 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       doc.remove(start, end - start);
       PresenceFoldComponent comp = new PresenceFoldComponent(block.entries);
 
-      SimpleAttributeSet attrs = withExistingMeta(styles.status(), existingAttrs);
+      SimpleAttributeSet attrs = withExistingMeta(styles.presence(), existingAttrs);
       StyleConstants.setComponent(attrs, comp);
-      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_PRESENCE);
 
       int insertPos = start;
       if (insertPos > 0) {
@@ -4059,7 +4143,7 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     boolean folded = false;
     PresenceFoldComponent component;
 
-    final List<PresenceEvent> entries = new ArrayList<>();
+    final List<PresenceFoldComponent.Entry> entries = new ArrayList<>();
 
     private PresenceBlock(int startOffset, int endOffset) {
       this.startOffset = startOffset;
@@ -4236,6 +4320,12 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       if (pendingState != null) {
         fresh.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, pendingState);
       }
+      Color ruleBg = null;
+      Object ruleBgObj = old.getAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG);
+      if (ruleBgObj instanceof Color c) {
+        ruleBg = c;
+        fresh.addAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG, c);
+      }
       java.awt.Component comp = StyleConstants.getComponent(old);
       if (comp != null) {
         StyleConstants.setComponent(fresh, comp);
@@ -4298,6 +4388,9 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
         Color tmp = finalFg;
         finalFg = finalBg;
         finalBg = tmp;
+      }
+      if (ruleBg != null) {
+        finalBg = ruleBg;
       }
       if (finalFg != null) StyleConstants.setForeground(fresh, finalFg);
       if (finalBg != null) StyleConstants.setBackground(fresh, finalBg);

@@ -117,6 +117,34 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Reads {@code ircafe.ui.invites.autoJoinOnInvite} from runtime config.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readInviteAutoJoinEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object invitesObj = ui.get("invites");
+      if (!(invitesObj instanceof Map<?, ?> invites)) return defaultValue;
+
+      if (!invites.containsKey("autoJoinOnInvite")) return defaultValue;
+      return asBoolean(invites.get("autoJoinOnInvite")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read invites.autoJoinOnInvite from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
   public Path runtimeConfigPath() {
     return file;
   }
@@ -196,6 +224,63 @@ public class RuntimeConfigStore {
       List<String> autoJoin = (List<String>) list;
       autoJoin.removeIf(c -> c != null && c.equalsIgnoreCase(chan));
     });
+  }
+
+  public synchronized void rememberPrivateMessageTarget(String serverId, String nick) {
+    updateServer(serverId, server -> {
+      String n = Objects.toString(nick, "").trim();
+      if (n.isEmpty()) return;
+
+      List<String> autoJoin = getOrCreateStringList(server, "autoJoin");
+      if (AutoJoinEntryCodec.privateMessageNicks(autoJoin).stream().anyMatch(existing -> existing.equalsIgnoreCase(n))) {
+        return;
+      }
+      String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
+      if (!encoded.isEmpty()) {
+        autoJoin.add(encoded);
+      }
+    });
+  }
+
+  public synchronized void forgetPrivateMessageTarget(String serverId, String nick) {
+    updateServer(serverId, server -> {
+      String n = Objects.toString(nick, "").trim();
+      if (n.isEmpty()) return;
+
+      Object o = server.get("autoJoin");
+      if (!(o instanceof List<?> list)) return;
+      @SuppressWarnings("unchecked")
+      List<String> autoJoin = (List<String>) list;
+      autoJoin.removeIf(entry -> {
+        String decoded = AutoJoinEntryCodec.decodePrivateMessageNick(entry);
+        return !decoded.isEmpty() && decoded.equalsIgnoreCase(n);
+      });
+    });
+  }
+
+  public synchronized List<String> readPrivateMessageTargets(String serverId) {
+    try {
+      if (file.toString().isBlank()) return List.of();
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return List.of();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      List<Map<String, Object>> servers = readServerList(irc).orElse(List.of());
+
+      for (Map<String, Object> server : servers) {
+        if (server == null) continue;
+        if (!sid.equalsIgnoreCase(Objects.toString(server.get("id"), "").trim())) continue;
+        Object autoJoinObj = server.get("autoJoin");
+        if (!(autoJoinObj instanceof List<?> rawList)) return List.of();
+        @SuppressWarnings("unchecked")
+        List<String> autoJoin = (List<String>) rawList;
+        return List.copyOf(AutoJoinEntryCodec.privateMessageNicks(autoJoin));
+      }
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read private-message target list from '{}'", file, e);
+    }
+    return List.of();
   }
 
   public synchronized void rememberNick(String serverId, String nick) {
@@ -419,6 +504,23 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist autoConnectOnStart setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberInviteAutoJoinEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> invites = getOrCreateMap(ui, "invites");
+
+      invites.put("autoJoinOnInvite", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist invites.autoJoinOnInvite setting to '{}'", file, e);
     }
   }
 
@@ -769,6 +871,38 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist chat logging soft-ignore setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatLoggingLogPrivateMessages(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("logPrivateMessages", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging PM-history setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatLoggingSavePrivateMessageList(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("savePrivateMessageList", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging PM-list setting to '{}'", file, e);
     }
   }
 
@@ -1425,6 +1559,25 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist chat message timestamp setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTimestampsIncludePresenceMessages(boolean includePresenceMessages) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> timestamps = getOrCreateMap(ui, "timestamps");
+
+      timestamps.put("includePresenceMessages", includePresenceMessages);
+      // Clean up legacy flat key.
+      ui.remove("chatMessageTimestampsEnabled");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist presence message timestamp setting to '{}'", file, e);
     }
   }
 

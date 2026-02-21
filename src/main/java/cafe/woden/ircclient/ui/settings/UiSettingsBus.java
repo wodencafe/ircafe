@@ -26,7 +26,10 @@ public class UiSettingsBus {
 
     boolean timestampsEnabled = ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
     String timestampFormat = ts != null ? ts.format() : "HH:mm:ss";
-    boolean timestampsIncludeChatMessages = ts != null && Boolean.TRUE.equals(ts.includeChatMessages());
+    boolean timestampsIncludeChatMessages =
+        ts == null || ts.includeChatMessages() == null || Boolean.TRUE.equals(ts.includeChatMessages());
+    boolean timestampsIncludePresenceMessages =
+        ts == null || ts.includePresenceMessages() == null || Boolean.TRUE.equals(ts.includePresenceMessages());
 
     boolean trayEnabled = tray == null || tray.enabled() == null || Boolean.TRUE.equals(tray.enabled());
 
@@ -113,6 +116,7 @@ public class UiSettingsBus {
         timestampsEnabled,
         timestampFormat,
         timestampsIncludeChatMessages,
+        timestampsIncludePresenceMessages,
         props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
         props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
         props.commandHistoryMaxSize() != null ? props.commandHistoryMaxSize() : 500,

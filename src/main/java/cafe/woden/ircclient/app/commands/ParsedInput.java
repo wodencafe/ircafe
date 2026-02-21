@@ -18,6 +18,12 @@ public sealed interface ParsedInput permits
     ParsedInput.Topic,
     ParsedInput.Kick,
     ParsedInput.Invite,
+    ParsedInput.InviteList,
+    ParsedInput.InviteJoin,
+    ParsedInput.InviteIgnore,
+    ParsedInput.InviteWhois,
+    ParsedInput.InviteBlock,
+    ParsedInput.InviteAutoJoin,
     ParsedInput.Names,
     ParsedInput.Who,
     ParsedInput.ListCmd,
@@ -115,6 +121,24 @@ public sealed interface ParsedInput permits
 
   /** /invite <nick> [#channel] */
   record Invite(String nick, String channel) implements ParsedInput {}
+
+  /** /invites [serverId] */
+  record InviteList(String serverId) implements ParsedInput {}
+
+  /** /invjoin [inviteId|last] */
+  record InviteJoin(String inviteToken) implements ParsedInput {}
+
+  /** /invignore [inviteId|last] */
+  record InviteIgnore(String inviteToken) implements ParsedInput {}
+
+  /** /invwhois [inviteId|last] */
+  record InviteWhois(String inviteToken) implements ParsedInput {}
+
+  /** /invblock [inviteId|last] */
+  record InviteBlock(String inviteToken) implements ParsedInput {}
+
+  /** /inviteautojoin [on|off|status] */
+  record InviteAutoJoin(String mode) implements ParsedInput {}
 
   /** /names [#channel] */
   record Names(String channel) implements ParsedInput {}

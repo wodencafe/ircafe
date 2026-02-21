@@ -176,6 +176,14 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     findBar.toggle();
   }
 
+  public void findNextInTranscript() {
+    findBar.findNext();
+  }
+
+  public void findPreviousInTranscript() {
+    findBar.findPrevious();
+  }
+
   protected void setTranscriptContextMenuActions(Runnable clearAction, Runnable reloadRecentAction) {
     try {
       if (transcriptMenu != null) {

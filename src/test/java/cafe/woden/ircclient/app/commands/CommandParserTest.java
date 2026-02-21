@@ -118,6 +118,55 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesInviteActionCommands() {
+    ParsedInput invites = parser.parse("/invites libera");
+    assertTrue(invites instanceof ParsedInput.InviteList);
+    assertEquals("libera", ((ParsedInput.InviteList) invites).serverId());
+
+    ParsedInput join = parser.parse("/invjoin 12");
+    assertTrue(join instanceof ParsedInput.InviteJoin);
+    assertEquals("12", ((ParsedInput.InviteJoin) join).inviteToken());
+
+    ParsedInput whois = parser.parse("/invitewhois last");
+    assertTrue(whois instanceof ParsedInput.InviteWhois);
+    assertEquals("last", ((ParsedInput.InviteWhois) whois).inviteToken());
+
+    ParsedInput block = parser.parse("/invblock 7");
+    assertTrue(block instanceof ParsedInput.InviteBlock);
+    assertEquals("7", ((ParsedInput.InviteBlock) block).inviteToken());
+
+    ParsedInput auto = parser.parse("/inviteautojoin on");
+    assertTrue(auto instanceof ParsedInput.InviteAutoJoin);
+    assertEquals("on", ((ParsedInput.InviteAutoJoin) auto).mode());
+  }
+
+  @Test
+  void parsesJoinInviteShortcutOptions() {
+    ParsedInput joinInvite = parser.parse("/join -invite");
+    assertTrue(joinInvite instanceof ParsedInput.InviteJoin);
+    assertEquals("last", ((ParsedInput.InviteJoin) joinInvite).inviteToken());
+
+    ParsedInput joinInviteAlias = parser.parse("/join -i");
+    assertTrue(joinInviteAlias instanceof ParsedInput.InviteJoin);
+    assertEquals("last", ((ParsedInput.InviteJoin) joinInviteAlias).inviteToken());
+
+    ParsedInput joinInviteById = parser.parse("/join -i 42");
+    assertTrue(joinInviteById instanceof ParsedInput.InviteJoin);
+    assertEquals("42", ((ParsedInput.InviteJoin) joinInviteById).inviteToken());
+  }
+
+  @Test
+  void parsesAjinviteAsToggleAlias() {
+    ParsedInput toggle = parser.parse("/ajinvite");
+    assertTrue(toggle instanceof ParsedInput.InviteAutoJoin);
+    assertEquals("toggle", ((ParsedInput.InviteAutoJoin) toggle).mode());
+
+    ParsedInput off = parser.parse("/ajinvite off");
+    assertTrue(off instanceof ParsedInput.InviteAutoJoin);
+    assertEquals("off", ((ParsedInput.InviteAutoJoin) off).mode());
+  }
+
+  @Test
   void parsesWhoAndListArgs() {
     ParsedInput who = parser.parse("/who #room o");
     assertTrue(who instanceof ParsedInput.Who);

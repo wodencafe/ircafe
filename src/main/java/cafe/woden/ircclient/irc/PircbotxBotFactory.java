@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
@@ -41,6 +42,7 @@ public class PircbotxBotFactory {
   private static final List<String> BASE_CAPABILITIES = List.of(
       "multi-prefix",
       "cap-notify",
+      "invite-notify",
       "away-notify",
       "account-notify",
       "extended-join",
@@ -114,6 +116,7 @@ public class PircbotxBotFactory {
     }
     for (String chan : s.autoJoin()) {
       String ch = chan == null ? "" : chan.trim();
+      if (AutoJoinEntryCodec.isPrivateMessageEntry(ch)) continue;
       if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
     }
     if (s.sasl() != null && s.sasl().enabled()) {

@@ -22,6 +22,7 @@ import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.PendingEchoMessageState;
+import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -75,6 +76,7 @@ public class IrcMediator {
   private final JoinRoutingState joinRoutingState;
   private final LabeledResponseRoutingState labeledResponseRoutingState;
   private final PendingEchoMessageState pendingEchoMessageState;
+  private final PendingInviteState pendingInviteState;
   private final InboundModeEventHandler inboundModeEventHandler;
 
   private final NotificationRuleMatcher notificationRuleMatcher;
@@ -123,6 +125,7 @@ public class IrcMediator {
       JoinRoutingState joinRoutingState,
       LabeledResponseRoutingState labeledResponseRoutingState,
       PendingEchoMessageState pendingEchoMessageState,
+      PendingInviteState pendingInviteState,
       InboundModeEventHandler inboundModeEventHandler,
       InboundIgnorePolicy inboundIgnorePolicy
   ) {
@@ -151,6 +154,7 @@ public class IrcMediator {
     this.joinRoutingState = joinRoutingState;
     this.labeledResponseRoutingState = labeledResponseRoutingState;
     this.pendingEchoMessageState = pendingEchoMessageState;
+    this.pendingInviteState = pendingInviteState;
     this.inboundModeEventHandler = inboundModeEventHandler;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
   }
@@ -406,7 +410,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     if (suppressOutput) return;
 
     if (spoiler) {
-      ui.appendSpoilerChatAt(status, at, "(notice) " + from, text);
+      ui.appendSpoilerChatAt(status, at, "(notice) " + from, text, messageId, ircv3Tags);
     } else {
       ui.appendNoticeAt(status, at, "(notice) " + from, text, messageId, ircv3Tags);
     }
@@ -463,6 +467,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         chatHistoryRequestRoutingState.clearServer(sid);
         joinRoutingState.clearServer(sid);
         labeledResponseRoutingState.clearServer(sid);
+        pendingInviteState.clearServer(sid);
         inboundModeEventHandler.clearServer(sid);
       }
       targetCoordinator.refreshInputEnabledForActiveTarget();
@@ -483,6 +488,8 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.ChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
+        NotificationRuleMatch ruleMatch =
+            firstRuleMatchForUnreadChannel(sid, chan, active, ev.from(), ev.text());
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
@@ -505,18 +512,29 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
+          postTo(
+              chan,
+              active,
+              true,
+              d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
         } else {
           postTo(
               chan,
               active,
               true,
-              d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), false, ev.messageId(), ev.ircv3Tags()));
+              d ->
+                  ui.appendChatAt(
+                      d,
+                      ev.at(),
+                      ev.from(),
+                      ev.text(),
+                      false,
+                      ev.messageId(),
+                      ev.ircv3Tags(),
+                      ruleMatch != null ? ruleMatch.highlightColor() : null));
         }
 
-        if (!chan.equals(active)) {
-          maybeRecordRuleMatch(sid, chan, active, ev.from(), ev.text());
-        }
+        recordRuleMatchIfPresent(chan, ev.from(), ev.text(), ruleMatch);
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.text());
         if (mention) {
@@ -534,6 +552,8 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.ChannelAction ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
+        NotificationRuleMatch ruleMatch =
+            firstRuleMatchForUnreadChannel(sid, chan, active, ev.from(), ev.action());
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
@@ -541,18 +561,31 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
+          postTo(
+              chan,
+              active,
+              true,
+              d ->
+                  ui.appendSpoilerChatAt(
+                      d, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags()));
         } else {
           postTo(
               chan,
               active,
               true,
-              d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), false, ev.messageId(), ev.ircv3Tags()));
+              d ->
+                  ui.appendActionAt(
+                      d,
+                      ev.at(),
+                      ev.from(),
+                      ev.action(),
+                      false,
+                      ev.messageId(),
+                      ev.ircv3Tags(),
+                      ruleMatch != null ? ruleMatch.highlightColor() : null));
         }
 
-        if (!chan.equals(active)) {
-          maybeRecordRuleMatch(sid, chan, active, ev.from(), ev.action());
-        }
+        recordRuleMatchIfPresent(chan, ev.from(), ev.action(), ruleMatch);
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.action());
         if (mention) {
@@ -638,7 +671,7 @@ case IrcEvent.PrivateMessage ev -> {
   }
 
   if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
+    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
   } else {
     postTo(pm, true,
         d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), fromSelf, ev.messageId(), ev.ircv3Tags()));
@@ -672,7 +705,12 @@ case IrcEvent.PrivateAction ev -> {
   if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
   if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
+    postTo(
+        pm,
+        true,
+        d ->
+            ui.appendSpoilerChatAt(
+                d, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags()));
   } else {
     postTo(pm, true,
         d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), fromSelf, ev.messageId(), ev.ircv3Tags()));
@@ -822,11 +860,69 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.InvitedToChannel ev -> {
-        TargetRef dest = resolveActiveOrStatus(sid, status);
-        String from = Objects.toString(ev.from(), "").trim();
-        if (from.isEmpty()) from = "server";
-        String rendered = from + " invited you to " + ev.channel();
-        postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite)", rendered));
+        TargetRef dest = status;
+        String inviter = Objects.toString(ev.from(), "").trim();
+        if (inviter.isEmpty()) inviter = "server";
+        String channel = Objects.toString(ev.channel(), "").trim();
+        if (channel.isEmpty()) {
+          String invalidLine = inviter + " sent an invalid invite.";
+          postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite)", invalidLine));
+        } else {
+          String invitee = Objects.toString(ev.invitee(), "").trim();
+          String selfNick = irc.currentNick(sid).orElse("");
+          boolean isSelfInvite = invitee.isBlank() || (!selfNick.isBlank() && invitee.equalsIgnoreCase(selfNick));
+
+          if (!isSelfInvite) {
+            String rendered = inviter + " invited " + invitee + " to " + channel;
+            postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite-notify)", rendered));
+          } else {
+            PendingInviteState.RecordResult recorded = pendingInviteState.record(
+                ev.at(), sid, channel, inviter, invitee, ev.reason(), ev.inviteNotify());
+            PendingInviteState.PendingInvite invite = recorded.invite();
+            TargetRef inviteStatus = new TargetRef(sid, "status");
+
+            if (recorded.collapsed()) {
+              String rendered = inviter + " invited you to " + channel + " (repeated x" + invite.repeatCount() + ")";
+              postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite)", rendered));
+            } else {
+              String reason = Objects.toString(invite.reason(), "").trim();
+              String rendered = inviter + " invited you to " + channel + " on " + sid;
+              if (!reason.isEmpty()) rendered = rendered + " (" + reason + ")";
+              String finalRendered = rendered;
+              String actions = "Actions: /invjoin " + invite.id()
+                  + " | /join -i"
+                  + " | /invignore " + invite.id()
+                  + " | /invwhois " + invite.id()
+                  + " | /invblock " + invite.id()
+                  + " | /invites";
+
+              postTo(dest, true, d -> {
+                ui.appendStatusAt(d, ev.at(), "(invite)", finalRendered);
+                ui.appendStatus(d, "(invite)", actions);
+              });
+
+              try {
+                trayNotificationService.notifyInvite(sid, channel, inviter, reason);
+              } catch (Exception ignored) {
+              }
+
+              if (pendingInviteState.inviteAutoJoinEnabled()) {
+                if (!connectionCoordinator.isConnected(sid)) {
+                  ui.appendStatus(inviteStatus, "(invite)", "Auto-join is enabled, but you are not connected.");
+                } else if (containsCrlf(channel)) {
+                  ui.appendStatus(inviteStatus, "(invite)", "Refusing to auto-join malformed invite channel.");
+                } else {
+                  ui.appendStatus(inviteStatus, "(invite)", "Auto-join enabled, joining " + channel + "...");
+                  disposables.add(
+                      irc.joinChannel(sid, channel)
+                          .subscribe(
+                              () -> pendingInviteState.remove(invite.id()),
+                              err -> ui.appendError(inviteStatus, "(invite-error)", String.valueOf(err))));
+                }
+              }
+            }
+          }
+        }
       }
 
       case IrcEvent.UserJoinedChannel ev -> {
@@ -1073,25 +1169,37 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     }
   }
 
-  private void maybeRecordRuleMatch(String serverId, TargetRef chan, TargetRef active, String from, String text) {
-    if (chan == null || text == null || text.isBlank()) return;
-    if (active != null && chan.equals(active)) return;
-    if (isFromSelf(serverId, from)) return;
+  private NotificationRuleMatch firstRuleMatchForUnreadChannel(
+      String serverId,
+      TargetRef chan,
+      TargetRef active,
+      String from,
+      String text
+  ) {
+    if (chan == null || text == null || text.isBlank()) return null;
+    if (active != null && chan.equals(active)) return null;
+    if (isFromSelf(serverId, from)) return null;
 
     List<NotificationRuleMatch> matches;
     try {
       matches = notificationRuleMatcher.matchAll(text);
     } catch (Exception ignored) {
-      return;
+      return null;
     }
+    if (matches == null || matches.isEmpty()) return null;
+    // Keep only the first match to avoid over-highlighting and duplicate events.
+    return matches.get(0);
+  }
 
-    if (matches == null || matches.isEmpty()) return;
-    // Record the first match only to avoid spamming notifications.
-    NotificationRuleMatch m = matches.get(0);
-
+  private void recordRuleMatchIfPresent(
+      TargetRef chan,
+      String from,
+      String text,
+      NotificationRuleMatch match
+  ) {
+    if (chan == null || match == null) return;
     ui.markHighlight(chan);
-
-    ui.recordRuleMatch(chan, from, m.ruleLabel(), snippetAround(text, m.start(), m.end()));
+    ui.recordRuleMatch(chan, from, match.ruleLabel(), snippetAround(text, match.start(), match.end()));
   }
 
   private boolean tryResolvePendingEchoChannelMessage(

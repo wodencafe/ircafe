@@ -19,7 +19,10 @@ import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
 import cafe.woden.ircclient.app.state.PendingEchoMessageState;
+import cafe.woden.ircclient.app.state.PendingInviteState;
+import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -40,6 +43,9 @@ class OutboundChatCommandServiceTest {
   private final JoinRoutingState joinRoutingState = mock(JoinRoutingState.class);
   private final LabeledResponseRoutingState labeledResponseRoutingState = mock(LabeledResponseRoutingState.class);
   private final PendingEchoMessageState pendingEchoMessageState = mock(PendingEchoMessageState.class);
+  private final PendingInviteState pendingInviteState = mock(PendingInviteState.class);
+  private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
+  private final IgnoreListService ignoreListService = mock(IgnoreListService.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =
@@ -53,7 +59,10 @@ class OutboundChatCommandServiceTest {
           chatHistoryRequestRoutingState,
           joinRoutingState,
           labeledResponseRoutingState,
-          pendingEchoMessageState);
+          pendingEchoMessageState,
+          pendingInviteState,
+          whoisRoutingState,
+          ignoreListService);
 
   @AfterEach
   void tearDown() {
@@ -543,5 +552,32 @@ class OutboundChatCommandServiceTest {
     verify(ui).appendStatus(chan, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     verify(ui).appendStatus(chan, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
     verify(ui).appendStatus(chan, "(help)", "UI: right-click a nick and use the DCC submenu.");
+  }
+
+  @Test
+  void inviteAutoJoinToggleFlipsCurrentState() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.inviteAutoJoinEnabled()).thenReturn(false);
+
+    service.handleInviteAutoJoin("toggle");
+
+    verify(pendingInviteState).setInviteAutoJoinEnabled(true);
+    verify(runtimeConfig).rememberInviteAutoJoinEnabled(true);
+    verify(ui).appendStatus(status, "(invite)", "Invite auto-join is now enabled.");
+  }
+
+  @Test
+  void inviteAutoJoinStatusMentionsAjinviteAlias() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.inviteAutoJoinEnabled()).thenReturn(true);
+
+    service.handleInviteAutoJoin("status");
+
+    verify(ui).appendStatus(
+        status,
+        "(invite)",
+        "Invite auto-join is enabled. Use /inviteautojoin on|off or /ajinvite.");
   }
 }

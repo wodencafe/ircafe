@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.model.LogDirection;
 import cafe.woden.ircclient.logging.model.LogKind;
@@ -33,11 +34,15 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
 
   private final ChatLogRepository repo;
   private final TransactionTemplate tx;
+  private final LogProperties props;
   private final ExecutorService exec;
 
-  public DbChatHistoryIngestor(ChatLogRepository repo, @Qualifier("chatLogTx") TransactionTemplate tx) {
+  public DbChatHistoryIngestor(ChatLogRepository repo,
+                               @Qualifier("chatLogTx") TransactionTemplate tx,
+                               LogProperties props) {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
+    this.props = Objects.requireNonNull(props, "props");
 
     this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-chathistory-ingest");
   }
@@ -89,6 +94,9 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
       if (e == null) continue;
       long ts = e.at() != null ? e.at().toEpochMilli() : System.currentTimeMillis();
       String tgt = normalizeTarget(e.target(), targetHint);
+      if (!Boolean.TRUE.equals(props.logPrivateMessages()) && isPrivateMessageTarget(tgt)) {
+        continue;
+      }
       String from = safe(e.from());
       String text = safe(e.text());
 
@@ -212,5 +220,17 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     String lower = bid.toLowerCase(Locale.ROOT);
     if (lower.startsWith("znc-playback")) return "znc-playback";
     return "chathistory";
+  }
+
+  private static boolean isPrivateMessageTarget(String target) {
+    String t = safe(target).trim();
+    if (t.isEmpty()) return false;
+    String key = t.toLowerCase(Locale.ROOT);
+    if ("status".equals(key)) return false;
+    if (t.startsWith("#") || t.startsWith("&")) return false;
+    if ("__notifications__".equals(key) || "__channel_list__".equals(key) || "__dcc_transfers__".equals(key)) {
+      return false;
+    }
+    return true;
   }
 }

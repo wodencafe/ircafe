@@ -23,7 +23,9 @@ ircafe:
       enabled: true
       format: "HH:mm:ss"
       # If enabled, IRCafe will also prepend a timestamp to regular user chat message lines.
-      includeChatMessages: false
+      includeChatMessages: true
+      # If enabled, IRCafe will prepend timestamps to presence/folded lines (join/part/quit/nick).
+      includePresenceMessages: true
     # Chat history load behavior
     # How many lines to prefill into the transcript when selecting a channel or user.
     # 0 disables prefill.
@@ -161,6 +163,13 @@ ircafe:
 
     # If true (default), "soft ignore" lines are still logged, but flagged.
     logSoftIgnoredLines: true
+
+    # If true (default), private-message/query lines are persisted.
+    logPrivateMessages: true
+
+    # If true (default), PM/query targets are remembered and restored in the chat list.
+    # Stored per server in autoJoin using a query: prefix.
+    savePrivateMessageList: true
 
     # Default behavior: keep logs indefinitely.
     keepForever: true

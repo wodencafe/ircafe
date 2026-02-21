@@ -28,6 +28,7 @@ import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
+import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
@@ -141,6 +142,7 @@ public class PreferencesDialog {
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
   private final NotificationSoundService notificationSoundService;
+  private final ServerDialogs serverDialogs;
 
   private JDialog dialog;
 
@@ -162,7 +164,8 @@ public class PreferencesDialog {
                            TrayNotificationService trayNotificationService,
                            GnomeDbusNotificationBackend gnomeDbusBackend,
                            NotificationSoundSettingsBus notificationSoundSettingsBus,
-                           NotificationSoundService notificationSoundService) {
+                           NotificationSoundService notificationSoundService,
+                           ServerDialogs serverDialogs) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
@@ -182,6 +185,7 @@ public class PreferencesDialog {
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
     this.notificationSoundService = notificationSoundService;
+    this.serverDialogs = serverDialogs;
   }
 
   public void open(Window owner) {
@@ -673,6 +677,7 @@ public class PreferencesDialog {
 
       boolean timestampsEnabledV = timestamps.enabled.isSelected();
       boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
+      boolean timestampsIncludePresenceMessagesV = timestamps.includePresenceMessages.isSelected();
       String timestampFormatV = timestamps.format.getText() != null ? timestamps.format.getText().trim() : "";
       if (timestampFormatV.isBlank()) timestampFormatV = "HH:mm:ss";
       try {
@@ -840,6 +845,7 @@ public class PreferencesDialog {
           timestampsEnabledV,
           timestampFormatV,
           timestampsIncludeChatMessagesV,
+          timestampsIncludePresenceMessagesV,
           historyInitialLoadV,
           historyPageSizeV,
           commandHistoryMaxSizeV,
@@ -942,6 +948,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberTimestampsEnabled(next.timestampsEnabled());
       runtimeConfig.rememberTimestampFormat(next.timestampFormat());
       runtimeConfig.rememberTimestampsIncludeChatMessages(next.timestampsIncludeChatMessages());
+      runtimeConfig.rememberTimestampsIncludePresenceMessages(next.timestampsIncludePresenceMessages());
 
       runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
       runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
@@ -950,6 +957,8 @@ public class PreferencesDialog {
       applyFilterSettingsFromUi(filters);
       runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
       runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
+      runtimeConfig.rememberChatLoggingLogPrivateMessages(logging.logPrivateMessages.isSelected());
+      runtimeConfig.rememberChatLoggingSavePrivateMessageList(logging.savePrivateMessageList.isSelected());
       runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
       runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(logging.dbNextToConfig.isSelected());
 
@@ -2372,18 +2381,57 @@ panel.add(subTabs, "growx, wmin 0");
     Map<String, Boolean> persisted = runtimeConfig.readIrcv3Capabilities();
 
     LinkedHashMap<String, JCheckBox> checkboxes = new LinkedHashMap<>();
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]2[]"));
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]"));
     panel.setOpaque(false);
 
+    LinkedHashMap<String, List<String>> grouped = new LinkedHashMap<>();
     for (String cap : PircbotxBotFactory.requestableCapabilities()) {
       String key = normalizeIrcv3CapabilityKey(cap);
       if (key.isEmpty()) continue;
+      grouped.computeIfAbsent(capabilityGroupKey(key), __ -> new ArrayList<>()).add(key);
+    }
 
-      JCheckBox cb = new JCheckBox(capabilityDisplayLabel(key));
-      cb.setSelected(persisted.getOrDefault(key, Boolean.TRUE));
-      cb.setToolTipText(capabilityTooltip(key));
-      panel.add(cb, "growx, wmin 0, wrap");
-      checkboxes.put(key, cb);
+    for (Map.Entry<String, List<String>> group : grouped.entrySet()) {
+      List<String> caps = group.getValue();
+      if (caps == null || caps.isEmpty()) continue;
+      List<String> orderedCaps = new ArrayList<>(caps);
+      orderedCaps.sort((a, b) -> {
+        int oa = capabilitySortOrder(a);
+        int ob = capabilitySortOrder(b);
+        if (oa != ob) return Integer.compare(oa, ob);
+        return capabilityDisplayLabel(a).compareToIgnoreCase(capabilityDisplayLabel(b));
+      });
+
+      JPanel groupPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
+      groupPanel.setBorder(BorderFactory.createCompoundBorder(
+          BorderFactory.createTitledBorder(capabilityGroupTitle(group.getKey())),
+          BorderFactory.createEmptyBorder(6, 6, 6, 6)
+      ));
+      groupPanel.setOpaque(false);
+
+      for (String key : orderedCaps) {
+        JCheckBox cb = new JCheckBox(capabilityDisplayLabel(key));
+        cb.setSelected(persisted.getOrDefault(key, Boolean.TRUE));
+        cb.setToolTipText(capabilityTooltip(key));
+        checkboxes.put(key, cb);
+
+        JButton help = whyHelpButton(capabilityHelpTitle(key), capabilityHelpMessage(key));
+        help.setToolTipText("What does this capability do in IRCafe?");
+
+        JTextArea impact = subtleInfoText();
+        impact.setText(capabilityImpactSummary(key));
+        impact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
+
+        JPanel row = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]6[]", "[]1[]"));
+        row.setOpaque(false);
+        row.add(cb, "growx, wmin 0");
+        row.add(help, "aligny top");
+        row.add(impact, "span 2, growx, wmin 0, wrap");
+
+        groupPanel.add(row, "growx, wmin 0, wrap");
+      }
+
+      panel.add(groupPanel, "growx, wmin 0, wrap");
     }
 
     return new Ircv3CapabilitiesControls(checkboxes, panel);
@@ -2518,15 +2566,20 @@ panel.add(subTabs, "growx, wmin 0");
     includeChatMessages.setSelected(current.timestampsIncludeChatMessages());
     includeChatMessages.setToolTipText("When enabled, timestamps are also shown on normal chat messages (not just status lines).");
 
+    JCheckBox includePresenceMessages = new JCheckBox("Include presence / folded messages");
+    includePresenceMessages.setSelected(current.timestampsIncludePresenceMessages());
+    includePresenceMessages.setToolTipText("When enabled, timestamps are shown for join/part/quit/nick presence lines and expanded fold details.");
+
     Runnable syncEnabled = () -> {
       boolean on = enabled.isSelected();
       format.setEnabled(on);
       includeChatMessages.setEnabled(on);
+      includePresenceMessages.setEnabled(on);
     };
     enabled.addActionListener(e -> syncEnabled.run());
     syncEnabled.run();
 
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]"));
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]6[]"));
     panel.setOpaque(false);
     panel.add(enabled);
     JPanel fmtRow = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[][grow,fill]", "[]"));
@@ -2535,8 +2588,9 @@ panel.add(subTabs, "growx, wmin 0");
     fmtRow.add(format, "w 200!");
     panel.add(fmtRow);
     panel.add(includeChatMessages);
+    panel.add(includePresenceMessages);
 
-    return new TimestampControls(enabled, format, includeChatMessages, panel);
+    return new TimestampControls(enabled, format, includeChatMessages, includePresenceMessages, panel);
   }
 
   private HistoryControls buildHistoryControls(UiSettings current, List<AutoCloseable> closeables) {
@@ -2581,6 +2635,8 @@ panel.add(subTabs, "growx, wmin 0");
   private LoggingControls buildLoggingControls(LogProperties logProps, List<AutoCloseable> closeables) {
     boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
     boolean logSoftIgnoredCurrent = logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
+    boolean logPrivateMessagesCurrent = logProps == null || Boolean.TRUE.equals(logProps.logPrivateMessages());
+    boolean savePrivateMessageListCurrent = logProps == null || Boolean.TRUE.equals(logProps.savePrivateMessageList());
 
     JCheckBox loggingEnabled = new JCheckBox("Enable chat logging (store messages to local DB)");
     loggingEnabled.setSelected(loggingEnabledCurrent);
@@ -2593,6 +2649,17 @@ panel.add(subTabs, "growx, wmin 0");
     loggingSoftIgnore.setToolTipText("If enabled, messages that are soft-ignored (spoiler-covered) are still stored,\n" +
         "and will re-load as spoiler-covered lines in history.");
     loggingSoftIgnore.setEnabled(loggingEnabled.isSelected());
+
+    JCheckBox loggingPrivateMessages = new JCheckBox("Save private-message history");
+    loggingPrivateMessages.setSelected(logPrivateMessagesCurrent);
+    loggingPrivateMessages.setToolTipText("If enabled, PM/query messages are stored in the local history database.\n" +
+        "If disabled, only non-PM targets are persisted.");
+    loggingPrivateMessages.setEnabled(loggingEnabled.isSelected());
+
+    JCheckBox savePrivateMessageList = new JCheckBox("Save private-message chat list");
+    savePrivateMessageList.setSelected(savePrivateMessageListCurrent);
+    savePrivateMessageList.setToolTipText("If enabled, PM/query targets are remembered and re-opened after reconnect/restart.\n" +
+        "The per-server PM list is managed in Servers -> Edit -> Auto-Join.");
 
     boolean keepForeverCurrent = logProps == null || Boolean.TRUE.equals(logProps.keepForever());
     int retentionDaysCurrent = (logProps != null && logProps.retentionDays() != null) ? Math.max(0, logProps.retentionDays()) : 0;
@@ -2642,6 +2709,7 @@ panel.add(subTabs, "growx, wmin 0");
     Runnable updateLoggingEnabledState = () -> {
       boolean en = loggingEnabled.isSelected();
       loggingSoftIgnore.setEnabled(en);
+      loggingPrivateMessages.setEnabled(en);
       dbBaseName.setEnabled(true);
       dbNextToConfig.setEnabled(true);
       updateRetentionUi.run();
@@ -2649,7 +2717,27 @@ panel.add(subTabs, "growx, wmin 0");
     loggingEnabled.addActionListener(e -> updateLoggingEnabledState.run());
     updateLoggingEnabledState.run();
 
-    return new LoggingControls(loggingEnabled, loggingSoftIgnore, keepForever, retentionDays, dbBaseName, dbNextToConfig, loggingInfo);
+    JButton managePmList = new JButton("Open Server Auto-Join Settings…");
+    managePmList.setIcon(SvgIcons.action("settings", 16));
+    managePmList.setDisabledIcon(SvgIcons.actionDisabled("settings", 16));
+    managePmList.setEnabled(serverDialogs != null);
+    managePmList.addActionListener(e -> {
+      if (serverDialogs == null) return;
+      Window owner = dialog != null ? dialog : SwingUtilities.getWindowAncestor(managePmList);
+      serverDialogs.openManageServers(owner);
+    });
+
+    return new LoggingControls(
+        loggingEnabled,
+        loggingSoftIgnore,
+        loggingPrivateMessages,
+        savePrivateMessageList,
+        managePmList,
+        keepForever,
+        retentionDays,
+        dbBaseName,
+        dbNextToConfig,
+        loggingInfo);
   }
 
   private OutgoingColorControls buildOutgoingColorControls(UiSettings current) {
@@ -3533,8 +3621,26 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(tabTitle("IRCv3"), "growx, wmin 0, wrap");
 
     form.add(sectionTitle("Feature toggles"), "growx, wmin 0, wrap");
-    form.add(typingIndicatorsEnabled, "growx, wmin 0, wrap");
-    form.add(helpText("Typing indicators control whether IRCafe sends/displays typing events when available."), "growx, wmin 0, wrap");
+    JButton typingHelp = whyHelpButton(
+        "Typing indicators",
+        "What it is:\n" +
+            "Typing indicators show when someone is actively typing or has paused.\n\n" +
+            "Impact in IRCafe:\n" +
+            "- Sends your typing state to peers when supported.\n" +
+            "- Displays incoming typing state in the active UI.\n\n" +
+            "If disabled:\n" +
+            "- IRCafe will not send or render typing indicators."
+    );
+    typingHelp.setToolTipText("How typing indicators affect IRCafe");
+    JPanel typingRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    typingRow.setOpaque(false);
+    typingRow.add(typingIndicatorsEnabled, "growx, wmin 0");
+    typingRow.add(typingHelp, "aligny top");
+    form.add(typingRow, "growx, wmin 0, wrap");
+    JTextArea typingImpact = subtleInfoText();
+    typingImpact.setText("Controls whether IRCafe sends and displays typing events when the network supports them.");
+    typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
+    form.add(typingImpact, "growx, wmin 0, wrap");
 
     form.add(sectionTitle("Requested capabilities"), "growx, wmin 0, wrap");
     form.add(helpText("These options control which IRCv3 capabilities IRCafe requests during CAP negotiation.\nChanges apply on new connections or reconnect."), "growx, wmin 0, wrap");
@@ -3555,20 +3661,142 @@ panel.add(subTabs, "growx, wmin 0");
 
   private static String capabilityDisplayLabel(String capability) {
     return switch (capability) {
-      case "typing" -> "typing (typing indicators transport)";
-      case "message-tags" -> "message-tags (IRCv3 tag transport)";
-      case "echo-message" -> "echo-message (self-echo reconciliation)";
-      case "draft/reply" -> "draft/reply (reply metadata)";
-      case "draft/react" -> "draft/react (reaction metadata)";
-      case "read-marker" -> "read-marker (read receipts)";
-      case "chathistory" -> "chathistory (history fetch)";
-      case "draft/chathistory" -> "draft/chathistory (draft history extension)";
+      case "message-tags" -> "Message tags";
+      case "server-time" -> "Server timestamps";
+      case "echo-message" -> "Echo own messages";
+      case "account-tag" -> "Account tags";
+      case "userhost-in-names" -> "USERHOST in NAMES";
+      case "typing" -> "Typing transport";
+      case "read-marker" -> "Read markers";
+      case "draft/reply" -> "Reply metadata";
+      case "draft/react" -> "Reaction metadata";
+      case "draft/message-edit" -> "Message edits (draft)";
+      case "message-edit" -> "Message edits (final)";
+      case "draft/message-redaction" -> "Message redaction (draft)";
+      case "message-redaction" -> "Message redaction (final)";
+      case "chathistory" -> "Chat history (final)";
+      case "draft/chathistory" -> "Chat history (draft)";
+      case "znc.in/playback" -> "ZNC playback";
+      case "labeled-response" -> "Labeled responses";
+      case "standard-replies" -> "Standard replies";
+      case "multi-prefix" -> "Multi-prefix names";
+      case "cap-notify" -> "CAP updates";
+      case "away-notify" -> "Away status updates";
+      case "account-notify" -> "Account status updates";
+      case "extended-join" -> "Extended join data";
+      case "setname" -> "Setname updates";
+      case "chghost" -> "Hostmask changes";
+      case "batch" -> "Batch event grouping";
       default -> capability;
     };
   }
 
   private static String capabilityTooltip(String capability) {
-    return "Request \"" + capability + "\" during IRCv3 capability negotiation on connect.";
+    return capabilityImpactSummary(capability);
+  }
+
+  private static String capabilityGroupKey(String capability) {
+    return switch (capability) {
+      case "multi-prefix", "cap-notify", "away-notify", "account-notify", "extended-join",
+           "setname", "chghost", "message-tags", "server-time", "standard-replies",
+           "echo-message", "labeled-response", "account-tag", "userhost-in-names"
+          -> "core";
+      case "draft/reply", "draft/react", "draft/message-edit", "message-edit",
+           "draft/message-redaction", "message-redaction", "typing", "read-marker"
+          -> "conversation";
+      case "batch", "chathistory", "draft/chathistory", "znc.in/playback"
+          -> "history";
+      default -> "other";
+    };
+  }
+
+  private static String capabilityGroupTitle(String groupKey) {
+    return switch (groupKey) {
+      case "core" -> "Core metadata and sync";
+      case "conversation" -> "Conversation features";
+      case "history" -> "History and playback";
+      default -> "Other capabilities";
+    };
+  }
+
+  private static int capabilitySortOrder(String capability) {
+    return switch (capability) {
+      // Core metadata and sync
+      case "message-tags" -> 10;
+      case "server-time" -> 20;
+      case "echo-message" -> 30;
+      case "labeled-response" -> 40;
+      case "standard-replies" -> 50;
+      case "account-tag" -> 60;
+      case "account-notify" -> 70;
+      case "away-notify" -> 80;
+      case "extended-join" -> 90;
+      case "chghost" -> 100;
+      case "setname" -> 110;
+      case "multi-prefix" -> 120;
+      case "cap-notify" -> 130;
+      case "userhost-in-names" -> 140;
+
+      // Conversation features
+      case "typing" -> 210;
+      case "read-marker" -> 220;
+      case "draft/reply" -> 230;
+      case "draft/react" -> 240;
+      case "message-edit" -> 250;
+      case "draft/message-edit" -> 260;
+      case "message-redaction" -> 270;
+      case "draft/message-redaction" -> 280;
+
+      // History and playback
+      case "batch" -> 310;
+      case "chathistory" -> 320;
+      case "draft/chathistory" -> 330;
+      case "znc.in/playback" -> 340;
+
+      default -> 10_000;
+    };
+  }
+
+  private static String capabilityImpactSummary(String capability) {
+    return switch (capability) {
+      case "message-tags" -> "Foundation for many IRCv3 features: carries structured metadata on messages.";
+      case "server-time" -> "Uses server-provided timestamps to improve ordering and replay accuracy.";
+      case "echo-message" -> "Server echoes your outbound messages, improving multi-client/bouncer consistency.";
+      case "account-tag" -> "Attaches account metadata to messages for richer identity info.";
+      case "userhost-in-names" -> "May provide richer host/user identity details during names lists.";
+      case "typing" -> "Transport for typing indicators; required to send/receive typing events.";
+      case "read-marker" -> "Enables read-position markers on servers that support them.";
+      case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
+      case "draft/react" -> "Carries reaction metadata where servers/clients support it.";
+      case "draft/message-edit", "message-edit" -> "Allows edit updates for previously sent messages.";
+      case "draft/message-redaction", "message-redaction" -> "Allows delete/redaction updates for messages.";
+      case "chathistory", "draft/chathistory" -> "Enables server-side history retrieval and backfill features.";
+      case "znc.in/playback" -> "Requests playback support from ZNC bouncers when available.";
+      case "labeled-response" -> "Correlates command responses with requests more reliably.";
+      case "standard-replies" -> "Provides structured success/error replies from the server.";
+      case "multi-prefix" -> "Preserves all nick privilege prefixes (not just the highest) in user data.";
+      case "cap-notify" -> "Allows capability change notifications after initial connection.";
+      case "away-notify" -> "Tracks away/back state transitions for users.";
+      case "account-notify" -> "Tracks account login/logout changes for users.";
+      case "extended-join" -> "Adds account/realname metadata to join events when available.";
+      case "setname" -> "Receives user real-name changes without extra lookups.";
+      case "chghost" -> "Keeps hostmask/userhost identity changes in sync.";
+      case "batch" -> "Groups related events into coherent batches (useful for playback/history).";
+      default -> "Requests \"" + capability + "\" during CAP negotiation on connect/reconnect.";
+    };
+  }
+
+  private static String capabilityHelpTitle(String capability) {
+    return capabilityDisplayLabel(capability) + " (" + capability + ")";
+  }
+
+  private static String capabilityHelpMessage(String capability) {
+    return "What it is:\n"
+        + "Requests IRCv3 capability \"" + capability + "\" during CAP negotiation.\n\n"
+        + "Impact in IRCafe:\n"
+        + capabilityImpactSummary(capability) + "\n\n"
+        + "If disabled:\n"
+        + "IRCafe will not request this capability on new connections; related features may be unavailable.";
   }
 
   private static String normalizeIrcv3CapabilityKey(String capability) {
@@ -3602,6 +3830,10 @@ panel.add(subTabs, "growx, wmin 0");
     panel.add(logging.info, "span 2, growx, wmin 0, wrap");
     panel.add(logging.enabled, "span 2, alignx left, wrap");
     panel.add(logging.logSoftIgnored, "span 2, alignx left, wrap");
+    panel.add(logging.logPrivateMessages, "span 2, alignx left, wrap");
+    panel.add(logging.savePrivateMessageList, "span 2, alignx left, wrap");
+    panel.add(new JLabel("PM list settings"));
+    panel.add(logging.managePrivateMessageList, "alignx left, wrap");
     panel.add(logging.keepForever, "span 2, alignx left, wrap");
     panel.add(new JLabel("Retention (days)"));
     panel.add(logging.retentionDays, "w 110!, wrap");
@@ -3674,17 +3906,14 @@ panel.add(subTabs, "growx, wmin 0");
   }
 
   private JPanel buildNotificationsPanel(NotificationRulesControls notifications) {
-    JPanel panel = new JPanel(new MigLayout("insets 12, fill, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]0[grow]"));
+    JPanel panel = new JPanel(new MigLayout("insets 10, fill, wrap 1", "[grow,fill]", "[]8[]4[grow,fill]"));
 
-    panel.add(tabTitle("Notifications"), "span 2, growx, wmin 0, wrap");
-    panel.add(sectionTitle("Rule matches"), "span 2, growx, wmin 0, wrap");
+    panel.add(tabTitle("Notifications"), "growx, wmin 0, wrap");
+    panel.add(sectionTitle("Rule matches"), "growx, wmin 0, wrap");
     panel.add(helpText(
         "Add custom word/regex rules to create notifications when messages match.\n"
             + "Rules only trigger for channels (not PMs) and only when the channel isn't the active target."),
-        "span 2, growx, wmin 0, wrap");
-
-    panel.add(new JLabel("Cooldown (sec)"));
-    panel.add(notifications.cooldownSeconds, "w 110!, wrap");
+        "growx, wmin 0, wrap");
 
     JButton add = new JButton("Add");
     JButton edit = new JButton("Edit");
@@ -3695,10 +3924,10 @@ panel.add(subTabs, "growx, wmin 0");
     JButton pickColor = new JButton("Color…");
     JButton clearColor = new JButton("Clear color");
 
-    pickColor.setToolTipText("Choose a foreground highlight color for this rule.");
-    clearColor.setToolTipText("Clear the rule's foreground highlight color.");
+    pickColor.setToolTipText("Choose a highlight color for this rule.");
+    clearColor.setToolTipText("Clear the rule's highlight color.");
 
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
     buttons.add(edit);
     buttons.add(duplicate);
@@ -3860,22 +4089,9 @@ panel.add(subTabs, "growx, wmin 0");
         pickNotificationRuleColor(notifications, modelRow);
       }
     });
-
-    panel.add(new JLabel("Rules"));
-    panel.add(buttons, "growx, wrap");
-
     JScrollPane scroll = new JScrollPane(notifications.table);
     scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    panel.add(scroll, "span 2, grow, push, h 240!, wrap");
-
-    panel.add(notifications.validationLabel, "span 2, growx, wmin 0, wrap");
-
-    panel.add(sectionTitle("Test"), "span 2, growx, wmin 0, wrap");
-    panel.add(helpText(
-        "Paste a sample message to see which rules match. This is just a preview; it won't create real notifications."),
-        "span 2, growx, wmin 0, wrap");
 
     JScrollPane testInScroll = new JScrollPane(notifications.testInput);
     testInScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -3888,7 +4104,7 @@ panel.add(subTabs, "growx, wmin 0");
     JButton runTest = new JButton("Test");
     JButton clearTest = new JButton("Clear");
 
-    JPanel testButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    JPanel testButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     testButtons.add(runTest);
     testButtons.add(clearTest);
     testButtons.add(notifications.testStatus);
@@ -3910,14 +4126,36 @@ panel.add(subTabs, "growx, wmin 0");
       notifications.testStatus.setText(" ");
     });
 
-    panel.add(new JLabel("Sample"), "aligny top");
-    panel.add(testInScroll, "growx, h 90!, wrap");
+    JPanel rulesTab = new JPanel(new MigLayout("insets 0, fill, wrap 2", "[right]10[grow,fill]", "[]6[]4[grow,fill]4[]4[]"));
+    rulesTab.setOpaque(false);
+    rulesTab.add(new JLabel("Cooldown (sec)"));
+    rulesTab.add(notifications.cooldownSeconds, "w 110!, wrap");
+    rulesTab.add(new JLabel("Rules"));
+    rulesTab.add(buttons, "growx, wrap");
+    rulesTab.add(scroll, "span 2, grow, push, h 260!, wrap");
+    rulesTab.add(notifications.validationLabel, "span 2, growx, wmin 0, wrap");
+    rulesTab.add(helpText("Tip: Double-click a rule's Color cell to quickly choose a color."),
+        "span 2, growx, wmin 0, wrap");
 
-    panel.add(new JLabel("Matches"), "aligny top");
-    panel.add(testOutScroll, "growx, h 140!, wrap");
+    JPanel testTab = new JPanel(new MigLayout("insets 0, fill, wrap 2", "[right]10[grow,fill]", "[]6[]4[]4[]"));
+    testTab.setOpaque(false);
+    testTab.add(helpText(
+            "Paste a sample message to see which rules match. This is just a preview; it won't create real notifications."),
+        "span 2, growx, wmin 0, wrap");
+    testTab.add(new JLabel("Sample"), "aligny top");
+    testTab.add(testInScroll, "growx, h 100!, wrap");
+    testTab.add(new JLabel("Matches"), "aligny top");
+    testTab.add(testOutScroll, "growx, h 160!, wrap");
+    testTab.add(new JLabel(""));
+    testTab.add(testButtons, "growx, wrap");
 
-    panel.add(new JLabel(""));
-    panel.add(testButtons, "growx, wrap");
+    JTabbedPane subTabs = new JTabbedPane();
+    Icon rulesTabIcon = SvgIcons.action("edit", 14);
+    Icon testTabIcon = SvgIcons.action("check", 14);
+    subTabs.addTab("Rules", rulesTabIcon, padSubTab(rulesTab), "Manage notification matching rules");
+    subTabs.addTab("Test", testTabIcon, padSubTab(testTab), "Try a sample message against your rules");
+
+    panel.add(subTabs, "grow, push, wmin 0");
 
     refreshNotificationRuleValidation(notifications);
 
@@ -5106,13 +5344,20 @@ panel.add(subTabs, "growx, wmin 0");
                                   JPanel panel) {
   }
 
-  private record TimestampControls(JCheckBox enabled, JTextField format, JCheckBox includeChatMessages, JPanel panel) {
+  private record TimestampControls(JCheckBox enabled,
+                                  JTextField format,
+                                  JCheckBox includeChatMessages,
+                                  JCheckBox includePresenceMessages,
+                                  JPanel panel) {
   }
   private record HistoryControls(JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {
   }
 
   private record LoggingControls(JCheckBox enabled,
                                 JCheckBox logSoftIgnored,
+                                JCheckBox logPrivateMessages,
+                                JCheckBox savePrivateMessageList,
+                                JButton managePrivateMessageList,
                                 JCheckBox keepForever,
                                 JSpinner retentionDays,
                                 JTextField dbBaseName,

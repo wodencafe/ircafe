@@ -12,15 +12,13 @@ import java.util.Locale;
  * Small right-side telemetry icon showing typing-signal availability and sends.
  *
  * <p>Renders a subtle keyboard icon and themed chevron telemetry:
- * active -> 3 double-chevrons in a flowing wave, paused -> ghost gray hold, done -> fade out.</p>
+ * active -> one double-chevron group scanning left-to-right, paused -> ghost gray hold, done -> fade out.</p>
  */
 final class TypingSignalIndicator extends JComponent {
 
   private static final int FRAME_MS = 33;
   private static final int DONE_FADE_MS = 650;
-  private static final long ACTIVE_PULSE_MS = 950L;
-  private static final float ACTIVE_WAVE_MIN_ALPHA = 0.34f;
-  private static final float ACTIVE_WAVE_MAX_ALPHA = 1.0f;
+  private static final long ACTIVE_SCAN_MS = 900L;
   private static final int CHEVRON_GROUPS = 5;
   private static final int CHEVRON_GROUP_STEP = 9;
   private static final int CHEVRON_WIDTH = 4;
@@ -157,7 +155,7 @@ final class TypingSignalIndicator extends JComponent {
     long now = System.currentTimeMillis();
     switch (mode) {
       case ACTIVE -> {
-        // Active visual wave is computed per chevron at paint time.
+        // Active scan index is computed at paint time.
         arrowAlpha = 1f;
       }
       case FADING -> {
@@ -220,11 +218,11 @@ final class TypingSignalIndicator extends JComponent {
     Color core = (style == SignalStyle.ACTIVE) ? activeArrowColor() : ghostArrowColor();
     float glowFactor = (style == SignalStyle.ACTIVE) ? 0.40f : 0.14f;
     int hh = Math.max(6, h);
-    double phase = activeWavePhase();
+    int activeIndex = activeChevronIndex();
 
     for (int i = 0; i < CHEVRON_GROUPS; i++) {
-      float wave = chevronWaveAlpha(i, phase);
-      float groupAlpha = Math.max(0f, Math.min(1f, arrowAlpha * wave));
+      float scanAlpha = chevronScanAlpha(i, activeIndex);
+      float groupAlpha = Math.max(0f, Math.min(1f, arrowAlpha * scanAlpha));
       if (groupAlpha <= 0.01f) continue;
       int gx = x + (i * CHEVRON_GROUP_STEP);
       Color glow = withAlpha(core, groupAlpha * glowFactor);
@@ -233,17 +231,21 @@ final class TypingSignalIndicator extends JComponent {
     }
   }
 
-  private double activeWavePhase() {
-    if (mode != Mode.ACTIVE) return 0d;
+  private int activeChevronIndex() {
+    if (style != SignalStyle.ACTIVE || mode != Mode.ACTIVE) return -1;
+    if (CHEVRON_GROUPS <= 0) return -1;
     long elapsed = Math.max(0L, System.currentTimeMillis() - modeStartMs);
-    return (elapsed % ACTIVE_PULSE_MS) / (double) ACTIVE_PULSE_MS;
+    double phase = (elapsed % ACTIVE_SCAN_MS) / (double) ACTIVE_SCAN_MS;
+    int idx = (int) Math.floor(phase * CHEVRON_GROUPS);
+    if (idx < 0) idx = 0;
+    if (idx >= CHEVRON_GROUPS) idx = CHEVRON_GROUPS - 1;
+    return idx;
   }
 
-  private float chevronWaveAlpha(int index, double phase) {
+  private float chevronScanAlpha(int index, int activeIndex) {
     if (style != SignalStyle.ACTIVE || mode != Mode.ACTIVE) return 1f;
-    double shifted = phase - (index / (double) CHEVRON_GROUPS);
-    double wave = 0.5d + 0.5d * Math.sin(shifted * Math.PI * 2d);
-    return (float) (ACTIVE_WAVE_MIN_ALPHA + (ACTIVE_WAVE_MAX_ALPHA - ACTIVE_WAVE_MIN_ALPHA) * wave);
+    if (activeIndex < 0) return 0f;
+    return index == activeIndex ? 1f : 0f;
   }
 
   private static void drawDoubleChevron(Graphics2D g2, int x, int y, int h, Color glow, Color stroke) {

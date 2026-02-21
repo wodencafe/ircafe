@@ -17,6 +17,8 @@ import java.util.List;
 public final class DockingTuner {
   private static final String CLIENT_PROP_WEST_LOCKED = "ircafe.lockWestDockWidth";
   private static final String CLIENT_PROP_EAST_LOCKED = "ircafe.lockEastDockWidth";
+  private static final String CLIENT_PROP_WEST_LOCK_WIDTH = "ircafe.lockWestDockWidthPx";
+  private static final String CLIENT_PROP_EAST_LOCK_WIDTH = "ircafe.lockEastDockWidthPx";
   private static final String CLIENT_PROP_ADJUSTING = "ircafe.splitAdjusting";
   private static final String CLIENT_PROP_PERSIST_WIDTH_PREFIX = "ircafe.persistDockWidth.";
 
@@ -315,15 +317,24 @@ private static SplitCandidate findBestSplitPane(Component root, Component dockab
 
   private static void installWestWidthLock(JSplitPane split, Integer seedLeftWidthPx) {
     if (split == null) return;
-    if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_WEST_LOCKED))) return;
+
+    int[] lockedLeftWidth = widthBox(split, CLIENT_PROP_WEST_LOCK_WIDTH);
+    if (seedLeftWidthPx != null && seedLeftWidthPx > 0) {
+      lockedLeftWidth[0] = seedLeftWidthPx;
+    }
+    if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_WEST_LOCKED))) {
+      if (lockedLeftWidth[0] > 0) {
+        int desired = clampDivider(split, lockedLeftWidth[0]);
+        setDividerLocationSafely(split, desired);
+      }
+      return;
+    }
     split.putClientProperty(CLIENT_PROP_WEST_LOCKED, Boolean.TRUE);
 
     log.info("dock-lock: install WEST (left-locked) split#{}", System.identityHashCode(split));
 
     // Give all future extra horizontal space to the right component.
     split.setResizeWeight(0.0);
-
-    final int[] lockedLeftWidth = new int[] { seedLeftWidthPx != null && seedLeftWidthPx > 0 ? seedLeftWidthPx : -1 };
 
     SwingUtilities.invokeLater(() -> {
       if (lockedLeftWidth[0] > 0) {
@@ -389,15 +400,24 @@ private static SplitCandidate findBestSplitPane(Component root, Component dockab
 
   private static void installEastWidthLock(JSplitPane split, Integer seedRightWidthPx) {
     if (split == null) return;
-    if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_EAST_LOCKED))) return;
+
+    int[] lockedRightWidth = widthBox(split, CLIENT_PROP_EAST_LOCK_WIDTH);
+    if (seedRightWidthPx != null && seedRightWidthPx > 0) {
+      lockedRightWidth[0] = seedRightWidthPx;
+    }
+    if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_EAST_LOCKED))) {
+      if (lockedRightWidth[0] > 0) {
+        int desiredLoc = desiredDividerForRightWidth(split, lockedRightWidth[0]);
+        setDividerLocationSafely(split, clampDivider(split, desiredLoc));
+      }
+      return;
+    }
     split.putClientProperty(CLIENT_PROP_EAST_LOCKED, Boolean.TRUE);
 
     log.info("dock-lock: install EAST (right-locked) split#{}", System.identityHashCode(split));
 
     // Give all future extra horizontal space to the left component.
     split.setResizeWeight(1.0);
-
-    final int[] lockedRightWidth = new int[] { seedRightWidthPx != null && seedRightWidthPx > 0 ? seedRightWidthPx : -1 };
 
     SwingUtilities.invokeLater(() -> {
       if (lockedRightWidth[0] > 0) {
@@ -473,6 +493,16 @@ private static SplitCandidate findBestSplitPane(Component root, Component dockab
     int divider = split.getDividerSize();
     // DividerLocation is measured from the left edge.
     return Math.max(0, total - divider - Math.max(0, rightWidth));
+  }
+
+  private static int[] widthBox(JSplitPane split, String key) {
+    Object existing = split.getClientProperty(key);
+    if (existing instanceof int[] arr && arr.length > 0) {
+      return arr;
+    }
+    int[] arr = new int[] { -1 };
+    split.putClientProperty(key, arr);
+    return arr;
   }
 
 

@@ -94,6 +94,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   private record ParsedJoinFailure(String channel, String message) {}
 
+  private record ParsedInviteLine(String fromNick, String inviteeNick, String channel, String reason) {}
+
 
   private record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
 
@@ -129,6 +131,53 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
 
     return new ParsedIrcLine(prefix, cmd, params, trailing);
+  }
+
+  private static ParsedInviteLine parseInviteLine(ParsedIrcLine parsed) {
+    if (parsed == null) return null;
+    String cmd = Objects.toString(parsed.command(), "").trim();
+    if (!"INVITE".equalsIgnoreCase(cmd)) return null;
+
+    String from = nickFromPrefix(parsed.prefix());
+    String invitee = "";
+    String channel = "";
+    String reason = "";
+
+    List<String> params = parsed.params();
+    if (params != null && !params.isEmpty()) {
+      invitee = Objects.toString(params.get(0), "").trim();
+      if (params.size() >= 2) {
+        channel = Objects.toString(params.get(1), "").trim();
+      }
+      if (params.size() >= 3) {
+        reason = Objects.toString(params.get(2), "").trim();
+      }
+    }
+
+    String trailing = Objects.toString(parsed.trailing(), "").trim();
+    if (!trailing.isEmpty()) {
+      if (channel.isEmpty()) {
+        int sp = trailing.indexOf(' ');
+        if (sp > 0) {
+          channel = trailing.substring(0, sp).trim();
+          reason = trailing.substring(sp + 1).trim();
+        } else {
+          channel = trailing;
+        }
+      } else if (!trailing.equalsIgnoreCase(channel)) {
+        if (trailing.startsWith(channel + " ")) {
+          reason = trailing.substring(channel.length()).trim();
+        } else {
+          reason = trailing;
+        }
+      }
+    }
+
+    if (channel.startsWith(":")) channel = channel.substring(1).trim();
+    if (reason.startsWith(":")) reason = reason.substring(1).trim();
+    if (channel.isBlank()) return null;
+
+    return new ParsedInviteLine(from, invitee, channel, reason);
   }
 
   private static String nickFromPrefix(String prefix) {
@@ -818,6 +867,8 @@ public void onAction(ActionEvent event) {
       if (channel.isBlank()) return;
 
       String from = "server";
+      String invitee = "";
+      String reason = "";
       try {
         if (event.getUser() != null) {
           maybeEmitHostmaskObserved(channel, event.getUser());
@@ -827,8 +878,21 @@ public void onAction(ActionEvent event) {
       } catch (Exception ignored) {
       }
 
+      try {
+        String raw = rawLineFromEvent(event);
+        ParsedIrcLine parsed = parseIrcLine(PircbotxLineParseUtil.normalizeIrcLineForParsing(raw));
+        ParsedInviteLine pi = parseInviteLine(parsed);
+        if (pi != null) {
+          if (from.isBlank()) from = Objects.toString(pi.fromNick(), "").trim();
+          if (!Objects.toString(pi.channel(), "").isBlank()) channel = pi.channel().trim();
+          invitee = Objects.toString(pi.inviteeNick(), "").trim();
+          reason = Objects.toString(pi.reason(), "").trim();
+        }
+      } catch (Exception ignored) {
+      }
+
       bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.InvitedToChannel(Instant.now(), channel, from)));
+          new IrcEvent.InvitedToChannel(Instant.now(), channel, from, invitee, reason, false)));
     }
 
 @Override
@@ -1281,6 +1345,24 @@ public void onFinger(FingerEvent event) throws Exception {
           && !parsedRawLine.params().isEmpty()) {
         // For server numerics, the first param is typically the recipient nick (us).
         rememberSelfNickHint(parsedRawLine.params().get(0));
+      }
+
+      ParsedInviteLine parsedInvite = parseInviteLine(parsedRawLine);
+      if (parsedInvite != null) {
+        Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
+        if (at == null) at = Instant.now();
+        String from = Objects.toString(parsedInvite.fromNick(), "").trim();
+        if (from.isEmpty()) from = "server";
+        bus.onNext(new ServerIrcEvent(
+            serverId,
+            new IrcEvent.InvitedToChannel(
+                at,
+                parsedInvite.channel(),
+                from,
+                parsedInvite.inviteeNick(),
+                parsedInvite.reason(),
+                true)));
+        return;
       }
 
       if (handleBatchControlLine(line, rawLine)) {

@@ -5,6 +5,8 @@ import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -36,6 +38,7 @@ import java.util.Objects;
 import java.util.Enumeration;
 import javax.swing.JMenuItem;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JButton;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -168,6 +171,7 @@ private static final class InsertionLine {
 
   private final JLabel statusLabel = new JLabel("Disconnected");
 
+  private final JButton addServerBtn = new JButton();
   private final ConnectButton connectBtn;
   private final DisconnectButton disconnectBtn;
 
@@ -181,6 +185,8 @@ private static final class InsertionLine {
   private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
 
   private final ServerCatalog serverCatalog;
+  private final RuntimeConfigStore runtimeConfig;
+  private final LogProperties logProps;
 
   private final SojuAutoConnectStore sojuAutoConnect;
 
@@ -202,6 +208,8 @@ private static final class InsertionLine {
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
+      RuntimeConfigStore runtimeConfig,
+      LogProperties logProps,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect,
       ConnectButton connectBtn,
@@ -211,6 +219,8 @@ private static final class InsertionLine {
     super(new BorderLayout());
 
     this.serverCatalog = serverCatalog;
+    this.runtimeConfig = runtimeConfig;
+    this.logProps = logProps;
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
@@ -218,9 +228,21 @@ private static final class InsertionLine {
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
+    this.addServerBtn.setText("");
+    this.addServerBtn.setIcon(SvgIcons.action("plus", 16));
+    this.addServerBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    this.addServerBtn.setToolTipText("Add server");
+    this.addServerBtn.setFocusable(false);
+    this.addServerBtn.setPreferredSize(new Dimension(26, 26));
+    this.addServerBtn.setEnabled(serverDialogs != null);
+    this.addServerBtn.addActionListener(ev -> {
+      if (serverDialogs == null) return;
+      Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+      serverDialogs.openAddServer(w);
+    });
     this.connectBtn.setText("");
-    this.connectBtn.setIcon(SvgIcons.action("plus", 16));
-    this.connectBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    this.connectBtn.setIcon(SvgIcons.action("check", 16));
+    this.connectBtn.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
     this.connectBtn.setToolTipText("Connect all disconnected servers");
     this.connectBtn.setFocusable(false);
     this.connectBtn.setPreferredSize(new Dimension(26, 26));
@@ -234,6 +256,8 @@ private static final class InsertionLine {
     header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
     header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
 
+    header.add(addServerBtn);
+    header.add(Box.createHorizontalStrut(6));
     header.add(connectBtn);
     header.add(Box.createHorizontalStrut(6));
     header.add(disconnectBtn);
@@ -363,7 +387,14 @@ private static final class InsertionLine {
 
         int x = e.getX();
         int y = e.getY();
-        TreePath path = tree.getPathForLocation(x, y);
+        // Resolve by row (Y-position) so right-click works anywhere across the row,
+        // not only directly over the node text/icon bounds.
+        int row = tree.getClosestRowForLocation(x, y);
+        if (row < 0) return;
+        Rectangle rb = tree.getRowBounds(row);
+        if (rb == null) return;
+        if (y < rb.y || y >= (rb.y + rb.height)) return;
+        TreePath path = tree.getPathForRow(row);
         if (path == null) {
           return;
         }
@@ -1606,6 +1637,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     leaves.put(ref, leaf);
     if (isPrivateMessageTarget(ref)) {
       privateMessageOnlineByTarget.putIfAbsent(ref, Boolean.FALSE);
+      if (shouldPersistPrivateMessageList()) {
+        runtimeConfig.rememberPrivateMessageTarget(ref.serverId(), ref.target());
+      }
     }
     int idx;
     if (ref.isChannel() && parent == sn.serverNode) {
@@ -1641,6 +1675,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (node == null) return;
     if (isPrivateMessageTarget(ref)) {
       privateMessageOnlineByTarget.remove(ref);
+      if (shouldPersistPrivateMessageList()) {
+        runtimeConfig.forgetPrivateMessageTarget(ref.serverId(), ref.target());
+      }
     }
 
     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
@@ -2017,6 +2054,10 @@ private void syncServers(List<ServerEntry> latest) {
       ServerNodes sn = servers.get(id);
       if (sn != null) model.nodeChanged(sn.serverNode);
     }
+  }
+
+  private boolean shouldPersistPrivateMessageList() {
+    return runtimeConfig != null && logProps != null && Boolean.TRUE.equals(logProps.savePrivateMessageList());
   }
 
 private void removeServerRoot(String serverId) {

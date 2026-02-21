@@ -223,6 +223,28 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags,
+      String notificationRuleHighlightColor
+  ) {
+    delegate.appendChatAt(
+        target,
+        at,
+        from,
+        text,
+        outgoingLocalEcho,
+        messageId,
+        ircv3Tags,
+        notificationRuleHighlightColor);
+  }
+
+  @Override
   public void appendPendingOutgoingChat(
       TargetRef target,
       String pendingId,
@@ -269,6 +291,18 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendSpoilerChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    delegate.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
     delegate.appendAction(target, from, action, outgoingLocalEcho);
   }
@@ -289,6 +323,28 @@ public abstract class UiPortDecorator implements UiPort {
       Map<String, String> ircv3Tags
   ) {
     delegate.appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
+  }
+
+  @Override
+  public void appendActionAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      String messageId,
+      Map<String, String> ircv3Tags,
+      String notificationRuleHighlightColor
+  ) {
+    delegate.appendActionAt(
+        target,
+        at,
+        from,
+        action,
+        outgoingLocalEcho,
+        messageId,
+        ircv3Tags,
+        notificationRuleHighlightColor);
   }
 
   @Override

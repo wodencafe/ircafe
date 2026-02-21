@@ -299,12 +299,14 @@ if (historyPlaceholdersEnabledByDefault == null) {
   public record Timestamps(
       Boolean enabled,
       String format,
-      Boolean includeChatMessages
+      Boolean includeChatMessages,
+      Boolean includePresenceMessages
   ) {
     public Timestamps {
       if (enabled == null) enabled = true;
       if (format == null || format.isBlank()) format = "HH:mm:ss";
-      if (includeChatMessages == null) includeChatMessages = false;
+      if (includeChatMessages == null) includeChatMessages = true;
+      if (includePresenceMessages == null) includePresenceMessages = true;
     }
   }
 
@@ -443,16 +445,20 @@ if (historyPlaceholdersEnabledByDefault == null) {
       autoConnectOnStart = true;
     }
 
-    // Default: disabled (preserve prior behavior where user messages have no timestamp prefix).
+    // Default: enabled (regular chat messages also include timestamp prefix).
     if (chatMessageTimestampsEnabled == null) {
-      chatMessageTimestampsEnabled = false;
+      chatMessageTimestampsEnabled = true;
     }
 
     if (timestamps == null) {
-      timestamps = new Timestamps(true, "HH:mm:ss", chatMessageTimestampsEnabled);
+      timestamps = new Timestamps(true, "HH:mm:ss", chatMessageTimestampsEnabled, true);
     } else if (timestamps.includeChatMessages() == null) {
       // Back-compat: if the new nested flag is absent, fall back to the legacy top-level flag.
-      timestamps = new Timestamps(timestamps.enabled(), timestamps.format(), chatMessageTimestampsEnabled);
+      timestamps = new Timestamps(
+          timestamps.enabled(),
+          timestamps.format(),
+          chatMessageTimestampsEnabled,
+          timestamps.includePresenceMessages());
     }
     // History defaults: conservative initial load, generous paging.
     if (chatHistoryInitialLoadLines == null) {
