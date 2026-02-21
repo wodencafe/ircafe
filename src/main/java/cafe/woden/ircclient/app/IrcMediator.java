@@ -1093,7 +1093,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
         boolean prefEnabled = false;
         try {
-          prefEnabled = uiSettingsBus.get().typingIndicatorsEnabled();
+          prefEnabled = uiSettingsBus.get().typingIndicatorsReceiveEnabled();
         } catch (Exception ignored) {
         }
         boolean typingAvailable = false;

@@ -508,7 +508,8 @@ public class PreferencesDialog {
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
-    JCheckBox typingIndicatorsEnabled = buildTypingIndicatorsCheckbox(current);
+    JCheckBox typingIndicatorsSendEnabled = buildTypingIndicatorsSendCheckbox(current);
+    JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
 
@@ -534,7 +535,10 @@ public class PreferencesDialog {
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
-    JPanel ircv3Panel = buildIrcv3CapabilitiesPanel(typingIndicatorsEnabled, ircv3Capabilities);
+    JPanel ircv3Panel = buildIrcv3CapabilitiesPanel(
+        typingIndicatorsSendEnabled,
+        typingIndicatorsReceiveEnabled,
+        ircv3Capabilities);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications);
@@ -693,7 +697,8 @@ public class PreferencesDialog {
 
       boolean presenceFoldsV = presenceFolds.isSelected();
       boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
-      boolean typingIndicatorsEnabledV = typingIndicatorsEnabled.isSelected();
+      boolean typingIndicatorsSendEnabledV = typingIndicatorsSendEnabled.isSelected();
+      boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
       Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
 
       boolean nickColoringEnabledV = nickColors.enabled.isSelected();
@@ -841,7 +846,8 @@ public class PreferencesDialog {
           linkPreviews.collapsed.isSelected(),
           presenceFoldsV,
           ctcpRequestsInActiveTargetV,
-          typingIndicatorsEnabledV,
+          typingIndicatorsSendEnabledV,
+          typingIndicatorsReceiveEnabledV,
           timestampsEnabledV,
           timestampFormatV,
           timestampsIncludeChatMessagesV,
@@ -938,6 +944,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
       runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(next.ctcpRequestsInActiveTargetEnabled());
       runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
+      runtimeConfig.rememberTypingIndicatorsReceiveEnabled(next.typingIndicatorsReceiveEnabled());
       persistIrcv3Capabilities(ircv3CapabilitiesV);
 
       if (nickColorSettingsBus != null) {
@@ -2370,10 +2377,17 @@ panel.add(subTabs, "growx, wmin 0");
     return ctcp;
   }
 
-  private JCheckBox buildTypingIndicatorsCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Enable typing indicators (IRCv3)");
+  private JCheckBox buildTypingIndicatorsSendCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Send typing indicators (IRCv3)");
     cb.setSelected(current.typingIndicatorsEnabled());
-    cb.setToolTipText("When enabled, IRCafe will send and display IRCv3 typing indicators when the server supports them.");
+    cb.setToolTipText("When enabled, IRCafe will send your IRCv3 typing state (active/paused/done) when the server supports it.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsReceiveCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Display incoming typing indicators (IRCv3)");
+    cb.setSelected(current.typingIndicatorsReceiveEnabled());
+    cb.setToolTipText("When enabled, IRCafe will display incoming IRCv3 typing indicators from other users.");
     return cb;
   }
 
@@ -3615,7 +3629,10 @@ panel.add(subTabs, "growx, wmin 0");
     return form;
   }
 
-  private JPanel buildIrcv3CapabilitiesPanel(JCheckBox typingIndicatorsEnabled, Ircv3CapabilitiesControls ircv3Capabilities) {
+  private JPanel buildIrcv3CapabilitiesPanel(
+      JCheckBox typingIndicatorsSendEnabled,
+      JCheckBox typingIndicatorsReceiveEnabled,
+      Ircv3CapabilitiesControls ircv3Capabilities) {
     JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]10[]6[]"));
 
     form.add(tabTitle("IRCv3"), "growx, wmin 0, wrap");
@@ -3626,19 +3643,21 @@ panel.add(subTabs, "growx, wmin 0");
         "What it is:\n" +
             "Typing indicators show when someone is actively typing or has paused.\n\n" +
             "Impact in IRCafe:\n" +
-            "- Sends your typing state to peers when supported.\n" +
-            "- Displays incoming typing state in the active UI.\n\n" +
+            "- Send: broadcasts your typing state to peers when supported.\n" +
+            "- Display: shows incoming typing state in the active UI.\n\n" +
             "If disabled:\n" +
-            "- IRCafe will not send or render typing indicators."
+            "- Send disabled: IRCafe won't broadcast your typing state.\n" +
+            "- Display disabled: IRCafe won't render incoming typing indicators."
     );
     typingHelp.setToolTipText("How typing indicators affect IRCafe");
-    JPanel typingRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    JPanel typingRow = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]6[]", "[]2[]"));
     typingRow.setOpaque(false);
-    typingRow.add(typingIndicatorsEnabled, "growx, wmin 0");
+    typingRow.add(typingIndicatorsSendEnabled, "growx, wmin 0, split 2");
     typingRow.add(typingHelp, "aligny top");
+    typingRow.add(typingIndicatorsReceiveEnabled, "growx, wmin 0");
     form.add(typingRow, "growx, wmin 0, wrap");
     JTextArea typingImpact = subtleInfoText();
-    typingImpact.setText("Controls whether IRCafe sends and displays typing events when the network supports them.");
+    typingImpact.setText("Choose whether IRCafe sends your typing state, displays incoming typing state, or both.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
     form.add(typingImpact, "growx, wmin 0, wrap");
 

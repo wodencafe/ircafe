@@ -1143,6 +1143,22 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTypingIndicatorsReceiveEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("typingIndicatorsReceiveEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist incoming typing indicators setting to '{}'", file, e);
+    }
+  }
+
   /**
    * Reads persisted IRCv3 capability request overrides under {@code ircafe.ui.ircv3Capabilities}.
    *

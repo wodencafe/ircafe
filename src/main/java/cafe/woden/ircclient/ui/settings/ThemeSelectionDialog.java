@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
+import java.awt.Color;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -17,6 +18,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -25,6 +27,7 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import org.springframework.context.annotation.Lazy;
@@ -48,6 +51,7 @@ public class ThemeSelectionDialog {
 
   private JDialog dialog;
   private JList<ThemeManager.ThemeOption> themeList;
+  private JEditorPane transcriptPreview;
   private String committedThemeId;
   private String previewThemeId;
 
@@ -96,6 +100,8 @@ public class ThemeSelectionDialog {
         new PackChoice("All packs", null),
         new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
         new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
+        new PackChoice("Retro", ThemeManager.ThemePack.RETRO),
+        new PackChoice("Modern", ThemeManager.ThemePack.MODERN),
         new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE),
         new PackChoice("IntelliJ", ThemeManager.ThemePack.INTELLIJ)
     });
@@ -139,6 +145,8 @@ public class ThemeSelectionDialog {
         String pack = switch (value.pack()) {
           case SYSTEM -> "System";
           case FLATLAF -> "FlatLaf";
+          case RETRO -> "Retro";
+          case MODERN -> "Modern";
           case IRCAFE -> "IRCafe";
           case INTELLIJ -> "IntelliJ";
         };
@@ -185,6 +193,23 @@ public class ThemeSelectionDialog {
     listPanel.add(header, BorderLayout.NORTH);
     listPanel.add(listScroll, BorderLayout.CENTER);
 
+    transcriptPreview = new JEditorPane("text/html", "");
+    transcriptPreview.setEditable(false);
+    transcriptPreview.setFocusable(false);
+    transcriptPreview.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+    transcriptPreview.putClientProperty(FlatClientProperties.STYLE, "border:0");
+    refreshTranscriptPreview();
+
+    JScrollPane previewScroll = new JScrollPane(transcriptPreview);
+    previewScroll.setPreferredSize(new Dimension(420, 280));
+
+    JLabel previewTitle = new JLabel("Transcript Preview");
+    previewTitle.putClientProperty(FlatClientProperties.STYLE, "font: -1");
+
+    JPanel previewPanel = new JPanel(new BorderLayout(0, 6));
+    previewPanel.add(previewTitle, BorderLayout.NORTH);
+    previewPanel.add(previewScroll, BorderLayout.CENTER);
+
     JButton apply = new JButton("Apply");
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
@@ -214,6 +239,7 @@ public class ThemeSelectionDialog {
 
     JPanel center = new JPanel(new BorderLayout(12, 0));
     center.add(listPanel, BorderLayout.WEST);
+    center.add(previewPanel, BorderLayout.CENTER);
 
     JPanel root = new JPanel(new BorderLayout(10, 10));
     root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -221,7 +247,7 @@ public class ThemeSelectionDialog {
     root.add(center, BorderLayout.CENTER);
     root.add(buttons, BorderLayout.SOUTH);
 
-    dialog = new JDialog(owner, "Theme Selector", JDialog.ModalityType.APPLICATION_MODAL);
+    dialog = new JDialog(owner, "More Themes", JDialog.ModalityType.APPLICATION_MODAL);
     dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
     dialog.addWindowListener(new java.awt.event.WindowAdapter() {
       @Override public void windowClosing(java.awt.event.WindowEvent e) {
@@ -230,7 +256,7 @@ public class ThemeSelectionDialog {
     });
     dialog.setContentPane(root);
     dialog.pack();
-    dialog.setMinimumSize(new Dimension(420, 430));
+    dialog.setMinimumSize(new Dimension(760, 430));
     dialog.setLocationRelativeTo(owner);
     dialog.setVisible(true);
   }
@@ -274,6 +300,7 @@ public class ThemeSelectionDialog {
     if (!sameTheme(committedThemeId, next)) {
       themeManager.applyTheme(next);
       committedThemeId = next;
+      refreshTranscriptPreview();
     }
   }
 
@@ -340,9 +367,11 @@ public class ThemeSelectionDialog {
       if (!sameTheme(committed, preview)) {
         themeManager.applyTheme(committed);
         previewThemeId = committed;
+        refreshTranscriptPreview();
       }
       dialog.dispose();
       dialog = null;
+      transcriptPreview = null;
     }
   }
 
@@ -385,7 +414,92 @@ public class ThemeSelectionDialog {
 
       themeManager.applyTheme(pending);
       previewThemeId = pending;
+      refreshTranscriptPreview();
     });
+  }
+
+  private void refreshTranscriptPreview() {
+    if (transcriptPreview == null) return;
+
+    Color panelBg = firstUiColor(Color.WHITE, "Panel.background", "control", "nimbusBase");
+    Color textBg = firstUiColor(panelBg, "TextArea.background", "TextComponent.background", "Panel.background");
+    Color textFg = firstUiColor(Color.BLACK, "TextArea.foreground", "TextComponent.foreground", "Label.foreground", "textText");
+    Color accent = firstUiColor(new Color(0x2D, 0x6B, 0xFF), "@accentColor", "Component.linkColor", "Component.focusColor", "textHighlight");
+    Color muted = mix(textFg, textBg, 0.45);
+    Color system = mix(textFg, textBg, 0.30);
+    Color nick = mix(accent, textFg, 0.20);
+    Color self = mix(accent, textFg, 0.35);
+    Color highlightBg = firstUiColor(null, "List.selectionBackground", "TextComponent.selectionBackground");
+    if (highlightBg == null) highlightBg = mix(textBg, accent, 0.33);
+    Color highlightFg = firstUiColor(null, "List.selectionForeground", "TextComponent.selectionForeground");
+    if (highlightFg == null) highlightFg = bestTextColor(highlightBg);
+
+    String html =
+        "<html><body style='margin:0;padding:10px;background:" + toHex(textBg) + ";color:" + toHex(textFg) + ";'>"
+            + "<div style='color:" + toHex(system) + ";'>[12:41] *** Connected to Libera.Chat as wodencafe</div>"
+            + "<div><span style='color:" + toHex(muted) + ";'>[12:42]</span> "
+            + "<span style='color:" + toHex(nick) + ";'>&lt;alice&gt;</span> anyone up for #java?</div>"
+            + "<div><span style='color:" + toHex(muted) + ";'>[12:42]</span> "
+            + "<span style='color:" + toHex(self) + ";'>&lt;wodencafe&gt;</span> sure, joining now.</div>"
+            + "<div style='margin-top:4px;padding:2px 4px;background:" + toHex(highlightBg)
+            + ";color:" + toHex(highlightFg) + ";'>"
+            + "<span style='color:" + toHex(muted) + ";'>[12:43]</span> "
+            + "<span style='color:" + toHex(nick) + ";'>&lt;bob&gt;</span> this is a highlight message for you."
+            + "</div>"
+            + "<div style='color:" + toHex(system) + ";'>[12:44] * carol waves</div>"
+            + "<div style='color:" + toHex(accent) + ";'>[12:45] -- Invite: dave invited you to #retro "
+            + "(reason: old-school night)</div>"
+            + "</body></html>";
+
+    transcriptPreview.setBackground(panelBg);
+    transcriptPreview.setText(html);
+    transcriptPreview.setCaretPosition(0);
+  }
+
+  private static Color firstUiColor(Color fallback, String... keys) {
+    for (String key : keys) {
+      if (key == null || key.isBlank()) continue;
+      Color c = UIManager.getColor(key);
+      if (c != null) return c;
+    }
+    return fallback;
+  }
+
+  private static Color mix(Color a, Color b, double t) {
+    if (a == null) return b;
+    if (b == null) return a;
+    double tt = Math.max(0.0, Math.min(1.0, t));
+    int r = (int) Math.round(a.getRed() + (b.getRed() - a.getRed()) * tt);
+    int g = (int) Math.round(a.getGreen() + (b.getGreen() - a.getGreen()) * tt);
+    int bl = (int) Math.round(a.getBlue() + (b.getBlue() - a.getBlue()) * tt);
+    return new Color(clamp255(r), clamp255(g), clamp255(bl));
+  }
+
+  private static int clamp255(int v) {
+    return Math.max(0, Math.min(255, v));
+  }
+
+  private static Color bestTextColor(Color bg) {
+    if (bg == null) return Color.WHITE;
+    double lum = relativeLuminance(bg);
+    return lum > 0.55 ? Color.BLACK : Color.WHITE;
+  }
+
+  private static double relativeLuminance(Color c) {
+    if (c == null) return 0.0;
+    double r = srgbToLinear(c.getRed() / 255.0);
+    double g = srgbToLinear(c.getGreen() / 255.0);
+    double b = srgbToLinear(c.getBlue() / 255.0);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  private static double srgbToLinear(double v) {
+    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  private static String toHex(Color c) {
+    Color use = c != null ? c : Color.WHITE;
+    return String.format("#%02X%02X%02X", use.getRed(), use.getGreen(), use.getBlue());
   }
 
   private void stopPreviewTimer() {
