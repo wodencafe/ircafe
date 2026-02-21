@@ -37,7 +37,7 @@ public class EphemeralServerRegistry {
   }
 
   public synchronized Set<String> serverIds() {
-    return Set.copyOf(byId.keySet());
+    return java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(byId.keySet()));
   }
 
   public synchronized Optional<IrcProperties.Server> find(String serverId) {

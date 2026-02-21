@@ -25,6 +25,11 @@ public class CommandParser {
       return new ParsedInput.Say(line);
     }
 
+    // Escaped slash: "//text" sends a literal message that starts with "/text".
+    if (line.startsWith("//")) {
+      return new ParsedInput.Say(line.substring(1));
+    }
+
     if (matchesCommand(line, "/join")) {
       String args = argAfter(line, "/join");
       return parseJoinInput(args);

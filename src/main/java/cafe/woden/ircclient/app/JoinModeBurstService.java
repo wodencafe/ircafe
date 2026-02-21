@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.util.RestartableRxTimer;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
@@ -8,7 +9,6 @@ import java.util.Objects;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
@@ -40,11 +40,7 @@ public final class JoinModeBurstService {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.modeFormattingService = Objects.requireNonNull(modeFormattingService, "modeFormattingService");
 
-    this.joinModeExec = Executors.newSingleThreadScheduledExecutor(r -> {
-      Thread t = new Thread(r, "ircafe-joinmode-burst");
-      t.setDaemon(true);
-      return t;
-    });
+    this.joinModeExec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-joinmode-burst");
     this.joinModeScheduler = Schedulers.from(joinModeExec);
   }
 

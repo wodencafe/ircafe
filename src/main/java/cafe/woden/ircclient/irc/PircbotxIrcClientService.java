@@ -7,11 +7,11 @@ import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.znc.ZncLoginParts;
 import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -182,7 +182,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
 
           timers.startHeartbeat(c);
-          Schedulers.io().scheduleDirect(() -> {
+          RxVirtualSchedulers.io().scheduleDirect(() -> {
             boolean crashed = false;
             try {
               bot.startBot();
@@ -199,7 +199,7 @@ public class PircbotxIrcClientService implements IrcClientService {
             }
           });
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -246,7 +246,7 @@ public class PircbotxIrcClientService implements IrcClientService {
                 new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
           }
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -255,7 +255,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String nick = PircbotxUtil.sanitizeNick(newNick);
           requireBot(serverId).sendIRC().changeNick(nick);
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -271,13 +271,13 @@ public class PircbotxIrcClientService implements IrcClientService {
             requireBot(serverId).sendRaw().rawLine("AWAY :" + msg);
           }
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable joinChannel(String serverId, String channel) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().joinChannel(channel))
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
 @Override
@@ -291,31 +291,31 @@ public class PircbotxIrcClientService implements IrcClientService {
             requireBot(serverId).sendRaw().rawLine("PART " + chan + " :" + msg);
           }
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendToChannel(String serverId, String channel, String message) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().message(channel, message))
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendNoticeToChannel(String serverId, String channel, String message) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().notice(channel, message))
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendPrivateMessage(String serverId, String nick, String message) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().message(PircbotxUtil.sanitizeNick(nick), message))
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendNoticePrivate(String serverId, String nick, String message) {
     return Completable.fromAction(() -> requireBot(serverId).sendIRC().notice(PircbotxUtil.sanitizeNick(nick), message))
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -325,7 +325,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           if (line.isEmpty()) return;
           requireBot(serverId).sendRaw().rawLine(line);
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -352,7 +352,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           }
           requireBot(serverId).sendRaw().rawLine(line);
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -371,7 +371,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String ts = MARKREAD_TS_FMT.format(at);
           requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " :" + ts);
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -389,7 +389,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String line = Ircv3ChatHistoryCommandBuilder.buildBefore(target, selector, limit);
           requireBot(serverId).sendRaw().rawLine(line);
         })
-        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -400,7 +400,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String line = Ircv3ChatHistoryCommandBuilder.buildLatest(target, selector, limit);
           requireBot(serverId).sendRaw().rawLine(line);
         })
-        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -417,7 +417,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String line = Ircv3ChatHistoryCommandBuilder.buildBetween(target, startSelector, endSelector, limit);
           requireBot(serverId).sendRaw().rawLine(line);
         })
-        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -428,7 +428,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String line = Ircv3ChatHistoryCommandBuilder.buildAround(target, selector, limit);
           requireBot(serverId).sendRaw().rawLine(line);
         })
-        .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   private void ensureChatHistoryNegotiated(String serverId) {
@@ -624,7 +624,7 @@ public class PircbotxIrcClientService implements IrcClientService {
             throw ex;
           }
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
 
@@ -657,7 +657,7 @@ public class PircbotxIrcClientService implements IrcClientService {
             requireBot(serverId).sendIRC().message(dest, "\u0001ACTION " + a + "\u0001");
           }
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -666,7 +666,7 @@ public class PircbotxIrcClientService implements IrcClientService {
           String chan = PircbotxUtil.sanitizeChannel(channel);
           requireBot(serverId).sendRaw().rawLine("NAMES " + chan);
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -678,7 +678,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
           requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -691,7 +691,7 @@ public class PircbotxIrcClientService implements IrcClientService {
             requireBot(serverId).sendRaw().rawLine("WHOWAS " + n);
           }
         })
-        .subscribeOn(Schedulers.io());
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   private PircbotxConnectionState conn(String serverId) {

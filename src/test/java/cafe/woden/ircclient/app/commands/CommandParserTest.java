@@ -18,6 +18,17 @@ class CommandParserTest {
   }
 
   @Test
+  void treatsDoubleSlashAsEscapedLeadingSlashMessage() {
+    ParsedInput escaped = parser.parse("//hello world");
+    assertTrue(escaped instanceof ParsedInput.Say);
+    assertEquals("/hello world", ((ParsedInput.Say) escaped).text());
+
+    ParsedInput justSlash = parser.parse("//");
+    assertTrue(justSlash instanceof ParsedInput.Say);
+    assertEquals("/", ((ParsedInput.Say) justSlash).text());
+  }
+
+  @Test
   void parsesConnectionLifecycleCommands() {
     ParsedInput connect = parser.parse("/connect libera");
     assertTrue(connect instanceof ParsedInput.Connect);

@@ -587,7 +587,7 @@ public class ThemeManager {
         } catch (Exception ignored) {
         }
         try {
-          transcripts.restyleAllDocuments();
+          transcripts.restyleAllDocumentsCoalesced();
         } catch (Exception ignored) {
         }
       } finally {
@@ -655,7 +655,7 @@ public class ThemeManager {
         } catch (Exception ignored) {
         }
         try {
-          transcripts.restyleAllDocuments();
+          transcripts.restyleAllDocumentsCoalesced();
         } catch (Exception ignored) {
         }
       } finally {
@@ -681,7 +681,7 @@ public class ThemeManager {
       } catch (Exception ignored) {
       }
       try {
-        transcripts.restyleAllDocuments();
+        transcripts.restyleAllDocumentsCoalesced();
       } catch (Exception ignored) {
       }
     });

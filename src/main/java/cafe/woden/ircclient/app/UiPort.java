@@ -97,6 +97,14 @@ Flowable<TargetRef> targetActivations();
   default void setServerDesiredOnline(String serverId, boolean desiredOnline) {}
 
   /**
+   * Update per-server connection diagnostics shown in server tree tooltips.
+   *
+   * @param lastError non-empty when a recent connection-related error/reason is available
+   * @param nextRetryEpochMs epoch millis for next reconnect attempt; {@code null} when not scheduled
+   */
+  default void setServerConnectionDiagnostics(String serverId, String lastError, Long nextRetryEpochMs) {}
+
+  /**
    * Update best-effort online state for a private-message target icon in the server tree.
    */
   default void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {}

@@ -52,6 +52,7 @@ import org.springframework.stereotype.Component;
 public class ChatTranscriptStore {
 
   private static final int MAX_FILTERED_LINES_PER_PLACEHOLDER_RUN = 250;
+  private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;
 
   /**
    * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are created in a single
@@ -72,6 +73,11 @@ public class ChatTranscriptStore {
 
   private final Map<TargetRef, StyledDocument> docs = new HashMap<>();
   private final Map<TargetRef, TranscriptState> stateByTarget = new HashMap<>();
+  private List<StyledDocument> restylePassDocs = List.of();
+  private int restylePassDocIndex = 0;
+  private int restylePassDocOffset = 0;
+  private boolean restylePassRunning = false;
+  private boolean restylePassRestartRequested = false;
 
   public ChatTranscriptStore(
       ChatStyles styles,
@@ -3131,7 +3137,7 @@ public void appendChatAt(TargetRef ref,
 
   private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
     if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
-    SwingUtilities.invokeLater(this::restyleAllDocuments);
+    restyleAllDocumentsCoalesced();
   }
 
   private UiSettings safeSettings() {
@@ -4067,6 +4073,100 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     }
   }
 
+  public void restyleAllDocumentsCoalesced() {
+    boolean schedule = false;
+    synchronized (this) {
+      if (restylePassRunning) {
+        restylePassRestartRequested = true;
+      } else {
+        restylePassRunning = true;
+        resetRestylePassLocked();
+        schedule = true;
+      }
+    }
+    if (schedule) {
+      SwingUtilities.invokeLater(this::runRestylePassSliceSafely);
+    }
+  }
+
+  private void resetRestylePassLocked() {
+    restylePassDocs = new ArrayList<>(docs.values());
+    restylePassDocIndex = 0;
+    restylePassDocOffset = 0;
+  }
+
+  private void clearRestylePassLocked() {
+    restylePassRunning = false;
+    restylePassRestartRequested = false;
+    restylePassDocs = List.of();
+    restylePassDocIndex = 0;
+    restylePassDocOffset = 0;
+  }
+
+  private void runRestylePassSliceSafely() {
+    try {
+      runRestylePassSlice();
+    } catch (Exception ignored) {
+      synchronized (this) {
+        clearRestylePassLocked();
+      }
+    }
+  }
+
+  private void runRestylePassSlice() {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::runRestylePassSliceSafely);
+      return;
+    }
+
+    UiSettings s = safeSettings();
+    boolean outgoingColorEnabled = s != null && s.clientLineColorEnabled();
+    Color outgoingColor = outgoingColorEnabled ? parseHexColor(s.clientLineColor()) : null;
+
+    boolean scheduleNext = false;
+    synchronized (this) {
+      if (!restylePassRunning) return;
+
+      if (restylePassRestartRequested) {
+        restylePassRestartRequested = false;
+        resetRestylePassLocked();
+      }
+
+      int budget = RESTYLE_ELEMENTS_PER_SLICE;
+      while (budget > 0 && restylePassDocIndex < restylePassDocs.size()) {
+        StyledDocument doc = restylePassDocs.get(restylePassDocIndex);
+        int currentOffset = restylePassDocOffset;
+        RestyleSliceOutcome outcome =
+            restyleDocumentSlice(doc, currentOffset, budget, outgoingColorEnabled, outgoingColor);
+        if (outcome.done() || outcome.nextOffset() <= currentOffset) {
+          restylePassDocIndex++;
+          restylePassDocOffset = 0;
+        } else {
+          restylePassDocOffset = outcome.nextOffset();
+        }
+        budget -= Math.max(1, outcome.processedElements());
+      }
+
+      if (restylePassDocIndex >= restylePassDocs.size()) {
+        if (restylePassRestartRequested) {
+          restylePassRestartRequested = false;
+          resetRestylePassLocked();
+          scheduleNext = true;
+        } else {
+          clearRestylePassLocked();
+        }
+      } else {
+        scheduleNext = true;
+      }
+    }
+
+    if (scheduleNext) {
+      SwingUtilities.invokeLater(this::runRestylePassSliceSafely);
+    }
+  }
+
+  private record RestyleSliceOutcome(int processedElements, int nextOffset, boolean done) {}
+
   private void restyle(StyledDocument doc) {
     if (doc == null) return;
 
@@ -4074,10 +4174,33 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     boolean outgoingColorEnabled = s != null && s.clientLineColorEnabled();
     Color outgoingColor = outgoingColorEnabled ? parseHexColor(s.clientLineColor()) : null;
 
-    int len = doc.getLength();
     int offset = 0;
+    while (true) {
+      RestyleSliceOutcome outcome =
+          restyleDocumentSlice(doc, offset, Integer.MAX_VALUE, outgoingColorEnabled, outgoingColor);
+      if (outcome.done()) return;
+      if (outcome.nextOffset() <= offset) return;
+      offset = outcome.nextOffset();
+    }
+  }
 
-    while (offset < len) {
+  private RestyleSliceOutcome restyleDocumentSlice(
+      StyledDocument doc,
+      int startOffset,
+      int maxElements,
+      boolean outgoingColorEnabled,
+      Color outgoingColor
+  ) {
+    if (doc == null) return new RestyleSliceOutcome(1, 0, true);
+
+    int len = doc.getLength();
+    if (len <= 0) return new RestyleSliceOutcome(1, 0, true);
+
+    int offset = Math.max(0, Math.min(startOffset, len));
+    int budget = Math.max(1, maxElements);
+    int processed = 0;
+
+    while (offset < len && processed < budget) {
       Element el = doc.getCharacterElement(offset);
       if (el == null) break;
 
@@ -4184,6 +4307,13 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
 
       doc.setCharacterAttributes(start, end - start, fresh, true);
       offset = end;
+      processed++;
     }
+
+    if (offset >= len) {
+      return new RestyleSliceOutcome(Math.max(1, processed), len, true);
+    }
+
+    return new RestyleSliceOutcome(Math.max(1, processed), offset, false);
   }
 }

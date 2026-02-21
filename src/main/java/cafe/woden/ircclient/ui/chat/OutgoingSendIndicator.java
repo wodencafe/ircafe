@@ -47,11 +47,53 @@ public final class OutgoingSendIndicator {
       this.timer.setRepeats(true);
     }
 
+    private int inlineHeight() {
+      try {
+        if (getFont() != null) {
+          int h = getFontMetrics(getFont()).getHeight();
+          if (h > 0) return Math.max(DEFAULT_SIZE, h);
+        }
+      } catch (Exception ignored) {
+      }
+      return DEFAULT_SIZE;
+    }
+
+    private int inlineAscent() {
+      try {
+        if (getFont() != null) {
+          int a = getFontMetrics(getFont()).getAscent();
+          if (a > 0) return a;
+        }
+      } catch (Exception ignored) {
+      }
+      return -1;
+    }
+
     @Override
     public Dimension getPreferredSize() {
-      int h = Math.max(DEFAULT_SIZE, getFont() != null ? getFont().getSize() : DEFAULT_SIZE);
+      int h = inlineHeight();
       int w = DEFAULT_SIZE + INSET_L + INSET_R;
       return new Dimension(w, h);
+    }
+
+    @Override
+    public int getBaseline(int width, int height) {
+      int ascent = inlineAscent();
+      if (ascent <= 0 || height <= 0) return -1;
+      return Math.max(0, Math.min(height - 1, ascent));
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+      return java.awt.Component.BaselineResizeBehavior.CONSTANT_ASCENT;
+    }
+
+    @Override
+    public float getAlignmentY() {
+      int h = inlineHeight();
+      int ascent = inlineAscent();
+      if (h <= 0 || ascent <= 0) return super.getAlignmentY();
+      return Math.max(0f, Math.min(1f, (float) ascent / (float) h));
     }
 
     @Override
@@ -118,11 +160,53 @@ public final class OutgoingSendIndicator {
       setOpaque(false);
     }
 
+    private int inlineHeight() {
+      try {
+        if (getFont() != null) {
+          int h = getFontMetrics(getFont()).getHeight();
+          if (h > 0) return Math.max(DEFAULT_SIZE, h);
+        }
+      } catch (Exception ignored) {
+      }
+      return DEFAULT_SIZE;
+    }
+
+    private int inlineAscent() {
+      try {
+        if (getFont() != null) {
+          int a = getFontMetrics(getFont()).getAscent();
+          if (a > 0) return a;
+        }
+      } catch (Exception ignored) {
+      }
+      return -1;
+    }
+
     @Override
     public Dimension getPreferredSize() {
-      int h = Math.max(DEFAULT_SIZE, (getFont() != null ? getFont().getSize() : DEFAULT_SIZE));
+      int h = inlineHeight();
       int w = DEFAULT_SIZE + INSET_L + INSET_R;
       return new Dimension(w, h);
+    }
+
+    @Override
+    public int getBaseline(int width, int height) {
+      int ascent = inlineAscent();
+      if (ascent <= 0 || height <= 0) return -1;
+      return Math.max(0, Math.min(height - 1, ascent));
+    }
+
+    @Override
+    public java.awt.Component.BaselineResizeBehavior getBaselineResizeBehavior() {
+      return java.awt.Component.BaselineResizeBehavior.CONSTANT_ASCENT;
+    }
+
+    @Override
+    public float getAlignmentY() {
+      int h = inlineHeight();
+      int ascent = inlineAscent();
+      if (h <= 0 || ascent <= 0) return super.getAlignmentY();
+      return Math.max(0f, Math.min(1f, (float) ascent / (float) h));
     }
 
     @Override

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.notify.sound;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -15,7 +16,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
@@ -25,12 +25,7 @@ public class NotificationSoundService {
 
   private static final Duration MIN_INTERVAL = Duration.ofMillis(500);
 
-  private final ExecutorService executor =
-      Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "notification-sound-thread");
-        t.setDaemon(true);
-        return t;
-      });
+  private final ExecutorService executor = VirtualThreads.newSingleThreadExecutor("notification-sound-thread");
 
   private final NotificationSoundSettingsBus settingsBus;
   private final RuntimeConfigStore runtimeConfig;

@@ -308,6 +308,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     activeTarget = target;
     updateDockTitle();
+    refreshTypingSignalAvailabilityForActiveTarget();
 
     // UI-only targets do not have a transcript.
     if (target.isNotifications()) {
@@ -392,6 +393,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
    */
   public void setInputEnabled(boolean enabled) {
     inputPanel.setInputEnabled(enabled);
+    if (!enabled) {
+      inputPanel.setTypingSignalAvailable(false);
+    } else {
+      refreshTypingSignalAvailabilityForActiveTarget();
+    }
   }
 
   /**
@@ -609,6 +615,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if ("typing".equals(cap) || "message-tags".equals(cap)) {
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         inputPanel.clearRemoteTypingIndicator();
+        refreshTypingSignalAvailabilityForActiveTarget();
       }
       return;
     }
@@ -885,7 +892,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     TargetRef t = activeTarget;
     if (t == null || t.isStatus() || t.isUiOnly()) return;
     if (irc == null) return;
-    if (!irc.isTypingAvailable(t.serverId())) {
+    boolean typingAvailable = false;
+    try {
+      typingAvailable = irc.isTypingAvailable(t.serverId());
+    } catch (Exception ignored) {
+    }
+    inputPanel.setTypingSignalAvailable(typingAvailable);
+    if (!typingAvailable) {
       String s = normalizeTypingState(state);
       // Only warn once per session when the user is actively composing.
       if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
@@ -899,12 +912,24 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
     irc.sendTyping(t.serverId(), t.target(), s).subscribe(
-        () -> {},
+        () -> inputPanel.onLocalTypingIndicatorSent(s),
         err -> {
           if (log.isDebugEnabled()) {
             log.debug("[{}] typing send failed (target={} state={}): {}", t.serverId(), t.target(), s, err.toString());
           }
         });
+  }
+
+  private void refreshTypingSignalAvailabilityForActiveTarget() {
+    TargetRef t = activeTarget;
+    boolean available = false;
+    if (t != null && !t.isStatus() && !t.isUiOnly() && irc != null) {
+      try {
+        available = irc.isTypingAvailable(t.serverId());
+      } catch (Exception ignored) {
+      }
+    }
+    inputPanel.setTypingSignalAvailable(available);
   }
 
   private static String normalizeTypingState(String state) {

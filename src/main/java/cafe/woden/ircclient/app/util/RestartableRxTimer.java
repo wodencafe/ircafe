@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.app.util;
 
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.Disposable;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -25,7 +25,7 @@ public final class RestartableRxTimer implements AutoCloseable {
   }
 
   public RestartableRxTimer(Scheduler scheduler, Consumer<Throwable> onError) {
-    this.scheduler = Objects.requireNonNullElse(scheduler, Schedulers.computation());
+    this.scheduler = Objects.requireNonNullElse(scheduler, RxVirtualSchedulers.computation());
     this.onError = (onError != null) ? onError : (err -> {});
   }
 

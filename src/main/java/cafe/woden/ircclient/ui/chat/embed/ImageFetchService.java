@@ -3,8 +3,8 @@ package cafe.woden.ircclient.ui.chat.embed;
 import cafe.woden.ircclient.net.HttpLite;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Single;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,7 +60,7 @@ public class ImageFetchService {
     // Deduplicate concurrent requests.
     return inflight.computeIfAbsent(key, k ->
         Single.fromCallable(() -> download(sid, base))
-            .subscribeOn(Schedulers.io())
+            .subscribeOn(RxVirtualSchedulers.io())
             .doOnSuccess(bytes -> cache.put(k, new SoftReference<>(bytes)))
             .doOnError(err -> log.warn("Image fetch failed for {}: {}", safeForLog(base), summarizeErr(err)))
             .doFinally(() -> inflight.remove(k))

@@ -10,14 +10,13 @@ import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.logging.ChatLogMaintenance;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -42,28 +41,15 @@ public class TargetCoordinator {
   private final ChatHistoryService chatHistoryService;
   private final ChatLogMaintenance chatLogMaintenance;
 
-  private final ExecutorService maintenanceExec = Executors.newSingleThreadExecutor(new ThreadFactory() {
-    @Override
-    public Thread newThread(Runnable r) {
-      Thread t = new Thread(r, "ircafe-chatlog-maintenance");
-      t.setDaemon(true);
-      return t;
-    }
-  });
+  private final ExecutorService maintenanceExec = VirtualThreads.newSingleThreadExecutor("ircafe-chatlog-maintenance");
 
   /**
    * UI refreshes for user-list metadata (away/account/hostmask/real-name) can arrive in huge bursts
    * (e.g., WHOX scans on big channels). Coalesce these to avoid rebuilding nick completions
    * on the EDT thousands of times.
    */
-  private final ScheduledExecutorService usersRefreshExec = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-    @Override
-    public Thread newThread(Runnable r) {
-      Thread t = new Thread(r, "ircafe-users-refresh");
-      t.setDaemon(true);
-      return t;
-    }
-  });
+  private final ScheduledExecutorService usersRefreshExec =
+      VirtualThreads.newSingleThreadScheduledExecutor("ircafe-users-refresh");
   private final AtomicBoolean usersRefreshScheduled = new AtomicBoolean(false);
 
   private final CompositeDisposable disposables = new CompositeDisposable();

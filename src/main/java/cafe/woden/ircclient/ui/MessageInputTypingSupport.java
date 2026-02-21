@@ -5,7 +5,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -26,7 +30,7 @@ final class MessageInputTypingSupport {
 
   private static final Logger log = LoggerFactory.getLogger(MessageInputTypingSupport.class);
 
-  private static final int TYPING_PAUSE_MS = 5000;
+  private static final int TYPING_PAUSE_MS = 2000;
 
   // IRCv3 typing indicators are ephemeral; many clients expire "active" after ~5–6 seconds.
   // We throttle "active" emissions to avoid spamming while still keeping the indicator alive.
@@ -39,6 +43,8 @@ final class MessageInputTypingSupport {
   private final JTextField input;
   private final JPanel typingBanner;
   private final JLabel typingBannerLabel;
+  private final TypingDotsIndicator typingDotsIndicator;
+  private final TypingSignalIndicator typingSignalIndicator;
   private final Supplier<UiSettings> settingsSupplier;
   private final MessageInputUiHooks hooks;
 
@@ -48,39 +54,58 @@ final class MessageInputTypingSupport {
   private final Timer remoteTypingHintTimer;
 
   private String lastEmittedTypingState = "done";
-  private String remoteTypingHint = "";
+  private final LinkedHashMap<String, RemoteTypingEntry> remoteTypingByNick = new LinkedHashMap<>();
 
   private long lastUserEditAtMs = 0L;
   private long lastActiveSentAtMs = 0L;
 
   // Track the last applied setting so we can react specifically to "toggle OFF".
   private boolean lastTypingIndicatorsEnabled = true;
+  private boolean typingSignalAvailable;
 
   MessageInputTypingSupport(
       JTextField input,
       JPanel typingBanner,
       JLabel typingBannerLabel,
+      TypingDotsIndicator typingDotsIndicator,
+      TypingSignalIndicator typingSignalIndicator,
       Supplier<UiSettings> settingsSupplier,
       MessageInputUiHooks hooks
   ) {
     this.input = Objects.requireNonNull(input, "input");
     this.typingBanner = Objects.requireNonNull(typingBanner, "typingBanner");
     this.typingBannerLabel = Objects.requireNonNull(typingBannerLabel, "typingBannerLabel");
+    this.typingDotsIndicator = Objects.requireNonNull(typingDotsIndicator, "typingDotsIndicator");
+    this.typingSignalIndicator = Objects.requireNonNull(typingSignalIndicator, "typingSignalIndicator");
     this.settingsSupplier = settingsSupplier != null ? settingsSupplier : () -> null;
     this.hooks = hooks;
 
     this.typingPauseTimer = new Timer(TYPING_PAUSE_MS, e -> onTypingPauseElapsed());
     this.typingPauseTimer.setRepeats(false);
 
-    this.remoteTypingHintTimer = new Timer(REMOTE_TYPING_HINT_MS, e -> clearRemoteTypingIndicator());
+    this.remoteTypingHintTimer = new Timer(REMOTE_TYPING_HINT_MS, e -> onRemoteTypingHintElapsed());
     this.remoteTypingHintTimer.setRepeats(false);
 
     UiSettings initial = this.settingsSupplier.get();
     this.lastTypingIndicatorsEnabled = initial != null && initial.typingIndicatorsEnabled();
+    this.typingSignalAvailable = false;
+    this.typingSignalIndicator.setAvailable(false);
   }
 
   void setOnTypingStateChanged(Consumer<String> onTypingStateChanged) {
     this.onTypingStateChanged = onTypingStateChanged == null ? s -> {} : onTypingStateChanged;
+  }
+
+  void setTypingSignalAvailable(boolean available) {
+    typingSignalAvailable = available;
+    typingSignalIndicator.setAvailable(available);
+  }
+
+  void onLocalTypingIndicatorSent(String state) {
+    if (!typingSignalAvailable) return;
+    String s = normalizeTypingState(state);
+    if (s.isEmpty()) return;
+    typingSignalIndicator.pulse(s);
   }
 
   /**
@@ -130,23 +155,27 @@ final class MessageInputTypingSupport {
     String s = normalizeTypingState(state);
     if (s.isEmpty()) s = "active";
 
+    long now = System.currentTimeMillis();
+    pruneExpiredRemoteTypers(now);
+
     if ("done".equals(s)) {
-      clearRemoteTypingIndicator();
+      remoteTypingByNick.remove(n);
+      refreshRemoteTypingBanner(now);
       return;
     }
 
-    remoteTypingHint = "paused".equals(s) ? (n + " paused typing…") : (n + " is typing…");
-    remoteTypingHintTimer.restart();
-    typingBannerLabel.setText(remoteTypingHint);
-    typingBanner.setVisible(true);
-    typingBanner.revalidate();
-    typingBanner.repaint();
+    // Keep last-updated nick near the end for a stable "most recently active" ordering.
+    remoteTypingByNick.remove(n);
+    remoteTypingByNick.put(n, new RemoteTypingEntry(s, now + REMOTE_TYPING_HINT_MS));
+    refreshRemoteTypingBanner(now);
   }
 
   void clearRemoteTypingIndicator() {
     remoteTypingHintTimer.stop();
-    remoteTypingHint = "";
+    remoteTypingByNick.clear();
     typingBannerLabel.setText("");
+    typingDotsIndicator.stopAnimation();
+    typingDotsIndicator.setVisible(false);
     typingBanner.setVisible(false);
     typingBanner.revalidate();
     typingBanner.repaint();
@@ -164,8 +193,10 @@ final class MessageInputTypingSupport {
   void onRemoveNotify() {
     typingPauseTimer.stop();
     remoteTypingHintTimer.stop();
-    remoteTypingHint = "";
+    remoteTypingByNick.clear();
     typingBannerLabel.setText("");
+    typingDotsIndicator.stopAnimation();
+    typingDotsIndicator.setVisible(false);
     typingBanner.setVisible(false);
     lastUserEditAtMs = 0L;
     lastActiveSentAtMs = 0L;
@@ -276,4 +307,137 @@ final class MessageInputTypingSupport {
       default -> "";
     };
   }
+
+  private void onRemoteTypingHintElapsed() {
+    long now = System.currentTimeMillis();
+    pruneExpiredRemoteTypers(now);
+    refreshRemoteTypingBanner(now);
+  }
+
+  private void pruneExpiredRemoteTypers(long now) {
+    if (remoteTypingByNick.isEmpty()) return;
+    remoteTypingByNick.entrySet().removeIf(e -> e.getValue().expiresAtMs() <= now);
+  }
+
+  private void refreshRemoteTypingBanner(long now) {
+    boolean wasVisible = typingBanner.isVisible();
+
+    if (remoteTypingByNick.isEmpty()) {
+      remoteTypingHintTimer.stop();
+      typingBannerLabel.setText("");
+      typingDotsIndicator.stopAnimation();
+      typingDotsIndicator.setVisible(false);
+      typingBanner.setVisible(false);
+      typingBanner.revalidate();
+      typingBanner.repaint();
+      if (wasVisible) {
+        refreshHintAndCompletionUi();
+      }
+      return;
+    }
+
+    typingBannerLabel.setText(buildRemoteTypingHintText());
+    boolean hasActive = hasActiveRemoteTypers();
+    if (hasActive) {
+      typingDotsIndicator.setVisible(true);
+      typingDotsIndicator.startAnimation();
+    } else {
+      typingDotsIndicator.stopAnimation();
+      typingDotsIndicator.setVisible(false);
+    }
+    typingBanner.setVisible(true);
+    typingBanner.revalidate();
+    typingBanner.repaint();
+    scheduleNextRemoteTypingExpiry(now);
+  }
+
+  private void scheduleNextRemoteTypingExpiry(long now) {
+    if (remoteTypingByNick.isEmpty()) {
+      remoteTypingHintTimer.stop();
+      return;
+    }
+    long nextExpiry = Long.MAX_VALUE;
+    for (RemoteTypingEntry e : remoteTypingByNick.values()) {
+      if (e.expiresAtMs() < nextExpiry) {
+        nextExpiry = e.expiresAtMs();
+      }
+    }
+    long delay = Math.max(100L, nextExpiry - now);
+    int delayMs = (int) Math.min(Integer.MAX_VALUE, delay);
+    remoteTypingHintTimer.setInitialDelay(delayMs);
+    remoteTypingHintTimer.restart();
+  }
+
+  private String buildRemoteTypingHintText() {
+    List<String> active = new ArrayList<>();
+    List<String> paused = new ArrayList<>();
+    for (Map.Entry<String, RemoteTypingEntry> e : remoteTypingByNick.entrySet()) {
+      if ("paused".equals(e.getValue().state())) {
+        paused.add(e.getKey());
+      } else {
+        active.add(e.getKey());
+      }
+    }
+
+    if (active.isEmpty() && paused.isEmpty()) {
+      return "";
+    }
+    if (paused.isEmpty()) {
+      return formatTypingClause(active, "is typing", "are typing");
+    }
+    if (active.isEmpty()) {
+      return formatTypingClause(paused, "paused typing", "paused typing");
+    }
+    return formatTypingClause(active, "is typing", "are typing")
+        + " | "
+        + formatTypingClause(paused, "paused typing", "paused typing");
+  }
+
+  private static String formatTypingClause(List<String> nicks, String singularSuffix, String pluralSuffix) {
+    if (nicks == null || nicks.isEmpty()) return "";
+    String names = formatNickList(nicks);
+    if (names.isEmpty()) return "";
+    return names + " " + (nicks.size() == 1 ? singularSuffix : pluralSuffix);
+  }
+
+  private static String formatNickList(List<String> nicks) {
+    if (nicks == null || nicks.isEmpty()) return "";
+
+    int maxShown = 3;
+    int showCount = Math.min(maxShown, nicks.size());
+    List<String> shown = nicks.subList(0, showCount);
+    int others = nicks.size() - showCount;
+
+    String base;
+    if (shown.size() == 1) {
+      base = shown.get(0);
+    } else if (shown.size() == 2) {
+      base = shown.get(0) + " and " + shown.get(1);
+    } else {
+      base = shown.get(0) + ", " + shown.get(1) + ", and " + shown.get(2);
+    }
+
+    if (others <= 0) return base;
+    return base + ", and " + others + " other" + (others == 1 ? "" : "s");
+  }
+
+  private boolean hasActiveRemoteTypers() {
+    for (RemoteTypingEntry entry : remoteTypingByNick.values()) {
+      if (!"paused".equals(entry.state())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void refreshHintAndCompletionUi() {
+    if (hooks == null) return;
+    try {
+      hooks.refreshHintAndCompletion();
+    } catch (Exception ex) {
+      log.warn("[MessageInputTypingSupport] hooks.refreshHintAndCompletion failed", ex);
+    }
+  }
+
+  private record RemoteTypingEntry(String state, long expiresAtMs) {}
 }

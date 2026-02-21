@@ -5,6 +5,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -19,8 +20,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +46,7 @@ public class UserInfoEnrichmentService {
 
   private static final String IRCafe_WHOX_TOKEN = "1";
   private static final String IRCafe_WHOX_FIELDS = "%tcuhnaf," + IRCafe_WHOX_TOKEN;
+  private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
   private final ObjectProvider<UiSettingsBus> settingsBusProvider;
@@ -76,11 +78,10 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
 
   private final Disposable eventsSub;
 
-  private final ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(r -> {
-    Thread t = new Thread(r, "user-info-enrichment");
-    t.setDaemon(true);
-    return t;
-  });
+  private final ScheduledExecutorService exec = VirtualThreads.newSingleThreadScheduledExecutor("user-info-enrichment");
+  private final Object scheduleLock = new Object();
+  private ScheduledFuture<?> scheduledTick;
+  private long scheduledAtEpochMs = Long.MAX_VALUE;
 
   public UserInfoEnrichmentService(IrcClientService irc,
                                    ObjectProvider<UiSettingsBus> settingsBusProvider,
@@ -91,7 +92,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
 
     this.eventsSub = irc.events().subscribe(this::onEvent, err ->
         log.debug("UserInfoEnrichmentService event handler failed", err));
-    exec.scheduleWithFixedDelay(this::tick, 0, 1, TimeUnit.SECONDS);
   }
 
   @PreDestroy
@@ -99,6 +99,13 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     try {
       if (eventsSub != null && !eventsSub.isDisposed()) eventsSub.dispose();
     } catch (Exception ignored) {
+    }
+    synchronized (scheduleLock) {
+      if (scheduledTick != null) {
+        scheduledTick.cancel(false);
+        scheduledTick = null;
+      }
+      scheduledAtEpochMs = Long.MAX_VALUE;
     }
     exec.shutdownNow();
   }
@@ -143,6 +150,7 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     if (sid.isEmpty()) return;
     knownServers.add(sid);
     planner.setRosterSnapshot(sid, nicks);
+    requestTick(0);
   }
 
   /** Enqueue USERHOST probes for these nicks (best-effort). */
@@ -151,6 +159,7 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     if (sid.isEmpty()) return;
     knownServers.add(sid);
     planner.enqueueUserhost(sid, nicks);
+    requestTick(0);
   }
 
   /** Enqueue WHOIS probes for these nicks (only executed if WHOIS fallback is enabled). */
@@ -163,6 +172,7 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     if (sid.isEmpty()) return;
     knownServers.add(sid);
     planner.enqueueWhois(sid, nicks);
+    requestTick(0);
   }
 
   /** Enqueue a channel WHO scan (best-effort, rate limited). */
@@ -175,6 +185,7 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     if (sid.isEmpty()) return;
     knownServers.add(sid);
     planner.enqueueWhoChannel(sid, channel);
+    requestTick(0);
   }
 
   /** Enqueue a channel WHO scan as high priority (promoted to the front of the queue). */
@@ -187,6 +198,7 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
     if (sid.isEmpty()) return;
     knownServers.add(sid);
     planner.enqueueWhoChannelPrioritized(sid, channel);
+    requestTick(0);
   }
 
 /** Enqueue WHOIS probes as high priority (promoted to the front of the queue). */
@@ -199,6 +211,7 @@ public void enqueueWhoisPrioritized(String serverId, List<String> nicks) {
   if (sid.isEmpty()) return;
   knownServers.add(sid);
   planner.enqueueWhoisPrioritized(sid, nicks);
+  requestTick(0);
 }
 
 /** Record that we saw a user do something (e.g., speak), so WHOIS fallback can prioritize them. */
@@ -238,6 +251,7 @@ private static Map<String, Instant> newLruInstantMap() {
       if (!sid.isEmpty()) {
         knownServers.add(sid);
         maybeEnqueueSelfWhoisProbe(sid, c.nick());
+        requestTick(0);
       }
       return;
     }
@@ -245,6 +259,7 @@ private static Map<String, Instant> newLruInstantMap() {
       String sid = norm(ev.serverId());
       if (!sid.isEmpty()) {
         selfWhoisProbeDone.remove(sid);
+        requestTick(0);
       }
       return;
     }
@@ -280,6 +295,7 @@ private static Map<String, Instant> newLruInstantMap() {
         wpc.whoisAccountNumericSupported(),
         cfg
     );
+    requestTick(0);
   }
 
   /**
@@ -301,6 +317,7 @@ private static Map<String, Instant> newLruInstantMap() {
     if (!selfWhoisProbeDone.add(serverId)) return;
     planner.enqueueWhois(serverId, List.of(nick));
     knownServers.add(serverId);
+    requestTick(0);
     log.debug("[{}] Enqueued self WHOIS capability probe for nick {}", serverId, nick);
   }
   private void tick() {
@@ -338,9 +355,49 @@ private static Map<String, Instant> newLruInstantMap() {
         execute(next.get());
         break;
       }
+
+      long nextDelayMs = NO_WAKE_NEEDED_MS;
+      Instant after = Instant.now();
+      for (String sid : List.copyOf(knownServers)) {
+        if (!isConnected(sid)) continue;
+        long readyDelayMs = planner.nextReadyDelayMs(sid, after, cfg);
+        if (readyDelayMs < nextDelayMs) nextDelayMs = readyDelayMs;
+        long periodicDelayMs = planner.nextPeriodicRefreshDelayMs(sid, after, cfg);
+        if (periodicDelayMs < nextDelayMs) nextDelayMs = periodicDelayMs;
+        if (nextDelayMs == 0L) break;
+      }
+      if (nextDelayMs != NO_WAKE_NEEDED_MS) {
+        requestTick(nextDelayMs);
+      }
     } catch (Exception ex) {
       log.debug("UserInfoEnrichmentService tick failed", ex);
     }
+  }
+
+  private void requestTick(long delayMs) {
+    long safeDelayMs = Math.max(0L, delayMs);
+    long targetEpochMs = System.currentTimeMillis() + safeDelayMs;
+    synchronized (scheduleLock) {
+      if (exec.isShutdown()) return;
+
+      if (scheduledTick != null && !scheduledTick.isDone()) {
+        if (targetEpochMs >= scheduledAtEpochMs) {
+          return;
+        }
+        scheduledTick.cancel(false);
+      }
+
+      scheduledAtEpochMs = targetEpochMs;
+      scheduledTick = exec.schedule(this::runScheduledTick, safeDelayMs, TimeUnit.MILLISECONDS);
+    }
+  }
+
+  private void runScheduledTick() {
+    synchronized (scheduleLock) {
+      scheduledTick = null;
+      scheduledAtEpochMs = Long.MAX_VALUE;
+    }
+    tick();
   }
 
   private void execute(UserInfoEnrichmentPlanner.PlannedCommand cmd) {

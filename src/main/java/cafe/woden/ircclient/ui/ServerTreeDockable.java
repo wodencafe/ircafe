@@ -148,7 +148,7 @@ private static final class InsertionLine {
     protected void paintComponent(Graphics g) {
       super.paintComponent(g);
       ServerTreeDockable.this.paintInsertionLine(g);
-      ServerTreeDockable.this.paintHoveredServerAction(g);
+      ServerTreeDockable.this.paintVisibleServerActions(g);
     }
 
     @Override
@@ -177,6 +177,8 @@ private static final class InsertionLine {
 
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
   private final Map<String, Boolean> serverDesiredOnline = new HashMap<>();
+  private final Map<String, String> serverLastError = new HashMap<>();
+  private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
 
   private final ServerCatalog serverCatalog;
 
@@ -223,8 +225,8 @@ private static final class InsertionLine {
     this.connectBtn.setFocusable(false);
     this.connectBtn.setPreferredSize(new Dimension(26, 26));
     this.disconnectBtn.setText("");
-    this.disconnectBtn.setIcon(SvgIcons.action("close", 16));
-    this.disconnectBtn.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
+    this.disconnectBtn.setIcon(SvgIcons.action("exit", 16));
+    this.disconnectBtn.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
     this.disconnectBtn.setToolTipText("Disconnect connected/connecting servers");
     this.disconnectBtn.setFocusable(false);
     this.disconnectBtn.setPreferredSize(new Dimension(26, 26));
@@ -304,13 +306,14 @@ private static final class InsertionLine {
       );
     }
     TreeSelectionListener tsl = e -> {
-      if (suppressSelectionBroadcast) return;
       DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-      if (node == null) return;
-      Object uo = node.getUserObject();
-      if (uo instanceof NodeData nd) {
-        selections.onNext(nd.ref);
+      if (!suppressSelectionBroadcast && node != null) {
+        Object uo = node.getUserObject();
+        if (uo instanceof NodeData nd) {
+          selections.onNext(nd.ref);
+        }
       }
+      tree.repaint();
     };
     tree.addTreeSelectionListener(tsl);
 
@@ -585,8 +588,7 @@ private static final class InsertionLine {
 
   private static boolean canDisconnectServer(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.CONNECTING
-        || st == ConnectionState.CONNECTED
+    return st == ConnectionState.CONNECTED
         || st == ConnectionState.RECONNECTING;
   }
 
@@ -659,6 +661,29 @@ private static final class InsertionLine {
     return badge.isEmpty() ? base : (base + badge);
   }
 
+  private String connectionDiagnosticsTipForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return "";
+
+    String err = Objects.toString(serverLastError.getOrDefault(sid, ""), "").trim();
+    Long retryAt = serverNextRetryAtEpochMs.get(sid);
+
+    StringBuilder out = new StringBuilder();
+    if (!err.isEmpty()) {
+      out.append(" Last error: ").append(err).append(".");
+    }
+    if (retryAt != null && retryAt > 0) {
+      long deltaMs = retryAt - System.currentTimeMillis();
+      if (deltaMs <= 0) {
+        out.append(" Next retry: imminent.");
+      } else {
+        long sec = Math.max(1L, deltaMs / 1000L);
+        out.append(" Next retry in ").append(sec).append("s.");
+      }
+    }
+    return out.toString();
+  }
+
   private static String serverNodeIconName(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return switch (st) {
@@ -680,9 +705,17 @@ private static final class InsertionLine {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return switch (st) {
       case DISCONNECTED -> "plus";
-      case CONNECTING, CONNECTED, RECONNECTING -> "close";
-      case DISCONNECTING -> "refresh";
+      case CONNECTED, RECONNECTING -> "exit";
+      case CONNECTING, DISCONNECTING -> "refresh";
     };
+  }
+
+  private String selectedServerActionServerId() {
+    TreePath selected = tree.getSelectionPath();
+    if (selected == null) return "";
+    Object last = selected.getLastPathComponent();
+    if (!(last instanceof DefaultMutableTreeNode node) || !isServerNode(node)) return "";
+    return Objects.toString(node.getUserObject(), "").trim();
   }
 
   private String serverIdAt(int x, int y) {
@@ -756,11 +789,32 @@ private static final class InsertionLine {
     tree.repaint();
   }
 
+  private String serverActionServerIdAtPoint(MouseEvent event) {
+    if (event == null) return "";
+
+    String sid = serverIdAt(event.getX(), event.getY());
+    if (!sid.isEmpty()) {
+      Rectangle btn = serverActionButtonBoundsForServer(sid);
+      if (btn != null && btn.contains(event.getPoint())) {
+        return sid;
+      }
+    }
+
+    String selected = selectedServerActionServerId();
+    if (!selected.isEmpty()) {
+      Rectangle btn = serverActionButtonBoundsForServer(selected);
+      if (btn != null && btn.contains(event.getPoint())) {
+        return selected;
+      }
+    }
+    return "";
+  }
+
   private boolean maybeHandleHoveredServerActionClick(MouseEvent event) {
     if (event == null) return false;
     if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
 
-    String sid = Objects.toString(hoveredServerActionServerId, "").trim();
+    String sid = serverActionServerIdAtPoint(event);
     if (sid.isEmpty()) return false;
 
     Rectangle btn = serverActionButtonBoundsForServer(sid);
@@ -778,8 +832,19 @@ private static final class InsertionLine {
     return true;
   }
 
-  private void paintHoveredServerAction(Graphics g) {
-    String sid = Objects.toString(hoveredServerActionServerId, "").trim();
+  private void paintVisibleServerActions(Graphics g) {
+    String selected = selectedServerActionServerId();
+    if (!selected.isEmpty()) {
+      paintServerAction(g, selected);
+    }
+    String hovered = Objects.toString(hoveredServerActionServerId, "").trim();
+    if (!hovered.isEmpty() && !Objects.equals(hovered, selected)) {
+      paintServerAction(g, hovered);
+    }
+  }
+
+  private void paintServerAction(Graphics g, String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
     Rectangle btn = serverActionButtonBoundsForServer(sid);
@@ -865,11 +930,15 @@ private static final class InsertionLine {
       }
 
       JMenuItem connectOne = new JMenuItem("Connect \"" + pretty + "\"");
+      connectOne.setIcon(SvgIcons.action("plus", 16));
+      connectOne.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
       connectOne.setEnabled(canConnectServer(state));
       connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
       menu.add(connectOne);
 
       JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + pretty + "\"");
+      disconnectOne.setIcon(SvgIcons.action("exit", 16));
+      disconnectOne.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
       disconnectOne.setEnabled(canDisconnectServer(state));
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
@@ -1226,6 +1295,35 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (Objects.equals(hoveredServerActionServerId, sid)) {
       tree.repaint();
     }
+  }
+
+  public void setServerConnectionDiagnostics(String serverId, String lastError, Long nextRetryEpochMs) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    String nextError = Objects.toString(lastError, "").trim();
+    Long nextRetry = (nextRetryEpochMs == null || nextRetryEpochMs <= 0L) ? null : nextRetryEpochMs;
+
+    String prevError = Objects.toString(serverLastError.getOrDefault(sid, ""), "").trim();
+    Long prevRetry = serverNextRetryAtEpochMs.get(sid);
+    if (Objects.equals(prevError, nextError) && Objects.equals(prevRetry, nextRetry)) return;
+
+    if (nextError.isEmpty()) {
+      serverLastError.remove(sid);
+    } else {
+      serverLastError.put(sid, nextError);
+    }
+    if (nextRetry == null) {
+      serverNextRetryAtEpochMs.remove(sid);
+    } else {
+      serverNextRetryAtEpochMs.put(sid, nextRetry);
+    }
+
+    ServerNodes sn = servers.get(sid);
+    if (sn != null && sn.serverNode != null) {
+      model.nodeChanged(sn.serverNode);
+    }
+    tree.repaint();
   }
 
   public void setStatusText(String text) {
@@ -1822,6 +1920,10 @@ private void syncServers(List<ServerEntry> latest) {
   private String toolTipForEvent(MouseEvent event) {
     if (event == null) return null;
     TreePath path = tree.getPathForLocation(event.getX(), event.getY());
+    if (path == null) {
+      String sid = serverIdAt(event.getX(), event.getY());
+      if (!sid.isEmpty()) path = serverPathForId(sid);
+    }
     if (path == null) return null;
     Object comp = path.getLastPathComponent();
     if (!(comp instanceof DefaultMutableTreeNode node)) return null;
@@ -1849,11 +1951,13 @@ private void syncServers(List<ServerEntry> latest) {
       String stateTip = "State: " + serverStateLabel(state) + ".";
       String intentTip = " Intent: " + serverDesiredIntentLabel(desired) + ".";
       String queueTip = serverIntentQueueTip(state, desired);
+      String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
       boolean auto = !origin.isEmpty() && sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, display);
       String tip = stateTip + intentTip;
       if (!queueTip.isBlank()) tip += " " + queueTip;
+      if (!diagnostics.isBlank()) tip += diagnostics;
       tip += " Discovered from soju; not saved.";
       if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
@@ -1867,11 +1971,13 @@ private void syncServers(List<ServerEntry> latest) {
       String stateTip = "State: " + serverStateLabel(state) + ".";
       String intentTip = " Intent: " + serverDesiredIntentLabel(desired) + ".";
       String queueTip = serverIntentQueueTip(state, desired);
+      String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
       boolean auto = !origin.isEmpty() && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display);
       String tip = stateTip + intentTip;
       if (!queueTip.isBlank()) tip += " " + queueTip;
+      if (!diagnostics.isBlank()) tip += diagnostics;
       tip += " Discovered from ZNC; not saved.";
       if (auto) tip += " Auto-connect enabled.";
       if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
@@ -1883,9 +1989,12 @@ private void syncServers(List<ServerEntry> latest) {
       ConnectionState state = connectionStateForServer(serverId);
       boolean desired = desiredOnlineForServer(serverId);
       String queueTip = serverIntentQueueTip(state, desired);
+      String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String action = serverActionHint(state);
       String base = "State: " + serverStateLabel(state) + ". Intent: " + serverDesiredIntentLabel(desired) + ".";
+      if (!queueTip.isBlank() && !diagnostics.isBlank()) return base + " " + queueTip + diagnostics + " " + action;
       if (!queueTip.isBlank()) return base + " " + queueTip + " " + action;
+      if (!diagnostics.isBlank()) return base + diagnostics + " " + action;
       return base + " " + action;
     }
 
@@ -1920,6 +2029,8 @@ private void removeServerRoot(String serverId) {
 
   serverStates.remove(serverId);
   serverDesiredOnline.remove(serverId);
+  serverLastError.remove(serverId);
+  serverNextRetryAtEpochMs.remove(serverId);
   clearPrivateMessageOnlineStates(serverId);
   leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
 

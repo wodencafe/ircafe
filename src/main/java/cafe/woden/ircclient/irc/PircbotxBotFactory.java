@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
@@ -68,10 +69,12 @@ public class PircbotxBotFactory {
 
   private final ServerProxyResolver proxyResolver;
   private final SojuProperties sojuProps;
+  private final RuntimeConfigStore runtimeConfig;
 
-  public PircbotxBotFactory(ServerProxyResolver proxyResolver, SojuProperties sojuProps) {
+  public PircbotxBotFactory(ServerProxyResolver proxyResolver, SojuProperties sojuProps, RuntimeConfigStore runtimeConfig) {
     this.proxyResolver = proxyResolver;
     this.sojuProps = sojuProps;
+    this.runtimeConfig = runtimeConfig;
   }
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
@@ -150,12 +153,28 @@ public class PircbotxBotFactory {
 
   private void configureCapHandlers(Configuration.Builder builder) {
     builder.getCapHandlers().clear();
-    List<String> caps = new ArrayList<>(BASE_CAPABILITIES);
+    List<String> caps = new ArrayList<>();
+    for (String cap : BASE_CAPABILITIES) {
+      if (isCapabilityEnabled(cap)) caps.add(cap);
+    }
     // Optional: soju network discovery.
-    if (sojuProps.discovery().enabled()) {
+    if (sojuProps.discovery().enabled() && isCapabilityEnabled("soju.im/bouncer-networks")) {
       caps.add("soju.im/bouncer-networks");
     }
     builder.addCapHandler(new BatchedEnableCapHandler(caps));
+  }
+
+  public static List<String> requestableCapabilities() {
+    return BASE_CAPABILITIES;
+  }
+
+  private boolean isCapabilityEnabled(String capability) {
+    if (runtimeConfig == null) return true;
+    try {
+      return runtimeConfig.isIrcv3CapabilityEnabled(capability, true);
+    } catch (Exception ignored) {
+      return true;
+    }
   }
 
   private static void applyMessageDelay(Configuration.Builder builder, long delayMs) {

@@ -24,11 +24,11 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Handles nick auto-completion in the message input.
+ * Handles message-input auto-completion (nicks + slash commands).
  *
  * Responsibilities:
  *  - Own AutoCompletion + its CompletionProvider
- *  - Efficient bulk rebuild of nick completions (avoid O(n^2) sorting)
+ *  - Efficient bulk rebuild of completion items (avoid O(n^2) sorting)
  *  - IRC-style addressing suffix behavior for first-word completion ("nick: ")
  *  - Best-effort refresh of AutoCompletion popup UI on theme/LAF changes
  */
@@ -37,6 +37,64 @@ final class MessageInputNickCompletionSupport {
   private static final Logger log = LoggerFactory.getLogger(MessageInputNickCompletionSupport.class);
 
   private static final int PENDING_NICK_SUFFIX_TIMEOUT_MS = 5000;
+  private static final List<SlashCommand> SLASH_COMMANDS = List.of(
+      new SlashCommand("/join", "Join channel"),
+      new SlashCommand("/j", "Alias: /join"),
+      new SlashCommand("/part", "Leave channel"),
+      new SlashCommand("/leave", "Alias: /part"),
+      new SlashCommand("/connect", "Connect server/all"),
+      new SlashCommand("/disconnect", "Disconnect server/all"),
+      new SlashCommand("/reconnect", "Reconnect server/all"),
+      new SlashCommand("/quit", "Disconnect all and quit"),
+      new SlashCommand("/nick", "Change nickname"),
+      new SlashCommand("/away", "Set/remove away status"),
+      new SlashCommand("/query", "Open private message"),
+      new SlashCommand("/whois", "WHOIS lookup"),
+      new SlashCommand("/wi", "Alias: /whois"),
+      new SlashCommand("/whowas", "WHOWAS lookup"),
+      new SlashCommand("/msg", "Send private message"),
+      new SlashCommand("/notice", "Send notice"),
+      new SlashCommand("/me", "Send action"),
+      new SlashCommand("/topic", "View/change topic"),
+      new SlashCommand("/kick", "Kick user"),
+      new SlashCommand("/invite", "Invite user"),
+      new SlashCommand("/names", "Request NAMES"),
+      new SlashCommand("/who", "Request WHO"),
+      new SlashCommand("/list", "Request LIST"),
+      new SlashCommand("/mode", "Set/query mode"),
+      new SlashCommand("/op", "Grant op"),
+      new SlashCommand("/deop", "Remove op"),
+      new SlashCommand("/voice", "Grant voice"),
+      new SlashCommand("/devoice", "Remove voice"),
+      new SlashCommand("/ban", "Set ban"),
+      new SlashCommand("/unban", "Remove ban"),
+      new SlashCommand("/ignore", "Add hard ignore"),
+      new SlashCommand("/unignore", "Remove hard ignore"),
+      new SlashCommand("/ignorelist", "Show hard ignores"),
+      new SlashCommand("/ignores", "Alias: /ignorelist"),
+      new SlashCommand("/softignore", "Add soft ignore"),
+      new SlashCommand("/unsoftignore", "Remove soft ignore"),
+      new SlashCommand("/softignorelist", "Show soft ignores"),
+      new SlashCommand("/softignores", "Alias: /softignorelist"),
+      new SlashCommand("/version", "CTCP VERSION"),
+      new SlashCommand("/ping", "CTCP PING"),
+      new SlashCommand("/time", "CTCP TIME"),
+      new SlashCommand("/ctcp", "Send CTCP"),
+      new SlashCommand("/dcc", "DCC command"),
+      new SlashCommand("/dccmsg", "DCC message"),
+      new SlashCommand("/chathistory", "IRCv3 CHATHISTORY"),
+      new SlashCommand("/history", "Alias: /chathistory"),
+      new SlashCommand("/help", "Show command help"),
+      new SlashCommand("/commands", "Alias: /help"),
+      new SlashCommand("/reply", "Reply to message-id"),
+      new SlashCommand("/react", "React to message-id"),
+      new SlashCommand("/edit", "Edit message-id"),
+      new SlashCommand("/redact", "Redact message-id"),
+      new SlashCommand("/delete", "Alias: /redact"),
+      new SlashCommand("/filter", "Local filtering controls"),
+      new SlashCommand("/quote", "Send raw IRC line"),
+      new SlashCommand("/raw", "Alias: /quote")
+  );
 
   private final JComponent owner;
   private final JTextField input;
@@ -48,6 +106,7 @@ final class MessageInputNickCompletionSupport {
    */
   private final FastCompletionProvider completionProvider = new FastCompletionProvider();
   private final AutoCompletion autoCompletion = new AutoCompletion(completionProvider);
+  private final List<Completion> slashCommandCompletions;
 
   // AutoCompletion popups are lazily created and may cache UI defaults; mark dirty on theme changes.
   private volatile boolean autoCompletionUiDirty = true;
@@ -75,6 +134,8 @@ final class MessageInputNickCompletionSupport {
     this.owner = owner;
     this.input = input;
     this.undoSupport = undoSupport;
+    this.slashCommandCompletions = buildSlashCommandCompletions();
+    rebuildCompletionModel(List.of());
   }
 
   AutoCompletion getAutoCompletion() {
@@ -93,6 +154,7 @@ final class MessageInputNickCompletionSupport {
     autoCompletion.install(input);
 
     installNickCompletionAddressingSuffix();
+    installSlashCommandAutoPopup();
     installAutoCompletionUiRefreshOnLafChange();
   }
 
@@ -127,19 +189,26 @@ final class MessageInputNickCompletionSupport {
   void setNickCompletions(List<String> nicks) {
     List<String> cleaned = cleanNickList(nicks);
     nickSnapshot = cleaned;
+    rebuildCompletionModel(cleaned);
+  }
 
-    // Build completions once and install in one shot; avoids O(n^2) sort churn.
-    if (cleaned.isEmpty()) {
-      completionProvider.replaceCompletions(List.of());
-      markUiDirty();
-      return;
-    }
-    ArrayList<Completion> completions = new ArrayList<>(cleaned.size());
+  private void rebuildCompletionModel(List<String> nicks) {
+    List<String> cleaned = (nicks == null) ? List.of() : nicks;
+    ArrayList<Completion> completions = new ArrayList<>(slashCommandCompletions.size() + cleaned.size());
+    completions.addAll(slashCommandCompletions);
     for (String nick : cleaned) {
       completions.add(new BasicCompletion(completionProvider, nick, "IRC nick"));
     }
     completionProvider.replaceCompletions(completions);
     markUiDirty();
+  }
+
+  private List<Completion> buildSlashCommandCompletions() {
+    ArrayList<Completion> completions = new ArrayList<>(SLASH_COMMANDS.size());
+    for (SlashCommand cmd : SLASH_COMMANDS) {
+      completions.add(new BasicCompletion(completionProvider, cmd.command(), cmd.summary()));
+    }
+    return List.copyOf(completions);
   }
 
   private static List<String> cleanNickList(List<String> nicks) {
@@ -232,6 +301,53 @@ final class MessageInputNickCompletionSupport {
       });
     } catch (Exception ignored) {
     }
+  }
+
+  private void installSlashCommandAutoPopup() {
+    try {
+      input.getDocument().addDocumentListener(new DocumentListener() {
+        @Override public void insertUpdate(DocumentEvent e) {
+          maybeShowSlashCommandPopup(e);
+        }
+
+        @Override public void removeUpdate(DocumentEvent e) {
+        }
+
+        @Override public void changedUpdate(DocumentEvent e) {
+        }
+      });
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void maybeShowSlashCommandPopup(DocumentEvent e) {
+    if (e == null || e.getLength() != 1) return;
+    if (!input.isEditable() || !input.isEnabled() || !input.hasFocus()) return;
+
+    try {
+      Document doc = e.getDocument();
+      if (doc == null) return;
+      String inserted = doc.getText(e.getOffset(), 1);
+      if (!"/".equals(inserted)) return;
+    } catch (Exception ignored) {
+      return;
+    }
+
+    SwingUtilities.invokeLater(() -> {
+      if (!shouldShowSlashCommandCompletion()) return;
+      autoCompletion.doCompletion();
+    });
+  }
+
+  private boolean shouldShowSlashCommandCompletion() {
+    if (!input.isEditable() || !input.isEnabled() || !input.hasFocus()) return false;
+    String text = input.getText();
+    if (text == null || text.isEmpty()) return false;
+    int caret = input.getCaretPosition();
+    if (caret <= 0 || caret > text.length()) return false;
+    if (text.charAt(caret - 1) != '/') return false;
+    int first = firstNonWhitespace(text);
+    return first >= 0 && first == caret - 1;
   }
 
   private void maybeAppendPendingNickSuffixAsync() {
@@ -389,6 +505,8 @@ final class MessageInputNickCompletionSupport {
     while (i < s.length() && !Character.isWhitespace(s.charAt(i))) i++;
     return i;
   }
+
+  private record SlashCommand(String command, String summary) {}
 
   private void installAutoCompletionUiRefreshOnLafChange() {
     try {
@@ -557,6 +675,11 @@ final class MessageInputNickCompletionSupport {
           }
         }
       }
+    }
+
+    @Override
+    protected boolean isValidChar(char ch) {
+      return super.isValidChar(ch) || ch == '/';
     }
   }
 }

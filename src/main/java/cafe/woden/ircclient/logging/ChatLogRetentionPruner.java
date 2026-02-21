@@ -1,13 +1,12 @@
 package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
@@ -55,14 +54,7 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
     this.props = Objects.requireNonNull(props, "props");
     this.flyway = Objects.requireNonNull(flyway, "flyway");
 
-    this.exec = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread t = new Thread(r, "ircafe-chatlog-retention");
-        t.setDaemon(true);
-        return t;
-      }
-    });
+    this.exec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-chatlog-retention");
 
     // Run once shortly after startup, then periodically.
     exec.schedule(this::pruneSafely, 10, TimeUnit.SECONDS);

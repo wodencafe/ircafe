@@ -7,6 +7,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
@@ -31,6 +32,7 @@ import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
+import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.beans.PropertyChangeListener;
 import java.awt.Color;
@@ -77,7 +79,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -504,6 +505,7 @@ public class PreferencesDialog {
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
     JCheckBox typingIndicatorsEnabled = buildTypingIndicatorsCheckbox(current);
+    Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
 
     HistoryControls history = buildHistoryControls(current, closeables);
@@ -527,7 +529,8 @@ public class PreferencesDialog {
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
-    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, typingIndicatorsEnabled, nickColors, timestamps, outgoing);
+    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
+    JPanel ircv3Panel = buildIrcv3CapabilitiesPanel(typingIndicatorsEnabled, ircv3Capabilities);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications);
@@ -686,6 +689,7 @@ public class PreferencesDialog {
       boolean presenceFoldsV = presenceFolds.isSelected();
       boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
       boolean typingIndicatorsEnabledV = typingIndicatorsEnabled.isSelected();
+      Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
 
       boolean nickColoringEnabledV = nickColors.enabled.isSelected();
       double nickColorMinContrastV = ((Number) nickColors.minContrast.getValue()).doubleValue();
@@ -928,6 +932,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
       runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(next.ctcpRequestsInActiveTargetEnabled());
       runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
+      persistIrcv3Capabilities(ircv3CapabilitiesV);
 
       if (nickColorSettingsBus != null) {
         nickColorSettingsBus.set(new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
@@ -1044,6 +1049,7 @@ public class PreferencesDialog {
     tabs.addTab("Startup", wrapTab(startupPanel));
     tabs.addTab("Tray & Notifications", wrapTab(trayPanel));
     tabs.addTab("Chat", wrapTab(chatPanel));
+    tabs.addTab("IRCv3", wrapTab(ircv3Panel));
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
     tabs.addTab("Notifications", wrapTab(notificationsPanel));
@@ -2362,6 +2368,27 @@ panel.add(subTabs, "growx, wmin 0");
     return cb;
   }
 
+  private Ircv3CapabilitiesControls buildIrcv3CapabilitiesControls() {
+    Map<String, Boolean> persisted = runtimeConfig.readIrcv3Capabilities();
+
+    LinkedHashMap<String, JCheckBox> checkboxes = new LinkedHashMap<>();
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]2[]"));
+    panel.setOpaque(false);
+
+    for (String cap : PircbotxBotFactory.requestableCapabilities()) {
+      String key = normalizeIrcv3CapabilityKey(cap);
+      if (key.isEmpty()) continue;
+
+      JCheckBox cb = new JCheckBox(capabilityDisplayLabel(key));
+      cb.setSelected(persisted.getOrDefault(key, Boolean.TRUE));
+      cb.setToolTipText(capabilityTooltip(key));
+      panel.add(cb, "growx, wmin 0, wrap");
+      checkboxes.put(key, cb);
+    }
+
+    return new Ircv3CapabilitiesControls(checkboxes, panel);
+  }
+
   private NickColorControls buildNickColorControls(Window owner, List<AutoCloseable> closeables) {
     NickColorSettings cur = (nickColorSettingsBus != null) ? nickColorSettingsBus.get() : null;
     boolean enabledSeed = cur == null || cur.enabled();
@@ -3474,7 +3501,6 @@ panel.add(subTabs, "growx, wmin 0");
 
   private JPanel buildChatPanel(JCheckBox presenceFolds,
                                JCheckBox ctcpRequestsInActiveTarget,
-                               JCheckBox typingIndicatorsEnabled,
                                NickColorControls nickColors,
                                TimestampControls timestamps,
                                OutgoingColorControls outgoing) {
@@ -3488,9 +3514,6 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(new JLabel("CTCP requests"), "aligny top");
     form.add(ctcpRequestsInActiveTarget, "alignx left");
 
-    form.add(new JLabel("Typing indicators"), "aligny top");
-    form.add(typingIndicatorsEnabled, "alignx left");
-
     form.add(new JLabel("Nick colors"), "aligny top");
     form.add(nickColors.panel, "growx");
 
@@ -3502,6 +3525,56 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(outgoing.panel, "growx");
 
     return form;
+  }
+
+  private JPanel buildIrcv3CapabilitiesPanel(JCheckBox typingIndicatorsEnabled, Ircv3CapabilitiesControls ircv3Capabilities) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]10[]6[]"));
+
+    form.add(tabTitle("IRCv3"), "growx, wmin 0, wrap");
+
+    form.add(sectionTitle("Feature toggles"), "growx, wmin 0, wrap");
+    form.add(typingIndicatorsEnabled, "growx, wmin 0, wrap");
+    form.add(helpText("Typing indicators control whether IRCafe sends/displays typing events when available."), "growx, wmin 0, wrap");
+
+    form.add(sectionTitle("Requested capabilities"), "growx, wmin 0, wrap");
+    form.add(helpText("These options control which IRCv3 capabilities IRCafe requests during CAP negotiation.\nChanges apply on new connections or reconnect."), "growx, wmin 0, wrap");
+    form.add(ircv3Capabilities.panel(), "growx, wmin 0");
+
+    return form;
+  }
+
+  private void persistIrcv3Capabilities(Map<String, Boolean> capabilities) {
+    if (capabilities == null || capabilities.isEmpty()) return;
+    for (Map.Entry<String, Boolean> e : capabilities.entrySet()) {
+      String key = normalizeIrcv3CapabilityKey(e.getKey());
+      if (key.isEmpty()) continue;
+      boolean enabled = Boolean.TRUE.equals(e.getValue());
+      runtimeConfig.rememberIrcv3CapabilityEnabled(key, enabled);
+    }
+  }
+
+  private static String capabilityDisplayLabel(String capability) {
+    return switch (capability) {
+      case "typing" -> "typing (typing indicators transport)";
+      case "message-tags" -> "message-tags (IRCv3 tag transport)";
+      case "echo-message" -> "echo-message (self-echo reconciliation)";
+      case "draft/reply" -> "draft/reply (reply metadata)";
+      case "draft/react" -> "draft/react (reaction metadata)";
+      case "read-marker" -> "read-marker (read receipts)";
+      case "chathistory" -> "chathistory (history fetch)";
+      case "draft/chathistory" -> "draft/chathistory (draft history extension)";
+      default -> capability;
+    };
+  }
+
+  private static String capabilityTooltip(String capability) {
+    return "Request \"" + capability + "\" during IRCv3 capability negotiation on connect.";
+  }
+
+  private static String normalizeIrcv3CapabilityKey(String capability) {
+    if (capability == null) return "";
+    String k = capability.trim().toLowerCase(Locale.ROOT);
+    return k;
   }
 
   private JPanel buildEmbedsAndPreviewsPanel(ImageEmbedControls image,
@@ -3917,11 +3990,7 @@ panel.add(subTabs, "growx, wmin 0");
     private final AtomicLong seq = new AtomicLong();
 
     RuleTestRunner() {
-      this.exec = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "ircafe-notification-rule-test");
-        t.setDaemon(true);
-        return t;
-      });
+      this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-notification-rule-test");
     }
 
     void runTest(NotificationRulesControls controls) {
@@ -5017,6 +5086,17 @@ panel.add(subTabs, "growx, wmin 0");
   }
 
   private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {
+  }
+
+  private record Ircv3CapabilitiesControls(Map<String, JCheckBox> checkboxes, JPanel panel) {
+    Map<String, Boolean> snapshot() {
+      Map<String, Boolean> out = new LinkedHashMap<>();
+      for (Map.Entry<String, JCheckBox> e : checkboxes.entrySet()) {
+        JCheckBox cb = e.getValue();
+        out.put(e.getKey(), cb != null && cb.isSelected());
+      }
+      return out;
+    }
   }
 
   private record NickColorControls(JCheckBox enabled,

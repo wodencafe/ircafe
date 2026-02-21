@@ -41,6 +41,12 @@ public class ConnectionCoordinator {
   /** Per-server desired online intent (missing => false/offline). */
   private final Set<String> desiredOnline = new HashSet<>();
 
+  /** Last connection-related error/reason shown in UI tooltips. */
+  private final Map<String, String> lastErrorByServer = new HashMap<>();
+
+  /** Next reconnect attempt wall-clock (epoch ms), when scheduled. */
+  private final Map<String, Long> nextRetryAtByServer = new HashMap<>();
+
   private final Set<String> configuredServers = new HashSet<>();
 
   public ConnectionCoordinator(
@@ -102,8 +108,9 @@ public class ConnectionCoordinator {
     }
 
     for (String sid : serverIds) {
-      requestConnect(sid, false);
+      requestConnect(sid, false, false);
     }
+    updateConnectionUi();
   }
 
   public void connectOne(String serverId) {
@@ -154,6 +161,7 @@ public class ConnectionCoordinator {
     TargetRef status = new TargetRef(sid, "status");
     ui.ensureTargetExists(status);
     setDesiredOnline(sid, true);
+    setNextRetryAtMs(sid, null);
 
     if (stateOf(sid) == ConnectionState.DISCONNECTING) {
       ui.appendStatus(status, "(conn)", "Reconnect requested; waiting for disconnect to finish…");
@@ -178,6 +186,7 @@ public class ConnectionCoordinator {
                 () -> {},
                 err -> {
                   ui.appendError(status, "(reconnect-error)", String.valueOf(err));
+                  setLastError(sid, String.valueOf(err));
                   setState(sid, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
                 }
@@ -196,18 +205,23 @@ public class ConnectionCoordinator {
   }
 
   private void requestConnect(String sid, boolean announceQueued) {
+    requestConnect(sid, announceQueued, true);
+  }
+
+  private void requestConnect(String sid, boolean announceQueued, boolean refreshUiNow) {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty()) return;
 
     TargetRef status = new TargetRef(id, "status");
     ui.ensureTargetExists(status);
     setDesiredOnline(id, true);
+    setNextRetryAtMs(id, null);
 
     ConnectionState current = stateOf(id);
     if (current == ConnectionState.CONNECTED
         || current == ConnectionState.CONNECTING
         || current == ConnectionState.RECONNECTING) {
-      updateConnectionUi();
+      if (refreshUiNow) updateConnectionUi();
       return;
     }
 
@@ -215,7 +229,7 @@ public class ConnectionCoordinator {
       if (announceQueued) {
         ui.appendStatus(status, "(conn)", "Connect requested; waiting for disconnect to finish…");
       }
-      updateConnectionUi();
+      if (refreshUiNow) updateConnectionUi();
       return;
     }
 
@@ -230,13 +244,14 @@ public class ConnectionCoordinator {
                 err -> {
                   ui.appendError(status, "(conn-error)", String.valueOf(err));
                   ui.appendStatus(status, "(conn)", "Connect failed");
+                  setLastError(id, String.valueOf(err));
                   setState(id, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
                 }
             )
     );
 
-    updateConnectionUi();
+    if (refreshUiNow) updateConnectionUi();
   }
 
   private void requestDisconnect(String sid, String reason, boolean announceWhenAlreadyOffline) {
@@ -246,6 +261,7 @@ public class ConnectionCoordinator {
     TargetRef status = new TargetRef(id, "status");
     ui.ensureTargetExists(status);
     setDesiredOnline(id, false);
+    setNextRetryAtMs(id, null);
 
     ConnectionState current = stateOf(id);
     boolean transitioning =
@@ -265,7 +281,10 @@ public class ConnectionCoordinator {
             .observeOn(SwingEdt.scheduler())
             .subscribe(
                 () -> {},
-                err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
+                err -> {
+                  ui.appendError(status, "(disc-error)", String.valueOf(err));
+                  setLastError(id, String.valueOf(err));
+                }
             )
     );
 
@@ -294,6 +313,7 @@ public class ConnectionCoordinator {
     for (String sid : removed) {
       if (sid == null || sid.isBlank()) continue;
       setDesiredOnline(sid, false);
+      clearConnectionDiagnostics(sid);
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
         TargetRef status = new TargetRef(fallback, "status");
@@ -322,6 +342,7 @@ public class ConnectionCoordinator {
       if (sid == null || sid.isBlank()) continue;
       ui.ensureTargetExists(new TargetRef(sid, "status"));
       setDesiredOnline(sid, false);
+      clearConnectionDiagnostics(sid);
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
     }
 
@@ -346,6 +367,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id)) {
           setDesiredOnline(id, true);
         }
+        setNextRetryAtMs(id, null);
 
         setState(id, ConnectionState.CONNECTING);
         ui.ensureTargetExists(status);
@@ -374,6 +396,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id)) {
           setDesiredOnline(id, true);
         }
+        clearConnectionDiagnostics(id);
 
         setState(id, ConnectionState.CONNECTED);
         ui.ensureTargetExists(status);
@@ -401,6 +424,10 @@ public class ConnectionCoordinator {
         setState(id, ConnectionState.RECONNECTING);
         ui.ensureTargetExists(status);
         long sec = Math.max(0, ev.delayMs() / 1000);
+        setNextRetryAtMs(id, System.currentTimeMillis() + Math.max(0, ev.delayMs()));
+        if (ev.reason() != null && !ev.reason().isBlank()) {
+          setLastError(id, ev.reason());
+        }
         String msg = "Reconnecting in " + sec + "s (attempt " + ev.attempt() + ")";
         if (ev.reason() != null && !ev.reason().isBlank()) {
           msg += " — " + ev.reason();
@@ -437,8 +464,10 @@ public class ConnectionCoordinator {
                 && previous == ConnectionState.DISCONNECTING
                 && serverCatalog.containsId(id);
         if (reconnectAfterDisconnect) {
+          setNextRetryAtMs(id, null);
           requestConnect(id, false);
         } else {
+          setNextRetryAtMs(id, null);
           updateConnectionUi();
         }
         return ConnectivityChange.CHANGED;
@@ -460,6 +489,12 @@ public class ConnectionCoordinator {
     return desiredOnline.contains(sid);
   }
 
+  public void noteConnectionError(String serverId, String message) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    setLastError(sid, message);
+  }
+
   private void setDesiredOnline(String sid, boolean desired) {
     if (sid == null) return;
     boolean old = desiredOnline.contains(sid);
@@ -477,6 +512,54 @@ public class ConnectionCoordinator {
       states.put(sid, st);
     }
     ui.setServerConnectionState(sid, st);
+  }
+
+  private void setLastError(String sid, String error) {
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty()) return;
+    String next = Objects.toString(error, "").trim();
+    String prev = lastErrorByServer.getOrDefault(id, "");
+    if (next.isEmpty()) {
+      if (!prev.isEmpty()) {
+        lastErrorByServer.remove(id);
+        publishConnectionDiagnostics(id);
+      }
+      return;
+    }
+    if (Objects.equals(prev, next)) return;
+    lastErrorByServer.put(id, next);
+    publishConnectionDiagnostics(id);
+  }
+
+  private void setNextRetryAtMs(String sid, Long atMs) {
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty()) return;
+    Long normalized = (atMs == null || atMs <= 0L) ? null : atMs;
+    Long prev = nextRetryAtByServer.get(id);
+    if (Objects.equals(prev, normalized)) return;
+    if (normalized == null) {
+      nextRetryAtByServer.remove(id);
+    } else {
+      nextRetryAtByServer.put(id, normalized);
+    }
+    publishConnectionDiagnostics(id);
+  }
+
+  private void clearConnectionDiagnostics(String sid) {
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty()) return;
+    boolean changed = false;
+    if (lastErrorByServer.remove(id) != null) changed = true;
+    if (nextRetryAtByServer.remove(id) != null) changed = true;
+    if (changed) {
+      publishConnectionDiagnostics(id);
+    }
+  }
+
+  private void publishConnectionDiagnostics(String sid) {
+    String id = Objects.toString(sid, "").trim();
+    if (id.isEmpty()) return;
+    ui.setServerConnectionDiagnostics(id, lastErrorByServer.getOrDefault(id, ""), nextRetryAtByServer.get(id));
   }
 
   private void updateConnectionUi() {

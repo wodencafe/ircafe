@@ -180,6 +180,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void setServerConnectionDiagnostics(String serverId, String lastError, Long nextRetryEpochMs) {
+    delegate.setServerConnectionDiagnostics(serverId, lastError, nextRetryEpochMs);
+  }
+
+  @Override
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
     delegate.setPrivateMessageOnlineState(serverId, nick, online);
   }

@@ -28,6 +28,8 @@ public class MessageInputPanel extends JPanel {
 
   private final JPanel typingBanner = new JPanel(new BorderLayout());
   private final JLabel typingBannerLabel = new JLabel();
+  private final TypingDotsIndicator typingDotsIndicator = new TypingDotsIndicator();
+  private final TypingSignalIndicator typingSignalIndicator = new TypingSignalIndicator();
   private final MessageInputUndoSupport undoSupport;
   private final MessageInputNickCompletionSupport nickCompletionSupport;
   private final MessageInputHintPopupSupport hintPopupSupport;
@@ -84,6 +86,8 @@ public class MessageInputPanel extends JPanel {
         input,
         typingBanner,
         typingBannerLabel,
+        typingDotsIndicator,
+        typingSignalIndicator,
         settingsBus::get,
         hooks
     );
@@ -124,6 +128,8 @@ public class MessageInputPanel extends JPanel {
     right.add(send, BorderLayout.CENTER);
 
     configureTypingBanner();
+    configureTypingSignalIndicator();
+    right.add(typingSignalIndicator, BorderLayout.SOUTH);
 
     JPanel center = new JPanel(new BorderLayout(0, 2));
     center.setOpaque(false);
@@ -146,8 +152,16 @@ public class MessageInputPanel extends JPanel {
     typingBannerLabel.setText("");
     // FlatLaf will render this a bit subtler if available; otherwise it's a normal label.
     typingBannerLabel.putClientProperty("FlatLaf.styleClass", "small");
+    typingDotsIndicator.setVisible(false);
+    typingDotsIndicator.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
     typingBanner.add(typingBannerLabel, BorderLayout.CENTER);
+    typingBanner.add(typingDotsIndicator, BorderLayout.EAST);
     typingBanner.setVisible(false);
+  }
+
+  private void configureTypingSignalIndicator() {
+    typingSignalIndicator.setVisible(false);
+    typingSignalIndicator.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
   }
 
   private void installSupports() {
@@ -314,6 +328,8 @@ private void installEscapeHandler() {
       input.setFont(f);
       send.setFont(f);
       typingBannerLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      typingDotsIndicator.setFont(typingBannerLabel.getFont());
+      typingSignalIndicator.setFont(typingBannerLabel.getFont());
       hintPopupSupport.onAppearanceChanged(f);
 
       // Mark completion popup UI dirty when appearance changes (e.g., accent sliders).
@@ -430,6 +446,22 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
 
   public void clearRemoteTypingIndicator() {
     typingSupport.clearRemoteTypingIndicator();
+  }
+
+  public void setTypingSignalAvailable(boolean available) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      typingSupport.setTypingSignalAvailable(available);
+    } else {
+      SwingUtilities.invokeLater(() -> typingSupport.setTypingSignalAvailable(available));
+    }
+  }
+
+  public void onLocalTypingIndicatorSent(String state) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      typingSupport.onLocalTypingIndicatorSent(state);
+    } else {
+      SwingUtilities.invokeLater(() -> typingSupport.onLocalTypingIndicatorSent(state));
+    }
   }
 
   /**

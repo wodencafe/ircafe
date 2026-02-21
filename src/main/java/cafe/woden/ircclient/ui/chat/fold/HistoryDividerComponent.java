@@ -67,10 +67,7 @@ public final class HistoryDividerComponent extends JPanel {
   public void updateUI() {
     super.updateUI();
     setOpaque(false);
-    try {
-      label.setOpaque(false);
-    } catch (Exception ignored) {
-    }
+    if (label != null) label.setOpaque(false);
     applyTheme();
   }
 
@@ -113,6 +110,7 @@ public final class HistoryDividerComponent extends JPanel {
   }
 
   private void applyTheme() {
+    if (label == null) return;
     var dim = UIManager.getColor("Label.disabledForeground");
     var fg = UIManager.getColor("TextPane.foreground");
     label.setForeground(dim != null ? dim : fg);

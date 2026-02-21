@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.logging.history;
 
+import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.Locale;
@@ -7,7 +8,6 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -38,11 +38,7 @@ abstract class AbstractTargetWaiterBus<E> {
     this.timeoutLabel = Objects.toString(timeoutLabel, "").trim();
     this.completionFailureMessage = Objects.toString(completionFailureMessage, "").trim();
     this.log = Objects.requireNonNull(log, "log");
-    this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-      Thread t = new Thread(r, threadName);
-      t.setDaemon(true);
-      return t;
-    });
+    this.scheduler = VirtualThreads.newSingleThreadScheduledExecutor(threadName);
   }
 
   public final CompletableFuture<E> awaitNext(String serverId, String target, Duration timeout) {

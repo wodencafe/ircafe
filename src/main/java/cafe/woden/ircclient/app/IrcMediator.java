@@ -889,6 +889,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
       case IrcEvent.JoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
+        TargetRef joinOrigin = joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
         joinRoutingState.clear(sid, ev.channel());
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
@@ -896,7 +897,10 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
-        ui.selectTarget(chan);
+        // Auto-joins should not steal focus; only switch when this join came from an explicit user /join.
+        if (joinOrigin != null) {
+          ui.selectTarget(chan);
+        }
       }
 
       case IrcEvent.JoinFailed ev -> {
@@ -1060,6 +1064,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.Error ev -> {
+          connectionCoordinator.noteConnectionError(sid, ev.message());
           ui.appendError(status, "(error)", ev.message());
       }
 

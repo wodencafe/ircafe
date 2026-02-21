@@ -31,10 +31,28 @@ version = (findProperty("version") ?: "0.0.1-SNAPSHOT").toString()
 
 description = 'IRC Client in modern Java, utilizing PircBotX, Spring Boot, and RXJava.'
 
+def javaRelease = 25
+
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(javaRelease)
     }
+}
+
+def javaLauncher25 = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(javaRelease)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = javaRelease
+}
+
+tasks.withType(Test).configureEach {
+    javaLauncher = javaLauncher25
+}
+
+tasks.withType(JavaExec).configureEach {
+    javaLauncher = javaLauncher25
 }
 
 springBoot {

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -125,5 +126,36 @@ class ConnectionCoordinatorTest {
 
     verify(irc, never()).disconnect(anyString(), any());
     verify(ui, atLeastOnce()).setConnectionControlsEnabled(false, true);
+  }
+
+  @Test
+  void reconnectingEventPublishesRetryDiagnostics() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
+    when(serverCatalog.containsId("libera")).thenReturn(true);
+    when(irc.connect("libera")).thenReturn(Completable.complete());
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            trayNotificationService);
+    coordinator.connectOne("libera");
+
+    coordinator.handleConnectivityEvent(
+        "libera",
+        new IrcEvent.Reconnecting(Instant.now(), 1, 5_000L, "Ping timeout"),
+        null);
+
+    verify(ui, atLeastOnce()).setServerConnectionDiagnostics(eq("libera"), eq("Ping timeout"), any());
   }
 }

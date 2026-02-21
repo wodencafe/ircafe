@@ -107,6 +107,10 @@ final class MessageInputHintPopupSupport {
       return;
     }
     String text = input.getText();
+    if (startsWithSlashCommand(text)) {
+      clearHintPopup();
+      return;
+    }
     int caret = input.getCaretPosition();
     String token = currentToken(text, caret);
     if (token.isBlank()) {
@@ -290,6 +294,16 @@ final class MessageInputHintPopupSupport {
     token = stripLeadingPunct(token);
     token = stripTrailingPunct(token);
     return token;
+  }
+
+  private static boolean startsWithSlashCommand(String text) {
+    if (text == null || text.isEmpty()) return false;
+    for (int i = 0; i < text.length(); i++) {
+      char c = text.charAt(i);
+      if (Character.isWhitespace(c)) continue;
+      return c == '/';
+    }
+    return false;
   }
 
   private static String stripLeadingPunct(String s) {

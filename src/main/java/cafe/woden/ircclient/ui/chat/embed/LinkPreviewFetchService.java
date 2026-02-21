@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Single;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.net.URI;
 import java.util.Locale;
 import java.util.List;
@@ -55,7 +55,7 @@ public class LinkPreviewFetchService {
     // Inflight de-dupe: computeIfAbsent + cache() so multiple subscribers share the same work.
     return inflight.computeIfAbsent(key, k ->
         Single.fromCallable(() -> load(sid, normalized))
-            .subscribeOn(Schedulers.io())
+            .subscribeOn(RxVirtualSchedulers.io())
             .doOnSuccess(p -> cache.put(k, new java.lang.ref.SoftReference<>(p)))
             .doFinally(() -> inflight.remove(k))
             .cache()
