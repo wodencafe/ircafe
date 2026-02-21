@@ -19,14 +19,20 @@ import java.util.Map;
  */
 public class PresenceFoldComponent extends JPanel {
 
-  private final List<PresenceEvent> entries = new ArrayList<>();
+  public record Entry(String timestampPrefix, PresenceEvent event) {
+    public Entry {
+      if (timestampPrefix == null) timestampPrefix = "";
+    }
+  }
+
+  private final List<Entry> entries = new ArrayList<>();
 
   private boolean expanded = false;
 
   private final JLabel summary = new JLabel();
   private final JPanel details = new JPanel();
 
-  public PresenceFoldComponent(List<PresenceEvent> initialEntries) {
+  public PresenceFoldComponent(List<Entry> initialEntries) {
     if (initialEntries != null) this.entries.addAll(initialEntries);
 
     setOpaque(false);
@@ -90,8 +96,8 @@ public class PresenceFoldComponent extends JPanel {
   }
 
   
-  public void addEntry(PresenceEvent e) {
-    if (e == null) return;
+  public void addEntry(Entry e) {
+    if (e == null || e.event() == null) return;
     entries.add(e);
     rebuildDetails();
     updateSummaryText();
@@ -102,7 +108,7 @@ public class PresenceFoldComponent extends JPanel {
   }
 
   
-  public void setEntries(List<PresenceEvent> newEntries) {
+  public void setEntries(List<Entry> newEntries) {
     entries.clear();
     if (newEntries != null) entries.addAll(newEntries);
     rebuildDetails();
@@ -116,8 +122,13 @@ public class PresenceFoldComponent extends JPanel {
   private void rebuildDetails() {
     details.removeAll();
 
-    for (PresenceEvent e : entries) {
-      JLabel l = new JLabel("• " + safe(e == null ? "" : e.displayText()));
+    for (Entry entry : entries) {
+      if (entry == null || entry.event() == null) continue;
+      String prefix = safe(entry.timestampPrefix());
+      String line = prefix.isBlank()
+          ? ("• " + safe(entry.event().displayText()))
+          : ("• " + prefix + safe(entry.event().displayText()));
+      JLabel l = new JLabel(line);
       l.setOpaque(false);
 
       // mimic a "status" style: dim + italic
@@ -151,15 +162,16 @@ public class PresenceFoldComponent extends JPanel {
     if (f != null) summary.setFont(f.deriveFont(Font.ITALIC));
   }
 
-  private static String buildSummaryCounts(List<PresenceEvent> entries) {
+  private static String buildSummaryCounts(List<Entry> entries) {
     Map<PresenceKind, Integer> counts = new EnumMap<>(PresenceKind.class);
     counts.put(PresenceKind.JOIN, 0);
     counts.put(PresenceKind.PART, 0);
     counts.put(PresenceKind.QUIT, 0);
     counts.put(PresenceKind.NICK, 0);
 
-    for (PresenceEvent e : entries) {
-      if (e == null) continue;
+    for (Entry entry : entries) {
+      if (entry == null || entry.event() == null) continue;
+      PresenceEvent e = entry.event();
       counts.compute(e.kind(), (k, v) -> v == null ? 1 : v + 1);
     }
 
@@ -178,7 +190,7 @@ public class PresenceFoldComponent extends JPanel {
     return String.join(", ", parts);
   }
 
-  private static String buildTooltipHtml(List<PresenceEvent> entries) {
+  private static String buildTooltipHtml(List<Entry> entries) {
     if (entries == null || entries.isEmpty()) return null;
 
     StringBuilder sb = new StringBuilder();
@@ -189,10 +201,13 @@ public class PresenceFoldComponent extends JPanel {
     int limit = 60; // avoid absurd tooltips
     int shown = 0;
 
-    for (PresenceEvent e : entries) {
-      if (e == null) continue;
+    for (Entry entry : entries) {
+      if (entry == null || entry.event() == null) continue;
+      PresenceEvent e = entry.event();
       if (shown >= limit) break;
-      sb.append("• ").append(escapeHtml(e.displayText())).append("<br/>");
+      String prefix = safe(entry.timestampPrefix());
+      String line = prefix.isBlank() ? e.displayText() : (prefix + e.displayText());
+      sb.append("• ").append(escapeHtml(line)).append("<br/>");
       shown++;
     }
 

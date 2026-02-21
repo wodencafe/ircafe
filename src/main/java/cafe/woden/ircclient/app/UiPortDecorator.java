@@ -269,6 +269,18 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendSpoilerChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    delegate.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
     delegate.appendAction(target, from, action, outgoingLocalEcho);
   }

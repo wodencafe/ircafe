@@ -1428,6 +1428,25 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     }
   }
 
+  public synchronized void rememberTimestampsIncludePresenceMessages(boolean includePresenceMessages) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> timestamps = getOrCreateMap(ui, "timestamps");
+
+      timestamps.put("includePresenceMessages", includePresenceMessages);
+      // Clean up legacy flat key.
+      ui.remove("chatMessageTimestampsEnabled");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist presence message timestamp setting to '{}'", file, e);
+    }
+  }
+
   @Deprecated
   public synchronized void rememberChatMessageTimestampsEnabled(boolean enabled) {
     // Back-compat alias for older callers.

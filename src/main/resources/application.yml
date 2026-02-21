@@ -23,7 +23,9 @@ ircafe:
       enabled: true
       format: "HH:mm:ss"
       # If enabled, IRCafe will also prepend a timestamp to regular user chat message lines.
-      includeChatMessages: false
+      includeChatMessages: true
+      # If enabled, IRCafe will prepend timestamps to presence/folded lines (join/part/quit/nick).
+      includePresenceMessages: true
     # Chat history load behavior
     # How many lines to prefill into the transcript when selecting a channel or user.
     # 0 disables prefill.

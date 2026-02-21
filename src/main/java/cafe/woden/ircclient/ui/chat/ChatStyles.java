@@ -56,6 +56,7 @@ public class ChatStyles {
   public static final String STYLE_NOTICE_FROM = "noticeFrom";
   public static final String STYLE_NOTICE_MESSAGE = "noticeMessage";
   public static final String STYLE_STATUS = "status";
+  public static final String STYLE_PRESENCE = "presence";
   public static final String STYLE_ERROR = "error";
   public static final String STYLE_LINK = "link";
   public static final String STYLE_MENTION = "mention";
@@ -68,6 +69,7 @@ public class ChatStyles {
   private SimpleAttributeSet noticeFromStyle;
   private SimpleAttributeSet noticeMsgStyle;
   private SimpleAttributeSet statusStyle;
+  private SimpleAttributeSet presenceStyle;
   private SimpleAttributeSet errorStyle;
   private SimpleAttributeSet linkStyle;
   private SimpleAttributeSet mentionStyle;
@@ -184,6 +186,7 @@ public class ChatStyles {
     noticeFromStyle = attrs(STYLE_NOTICE_FROM, warn, bg, true, false);
     noticeMsgStyle = attrs(STYLE_NOTICE_MESSAGE, warn, bg, false, false);
     statusStyle = attrs(STYLE_STATUS, sysFg, bg, false, true);
+    presenceStyle = attrs(STYLE_PRESENCE, sysFg, bg, false, true);
     errorStyle = attrs(STYLE_ERROR, err, bg, true, false);
 
     linkStyle = attrs(STYLE_LINK, link, bg, false, false);
@@ -202,6 +205,7 @@ public class ChatStyles {
   public AttributeSet noticeFrom() { return noticeFromStyle; }
   public AttributeSet noticeMessage() { return noticeMsgStyle; }
   public AttributeSet status() { return statusStyle; }
+  public AttributeSet presence() { return presenceStyle; }
   public AttributeSet error() { return errorStyle; }
   public AttributeSet link() { return linkStyle; }
   public AttributeSet mention() { return mentionStyle; }
@@ -217,6 +221,7 @@ public class ChatStyles {
       case STYLE_NOTICE_FROM -> noticeFromStyle;
       case STYLE_NOTICE_MESSAGE -> noticeMsgStyle;
       case STYLE_STATUS -> statusStyle;
+      case STYLE_PRESENCE -> presenceStyle;
       case STYLE_ERROR -> errorStyle;
       case STYLE_LINK -> linkStyle;
       case STYLE_MENTION -> mentionStyle;

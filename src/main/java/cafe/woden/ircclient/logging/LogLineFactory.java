@@ -6,7 +6,10 @@ import cafe.woden.ircclient.logging.model.LogDirection;
 import cafe.woden.ircclient.logging.model.LogKind;
 import cafe.woden.ircclient.logging.model.LogLine;
 import java.time.Clock;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,6 +52,54 @@ public final class LogLineFactory {
         .build();
   }
 
+  /**
+   * Same as {@link #chatAt(TargetRef, String, String, boolean, long)} but with IRCv3 identity metadata.
+   */
+  public LogLine chatAt(
+      TargetRef target,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return baseAt(target, tsEpochMs)
+        .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
+        .kind(LogKind.CHAT)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(outgoingLocalEcho)
+        .softIgnored(false)
+        .metaJson(messageMetaJson(null, messageId, ircv3Tags))
+        .build();
+  }
+
+  /**
+   * Persist a resolved outbound line (pending send replaced by canonical server echo).
+   *
+   * <p>Includes the pending id plus message identity metadata in {@code meta}.
+   */
+  public LogLine resolvedOutgoingChatAt(
+      TargetRef target,
+      String from,
+      String text,
+      long tsEpochMs,
+      String pendingId,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return baseAt(target, tsEpochMs)
+        .direction(LogDirection.OUT)
+        .kind(LogKind.CHAT)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(true)
+        .softIgnored(false)
+        .metaJson(messageMetaJson(pendingId, messageId, ircv3Tags))
+        .build();
+  }
+
   public LogLine softIgnoredSpoiler(TargetRef target, String from, String text) {
     return base(target)
         .direction(LogDirection.IN)
@@ -69,6 +120,28 @@ public final class LogLineFactory {
         .text(normText(text))
         .outgoingLocalEcho(false)
         .softIgnored(true)
+        .build();
+  }
+
+  /**
+   * Same as {@link #softIgnoredSpoilerAt(TargetRef, String, String, long)} but with IRCv3 identity metadata.
+   */
+  public LogLine softIgnoredSpoilerAt(
+      TargetRef target,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return baseAt(target, tsEpochMs)
+        .direction(LogDirection.IN)
+        .kind(LogKind.SPOILER)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(true)
+        .metaJson(messageMetaJson(null, messageId, ircv3Tags))
         .build();
   }
 
@@ -95,6 +168,29 @@ public final class LogLineFactory {
         .build();
   }
 
+  /**
+   * Same as {@link #actionAt(TargetRef, String, String, boolean, long)} but with IRCv3 identity metadata.
+   */
+  public LogLine actionAt(
+      TargetRef target,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return baseAt(target, tsEpochMs)
+        .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
+        .kind(LogKind.ACTION)
+        .fromNick(normNick(from))
+        .text(normText(action))
+        .outgoingLocalEcho(outgoingLocalEcho)
+        .softIgnored(false)
+        .metaJson(messageMetaJson(null, messageId, ircv3Tags))
+        .build();
+  }
+
   public LogLine notice(TargetRef target, String from, String text) {
     return base(target)
         .direction(LogDirection.IN)
@@ -118,6 +214,26 @@ public final class LogLineFactory {
         .build();
   }
 
+  /** Same as {@link #noticeAt(TargetRef, String, String, long)} but with IRCv3 identity metadata. */
+  public LogLine noticeAt(
+      TargetRef target,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return baseAt(target, tsEpochMs)
+        .direction(LogDirection.IN)
+        .kind(LogKind.NOTICE)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(false)
+        .metaJson(messageMetaJson(null, messageId, ircv3Tags))
+        .build();
+  }
+
   public LogLine status(TargetRef target, String from, String text) {
     return base(target)
         .direction(LogDirection.SYSTEM)
@@ -138,6 +254,26 @@ public final class LogLineFactory {
         .text(normText(text))
         .outgoingLocalEcho(false)
         .softIgnored(false)
+        .build();
+  }
+
+  /** Same as {@link #statusAt(TargetRef, String, String, long)} but with IRCv3 identity metadata. */
+  public LogLine statusAt(
+      TargetRef target,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    return baseAt(target, tsEpochMs)
+        .direction(LogDirection.SYSTEM)
+        .kind(LogKind.STATUS)
+        .fromNick(normNick(from))
+        .text(normText(text))
+        .outgoingLocalEcho(false)
+        .softIgnored(false)
+        .metaJson(messageMetaJson(null, messageId, ircv3Tags))
         .build();
   }
 
@@ -201,6 +337,96 @@ public final class LogLineFactory {
   private static String normText(String s) {
     // Preserve message content exactly; just prevent nulls from bubbling into persistence.
     return s == null ? "" : s;
+  }
+
+  private static String messageMetaJson(String pendingId, String messageId, Map<String, String> ircv3Tags) {
+    String pid = normToken(pendingId);
+    String msgId = normToken(messageId);
+    Map<String, String> tags = normalizeTagsForMeta(ircv3Tags);
+
+    if (pid == null && msgId == null && tags.isEmpty()) return null;
+
+    StringBuilder sb = new StringBuilder(96);
+    sb.append('{');
+    boolean needComma = false;
+    if (pid != null) {
+      appendJsonField(sb, "pendingId", pid);
+      needComma = true;
+    }
+    if (msgId != null) {
+      if (needComma) sb.append(',');
+      appendJsonField(sb, "messageId", msgId);
+      needComma = true;
+    }
+    if (!tags.isEmpty()) {
+      if (needComma) sb.append(',');
+      appendJsonString(sb, "ircv3Tags");
+      sb.append(':').append('{');
+      boolean tagComma = false;
+      for (Map.Entry<String, String> e : tags.entrySet()) {
+        if (tagComma) sb.append(',');
+        appendJsonString(sb, e.getKey());
+        sb.append(':');
+        if (e.getValue() == null) {
+          sb.append("null");
+        } else {
+          appendJsonString(sb, e.getValue());
+        }
+        tagComma = true;
+      }
+      sb.append('}');
+    }
+    sb.append('}');
+    return sb.toString();
+  }
+
+  private static String normToken(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    return s.isEmpty() ? null : s;
+  }
+
+  private static Map<String, String> normalizeTagsForMeta(Map<String, String> raw) {
+    if (raw == null || raw.isEmpty()) return Map.of();
+    TreeMap<String, String> out = new TreeMap<>();
+    for (Map.Entry<String, String> e : raw.entrySet()) {
+      if (e == null || e.getKey() == null) continue;
+      out.put(e.getKey(), e.getValue());
+    }
+    return out;
+  }
+
+  private static void appendJsonField(StringBuilder sb, String key, String value) {
+    appendJsonString(sb, key);
+    sb.append(':');
+    appendJsonString(sb, value);
+  }
+
+  private static void appendJsonString(StringBuilder sb, String value) {
+    sb.append('"').append(escapeJson(value)).append('"');
+  }
+
+  private static String escapeJson(String s) {
+    if (s == null || s.isEmpty()) return "";
+    StringBuilder sb = new StringBuilder(s.length() + 16);
+    for (int i = 0; i < s.length(); i++) {
+      char c = s.charAt(i);
+      switch (c) {
+        case '"' -> sb.append("\\\"");
+        case '\\' -> sb.append("\\\\");
+        case '\n' -> sb.append("\\n");
+        case '\r' -> sb.append("\\r");
+        case '\t' -> sb.append("\\t");
+        default -> {
+          if (c < 0x20) {
+            sb.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+          } else {
+            sb.append(c);
+          }
+        }
+      }
+    }
+    return sb.toString();
   }
 
   private static final class Builder {

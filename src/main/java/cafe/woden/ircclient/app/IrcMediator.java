@@ -406,7 +406,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     if (suppressOutput) return;
 
     if (spoiler) {
-      ui.appendSpoilerChatAt(status, at, "(notice) " + from, text);
+      ui.appendSpoilerChatAt(status, at, "(notice) " + from, text, messageId, ircv3Tags);
     } else {
       ui.appendNoticeAt(status, at, "(notice) " + from, text, messageId, ircv3Tags);
     }
@@ -505,7 +505,11 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
+          postTo(
+              chan,
+              active,
+              true,
+              d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
         } else {
           postTo(
               chan,
@@ -541,7 +545,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(chan, active, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
+          postTo(
+              chan,
+              active,
+              true,
+              d ->
+                  ui.appendSpoilerChatAt(
+                      d, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags()));
         } else {
           postTo(
               chan,
@@ -638,7 +648,7 @@ case IrcEvent.PrivateMessage ev -> {
   }
 
   if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
+    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
   } else {
     postTo(pm, true,
         d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), fromSelf, ev.messageId(), ev.ircv3Tags()));
@@ -672,7 +682,12 @@ case IrcEvent.PrivateAction ev -> {
   if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
   if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
+    postTo(
+        pm,
+        true,
+        d ->
+            ui.appendSpoilerChatAt(
+                d, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags()));
   } else {
     postTo(pm, true,
         d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), fromSelf, ev.messageId(), ev.ircv3Tags()));

@@ -673,6 +673,7 @@ public class PreferencesDialog {
 
       boolean timestampsEnabledV = timestamps.enabled.isSelected();
       boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
+      boolean timestampsIncludePresenceMessagesV = timestamps.includePresenceMessages.isSelected();
       String timestampFormatV = timestamps.format.getText() != null ? timestamps.format.getText().trim() : "";
       if (timestampFormatV.isBlank()) timestampFormatV = "HH:mm:ss";
       try {
@@ -840,6 +841,7 @@ public class PreferencesDialog {
           timestampsEnabledV,
           timestampFormatV,
           timestampsIncludeChatMessagesV,
+          timestampsIncludePresenceMessagesV,
           historyInitialLoadV,
           historyPageSizeV,
           commandHistoryMaxSizeV,
@@ -942,6 +944,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberTimestampsEnabled(next.timestampsEnabled());
       runtimeConfig.rememberTimestampFormat(next.timestampFormat());
       runtimeConfig.rememberTimestampsIncludeChatMessages(next.timestampsIncludeChatMessages());
+      runtimeConfig.rememberTimestampsIncludePresenceMessages(next.timestampsIncludePresenceMessages());
 
       runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
       runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
@@ -2557,15 +2560,20 @@ panel.add(subTabs, "growx, wmin 0");
     includeChatMessages.setSelected(current.timestampsIncludeChatMessages());
     includeChatMessages.setToolTipText("When enabled, timestamps are also shown on normal chat messages (not just status lines).");
 
+    JCheckBox includePresenceMessages = new JCheckBox("Include presence / folded messages");
+    includePresenceMessages.setSelected(current.timestampsIncludePresenceMessages());
+    includePresenceMessages.setToolTipText("When enabled, timestamps are shown for join/part/quit/nick presence lines and expanded fold details.");
+
     Runnable syncEnabled = () -> {
       boolean on = enabled.isSelected();
       format.setEnabled(on);
       includeChatMessages.setEnabled(on);
+      includePresenceMessages.setEnabled(on);
     };
     enabled.addActionListener(e -> syncEnabled.run());
     syncEnabled.run();
 
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]"));
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]6[]"));
     panel.setOpaque(false);
     panel.add(enabled);
     JPanel fmtRow = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[][grow,fill]", "[]"));
@@ -2574,8 +2582,9 @@ panel.add(subTabs, "growx, wmin 0");
     fmtRow.add(format, "w 200!");
     panel.add(fmtRow);
     panel.add(includeChatMessages);
+    panel.add(includePresenceMessages);
 
-    return new TimestampControls(enabled, format, includeChatMessages, panel);
+    return new TimestampControls(enabled, format, includeChatMessages, includePresenceMessages, panel);
   }
 
   private HistoryControls buildHistoryControls(UiSettings current, List<AutoCloseable> closeables) {
@@ -5291,7 +5300,11 @@ panel.add(subTabs, "growx, wmin 0");
                                   JPanel panel) {
   }
 
-  private record TimestampControls(JCheckBox enabled, JTextField format, JCheckBox includeChatMessages, JPanel panel) {
+  private record TimestampControls(JCheckBox enabled,
+                                  JTextField format,
+                                  JCheckBox includeChatMessages,
+                                  JCheckBox includePresenceMessages,
+                                  JPanel panel) {
   }
   private record HistoryControls(JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {
   }

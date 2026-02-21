@@ -61,7 +61,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       Map<String, String> ircv3Tags
   ) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(() -> factory.chatAt(target, from, text, outgoingLocalEcho, ts));
+    tryLog(() -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
     super.appendChatAt(target, at, from, text, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -78,7 +78,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
     boolean resolved = super.resolvePendingOutgoingChat(target, pendingId, at, from, text, messageId, ircv3Tags);
     if (resolved) {
       long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-      tryLog(() -> factory.chatAt(target, from, text, true, ts));
+      tryLog(() -> factory.resolvedOutgoingChatAt(target, from, text, ts, pendingId, messageId, ircv3Tags));
     }
     return resolved;
   }
@@ -98,6 +98,22 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       tryLog(() -> factory.softIgnoredSpoilerAt(target, from, text, ts));
     }
     super.appendSpoilerChatAt(target, at, from, text);
+  }
+
+  @Override
+  public void appendSpoilerChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    if (Boolean.TRUE.equals(props.logSoftIgnoredLines())) {
+      long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+      tryLog(() -> factory.softIgnoredSpoilerAt(target, from, text, ts, messageId, ircv3Tags));
+    }
+    super.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
   }
 
   @Override
@@ -124,7 +140,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       Map<String, String> ircv3Tags
   ) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(() -> factory.actionAt(target, from, action, outgoingLocalEcho, ts));
+    tryLog(() -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
     super.appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -157,7 +173,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       Map<String, String> ircv3Tags
   ) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(() -> factory.noticeAt(target, from, text, ts));
+    tryLog(() -> factory.noticeAt(target, from, text, ts, messageId, ircv3Tags));
     super.appendNoticeAt(target, at, from, text, messageId, ircv3Tags);
   }
 
@@ -184,7 +200,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       Map<String, String> ircv3Tags
   ) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(() -> factory.statusAt(target, from, text, ts));
+    tryLog(() -> factory.statusAt(target, from, text, ts, messageId, ircv3Tags));
     super.appendStatusAt(target, at, from, text, messageId, ircv3Tags);
   }
 

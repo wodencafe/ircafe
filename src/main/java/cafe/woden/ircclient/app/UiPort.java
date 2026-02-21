@@ -212,6 +212,22 @@ Flowable<TargetRef> targetActivations();
     appendSpoilerChat(target, from, text);
   }
 
+  /**
+   * Append a spoiler chat line with an explicit timestamp and IRCv3 identity metadata.
+   *
+   * <p>Default implementation falls back to {@link #appendSpoilerChatAt(TargetRef, Instant, String, String)}.
+   */
+  default void appendSpoilerChatAt(
+      TargetRef target,
+      Instant at,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags
+  ) {
+    appendSpoilerChatAt(target, at, from, text);
+  }
+
   default void appendAction(TargetRef target, String from, String action) {
     appendAction(target, from, action, false);
   }

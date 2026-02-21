@@ -1551,6 +1551,17 @@ public class ChatTranscriptStore {
     StyledDocument doc = docs.get(ref);
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
+    boolean includePresenceTimestamps = shouldIncludePresenceTimestamps();
+    String presenceTimestampPrefix = "";
+    if (includePresenceTimestamps && ts != null && ts.enabled()) {
+      try {
+        presenceTimestampPrefix = ts.prefixNow();
+      } catch (Exception ignored) {
+        presenceTimestampPrefix = "";
+      }
+    }
+    PresenceFoldComponent.Entry foldEntry = new PresenceFoldComponent.Entry(presenceTimestampPrefix, event);
+
     boolean foldsEnabled = true;
     try {
       foldsEnabled = uiSettings == null || uiSettings.get() == null || uiSettings.get().presenceFoldsEnabled();
@@ -1562,10 +1573,10 @@ public class ChatTranscriptStore {
       st.currentPresenceBlock = null;
       ensureAtLineStart(doc);
       try {
-        if (ts != null && ts.enabled()) {
-          doc.insertString(doc.getLength(), ts.prefixNow(), withLineMeta(styles.timestamp(), meta));
+        if (!presenceTimestampPrefix.isBlank()) {
+          doc.insertString(doc.getLength(), presenceTimestampPrefix, withLineMeta(styles.timestamp(), meta));
         }
-        AttributeSet base = withLineMeta(styles.status(), meta);
+        AttributeSet base = withLineMeta(styles.presence(), meta);
         renderer.insertRichText(doc, ref, event.displayText(), base);
         doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
       } catch (Exception ignored2) {
@@ -1574,19 +1585,19 @@ public class ChatTranscriptStore {
     }
     if (st.currentPresenceBlock != null && st.currentPresenceBlock.folded
         && st.currentPresenceBlock.component != null) {
-      st.currentPresenceBlock.entries.add(event);
-      st.currentPresenceBlock.component.addEntry(event);
+      st.currentPresenceBlock.entries.add(foldEntry);
+      st.currentPresenceBlock.component.addEntry(foldEntry);
       return;
     }
     ensureAtLineStart(doc);
     int startOffset = doc.getLength();
 
     try {
-      if (ts != null && ts.enabled()) {
-        doc.insertString(doc.getLength(), ts.prefixNow(), withLineMeta(styles.timestamp(), meta));
+      if (!presenceTimestampPrefix.isBlank()) {
+        doc.insertString(doc.getLength(), presenceTimestampPrefix, withLineMeta(styles.timestamp(), meta));
       }
 
-      AttributeSet base = withLineMeta(styles.status(), meta);
+      AttributeSet base = withLineMeta(styles.presence(), meta);
       renderer.insertRichText(doc, ref, event.displayText(), base);
       doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
     } catch (Exception ignored) {
@@ -1602,7 +1613,7 @@ public class ChatTranscriptStore {
       block.endOffset = endOffset;
     }
 
-    block.entries.add(event);
+    block.entries.add(foldEntry);
     if (!block.folded && block.entries.size() == 2) {
       foldBlock(doc, ref, block);
     }
@@ -1662,18 +1673,24 @@ public class ChatTranscriptStore {
       Object styleIdObj = baseForId.getAttribute(ChatStyles.ATTR_STYLE);
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
       boolean timestampsIncludeChatMessages = false;
+      boolean timestampsIncludePresenceMessages = false;
       try {
         timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
             && uiSettings.get().timestampsIncludeChatMessages();
+        timestampsIncludePresenceMessages = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().timestampsIncludePresenceMessages();
       } catch (Exception ignored) {
         timestampsIncludeChatMessages = false;
+        timestampsIncludePresenceMessages = false;
       }
 
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
+          || (timestampsIncludePresenceMessages && ChatStyles.STYLE_PRESENCE.equals(styleId))
           || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(doc.getLength(), prefix, tsStyle);
@@ -2333,18 +2350,24 @@ public void appendChatAt(TargetRef ref,
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
       boolean timestampsIncludeChatMessages = false;
+      boolean timestampsIncludePresenceMessages = false;
       try {
         timestampsIncludeChatMessages = uiSettings != null
             && uiSettings.get() != null
             && uiSettings.get().timestampsIncludeChatMessages();
+        timestampsIncludePresenceMessages = uiSettings != null
+            && uiSettings.get() != null
+            && uiSettings.get().timestampsIncludePresenceMessages();
       } catch (Exception ignored) {
         timestampsIncludeChatMessages = false;
+        timestampsIncludePresenceMessages = false;
       }
 
       if (ts != null && ts.enabled()
           && (ChatStyles.STYLE_STATUS.equals(styleId)
           || ChatStyles.STYLE_ERROR.equals(styleId)
           || ChatStyles.STYLE_NOTICE_MESSAGE.equals(styleId)
+          || (timestampsIncludePresenceMessages && ChatStyles.STYLE_PRESENCE.equals(styleId))
           || (timestampsIncludeChatMessages && ChatStyles.STYLE_MESSAGE.equals(styleId)))) {
         String prefix = (epochMs != null) ? ts.prefixAt(epochMs) : ts.prefixNow();
         doc.insertString(pos, prefix, tsStyle);
@@ -3750,7 +3773,17 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, null, displayText, styles.status(), styles.status(), false, meta);
+    appendLineInternal(ref, null, displayText, styles.presence(), styles.presence(), false, meta);
+  }
+
+  private boolean shouldIncludePresenceTimestamps() {
+    try {
+      return uiSettings != null
+          && uiSettings.get() != null
+          && uiSettings.get().timestampsIncludePresenceMessages();
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private void breakPresenceRun(TargetRef ref) {
@@ -3800,9 +3833,9 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
       doc.remove(start, end - start);
       PresenceFoldComponent comp = new PresenceFoldComponent(block.entries);
 
-      SimpleAttributeSet attrs = withExistingMeta(styles.status(), existingAttrs);
+      SimpleAttributeSet attrs = withExistingMeta(styles.presence(), existingAttrs);
       StyleConstants.setComponent(attrs, comp);
-      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_PRESENCE);
 
       int insertPos = start;
       if (insertPos > 0) {
@@ -4059,7 +4092,7 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     boolean folded = false;
     PresenceFoldComponent component;
 
-    final List<PresenceEvent> entries = new ArrayList<>();
+    final List<PresenceFoldComponent.Entry> entries = new ArrayList<>();
 
     private PresenceBlock(int startOffset, int endOffset) {
       this.startOffset = startOffset;
