@@ -379,7 +379,14 @@ private static final class InsertionLine {
 
         int x = e.getX();
         int y = e.getY();
-        TreePath path = tree.getPathForLocation(x, y);
+        // Resolve by row (Y-position) so right-click works anywhere across the row,
+        // not only directly over the node text/icon bounds.
+        int row = tree.getClosestRowForLocation(x, y);
+        if (row < 0) return;
+        Rectangle rb = tree.getRowBounds(row);
+        if (rb == null) return;
+        if (y < rb.y || y >= (rb.y + rb.height)) return;
+        TreePath path = tree.getPathForRow(row);
         if (path == null) {
           return;
         }
