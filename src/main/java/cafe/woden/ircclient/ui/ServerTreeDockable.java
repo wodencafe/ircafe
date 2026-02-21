@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.Enumeration;
 import javax.swing.JMenuItem;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JButton;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -168,6 +169,7 @@ private static final class InsertionLine {
 
   private final JLabel statusLabel = new JLabel("Disconnected");
 
+  private final JButton addServerBtn = new JButton();
   private final ConnectButton connectBtn;
   private final DisconnectButton disconnectBtn;
 
@@ -218,9 +220,21 @@ private static final class InsertionLine {
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
+    this.addServerBtn.setText("");
+    this.addServerBtn.setIcon(SvgIcons.action("plus", 16));
+    this.addServerBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    this.addServerBtn.setToolTipText("Add server");
+    this.addServerBtn.setFocusable(false);
+    this.addServerBtn.setPreferredSize(new Dimension(26, 26));
+    this.addServerBtn.setEnabled(serverDialogs != null);
+    this.addServerBtn.addActionListener(ev -> {
+      if (serverDialogs == null) return;
+      Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+      serverDialogs.openAddServer(w);
+    });
     this.connectBtn.setText("");
-    this.connectBtn.setIcon(SvgIcons.action("plus", 16));
-    this.connectBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    this.connectBtn.setIcon(SvgIcons.action("check", 16));
+    this.connectBtn.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
     this.connectBtn.setToolTipText("Connect all disconnected servers");
     this.connectBtn.setFocusable(false);
     this.connectBtn.setPreferredSize(new Dimension(26, 26));
@@ -234,6 +248,8 @@ private static final class InsertionLine {
     header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
     header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
 
+    header.add(addServerBtn);
+    header.add(Box.createHorizontalStrut(6));
     header.add(connectBtn);
     header.add(Box.createHorizontalStrut(6));
     header.add(disconnectBtn);

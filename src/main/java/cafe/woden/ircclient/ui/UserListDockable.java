@@ -36,7 +36,7 @@ import java.util.Objects;
 
 @Component
 @Lazy
-public class UserListDockable extends JPanel implements Dockable {
+public class UserListDockable extends JPanel implements Dockable, Scrollable {
   public static final String ID = "users";
 
   private static final int ACCOUNT_ICON_SIZE = 10;
@@ -53,6 +53,14 @@ public class UserListDockable extends JPanel implements Dockable {
 
   private final DefaultListModel<NickInfo> model = new DefaultListModel<>();
   private final JList<NickInfo> list = new JList<>(model) {
+
+    @Override
+    public Dimension getMinimumSize() {
+      Dimension d = super.getMinimumSize();
+      int h = (d == null) ? 0 : Math.max(0, d.height);
+      // Allow the users dock to collapse narrower without the list enforcing a wide minimum.
+      return new Dimension(0, h);
+    }
 
     @Override
     public boolean getScrollableTracksViewportWidth() {
@@ -167,6 +175,7 @@ public class UserListDockable extends JPanel implements Dockable {
   private final IgnoreListDialog ignoreDialog;
   private final IgnoreStatusService ignoreStatusService;
   private final NickContextMenuFactory.NickContextMenu nickContextMenu;
+  private final JScrollPane scroll;
 
   private record IgnoreMark(boolean ignore, boolean softIgnore) {}
 
@@ -181,6 +190,7 @@ public class UserListDockable extends JPanel implements Dockable {
                          OutboundLineBus outboundBus,
                          NickContextMenuFactory nickContextMenuFactory) {
     super(new BorderLayout());
+    setMinimumSize(new Dimension(0, 0));
 
     this.nickColors = nickColors;
     this.nickColorSettingsBus = nickColorSettingsBus;
@@ -265,19 +275,19 @@ public class UserListDockable extends JPanel implements Dockable {
 
       return c;
     });
-    JScrollPane scroll = new JScrollPane(
+    scroll = new JScrollPane(
         list,
         ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
-        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-    // Ensure the horizontal scrollbar never reserves height.
-    JScrollBar hbar = scroll.getHorizontalScrollBar();
-    if (hbar != null) {
-      hbar.setVisible(false);
-      Dimension zero = new Dimension(0, 0);
-      hbar.setPreferredSize(zero);
-      hbar.setMinimumSize(zero);
-      hbar.setMaximumSize(zero);
-    }
+        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER) {
+      @Override
+      public void updateUI() {
+        super.updateUI();
+        enforceNoHorizontalScrollBar(this);
+      }
+    };
+    scroll.setMinimumSize(new Dimension(0, 0));
+    // Ensure the horizontal scrollbar never reserves height or appears.
+    enforceNoHorizontalScrollBar(scroll);
 
     add(scroll, BorderLayout.CENTER);
     if (ignoreListService != null) {
@@ -403,6 +413,22 @@ public class UserListDockable extends JPanel implements Dockable {
       }
     }
     return sb.toString();
+  }
+
+  private void enforceNoHorizontalScrollBar(JScrollPane scroll) {
+    if (scroll == null) return;
+
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    JScrollBar hbar = scroll.getHorizontalScrollBar();
+    if (hbar == null) return;
+
+    Dimension zero = new Dimension(0, 0);
+    hbar.setVisible(false);
+    hbar.setEnabled(false);
+    hbar.setPreferredSize(zero);
+    hbar.setMinimumSize(zero);
+    hbar.setMaximumSize(zero);
   }
 
   private NickInfo selectedNickInfo(int index) {
@@ -579,6 +605,7 @@ public class UserListDockable extends JPanel implements Dockable {
     if (nickColorSettingsBus != null) {
       nickColorSettingsBus.addListener(nickColorSettingsListener);
     }
+    SwingUtilities.invokeLater(() -> enforceNoHorizontalScrollBar(scroll));
   }
 
   @Override
@@ -592,6 +619,36 @@ public class UserListDockable extends JPanel implements Dockable {
   private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
     if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
     SwingUtilities.invokeLater(list::repaint);
+  }
+
+  @Override
+  public Dimension getPreferredScrollableViewportSize() {
+    return getPreferredSize();
+  }
+
+  @Override
+  public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+    return orientation == SwingConstants.VERTICAL ? 16 : 16;
+  }
+
+  @Override
+  public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+    if (visibleRect == null) return 64;
+    return orientation == SwingConstants.VERTICAL
+        ? Math.max(32, visibleRect.height - 24)
+        : Math.max(32, visibleRect.width - 24);
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportWidth() {
+    // Crucial for outer docking JScrollPane wrappers: prevent horizontal scrolling at dock level.
+    return true;
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportHeight() {
+    // Let our inner list scrollpane handle vertical overflow; outer wrappers should not scroll.
+    return true;
   }
 
   @Override public String getPersistentID() { return ID; }
