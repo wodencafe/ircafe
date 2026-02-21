@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.io.BufferedInputStream;
@@ -38,10 +39,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
 /**
@@ -90,7 +88,7 @@ public class OutboundDccCommandService {
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.dccTransferStore = dccTransferStore;
-    this.io = Executors.newCachedThreadPool(new NamedThreadFactory("ircafe-dcc-"));
+    this.io = VirtualThreads.newThreadPerTaskExecutor("ircafe-dcc");
   }
 
   public void handleDcc(CompositeDisposable disposables, String subcommand, String nick, String argument) {
@@ -1350,19 +1348,4 @@ public class OutboundDccCommandService {
       AtomicBoolean closing
   ) {}
 
-  private static final class NamedThreadFactory implements ThreadFactory {
-    private final String prefix;
-    private final AtomicLong seq = new AtomicLong(1L);
-
-    private NamedThreadFactory(String prefix) {
-      this.prefix = prefix == null ? "ircafe-dcc-" : prefix;
-    }
-
-    @Override
-    public Thread newThread(Runnable r) {
-      Thread t = new Thread(r, prefix + seq.getAndIncrement());
-      t.setDaemon(true);
-      return t;
-    }
-  }
 }

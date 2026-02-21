@@ -4,6 +4,7 @@ import cafe.woden.ircclient.net.HttpLite;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
@@ -583,9 +584,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       }
 
       // Download off the EDT.
-      Thread t = new Thread(() -> downloadToFile(url, out), "ircafe-save-link");
-      t.setDaemon(true);
-      t.start();
+      VirtualThreads.start("ircafe-save-link", () -> downloadToFile(url, out));
     } catch (Exception ignored) {
     }
   }

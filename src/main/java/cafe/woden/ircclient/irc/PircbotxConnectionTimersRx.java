@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -13,7 +14,6 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
@@ -55,16 +55,8 @@ final class PircbotxConnectionTimersRx {
     this.reconnectPolicy = (c != null) ? c.reconnect() : null;
     this.heartbeatPolicy = (c != null) ? c.heartbeat() : null;
 
-    this.heartbeatExec = Executors.newSingleThreadScheduledExecutor(r -> {
-      Thread t = new Thread(r, "ircafe-heartbeat");
-      t.setDaemon(true);
-      return t;
-    });
-    this.reconnectExec = Executors.newSingleThreadScheduledExecutor(r -> {
-      Thread t = new Thread(r, "ircafe-reconnect");
-      t.setDaemon(true);
-      return t;
-    });
+    this.heartbeatExec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-heartbeat");
+    this.reconnectExec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-reconnect");
     this.heartbeatScheduler = Schedulers.from(heartbeatExec);
   }
 

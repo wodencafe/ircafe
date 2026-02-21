@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.tray.dbus;
 
+import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
@@ -10,9 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -43,7 +42,8 @@ public class GnomeDbusNotificationBackend {
   // Live signal handling state (G3).
   private final AtomicBoolean handlersInstalled = new AtomicBoolean(false);
   private final Map<Long, ClickEntry> clickHandlers = new ConcurrentHashMap<>();
-  private final ScheduledExecutorService cleanup = Executors.newSingleThreadScheduledExecutor(daemonTf("ircafe-dbus-notify"));
+  private final ScheduledExecutorService cleanup =
+      VirtualThreads.newSingleThreadScheduledExecutor("ircafe-dbus-notify");
 
   private volatile DBusConnection liveConn;
   private volatile FreedesktopNotifications liveSvc;
@@ -258,15 +258,6 @@ public class GnomeDbusNotificationBackend {
   }
 
   private record ClickEntry(Runnable onClick, long deadlineMs) {
-  }
-
-  private static ThreadFactory daemonTf(String name) {
-    return r -> {
-      Thread t = new Thread(r);
-      t.setName(name);
-      t.setDaemon(true);
-      return t;
-    };
   }
 
   /**

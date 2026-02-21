@@ -9,6 +9,7 @@ import cafe.woden.ircclient.logging.model.LogLine;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Completable;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -23,8 +24,6 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.swing.JViewport;
@@ -79,14 +78,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
     this.settingsBus = settingsBus;
 
-    this.exec = Executors.newSingleThreadExecutor(new ThreadFactory() {
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread t = new Thread(r, "ircafe-remote-history");
-        t.setDaemon(true);
-        return t;
-      }
-    });
+    this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-remote-history");
   }
 
   @Override

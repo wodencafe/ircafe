@@ -181,6 +181,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
         })
     );
 
+    refreshTypingSignalAvailability();
     SwingUtilities.invokeLater(this::applyReadMarkerViewState);
   }
 
@@ -189,6 +190,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
    */
   public void setInputEnabled(boolean enabled) {
     inputPanel.setInputEnabled(enabled);
+    if (!enabled) {
+      inputPanel.setTypingSignalAvailable(false);
+    } else {
+      refreshTypingSignalAvailability();
+    }
   }
 
   /**
@@ -248,6 +254,17 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   public void clearTypingIndicator() {
     inputPanel.clearRemoteTypingIndicator();
+  }
+
+  public void refreshTypingSignalAvailability() {
+    boolean available = false;
+    if (target != null && !target.isStatus() && !target.isUiOnly() && irc != null) {
+      try {
+        available = irc.isTypingAvailable(target.serverId());
+      } catch (Exception ignored) {
+      }
+    }
+    inputPanel.setTypingSignalAvailable(available);
   }
 
   public boolean normalizeIrcv3DraftForCapabilities(boolean replySupported, boolean reactSupported) {
@@ -549,7 +566,13 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private void onLocalTypingStateChanged(String state) {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
     if (irc == null) return;
-    if (!irc.isTypingAvailable(target.serverId())) {
+    boolean typingAvailable = false;
+    try {
+      typingAvailable = irc.isTypingAvailable(target.serverId());
+    } catch (Exception ignored) {
+    }
+    inputPanel.setTypingSignalAvailable(typingAvailable);
+    if (!typingAvailable) {
       String s = normalizeTypingState(state);
       if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
         String reason = Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
@@ -562,7 +585,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
     irc.sendTyping(target.serverId(), target.target(), s).subscribe(
-        () -> {},
+        () -> inputPanel.onLocalTypingIndicatorSent(s),
         err -> {
           if (log.isDebugEnabled()) {
             log.debug(

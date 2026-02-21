@@ -37,6 +37,7 @@ public final class UserInfoEnrichmentPlanner {
   private static final Duration WHO_CHANNEL_MIN_CMD_INTERVAL = Duration.ofSeconds(30);
   private static final int WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE = 2;
   private static final Duration WHO_CHANNEL_TARGET_COOLDOWN = Duration.ofMinutes(10);
+  private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   public enum ProbeKind {
     WHO_CHANNEL,
@@ -319,6 +320,72 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
     }
   }
 
+  /**
+   * Returns the earliest delay until any queued probe for this server could become sendable.
+   *
+   * <p>This is a non-mutating scheduling hint for event-driven executors.
+   */
+  public long nextReadyDelayMs(String serverId, Instant now, Settings cfg) {
+    String sid = norm(serverId);
+    if (sid.isEmpty() || cfg == null || now == null || !cfg.enabled) return NO_WAKE_NEEDED_MS;
+    ServerState st = stateByServer.get(sid);
+    if (st == null) return NO_WAKE_NEEDED_MS;
+
+    synchronized (st) {
+      cleanupWindow(st.whoChannel, now);
+      cleanupWindow(st.userhost, now);
+      cleanupWindow(st.whois, now);
+
+      long nextDelayMs = NO_WAKE_NEEDED_MS;
+      nextDelayMs = Math.min(nextDelayMs, computeProbeNextDelayMs(
+          st.whoChannel,
+          now,
+          WHO_CHANNEL_MIN_CMD_INTERVAL,
+          WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE,
+          WHO_CHANNEL_TARGET_COOLDOWN,
+          null
+      ));
+      nextDelayMs = Math.min(nextDelayMs, computeProbeNextDelayMs(
+          st.userhost,
+          now,
+          cfg.userhostMinCmdInterval,
+          cfg.userhostMaxCommandsPerMinute,
+          cfg.userhostNickCooldown,
+          null
+      ));
+      if (cfg.whoisFallbackEnabled) {
+        nextDelayMs = Math.min(nextDelayMs, computeProbeNextDelayMs(
+            st.whois,
+            now,
+            cfg.whoisMinCmdInterval,
+            cfg.whoisMaxCommandsPerMinuteHint(),
+            cfg.whoisNickCooldown,
+            st.whois.snoozeUntilByNickLower
+        ));
+      }
+      return nextDelayMs;
+    }
+  }
+
+  /**
+   * Returns when periodic refresh should run next for this server, if periodic refresh is active.
+   */
+  public long nextPeriodicRefreshDelayMs(String serverId, Instant now, Settings cfg) {
+    String sid = norm(serverId);
+    if (sid.isEmpty() || cfg == null || now == null || !cfg.enabled || !cfg.periodicRefreshEnabled) {
+      return NO_WAKE_NEEDED_MS;
+    }
+    ServerState st = stateByServer.get(sid);
+    if (st == null) return NO_WAKE_NEEDED_MS;
+
+    synchronized (st) {
+      if (st.roster.snapshot.isEmpty()) return NO_WAKE_NEEDED_MS;
+      if (st.nextPeriodicAt == null || !now.isBefore(st.nextPeriodicAt)) return 0L;
+      long delayMs = Duration.between(now, st.nextPeriodicAt).toMillis();
+      return Math.max(0L, delayMs);
+    }
+  }
+
 
   private Optional<PlannedCommand> pollWhoChannel(String serverId, ServerState st, Instant now, Settings cfg) {
     synchronized (st) {
@@ -415,6 +482,65 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
   private static boolean canSend(ProbeState ps, Instant now, Duration minInterval, int maxPerMinute) {
     if (ps.cmdTimes.size() >= maxPerMinute) return false;
     return ps.lastCmdAt == null || Duration.between(ps.lastCmdAt, now).compareTo(minInterval) >= 0;
+  }
+
+  private static long computeProbeNextDelayMs(
+      ProbeState ps,
+      Instant now,
+      Duration minInterval,
+      int maxPerMinute,
+      Duration targetCooldown,
+      Map<String, Instant> notBeforeByNickLower
+  ) {
+    if (ps.queue.isEmpty()) return NO_WAKE_NEEDED_MS;
+
+    Instant nextRateAllowedAt = now;
+    if (ps.lastCmdAt != null) {
+      Instant afterMinInterval = ps.lastCmdAt.plus(minInterval);
+      if (afterMinInterval.isAfter(nextRateAllowedAt)) {
+        nextRateAllowedAt = afterMinInterval;
+      }
+    }
+    if (ps.cmdTimes.size() >= maxPerMinute && ps.cmdTimes.peekFirst() != null) {
+      Instant afterRateWindow = ps.cmdTimes.peekFirst().plusSeconds(60);
+      if (afterRateWindow.isAfter(nextRateAllowedAt)) {
+        nextRateAllowedAt = afterRateWindow;
+      }
+    }
+
+    Instant earliestTargetReadyAt = null;
+    for (String target : ps.queue) {
+      String key = Objects.toString(target, "").trim().toLowerCase(Locale.ROOT);
+      if (key.isEmpty()) continue;
+
+      Instant readyAt = now;
+      Instant last = ps.lastNickRequestAt.get(key);
+      if (last != null) {
+        Instant afterCooldown = last.plus(targetCooldown);
+        if (afterCooldown.isAfter(readyAt)) {
+          readyAt = afterCooldown;
+        }
+      }
+      if (notBeforeByNickLower != null) {
+        Instant notBefore = notBeforeByNickLower.get(key);
+        if (notBefore != null && notBefore.isAfter(readyAt)) {
+          readyAt = notBefore;
+        }
+      }
+
+      if (earliestTargetReadyAt == null || readyAt.isBefore(earliestTargetReadyAt)) {
+        earliestTargetReadyAt = readyAt;
+        if (!readyAt.isAfter(now)) {
+          break;
+        }
+      }
+    }
+
+    if (earliestTargetReadyAt == null) return NO_WAKE_NEEDED_MS;
+
+    Instant wakeAt = nextRateAllowedAt.isAfter(earliestTargetReadyAt) ? nextRateAllowedAt : earliestTargetReadyAt;
+    long delayMs = Duration.between(now, wakeAt).toMillis();
+    return Math.max(0L, delayMs);
   }
 
   private static void noteSent(ProbeState ps, Instant at) {

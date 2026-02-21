@@ -162,6 +162,10 @@ public class ChatDockManager {
         dock.clearTypingIndicator();
       } catch (Exception ignored) {
       }
+      try {
+        dock.refreshTypingSignalAvailability();
+      } catch (Exception ignored) {
+      }
     }
   }
 

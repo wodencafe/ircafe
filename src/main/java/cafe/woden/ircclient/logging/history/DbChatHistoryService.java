@@ -11,6 +11,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.time.Instant;
@@ -24,7 +25,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import jakarta.annotation.PreDestroy;
@@ -69,11 +69,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   
   private final Set<TargetRef> loading = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-  private final ExecutorService exec = Executors.newSingleThreadExecutor(r -> {
-    Thread t = new Thread(r, "ircafe-chat-history");
-    t.setDaemon(true);
-    return t;
-  });
+  private final ExecutorService exec = VirtualThreads.newSingleThreadExecutor("ircafe-chat-history");
 
   public DbChatHistoryService(ChatLogRepository repo,
                               LogProperties props,

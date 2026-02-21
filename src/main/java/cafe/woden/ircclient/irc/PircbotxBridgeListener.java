@@ -79,6 +79,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private static final int ERR_SASL_ABORTED = 906;
   private static final int ERR_SASL_ALREADY = 907;
   private static final String IRCafe_WHOX_TOKEN = "1";
+  private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
 
   private static boolean isJoinFailureNumeric(int code) {
     return code == 403
@@ -139,6 +140,241 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (at > 0) p = p.substring(0, at);
     return p;
   }
+
+  /** Best-effort resolve of our current nick (prefers UserBot nick when available). */
+  private static String resolveBotNick(PircBotX bot) {
+    if (bot == null) return "";
+
+    // Prefer UserBot nick, since it tends to reflect the *current* nick (including alt-nick fallback).
+    try {
+      if (bot.getUserBot() != null) {
+        String ub = bot.getUserBot().getNick();
+        if (ub != null && !ub.isBlank()) return ub.trim();
+      }
+    } catch (Exception ignored) {
+    }
+
+    try {
+      String n = PircbotxUtil.safeStr(bot::getNick, "");
+      if (n != null && !n.isBlank()) return n.trim();
+    } catch (Exception ignored) {
+    }
+
+    // Last resort: poke configuration via reflection (PircBotX versions differ).
+    try {
+      Object cfg = reflectCall(bot, "getConfiguration");
+      Object n = reflectCall(cfg, "getNick");
+      if (n != null) {
+        String s = String.valueOf(n);
+        if (!s.isBlank()) return s.trim();
+      }
+    } catch (Exception ignored) {
+    }
+    return "";
+  }
+
+  /** True when an inbound event is actually our own message echoed back (IRCv3 echo-message). */
+  private static boolean isSelfEchoed(PircBotX bot, String fromNick) {
+    try {
+      if (fromNick == null || fromNick.isBlank()) return false;
+
+      String botNick = resolveBotNick(bot);
+      if (!botNick.isBlank() && fromNick.equalsIgnoreCase(botNick)) return true;
+
+      // Sometimes UserBot nick is available even when botNick isn't.
+      try {
+        if (bot != null && bot.getUserBot() != null) {
+          String ub = bot.getUserBot().getNick();
+          if (ub != null && !ub.isBlank() && fromNick.equalsIgnoreCase(ub)) return true;
+        }
+      } catch (Exception ignored) {
+      }
+
+      return false;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static boolean looksLikeSelfNickHint(String nick) {
+    if (nick == null) return false;
+    String n = nick.trim();
+    if (n.isBlank()) return false;
+    if ("*".equals(n)) return false;
+    if (PircbotxLineParseUtil.looksNumeric(n)) return false;
+    if (PircbotxLineParseUtil.looksLikeChannel(n)) return false;
+    if (n.indexOf(' ') >= 0) return false;
+    return true;
+  }
+
+  private void rememberSelfNickHint(String nick) {
+    if (!looksLikeSelfNickHint(nick)) return;
+    String n = nick.trim();
+    conn.selfNickHint.set(n);
+  }
+
+  private boolean nickMatchesSelf(PircBotX bot, String nick) {
+    if (nick == null || nick.isBlank()) return false;
+    String n = nick.trim();
+
+    String hinted = conn.selfNickHint.get();
+    if (hinted != null && !hinted.isBlank() && n.equalsIgnoreCase(hinted.trim())) {
+      return true;
+    }
+
+    String fromBot = resolveBotNick(bot);
+    if (!fromBot.isBlank() && n.equalsIgnoreCase(fromBot.trim())) {
+      rememberSelfNickHint(fromBot);
+      return true;
+    }
+
+    return false;
+  }
+
+  private String resolveSelfNick(PircBotX bot) {
+    String hinted = conn.selfNickHint.get();
+    if (looksLikeSelfNickHint(hinted)) {
+      return hinted.trim();
+    }
+    String fromBot = resolveBotNick(bot);
+    if (!fromBot.isBlank()) {
+      rememberSelfNickHint(fromBot);
+      return fromBot;
+    }
+    return "";
+  }
+
+  private static boolean isCtcpWrapped(String msg) {
+    if (msg == null || msg.length() < 2) return false;
+    return msg.charAt(0) == 0x01 && msg.charAt(msg.length() - 1) == 0x01;
+  }
+
+
+private static String rawLineFromEvent(Object event) {
+  if (event == null) return null;
+
+  try {
+    Object raw = reflectCall(event, "getRawLine");
+    String s = toRawIrcLine(raw);
+    if (s != null) return s;
+  } catch (Exception ignored) {
+  }
+
+  try {
+    Object line = reflectCall(event, "getLine");
+    String s = toRawIrcLine(line);
+    if (s != null) return s;
+  } catch (Exception ignored) {
+  }
+
+  try {
+    Object raw = reflectCall(event, "getRaw");
+    String s = toRawIrcLine(raw);
+    if (s != null) return s;
+  } catch (Exception ignored) {
+  }
+
+  return null;
+}
+
+private static String toRawIrcLine(Object maybeLine) {
+  if (maybeLine == null) return null;
+
+  if (maybeLine instanceof String s) {
+    String t = s.trim();
+    return t.isEmpty() ? null : t;
+  }
+
+  // PircBotX uses several internal line types; extract the raw line via reflection if possible.
+  for (String m : new String[]{"getRawLine", "getLine", "getRaw", "rawLine", "line"}) {
+    try {
+      Object nested = reflectCall(maybeLine, m);
+      if (nested == null || nested == maybeLine) continue;
+      String s = toRawIrcLine(nested);
+      if (s != null) return s;
+    } catch (Exception ignored) {
+    }
+  }
+
+  // Last resort: only accept toString() if it looks like an IRC line.
+  try {
+    String t = String.valueOf(maybeLine).trim();
+    if (t.startsWith("@") || t.startsWith(":")) return t;
+  } catch (Exception ignored) {
+  }
+
+  return null;
+}
+
+private static String privmsgTargetFromEvent(Object event) {
+    // Best effort: parse the raw IRC line first.
+    try {
+      String raw = rawLineFromEvent(event);
+      String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(raw);
+      ParsedIrcLine p = parseIrcLine(normalized);
+      if (p != null
+          && p.command() != null
+          && ("PRIVMSG".equalsIgnoreCase(p.command()) || "NOTICE".equalsIgnoreCase(p.command()))
+          && !p.params().isEmpty()) {
+        return p.params().get(0);
+      }
+    } catch (Exception ignored) {
+    }
+
+    // Fallback: try reflective access to a target/recipient property.
+    try {
+      Object t = reflectCall(event, "getTarget");
+      if (t == null) t = reflectCall(event, "getRecipient");
+      if (t == null) t = reflectCall(event, "getMessageTarget");
+      if (t == null) t = reflectCall(event, "getMessageTargetName");
+      if (t == null) t = reflectCall(event, "getDestination");
+
+      if (t instanceof Channel) {
+        return ((Channel) t).getName();
+      }
+      if (t instanceof User) {
+        return ((User) t).getNick();
+      }
+      if (t != null) {
+        String s = String.valueOf(t);
+        if (!s.isBlank()) return s.trim();
+      }
+    } catch (Exception ignored) {
+    }
+
+    return null;
+  }
+
+private static String derivePrivateConversationTarget(String botNick, String fromNick, String dest) {
+  String from = fromNick == null ? "" : fromNick.trim();
+  String d = dest == null ? "" : dest.trim();
+  String me = botNick == null ? "" : botNick.trim();
+
+  if (d.isBlank()) return from;
+  if (me.isBlank()) return from;
+
+  // If the destination is us, this is an inbound PM; the conversation key is the sender.
+  if (d.equalsIgnoreCase(me)) return from;
+
+  // Otherwise (including echo-message), the conversation key is the destination.
+  return d;
+}
+
+private static boolean isZncPlayStarCursorCommand(String msg) {
+  String m = Objects.toString(msg, "").trim();
+  if (m.isEmpty()) return false;
+  String[] parts = m.split("\\s+");
+  if (parts.length < 3) return false;
+  if (!"play".equalsIgnoreCase(parts[0])) return false;
+  if (!"*".equals(parts[1])) return false;
+  String n = parts[2];
+  if (n.isEmpty()) return false;
+  for (int i = 0; i < n.length(); i++) {
+    if (!Character.isDigit(n.charAt(i))) return false;
+  }
+  return true;
+}
+
 
   private static boolean isChatHistoryBatchType(String type) {
     if (type == null) return false;
@@ -486,51 +722,67 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       ));
     }
 
+@Override
+public void onAction(ActionEvent event) {
+  touchInbound();
 
-    @Override
-    public void onAction(ActionEvent event) {
-      touchInbound();
-      Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
-      if (batchId.isPresent()) {
-        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
-        if (buf != null) {
-          Instant at = inboundAt(event);
-          String from = (event.getUser() != null) ? event.getUser().getNick() : "";
-          String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+  String pmDest = privmsgTargetFromEvent(event);
 
-          String fallbackTarget = (event.getChannel() != null) ? event.getChannel().getName() : from;
-          String target = (buf.target == null || buf.target.isBlank()) ? fallbackTarget : buf.target;
-
-          buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
-          return;
-        }
-      }
+  Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
+  if (batchId.isPresent()) {
+    ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
+    if (buf != null) {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
-      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
-      String messageId = ircv3MessageId(ircv3Tags);
 
+      String fallbackTarget;
       if (event.getChannel() != null) {
-        String channel = event.getChannel().getName();
-        maybeEmitHostmaskObserved(channel, event.getUser());
-
-        if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
-          return;
-        }
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(at, channel, from, action, messageId, ircv3Tags)));
+        fallbackTarget = event.getChannel().getName();
       } else {
-        maybeEmitHostmaskObserved("", event.getUser());
-
-        // For queries, use the sender nick as the "target" key.
-        if (!"*playback".equalsIgnoreCase(from)
-            && maybeCaptureZncPlayback(from, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
-          return;
-        }
-
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
+        fallbackTarget = derivePrivateConversationTarget(botNick, from, pmDest);
       }
+
+      String target = (buf.target == null || buf.target.isBlank()) ? fallbackTarget : buf.target;
+      buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+      return;
     }
+  }
+
+  Instant at = inboundAt(event);
+  String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+  String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+  Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
+  if (pmDest != null && !pmDest.isBlank()) {
+    tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
+  }
+  Map<String, String> ircv3Tags = tags;
+  String messageId = ircv3MessageId(ircv3Tags);
+
+  if (event.getChannel() != null) {
+    String channel = event.getChannel().getName();
+    maybeEmitHostmaskObserved(channel, event.getUser());
+
+    if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
+      return;
+    }
+    bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelAction(at, channel, from, action, messageId, ircv3Tags)));
+  } else {
+    maybeEmitHostmaskObserved("", event.getUser());
+
+    String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
+
+    // For queries, use the conversation peer nick as the "target" key.
+    if (!"*playback".equalsIgnoreCase(from)
+        && maybeCaptureZncPlayback(convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
+      return;
+    }
+
+    bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
+  }
+}
+
 
     @Override
     public void onTopic(TopicEvent event) {
@@ -579,70 +831,128 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           new IrcEvent.InvitedToChannel(Instant.now(), channel, from)));
     }
 
+@Override
+public void onPrivateMessage(PrivateMessageEvent event) {
+  touchInbound();
 
-    @Override
-    public void onPrivateMessage(PrivateMessageEvent event) {
-      touchInbound();
-      Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
-      if (batchId.isPresent()) {
-        ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
-        if (buf != null) {
-          Instant at = inboundAt(event);
-          String from = (event.getUser() != null) ? event.getUser().getNick() : "";
-          String msg = PircbotxUtil.safeStr(event::getMessage, "");
-          String action = PircbotxUtil.parseCtcpAction(msg);
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+  String pmDest = privmsgTargetFromEvent(event);
 
-          String target = (buf.target == null || buf.target.isBlank()) ? from : buf.target;
-          if (action != null) {
-            buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
-          } else {
-            buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg));
-          }
+  Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
+  if (batchId.isPresent()) {
+    ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
+    if (buf != null) {
+      Instant at = inboundAt(event);
+      String from = (event.getUser() != null) ? event.getUser().getNick() : "";
+      String msg = PircbotxUtil.safeStr(event::getMessage, "");
+      String action = PircbotxUtil.parseCtcpAction(msg);
+
+      boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+      if (fromSelf) {
+        // Don't show our internal ZNC playback bootstrap line.
+        if (isZncPlayStarCursorCommand(msg)) {
           return;
         }
-      }
-      Instant at = inboundAt(event);
-      String from = event.getUser().getNick();
-      String msg = event.getMessage();
-      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
-      String messageId = ircv3MessageId(ircv3Tags);
-
-      if ("*status".equalsIgnoreCase(from)) {
-        maybeMarkZncDetected("private message from *status", null);
-      }
-
-      // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
-      if (maybeCaptureZncListNetworks(from, msg)) {
-        return;
-      }
-
-      if ("*playback".equalsIgnoreCase(from)) {
-        conn.zncPlaybackCapture.onPlaybackControlLine(msg);
-      }
-
-      // If we're in the middle of an explicit playback range request for this query, capture and
-      // suppress replayed lines. (Playback control lines from *playback are kept visible.)
-      if (!"*playback".equalsIgnoreCase(from)) {
-        String action = PircbotxUtil.parseCtcpAction(msg);
-        if (action != null) {
-          if (maybeCaptureZncPlayback(from, at, ChatHistoryEntry.Kind.ACTION, from, action)) return;
-        } else {
-          if (maybeCaptureZncPlayback(from, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg)) return;
+        if (pmDest != null) {
+          if ("*playback".equalsIgnoreCase(pmDest) && msg != null && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
+            return;
+          }
+          if ("*status".equalsIgnoreCase(pmDest) && msg != null && msg.equalsIgnoreCase("ListNetworks")) {
+            return;
+          }
         }
       }
 
-      maybeEmitHostmaskObserved("", event.getUser());
+      String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
+      String target = (buf.target == null || buf.target.isBlank()) ? convTarget : buf.target;
 
-      String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
+        buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+      } else {
+        buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg));
+      }
+      return;
+    }
+  }
+
+  Instant at = inboundAt(event);
+  String from = event.getUser().getNick();
+  String msg = event.getMessage();
+
+  Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
+  if (pmDest != null && !pmDest.isBlank()) {
+    tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
+  }
+  Map<String, String> ircv3Tags = tags;
+  String messageId = ircv3MessageId(ircv3Tags);
+
+  boolean fromSelf = false;
+  try {
+    fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+  } catch (Exception ignored) {
+  }
+
+  // Suppress our own internal ZNC control messages that might be echoed back (echo-message)
+  // or replayed by servers that emulate ZNC playback (e.g., Ergo).
+  if (fromSelf) {
+    // "play * <cursor>" is a control line we send to bootstrap playback; never show it as chat.
+    if (isZncPlayStarCursorCommand(msg)) {
+      return;
+    }
+    if (pmDest != null) {
+      if ("*playback".equalsIgnoreCase(pmDest) && msg != null && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
         return;
       }
-
-      if (ctcpHandler.handle(event.getBot(), from, msg)) return;
-
-      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg, messageId, ircv3Tags)));
+      if ("*status".equalsIgnoreCase(pmDest) && msg != null && msg.equalsIgnoreCase("ListNetworks")) {
+        return;
+      }
     }
+  }
+
+  if ("*status".equalsIgnoreCase(from)) {
+    maybeMarkZncDetected("private message from *status", null);
+  }
+
+  // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
+  if (maybeCaptureZncListNetworks(from, msg)) {
+    return;
+  }
+
+  if ("*playback".equalsIgnoreCase(from)) {
+    conn.zncPlaybackCapture.onPlaybackControlLine(msg);
+  }
+
+  // If we're in the middle of an explicit playback range request for this query, capture and
+  // suppress replayed lines. (Playback control lines from *playback are kept visible.)
+  String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
+  if (!"*playback".equalsIgnoreCase(from)) {
+    String action = PircbotxUtil.parseCtcpAction(msg);
+    if (action != null) {
+      if (maybeCaptureZncPlayback(convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action)) return;
+    } else {
+      if (maybeCaptureZncPlayback(convTarget, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg)) return;
+    }
+  }
+
+  maybeEmitHostmaskObserved("", event.getUser());
+
+  String action = PircbotxUtil.parseCtcpAction(msg);
+  if (action != null) {
+    bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
+    return;
+  }
+
+  // If echo-message is enabled, our own outbound CTCP requests can come back as inbound.
+  // Never treat those as inbound requests, and never show them.
+  if (fromSelf && isCtcpWrapped(msg)) {
+    return;
+  }
+
+  // CTCP auto-replies are handled in onGenericCTCP/onFinger so we can safely ignore echo-message copies.
+
+  bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateMessage(at, from, msg, messageId, ircv3Tags)));
+}
+
 
     @Override
     public void onNotice(NoticeEvent event) {
@@ -704,58 +1014,199 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
 
     @Override
-    public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
-      touchInbound();
-      Instant at = inboundAt(event);
-      log.info("CTCP: {}", event);
+public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
+  touchInbound();
+  Instant at = inboundAt(event);
+  log.info("CTCP: {}", event);
 
-      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
-      String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+  String botNickDirect = resolveBotNick(event != null ? event.getBot() : null);
+  String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "";
+  if (from == null) from = "";
+  from = from.trim();
+  String rawLine = rawLineFromEvent(event);
+  String normalizedRaw = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+  ParsedIrcLine rawParsed = parseIrcLine(normalizedRaw);
+  String rawFrom = (rawParsed == null) ? "" : nickFromPrefix(rawParsed.prefix());
+  if (from.isBlank() && !rawFrom.isBlank()) {
+    from = rawFrom;
+  }
+  if (from.isBlank()) from = "server";
+  String rawCmd = (rawParsed != null && rawParsed.command() != null) ? rawParsed.command().toUpperCase(Locale.ROOT) : "";
+  boolean rawIsNotice = "NOTICE".equals(rawCmd);
+  boolean rawIsPrivmsg = "PRIVMSG".equals(rawCmd);
+  String selfHintBefore = Objects.toString(conn.selfNickHint.get(), "").trim();
+  boolean fromSelf = nickMatchesSelf(event != null ? event.getBot() : null, from);
+  boolean rawFromSelf = nickMatchesSelf(event != null ? event.getBot() : null, rawFrom);
+  boolean selfEcho = isSelfEchoed(event != null ? event.getBot() : null, from);
+  String selfHintAfter = Objects.toString(conn.selfNickHint.get(), "").trim();
 
-      if (event != null && event.getUser() != null) {
-        String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
-        maybeEmitHostmaskObserved(ch, event.getUser());
-      }
+  log.debug(
+      "[{}] CTCPDBG pre cmdClass={} from={} rawFrom={} rawCmd={} selfHintBefore={} selfHintAfter={} botNick={} botNickDirect={} fromSelf={} rawFromSelf={} selfEcho={} raw={}",
+      serverId,
+      (event == null) ? "null" : event.getClass().getSimpleName(),
+      from,
+      rawFrom,
+      rawCmd,
+      selfHintBefore,
+      selfHintAfter,
+      botNick,
+      botNickDirect,
+      fromSelf,
+      rawFromSelf,
+      selfEcho,
+      normalizedRaw);
 
-      String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-      String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
-      String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
-      cmd = cmd.toUpperCase(Locale.ROOT);
-      String arg = null;
-      try {
-        java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
-        Object v = m.invoke(event);
-        if (v != null) arg = v.toString();
-      } catch (Exception ignored) {
-      }
+  // Ignore self-echoed CTCP requests (echo-message), otherwise we can reply to ourselves.
+  if (fromSelf) {
+    log.debug("[{}] CTCPDBG drop reason=self-from from={}", serverId, from);
+    return;
+  }
+  if (rawFromSelf) {
+    log.debug("[{}] CTCPDBG drop reason=self-raw-from rawFrom={}", serverId, rawFrom);
+    return;
+  }
+  if (selfEcho) {
+    log.debug("[{}] CTCPDBG drop reason=self-echo from={}", serverId, from);
+    return;
+  }
 
-      bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.CtcpRequestReceived(at, from, cmd, arg, channel)
-      ));
-
-      super.onGenericCTCP(event);
+  // For private CTCP, only treat it as "incoming to us" if the destination is our nick.
+  // This prevents echo-message copies of our own outbound CTCP requests (dest=otherNick) from being processed.
+  String pmDest = null;
+  if (event != null && event.getChannel() == null) {
+    pmDest = privmsgTargetFromEvent(event);
+    if ((pmDest == null || pmDest.isBlank()) && rawParsed != null && rawParsed.params() != null && !rawParsed.params().isEmpty()) {
+      pmDest = rawParsed.params().get(0);
     }
+    boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+    boolean destMismatch = pmDestKnown && !botNick.isBlank() && !pmDest.equalsIgnoreCase(botNick);
+    log.debug(
+        "[{}] CTCPDBG route channel={} pmDest={} pmDestKnown={} botNick={} rawIsPrivmsg={} rawIsNotice={} destMismatch={}",
+        serverId,
+        event.getChannel(),
+        pmDest,
+        pmDestKnown,
+        botNick,
+        rawIsPrivmsg,
+        rawIsNotice,
+        destMismatch);
+    if (log.isDebugEnabled()) {
+      log.debug("[{}] CTCP parsed rawCmd={} pmDest={} from={} botNick={} raw={}",
+          serverId, rawCmd, pmDest, from, botNick, normalizedRaw);
+    }
+    if (destMismatch) {
+      log.debug("[{}] CTCPDBG drop reason=dest-not-self pmDest={} botNick={}", serverId, pmDest, botNick);
+      return;
+    }
+  }
+
+  if (event != null && event.getUser() != null) {
+    String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
+    maybeEmitHostmaskObserved(ch, event.getUser());
+  }
+
+  String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+  String simple = (event == null) ? "CTCP" : event.getClass().getSimpleName();
+  String cmd = simple.endsWith("Event") ? simple.substring(0, simple.length() - "Event".length()) : simple;
+  cmd = cmd.toUpperCase(Locale.ROOT);
+
+  String arg = null;
+  try {
+    java.lang.reflect.Method m = event.getClass().getMethod("getPingValue");
+    Object v = m.invoke(event);
+    if (v != null) arg = v.toString();
+  } catch (Exception ignored) {
+  }
+
+  bus.onNext(new ServerIrcEvent(serverId,
+      new IrcEvent.CtcpRequestReceived(at, from, cmd, arg, channel)
+  ));
+
+  // Auto-reply only for private CTCP that is actually addressed to us.
+  // PircBotX 2.3.1 emits these CTCP events from PRIVMSG parsing.
+  // If destination parsing is unavailable (e.g. raw line hidden), treat private non-self CTCP as addressed to us.
+  boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+  boolean shouldAutoReply = event != null
+      && event.getChannel() == null
+      && !botNick.isBlank()
+      && (!pmDestKnown || pmDest.equalsIgnoreCase(botNick));
+  log.debug(
+      "[{}] CTCPDBG autoreply-eval shouldAutoReply={} pmDest={} pmDestKnown={} botNick={} rawIsPrivmsg={} rawIsNotice={} cmd={} arg={}",
+      serverId,
+      shouldAutoReply,
+      pmDest,
+      pmDestKnown,
+      botNick,
+      rawIsPrivmsg,
+      rawIsNotice,
+      cmd,
+      arg);
+  if (shouldAutoReply) {
+    String wrapped = "\u0001" + cmd + ((arg != null && !arg.isBlank()) ? (" " + arg) : "") + "\u0001";
+    log.debug("[{}] CTCPDBG autoreply-send to={} wrapped={}", serverId, from, wrapped.replace('\u0001', '|'));
+    ctcpHandler.handle(event.getBot(), from, wrapped);
+  }
+}
+
     @Override
-    public void onFinger(FingerEvent event) throws Exception {
-      touchInbound();
-      Instant at = inboundAt(event);
-      log.info("CTCP (FINGER): {}", event);
+public void onFinger(FingerEvent event) throws Exception {
+  touchInbound();
+  Instant at = inboundAt(event);
+  log.info("CTCP: {}", event);
 
-      String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "server";
-      String hostmask = (event != null && event.getUser() != null) ? PircbotxUtil.hostmaskFromUser(event.getUser()) : "";
+  String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+  String from = (event != null && event.getUser() != null) ? event.getUser().getNick() : "";
+  if (from == null) from = "";
+  from = from.trim();
+  String rawLine = rawLineFromEvent(event);
+  String normalizedRaw = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+  ParsedIrcLine rawParsed = parseIrcLine(normalizedRaw);
+  String rawFrom = (rawParsed == null) ? "" : nickFromPrefix(rawParsed.prefix());
+  if (from.isBlank() && !rawFrom.isBlank()) {
+    from = rawFrom;
+  }
+  if (from.isBlank()) from = "server";
 
-      if (event != null && event.getUser() != null) {
-        String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
-        maybeEmitHostmaskObserved(ch, event.getUser());
-      }
+  if (nickMatchesSelf(event != null ? event.getBot() : null, from)) {
+    return;
+  }
+  if (nickMatchesSelf(event != null ? event.getBot() : null, rawFrom)) {
+    return;
+  }
+  if (isSelfEchoed(event != null ? event.getBot() : null, from)) {
+    return;
+  }
 
-      String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
-      bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.CtcpRequestReceived(at, from, "FINGER", null, channel)
-      ));
-
-      super.onFinger(event);
+  String pmDest = null;
+  if (event != null && event.getChannel() == null) {
+    pmDest = privmsgTargetFromEvent(event);
+    if ((pmDest == null || pmDest.isBlank()) && rawParsed != null && rawParsed.params() != null && !rawParsed.params().isEmpty()) {
+      pmDest = rawParsed.params().get(0);
     }
+    boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+    if (pmDestKnown && !botNick.isBlank() && !pmDest.equalsIgnoreCase(botNick)) {
+      return;
+    }
+  }
+
+  if (event != null && event.getUser() != null) {
+    String ch = (event.getChannel() != null) ? event.getChannel().getName() : "";
+    maybeEmitHostmaskObserved(ch, event.getUser());
+  }
+
+  String channel = (event != null && event.getChannel() != null) ? event.getChannel().getName() : null;
+  bus.onNext(new ServerIrcEvent(serverId,
+      new IrcEvent.CtcpRequestReceived(at, from, "FINGER", null, channel)
+  ));
+
+  boolean pmDestKnown = pmDest != null && !pmDest.isBlank();
+  if (event != null && event.getChannel() == null && !botNick.isBlank()
+      && (!pmDestKnown || pmDest.equalsIgnoreCase(botNick))) {
+    ctcpHandler.handle(event.getBot(), from, "\u0001FINGER\u0001");
+  }
+}
+
 
 
 
@@ -822,6 +1273,15 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (l != null) line = String.valueOf(l);
       if (line == null || line.isBlank()) line = String.valueOf(event);
       String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+      ParsedIrcLine parsedRawLine = parseIrcLine(rawLine);
+      if (parsedRawLine != null
+          && parsedRawLine.command() != null
+          && PircbotxLineParseUtil.looksNumeric(parsedRawLine.command())
+          && parsedRawLine.params() != null
+          && !parsedRawLine.params().isEmpty()) {
+        // For server numerics, the first param is typically the recipient nick (us).
+        rememberSelfNickHint(parsedRawLine.params().get(0));
+      }
 
       if (handleBatchControlLine(line, rawLine)) {
         return;
@@ -837,6 +1297,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
             if (at == null) at = Instant.now();
             String from = nickFromPrefix(pl.prefix());
+
+            String botNick = resolveSelfNick(event != null ? event.getBot() : null);
+            if (botNick == null) botNick = "";
             String trailing = pl.trailing();
             if (trailing == null) trailing = "";
 
@@ -858,10 +1321,27 @@ final class PircbotxBridgeListener extends ListenerAdapter {
               payload = trailing;
             }
 
-            // For PMs to our nick, use the sender as the conversation target.
-            if (!target.startsWith("#") && !target.startsWith("&")) {
-              target = from;
-            }
+// For PMs, derive the conversation target from the destination:
+// - dest == our nick => inbound PM, conversation is the sender
+// - dest != our nick => echo-message/outbound PM, conversation is the destination
+if (!target.startsWith("#") && !target.startsWith("&")) {
+  target = derivePrivateConversationTarget(botNick, from, dest);
+}
+
+boolean fromSelf = !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+if (fromSelf) {
+  if (isZncPlayStarCursorCommand(payload)) {
+    return;
+  }
+  if (dest != null) {
+    if ("*playback".equalsIgnoreCase(dest) && payload.toLowerCase(java.util.Locale.ROOT).startsWith("play ")) {
+      return;
+    }
+    if ("*status".equalsIgnoreCase(dest) && payload.equalsIgnoreCase("ListNetworks")) {
+      return;
+    }
+  }
+}
 
             // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
             if (maybeCaptureZncListNetworks(from, payload)) {
@@ -1261,6 +1741,19 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       } catch (Exception ex) {
         return;
       }
+      try {
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) {
+          String raw = PircbotxLineParseUtil.normalizeIrcLineForParsing(String.valueOf(l));
+          ParsedIrcLine pl = parseIrcLine(raw);
+          if (pl != null && pl.params() != null && !pl.params().isEmpty()) {
+            // Server numerics are generally addressed to us in param[0].
+            rememberSelfNickHint(pl.params().get(0));
+          }
+        }
+      } catch (Exception ignored) {
+      }
       if (code == ERR_SASL_FAIL
           || code == ERR_SASL_TOO_LONG
           || code == ERR_SASL_ABORTED
@@ -1659,8 +2152,23 @@ if (code == 302 || code == 352 || code == 354) {
       if (channel != null) maybeEmitHostmaskObserved(channel.getName(), event.getUser());
 
       String nick = event.getUser() == null ? null : event.getUser().getNick();
+      boolean selfJoin = isSelf(event.getBot(), nick);
+      if (log.isDebugEnabled()) {
+        String hint = Objects.toString(conn.selfNickHint.get(), "");
+        String botNick = resolveBotNick(event.getBot());
+        String channelName = (channel == null) ? "" : channel.getName();
+        log.debug(
+            "[{}] JOIN route chan={} nick={} selfJoin={} selfHint={} botNick={}",
+            serverId,
+            channelName,
+            nick,
+            selfJoin,
+            hint,
+            botNick
+        );
+      }
 
-      if (isSelf(event.getBot(), nick)) {
+      if (selfJoin) {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.JoinedChannel(Instant.now(), channel.getName())));
       } else {
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserJoinedChannel(
@@ -1953,13 +2461,21 @@ if (code == 302 || code == 352 || code == 354) {
     @Override
     public void onNickChange(NickChangeEvent event) {
       touchInbound();
+      String oldNick = PircbotxUtil.safeStr(event::getOldNick, "");
+      String newNick = PircbotxUtil.safeStr(event::getNewNick, "");
+      String hinted = conn.selfNickHint.get();
+      if ((!hinted.isBlank() && oldNick.equalsIgnoreCase(hinted))
+          || isSelf(event.getBot(), oldNick)
+          || isSelf(event.getBot(), newNick)) {
+        rememberSelfNickHint(newNick);
+      }
       try {
         maybeEmitHostmaskObserved("", event.getUser());
       } catch (Exception ignored) {}
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.NickChanged(
           Instant.now(),
-          event.getOldNick(),
-          event.getNewNick()
+          oldNick,
+          newNick
       )));
 
       try {
@@ -1968,8 +2484,8 @@ if (code == 302 || code == 352 || code == 354) {
             bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.UserNickChangedChannel(
                 Instant.now(),
                 ch.getName(),
-                event.getOldNick(),
-                event.getNewNick()
+                oldNick,
+                newNick
             )));
           } catch (Exception ignored) {}
           emitRoster(ch);
@@ -2029,7 +2545,7 @@ if (code == 302 || code == 352 || code == 354) {
     @Override public void onSuperOp(SuperOpEvent event) { emitRoster(event.getChannel()); }
 
     private boolean isSelf(PircBotX bot, String nick) {
-      return nick != null && nick.equalsIgnoreCase(bot.getNick());
+      return nickMatchesSelf(bot, nick);
     }
 
     private void refreshRosterByName(PircBotX bot, String channelName) {

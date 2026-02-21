@@ -202,7 +202,7 @@ public class NickColorOverridesDialog {
       }
       // Restyle existing transcripts
       if (transcripts != null) {
-        transcripts.restyleAllDocuments();
+        transcripts.restyleAllDocumentsCoalesced();
       }
       // Nudge repaint for other components (e.g., user list)
       for (Window w : Window.getWindows()) {

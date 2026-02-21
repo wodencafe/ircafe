@@ -581,76 +581,111 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         ensureTargetExists(chan);
         ui.setChannelTopic(chan, ev.topic());
       }
-      case IrcEvent.PrivateMessage ev -> {
-        TargetRef pm = new TargetRef(sid, ev.from());
+      
+case IrcEvent.PrivateMessage ev -> {
+  boolean fromSelf = isFromSelf(sid, ev.from());
+  String peer = ev.from();
+  if (fromSelf) {
+    String dest = ev.ircv3Tags().get("ircafe/pm-target");
+    if (dest != null && !dest.isBlank()) peer = dest;
+  }
+  TargetRef pm = new TargetRef(sid, peer);
 
-        userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
-        markPrivateMessagePeerOnline(sid, ev.from());
+  // Suppress our own internal ZNC playback control lines if they get echoed back.
+  if (fromSelf && "*playback".equalsIgnoreCase(peer)
+      && ev.text() != null
+      && ev.text().toLowerCase(java.util.Locale.ROOT).startsWith("play ")) {
+    return;
+  }
 
-        ParsedCtcp ctcp = parseCtcp(ev.text());
-        if (ctcp != null && "DCC".equals(ctcp.commandUpper())) {
-          InboundIgnorePolicy.Decision dccDecision = decideInbound(sid, ev.from(), true);
-          if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+  if (!fromSelf) {
+    userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+    markPrivateMessagePeerOnline(sid, ev.from());
+  }
 
-          boolean dccHandled = outboundDccCommandService.handleInboundDccOffer(
-              ev.at(),
-              sid,
-              ev.from(),
-              ctcp.arg(),
-              dccDecision == InboundIgnorePolicy.Decision.SOFT_SPOILER);
-          if (dccHandled) return;
-        }
+  ParsedCtcp ctcp = parseCtcp(ev.text());
+  if (!fromSelf && ctcp != null && "DCC".equals(ctcp.commandUpper())) {
+    InboundIgnorePolicy.Decision dccDecision = decideInbound(sid, ev.from(), true);
+    if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+    boolean dccHandled = outboundDccCommandService.handleInboundDccOffer(
+        ev.at(),
+        sid,
+        ev.from(),
+        ctcp.arg(),
+        dccDecision == InboundIgnorePolicy.Decision.SOFT_SPOILER);
+    if (dccHandled) return;
+  }
 
-        if (tryResolvePendingEchoPrivateMessage(sid, pm, ev)) {
-          return;
-        }
+  InboundIgnorePolicy.Decision decision = fromSelf
+      ? InboundIgnorePolicy.Decision.ALLOW
+      : decideInbound(sid, ev.from(), false);
+  if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-        if (maybeApplyMessageEditFromTaggedLine(
-            sid,
-            pm,
-            ev.at(),
-            ev.from(),
-            ev.text(),
-            ev.messageId(),
-            ev.ircv3Tags())) {
-          return;
-        }
+  if (tryResolvePendingEchoPrivateMessage(sid, pm, ev)) {
+    return;
+  }
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
-        } else {
-          postTo(pm, true, d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), false, ev.messageId(), ev.ircv3Tags()));
-        }
+  if (maybeApplyMessageEditFromTaggedLine(
+      sid,
+      pm,
+      ev.at(),
+      ev.from(),
+      ev.text(),
+      ev.messageId(),
+      ev.ircv3Tags())) {
+    return;
+  }
 
-        try {
-          trayNotificationService.notifyPrivateMessage(sid, ev.from(), ev.text());
-        } catch (Exception ignored) {
-        }
-      }
-      case IrcEvent.PrivateAction ev -> {
-        TargetRef pm = new TargetRef(sid, ev.from());
+  if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text()));
+  } else {
+    postTo(pm, true,
+        d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), fromSelf, ev.messageId(), ev.ircv3Tags()));
+  }
 
-        userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
-        markPrivateMessagePeerOnline(sid, ev.from());
+  if (!fromSelf) {
+    try {
+      trayNotificationService.notifyPrivateMessage(sid, ev.from(), ev.text());
+    } catch (Exception ignored) {
+    }
+  }
+}
 
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+case IrcEvent.PrivateAction ev -> {
+  boolean fromSelf = isFromSelf(sid, ev.from());
+  String peer = ev.from();
+  if (fromSelf) {
+    String dest = ev.ircv3Tags().get("ircafe/pm-target");
+    if (dest != null && !dest.isBlank()) peer = dest;
+  }
+  TargetRef pm = new TargetRef(sid, peer);
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-          postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
-        } else {
-          postTo(pm, true, d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), false, ev.messageId(), ev.ircv3Tags()));
-        }
+  if (!fromSelf) {
+    userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+    markPrivateMessagePeerOnline(sid, ev.from());
+  }
 
-        try {
-          trayNotificationService.notifyPrivateMessage(sid, ev.from(), "* " + ev.action());
-        } catch (Exception ignored) {
-        }
-      }
-      case IrcEvent.Notice ev -> {
+  InboundIgnorePolicy.Decision decision = fromSelf
+      ? InboundIgnorePolicy.Decision.ALLOW
+      : decideInbound(sid, ev.from(), true);
+  if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+
+  if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+    postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), "* " + ev.action()));
+  } else {
+    postTo(pm, true,
+        d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), fromSelf, ev.messageId(), ev.ircv3Tags()));
+  }
+
+  if (!fromSelf) {
+    try {
+      trayNotificationService.notifyPrivateMessage(sid, ev.from(), "* " + ev.action());
+    } catch (Exception ignored) {
+    }
+  }
+}
+case IrcEvent.Notice ev -> {
         markPrivateMessagePeerOnline(sid, ev.from());
         boolean isCtcp = parseCtcp(ev.text()) != null;
         InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
@@ -854,6 +889,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
       case IrcEvent.JoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
+        TargetRef joinOrigin = joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
         joinRoutingState.clear(sid, ev.channel());
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
@@ -861,7 +897,10 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
-        ui.selectTarget(chan);
+        // Auto-joins should not steal focus; only switch when this join came from an explicit user /join.
+        if (joinOrigin != null) {
+          ui.selectTarget(chan);
+        }
       }
 
       case IrcEvent.JoinFailed ev -> {
@@ -1025,6 +1064,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.Error ev -> {
+          connectionCoordinator.noteConnectionError(sid, ev.message());
           ui.appendError(status, "(error)", ev.message());
       }
 

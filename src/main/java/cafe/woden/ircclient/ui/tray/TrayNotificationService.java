@@ -7,13 +7,13 @@ import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import dorkbox.notify.Notify;
 import dorkbox.notify.Position;
 import dorkbox.notify.Theme;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
-import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.awt.Frame;
 import java.awt.Toolkit;
 import java.io.BufferedReader;
@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ThreadFactory;
 import jakarta.annotation.PreDestroy;
 import javax.swing.SwingUtilities;
 import kotlin.Unit;
@@ -190,7 +189,7 @@ public class TrayNotificationService {
   private void installRateLimiterPipeline() {
     // Periodic cleanup of dedupe keys so long-running sessions don't accumulate unlimited entries.
     disposables.add(
-        io.reactivex.rxjava3.core.Flowable.interval(1, 1, TimeUnit.MINUTES, Schedulers.computation())
+        io.reactivex.rxjava3.core.Flowable.interval(1, 1, TimeUnit.MINUTES, RxVirtualSchedulers.computation())
             .subscribe(tick -> cleanupContentKeys(), err -> log.debug("[ircafe] notify cleanup failed", err))
     );
 
@@ -207,7 +206,7 @@ public class TrayNotificationService {
             // Global: allow up to N per window.
             .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
             .flatMap(win -> win.take(GLOBAL_MAX_PER_WINDOW))
-            .observeOn(Schedulers.io())
+            .observeOn(RxVirtualSchedulers.io())
             .subscribe(this::sendNow, err -> log.debug("[ircafe] tray notify stream failed", err))
     );
   }
@@ -462,15 +461,6 @@ public class TrayNotificationService {
   private static String contentKey(String targetKey, String title, String body) {
     // Body is already bounded and sanitized; keep the key readable for debug.
     return Objects.toString(targetKey, "") + "|" + Objects.toString(title, "") + "|" + Objects.toString(body, "");
-  }
-
-  private static ThreadFactory daemonTf(String base) {
-    return r -> {
-      Thread t = new Thread(r);
-      t.setName(base);
-      t.setDaemon(true);
-      return t;
-    };
   }
 
   private record NotificationRequest(

@@ -5,6 +5,7 @@ import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.model.LogDirection;
 import cafe.woden.ircclient.logging.model.LogKind;
 import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -12,8 +13,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,14 +39,7 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
 
-    this.exec = Executors.newSingleThreadExecutor(new ThreadFactory() {
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread t = new Thread(r, "ircafe-chathistory-ingest");
-        t.setDaemon(true);
-        return t;
-      }
-    });
+    this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-chathistory-ingest");
   }
 
   @Override

@@ -2,14 +2,12 @@ package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -25,10 +23,9 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   // TODO: Make these configurable by GUI and config.
   private static final int MAX_QUEUE = 50_000;
   private static final int BATCH_SIZE = 250;
-  private static final long FLUSH_INTERVAL_MS = 750;
 
   private final BlockingQueue<LogLine> queue = new LinkedBlockingQueue<>(MAX_QUEUE);
-  private final ScheduledExecutorService scheduler;
+  private final Thread writerThread;
   private final ChatLogRepository repo;
   private final TransactionTemplate tx;
   private final LogProperties props;
@@ -43,17 +40,8 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
 
-    this.scheduler = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread t = new Thread(r, "ircafe-chatlog-writer");
-        t.setDaemon(true);
-        return t;
-      }
-    });
-
-    // Fixed-delay ensures we never overlap flush runs.
-    scheduler.scheduleWithFixedDelay(this::flushSafely, FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    this.writerThread = VirtualThreads.unstarted("ircafe-chatlog-writer", this::writerLoop);
+    this.writerThread.start();
   }
 
   @Override
@@ -73,9 +61,24 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
     }
   }
 
-  private void flushSafely() {
+  private void writerLoop() {
+    while (true) {
+      try {
+        LogLine first = queue.take();
+        flushSafely(first);
+      } catch (InterruptedException ie) {
+        if (closed.get()) {
+          return;
+        }
+      }
+    }
+  }
+
+  private void flushSafely(LogLine first) {
     try {
-      flushNow();
+      synchronized (flushLock) {
+        flushOnceLocked(first);
+      }
     } catch (Throwable t) {
       log.warn("[ircafe] Chat log flush failed", t);
     }
@@ -88,22 +91,31 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
    */
   public void flushNow() {
     synchronized (flushLock) {
-      flushOnceLocked();
+      flushOnceLocked(null);
     }
   }
 
-  private void flushOnceLocked() {
-    if (queue.isEmpty()) return;
+  private void flushOnceLocked(LogLine first) {
+    List<LogLine> batch = new ArrayList<>(BATCH_SIZE);
+    if (first != null) {
+      batch.add(first);
+    }
 
-    // Drain up to a bounded number of batches per tick to avoid starving other work.
-    int batches = 0;
-    while (!queue.isEmpty() && batches < 20) {
-      List<LogLine> batch = new ArrayList<>(BATCH_SIZE);
-      queue.drainTo(batch, BATCH_SIZE);
-      if (batch.isEmpty()) break;
+    while (true) {
+      if (batch.size() < BATCH_SIZE) {
+        queue.drainTo(batch, BATCH_SIZE - batch.size());
+      }
+      if (batch.isEmpty()) {
+        return;
+      }
 
-      tx.executeWithoutResult(status -> repo.insertBatch(batch));
-      batches++;
+      List<LogLine> toWrite = batch;
+      tx.executeWithoutResult(status -> repo.insertBatch(toWrite));
+
+      if (queue.isEmpty()) {
+        return;
+      }
+      batch = new ArrayList<>(BATCH_SIZE);
     }
   }
 
@@ -112,11 +124,16 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   public void close() {
     if (!closed.compareAndSet(false, true)) return;
 
-    scheduler.shutdown();
+    writerThread.interrupt();
     try {
-      scheduler.awaitTermination(2, TimeUnit.SECONDS);
+      writerThread.join(TimeUnit.SECONDS.toMillis(2));
     } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
+    }
+
+    if (writerThread.isAlive()) {
+      log.warn("[ircafe] Chat log writer did not stop within timeout; skipping final synchronous flush");
+      return;
     }
 
     // Final flush (best effort).

@@ -1,11 +1,14 @@
 package cafe.woden.ircclient;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.util.VirtualThreads;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,7 +35,7 @@ public class ApplicationShutdownCoordinator {
       return;
     }
 
-    Thread watchdog = new Thread(() -> {
+    VirtualThreads.start("ircafe-shutdown-watchdog", () -> {
       try {
         Thread.sleep(SHUTDOWN_WATCHDOG_MS);
       } catch (InterruptedException ignored) {
@@ -40,11 +43,9 @@ public class ApplicationShutdownCoordinator {
       }
       log.error("[ircafe] Shutdown watchdog fired after {}ms; forcing JVM halt.", SHUTDOWN_WATCHDOG_MS);
       Runtime.getRuntime().halt(1);
-    }, "ircafe-shutdown-watchdog");
-    watchdog.setDaemon(true);
-    watchdog.start();
+    });
 
-    Thread shutdownThread = new Thread(() -> {
+    VirtualThreads.start("ircafe-shutdown", () -> {
       int exitCode = 0;
       try {
         ircClientService.shutdownNow();
@@ -54,15 +55,41 @@ public class ApplicationShutdownCoordinator {
       }
 
       try {
-        exitCode = SpringApplication.exit(applicationContext, () -> 0);
+        if (isApplicationContextAlreadyClosed()) {
+          log.debug("[ircafe] Spring context already closed before shutdown coordinator exit call.");
+        } else {
+          exitCode = SpringApplication.exit(applicationContext, () -> 0);
+        }
+      } catch (IllegalStateException ise) {
+        if (isAlreadyClosedException(ise)) {
+          // Benign shutdown race: another path already closed the context.
+          log.debug("[ircafe] Spring context already closed during shutdown.", ise);
+        } else {
+          log.warn("[ircafe] Error while closing Spring context", ise);
+          exitCode = 1;
+        }
       } catch (Throwable t) {
         log.warn("[ircafe] Error while closing Spring context", t);
         exitCode = 1;
       }
 
       System.exit(exitCode);
-    }, "ircafe-shutdown");
-    shutdownThread.setDaemon(false);
-    shutdownThread.start();
+    });
+  }
+
+  private boolean isApplicationContextAlreadyClosed() {
+    try {
+      if (applicationContext instanceof AbstractApplicationContext ac) {
+        return !ac.isActive();
+      }
+    } catch (Throwable ignored) {
+    }
+    return false;
+  }
+
+  private static boolean isAlreadyClosedException(IllegalStateException ex) {
+    String msg = ex == null ? "" : String.valueOf(ex.getMessage());
+    msg = msg.toLowerCase(Locale.ROOT);
+    return msg.contains("has been closed already") || msg.contains("beanfactory not initialized or already closed");
   }
 }

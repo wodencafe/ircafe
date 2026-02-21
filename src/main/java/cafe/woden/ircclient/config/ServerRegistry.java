@@ -39,7 +39,7 @@ public class ServerRegistry {
   }
 
   public synchronized Set<String> serverIds() {
-    return Set.copyOf(byId.keySet());
+    return java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(byId.keySet()));
   }
 
   public synchronized Map<String, IrcProperties.Server> byId() {

@@ -328,6 +328,16 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void setServerDesiredOnline(String serverId, boolean desiredOnline) {
+    onEdt(() -> serverTree.setServerDesiredOnline(serverId, desiredOnline));
+  }
+
+  @Override
+  public void setServerConnectionDiagnostics(String serverId, String lastError, Long nextRetryEpochMs) {
+    onEdt(() -> serverTree.setServerConnectionDiagnostics(serverId, lastError, nextRetryEpochMs));
+  }
+
+  @Override
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
     onEdt(() -> serverTree.setPrivateMessageOnlineState(serverId, nick, online));
   }

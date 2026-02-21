@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -9,13 +10,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,26 +44,31 @@ public class UserhostQueryService {
   private static final int DEFAULT_MAX_CMDS_PER_MINUTE = 6;
   private static final Duration DEFAULT_NICK_COOLDOWN = Duration.ofMinutes(30);
   private static final int DEFAULT_MAX_NICKS_PER_CMD = 5;
+  private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
   private final ObjectProvider<UiSettingsBus> settingsBusProvider;
-  private final ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(r -> {
-    Thread t = new Thread(r, "userhost-query");
-    t.setDaemon(true);
-    return t;
-  });
+  private final ScheduledExecutorService exec = VirtualThreads.newSingleThreadScheduledExecutor("userhost-query");
+  private final Object scheduleLock = new Object();
+  private ScheduledFuture<?> scheduledTick;
+  private long scheduledAtEpochMs = Long.MAX_VALUE;
 
   private final ConcurrentHashMap<String, ServerState> stateByServer = new ConcurrentHashMap<>();
 
   public UserhostQueryService(IrcClientService irc, ObjectProvider<UiSettingsBus> settingsBusProvider) {
     this.irc = irc;
     this.settingsBusProvider = settingsBusProvider;
-    // One global tick; each server has its own rate-limited state.
-    exec.scheduleWithFixedDelay(this::tickAll, 0, 1, TimeUnit.SECONDS);
   }
 
   @PreDestroy
   void shutdown() {
+    synchronized (scheduleLock) {
+      if (scheduledTick != null) {
+        scheduledTick.cancel(false);
+        scheduledTick = null;
+      }
+      scheduledAtEpochMs = Long.MAX_VALUE;
+    }
     exec.shutdownNow();
   }
 
@@ -84,6 +91,8 @@ public class UserhostQueryService {
         st.queue.add(nick);
       }
     }
+
+    requestTick(0);
   }
 
   private void tickAll() {
@@ -94,8 +103,15 @@ public class UserhostQueryService {
         return;
       }
       Instant now = Instant.now();
+      long nextDelayMs = NO_WAKE_NEEDED_MS;
       for (Map.Entry<String, ServerState> e : stateByServer.entrySet()) {
-        tickServer(e.getKey(), e.getValue(), now, cfg);
+        long serverDelayMs = tickServer(e.getKey(), e.getValue(), now, cfg);
+        if (serverDelayMs < nextDelayMs) {
+          nextDelayMs = serverDelayMs;
+        }
+      }
+      if (nextDelayMs != NO_WAKE_NEEDED_MS) {
+        requestTick(nextDelayMs);
       }
     } catch (Exception ex) {
       // Never allow the scheduler to die.
@@ -103,39 +119,44 @@ public class UserhostQueryService {
     }
   }
 
-  private void tickServer(String serverId, ServerState st, Instant now, UserhostConfig cfg) {
-    java.util.List<String> batch;
+  private long tickServer(String serverId, ServerState st, Instant now, UserhostConfig cfg) {
+    List<String> batch = List.of();
+    long nextDelayMs;
+
     synchronized (st) {
-      // Cleanup command history (last minute).
-      while (!st.cmdTimes.isEmpty() && Duration.between(st.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
-        st.cmdTimes.removeFirst();
+      cleanupCommandHistory(st, now);
+      if (st.queue.isEmpty()) {
+        return NO_WAKE_NEEDED_MS;
       }
 
-      // Respect max cmds/min and min interval.
-      if (st.cmdTimes.size() >= cfg.maxCommandsPerMinute) return;
-      if (st.lastCmdAt != null && Duration.between(st.lastCmdAt, now).compareTo(cfg.minCmdInterval) < 0) return;
-
-      if (st.queue.isEmpty()) return;
-
-      batch = new ArrayList<>(cfg.maxNicksPerCommand);
-      // Pull up to max nicks per command, skipping those still in cooldown.
-      java.util.Iterator<String> it = st.queue.iterator();
-      while (it.hasNext() && batch.size() < cfg.maxNicksPerCommand) {
-        String nick = it.next();
-        String key = nick.toLowerCase(Locale.ROOT);
-        Instant last = st.lastNickRequestAt.get(key);
-        if (last != null && Duration.between(last, now).compareTo(cfg.nickCooldown) < 0) {
-          // Still cooling down; leave it in the queue.
-          continue;
+      if (canSendNow(st, now, cfg)) {
+        List<String> candidate = new ArrayList<>(cfg.maxNicksPerCommand);
+        // Pull up to max nicks per command, skipping those still in cooldown.
+        java.util.Iterator<String> it = st.queue.iterator();
+        while (it.hasNext() && candidate.size() < cfg.maxNicksPerCommand) {
+          String nick = it.next();
+          String key = nick.toLowerCase(Locale.ROOT);
+          Instant last = st.lastNickRequestAt.get(key);
+          if (last != null && Duration.between(last, now).compareTo(cfg.nickCooldown) < 0) {
+            // Still cooling down; leave it in the queue.
+            continue;
+          }
+          it.remove();
+          st.lastNickRequestAt.put(key, now);
+          candidate.add(nick);
         }
-        it.remove();
-        st.lastNickRequestAt.put(key, now);
-        batch.add(nick);
+        if (!candidate.isEmpty()) {
+          st.lastCmdAt = now;
+          st.cmdTimes.addLast(now);
+          batch = candidate;
+        }
       }
 
-      if (batch.isEmpty()) return;
-      st.lastCmdAt = now;
-      st.cmdTimes.addLast(now);
+      nextDelayMs = computeNextDelayMs(st, now, cfg);
+    }
+
+    if (batch.isEmpty()) {
+      return nextDelayMs;
     }
 
     // Send outside synchronized block.
@@ -153,6 +174,90 @@ public class UserhostQueryService {
     if (d.isDisposed()) {
       // no-op
     }
+
+    return nextDelayMs;
+  }
+
+  private void cleanupCommandHistory(ServerState st, Instant now) {
+    while (!st.cmdTimes.isEmpty() && Duration.between(st.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
+      st.cmdTimes.removeFirst();
+    }
+  }
+
+  private boolean canSendNow(ServerState st, Instant now, UserhostConfig cfg) {
+    if (st.cmdTimes.size() >= cfg.maxCommandsPerMinute) return false;
+    return st.lastCmdAt == null || Duration.between(st.lastCmdAt, now).compareTo(cfg.minCmdInterval) >= 0;
+  }
+
+  private long computeNextDelayMs(ServerState st, Instant now, UserhostConfig cfg) {
+    if (st.queue.isEmpty()) {
+      return NO_WAKE_NEEDED_MS;
+    }
+
+    Instant nextRateAllowedAt = now;
+    if (st.lastCmdAt != null) {
+      Instant afterMinInterval = st.lastCmdAt.plus(cfg.minCmdInterval);
+      if (afterMinInterval.isAfter(nextRateAllowedAt)) {
+        nextRateAllowedAt = afterMinInterval;
+      }
+    }
+    if (st.cmdTimes.size() >= cfg.maxCommandsPerMinute && st.cmdTimes.peekFirst() != null) {
+      Instant afterRateWindow = st.cmdTimes.peekFirst().plusSeconds(60);
+      if (afterRateWindow.isAfter(nextRateAllowedAt)) {
+        nextRateAllowedAt = afterRateWindow;
+      }
+    }
+
+    Instant earliestNickReadyAt = null;
+    for (String nick : st.queue) {
+      Instant readyAt;
+      Instant last = st.lastNickRequestAt.get(nick.toLowerCase(Locale.ROOT));
+      if (last == null) {
+        readyAt = now;
+      } else {
+        readyAt = last.plus(cfg.nickCooldown);
+      }
+      if (earliestNickReadyAt == null || readyAt.isBefore(earliestNickReadyAt)) {
+        earliestNickReadyAt = readyAt;
+      }
+      if (now.equals(earliestNickReadyAt)) {
+        break;
+      }
+    }
+
+    if (earliestNickReadyAt == null) {
+      return NO_WAKE_NEEDED_MS;
+    }
+
+    Instant wakeAt = nextRateAllowedAt.isAfter(earliestNickReadyAt) ? nextRateAllowedAt : earliestNickReadyAt;
+    long delayMs = Duration.between(now, wakeAt).toMillis();
+    return Math.max(0L, delayMs);
+  }
+
+  private void requestTick(long delayMs) {
+    long safeDelayMs = Math.max(0L, delayMs);
+    long targetEpochMs = System.currentTimeMillis() + safeDelayMs;
+    synchronized (scheduleLock) {
+      if (exec.isShutdown()) return;
+
+      if (scheduledTick != null && !scheduledTick.isDone()) {
+        if (targetEpochMs >= scheduledAtEpochMs) {
+          return;
+        }
+        scheduledTick.cancel(false);
+      }
+
+      scheduledAtEpochMs = targetEpochMs;
+      scheduledTick = exec.schedule(this::runScheduledTick, safeDelayMs, TimeUnit.MILLISECONDS);
+    }
+  }
+
+  private void runScheduledTick() {
+    synchronized (scheduleLock) {
+      scheduledTick = null;
+      scheduledAtEpochMs = Long.MAX_VALUE;
+    }
+    tickAll();
   }
 
   private static String norm(String s) {
