@@ -5,6 +5,8 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
@@ -141,6 +143,7 @@ public class PreferencesDialog {
   private final TrayNotificationService trayNotificationService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
+  private final IrcEventNotificationRulesBus ircEventNotificationRulesBus;
   private final NotificationSoundService notificationSoundService;
   private final ServerDialogs serverDialogs;
 
@@ -164,6 +167,7 @@ public class PreferencesDialog {
                            TrayNotificationService trayNotificationService,
                            GnomeDbusNotificationBackend gnomeDbusBackend,
                            NotificationSoundSettingsBus notificationSoundSettingsBus,
+                           IrcEventNotificationRulesBus ircEventNotificationRulesBus,
                            NotificationSoundService notificationSoundService,
                            ServerDialogs serverDialogs) {
     this.settingsBus = settingsBus;
@@ -184,6 +188,7 @@ public class PreferencesDialog {
     this.trayNotificationService = trayNotificationService;
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
+    this.ircEventNotificationRulesBus = ircEventNotificationRulesBus;
     this.notificationSoundService = notificationSoundService;
     this.serverDialogs = serverDialogs;
   }
@@ -528,6 +533,10 @@ public class PreferencesDialog {
     JPanel userLookupsPanel = network.userLookupsPanel;
 
     NotificationRulesControls notifications = buildNotificationRulesControls(current, closeables);
+    IrcEventNotificationControls ircEventNotifications = buildIrcEventNotificationControls(
+        ircEventNotificationRulesBus != null
+            ? ircEventNotificationRulesBus.get()
+            : IrcEventNotificationRule.defaults());
 
     FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
 
@@ -541,7 +550,7 @@ public class PreferencesDialog {
         ircv3Capabilities);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
-    JPanel notificationsPanel = buildNotificationsPanel(notifications);
+    JPanel notificationsPanel = buildNotificationsPanel(notifications, ircEventNotifications);
     JPanel filtersPanel = buildFiltersPanel(filters);
 
     JButton apply = new JButton("Apply");
@@ -803,6 +812,12 @@ public class PreferencesDialog {
         } catch (Exception ignored) {
         }
       }
+      if (ircEventNotifications.table.isEditing()) {
+        try {
+          ircEventNotifications.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
 
       ValidationError notifErr = notifications.model.firstValidationError();
       if (notifErr != null) {
@@ -818,6 +833,7 @@ public class PreferencesDialog {
       if (notificationRuleCooldownSecondsV < 0) notificationRuleCooldownSecondsV = 15;
       if (notificationRuleCooldownSecondsV > 3600) notificationRuleCooldownSecondsV = 3600;
       List<NotificationRule> notificationRulesV = notifications.model.snapshot();
+      List<IrcEventNotificationRule> ircEventNotificationRulesV = ircEventNotifications.model.snapshot();
 
       UiSettings next = new UiSettings(
           t,
@@ -977,6 +993,10 @@ public class PreferencesDialog {
 
       runtimeConfig.rememberNotificationRuleCooldownSeconds(next.notificationRuleCooldownSeconds());
       runtimeConfig.rememberNotificationRules(notificationRulesV);
+      runtimeConfig.rememberIrcEventNotificationRules(ircEventNotificationRulesV);
+      if (ircEventNotificationRulesBus != null) {
+        ircEventNotificationRulesBus.set(ircEventNotificationRulesV);
+      }
 
       runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
       runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
@@ -3924,7 +3944,390 @@ panel.add(subTabs, "growx, wmin 0");
     return new NotificationRulesControls(cooldownSeconds, table, model, validationLabel, testInput, testOutput, testStatus, testRunner);
   }
 
-  private JPanel buildNotificationsPanel(NotificationRulesControls notifications) {
+  private IrcEventNotificationControls buildIrcEventNotificationControls(List<IrcEventNotificationRule> initialRules) {
+    IrcEventNotificationTableModel model = new IrcEventNotificationTableModel(initialRules);
+    JTable table = new JTable(model);
+    table.setFillsViewportHeight(true);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    table.setRowHeight(Math.max(22, table.getRowHeight()));
+
+    JComboBox<IrcEventNotificationRule.EventType> eventCombo = new JComboBox<>(IrcEventNotificationRule.EventType.values());
+    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT).setCellEditor(new DefaultCellEditor(eventCombo));
+
+    JComboBox<IrcEventNotificationRule.SourceFilter> sourceCombo = new JComboBox<>(IrcEventNotificationRule.SourceFilter.values());
+    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE).setCellEditor(new DefaultCellEditor(sourceCombo));
+
+    TableColumn enabledCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_ENABLED);
+    enabledCol.setMaxWidth(80);
+    enabledCol.setPreferredWidth(70);
+
+    TableColumn eventCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT);
+    eventCol.setPreferredWidth(140);
+
+    TableColumn sourceCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE);
+    sourceCol.setPreferredWidth(110);
+
+    TableColumn toastCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_TOAST);
+    toastCol.setMaxWidth(80);
+    toastCol.setPreferredWidth(70);
+
+    TableColumn soundCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOUND);
+    soundCol.setMaxWidth(80);
+    soundCol.setPreferredWidth(70);
+
+    TableColumn includeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_WHITELIST);
+    includeCol.setPreferredWidth(150);
+    TableColumn excludeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_BLACKLIST);
+    excludeCol.setPreferredWidth(150);
+
+    JComboBox<BuiltInSound> sound = new JComboBox<>(BuiltInSound.values());
+    JCheckBox useCustom = new JCheckBox("Use custom file");
+    JTextField customPath = new JTextField();
+    customPath.setEditable(false);
+    JButton browseCustom = new JButton("Browse...");
+    JButton clearCustom = new JButton("Clear");
+    JButton testSound = new JButton("Test sound");
+    JLabel selectionHint = new JLabel("Select a rule row to edit sound settings.");
+
+    final boolean[] syncing = new boolean[] { false };
+
+    Runnable loadSelectedSound = () -> {
+      int viewRow = table.getSelectedRow();
+      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
+
+      syncing[0] = true;
+      if (row < 0) {
+        sound.setSelectedItem(BuiltInSound.NOTIF_1);
+        useCustom.setSelected(false);
+        customPath.setText("");
+      } else {
+        sound.setSelectedItem(BuiltInSound.fromId(model.soundIdAt(row)));
+        useCustom.setSelected(model.soundUseCustomAt(row));
+        customPath.setText(Objects.toString(model.soundCustomPathAt(row), ""));
+      }
+      syncing[0] = false;
+
+      boolean selected = row >= 0;
+      browseCustom.setEnabled(selected);
+      sound.setEnabled(selected);
+      useCustom.setEnabled(selected);
+      testSound.setEnabled(selected);
+
+      String rel = customPath.getText() != null ? customPath.getText().trim() : "";
+      clearCustom.setEnabled(selected && !rel.isBlank());
+
+      if (!selected) {
+        selectionHint.setText("Select a rule row to edit sound settings.");
+      } else {
+        selectionHint.setText("Sound settings apply to the selected rule.");
+      }
+    };
+
+    Runnable persistSelectedSound = () -> {
+      if (syncing[0]) return;
+      int viewRow = table.getSelectedRow();
+      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
+      if (row < 0) return;
+
+      BuiltInSound selectedSound = (BuiltInSound) sound.getSelectedItem();
+      String soundId = selectedSound != null ? selectedSound.name() : BuiltInSound.NOTIF_1.name();
+      boolean custom = useCustom.isSelected();
+      String rel = customPath.getText() != null ? customPath.getText().trim() : "";
+      if (rel.isBlank()) rel = null;
+      model.setSoundConfig(row, soundId, custom, rel);
+
+      clearCustom.setEnabled(rel != null);
+    };
+
+    table.getSelectionModel().addListSelectionListener(e -> {
+      if (e != null && e.getValueIsAdjusting()) return;
+      loadSelectedSound.run();
+    });
+
+    model.addTableModelListener(e -> loadSelectedSound.run());
+
+    sound.addActionListener(e -> persistSelectedSound.run());
+    useCustom.addActionListener(e -> persistSelectedSound.run());
+
+    browseCustom.addActionListener(e -> {
+      int viewRow = table.getSelectedRow();
+      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
+      if (row < 0) return;
+      try {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(true);
+        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+        int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustom));
+        if (result != JFileChooser.APPROVE_OPTION) return;
+
+        File f = chooser.getSelectedFile();
+        if (f == null) return;
+        String rel = importNotificationSoundFileToRuntimeDir(f);
+        if (rel == null || rel.isBlank()) return;
+
+        customPath.setText(rel);
+        useCustom.setSelected(true);
+        persistSelectedSound.run();
+        loadSelectedSound.run();
+      } catch (Exception ex) {
+        JOptionPane.showMessageDialog(
+            SwingUtilities.getWindowAncestor(browseCustom),
+            "Could not import sound file.\n\n" + ex.getMessage(),
+            "Import failed",
+            JOptionPane.ERROR_MESSAGE
+        );
+      }
+    });
+
+    clearCustom.addActionListener(e -> {
+      customPath.setText("");
+      useCustom.setSelected(false);
+      persistSelectedSound.run();
+      loadSelectedSound.run();
+    });
+
+    testSound.addActionListener(e -> {
+      int viewRow = table.getSelectedRow();
+      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
+      if (row < 0 || notificationSoundService == null) return;
+      try {
+        String rel = model.soundCustomPathAt(row);
+        if (model.soundUseCustomAt(row) && rel != null && !rel.isBlank()) {
+          notificationSoundService.previewCustom(rel);
+          return;
+        }
+        notificationSoundService.preview(BuiltInSound.fromId(model.soundIdAt(row)));
+      } catch (Exception ignored) {
+      }
+    });
+
+    loadSelectedSound.run();
+    return new IrcEventNotificationControls(table, model, sound, useCustom, customPath, browseCustom, clearCustom, testSound, selectionHint);
+  }
+
+  private JPanel buildIrcEventNotificationsTab(IrcEventNotificationControls controls) {
+    JPanel tab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]"));
+    tab.setOpaque(false);
+
+    tab.add(helpText(
+            "Configure desktop notifications for IRC events like kicks, bans, invites, and mode changes.\n"
+                + "Source filter: Self, Someone else, or Any. Channel filters use globs (* and ?), separated by commas or spaces."),
+        "growx, wmin 0, wrap");
+
+    JComboBox<IrcEventNotificationPreset> defaultsPreset = new JComboBox<>(IrcEventNotificationPreset.values());
+    JButton applyDefaults = new JButton("Apply defaults");
+    applyDefaults.setToolTipText("Apply a starter set. Existing rows for the same event type are updated.");
+
+    applyDefaults.addActionListener(e -> {
+      if (controls.table.isEditing()) {
+        try {
+          controls.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      IrcEventNotificationPreset preset = (IrcEventNotificationPreset) defaultsPreset.getSelectedItem();
+      if (preset == null) return;
+      List<IrcEventNotificationRule> rules = buildIrcEventDefaultPreset(preset);
+      if (rules.isEmpty()) return;
+
+      controls.model.applyPreset(rules);
+      if (controls.table.getRowCount() > 0) {
+        int row = controls.model.firstRowForEvent(rules.get(0).eventType());
+        if (row < 0) row = 0;
+        controls.table.getSelectionModel().setSelectionInterval(row, row);
+        controls.table.scrollRectToVisible(controls.table.getCellRect(row, 0, true));
+      }
+    });
+
+    JPanel defaultsRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]8[]", "[]"));
+    defaultsRow.setOpaque(false);
+    defaultsRow.add(new JLabel("Defaults"));
+    defaultsRow.add(defaultsPreset, "w 240!");
+    defaultsRow.add(applyDefaults, "w 130!");
+
+    JButton add = new JButton("Add");
+    JButton duplicate = new JButton("Duplicate");
+    JButton remove = new JButton("Remove");
+    JButton up = new JButton("Up");
+    JButton down = new JButton("Down");
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    buttons.add(add);
+    buttons.add(duplicate);
+    buttons.add(remove);
+    buttons.add(up);
+    buttons.add(down);
+
+    add.addActionListener(e -> {
+      if (controls.table.isEditing()) {
+        try {
+          controls.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = controls.model.addRule(new IrcEventNotificationRule(
+          false,
+          IrcEventNotificationRule.EventType.INVITE_RECEIVED,
+          IrcEventNotificationRule.SourceFilter.ANY,
+          true,
+          false,
+          BuiltInSound.NOTIF_1.name(),
+          false,
+          null,
+          null,
+          null));
+      if (row < 0) return;
+      controls.table.getSelectionModel().setSelectionInterval(row, row);
+      controls.table.scrollRectToVisible(controls.table.getCellRect(row, 0, true));
+      controls.table.requestFocusInWindow();
+    });
+
+    duplicate.addActionListener(e -> {
+      if (controls.table.isEditing()) {
+        try {
+          controls.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = controls.table.getSelectedRow();
+      if (row < 0) return;
+      int dup = controls.model.duplicateRow(row);
+      if (dup >= 0) {
+        controls.table.getSelectionModel().setSelectionInterval(dup, dup);
+        controls.table.scrollRectToVisible(controls.table.getCellRect(dup, 0, true));
+      }
+    });
+
+    remove.addActionListener(e -> {
+      if (controls.table.isEditing()) {
+        try {
+          controls.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+
+      int row = controls.table.getSelectedRow();
+      if (row < 0) return;
+      int res = JOptionPane.showConfirmDialog(dialog, "Remove selected IRC event rule?", "Remove rule", JOptionPane.OK_CANCEL_OPTION);
+      if (res != JOptionPane.OK_OPTION) return;
+      controls.model.removeRow(row);
+    });
+
+    up.addActionListener(e -> {
+      if (controls.table.isEditing()) {
+        try {
+          controls.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+      int row = controls.table.getSelectedRow();
+      if (row <= 0) return;
+      int next = controls.model.moveRow(row, row - 1);
+      if (next >= 0) {
+        controls.table.getSelectionModel().setSelectionInterval(next, next);
+        controls.table.scrollRectToVisible(controls.table.getCellRect(next, 0, true));
+      }
+    });
+
+    down.addActionListener(e -> {
+      if (controls.table.isEditing()) {
+        try {
+          controls.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
+      int row = controls.table.getSelectedRow();
+      if (row < 0) return;
+      int next = controls.model.moveRow(row, row + 1);
+      if (next >= 0) {
+        controls.table.getSelectionModel().setSelectionInterval(next, next);
+        controls.table.scrollRectToVisible(controls.table.getCellRect(next, 0, true));
+      }
+    });
+
+    JScrollPane scroll = new JScrollPane(controls.table);
+    scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+    JPanel soundPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 4", "[right]8[grow,fill]8[]8[]", "[]6[]6[]4[]"));
+    soundPanel.setOpaque(false);
+    soundPanel.add(sectionTitle("Selected rule sound"), "span 4, growx, wmin 0, wrap");
+    soundPanel.add(new JLabel("Built-in"));
+    soundPanel.add(controls.sound, "growx, wmin 160");
+    soundPanel.add(controls.testSound, "w 110!");
+    soundPanel.add(controls.useCustom, "wrap");
+    soundPanel.add(new JLabel("Custom file"));
+    soundPanel.add(controls.customPath, "growx, pushx, wmin 0");
+    soundPanel.add(controls.browseCustom, "w 100!");
+    soundPanel.add(controls.clearCustom, "w 80!");
+    soundPanel.add(controls.selectionHint, "span 4, growx, wmin 0, wrap");
+    soundPanel.add(helpText("When Sound is disabled on a rule, no sound is played for that event."),
+        "span 4, growx, wmin 0, wrap");
+
+    tab.add(defaultsRow, "growx, wmin 0, wrap");
+    tab.add(helpText("Applies a starter profile by event type. Existing rows with matching event types are replaced."),
+        "growx, wmin 0, wrap");
+    tab.add(buttons, "growx, wrap");
+    tab.add(scroll, "grow, push, h 260!, wrap");
+    tab.add(soundPanel, "growx, wmin 0, wrap");
+
+    return tab;
+  }
+
+  private List<IrcEventNotificationRule> buildIrcEventDefaultPreset(IrcEventNotificationPreset preset) {
+    if (preset == null) return List.of();
+    return switch (preset) {
+      case ESSENTIAL -> List.of(
+          eventDefaultRule(IrcEventNotificationRule.EventType.INVITE_RECEIVED, IrcEventNotificationRule.SourceFilter.ANY, true),
+          eventDefaultRule(IrcEventNotificationRule.EventType.KICKED, IrcEventNotificationRule.SourceFilter.ANY, true),
+          eventDefaultRule(IrcEventNotificationRule.EventType.BANNED, IrcEventNotificationRule.SourceFilter.OTHERS, true),
+          eventDefaultRule(IrcEventNotificationRule.EventType.KLINED, IrcEventNotificationRule.SourceFilter.ANY, true));
+      case MODERATION -> List.of(
+          eventDefaultRule(IrcEventNotificationRule.EventType.KICKED, IrcEventNotificationRule.SourceFilter.OTHERS, true),
+          eventDefaultRule(IrcEventNotificationRule.EventType.BANNED, IrcEventNotificationRule.SourceFilter.OTHERS, true),
+          eventDefaultRule(IrcEventNotificationRule.EventType.OPPED, IrcEventNotificationRule.SourceFilter.OTHERS, false),
+          eventDefaultRule(IrcEventNotificationRule.EventType.DEOPPED, IrcEventNotificationRule.SourceFilter.OTHERS, false),
+          eventDefaultRule(IrcEventNotificationRule.EventType.VOICED, IrcEventNotificationRule.SourceFilter.OTHERS, false),
+          eventDefaultRule(IrcEventNotificationRule.EventType.DEVOICED, IrcEventNotificationRule.SourceFilter.OTHERS, false),
+          eventDefaultRule(IrcEventNotificationRule.EventType.HALF_OPPED, IrcEventNotificationRule.SourceFilter.OTHERS, false),
+          eventDefaultRule(IrcEventNotificationRule.EventType.DEHALF_OPPED, IrcEventNotificationRule.SourceFilter.OTHERS, false),
+          eventDefaultRule(IrcEventNotificationRule.EventType.INVITE_RECEIVED, IrcEventNotificationRule.SourceFilter.ANY, false));
+      case ALL_EVENTS -> Arrays.stream(IrcEventNotificationRule.EventType.values())
+          .map(t -> eventDefaultRule(
+              t,
+              IrcEventNotificationRule.SourceFilter.ANY,
+              t == IrcEventNotificationRule.EventType.INVITE_RECEIVED
+                  || t == IrcEventNotificationRule.EventType.KICKED
+                  || t == IrcEventNotificationRule.EventType.BANNED
+                  || t == IrcEventNotificationRule.EventType.KLINED))
+          .toList();
+    };
+  }
+
+  private static IrcEventNotificationRule eventDefaultRule(
+      IrcEventNotificationRule.EventType eventType,
+      IrcEventNotificationRule.SourceFilter sourceFilter,
+      boolean soundEnabled
+  ) {
+    return new IrcEventNotificationRule(
+        true,
+        eventType,
+        sourceFilter,
+        true,
+        soundEnabled,
+        BuiltInSound.NOTIF_1.name(),
+        false,
+        null,
+        null,
+        null);
+  }
+
+  private JPanel buildNotificationsPanel(NotificationRulesControls notifications, IrcEventNotificationControls ircEventNotifications) {
     JPanel panel = new JPanel(new MigLayout("insets 10, fill, wrap 1", "[grow,fill]", "[]8[]4[grow,fill]"));
 
     panel.add(tabTitle("Notifications"), "growx, wmin 0, wrap");
@@ -4173,6 +4576,11 @@ panel.add(subTabs, "growx, wmin 0");
     Icon testTabIcon = SvgIcons.action("check", 14);
     subTabs.addTab("Rules", rulesTabIcon, padSubTab(rulesTab), "Manage notification matching rules");
     subTabs.addTab("Test", testTabIcon, padSubTab(testTab), "Try a sample message against your rules");
+    subTabs.addTab(
+        "IRC Events",
+        null,
+        padSubTab(buildIrcEventNotificationsTab(ircEventNotifications)),
+        "Configure notifications for IRC events like kick/ban/invite/mode updates");
 
     panel.add(subTabs, "grow, push, wmin 0");
 
@@ -4819,6 +5227,23 @@ panel.add(subTabs, "growx, wmin 0");
     }
   }
 
+  private enum IrcEventNotificationPreset {
+    ESSENTIAL("Essential alerts (Recommended)"),
+    MODERATION("Moderation focused"),
+    ALL_EVENTS("All events");
+
+    private final String label;
+
+    IrcEventNotificationPreset(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
   private static LookupRatePreset detectLookupRatePreset(UiSettings s) {
     if (matchesLookupRatePreset(s, LookupRatePreset.BALANCED)) return LookupRatePreset.BALANCED;
     if (matchesLookupRatePreset(s, LookupRatePreset.CONSERVATIVE)) return LookupRatePreset.CONSERVATIVE;
@@ -4891,6 +5316,307 @@ panel.add(subTabs, "growx, wmin 0");
                                 JTextArea testOutput,
                                 JLabel testStatus,
                                 RuleTestRunner testRunner) {
+  }
+
+  private record IrcEventNotificationControls(
+      JTable table,
+      IrcEventNotificationTableModel model,
+      JComboBox<BuiltInSound> sound,
+      JCheckBox useCustom,
+      JTextField customPath,
+      JButton browseCustom,
+      JButton clearCustom,
+      JButton testSound,
+      JLabel selectionHint
+  ) {
+  }
+
+  private static final class IrcEventNotificationTableModel extends AbstractTableModel {
+    static final int COL_ENABLED = 0;
+    static final int COL_EVENT = 1;
+    static final int COL_SOURCE = 2;
+    static final int COL_TOAST = 3;
+    static final int COL_SOUND = 4;
+    static final int COL_CHANNEL_WHITELIST = 5;
+    static final int COL_CHANNEL_BLACKLIST = 6;
+
+    private static final String[] COLS = new String[] {
+        "Enabled",
+        "Event",
+        "Source",
+        "Toast",
+        "Sound",
+        "Channels",
+        "Exclude"
+    };
+
+    private final List<MutableRule> rows = new ArrayList<>();
+
+    IrcEventNotificationTableModel(List<IrcEventNotificationRule> initial) {
+      if (initial != null) {
+        for (IrcEventNotificationRule r : initial) {
+          if (r == null) continue;
+          rows.add(MutableRule.from(r));
+        }
+      }
+    }
+
+    List<IrcEventNotificationRule> snapshot() {
+      return rows.stream().map(MutableRule::toRule).toList();
+    }
+
+    String soundIdAt(int row) {
+      if (row < 0 || row >= rows.size()) return BuiltInSound.NOTIF_1.name();
+      return rows.get(row).soundId;
+    }
+
+    boolean soundUseCustomAt(int row) {
+      if (row < 0 || row >= rows.size()) return false;
+      return rows.get(row).soundUseCustom;
+    }
+
+    String soundCustomPathAt(int row) {
+      if (row < 0 || row >= rows.size()) return null;
+      return rows.get(row).soundCustomPath;
+    }
+
+    void setSoundConfig(int row, String soundId, boolean soundUseCustom, String soundCustomPath) {
+      if (row < 0 || row >= rows.size()) return;
+      MutableRule r = rows.get(row);
+      r.soundId = BuiltInSound.fromId(soundId).name();
+      String path = Objects.toString(soundCustomPath, "").trim();
+      if (path.isBlank()) path = null;
+      r.soundCustomPath = path;
+      r.soundUseCustom = soundUseCustom && path != null;
+      fireTableRowsUpdated(row, row);
+    }
+
+    int addRule(IrcEventNotificationRule rule) {
+      rows.add(MutableRule.from(rule));
+      int idx = rows.size() - 1;
+      fireTableRowsInserted(idx, idx);
+      return idx;
+    }
+
+    int duplicateRow(int row) {
+      if (row < 0 || row >= rows.size()) return -1;
+      MutableRule src = rows.get(row);
+      MutableRule copy = src.copy();
+      int idx = Math.min(rows.size(), row + 1);
+      rows.add(idx, copy);
+      fireTableRowsInserted(idx, idx);
+      return idx;
+    }
+
+    void removeRow(int row) {
+      if (row < 0 || row >= rows.size()) return;
+      rows.remove(row);
+      fireTableRowsDeleted(row, row);
+    }
+
+    int moveRow(int from, int to) {
+      if (from < 0 || from >= rows.size()) return -1;
+      if (to < 0 || to >= rows.size()) return -1;
+      if (from == to) return from;
+      MutableRule r = rows.remove(from);
+      rows.add(to, r);
+      fireTableDataChanged();
+      return to;
+    }
+
+    int firstRowForEvent(IrcEventNotificationRule.EventType eventType) {
+      if (eventType == null) return -1;
+      for (int i = 0; i < rows.size(); i++) {
+        MutableRule r = rows.get(i);
+        if (r == null) continue;
+        if (r.eventType == eventType) return i;
+      }
+      return -1;
+    }
+
+    void applyPreset(List<IrcEventNotificationRule> presetRules) {
+      if (presetRules == null || presetRules.isEmpty()) return;
+      for (IrcEventNotificationRule rule : presetRules) {
+        if (rule == null) continue;
+        int idx = firstRowForEvent(rule.eventType());
+        if (idx >= 0) {
+          rows.set(idx, MutableRule.from(rule));
+        } else {
+          rows.add(MutableRule.from(rule));
+        }
+      }
+      fireTableDataChanged();
+    }
+
+    @Override
+    public int getRowCount() {
+      return rows.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+      return COLS.length;
+    }
+
+    @Override
+    public String getColumnName(int column) {
+      if (column < 0 || column >= COLS.length) return "";
+      return COLS[column];
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+      return switch (columnIndex) {
+        case COL_ENABLED, COL_TOAST, COL_SOUND -> Boolean.class;
+        case COL_EVENT -> IrcEventNotificationRule.EventType.class;
+        case COL_SOURCE -> IrcEventNotificationRule.SourceFilter.class;
+        default -> String.class;
+      };
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+      return rowIndex >= 0 && rowIndex < rows.size() && columnIndex >= 0 && columnIndex < COLS.length;
+    }
+
+    @Override
+    public Object getValueAt(int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+      MutableRule r = rows.get(rowIndex);
+      return switch (columnIndex) {
+        case COL_ENABLED -> r.enabled;
+        case COL_EVENT -> r.eventType;
+        case COL_SOURCE -> r.sourceFilter;
+        case COL_TOAST -> r.toastEnabled;
+        case COL_SOUND -> r.soundEnabled;
+        case COL_CHANNEL_WHITELIST -> r.channelWhitelist;
+        case COL_CHANNEL_BLACKLIST -> r.channelBlacklist;
+        default -> null;
+      };
+    }
+
+    @Override
+    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return;
+      MutableRule r = rows.get(rowIndex);
+
+      switch (columnIndex) {
+        case COL_ENABLED -> r.enabled = asBool(aValue);
+        case COL_EVENT -> r.eventType = asEventType(aValue);
+        case COL_SOURCE -> r.sourceFilter = asSourceFilter(aValue);
+        case COL_TOAST -> r.toastEnabled = asBool(aValue);
+        case COL_SOUND -> r.soundEnabled = asBool(aValue);
+        case COL_CHANNEL_WHITELIST -> r.channelWhitelist = trimToNull(aValue);
+        case COL_CHANNEL_BLACKLIST -> r.channelBlacklist = trimToNull(aValue);
+        default -> {
+        }
+      }
+
+      fireTableRowsUpdated(rowIndex, rowIndex);
+    }
+
+    private static boolean asBool(Object v) {
+      if (v instanceof Boolean b) return b;
+      return Boolean.parseBoolean(Objects.toString(v, "false"));
+    }
+
+    private static IrcEventNotificationRule.EventType asEventType(Object v) {
+      if (v instanceof IrcEventNotificationRule.EventType t) return t;
+      String s = Objects.toString(v, "").trim();
+      if (s.isEmpty()) return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+      try {
+        return IrcEventNotificationRule.EventType.valueOf(s);
+      } catch (Exception ignored) {
+        return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+      }
+    }
+
+    private static IrcEventNotificationRule.SourceFilter asSourceFilter(Object v) {
+      if (v instanceof IrcEventNotificationRule.SourceFilter f) return f;
+      String s = Objects.toString(v, "").trim();
+      if (s.isEmpty()) return IrcEventNotificationRule.SourceFilter.ANY;
+      try {
+        return IrcEventNotificationRule.SourceFilter.valueOf(s);
+      } catch (Exception ignored) {
+        return IrcEventNotificationRule.SourceFilter.ANY;
+      }
+    }
+
+    private static String trimToNull(Object v) {
+      String s = Objects.toString(v, "").trim();
+      return s.isEmpty() ? null : s;
+    }
+
+    private static final class MutableRule {
+      boolean enabled;
+      IrcEventNotificationRule.EventType eventType;
+      IrcEventNotificationRule.SourceFilter sourceFilter;
+      boolean toastEnabled;
+      boolean soundEnabled;
+      String soundId;
+      boolean soundUseCustom;
+      String soundCustomPath;
+      String channelWhitelist;
+      String channelBlacklist;
+
+      IrcEventNotificationRule toRule() {
+        return new IrcEventNotificationRule(
+            enabled,
+            eventType,
+            sourceFilter,
+            toastEnabled,
+            soundEnabled,
+            soundId,
+            soundUseCustom,
+            soundCustomPath,
+            channelWhitelist,
+            channelBlacklist);
+      }
+
+      MutableRule copy() {
+        MutableRule m = new MutableRule();
+        m.enabled = enabled;
+        m.eventType = eventType;
+        m.sourceFilter = sourceFilter;
+        m.toastEnabled = toastEnabled;
+        m.soundEnabled = soundEnabled;
+        m.soundId = soundId;
+        m.soundUseCustom = soundUseCustom;
+        m.soundCustomPath = soundCustomPath;
+        m.channelWhitelist = channelWhitelist;
+        m.channelBlacklist = channelBlacklist;
+        return m;
+      }
+
+      static MutableRule from(IrcEventNotificationRule r) {
+        MutableRule m = new MutableRule();
+        if (r == null) {
+          m.enabled = false;
+          m.eventType = IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          m.sourceFilter = IrcEventNotificationRule.SourceFilter.ANY;
+          m.toastEnabled = true;
+          m.soundEnabled = false;
+          m.soundId = BuiltInSound.NOTIF_1.name();
+          m.soundUseCustom = false;
+          m.soundCustomPath = null;
+          m.channelWhitelist = null;
+          m.channelBlacklist = null;
+          return m;
+        }
+
+        m.enabled = r.enabled();
+        m.eventType = r.eventType();
+        m.sourceFilter = r.sourceFilter();
+        m.toastEnabled = r.toastEnabled();
+        m.soundEnabled = r.soundEnabled();
+        m.soundId = BuiltInSound.fromId(r.soundId()).name();
+        m.soundUseCustom = r.soundUseCustom();
+        m.soundCustomPath = r.soundCustomPath();
+        m.channelWhitelist = r.channelWhitelist();
+        m.channelBlacklist = r.channelBlacklist();
+        return m;
+      }
+    }
   }
 
   private static final class NotificationRulesTableModel extends AbstractTableModel {

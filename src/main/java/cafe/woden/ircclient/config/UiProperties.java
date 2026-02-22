@@ -106,6 +106,11 @@ public record UiProperties(
      */
     List<NotificationRuleProperties> notificationRules,
 
+    /**
+     * User-configured IRC event notifications (kicks/modes/invites/etc).
+     */
+    List<IrcEventNotificationRuleProperties> ircEventNotificationRules,
+
     /** Cooldown (seconds) to dedupe repeated rule-match notifications per channel + rule. */
     Integer notificationRuleCooldownSeconds,
 
@@ -567,6 +572,11 @@ if (historyPlaceholdersEnabledByDefault == null) {
       notificationRules = List.of();
     } else {
       notificationRules = notificationRules.stream().filter(Objects::nonNull).toList();
+    }
+    if (ircEventNotificationRules == null) {
+      ircEventNotificationRules = IrcEventNotificationRuleProperties.defaultRules();
+    } else {
+      ircEventNotificationRules = ircEventNotificationRules.stream().filter(Objects::nonNull).toList();
     }
     if (nickColors == null) {
       nickColors = List.of();

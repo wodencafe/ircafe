@@ -52,6 +52,13 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       List<String> parsedLine,
       ImmutableMap<String, String> tags
   ) throws IOException {
+    Instant now = Instant.now();
+    String sourceNick = source != null ? Objects.toString(source.getNick(), "").trim() : "";
+
+    // Capture self-query target hints *before* default dispatch so onPrivateMessage/onAction can
+    // resolve the destination even when PircBotX doesn't expose recipient accessors.
+    captureSelfPrivateMessageTargetHint(now, sourceNick, target, command, line, parsedLine, tags);
+
     // Preserve default behavior first (this keeps User.isAway()/getAwayMessage() accurate).
     super.processCommand(target, source, command, line, parsedLine, tags);
     if (command == null) return;
@@ -69,8 +76,6 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       return;
     }
 
-    Instant now = Instant.now();
-
     if ("MARKREAD".equalsIgnoreCase(command)) {
       String markerTarget = firstParam(parsedLine);
       String marker = secondParam(parsedLine);
@@ -86,7 +91,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     }
 
     if (source == null) return;
-    String nick = Objects.toString(source.getNick(), "").trim();
+    String nick = sourceNick;
     if (nick.isEmpty()) return;
 
     // IRCv3 account-tag: message tags include @account=<name> (or @account=* / @account=0).
@@ -538,6 +543,95 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       }
     }
     return "";
+  }
+
+  private void captureSelfPrivateMessageTargetHint(
+      Instant at,
+      String fromNick,
+      String rawTarget,
+      String command,
+      String rawLine,
+      List<String> parsedLine,
+      ImmutableMap<String, String> tags
+  ) {
+    String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
+    if (!"PRIVMSG".equals(cmd)) return;
+    if (!isSelfNick(fromNick)) return;
+
+    String messageTarget = stripLeadingColon(rawTarget);
+    if (messageTarget.isBlank()) {
+      messageTarget = firstParam(parsedLine);
+    }
+    if (messageTarget.isBlank() || isChannelName(messageTarget) || looksLikeSelfTarget(messageTarget)) {
+      return;
+    }
+
+    String first = firstParam(parsedLine);
+    String second = secondParam(parsedLine);
+    String payload = second;
+    if (payload.isBlank() && !first.isBlank() && !first.equalsIgnoreCase(messageTarget)) {
+      payload = first;
+    }
+    if (payload.isBlank()) {
+      payload = trailingParam(rawLine);
+    }
+    String action = PircbotxUtil.parseCtcpAction(payload);
+    String kind = action == null ? "PRIVMSG" : "ACTION";
+    String normalizedPayload = action == null ? payload : action;
+    String msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+    conn.rememberPrivateTargetHint(
+        fromNick,
+        messageTarget,
+        kind,
+        normalizedPayload,
+        msgId,
+        at == null ? System.currentTimeMillis() : at.toEpochMilli());
+  }
+
+  private boolean isSelfNick(String nick) {
+    String n = Objects.toString(nick, "").trim();
+    if (n.isEmpty()) return false;
+
+    String hinted = Objects.toString(conn.selfNickHint.get(), "").trim();
+    if (!hinted.isEmpty() && n.equalsIgnoreCase(hinted)) {
+      return true;
+    }
+
+    try {
+      PircBotX liveBot = this.bot;
+      String fromBot = liveBot == null ? "" : Objects.toString(liveBot.getNick(), "").trim();
+      return !fromBot.isEmpty() && n.equalsIgnoreCase(fromBot);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean looksLikeSelfTarget(String target) {
+    String t = Objects.toString(target, "").trim();
+    if (t.isEmpty()) return false;
+    String hinted = Objects.toString(conn.selfNickHint.get(), "").trim();
+    if (!hinted.isEmpty() && t.equalsIgnoreCase(hinted)) return true;
+    try {
+      PircBotX liveBot = this.bot;
+      String fromBot = liveBot == null ? "" : Objects.toString(liveBot.getNick(), "").trim();
+      return !fromBot.isEmpty() && t.equalsIgnoreCase(fromBot);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static String trailingParam(String rawLine) {
+    String line = Objects.toString(rawLine, "");
+    int idx = line.indexOf(" :");
+    if (idx < 0 || idx + 2 >= line.length()) return "";
+    return line.substring(idx + 2).trim();
+  }
+
+  private static boolean isChannelName(String target) {
+    String t = Objects.toString(target, "").trim();
+    if (t.isEmpty()) return false;
+    char c = t.charAt(0);
+    return c == '#' || c == '&' || c == '!' || c == '+';
   }
 
   private void emitStandardReply(

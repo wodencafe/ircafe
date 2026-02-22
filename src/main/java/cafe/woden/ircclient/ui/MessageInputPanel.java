@@ -426,6 +426,10 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
     typingSupport.flushTypingDone();
   }
 
+  public void flushTypingForBufferSwitch() {
+    typingSupport.flushTypingForBufferSwitch();
+  }
+
   private void fireDraftChanged() {
     try {
       onDraftChanged.accept(getDraftText());

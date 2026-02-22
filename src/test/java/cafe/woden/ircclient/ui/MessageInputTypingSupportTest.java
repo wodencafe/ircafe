@@ -139,6 +139,53 @@ class MessageInputTypingSupportTest {
         });
   }
 
+  @Test
+  void bufferSwitchWithNonEmptyDraftEmitsPaused() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          f.support.setOnTypingStateChanged(states::add);
+          f.input.setText("still drafting");
+          f.support.onUserEdit(false);
+
+          f.support.flushTypingForBufferSwitch();
+          assertEquals("paused", states.get(states.size() - 1));
+        });
+  }
+
+  @Test
+  void bufferSwitchWithBlankDraftEmitsDone() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          f.support.setOnTypingStateChanged(states::add);
+          f.input.setText("hello");
+          f.support.onUserEdit(false);
+
+          f.input.setText("");
+          f.support.flushTypingForBufferSwitch();
+          assertEquals("done", states.get(states.size() - 1));
+        });
+  }
+
+  @Test
+  void bufferSwitchWithSlashCommandDraftEmitsDone() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          f.support.setOnTypingStateChanged(states::add);
+          f.input.setText("hello");
+          f.support.onUserEdit(false);
+
+          f.input.setText("/whois alice");
+          f.support.flushTypingForBufferSwitch();
+          assertEquals("done", states.get(states.size() - 1));
+        });
+  }
+
   private static Fixture newFixture() throws Exception {
     return newFixture(() -> null);
   }

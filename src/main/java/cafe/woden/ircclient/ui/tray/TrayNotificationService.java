@@ -162,6 +162,50 @@ public class TrayNotificationService {
     notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, this::showMainWindowOnly);
   }
 
+  /**
+   * Sends a custom notification driven by user-configured IRC event rules.
+   */
+  public void notifyCustom(
+      String serverId,
+      String target,
+      String title,
+      String body,
+      boolean showToast,
+      boolean playSound,
+      String soundId,
+      boolean soundUseCustom,
+      String soundCustomPath
+  ) {
+    UiSettings s = settingsBus.get();
+    if (s == null || !s.trayEnabled()) return;
+
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    String tgt = Objects.toString(target, "").trim();
+    if (tgt.isEmpty()) tgt = "status";
+
+    TargetRef openTarget = safeTargetRef(sid, tgt, "status");
+    if (!passesNotifyConditions(openTarget)) return;
+
+    String finalTitle = Objects.toString(title, "").trim();
+    if (finalTitle.isEmpty()) finalTitle = "IRCafe";
+    String finalBody = safeBody(body);
+
+    String targetKey = targetKey(sid, tgt);
+    String contentKey = contentKey(
+        targetKey,
+        "event",
+        (showToast ? "toast|" : "sound|") + finalTitle + "|" + finalBody);
+
+    SoundDirective soundDirective = playSound
+        ? SoundDirective.override(soundId, soundUseCustom, soundCustomPath)
+        : SoundDirective.none();
+
+    Runnable onClick = showToast ? () -> openTarget(openTarget) : null;
+    notifyAsync(targetKey, contentKey, finalTitle, finalBody, onClick, showToast, soundDirective);
+  }
+
   private boolean passesNotifyConditions(TargetRef target) {
     UiSettings s = settingsBus.get();
     if (s == null || !s.trayEnabled()) return false;
@@ -208,7 +252,26 @@ public class TrayNotificationService {
 
   private void notifyAsync(String targetKey, String contentKey, String title, String body, Runnable onClick) {
     // Push into the Rx pipeline; rate limiting and dedupe happen there.
-    requests.onNext(new NotificationRequest(targetKey, contentKey, title, body, onClick));
+    notifyAsync(targetKey, contentKey, title, body, onClick, true, SoundDirective.global());
+  }
+
+  private void notifyAsync(
+      String targetKey,
+      String contentKey,
+      String title,
+      String body,
+      Runnable onClick,
+      boolean showToast,
+      SoundDirective soundDirective
+  ) {
+    requests.onNext(new NotificationRequest(
+        targetKey,
+        contentKey,
+        title,
+        body,
+        onClick,
+        showToast,
+        soundDirective != null ? soundDirective : SoundDirective.global()));
   }
 
   private void installRateLimiterPipeline() {
@@ -254,11 +317,19 @@ public class TrayNotificationService {
   private void sendNow(NotificationRequest req) {
     if (req == null) return;
     try {
-      // Phase 2: single global sound for all delivered tray notifications.
-      // This uses the same rate-limited/deduped pipeline as the tray popup itself.
-      if (soundService != null) {
-        soundService.play();
+      if (soundService != null && req.soundDirective() != null) {
+        switch (req.soundDirective().mode()) {
+          case GLOBAL -> soundService.play();
+          case NONE -> {
+          }
+          case OVERRIDE -> soundService.playOverride(
+              req.soundDirective().soundId(),
+              req.soundDirective().soundUseCustom(),
+              req.soundDirective().soundCustomPath());
+        }
       }
+
+      if (!req.showToast()) return;
 
       if (tryWindowsToastPopup(req.title(), req.body(), req.onClick())) return;
       if (tryLinuxNotifySend(req.title(), req.body(), req.onClick())) return;
@@ -493,7 +564,34 @@ public class TrayNotificationService {
       String contentKey,
       String title,
       String body,
-      Runnable onClick
+      Runnable onClick,
+      boolean showToast,
+      SoundDirective soundDirective
   ) {
+  }
+
+  private enum SoundMode {
+    GLOBAL,
+    NONE,
+    OVERRIDE
+  }
+
+  private record SoundDirective(
+      SoundMode mode,
+      String soundId,
+      boolean soundUseCustom,
+      String soundCustomPath
+  ) {
+    static SoundDirective global() {
+      return new SoundDirective(SoundMode.GLOBAL, null, false, null);
+    }
+
+    static SoundDirective none() {
+      return new SoundDirective(SoundMode.NONE, null, false, null);
+    }
+
+    static SoundDirective override(String soundId, boolean soundUseCustom, String soundCustomPath) {
+      return new SoundDirective(SoundMode.OVERRIDE, soundId, soundUseCustom, soundCustomPath);
+    }
   }
 }

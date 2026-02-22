@@ -348,6 +348,32 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
+    onEdt(() -> serverTree.setServerConnectedIdentity(serverId, connectedHost, connectedPort, nick, at));
+  }
+
+  @Override
+  public void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {
+    onEdt(() -> serverTree.setServerIrcv3Capability(serverId, capability, subcommand, enabled));
+  }
+
+  @Override
+  public void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {
+    onEdt(() -> serverTree.setServerIsupportToken(serverId, tokenName, tokenValue));
+  }
+
+  @Override
+  public void setServerVersionDetails(
+      String serverId,
+      String serverName,
+      String serverVersion,
+      String userModes,
+      String channelModes
+  ) {
+    onEdt(() -> serverTree.setServerVersionDetails(serverId, serverName, serverVersion, userModes, channelModes));
+  }
+
+  @Override
   public void setInputEnabled(boolean enabled) {
     onEdt(() -> {
       chat.setInputEnabled(enabled);

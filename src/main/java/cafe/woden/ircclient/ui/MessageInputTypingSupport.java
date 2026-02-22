@@ -38,7 +38,9 @@ final class MessageInputTypingSupport {
   // after the user stops typing (until PAUSED fires). Emit "active" only from user edits.
   private static final int TYPING_ACTIVE_THROTTLE_MS = 3000;
 
-  private static final int REMOTE_TYPING_HINT_MS = 5000;
+  // Keep incoming typing hints visible a bit longer than the common remote refresh cadence
+  // so short network delays do not cause the banner to blink out before "done" arrives.
+  private static final int REMOTE_TYPING_HINT_MS = 8000;
 
   private final JTextField input;
   private final JPanel typingBanner;
@@ -127,6 +129,26 @@ final class MessageInputTypingSupport {
     typingPauseTimer.stop();
     lastUserEditAtMs = 0L;
     lastActiveSentAtMs = 0L;
+  }
+
+  /**
+   * Called when the user switches away from the current chat buffer.
+   *
+   * <p>If there is still draft text, emit PAUSED instead of DONE so peers can
+   * distinguish "still composing, temporarily away" from "finished typing".</p>
+   */
+  void flushTypingForBufferSwitch() {
+    typingPauseTimer.stop();
+    lastUserEditAtMs = 0L;
+    lastActiveSentAtMs = 0L;
+
+    String text = input.getText();
+    if (text != null && !text.isBlank() && !text.startsWith("/")) {
+      emitTypingState("paused");
+      return;
+    }
+
+    emitTypingState("done");
   }
 
   void flushTypingDone() {

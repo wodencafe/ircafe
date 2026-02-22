@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.ui.settings.NotificationRule;
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.ui.filter.FilterRule;
 import cafe.woden.ircclient.ui.filter.TagSpec;
 import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
@@ -837,6 +838,48 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist notificationRules to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIrcEventNotificationRules(List<IrcEventNotificationRule> rules) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      List<Map<String, Object>> out = new ArrayList<>();
+      if (rules != null) {
+        for (IrcEventNotificationRule r : rules) {
+          if (r == null) continue;
+
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("enabled", r.enabled());
+          m.put("eventType", r.eventType() != null ? r.eventType().name() : "INVITE_RECEIVED");
+          m.put("sourceFilter", r.sourceFilter() != null ? r.sourceFilter().name() : "ANY");
+          m.put("toastEnabled", r.toastEnabled());
+          m.put("soundEnabled", r.soundEnabled());
+          m.put("soundId", Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());
+          m.put("soundUseCustom", r.soundUseCustom());
+
+          String custom = Objects.toString(r.soundCustomPath(), "").trim();
+          if (!custom.isEmpty()) m.put("soundCustomPath", custom);
+
+          String include = Objects.toString(r.channelWhitelist(), "").trim();
+          if (!include.isEmpty()) m.put("channelWhitelist", include);
+
+          String exclude = Objects.toString(r.channelBlacklist(), "").trim();
+          if (!exclude.isEmpty()) m.put("channelBlacklist", exclude);
+
+          out.add(m);
+        }
+      }
+
+      ui.put("ircEventNotificationRules", out);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ircEventNotificationRules to '{}'", file, e);
     }
   }
 

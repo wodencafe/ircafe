@@ -29,6 +29,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
+import java.awt.Dialog;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -47,6 +48,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JDialog;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTree;
 import javax.swing.ToolTipManager;
 import javax.swing.JOptionPane;
@@ -62,13 +66,21 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreePath;
+import javax.swing.table.DefaultTableModel;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+import net.miginfocom.swing.MigLayout;
 
 import jakarta.annotation.PreDestroy;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -183,6 +195,10 @@ private static final class InsertionLine {
   private final Map<String, Boolean> serverDesiredOnline = new HashMap<>();
   private final Map<String, String> serverLastError = new HashMap<>();
   private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
+  private final Map<String, ServerRuntimeMetadata> serverRuntimeMetadata = new HashMap<>();
+
+  private static final DateTimeFormatter SERVER_META_TIME_FMT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
 
   private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
@@ -974,6 +990,12 @@ private static final class InsertionLine {
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
 
+      JMenuItem networkInfo = new JMenuItem("View Network Info...");
+      networkInfo.setIcon(SvgIcons.action("info", 16));
+      networkInfo.setDisabledIcon(SvgIcons.actionDisabled("info", 16));
+      networkInfo.addActionListener(ev -> openServerInfoDialog(serverId));
+      menu.add(networkInfo);
+
       // Ephemeral servers can be promoted to persisted servers. This is especially useful for
       // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
       boolean ephemeral = serverCatalog != null
@@ -1357,6 +1379,378 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     tree.repaint();
   }
 
+  public void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    boolean changed = false;
+
+    String host = Objects.toString(connectedHost, "").trim();
+    if (!host.isEmpty() && !Objects.equals(meta.connectedHost, host)) {
+      meta.connectedHost = host;
+      changed = true;
+    }
+
+    if (connectedPort > 0 && meta.connectedPort != connectedPort) {
+      meta.connectedPort = connectedPort;
+      changed = true;
+    }
+
+    String n = Objects.toString(nick, "").trim();
+    if (!n.isEmpty() && !Objects.equals(meta.nick, n)) {
+      meta.nick = n;
+      changed = true;
+    }
+
+    Instant connectedAt = at != null ? at : (meta.connectedAt == null ? Instant.now() : meta.connectedAt);
+    if (!Objects.equals(meta.connectedAt, connectedAt)) {
+      meta.connectedAt = connectedAt;
+      changed = true;
+    }
+
+    if (changed) {
+      ServerNodes sn = servers.get(sid);
+      if (sn != null && sn.serverNode != null) {
+        model.nodeChanged(sn.serverNode);
+      }
+    }
+  }
+
+  public void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {
+    String sid = Objects.toString(serverId, "").trim();
+    String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    if (sid.isEmpty() || cap.isEmpty()) return;
+
+    String sub = Objects.toString(subcommand, "").trim().toUpperCase(java.util.Locale.ROOT);
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    boolean changed = false;
+
+    CapabilityState next = null;
+    if ("DEL".equals(sub)) {
+      next = CapabilityState.REMOVED;
+    } else if ("NEW".equals(sub)) {
+      next = CapabilityState.AVAILABLE;
+    } else if ("ACK".equals(sub)) {
+      next = enabled ? CapabilityState.ENABLED : CapabilityState.DISABLED;
+    } else {
+      next = enabled ? CapabilityState.ENABLED : CapabilityState.DISABLED;
+    }
+
+    CapabilityState prev = meta.ircv3Caps.put(cap, next);
+    if (!Objects.equals(prev, next)) {
+      changed = true;
+    }
+
+    if (changed) {
+      ServerNodes sn = servers.get(sid);
+      if (sn != null && sn.serverNode != null) {
+        model.nodeChanged(sn.serverNode);
+      }
+    }
+  }
+
+  public void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = Objects.toString(tokenName, "").trim().toUpperCase(java.util.Locale.ROOT);
+    if (sid.isEmpty() || key.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    String val = tokenValue != null ? tokenValue.trim() : null;
+    if (val != null && val.isEmpty()) val = "";
+
+    String prev;
+    if (val == null) {
+      prev = meta.isupport.remove(key);
+    } else {
+      prev = meta.isupport.put(key, val);
+    }
+    if (Objects.equals(prev, val)) return;
+
+    ServerNodes sn = servers.get(sid);
+    if (sn != null && sn.serverNode != null) {
+      model.nodeChanged(sn.serverNode);
+    }
+  }
+
+  public void setServerVersionDetails(
+      String serverId,
+      String serverName,
+      String serverVersion,
+      String userModes,
+      String channelModes
+  ) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    boolean changed = false;
+
+    String srv = Objects.toString(serverName, "").trim();
+    if (!srv.isEmpty() && !Objects.equals(meta.serverName, srv)) {
+      meta.serverName = srv;
+      changed = true;
+    }
+
+    String ver = Objects.toString(serverVersion, "").trim();
+    if (!ver.isEmpty() && !Objects.equals(meta.serverVersion, ver)) {
+      meta.serverVersion = ver;
+      changed = true;
+    }
+
+    String um = Objects.toString(userModes, "").trim();
+    if (!um.isEmpty() && !Objects.equals(meta.userModes, um)) {
+      meta.userModes = um;
+      changed = true;
+    }
+
+    String cm = Objects.toString(channelModes, "").trim();
+    if (!cm.isEmpty() && !Objects.equals(meta.channelModes, cm)) {
+      meta.channelModes = cm;
+      changed = true;
+    }
+
+    if (changed) {
+      ServerNodes sn = servers.get(sid);
+      if (sn != null && sn.serverNode != null) {
+        model.nodeChanged(sn.serverNode);
+      }
+    }
+  }
+
+  private ServerRuntimeMetadata metadataForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) sid = "(server)";
+    return serverRuntimeMetadata.computeIfAbsent(sid, __ -> new ServerRuntimeMetadata());
+  }
+
+  private void openServerInfoDialog(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    String title = "Network Info - " + prettyServerLabel(sid);
+
+    JDialog dialog = new JDialog(owner, title, Dialog.ModalityType.APPLICATION_MODAL);
+    dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+    JPanel content = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill][]"));
+    content.add(buildNetworkSummaryPanel(sid, meta), "growx");
+
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.addTab("Overview", buildOverviewTab(sid, meta));
+    tabs.addTab("Capabilities (" + meta.ircv3Caps.size() + ")", buildCapabilitiesInfoPanel(meta));
+    tabs.addTab("ISUPPORT (" + meta.isupport.size() + ")", buildIsupportInfoPanel(meta));
+    content.add(tabs, "grow");
+
+    JButton close = new JButton("Close");
+    close.addActionListener(ev -> dialog.dispose());
+    JPanel actions = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill][]", "[]"));
+    actions.add(new JLabel(""), "growx");
+    actions.add(close, "tag ok");
+    content.add(actions, "growx");
+
+    dialog.setContentPane(content);
+    dialog.getRootPane().setDefaultButton(close);
+    dialog.pack();
+    int width = Math.max(820, dialog.getWidth());
+    int height = Math.max(620, dialog.getHeight());
+    dialog.setSize(width, height);
+    dialog.setLocationRelativeTo(owner);
+    dialog.setVisible(true);
+  }
+
+  private JPanel buildNetworkSummaryPanel(String serverId, ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[grow,fill][right]", "[]4[]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Summary"));
+
+    ConnectionState state = connectionStateForServer(serverId);
+    boolean desired = desiredOnlineForServer(serverId);
+
+    JLabel title = new JLabel(prettyServerLabel(serverId));
+    Font base = title.getFont();
+    if (base != null) {
+      title.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1.5f));
+    }
+    panel.add(title, "growx");
+    panel.add(new JLabel("State: " + serverStateLabel(state)));
+
+    String endpoint = formatConnectedEndpoint(meta.connectedHost, meta.connectedPort);
+    String nick = fallbackInfoValue(meta.nick);
+    panel.add(new JLabel("Network ID: " + serverId), "span 2, growx");
+    panel.add(new JLabel("Endpoint: " + endpoint + "    Nick: " + nick + "    Intent: " + serverDesiredIntentLabel(desired)),
+        "span 2, growx");
+    return panel;
+  }
+
+  private JComponent buildOverviewTab(String serverId, ServerRuntimeMetadata meta) {
+    JPanel overview = new JPanel(new MigLayout("insets 8, fill, wrap 2", "[grow,fill]12[grow,fill]", "[top]"));
+    overview.add(buildConnectionInfoPanel(serverId, meta), "grow");
+    overview.add(buildServerInfoPanel(meta), "grow");
+    return overview;
+  }
+
+  private JPanel buildConnectionInfoPanel(String serverId, ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[right][grow,fill]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Connection"));
+
+    ConnectionState state = connectionStateForServer(serverId);
+    boolean desired = desiredOnlineForServer(serverId);
+
+    addInfoRow(panel, "Network ID", serverId);
+    addInfoRow(panel, "Display", prettyServerLabel(serverId));
+    addInfoRow(panel, "State", serverStateLabel(state));
+    addInfoRow(panel, "Intent", serverDesiredIntentLabel(desired));
+    addInfoRow(panel, "Connected endpoint", formatConnectedEndpoint(meta.connectedHost, meta.connectedPort));
+    addInfoRow(panel, "Current nick", fallbackInfoValue(meta.nick));
+    addInfoRow(panel, "Connected at", meta.connectedAt == null ? "(unknown)" : SERVER_META_TIME_FMT.format(meta.connectedAt));
+
+    String diagnostics = connectionDiagnosticsTipForServer(serverId).trim();
+    if (!diagnostics.isEmpty()) {
+      addInfoRow(panel, "Diagnostics", diagnostics);
+    }
+    return panel;
+  }
+
+  private JPanel buildServerInfoPanel(ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[right][grow,fill]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Server"));
+    addInfoRow(panel, "Server name", fallbackInfoValue(meta.serverName));
+    addInfoRow(panel, "Version", fallbackInfoValue(meta.serverVersion));
+    addInfoRow(panel, "User modes", fallbackInfoValue(meta.userModes));
+    addInfoRow(panel, "Channel modes", fallbackInfoValue(meta.channelModes));
+    return panel;
+  }
+
+  private JPanel buildCapabilitiesInfoPanel(ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+    panel.add(buildCapabilityCountsRow(meta), "growx");
+
+    if (meta.ircv3Caps.isEmpty()) {
+      panel.add(new JLabel("No IRCv3 capabilities observed yet."), "grow");
+      return panel;
+    }
+
+    TreeMap<String, CapabilityState> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    sorted.putAll(meta.ircv3Caps);
+    Object[][] rows = new Object[sorted.size()][2];
+    int idx = 0;
+    for (Map.Entry<String, CapabilityState> e : sorted.entrySet()) {
+      CapabilityState st = e.getValue();
+      rows[idx][0] = e.getKey();
+      rows[idx][1] = st == null ? "unknown" : st.label;
+      idx++;
+    }
+
+    JTable table = buildReadOnlyTable(new String[] { "Capability", "State" }, rows);
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    panel.add(scroll, "grow");
+    return panel;
+  }
+
+  private JPanel buildIsupportInfoPanel(ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[grow,fill]"));
+    if (meta.isupport.isEmpty()) {
+      panel.add(new JLabel("No ISUPPORT tokens observed yet."), "grow");
+      return panel;
+    }
+
+    TreeMap<String, String> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    sorted.putAll(meta.isupport);
+    Object[][] rows = new Object[sorted.size()][2];
+    int idx = 0;
+    for (Map.Entry<String, String> e : sorted.entrySet()) {
+      String val = Objects.toString(e.getValue(), "");
+      rows[idx][0] = e.getKey();
+      rows[idx][1] = val.isBlank() ? "(present)" : val;
+      idx++;
+    }
+
+    JTable table = buildReadOnlyTable(new String[] { "Token", "Value" }, rows);
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    panel.add(scroll, "grow");
+    return panel;
+  }
+
+  private JPanel buildCapabilityCountsRow(ServerRuntimeMetadata meta) {
+    Map<CapabilityState, Integer> counts = new java.util.EnumMap<>(CapabilityState.class);
+    for (CapabilityState state : CapabilityState.values()) {
+      counts.put(state, 0);
+    }
+    for (CapabilityState state : meta.ircv3Caps.values()) {
+      if (state == null) continue;
+      counts.put(state, counts.getOrDefault(state, 0) + 1);
+    }
+
+    JPanel row = new JPanel(new MigLayout("insets 0, fillx, wrap 4", "[grow,fill]8[grow,fill]8[grow,fill]8[grow,fill]", "[]"));
+    row.add(buildCountChip("Enabled", counts.getOrDefault(CapabilityState.ENABLED, 0)), "growx");
+    row.add(buildCountChip("Available", counts.getOrDefault(CapabilityState.AVAILABLE, 0)), "growx");
+    row.add(buildCountChip("Disabled", counts.getOrDefault(CapabilityState.DISABLED, 0)), "growx");
+    row.add(buildCountChip("Removed", counts.getOrDefault(CapabilityState.REMOVED, 0)), "growx");
+    return row;
+  }
+
+  private static JPanel buildCountChip(String label, int count) {
+    JPanel chip = new JPanel(new MigLayout("insets 6, wrap 1", "[grow,fill]", "[]0[]"));
+    Color border = UIManager.getColor("Separator.foreground");
+    if (border == null) border = UIManager.getColor("Component.borderColor");
+    if (border == null) border = Color.GRAY;
+    chip.setBorder(BorderFactory.createLineBorder(withAlpha(border, 180)));
+
+    JLabel countLabel = new JLabel(Integer.toString(Math.max(0, count)));
+    Font f = countLabel.getFont();
+    if (f != null) {
+      countLabel.setFont(f.deriveFont(Font.BOLD, f.getSize2D() + 1f));
+    }
+    JLabel textLabel = new JLabel(label);
+    Color muted = UIManager.getColor("Label.disabledForeground");
+    if (muted != null) textLabel.setForeground(muted);
+
+    chip.add(countLabel, "alignx center");
+    chip.add(textLabel, "alignx center");
+    return chip;
+  }
+
+  private static JTable buildReadOnlyTable(String[] columns, Object[][] rows) {
+    DefaultTableModel model = new DefaultTableModel(rows, columns) {
+      @Override
+      public boolean isCellEditable(int row, int column) {
+        return false;
+      }
+    };
+
+    JTable table = new JTable(model);
+    table.setFillsViewportHeight(true);
+    table.setAutoCreateRowSorter(true);
+    table.setRowSelectionAllowed(false);
+    table.setColumnSelectionAllowed(false);
+    table.getTableHeader().setReorderingAllowed(false);
+    return table;
+  }
+
+  private static void addInfoRow(JPanel panel, String key, String value) {
+    panel.add(new JLabel(key + ":"), "aligny top");
+    JLabel valueLabel = new JLabel(fallbackInfoValue(value));
+    valueLabel.setToolTipText(fallbackInfoValue(value));
+    panel.add(valueLabel, "growx, wrap");
+  }
+
+  private static String fallbackInfoValue(String value) {
+    String v = Objects.toString(value, "").trim();
+    return v.isEmpty() ? "(unknown)" : v;
+  }
+
+  private static String formatConnectedEndpoint(String host, int port) {
+    String h = Objects.toString(host, "").trim();
+    if (h.isEmpty() && port <= 0) return "(unknown)";
+    if (h.isEmpty()) return ":" + port;
+    if (port <= 0) return h;
+    return h + ":" + port;
+  }
+
   public void setStatusText(String text) {
     String t = Objects.toString(text, "").trim();
     statusLabel.setText(t);
@@ -1671,8 +2065,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public void removeTarget(TargetRef ref) {
     if (ref == null || ref.isStatus() || ref.isUiOnly()) return;
-    DefaultMutableTreeNode node = leaves.remove(ref);
-    if (node == null) return;
+    DefaultMutableTreeNode mappedNode = leaves.remove(ref);
+    java.util.Set<DefaultMutableTreeNode> nodesToRemove = new HashSet<>();
+    if (mappedNode != null) {
+      nodesToRemove.add(mappedNode);
+    }
+    nodesToRemove.addAll(findTreeNodesByTarget(ref));
+    if (nodesToRemove.isEmpty()) return;
+
     if (isPrivateMessageTarget(ref)) {
       privateMessageOnlineByTarget.remove(ref);
       if (shouldPersistPrivateMessageList()) {
@@ -1680,13 +2080,39 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       }
     }
 
-    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
-    if (parent != null) {
+    boolean removedAny = false;
+    for (DefaultMutableTreeNode node : nodesToRemove) {
+      if (node == null) continue;
+      DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+      if (parent == null) continue;
+      int idx = parent.getIndex(node);
+      if (idx < 0) continue;
+      Object[] removed = new Object[] { node };
       parent.remove(node);
-      model.reload(parent);
-    } else {
+      model.nodesWereRemoved(parent, new int[] { idx }, removed);
+      removedAny = true;
+    }
+
+    if (!removedAny) {
       model.reload(root);
     }
+  }
+
+  private java.util.List<DefaultMutableTreeNode> findTreeNodesByTarget(TargetRef ref) {
+    java.util.ArrayList<DefaultMutableTreeNode> out = new java.util.ArrayList<>();
+    if (ref == null) return out;
+
+    Enumeration<?> en = root.depthFirstEnumeration();
+    while (en.hasMoreElements()) {
+      Object o = en.nextElement();
+      if (!(o instanceof DefaultMutableTreeNode node)) continue;
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData nd)) continue;
+      if (nd.ref == null) continue;
+      if (!ref.equals(nd.ref)) continue;
+      out.add(node);
+    }
+    return out;
   }
 
   public void markUnread(TargetRef ref) {
@@ -2072,6 +2498,7 @@ private void removeServerRoot(String serverId) {
   serverDesiredOnline.remove(serverId);
   serverLastError.remove(serverId);
   serverNextRetryAtEpochMs.remove(serverId);
+  serverRuntimeMetadata.remove(serverId);
   clearPrivateMessageOnlineStates(serverId);
   leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
 
@@ -2307,7 +2734,33 @@ private void removeServerRoot(String serverId) {
     }
   }
 
-  
+  private enum CapabilityState {
+    AVAILABLE("available"),
+    ENABLED("enabled"),
+    DISABLED("disabled"),
+    REMOVED("removed");
+
+    private final String label;
+
+    CapabilityState(String label) {
+      this.label = label;
+    }
+  }
+
+  private static final class ServerRuntimeMetadata {
+    String connectedHost = "";
+    int connectedPort = 0;
+    String nick = "";
+    Instant connectedAt;
+
+    String serverName = "";
+    String serverVersion = "";
+    String userModes = "";
+    String channelModes = "";
+
+    final Map<String, CapabilityState> ircv3Caps = new LinkedHashMap<>();
+    final Map<String, String> isupport = new LinkedHashMap<>();
+  }
 
 private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
   private void setTreeIcon(String name) {

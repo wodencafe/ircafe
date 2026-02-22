@@ -409,6 +409,19 @@ private static String derivePrivateConversationTarget(String botNick, String fro
   return d;
 }
 
+private String inferPrivateDestinationFromHints(
+    String from,
+    String kind,
+    String payload,
+    String messageId
+) {
+  String fromNick = Objects.toString(from, "").trim();
+  String k = Objects.toString(kind, "").trim().toUpperCase(Locale.ROOT);
+  String body = Objects.toString(payload, "").trim();
+  if (fromNick.isBlank() || k.isBlank() || body.isBlank()) return "";
+  return conn.findPrivateTargetHint(fromNick, k, body, messageId, System.currentTimeMillis());
+}
+
 private static boolean isZncPlayStarCursorCommand(String msg) {
   String m = Objects.toString(msg, "").trim();
   if (m.isEmpty()) return false;
@@ -785,6 +798,14 @@ public void onAction(ActionEvent event) {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+      boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+      String batchMsgId = ircv3MessageId(ircv3TagsFromEvent(event));
+      if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+        String hinted = inferPrivateDestinationFromHints(from, "ACTION", action, batchMsgId);
+        if (!hinted.isBlank()) {
+          pmDest = hinted;
+        }
+      }
 
       String fallbackTarget;
       if (event.getChannel() != null) {
@@ -802,12 +823,20 @@ public void onAction(ActionEvent event) {
   Instant at = inboundAt(event);
   String from = (event.getUser() != null) ? event.getUser().getNick() : "";
   String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+  boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
   Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
+  String messageId = ircv3MessageId(tags);
+  if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+    String hinted = inferPrivateDestinationFromHints(from, "ACTION", action, messageId);
+    if (!hinted.isBlank()) {
+      pmDest = hinted;
+    }
+  }
   if (pmDest != null && !pmDest.isBlank()) {
     tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
   }
   Map<String, String> ircv3Tags = tags;
-  String messageId = ircv3MessageId(ircv3Tags);
+  messageId = ircv3MessageId(ircv3Tags);
 
   if (event.getChannel() != null) {
     String channel = event.getChannel().getName();
@@ -910,8 +939,17 @@ public void onPrivateMessage(PrivateMessageEvent event) {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String msg = PircbotxUtil.safeStr(event::getMessage, "");
       String action = PircbotxUtil.parseCtcpAction(msg);
+      String kind = action == null ? "PRIVMSG" : "ACTION";
+      String hintPayload = action == null ? msg : action;
+      String batchMsgId = ircv3MessageId(ircv3TagsFromEvent(event));
 
       boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+      if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+        String hinted = inferPrivateDestinationFromHints(from, kind, hintPayload, batchMsgId);
+        if (!hinted.isBlank()) {
+          pmDest = hinted;
+        }
+      }
       if (fromSelf) {
         // Don't show our internal ZNC playback bootstrap line.
         if (isZncPlayStarCursorCommand(msg)) {
@@ -942,19 +980,29 @@ public void onPrivateMessage(PrivateMessageEvent event) {
   Instant at = inboundAt(event);
   String from = event.getUser().getNick();
   String msg = event.getMessage();
-
-  Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
-  if (pmDest != null && !pmDest.isBlank()) {
-    tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
-  }
-  Map<String, String> ircv3Tags = tags;
-  String messageId = ircv3MessageId(ircv3Tags);
+  String actionPayload = PircbotxUtil.parseCtcpAction(msg);
+  String hintKind = actionPayload == null ? "PRIVMSG" : "ACTION";
+  String hintPayload = actionPayload == null ? msg : actionPayload;
 
   boolean fromSelf = false;
   try {
     fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
   } catch (Exception ignored) {
   }
+
+  Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
+  String messageId = ircv3MessageId(tags);
+  if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+    String hinted = inferPrivateDestinationFromHints(from, hintKind, hintPayload, messageId);
+    if (!hinted.isBlank()) {
+      pmDest = hinted;
+    }
+  }
+  if (pmDest != null && !pmDest.isBlank()) {
+    tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
+  }
+  Map<String, String> ircv3Tags = tags;
+  messageId = ircv3MessageId(ircv3Tags);
 
   // Suppress our own internal ZNC control messages that might be echoed back (echo-message)
   // or replayed by servers that emulate ZNC playback (e.g., Ergo).
@@ -1000,7 +1048,7 @@ public void onPrivateMessage(PrivateMessageEvent event) {
 
   maybeEmitHostmaskObserved("", event.getUser());
 
-  String action = PircbotxUtil.parseCtcpAction(msg);
+  String action = actionPayload;
   if (action != null) {
     bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
     return;
