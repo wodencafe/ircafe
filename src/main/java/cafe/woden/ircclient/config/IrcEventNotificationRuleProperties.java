@@ -17,6 +17,7 @@ public record IrcEventNotificationRuleProperties(
     ChannelScope channelScope,
     String channelPatterns,
     Boolean toastEnabled,
+    Boolean toastWhenFocused,
     Boolean notificationsNodeEnabled,
     Boolean soundEnabled,
     String soundId,
@@ -49,6 +50,7 @@ public record IrcEventNotificationRuleProperties(
     YOU_HALF_OPPED,
     YOU_DEHALF_OPPED,
     PRIVATE_MESSAGE_RECEIVED,
+    CTCP_RECEIVED,
     NOTICE_RECEIVED,
     WALLOPS_RECEIVED,
     INVITE_RECEIVED,
@@ -131,6 +133,7 @@ public record IrcEventNotificationRuleProperties(
     }
 
     if (toastEnabled == null) toastEnabled = true;
+    if (toastWhenFocused == null) toastWhenFocused = false;
     if (notificationsNodeEnabled == null) notificationsNodeEnabled = true;
     if (soundEnabled == null) soundEnabled = false;
 
@@ -166,6 +169,7 @@ public record IrcEventNotificationRuleProperties(
           ChannelScope.ALL,
           null,
           true,
+          false,
           true,
           false,
           defaultBuiltInSoundForEvent(t).name(),
@@ -206,6 +210,7 @@ public record IrcEventNotificationRuleProperties(
            HALF_OPPED,
            DEHALF_OPPED,
            PRIVATE_MESSAGE_RECEIVED,
+           CTCP_RECEIVED,
            NOTICE_RECEIVED,
            WALLOPS_RECEIVED,
            INVITE_RECEIVED,

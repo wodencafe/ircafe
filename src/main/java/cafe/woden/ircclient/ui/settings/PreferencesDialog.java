@@ -3648,9 +3648,12 @@ panel.add(subTabs, "growx, wmin 0");
       JCheckBox typingIndicatorsSendEnabled,
       JCheckBox typingIndicatorsReceiveEnabled,
       Ircv3CapabilitiesControls ircv3Capabilities) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]10[]10[]"));
+    JPanel form = new JPanel(new MigLayout("insets 12, fill, wrap 1, hidemode 3", "[grow,fill]", "[]8[]8[grow,fill]"));
 
     form.add(tabTitle("IRCv3"), "growx, wmin 0, wrap");
+    form.add(
+        subtleInfoTextWith("Typing and capability settings for modern IRCv3 features. Capability changes apply on reconnect."),
+        "growx, wmin 0, wrap");
 
     JButton typingHelp = whyHelpButton(
         "Typing indicators",
@@ -3673,13 +3676,15 @@ panel.add(subTabs, "growx, wmin 0");
     typingRow.add(typingIndicatorsSendEnabled, "growx, wmin 0, split 2");
     typingRow.add(typingHelp, "aligny center");
     typingRow.add(typingIndicatorsReceiveEnabled, "growx, wmin 0");
-    form.add(typingRow, "growx, wmin 0, wrap");
     JTextArea typingImpact = subtleInfoText();
     typingImpact.setText("Send controls your outbound typing state; Display controls incoming typing state from others.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
-    form.add(typingImpact, "growx, wmin 0, wrap");
+    JPanel typingTab = new JPanel(new MigLayout("insets 6, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
+    typingTab.setOpaque(false);
+    typingTab.add(typingRow, "growx, wmin 0, wrap");
+    typingTab.add(typingImpact, "growx, wmin 0, wrap");
 
-    JPanel capabilityBlock = new JPanel(new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
+    JPanel capabilityBlock = new JPanel(new MigLayout("insets 8, fill, wrap 1, hidemode 3", "[grow,fill]", "[]6[grow,fill]"));
     capabilityBlock.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createTitledBorder("Requested capabilities"),
         BorderFactory.createEmptyBorder(4, 6, 6, 6)
@@ -3687,13 +3692,68 @@ panel.add(subTabs, "growx, wmin 0");
     capabilityBlock.setOpaque(false);
     capabilityBlock.add(
         subtleInfoTextWith(
-            "These capabilities are requested during CAP negotiation.\n" +
+                "These capabilities are requested during CAP negotiation.\n" +
                 "Changes apply on new connections or reconnect."
         ),
         "growx, wmin 0, wrap"
     );
-    capabilityBlock.add(ircv3Capabilities.panel(), "growx, wmin 0");
-    form.add(capabilityBlock, "growx, wmin 0");
+    JScrollPane capabilityScroll = new JScrollPane(
+        ircv3Capabilities.panel(),
+        ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    capabilityScroll.setBorder(BorderFactory.createEmptyBorder());
+    capabilityScroll.setViewportBorder(null);
+    capabilityScroll.getVerticalScrollBar().setUnitIncrement(16);
+    capabilityScroll.setPreferredSize(new Dimension(1, 320));
+    capabilityBlock.add(capabilityScroll, "grow, push, wmin 0, hmin 180");
+
+    JPanel capabilitiesTab = new JPanel(new MigLayout("insets 6, fill, wrap 1, hidemode 3", "[grow,fill]", "[grow,fill]"));
+    capabilitiesTab.setOpaque(false);
+    capabilitiesTab.add(capabilityBlock, "grow, push, wmin 0");
+
+    JButton typingHeader = new JButton();
+    typingHeader.setHorizontalAlignment(SwingConstants.LEFT);
+    typingHeader.setFocusable(false);
+    typingHeader.setMargin(new Insets(6, 10, 6, 10));
+    typingHeader.setToolTipText("Show typing-indicator settings");
+
+    JButton capabilitiesHeader = new JButton();
+    capabilitiesHeader.setHorizontalAlignment(SwingConstants.LEFT);
+    capabilitiesHeader.setFocusable(false);
+    capabilitiesHeader.setMargin(new Insets(6, 10, 6, 10));
+    capabilitiesHeader.setToolTipText("Show requested IRCv3 capabilities");
+
+    final boolean[] typingExpanded = new boolean[] { true };
+    final boolean[] capabilitiesExpanded = new boolean[] { false };
+
+    Runnable refreshAccordion = () -> {
+      typingHeader.setText((typingExpanded[0] ? "▾ " : "▸ ") + "Typing indicators");
+      capabilitiesHeader.setText((capabilitiesExpanded[0] ? "▾ " : "▸ ") + "Requested capabilities");
+      typingTab.setVisible(typingExpanded[0]);
+      capabilitiesTab.setVisible(capabilitiesExpanded[0]);
+      form.revalidate();
+      form.repaint();
+    };
+
+    typingHeader.addActionListener(e -> {
+      if (typingExpanded[0]) return;
+      typingExpanded[0] = true;
+      capabilitiesExpanded[0] = false;
+      refreshAccordion.run();
+    });
+
+    capabilitiesHeader.addActionListener(e -> {
+      if (capabilitiesExpanded[0]) return;
+      capabilitiesExpanded[0] = true;
+      typingExpanded[0] = false;
+      refreshAccordion.run();
+    });
+
+    form.add(typingHeader, "growx, wmin 0, wrap");
+    form.add(typingTab, "growx, wmin 0, wrap, hidemode 3");
+    form.add(capabilitiesHeader, "growx, wmin 0, wrap");
+    form.add(capabilitiesTab, "grow, push, wmin 0, hmin 180, hidemode 3");
+    refreshAccordion.run();
 
     return form;
   }
@@ -4039,6 +4099,10 @@ panel.add(subTabs, "growx, wmin 0");
     toastCol.setMaxWidth(80);
     toastCol.setPreferredWidth(70);
 
+    TableColumn toastForegroundCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_TOAST_WHEN_FOCUSED);
+    toastForegroundCol.setMaxWidth(85);
+    toastForegroundCol.setPreferredWidth(75);
+
     TableColumn nodeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
     nodeCol.setMaxWidth(90);
     nodeCol.setPreferredWidth(80);
@@ -4297,7 +4361,8 @@ panel.add(subTabs, "growx, wmin 0");
 
     tab.add(helpText(
             "Configure event actions for kicks, bans, invites, joins, and mode changes.\n"
-                + "Source supports self/others/specific nicks/glob/regex. Channel patterns use globs (* and ?), separated by commas or spaces."),
+                + "Source supports self/others/specific nicks/glob/regex. Channel patterns use globs (* and ?), separated by commas or spaces.\n"
+                + "Foreground allows this rule to notify (toast and/or sound) while IRCafe is focused."),
         "growx, wmin 0, wrap");
 
     JComboBox<IrcEventNotificationPreset> defaultsPreset = new JComboBox<>(IrcEventNotificationPreset.values());
@@ -4388,6 +4453,7 @@ panel.add(subTabs, "growx, wmin 0");
           IrcEventNotificationRule.ChannelScope.ALL,
           null,
           true,
+          false,
           true,
           false,
           BuiltInSound.NOTIF_1.name(),
@@ -4560,6 +4626,7 @@ panel.add(subTabs, "growx, wmin 0");
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
+        false,
         true,
         soundEnabled,
         defaultBuiltInSoundForIrcEventRule(eventType).name(),
@@ -5595,10 +5662,11 @@ panel.add(subTabs, "growx, wmin 0");
     static final int COL_SOURCE = 2;
     static final int COL_SOURCE_PATTERN = 3;
     static final int COL_TOAST = 4;
-    static final int COL_NOTIFICATIONS_NODE = 5;
-    static final int COL_SOUND = 6;
-    static final int COL_CHANNEL_SCOPE = 7;
-    static final int COL_CHANNEL_PATTERNS = 8;
+    static final int COL_TOAST_WHEN_FOCUSED = 5;
+    static final int COL_NOTIFICATIONS_NODE = 6;
+    static final int COL_SOUND = 7;
+    static final int COL_CHANNEL_SCOPE = 8;
+    static final int COL_CHANNEL_PATTERNS = 9;
 
     private static final String[] COLS = new String[] {
         "Enabled",
@@ -5606,6 +5674,7 @@ panel.add(subTabs, "growx, wmin 0");
         "Source",
         "Source Match",
         "Toast",
+        "Foreground",
         "Node",
         "Sound",
         "Channel Scope",
@@ -5778,7 +5847,7 @@ panel.add(subTabs, "growx, wmin 0");
     @Override
     public Class<?> getColumnClass(int columnIndex) {
       return switch (columnIndex) {
-        case COL_ENABLED, COL_TOAST, COL_NOTIFICATIONS_NODE, COL_SOUND -> Boolean.class;
+        case COL_ENABLED, COL_TOAST, COL_TOAST_WHEN_FOCUSED, COL_NOTIFICATIONS_NODE, COL_SOUND -> Boolean.class;
         case COL_EVENT -> IrcEventNotificationRule.EventType.class;
         case COL_SOURCE -> IrcEventNotificationRule.SourceMode.class;
         case COL_CHANNEL_SCOPE -> IrcEventNotificationRule.ChannelScope.class;
@@ -5808,6 +5877,7 @@ panel.add(subTabs, "growx, wmin 0");
         case COL_SOURCE -> r.sourceMode;
         case COL_SOURCE_PATTERN -> r.sourcePattern;
         case COL_TOAST -> r.toastEnabled;
+        case COL_TOAST_WHEN_FOCUSED -> r.toastWhenFocused;
         case COL_NOTIFICATIONS_NODE -> r.notificationsNodeEnabled;
         case COL_SOUND -> r.soundEnabled;
         case COL_CHANNEL_SCOPE -> r.channelScope;
@@ -5842,6 +5912,7 @@ panel.add(subTabs, "growx, wmin 0");
           }
         }
         case COL_TOAST -> r.toastEnabled = asBool(aValue);
+        case COL_TOAST_WHEN_FOCUSED -> r.toastWhenFocused = asBool(aValue);
         case COL_NOTIFICATIONS_NODE -> r.notificationsNodeEnabled = asBool(aValue);
         case COL_SOUND -> r.soundEnabled = asBool(aValue);
         case COL_CHANNEL_SCOPE -> r.channelScope = asChannelScope(aValue);
@@ -5919,6 +5990,7 @@ panel.add(subTabs, "growx, wmin 0");
       IrcEventNotificationRule.ChannelScope channelScope;
       String channelPatterns;
       boolean toastEnabled;
+      boolean toastWhenFocused;
       boolean notificationsNodeEnabled;
       boolean soundEnabled;
       String soundId;
@@ -5938,6 +6010,7 @@ panel.add(subTabs, "growx, wmin 0");
             channelScope,
             channelPatterns,
             toastEnabled,
+            toastWhenFocused,
             notificationsNodeEnabled,
             soundEnabled,
             soundId,
@@ -5958,6 +6031,7 @@ panel.add(subTabs, "growx, wmin 0");
         m.channelScope = channelScope;
         m.channelPatterns = channelPatterns;
         m.toastEnabled = toastEnabled;
+        m.toastWhenFocused = toastWhenFocused;
         m.notificationsNodeEnabled = notificationsNodeEnabled;
         m.soundEnabled = soundEnabled;
         m.soundId = soundId;
@@ -5980,6 +6054,7 @@ panel.add(subTabs, "growx, wmin 0");
           m.channelScope = IrcEventNotificationRule.ChannelScope.ALL;
           m.channelPatterns = null;
           m.toastEnabled = true;
+          m.toastWhenFocused = false;
           m.notificationsNodeEnabled = true;
           m.soundEnabled = false;
           m.soundId = BuiltInSound.NOTIF_1.name();
@@ -5999,6 +6074,7 @@ panel.add(subTabs, "growx, wmin 0");
         m.channelScope = r.channelScope();
         m.channelPatterns = r.channelPatterns();
         m.toastEnabled = r.toastEnabled();
+        m.toastWhenFocused = r.toastWhenFocused();
         m.notificationsNodeEnabled = r.notificationsNodeEnabled();
         m.soundEnabled = r.soundEnabled();
         m.soundId = BuiltInSound.fromId(r.soundId()).name();

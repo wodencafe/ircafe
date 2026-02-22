@@ -940,6 +940,25 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         } else {
           postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(ctcp)", rendered));
         }
+
+        String fromNick = Objects.toString(ev.from(), "").trim();
+        String channel = Objects.toString(ev.channel(), "").trim();
+        if (channel.isBlank()) channel = null;
+        String command = Objects.toString(ev.command(), "").trim();
+        String argument = Objects.toString(ev.argument(), "").trim();
+        String title = fromNick.isEmpty()
+            ? "CTCP request received"
+            : ("CTCP from " + fromNick + (channel == null ? "" : (" in " + channel)));
+        String body = command.isEmpty() ? "CTCP request" : command;
+        if (!argument.isEmpty()) body = body + " " + argument;
+
+        notifyIrcEvent(
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            sid,
+            channel,
+            fromNick,
+            title,
+            body);
       }
       case IrcEvent.AwayStatusChanged ev -> {
         awayRoutingState.setAway(sid, ev.away());

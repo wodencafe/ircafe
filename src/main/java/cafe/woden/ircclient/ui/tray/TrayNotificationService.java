@@ -195,6 +195,7 @@ public class TrayNotificationService {
       String title,
       String body,
       boolean showToast,
+      boolean allowWhenFocused,
       boolean playSound,
       String soundId,
       boolean soundUseCustom,
@@ -212,7 +213,7 @@ public class TrayNotificationService {
     if (tgt.isEmpty()) tgt = "status";
 
     TargetRef openTarget = safeTargetRef(sid, tgt, "status");
-    if (trayEnabled && !passesNotifyConditions(openTarget)) return;
+    if (trayEnabled && !passesNotifyConditions(openTarget, allowWhenFocused)) return;
 
     String finalTitle = Objects.toString(title, "").trim();
     if (finalTitle.isEmpty()) finalTitle = "IRCafe";
@@ -236,10 +237,14 @@ public class TrayNotificationService {
   }
 
   private boolean passesNotifyConditions(TargetRef target) {
+    return passesNotifyConditions(target, false);
+  }
+
+  private boolean passesNotifyConditions(TargetRef target, boolean allowWhenFocused) {
     UiSettings s = settingsBus.get();
     if (s == null || !s.trayEnabled()) return false;
 
-    if (s.trayNotifyOnlyWhenUnfocused() && isMainWindowFocused()) {
+    if (!allowWhenFocused && s.trayNotifyOnlyWhenUnfocused() && isMainWindowFocused()) {
       return false;
     }
 

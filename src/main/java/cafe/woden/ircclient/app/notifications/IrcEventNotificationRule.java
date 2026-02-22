@@ -19,6 +19,7 @@ public record IrcEventNotificationRule(
     ChannelScope channelScope,
     String channelPatterns,
     boolean toastEnabled,
+    boolean toastWhenFocused,
     boolean notificationsNodeEnabled,
     boolean soundEnabled,
     String soundId,
@@ -48,6 +49,7 @@ public record IrcEventNotificationRule(
     YOU_HALF_OPPED("You Were Half-Opped"),
     YOU_DEHALF_OPPED("You Were De-Half-Opped"),
     PRIVATE_MESSAGE_RECEIVED("Private Message Received"),
+    CTCP_RECEIVED("CTCP Request Received"),
     NOTICE_RECEIVED("Notice Received"),
     WALLOPS_RECEIVED("WALLOPS Received"),
     INVITE_RECEIVED("Invite Received"),
@@ -187,6 +189,7 @@ public record IrcEventNotificationRule(
           ChannelScope.ALL,
           null,
           true,
+          false,
           true,
           false,
           defaultBuiltInSoundForEvent(t).name(),
@@ -220,6 +223,7 @@ public record IrcEventNotificationRule(
       case YOU_VOICED -> BuiltInSound.YOU_VOICE_1;
       case YOU_DEVOICED -> BuiltInSound.YOU_LOST_VOICE_1;
       case PRIVATE_MESSAGE_RECEIVED -> BuiltInSound.PM_RECEIVED_1;
+      case CTCP_RECEIVED -> BuiltInSound.SOMEBODY_SENT_CTCP_1;
       case NOTICE_RECEIVED -> BuiltInSound.NOTICE_RECEIVED_1;
       case WALLOPS_RECEIVED -> BuiltInSound.WALLOPS_1;
       case INVITE_RECEIVED -> BuiltInSound.CHANNEL_INVITE_1;
@@ -258,6 +262,7 @@ public record IrcEventNotificationRule(
            HALF_OPPED,
            DEHALF_OPPED,
            PRIVATE_MESSAGE_RECEIVED,
+           CTCP_RECEIVED,
            NOTICE_RECEIVED,
            WALLOPS_RECEIVED,
            INVITE_RECEIVED,

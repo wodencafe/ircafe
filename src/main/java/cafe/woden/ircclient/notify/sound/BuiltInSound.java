@@ -44,6 +44,7 @@ public enum BuiltInSound {
   WALLOPS_1("Wallops", "sounds/voice/wallops_1.mp3"),
   NETSPLIT_1("Netsplit", "sounds/voice/netsplit_1.mp3"),
   PM_RECEIVED_1("PM Received", "sounds/voice/pm_received_1.mp3"),
+  SOMEBODY_SENT_CTCP_1("Somebody Sent CTCP", "sounds/voice/somebody_sent_ctcp_1.mp3"),
   NOTICE_RECEIVED_1("Notice Received", "sounds/voice/someone_notice_you_1.mp3"),
   USER_JOINED_1("User Joined", "sounds/voice/watched_online_1.mp3"),
   USER_LEFT_1("User Left", "sounds/voice/watched_user_offline_1.mp3"),

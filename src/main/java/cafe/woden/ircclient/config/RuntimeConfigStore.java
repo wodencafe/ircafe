@@ -911,6 +911,7 @@ public class RuntimeConfigStore {
           if (!channelPatterns.isEmpty()) m.put("channelPatterns", channelPatterns);
 
           m.put("toastEnabled", r.toastEnabled());
+          m.put("toastWhenFocused", r.toastWhenFocused());
           m.put("notificationsNodeEnabled", r.notificationsNodeEnabled());
           m.put("soundEnabled", r.soundEnabled());
           m.put("soundId", Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());

@@ -21,6 +21,9 @@ class IrcEventNotificationRuleTest {
         BuiltInSound.CHANNEL_INVITE_1,
         IrcEventNotificationRule.defaultBuiltInSoundForEvent(IrcEventNotificationRule.EventType.INVITE_RECEIVED));
     assertEquals(
+        BuiltInSound.SOMEBODY_SENT_CTCP_1,
+        IrcEventNotificationRule.defaultBuiltInSoundForEvent(IrcEventNotificationRule.EventType.CTCP_RECEIVED));
+    assertEquals(
         BuiltInSound.NETSPLIT_1,
         IrcEventNotificationRule.defaultBuiltInSoundForEvent(IrcEventNotificationRule.EventType.NETSPLIT_DETECTED));
     assertEquals(
@@ -38,6 +41,7 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ONLY,
         "#staff*",
         true,
+        false,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -64,6 +68,7 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
+        false,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -82,6 +87,7 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
+        false,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -100,6 +106,7 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
+        false,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -130,6 +137,7 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL_EXCEPT,
         "#ops*",
         true,
+        false,
         true,
         true,
         BuiltInSound.NOTIF_2.name(),

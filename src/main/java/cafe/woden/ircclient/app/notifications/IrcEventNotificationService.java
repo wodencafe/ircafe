@@ -91,6 +91,7 @@ public class IrcEventNotificationService {
 
     boolean showToast = matched.toastEnabled();
     boolean playSound = matched.soundEnabled();
+    boolean allowWhenFocused = (showToast || playSound) && matched.toastWhenFocused();
     if ((showToast || playSound) && trayNotificationService != null) {
       trayNotificationService.notifyCustom(
           sid,
@@ -98,6 +99,7 @@ public class IrcEventNotificationService {
           t,
           b,
           showToast,
+          allowWhenFocused,
           playSound,
           matched.soundId(),
           matched.soundUseCustom(),

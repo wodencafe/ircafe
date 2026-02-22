@@ -438,6 +438,16 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void showTypingActivity(TargetRef target, String state) {
+    delegate.showTypingActivity(target, state);
+  }
+
+  @Override
+  public void showUsersTypingIndicator(TargetRef target, String nick, String state) {
+    delegate.showUsersTypingIndicator(target, nick, state);
+  }
+
+  @Override
   public void setReadMarker(TargetRef target, long markerEpochMs) {
     delegate.setReadMarker(target, markerEpochMs);
   }
