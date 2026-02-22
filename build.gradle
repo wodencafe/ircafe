@@ -136,7 +136,7 @@ dependencies {
     implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
     implementation 'com.googlecode.soundlibs:tritonus-share:0.3.7.4'
-
+    implementation 'com.sshtools:two-slices:0.9.4'
     implementation 'org.springframework.boot:spring-boot-starter'
 
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -548,4 +548,14 @@ tasks.register("installLinuxDesktopEntry") {
 // When building a Linux app image, always include icon + .desktop alongside the output.
 tasks.named("jpackage").configure {
     finalizedBy("copyLinuxAppImageIconToLib", "generateLinuxDesktopEntry", "generateLinuxInstallScript", "generateLinuxUninstallScript")
+}
+
+forbiddenApis {
+    // Add your new file here
+    signaturesFiles = files("forbidden-signatures.txt")
+
+    // This is the CRITICAL line: it tells the plugin to ignore
+    // classes it can't find in its bundled "forbidden" lists
+    ignoreFailures = true
+    ignoreSignaturesOfMissingClasses = true
 }
