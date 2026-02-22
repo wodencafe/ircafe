@@ -49,10 +49,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
 import javax.swing.JDialog;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTree;
+import javax.swing.SwingConstants;
 import javax.swing.ToolTipManager;
 import javax.swing.JOptionPane;
 import javax.swing.UIManager;
@@ -73,6 +76,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.HierarchyEvent;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -90,7 +94,7 @@ import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 
 @org.springframework.stereotype.Component
 @Lazy
-public class ServerTreeDockable extends JPanel implements Dockable {
+public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
 
   // UI label for the per-server "status" transcript target.
@@ -108,7 +112,7 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final int TYPING_ACTIVITY_HOLD_MS = 8000;
   private static final int TYPING_ACTIVITY_FADE_MS = 900;
   private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
-  private static final int TYPING_ACTIVITY_TICK_MS = 50;
+  private static final int TYPING_ACTIVITY_TICK_MS = 100;
   private static final Color TYPING_ACTIVITY_DOT = new Color(65, 210, 108);
   private static final Color TYPING_ACTIVITY_GLOW = new Color(120, 255, 150);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
@@ -186,6 +190,7 @@ private static final class InsertionLine {
       return ServerTreeDockable.this.toolTipForEvent(event);
     }
   };
+  private final JScrollPane treeScroll = new JScrollPane(tree);
 
   private final ServerTreeCellRenderer treeCellRenderer = new ServerTreeCellRenderer();
 
@@ -205,6 +210,7 @@ private static final class InsertionLine {
   private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
   private final Map<String, ServerRuntimeMetadata> serverRuntimeMetadata = new HashMap<>();
   private final Timer typingActivityTimer;
+  private final Set<DefaultMutableTreeNode> typingActivityNodes = new HashSet<>();
 
   private static final DateTimeFormatter SERVER_META_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
@@ -297,6 +303,15 @@ private static final class InsertionLine {
     tree.setCellRenderer(treeCellRenderer);
     this.typingActivityTimer = new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
     this.typingActivityTimer.setRepeats(true);
+    tree.addHierarchyListener(e -> {
+      if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
+      if (tree.isShowing()) {
+        startTypingActivityTimerIfNeeded();
+        tree.repaint();
+        return;
+      }
+      typingActivityTimer.stop();
+    });
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
     this.nodeActions = new TreeNodeActions<>(
@@ -312,11 +327,11 @@ private static final class InsertionLine {
     );
     installTreeKeyBindings();
 
-    JScrollPane scroll = new JScrollPane(tree);
-    scroll.setPreferredSize(new Dimension(260, 400));
-    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-    treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
-    add(scroll, BorderLayout.CENTER);
+    treeScroll.setPreferredSize(new Dimension(260, 400));
+    treeScroll.setMinimumSize(new Dimension(0, 0));
+    enforceTreeScrollPanePolicies();
+    treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, treeScroll);
+    add(treeScroll, BorderLayout.CENTER);
     if (serverCatalog != null) {
       syncServers(serverCatalog.entries());
 
@@ -617,6 +632,20 @@ private static final class InsertionLine {
         tree.setSelectionPath(new TreePath(root.getPath()));
       }
     });
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    SwingUtilities.invokeLater(this::enforceTreeScrollPanePolicies);
+  }
+
+  private void enforceTreeScrollPanePolicies() {
+    treeScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    treeScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+    if (treeScroll.getVerticalScrollBar() != null) {
+      treeScroll.getVerticalScrollBar().setUnitIncrement(16);
+    }
   }
 
   private ConnectionState connectionStateForServer(String serverId) {
@@ -1302,6 +1331,36 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return "Servers";
   }
 
+  // If the docking framework wraps this Dockable in an outer JScrollPane, keep that wrapper
+  // passive and let our inner tree scrollpane own scrolling behavior.
+  @Override
+  public Dimension getPreferredScrollableViewportSize() {
+    return getPreferredSize();
+  }
+
+  @Override
+  public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+    return orientation == SwingConstants.VERTICAL ? 16 : 16;
+  }
+
+  @Override
+  public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+    if (visibleRect == null) return 64;
+    return orientation == SwingConstants.VERTICAL
+        ? Math.max(32, visibleRect.height - 24)
+        : Math.max(32, visibleRect.width - 24);
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportWidth() {
+    return true;
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportHeight() {
+    return true;
+  }
+
   public Flowable<TargetRef> selectionStream() {
     return selections.onBackpressureLatest();
   }
@@ -1970,6 +2029,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       DefaultMutableTreeNode parent = (DefaultMutableTreeNode) existing.getParent();
       int idx = parent == null ? -1 : parent.getIndex(existing);
       leaves.remove(ref);
+      typingActivityNodes.remove(existing);
       if (parent != null) {
         Object[] removed = new Object[] { existing };
         if (idx < 0) {
@@ -2119,6 +2179,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     boolean removedAny = false;
     for (DefaultMutableTreeNode node : nodesToRemove) {
       if (node == null) continue;
+      typingActivityNodes.remove(node);
       DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
       if (parent == null) continue;
       int idx = parent.getIndex(node);
@@ -2187,32 +2248,70 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (changed) {
       repaintTreeNode(node);
     }
-    if (nd.hasTypingActivity() && !typingActivityTimer.isRunning()) {
-      typingActivityTimer.start();
+    if (nd.hasTypingActivity()) {
+      typingActivityNodes.add(node);
+      startTypingActivityTimerIfNeeded();
+      return;
+    }
+    typingActivityNodes.remove(node);
+    if (typingActivityNodes.isEmpty()) {
+      typingActivityTimer.stop();
     }
   }
 
   private void onTypingActivityAnimationTick() {
-    long now = System.currentTimeMillis();
-    boolean visible = false;
-
-    for (DefaultMutableTreeNode node : leaves.values()) {
-      if (node == null) continue;
-      Object uo = node.getUserObject();
-      if (!(uo instanceof NodeData nd)) continue;
-      if (!nd.hasTypingActivity()) continue;
-      nd.clearTypingActivityIfExpired(now, TYPING_ACTIVITY_FADE_MS);
-      if (nd.typingDotAlpha(now, TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS) > 0.01f) {
-        visible = true;
-      }
-    }
-
-    if (visible) {
-      tree.repaint();
+    if (!isShowing() || !tree.isShowing()) {
+      typingActivityTimer.stop();
       return;
     }
-    typingActivityTimer.stop();
-    tree.repaint();
+
+    long now = System.currentTimeMillis();
+    java.util.ArrayList<DefaultMutableTreeNode> repaintNodes = new java.util.ArrayList<>();
+
+    java.util.Iterator<DefaultMutableTreeNode> it = typingActivityNodes.iterator();
+    while (it.hasNext()) {
+      DefaultMutableTreeNode node = it.next();
+      if (node == null) {
+        it.remove();
+        continue;
+      }
+      if (node.getParent() == null) {
+        it.remove();
+        continue;
+      }
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData nd)) {
+        it.remove();
+        continue;
+      }
+      if (!nd.hasTypingActivity()) {
+        it.remove();
+        continue;
+      }
+
+      boolean hadTyping = nd.hasTypingActivity();
+      nd.clearTypingActivityIfExpired(now, TYPING_ACTIVITY_FADE_MS);
+      if (!nd.hasTypingActivity()) {
+        it.remove();
+      }
+      if (hadTyping) repaintNodes.add(node);
+    }
+
+    if (typingActivityNodes.isEmpty()) {
+      typingActivityTimer.stop();
+    }
+
+    for (DefaultMutableTreeNode node : repaintNodes) {
+      repaintTreeNode(node);
+    }
+  }
+
+  private void startTypingActivityTimerIfNeeded() {
+    if (typingActivityNodes.isEmpty()) return;
+    if (!isShowing() || !tree.isShowing()) return;
+    if (!typingActivityTimer.isRunning()) {
+      typingActivityTimer.start();
+    }
   }
 
   private void repaintTreeNode(DefaultMutableTreeNode node) {
@@ -2595,6 +2694,12 @@ private void removeServerRoot(String serverId) {
   serverRuntimeMetadata.remove(serverId);
   clearPrivateMessageOnlineStates(serverId);
   leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
+  typingActivityNodes.removeIf(node -> {
+    if (node == null || node.getParent() == null) return true;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd) || nd.ref == null) return false;
+    return Objects.equals(nd.ref.serverId(), serverId);
+  });
 
   DefaultMutableTreeNode parent = (DefaultMutableTreeNode) sn.serverNode.getParent();
   if (parent != null) {

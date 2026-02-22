@@ -270,6 +270,59 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     }
   }
 
+  @Override
+  public void processServerResponse(int code, String line, List<String> parsedLine) {
+    if (code != 324) {
+      super.processServerResponse(code, line, parsedLine);
+      return;
+    }
+
+    try {
+      super.processServerResponse(code, line, parsedLine);
+    } catch (NumberFormatException ex) {
+      PircbotxChannelModeParsers.ParsedRpl324 parsed = parseRpl324Fallback(line, parsedLine);
+      if (parsed != null) {
+        log.warn(
+            "[{}] recovered from PircBotX RPL 324 parse failure: channel={} details={} line={}",
+            serverId,
+            parsed.channel(),
+            parsed.details(),
+            Objects.toString(line, ""));
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+      } else {
+        log.warn(
+            "[{}] recovered from PircBotX RPL 324 parse failure but could not parse mode line: line={} parsed={}",
+            serverId,
+            Objects.toString(line, ""),
+            parsedLine,
+            ex);
+      }
+    }
+  }
+
+  private static PircbotxChannelModeParsers.ParsedRpl324 parseRpl324Fallback(
+      String line,
+      List<String> parsedLine
+  ) {
+    PircbotxChannelModeParsers.ParsedRpl324 fromLine = PircbotxChannelModeParsers.parseRpl324(line);
+    if (fromLine != null) return fromLine;
+
+    if (parsedLine == null || parsedLine.size() < 3) return null;
+    String channel = stripLeadingColon(parsedLine.get(1));
+    if (channel.isBlank()) return null;
+
+    StringBuilder details = new StringBuilder();
+    for (int i = 2; i < parsedLine.size(); i++) {
+      String token = stripLeadingColon(parsedLine.get(i));
+      if (token.isBlank()) continue;
+      if (details.length() > 0) details.append(' ');
+      details.append(token);
+    }
+    if (details.length() == 0) return null;
+    return new PircbotxChannelModeParsers.ParsedRpl324(channel, details.toString());
+  }
+
   private void applyCapStateFromCapLine(String sub, String capList) {
     if (sub == null) return;
     String action = sub.trim().toUpperCase(Locale.ROOT);

@@ -30,16 +30,30 @@ public final class OutgoingSendIndicator {
     private static final int DEFAULT_SIZE = 12;
     private static final int INSET_L = 4;
     private static final int INSET_R = 2;
+    private static final long MAX_ANIMATION_MS = 45_000L;
 
     private final Color color;
     private final Timer timer;
     private float angleDeg = 0f;
+    private long startedAtMs = 0L;
+    private boolean frozen = false;
 
     public PendingSpinner(Color color) {
       this.color = color;
       setOpaque(false);
       // ~30 FPS is plenty for a tiny inline spinner.
-      this.timer = new Timer(33, e -> {
+      this.timer = new Timer(33, null);
+      this.timer.addActionListener(e -> {
+        if (frozen) return;
+        if (startedAtMs > 0L && (System.currentTimeMillis() - startedAtMs) >= MAX_ANIMATION_MS) {
+          frozen = true;
+          try {
+            timer.stop();
+          } catch (Exception ignored) {
+          }
+          repaint();
+          return;
+        }
         angleDeg += 18f;
         if (angleDeg >= 360f) angleDeg -= 360f;
         repaint();
@@ -99,7 +113,11 @@ public final class OutgoingSendIndicator {
     @Override
     public void addNotify() {
       super.addNotify();
-      if (!timer.isRunning()) timer.start();
+      if (!timer.isRunning()) {
+        frozen = false;
+        startedAtMs = System.currentTimeMillis();
+        timer.start();
+      }
     }
 
     @Override
@@ -108,6 +126,7 @@ public final class OutgoingSendIndicator {
         timer.stop();
       } catch (Exception ignored) {
       }
+      startedAtMs = 0L;
       super.removeNotify();
     }
 

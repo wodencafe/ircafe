@@ -28,6 +28,7 @@ import org.springframework.stereotype.Component;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private static final int TYPING_HOLD_MS = 8000;
   private static final int TYPING_FADE_OUT_MS = 900;
   private static final int TYPING_PULSE_MS = 1200;
-  private static final int TYPING_TICK_MS = 50;
+  private static final int TYPING_TICK_MS = 100;
 
   private static Icon accountIcon(AccountState state) {
     AccountState s = state != null ? state : AccountState.UNKNOWN;
@@ -194,6 +195,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private TargetRef active = new TargetRef("default", "status");
   private final Map<String, TypingIndicatorState> typingByNick = new HashMap<>();
   private final Set<String> nickKeys = new HashSet<>();
+  private final Map<String, Integer> nickIndexByKey = new HashMap<>();
   private final Timer typingIndicatorTimer = new Timer(TYPING_TICK_MS, e -> onTypingIndicatorTick());
 
   public UserListDockable(
@@ -258,6 +260,15 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     list.setToolTipText("");
     list.setCellRenderer(new NickCellRenderer());
     typingIndicatorTimer.setRepeats(true);
+    list.addHierarchyListener(e -> {
+      if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
+      if (list.isShowing()) {
+        startTypingIndicatorTimerIfNeeded();
+        list.repaint();
+        return;
+      }
+      typingIndicatorTimer.stop();
+    });
     typingIndicatorTimer.setCoalesce(true);
     scroll = new JScrollPane(
         list,
@@ -349,6 +360,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
   public void setNicks(List<NickInfo> nicks) {
     nickKeys.clear();
+    nickIndexByKey.clear();
     model.clear();
     if (nicks == null || nicks.isEmpty()) {
       clearTypingIndicators();
@@ -356,10 +368,12 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     }
     // Bulk add to avoid firing an interval-added event per nick (big channels can be thousands).
     model.addAll(nicks);
-    for (NickInfo ni : nicks) {
+    for (int i = 0; i < nicks.size(); i++) {
+      NickInfo ni = nicks.get(i);
       String key = foldNick(ni == null ? "" : ni.nick());
       if (key != null) {
         nickKeys.add(key);
+        nickIndexByKey.putIfAbsent(key, i);
       }
     }
     pruneTypingIndicatorsToKnownNicks();
@@ -367,6 +381,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
   public void setPlaceholder(String... nicks) {
     nickKeys.clear();
+    nickIndexByKey.clear();
     model.clear();
     if (nicks == null) return;
     for (String n : nicks) {
@@ -376,6 +391,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       String key = foldNick(nick);
       if (key != null) {
         nickKeys.add(key);
+        nickIndexByKey.putIfAbsent(key, model.size() - 1);
       }
     }
     pruneTypingIndicatorsToKnownNicks();
@@ -394,12 +410,12 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       typingByNick.remove(key);
     }
 
-    if (!typingByNick.isEmpty() && !typingIndicatorTimer.isRunning()) {
-      typingIndicatorTimer.start();
-    } else if (typingByNick.isEmpty()) {
+    if (!typingByNick.isEmpty()) {
+      startTypingIndicatorTimerIfNeeded();
+    } else {
       typingIndicatorTimer.stop();
     }
-    list.repaint();
+    repaintTypingRows();
   }
 
   public TargetRef getChannel() {
@@ -427,6 +443,11 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void onTypingIndicatorTick() {
+    if (!isShowing() || !list.isShowing()) {
+      typingIndicatorTimer.stop();
+      return;
+    }
+
     long now = System.currentTimeMillis();
     boolean visible = false;
     boolean changed = false;
@@ -453,9 +474,11 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
     if (typingByNick.isEmpty()) {
       typingIndicatorTimer.stop();
+      if (changed) list.repaint();
+      return;
     }
     if (visible || changed) {
-      list.repaint();
+      repaintTypingRows();
     }
   }
 
@@ -476,6 +499,40 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       typingIndicatorTimer.stop();
     }
     if (changed) {
+      if (typingByNick.isEmpty()) {
+        list.repaint();
+      } else {
+        repaintTypingRows();
+      }
+    }
+  }
+
+  private void startTypingIndicatorTimerIfNeeded() {
+    if (typingByNick.isEmpty()) return;
+    if (!isShowing() || !list.isShowing()) return;
+    if (!typingIndicatorTimer.isRunning()) {
+      typingIndicatorTimer.start();
+    }
+  }
+
+  private void repaintTypingRows() {
+    if (typingByNick.isEmpty()) {
+      list.repaint();
+      return;
+    }
+
+    boolean repaintedAny = false;
+    for (String key : typingByNick.keySet()) {
+      Integer idx = nickIndexByKey.get(key);
+      if (idx == null) continue;
+      if (idx < 0 || idx >= model.size()) continue;
+      Rectangle row = list.getCellBounds(idx, idx);
+      if (row == null) continue;
+      list.repaint(row);
+      repaintedAny = true;
+    }
+
+    if (!repaintedAny) {
       list.repaint();
     }
   }

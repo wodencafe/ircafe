@@ -53,6 +53,8 @@ public class IrcMediator {
   private static final Logger log = LoggerFactory.getLogger(IrcMediator.class);
   private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);
   private static final Duration LABELED_RESPONSE_TIMEOUT = Duration.ofSeconds(30);
+  private static final Duration PENDING_ECHO_TIMEOUT = Duration.ofSeconds(45);
+  private static final int PENDING_ECHO_TIMEOUT_BATCH_MAX = 64;
   private static final long NETSPLIT_NOTIFY_DEBOUNCE_MS = 20_000L;
   private static final int NETSPLIT_NOTIFY_MAX_KEYS = 512;
 
@@ -208,7 +210,10 @@ public class IrcMediator {
         Flowable.interval(5, TimeUnit.SECONDS)
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
             .subscribe(
-                tick -> handleLabeledRequestTimeouts(),
+                tick -> {
+                  handleLabeledRequestTimeouts();
+                  handlePendingEchoTimeouts();
+                },
                 err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(label-timeout)", String.valueOf(err))));
   }
 
@@ -2107,6 +2112,25 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           timeout.request().requestPreview(),
           LabeledResponseRoutingState.Outcome.TIMEOUT,
           "no reply within " + LABELED_RESPONSE_TIMEOUT.toSeconds() + "s");
+    }
+  }
+
+  private void handlePendingEchoTimeouts() {
+    Instant now = Instant.now();
+    List<PendingEchoMessageState.PendingOutboundChat> timedOut =
+        pendingEchoMessageState.collectTimedOut(PENDING_ECHO_TIMEOUT, PENDING_ECHO_TIMEOUT_BATCH_MAX, now);
+    if (timedOut == null || timedOut.isEmpty()) return;
+
+    String reason = "Timed out waiting for server echo after " + PENDING_ECHO_TIMEOUT.toSeconds() + "s";
+    for (PendingEchoMessageState.PendingOutboundChat pending : timedOut) {
+      if (pending == null || pending.target() == null) continue;
+      ui.failPendingOutgoingChat(
+          pending.target(),
+          pending.pendingId(),
+          now,
+          pending.fromNick(),
+          pending.text(),
+          reason);
     }
   }
 

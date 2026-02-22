@@ -1419,6 +1419,16 @@ public class PreferencesDialog {
     return l;
   }
 
+  private static JPanel captionPanel(String title, String layout, String columns, String rows) {
+    JPanel panel = new JPanel(new MigLayout(layout, columns, rows));
+    panel.setOpaque(false);
+    panel.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(title),
+            BorderFactory.createEmptyBorder(6, 8, 8, 8)));
+    return panel;
+  }
+
   private static JTextArea helpText(String text) {
     JTextArea t = new JTextArea(text);
     t.setEditable(false);
@@ -2362,54 +2372,88 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
 JPanel trayTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
 trayTab.setOpaque(false);
-trayTab.add(enabled, "growx");
-trayTab.add(closeToTray, "growx");
-trayTab.add(minimizeToTray, "growx");
-trayTab.add(startMinimized, "growx, wrap");
-trayTab.add(helpText("Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."), "growx");
+JPanel trayBehavior = captionPanel("Tray behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+trayBehavior.add(enabled, "growx");
+trayBehavior.add(closeToTray, "growx");
+trayBehavior.add(minimizeToTray, "growx");
+trayBehavior.add(startMinimized, "growx, wrap");
+trayTab.add(trayBehavior, "growx, wmin 0, wrap");
+trayTab.add(
+    helpText(
+        "Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."),
+    "growx");
 
 JPanel notificationsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
 notificationsTab.setOpaque(false);
-notificationsTab.add(notifyHighlights, "growx");
-notificationsTab.add(notifyPrivateMessages, "growx");
-notificationsTab.add(notifyConnectionState, "growx");
-notificationsTab.add(new JSeparator(), "growx, gaptop 8");
-notificationsTab.add(notifyOnlyWhenUnfocused, "growx");
-notificationsTab.add(notifyOnlyWhenMinimizedOrHidden, "growx");
-notificationsTab.add(notifySuppressWhenTargetActive, "growx, wrap");
-notificationsTab.add(testNotification, "w 180!");
-notificationsTab.add(helpText("Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."), "growx");
+JPanel notificationEvents = captionPanel("Notification events", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+notificationEvents.add(notifyHighlights, "growx");
+notificationEvents.add(notifyPrivateMessages, "growx");
+notificationEvents.add(notifyConnectionState, "growx");
+notificationsTab.add(notificationEvents, "growx, wmin 0, wrap");
+JPanel notificationVisibility = captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
+notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
+notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
+notificationVisibility.add(new JSeparator(), "growx, gaptop 4");
+notificationVisibility.add(testNotification, "w 180!");
+notificationsTab.add(notificationVisibility, "growx, wmin 0, wrap");
+notificationsTab.add(
+    helpText(
+        "Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."),
+    "growx");
 
 JPanel soundsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
 soundsTab.setOpaque(false);
-soundsTab.add(notificationSoundsEnabled, "growx");
-soundsTab.add(notificationSoundUseCustom, "growx, wrap");
-soundsTab.add(new JLabel("Custom file:"), "split 4");
-soundsTab.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
-soundsTab.add(browseCustomSound, "w 110!");
-soundsTab.add(clearCustomSound, "w 80!, wrap");
-soundsTab.add(new JLabel("Built-in:"), "split 3");
-soundsTab.add(notificationSound, "w 240!");
-soundsTab.add(testSound, "w 120!, wrap");
+JPanel soundsBehavior = captionPanel("Sound behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+soundsBehavior.add(notificationSoundsEnabled, "growx");
+soundsBehavior.add(notificationSoundUseCustom, "growx, wrap");
+soundsTab.add(soundsBehavior, "growx, wmin 0, wrap");
+JPanel customSound = captionPanel(
+    "Custom sound file",
+    "insets 0, fillx, wrap 4",
+    "[right]8[grow,fill]8[]8[]",
+    "[]");
+customSound.add(new JLabel("File:"));
+customSound.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
+customSound.add(browseCustomSound, "w 110!");
+customSound.add(clearCustomSound, "w 80!, wrap");
+soundsTab.add(customSound, "growx, wmin 0, wrap");
+JPanel builtInSound = captionPanel("Built-in sound", "insets 0, fillx, wrap 3", "[right]8[grow,fill]8[]", "[]");
+builtInSound.add(new JLabel("Preset:"));
+builtInSound.add(notificationSound, "w 240!");
+builtInSound.add(testSound, "w 120!, wrap");
+soundsTab.add(builtInSound, "growx, wmin 0, wrap");
 
 Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
 Path base = cfg != null ? cfg.getParent() : null;
 if (base != null) {
-  soundsTab.add(helpText("Custom sounds are copied to: " + base.resolve("sounds") + "\n" +
-      "Tip: Use small files (short MP3/WAV) for snappy notifications."), "growx");
+  soundsTab.add(
+      helpText(
+          "Custom sounds are copied to: "
+              + base.resolve("sounds")
+              + "\nTip: Use small files (short MP3/WAV) for snappy notifications."),
+      "growx");
 }
 
 JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
 linuxTab.setOpaque(false);
-linuxTab.add(linuxDbusActions, "growx, wrap");
+JPanel linuxGroup = captionPanel("Linux integration", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+linuxGroup.add(linuxDbusActions, "growx, wrap");
 if (!linux) {
-  linuxTab.add(helpText("Linux only."), "growx");
+  linuxGroup.add(helpText("Linux only."), "growx");
 } else if (!linuxActionsSupported) {
-  linuxTab.add(helpText("Linux notification actions were not detected for this session.\n" +
-      "IRCafe will fall back to notify-send."), "growx");
+  linuxGroup.add(
+      helpText(
+          "Linux notification actions were not detected for this session.\n"
+              + "IRCafe will fall back to notify-send."),
+      "growx");
 } else {
-  linuxTab.add(helpText("Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."), "growx");
+  linuxGroup.add(
+      helpText(
+          "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."),
+      "growx");
 }
+linuxTab.add(linuxGroup, "growx, wmin 0");
 
 JTabbedPane subTabs = new JTabbedPane();
 subTabs.addTab("Tray", padSubTab(trayTab));
@@ -3658,9 +3702,14 @@ panel.add(subTabs, "growx, wmin 0");
   }
 
   private JPanel buildTrayNotificationsPanel(TrayControls trayControls) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]"));
+    JPanel form = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[]6[grow,fill]"));
     form.add(tabTitle("Tray & Notifications"), "growx, wrap");
-    form.add(trayControls.panel, "growx");
+    form.add(sectionTitle("Categories"), "growx, wmin 0, wrap");
+    form.add(
+        helpText(
+            "Use the sub-tabs below to configure tray behavior, desktop notifications, notification sounds, and Linux integration."),
+        "growx, wmin 0, wrap");
+    form.add(trayControls.panel, "grow, push, wmin 0");
     return form;
   }
 
@@ -4486,14 +4535,17 @@ panel.add(subTabs, "growx, wmin 0");
   }
 
   private JPanel buildIrcEventNotificationsTab(IrcEventNotificationControls controls) {
-    JPanel tab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]"));
+    JPanel tab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]8[]8[]8[]8[]"));
     tab.setOpaque(false);
 
-    tab.add(helpText(
+    JPanel overviewPanel = captionPanel("Overview", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    overviewPanel.add(
+        helpText(
             "Configure event actions for kicks, bans, invites, joins, and mode changes.\n"
                 + "Source supports self/others/specific nicks/glob/regex. Channel patterns use globs (* and ?), separated by commas or spaces.\n"
                 + "Foreground allows this rule to notify (toast and/or sound) while IRCafe is focused."),
         "growx, wmin 0, wrap");
+    tab.add(overviewPanel, "growx, wmin 0, wrap");
 
     JComboBox<IrcEventNotificationPreset> defaultsPreset = new JComboBox<>(IrcEventNotificationPreset.values());
     JButton applyDefaults = new JButton("Apply defaults");
@@ -4667,9 +4719,11 @@ panel.add(subTabs, "growx, wmin 0");
     scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-    JPanel soundPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 4", "[right]8[grow,fill]8[]8[]", "[]6[]6[]4[]"));
-    soundPanel.setOpaque(false);
-    soundPanel.add(sectionTitle("Selected rule sound"), "span 4, growx, wmin 0, wrap");
+    JPanel soundPanel = captionPanel(
+        "Selected rule sound",
+        "insets 0, fillx, wrap 4",
+        "[right]8[grow,fill]8[]8[]",
+        "[]6[]6[]4[]");
     soundPanel.add(new JLabel("Built-in"));
     soundPanel.add(controls.sound, "growx, wmin 160");
     soundPanel.add(controls.testSound, "w 110!");
@@ -4682,9 +4736,11 @@ panel.add(subTabs, "growx, wmin 0");
     soundPanel.add(helpText("When Sound is disabled on a rule, no sound is played for that event."),
         "span 4, growx, wmin 0, wrap");
 
-    JPanel scriptPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 4", "[right]8[grow,fill]8[]8[]", "[]6[]4[]"));
-    scriptPanel.setOpaque(false);
-    scriptPanel.add(sectionTitle("Selected rule script"), "span 4, growx, wmin 0, wrap");
+    JPanel scriptPanel = captionPanel(
+        "Selected rule script",
+        "insets 0, fillx, wrap 4",
+        "[right]8[grow,fill]8[]8[]",
+        "[]6[]4[]");
     scriptPanel.add(new JLabel("Action"));
     scriptPanel.add(controls.runScript, "span 3, growx, wrap");
     scriptPanel.add(new JLabel("Script path"));
@@ -4704,11 +4760,18 @@ panel.add(subTabs, "growx, wmin 0");
                 + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
         "span 4, growx, wmin 0, wrap");
 
-    tab.add(defaultsRow, "growx, wmin 0, wrap");
-    tab.add(helpText("Apply defaults merges by event type. Reset to IRCafe defaults replaces the full rule list."),
+    JPanel presetsPanel = captionPanel("Presets", "insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]");
+    presetsPanel.add(defaultsRow, "growx, wmin 0, wrap");
+    presetsPanel.add(
+        helpText("Apply defaults merges by event type. Reset to IRCafe defaults replaces the full rule list."),
         "growx, wmin 0, wrap");
-    tab.add(buttons, "growx, wrap");
-    tab.add(scroll, "grow, push, h 260!, wrap");
+    tab.add(presetsPanel, "growx, wmin 0, wrap");
+
+    JPanel rulesPanel = captionPanel("Rules", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]");
+    rulesPanel.add(buttons, "growx, wmin 0, wrap");
+    rulesPanel.add(scroll, "grow, push, h 260!, wmin 0, wrap");
+    tab.add(rulesPanel, "grow, push, wmin 0, wrap");
+
     tab.add(soundPanel, "growx, wmin 0, wrap");
     tab.add(scriptPanel, "growx, wmin 0, wrap");
 
@@ -4995,28 +5058,43 @@ panel.add(subTabs, "growx, wmin 0");
       notifications.testStatus.setText(" ");
     });
 
-    JPanel rulesTab = new JPanel(new MigLayout("insets 0, fill, wrap 2", "[right]10[grow,fill]", "[]6[]4[grow,fill]4[]4[]"));
+    JPanel rulesTab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]8[]"));
     rulesTab.setOpaque(false);
-    rulesTab.add(new JLabel("Cooldown (sec)"));
-    rulesTab.add(notifications.cooldownSeconds, "w 110!, wrap");
-    rulesTab.add(new JLabel("Rules"));
-    rulesTab.add(buttons, "growx, wrap");
-    rulesTab.add(scroll, "span 2, grow, push, h 260!, wrap");
-    rulesTab.add(notifications.validationLabel, "span 2, growx, wmin 0, wrap");
-    rulesTab.add(helpText("Tip: Double-click a rule's Color cell to quickly choose a color."),
-        "span 2, growx, wmin 0, wrap");
+    JPanel rulesBehaviorPanel = captionPanel("Rule behavior", "insets 0, fillx, wrap 2", "[right]10[grow,fill]", "[]");
+    rulesBehaviorPanel.add(new JLabel("Cooldown (sec)"));
+    rulesBehaviorPanel.add(notifications.cooldownSeconds, "w 110!, wrap");
+    rulesTab.add(rulesBehaviorPanel, "growx, wmin 0, wrap");
+    JPanel rulesTablePanel = captionPanel(
+        "Rule list",
+        "insets 0, fill, wrap 1",
+        "[grow,fill]",
+        "[]6[grow,fill]4[]4[]");
+    rulesTablePanel.add(buttons, "growx, wmin 0, wrap");
+    rulesTablePanel.add(scroll, "grow, push, h 260!, wmin 0, wrap");
+    rulesTablePanel.add(notifications.validationLabel, "growx, wmin 0, wrap");
+    rulesTablePanel.add(
+        helpText("Tip: Double-click a rule's Color cell to quickly choose a color."),
+        "growx, wmin 0, wrap");
+    rulesTab.add(rulesTablePanel, "grow, push, wmin 0");
 
-    JPanel testTab = new JPanel(new MigLayout("insets 0, fill, wrap 2", "[right]10[grow,fill]", "[]6[]4[]4[]"));
+    JPanel testTab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]"));
     testTab.setOpaque(false);
-    testTab.add(helpText(
+    JPanel testRunnerPanel = captionPanel(
+        "Message test",
+        "insets 0, fill, wrap 2",
+        "[right]10[grow,fill]",
+        "[]6[]4[]4[]");
+    testRunnerPanel.add(
+        helpText(
             "Paste a sample message to see which rules match. This is just a preview; it won't create real notifications."),
         "span 2, growx, wmin 0, wrap");
-    testTab.add(new JLabel("Sample"), "aligny top");
-    testTab.add(testInScroll, "growx, h 100!, wrap");
-    testTab.add(new JLabel("Matches"), "aligny top");
-    testTab.add(testOutScroll, "growx, h 160!, wrap");
-    testTab.add(new JLabel(""));
-    testTab.add(testButtons, "growx, wrap");
+    testRunnerPanel.add(new JLabel("Sample"), "aligny top");
+    testRunnerPanel.add(testInScroll, "growx, h 100!, wrap");
+    testRunnerPanel.add(new JLabel("Matches"), "aligny top");
+    testRunnerPanel.add(testOutScroll, "growx, h 160!, wrap");
+    testRunnerPanel.add(new JLabel(""));
+    testRunnerPanel.add(testButtons, "growx, wrap");
+    testTab.add(testRunnerPanel, "grow, push, wmin 0");
 
     JTabbedPane subTabs = new JTabbedPane();
     Icon rulesTabIcon = SvgIcons.action("edit", 14);
@@ -5359,7 +5437,7 @@ panel.add(subTabs, "growx, wmin 0");
             new MigLayout(
                 "insets 12, fill, wrap 1",
                 "[grow,fill]",
-                "[]8[]6[]6[grow,fill]8[]4[]"));
+                "[]8[]6[]8[grow,fill]8[]"));
 
     panel.add(tabTitle("Commands"), "growx, wmin 0, wrap");
     panel.add(sectionTitle("User command aliases"), "growx, wmin 0, wrap");
@@ -5370,7 +5448,10 @@ panel.add(subTabs, "growx, wmin 0");
                 + "HexChat import maps %t (time), %m and %v into IRCafe-compatible placeholders.\n"
                 + "Multi-command expansion: separate commands with ';' or new lines."),
         "growx, wmin 0, wrap");
-    panel.add(controls.unknownCommandAsRaw, "growx, wmin 0, wrap");
+
+    JPanel behavior = captionPanel("Behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    behavior.add(controls.unknownCommandAsRaw, "growx, wmin 0, wrap");
+    panel.add(behavior, "growx, wmin 0, wrap");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(controls.add);
@@ -5388,12 +5469,23 @@ panel.add(subTabs, "growx, wmin 0");
     templateScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     templateScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-    panel.add(new JLabel("Aliases"), "growx, wrap");
-    panel.add(buttons, "growx, wrap");
-    panel.add(tableScroll, "grow, push, h 220!, wrap");
-    panel.add(controls.hint, "growx, wmin 0, wrap");
-    panel.add(new JLabel("Expansion for selected alias"), "growx, wrap");
-    panel.add(templateScroll, "growx, h 140!, wrap");
+    JPanel aliasList = captionPanel(
+        "Alias list",
+        "insets 0, fill, wrap 1",
+        "[grow,fill]",
+        "[]6[grow,fill]");
+    aliasList.add(buttons, "growx, wmin 0, wrap");
+    aliasList.add(tableScroll, "grow, push, h 220!, wmin 0");
+    panel.add(aliasList, "grow, push, wmin 0, wrap");
+
+    JPanel editor = captionPanel(
+        "Expansion editor",
+        "insets 0, fillx, wrap 1",
+        "[grow,fill]",
+        "[]6[]");
+    editor.add(controls.hint, "growx, wmin 0, wrap");
+    editor.add(templateScroll, "growx, h 140!, wmin 0, wrap");
+    panel.add(editor, "growx, wmin 0, wrap");
 
     return panel;
   }
@@ -8601,10 +8693,13 @@ panel.add(subTabs, "growx, wmin 0");
   }
 
   private JPanel buildFiltersPanel(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", "[][grow]"));
+    JPanel panel = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]6[grow,fill]"));
 
     panel.add(tabTitle("Filters"), "growx, wrap");
-    panel.add(new JLabel("Filters only affect transcript rendering; messages are still logged."), "growx, wrap 12");
+    panel.add(sectionTitle("Configuration"), "growx, wmin 0, wrap");
+    panel.add(
+        helpText("Filters only affect transcript rendering; messages are still logged."),
+        "growx, wmin 0, wrap");
 
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("General", buildFiltersGeneralTab(c));
@@ -8613,86 +8708,114 @@ panel.add(subTabs, "growx, wmin 0");
     tabs.addTab("Overrides", buildFiltersOverridesTab(c));
     tabs.addTab("Rules", buildFiltersRulesTab(c));
 
-    panel.add(tabs, "grow");
+    panel.add(tabs, "grow, push, wmin 0");
     return panel;
   }
 
   private JPanel buildFiltersGeneralTab(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", ""));
+    panel.setOpaque(false);
 
-    panel.add(c.filtersEnabledByDefault, "growx, wrap 8");
-    panel.add(new JLabel("When disabled, rules and placeholders are ignored unless a scope override enables them."), "growx, wrap");
+    JPanel defaults = captionPanel("Defaults", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    defaults.add(c.filtersEnabledByDefault, "growx, wrap");
+    defaults.add(
+        helpText(
+            "When disabled, rules and placeholders are ignored unless a scope override enables them."),
+        "growx, wmin 0, wrap");
+    panel.add(defaults, "growx, wmin 0");
 
     return panel;
   }
 
   private JPanel buildFiltersPlaceholdersTab(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]8[]8[]"));
+    panel.setOpaque(false);
 
-    panel.add(c.placeholdersEnabledByDefault, "growx, wrap");
-    panel.add(c.placeholdersCollapsedByDefault, "growx, wrap 12");
+    JPanel behavior = captionPanel("Placeholder behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    behavior.add(c.placeholdersEnabledByDefault, "growx, wrap");
+    behavior.add(c.placeholdersCollapsedByDefault, "growx, wrap");
 
     JPanel previewRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     previewRow.add(new JLabel("Placeholder preview lines:"), "split 2");
     previewRow.add(c.placeholderPreviewLines, "w 80!");
-    panel.add(previewRow, "growx, wrap");
+    behavior.add(previewRow, "growx, wrap");
+    panel.add(behavior, "growx, wmin 0, wrap");
 
+    JPanel limits = captionPanel("Preview and run limits", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     JPanel runCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     runCapRow.add(new JLabel("Max hidden lines per run:"), "split 2");
     runCapRow.add(c.placeholderMaxLinesPerRun, "w 80!");
-    panel.add(runCapRow, "growx, wrap");
-    panel.add(new JLabel("0 = unlimited. Prevents a single placeholder from representing an enormous filtered run."), "growx, wrap 12");
+    limits.add(runCapRow, "growx, wrap");
+    limits.add(
+        helpText(
+            "0 = unlimited. Prevents a single placeholder from representing an enormous filtered run."),
+        "growx, wmin 0, wrap");
+    panel.add(limits, "growx, wmin 0, wrap");
 
+    JPanel tooltip = captionPanel("Tooltip details", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     JPanel tooltipTagsRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     tooltipTagsRow.add(new JLabel("Tooltip tag limit:"), "split 2");
     tooltipTagsRow.add(c.placeholderTooltipMaxTags, "w 80!");
-    panel.add(tooltipTagsRow, "growx, wrap");
-    panel.add(new JLabel("0 = hide tags in the tooltip (rule + count still shown)."), "growx, wrap");
+    tooltip.add(tooltipTagsRow, "growx, wrap");
+    tooltip.add(
+        helpText("0 = hide tags in the tooltip (rule + count still shown)."),
+        "growx, wmin 0, wrap");
+    panel.add(tooltip, "growx, wmin 0, wrap");
 
     return panel;
   }
 
   private JPanel buildFiltersHistoryTab(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
+    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", ""));
+    panel.setOpaque(false);
 
-    panel.add(c.historyPlaceholdersEnabledByDefault, "growx, wrap 12");
+    JPanel history = captionPanel("History loading", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    history.add(c.historyPlaceholdersEnabledByDefault, "growx, wrap");
 
     JPanel historyCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     historyCapRow.add(new JLabel("History placeholder run cap per batch:"), "split 2");
     historyCapRow.add(c.historyPlaceholderMaxRunsPerBatch, "w 80!");
-    panel.add(historyCapRow, "growx, wrap");
-    panel.add(new JLabel("0 = unlimited. Limits how many filtered placeholder/hint runs appear per history load."), "growx, wrap");
+    history.add(historyCapRow, "growx, wrap");
+    history.add(
+        helpText(
+            "0 = unlimited. Limits how many filtered placeholder/hint runs appear per history load."),
+        "growx, wmin 0, wrap");
+    panel.add(history, "growx, wmin 0");
 
     return panel;
   }
 
   private JPanel buildFiltersOverridesTab(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
-
-    panel.add(new JLabel("Overrides apply by scope pattern. Most specific match wins."), "growx, wrap 12");
+    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", ""));
+    panel.setOpaque(false);
 
     JScrollPane tableScroll = new JScrollPane(c.overridesTable);
     tableScroll.setPreferredSize(new Dimension(520, 220));
-    panel.add(tableScroll, "growx, wrap 8");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     buttons.add(c.addOverride);
     buttons.add(c.removeOverride);
-    panel.add(buttons, "growx, wrap 8");
 
-    panel.add(new JLabel("Tip: You can also manage overrides via /filter override ... and export with /filter export."), "growx, wrap");
+    JPanel overrides = captionPanel("Scope overrides", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    overrides.add(
+        helpText("Overrides apply by scope pattern. Most specific match wins."),
+        "growx, wmin 0, wrap");
+    overrides.add(tableScroll, "growx, wrap 8");
+    overrides.add(buttons, "growx, wrap 8");
+    overrides.add(
+        helpText("Tip: You can also manage overrides via /filter override ... and export with /filter export."),
+        "growx, wmin 0, wrap");
+    panel.add(overrides, "growx, wmin 0");
 
     return panel;
   }
 
   private JPanel buildFiltersRulesTab(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12", "[grow]", ""));
-
-    panel.add(new JLabel("Rules affect transcript rendering only (they do not prevent logging)."), "growx, wrap 12");
+    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", ""));
+    panel.setOpaque(false);
 
     JScrollPane rulesScroll = new JScrollPane(c.rulesTable);
     rulesScroll.setPreferredSize(new Dimension(760, 260));
-    panel.add(rulesScroll, "growx, wrap 8");
 
     JPanel ruleButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     ruleButtons.add(c.addRule);
@@ -8700,9 +8823,17 @@ panel.add(subTabs, "growx, wmin 0");
     ruleButtons.add(c.deleteRule);
     ruleButtons.add(c.moveRuleUp);
     ruleButtons.add(c.moveRuleDown);
-    panel.add(ruleButtons, "growx, wrap 8");
 
-    panel.add(new JLabel("Tip: You can also manage rules via /filter add|del|set and export with /filter export."), "growx, wrap");
+    JPanel rules = captionPanel("Filter rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    rules.add(
+        helpText("Rules affect transcript rendering only (they do not prevent logging)."),
+        "growx, wmin 0, wrap");
+    rules.add(rulesScroll, "growx, wrap 8");
+    rules.add(ruleButtons, "growx, wrap 8");
+    rules.add(
+        helpText("Tip: You can also manage rules via /filter add|del|set and export with /filter export."),
+        "growx, wmin 0, wrap");
+    panel.add(rules, "growx, wmin 0");
 
     return panel;
   }
