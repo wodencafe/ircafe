@@ -7,6 +7,9 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
+import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
+import cafe.woden.ircclient.app.commands.UserCommandAlias;
+import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
@@ -144,6 +147,7 @@ public class PreferencesDialog {
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
   private final IrcEventNotificationRulesBus ircEventNotificationRulesBus;
+  private final UserCommandAliasesBus userCommandAliasesBus;
   private final NotificationSoundService notificationSoundService;
   private final ServerDialogs serverDialogs;
 
@@ -168,6 +172,7 @@ public class PreferencesDialog {
                            GnomeDbusNotificationBackend gnomeDbusBackend,
                            NotificationSoundSettingsBus notificationSoundSettingsBus,
                            IrcEventNotificationRulesBus ircEventNotificationRulesBus,
+                           UserCommandAliasesBus userCommandAliasesBus,
                            NotificationSoundService notificationSoundService,
                            ServerDialogs serverDialogs) {
     this.settingsBus = settingsBus;
@@ -189,6 +194,7 @@ public class PreferencesDialog {
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
     this.ircEventNotificationRulesBus = ircEventNotificationRulesBus;
+    this.userCommandAliasesBus = userCommandAliasesBus;
     this.notificationSoundService = notificationSoundService;
     this.serverDialogs = serverDialogs;
   }
@@ -513,6 +519,7 @@ public class PreferencesDialog {
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
+    CtcpAutoReplyControls ctcpAutoReplies = buildCtcpAutoReplyControls();
     JCheckBox typingIndicatorsSendEnabled = buildTypingIndicatorsSendCheckbox(current);
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
@@ -539,11 +546,18 @@ public class PreferencesDialog {
             : IrcEventNotificationRule.defaults());
 
     FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
+    UserCommandAliasesControls userCommands =
+        buildUserCommandAliasesControls(
+            userCommandAliasesBus != null ? userCommandAliasesBus.get() : List.of(),
+            userCommandAliasesBus != null
+                ? userCommandAliasesBus.unknownCommandAsRawEnabled()
+                : runtimeConfig.readUnknownCommandAsRawEnabled(false));
 
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
+    JPanel ctcpRepliesPanel = buildCtcpRepliesPanel(ctcpAutoReplies);
     JPanel ircv3Panel = buildIrcv3CapabilitiesPanel(
         typingIndicatorsSendEnabled,
         typingIndicatorsReceiveEnabled,
@@ -551,6 +565,7 @@ public class PreferencesDialog {
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications, ircEventNotifications);
+    JPanel commandsPanel = buildUserCommandsPanel(userCommands);
     JPanel filtersPanel = buildFiltersPanel(filters);
 
     JButton apply = new JButton("Apply");
@@ -706,6 +721,10 @@ public class PreferencesDialog {
 
       boolean presenceFoldsV = presenceFolds.isSelected();
       boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
+      boolean ctcpAutoRepliesEnabledV = ctcpAutoReplies.enabled.isSelected();
+      boolean ctcpAutoReplyVersionEnabledV = ctcpAutoReplies.version.isSelected();
+      boolean ctcpAutoReplyPingEnabledV = ctcpAutoReplies.ping.isSelected();
+      boolean ctcpAutoReplyTimeEnabledV = ctcpAutoReplies.time.isSelected();
       boolean typingIndicatorsSendEnabledV = typingIndicatorsSendEnabled.isSelected();
       boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
       Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
@@ -818,6 +837,12 @@ public class PreferencesDialog {
         } catch (Exception ignored) {
         }
       }
+      if (userCommands.table.isEditing()) {
+        try {
+          userCommands.table.getCellEditor().stopCellEditing();
+        } catch (Exception ignored) {
+        }
+      }
 
       ValidationError notifErr = notifications.model.firstValidationError();
       if (notifErr != null) {
@@ -829,11 +854,23 @@ public class PreferencesDialog {
         return;
       }
 
+      UserCommandAliasValidationError aliasErr = userCommands.model.firstValidationError();
+      if (aliasErr != null) {
+        JOptionPane.showMessageDialog(
+            dialog,
+            aliasErr.formatForDialog(),
+            "Invalid command alias",
+            JOptionPane.ERROR_MESSAGE);
+        return;
+      }
+
       int notificationRuleCooldownSecondsV = ((Number) notifications.cooldownSeconds.getValue()).intValue();
       if (notificationRuleCooldownSecondsV < 0) notificationRuleCooldownSecondsV = 15;
       if (notificationRuleCooldownSecondsV > 3600) notificationRuleCooldownSecondsV = 3600;
       List<NotificationRule> notificationRulesV = notifications.model.snapshot();
       List<IrcEventNotificationRule> ircEventNotificationRulesV = ircEventNotifications.model.snapshot();
+      List<UserCommandAlias> userCommandAliasesV = userCommands.model.snapshot();
+      boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw.isSelected();
 
       UiSettings next = new UiSettings(
           t,
@@ -959,6 +996,10 @@ public class PreferencesDialog {
       runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
       runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
       runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(next.ctcpRequestsInActiveTargetEnabled());
+      runtimeConfig.rememberCtcpAutoRepliesEnabled(ctcpAutoRepliesEnabledV);
+      runtimeConfig.rememberCtcpAutoReplyVersionEnabled(ctcpAutoReplyVersionEnabledV);
+      runtimeConfig.rememberCtcpAutoReplyPingEnabled(ctcpAutoReplyPingEnabledV);
+      runtimeConfig.rememberCtcpAutoReplyTimeEnabled(ctcpAutoReplyTimeEnabledV);
       runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
       runtimeConfig.rememberTypingIndicatorsReceiveEnabled(next.typingIndicatorsReceiveEnabled());
       persistIrcv3Capabilities(ircv3CapabilitiesV);
@@ -996,6 +1037,12 @@ public class PreferencesDialog {
       runtimeConfig.rememberIrcEventNotificationRules(ircEventNotificationRulesV);
       if (ircEventNotificationRulesBus != null) {
         ircEventNotificationRulesBus.set(ircEventNotificationRulesV);
+      }
+      runtimeConfig.rememberUserCommandAliases(userCommandAliasesV);
+      runtimeConfig.rememberUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
+      if (userCommandAliasesBus != null) {
+        userCommandAliasesBus.set(userCommandAliasesV);
+        userCommandAliasesBus.setUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
       }
 
       runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
@@ -1085,10 +1132,12 @@ public class PreferencesDialog {
     tabs.addTab("Startup", wrapTab(startupPanel));
     tabs.addTab("Tray & Notifications", wrapTab(trayPanel));
     tabs.addTab("Chat", wrapTab(chatPanel));
+    tabs.addTab("CTCP Replies", wrapTab(ctcpRepliesPanel));
     tabs.addTab("IRCv3", wrapTab(ircv3Panel));
     tabs.addTab("Embeds & Previews", wrapTab(embedsPanel));
     tabs.addTab("History & Storage", wrapTab(historyStoragePanel));
     tabs.addTab("Notifications", wrapTab(notificationsPanel));
+    tabs.addTab("Commands", wrapTab(commandsPanel));
     tabs.addTab("Filters", wrapTab(filtersPanel));
     tabs.addTab("Network", wrapTab(networkPanel));
     tabs.addTab("User lookups", wrapTab(userLookupsPanel));
@@ -2605,7 +2654,7 @@ panel.add(subTabs, "growx, wmin 0");
       includeChatMessages.setEnabled(on);
       includePresenceMessages.setEnabled(on);
     };
-    enabled.addActionListener(e -> syncEnabled.run());
+    enabled.addItemListener(e -> syncEnabled.run());
     syncEnabled.run();
 
     JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]6[]"));
@@ -3641,6 +3690,87 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(new JLabel("Outgoing messages"), "aligny top");
     form.add(outgoing.panel, "growx");
 
+    return form;
+  }
+
+  private CtcpAutoReplyControls buildCtcpAutoReplyControls() {
+    JCheckBox enabled = new JCheckBox("Enable automatic CTCP replies");
+    enabled.setSelected(runtimeConfig.readCtcpAutoRepliesEnabled(true));
+    enabled.setToolTipText(
+        "When enabled, IRCafe can auto-reply to private CTCP requests (VERSION, PING, TIME).");
+
+    JCheckBox version = new JCheckBox("Reply to CTCP VERSION");
+    version.setSelected(runtimeConfig.readCtcpAutoReplyVersionEnabled(true));
+    version.setToolTipText("Respond with your client version.");
+
+    JCheckBox ping = new JCheckBox("Reply to CTCP PING");
+    ping.setSelected(runtimeConfig.readCtcpAutoReplyPingEnabled(true));
+    ping.setToolTipText("Echo back the request payload so the sender can measure latency.");
+
+    JCheckBox time = new JCheckBox("Reply to CTCP TIME");
+    time.setSelected(runtimeConfig.readCtcpAutoReplyTimeEnabled(true));
+    time.setToolTipText("Respond with your current local timestamp.");
+
+    Runnable syncEnabled = () -> {
+      boolean on = enabled.isSelected();
+      version.setEnabled(on);
+      ping.setEnabled(on);
+      time.setEnabled(on);
+    };
+    enabled.addActionListener(e -> syncEnabled.run());
+    syncEnabled.run();
+
+    return new CtcpAutoReplyControls(enabled, version, ping, time);
+  }
+
+  private JPanel buildCtcpRepliesPanel(CtcpAutoReplyControls controls) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]8[]8[]"));
+
+    form.add(tabTitle("CTCP Replies"), "growx, wmin 0, wrap");
+    form.add(
+        subtleInfoTextWith(
+            "Control automatic replies to inbound private CTCP requests. "
+                + "Outbound /ctcp commands are not affected."),
+        "growx, wmin 0, wrap");
+    form.add(controls.enabled, "growx, wrap");
+
+    JPanel perCommand = new JPanel(new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]2[]2[]"));
+    perCommand.setOpaque(false);
+    perCommand.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createTitledBorder("Per-command replies"),
+        BorderFactory.createEmptyBorder(4, 8, 6, 8)
+    ));
+    perCommand.add(controls.version, "growx, wmin 0, gapleft 8, wrap");
+    perCommand.add(controls.ping, "growx, wmin 0, gapleft 8, wrap");
+    perCommand.add(controls.time, "growx, wmin 0, gapleft 8, wrap");
+    form.add(perCommand, "growx, wmin 0, wrap");
+
+    JButton enableDefaults = new JButton("Enable defaults");
+    enableDefaults.setToolTipText("Enable automatic replies and turn on VERSION, PING, and TIME.");
+    enableDefaults.addActionListener(e -> {
+      controls.enabled.setSelected(true);
+      controls.version.setSelected(true);
+      controls.ping.setSelected(true);
+      controls.time.setSelected(true);
+    });
+
+    JButton disableAll = new JButton("Disable all");
+    disableAll.setToolTipText("Disable all automatic CTCP replies.");
+    disableAll.addActionListener(e -> {
+      controls.enabled.setSelected(false);
+      controls.version.setSelected(false);
+      controls.ping.setSelected(false);
+      controls.time.setSelected(false);
+    });
+
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    actions.setOpaque(false);
+    actions.add(enableDefaults);
+    actions.add(disableAll);
+    form.add(actions, "growx, wmin 0, wrap");
+
+    form.add(helpText("If the top toggle is off, IRCafe will not send any automatic CTCP replies."),
+        "growx, wmin 0, wrap");
     return form;
   }
 
@@ -4906,6 +5036,393 @@ panel.add(subTabs, "growx, wmin 0");
     return panel;
   }
 
+  private UserCommandAliasesControls buildUserCommandAliasesControls(
+      List<UserCommandAlias> initial, boolean unknownCommandAsRawEnabled) {
+    UserCommandAliasesTableModel model = new UserCommandAliasesTableModel(initial);
+    JTable table = new JTable(model);
+    table.setFillsViewportHeight(true);
+    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    table.setRowHeight(Math.max(22, table.getRowHeight()));
+
+    TableColumn enabledCol = table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_ENABLED);
+    enabledCol.setMaxWidth(80);
+    enabledCol.setPreferredWidth(70);
+
+    TableColumn commandCol = table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_COMMAND);
+    commandCol.setPreferredWidth(220);
+
+    JTextArea template = new JTextArea(7, 40);
+    template.setLineWrap(true);
+    template.setWrapStyleWord(true);
+    template.setToolTipText(
+        "Use %1..%9, %1-, %*, %c, %t, %s, %e, %n, &1..&9. "
+            + "Separate commands with ';' or new lines.");
+    template.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "/msg %1 Hello %2-");
+
+    JButton add = new JButton("Add");
+    JButton importHexChat = new JButton("Import HexChat...");
+    JButton duplicate = new JButton("Duplicate");
+    JButton remove = new JButton("Remove");
+    JButton up = new JButton("Up");
+    JButton down = new JButton("Down");
+    JCheckBox unknownCommandAsRaw = new JCheckBox(
+        "Fallback unknown /commands to raw IRC (HexChat-compatible)");
+    unknownCommandAsRaw.setSelected(unknownCommandAsRawEnabled);
+    unknownCommandAsRaw.setToolTipText(
+        "When enabled, typing an unknown slash command sends it to the server "
+            + "as raw IRC (same as /quote), instead of showing a local Unknown command message.");
+
+    JLabel hint = new JLabel("Select an alias row to edit its expansion.");
+    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+
+    final boolean[] syncing = new boolean[] { false };
+
+    Runnable loadSelectedTemplate = () -> {
+      int row = table.getSelectedRow();
+      syncing[0] = true;
+      if (row < 0) {
+        template.setText("");
+      } else {
+        int modelRow = table.convertRowIndexToModel(row);
+        template.setText(model.templateAt(modelRow));
+      }
+      syncing[0] = false;
+
+      boolean selected = row >= 0;
+      duplicate.setEnabled(selected);
+      remove.setEnabled(selected);
+      up.setEnabled(selected && row > 0);
+      down.setEnabled(selected && row < table.getRowCount() - 1);
+      template.setEnabled(selected);
+      hint.setText(selected ? "Expansion supports multi-command ';' / newline and placeholders (%1, %2-, %*)." : "Select an alias row to edit its expansion.");
+    };
+
+    Runnable persistSelectedTemplate = () -> {
+      if (syncing[0]) return;
+      int row = table.getSelectedRow();
+      if (row < 0) return;
+      int modelRow = table.convertRowIndexToModel(row);
+      model.setTemplateAt(modelRow, template.getText());
+    };
+
+    table.getSelectionModel().addListSelectionListener(e -> {
+      if (e != null && e.getValueIsAdjusting()) return;
+      loadSelectedTemplate.run();
+    });
+    template.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedTemplate));
+
+    add.addActionListener(
+        e -> {
+          if (table.isEditing()) {
+            try {
+              table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          int idx = model.addAlias(new UserCommandAlias(true, "", ""));
+          if (idx >= 0) {
+            int view = table.convertRowIndexToView(idx);
+            table.getSelectionModel().setSelectionInterval(view, view);
+            table.scrollRectToVisible(table.getCellRect(view, 0, true));
+            table.editCellAt(view, UserCommandAliasesTableModel.COL_COMMAND);
+            table.requestFocusInWindow();
+          }
+        });
+
+    importHexChat.addActionListener(
+        e -> {
+          if (table.isEditing()) {
+            try {
+              table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Import HexChat commands.conf");
+          chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+          chooser.setAcceptAllFileFilterUsed(true);
+          File suggested = suggestedHexChatCommandsConfFile();
+          if (suggested != null) {
+            File parent = suggested.getParentFile();
+            if (parent != null && parent.isDirectory()) {
+              chooser.setCurrentDirectory(parent);
+            }
+            chooser.setSelectedFile(suggested);
+          } else {
+            chooser.setSelectedFile(new File("commands.conf"));
+          }
+
+          int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(importHexChat));
+          if (result != JFileChooser.APPROVE_OPTION) return;
+
+          File selected = chooser.getSelectedFile();
+          if (selected == null) return;
+
+          HexChatCommandAliasImporter.ImportResult imported;
+          try {
+            imported = HexChatCommandAliasImporter.importFile(selected.toPath());
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                SwingUtilities.getWindowAncestor(importHexChat),
+                "Could not import HexChat aliases from:\n" + selected + "\n\n" + ex.getMessage(),
+                "Import failed",
+                JOptionPane.ERROR_MESSAGE);
+            return;
+          }
+
+          if (imported.aliases().isEmpty()) {
+            JOptionPane.showMessageDialog(
+                SwingUtilities.getWindowAncestor(importHexChat),
+                "No aliases were found in the selected file.",
+                "HexChat import",
+                JOptionPane.INFORMATION_MESSAGE);
+            return;
+          }
+
+          Set<String> existing = new HashSet<>();
+          for (UserCommandAlias alias : model.snapshot()) {
+            String key = normalizeAliasCommandKey(alias != null ? alias.name() : null);
+            if (!key.isEmpty()) existing.add(key);
+          }
+
+          int added = 0;
+          int skippedExisting = 0;
+          int firstAdded = -1;
+          for (UserCommandAlias alias : imported.aliases()) {
+            String key = normalizeAliasCommandKey(alias != null ? alias.name() : null);
+            if (key.isEmpty()) continue;
+            if (existing.contains(key)) {
+              skippedExisting++;
+              continue;
+            }
+            int idx = model.addAlias(alias);
+            if (firstAdded < 0) firstAdded = idx;
+            existing.add(key);
+            added++;
+          }
+
+          if (firstAdded >= 0) {
+            int view = table.convertRowIndexToView(firstAdded);
+            if (view >= 0) {
+              table.getSelectionModel().setSelectionInterval(view, view);
+              table.scrollRectToVisible(table.getCellRect(view, 0, true));
+            }
+          }
+
+          StringBuilder summary = new StringBuilder();
+          if (added > 0) {
+            summary.append("Imported ").append(added).append(" alias");
+            if (added != 1) summary.append('e').append('s');
+            summary.append('.');
+          } else {
+            summary.append("No new aliases were imported.");
+          }
+
+          if (skippedExisting > 0) {
+            summary.append("\nSkipped ")
+                .append(skippedExisting)
+                .append(" alias");
+            if (skippedExisting != 1) summary.append('e').append('s');
+            summary.append(" because the command name already exists.");
+          }
+
+          if (imported.mergedDuplicateCommands() > 0) {
+            summary.append("\nMerged ")
+                .append(imported.mergedDuplicateCommands())
+                .append(" duplicate command");
+            if (imported.mergedDuplicateCommands() != 1) summary.append('s');
+            summary.append(" from HexChat.");
+          }
+
+          if (imported.translatedPlaceholders() > 0) {
+            summary.append("\nTranslated ")
+                .append(imported.translatedPlaceholders())
+                .append(" HexChat placeholder");
+            if (imported.translatedPlaceholders() != 1) summary.append('s');
+            summary.append(" (%t/%m/%v).");
+          }
+
+          if (imported.skippedInvalidEntries() > 0) {
+            summary.append("\nSkipped ")
+                .append(imported.skippedInvalidEntries())
+                .append(" invalid command name");
+            if (imported.skippedInvalidEntries() != 1) summary.append('s');
+            summary.append('.');
+          }
+
+          JOptionPane.showMessageDialog(
+              SwingUtilities.getWindowAncestor(importHexChat),
+              summary.toString(),
+              "HexChat import complete",
+              JOptionPane.INFORMATION_MESSAGE);
+        });
+
+    duplicate.addActionListener(
+        e -> {
+          if (table.isEditing()) {
+            try {
+              table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          int row = table.getSelectedRow();
+          if (row < 0) return;
+          int modelRow = table.convertRowIndexToModel(row);
+          int dup = model.duplicateRow(modelRow);
+          if (dup >= 0) {
+            int view = table.convertRowIndexToView(dup);
+            table.getSelectionModel().setSelectionInterval(view, view);
+            table.scrollRectToVisible(table.getCellRect(view, 0, true));
+          }
+        });
+
+    remove.addActionListener(
+        e -> {
+          if (table.isEditing()) {
+            try {
+              table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          int row = table.getSelectedRow();
+          if (row < 0) return;
+          int res =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove selected alias?",
+                  "Remove alias",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (res != JOptionPane.OK_OPTION) return;
+          int modelRow = table.convertRowIndexToModel(row);
+          model.removeRow(modelRow);
+        });
+
+    up.addActionListener(
+        e -> {
+          if (table.isEditing()) {
+            try {
+              table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          int row = table.getSelectedRow();
+          if (row <= 0) return;
+          int modelRow = table.convertRowIndexToModel(row);
+          int modelPrevRow = table.convertRowIndexToModel(row - 1);
+          int next = model.moveRow(modelRow, modelPrevRow);
+          if (next >= 0) {
+            int view = table.convertRowIndexToView(next);
+            table.getSelectionModel().setSelectionInterval(view, view);
+            table.scrollRectToVisible(table.getCellRect(view, 0, true));
+          }
+        });
+
+    down.addActionListener(
+        e -> {
+          if (table.isEditing()) {
+            try {
+              table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          int row = table.getSelectedRow();
+          if (row < 0 || row >= table.getRowCount() - 1) return;
+          int modelRow = table.convertRowIndexToModel(row);
+          int modelNextRow = table.convertRowIndexToModel(row + 1);
+          int next = model.moveRow(modelRow, modelNextRow);
+          if (next >= 0) {
+            int view = table.convertRowIndexToView(next);
+            table.getSelectionModel().setSelectionInterval(view, view);
+            table.scrollRectToVisible(table.getCellRect(view, 0, true));
+          }
+        });
+
+    loadSelectedTemplate.run();
+    return new UserCommandAliasesControls(
+        table,
+        model,
+        template,
+        unknownCommandAsRaw,
+        add,
+        importHexChat,
+        duplicate,
+        remove,
+        up,
+        down,
+        hint);
+  }
+
+  private JPanel buildUserCommandsPanel(UserCommandAliasesControls controls) {
+    JPanel panel =
+        new JPanel(
+            new MigLayout(
+                "insets 12, fill, wrap 1",
+                "[grow,fill]",
+                "[]8[]6[]6[grow,fill]8[]4[]"));
+
+    panel.add(tabTitle("Commands"), "growx, wmin 0, wrap");
+    panel.add(sectionTitle("User command aliases"), "growx, wmin 0, wrap");
+    panel.add(
+        helpText(
+            "Define custom /commands that expand before built-in parsing.\n"
+                + "Placeholders: %1..%9 (positional), %1- (rest from arg), %* (all args), &1..&9 (from end), %c (channel), %t (target), %s/%e (server), %n (nick).\n"
+                + "HexChat import maps %t (time), %m and %v into IRCafe-compatible placeholders.\n"
+                + "Multi-command expansion: separate commands with ';' or new lines."),
+        "growx, wmin 0, wrap");
+    panel.add(controls.unknownCommandAsRaw, "growx, wmin 0, wrap");
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    buttons.add(controls.add);
+    buttons.add(controls.importHexChat);
+    buttons.add(controls.duplicate);
+    buttons.add(controls.remove);
+    buttons.add(controls.up);
+    buttons.add(controls.down);
+
+    JScrollPane tableScroll = new JScrollPane(controls.table);
+    tableScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    tableScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    JScrollPane templateScroll = new JScrollPane(controls.template);
+    templateScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    templateScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+    panel.add(new JLabel("Aliases"), "growx, wrap");
+    panel.add(buttons, "growx, wrap");
+    panel.add(tableScroll, "grow, push, h 220!, wrap");
+    panel.add(controls.hint, "growx, wmin 0, wrap");
+    panel.add(new JLabel("Expansion for selected alias"), "growx, wrap");
+    panel.add(templateScroll, "growx, h 140!, wrap");
+
+    return panel;
+  }
+
+  private static String normalizeAliasCommandKey(String raw) {
+    String command = Objects.toString(raw, "").trim();
+    if (command.startsWith("/")) command = command.substring(1).trim();
+    int split = command.indexOf(' ');
+    if (split >= 0) command = command.substring(0, split).trim();
+    return command.toLowerCase(Locale.ROOT);
+  }
+
+  private static File suggestedHexChatCommandsConfFile() {
+    String home = Objects.toString(System.getProperty("user.home"), "").trim();
+    if (home.isEmpty()) return null;
+
+    Path userHome = Path.of(home);
+    List<Path> candidates =
+        List.of(
+            userHome.resolve(".config").resolve("hexchat").resolve("commands.conf"),
+            userHome.resolve(".xchat2").resolve("commands.conf"),
+            userHome.resolve("AppData").resolve("Roaming").resolve("HexChat").resolve("commands.conf"));
+
+    for (Path p : candidates) {
+      if (p != null && Files.isRegularFile(p)) return p.toFile();
+    }
+    return candidates.get(0).toFile();
+  }
+
   private void attachNotificationRuleValidation(NotificationRulesControls notifications, JButton apply, JButton ok) {
     Runnable refresh = () -> {
       boolean valid = refreshNotificationRuleValidation(notifications);
@@ -4961,6 +5478,16 @@ panel.add(subTabs, "growx, wmin 0");
     String formatForDialog() {
       String msg = message != null ? message.trim() : "Invalid regex";
       return "Row " + (rowIndex + 1) + " (" + effectiveLabel() + "):\n" + msg + "\n\nPattern:\n" + (pattern != null ? pattern : "");
+    }
+  }
+
+  private record UserCommandAliasValidationError(int rowIndex, String command, String message) {
+
+    String formatForDialog() {
+      String cmd = Objects.toString(command, "").trim();
+      if (cmd.isEmpty()) cmd = "(blank)";
+      String msg = Objects.toString(message, "Invalid alias").trim();
+      return "Row " + (rowIndex + 1) + " (/" + cmd + "):\n" + msg;
     }
   }
 
@@ -5656,6 +6183,19 @@ panel.add(subTabs, "growx, wmin 0");
   ) {
   }
 
+  private record UserCommandAliasesControls(
+      JTable table,
+      UserCommandAliasesTableModel model,
+      JTextArea template,
+      JCheckBox unknownCommandAsRaw,
+      JButton add,
+      JButton importHexChat,
+      JButton duplicate,
+      JButton remove,
+      JButton up,
+      JButton down,
+      JLabel hint) {}
+
   private static final class IrcEventNotificationTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
     static final int COL_EVENT = 1;
@@ -6084,6 +6624,198 @@ panel.add(subTabs, "growx, wmin 0");
         m.scriptPath = r.scriptPath();
         m.scriptArgs = r.scriptArgs();
         m.scriptWorkingDirectory = r.scriptWorkingDirectory();
+        return m;
+      }
+    }
+  }
+
+  private static final class UserCommandAliasesTableModel extends AbstractTableModel {
+    static final int COL_ENABLED = 0;
+    static final int COL_COMMAND = 1;
+
+    private static final String[] COLS = new String[] {"Enabled", "Command"};
+    private static final Pattern COMMAND_NAME_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9_-]*$");
+
+    private final List<MutableAlias> rows = new ArrayList<>();
+
+    UserCommandAliasesTableModel(List<UserCommandAlias> initial) {
+      if (initial != null) {
+        for (UserCommandAlias alias : initial) {
+          if (alias == null) continue;
+          rows.add(MutableAlias.from(alias));
+        }
+      }
+    }
+
+    List<UserCommandAlias> snapshot() {
+      return rows.stream().map(MutableAlias::toAlias).toList();
+    }
+
+    int addAlias(UserCommandAlias alias) {
+      rows.add(MutableAlias.from(alias));
+      int idx = rows.size() - 1;
+      fireTableRowsInserted(idx, idx);
+      return idx;
+    }
+
+    int duplicateRow(int row) {
+      if (row < 0 || row >= rows.size()) return -1;
+      MutableAlias src = rows.get(row);
+      MutableAlias copy = src.copy();
+      int idx = Math.min(rows.size(), row + 1);
+      rows.add(idx, copy);
+      fireTableRowsInserted(idx, idx);
+      return idx;
+    }
+
+    void removeRow(int row) {
+      if (row < 0 || row >= rows.size()) return;
+      rows.remove(row);
+      fireTableRowsDeleted(row, row);
+    }
+
+    int moveRow(int from, int to) {
+      if (from < 0 || from >= rows.size()) return -1;
+      if (to < 0 || to >= rows.size()) return -1;
+      if (from == to) return from;
+      MutableAlias alias = rows.remove(from);
+      rows.add(to, alias);
+      fireTableDataChanged();
+      return to;
+    }
+
+    String templateAt(int row) {
+      if (row < 0 || row >= rows.size()) return "";
+      return Objects.toString(rows.get(row).template, "");
+    }
+
+    void setTemplateAt(int row, String template) {
+      if (row < 0 || row >= rows.size()) return;
+      rows.get(row).template = Objects.toString(template, "");
+      fireTableRowsUpdated(row, row);
+    }
+
+    UserCommandAliasValidationError firstValidationError() {
+      Map<String, Integer> seenEnabled = new LinkedHashMap<>();
+
+      for (int i = 0; i < rows.size(); i++) {
+        MutableAlias a = rows.get(i);
+        if (a == null || !a.enabled) continue;
+
+        String cmd = normalizeCommand(a.name);
+        if (cmd.isEmpty()) {
+          return new UserCommandAliasValidationError(i, a.name, "Enabled aliases require a command name.");
+        }
+        if (!COMMAND_NAME_PATTERN.matcher(cmd).matches()) {
+          return new UserCommandAliasValidationError(
+              i,
+              a.name,
+              "Command names must start with a letter and contain only letters, numbers, '_' or '-'.");
+        }
+        if (Objects.toString(a.template, "").isBlank()) {
+          return new UserCommandAliasValidationError(i, cmd, "Enabled aliases require an expansion.");
+        }
+
+        String key = cmd.toLowerCase(Locale.ROOT);
+        Integer prev = seenEnabled.putIfAbsent(key, i);
+        if (prev != null) {
+          return new UserCommandAliasValidationError(
+              i,
+              cmd,
+              "Duplicate enabled alias: /" + cmd + " (also used on row " + (prev + 1) + ").");
+        }
+      }
+
+      return null;
+    }
+
+    @Override
+    public int getRowCount() {
+      return rows.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+      return COLS.length;
+    }
+
+    @Override
+    public String getColumnName(int column) {
+      if (column < 0 || column >= COLS.length) return "";
+      return COLS[column];
+    }
+
+    @Override
+    public Class<?> getColumnClass(int columnIndex) {
+      if (columnIndex == COL_ENABLED) return Boolean.class;
+      return String.class;
+    }
+
+    @Override
+    public boolean isCellEditable(int rowIndex, int columnIndex) {
+      return rowIndex >= 0 && rowIndex < rows.size() && columnIndex >= 0 && columnIndex < COLS.length;
+    }
+
+    @Override
+    public Object getValueAt(int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+      MutableAlias a = rows.get(rowIndex);
+      return switch (columnIndex) {
+        case COL_ENABLED -> a.enabled;
+        case COL_COMMAND -> a.name;
+        default -> null;
+      };
+    }
+
+    @Override
+    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return;
+      MutableAlias a = rows.get(rowIndex);
+
+      switch (columnIndex) {
+        case COL_ENABLED -> a.enabled = aValue instanceof Boolean b && b;
+        case COL_COMMAND -> a.name = normalizeCommand(Objects.toString(aValue, ""));
+        default -> {
+        }
+      }
+
+      fireTableRowsUpdated(rowIndex, rowIndex);
+    }
+
+    private static String normalizeCommand(String raw) {
+      String cmd = Objects.toString(raw, "").trim();
+      if (cmd.startsWith("/")) cmd = cmd.substring(1).trim();
+      return cmd;
+    }
+
+    private static final class MutableAlias {
+      boolean enabled;
+      String name;
+      String template;
+
+      UserCommandAlias toAlias() {
+        return new UserCommandAlias(enabled, normalizeCommand(name), Objects.toString(template, ""));
+      }
+
+      MutableAlias copy() {
+        MutableAlias c = new MutableAlias();
+        c.enabled = enabled;
+        c.name = name;
+        c.template = template;
+        return c;
+      }
+
+      static MutableAlias from(UserCommandAlias alias) {
+        MutableAlias m = new MutableAlias();
+        if (alias == null) {
+          m.enabled = true;
+          m.name = "";
+          m.template = "";
+          return m;
+        }
+        m.enabled = alias.enabled();
+        m.name = normalizeCommand(alias.name());
+        m.template = Objects.toString(alias.template(), "");
         return m;
       }
     }
@@ -6539,6 +7271,12 @@ panel.add(subTabs, "growx, wmin 0");
   }
 
   private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {
+  }
+
+  private record CtcpAutoReplyControls(JCheckBox enabled,
+                                       JCheckBox version,
+                                       JCheckBox ping,
+                                       JCheckBox time) {
   }
 
   private record Ircv3CapabilitiesControls(Map<String, JCheckBox> checkboxes, JPanel panel) {

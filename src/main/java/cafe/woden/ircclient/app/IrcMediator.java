@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.commands.CommandParser;
+import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
@@ -58,6 +59,7 @@ public class IrcMediator {
   private final IrcClientService irc;
   private final UiPort ui;
   private final CommandParser commandParser;
+  private final UserCommandAliasEngine userCommandAliasEngine;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
@@ -110,6 +112,7 @@ public class IrcMediator {
       IrcClientService irc,
       UiPort ui,
       CommandParser commandParser,
+      UserCommandAliasEngine userCommandAliasEngine,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
@@ -140,6 +143,7 @@ public class IrcMediator {
     this.irc = irc;
     this.ui = ui;
     this.commandParser = commandParser;
+    this.userCommandAliasEngine = userCommandAliasEngine;
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
     this.connectionCoordinator = connectionCoordinator;
@@ -439,10 +443,23 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
   }
 
   private void handleOutgoingLine(String raw) {
-    outboundCommandDispatcher.dispatch(disposables, commandParser.parse(raw));
+    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef ctx = (at != null) ? at : targetCoordinator.safeStatusTarget();
+
+    UserCommandAliasEngine.ExpansionResult expanded = userCommandAliasEngine.expand(raw, ctx);
+
+    for (String warning : expanded.warnings()) {
+      if (warning == null || warning.isBlank()) continue;
+      TargetRef out = (ctx != null) ? new TargetRef(ctx.serverId(), "status") : targetCoordinator.safeStatusTarget();
+      ui.appendStatus(out, "(alias)", warning);
+    }
+
+    for (String line : expanded.lines()) {
+      if (line == null || line.isBlank()) continue;
+      outboundCommandDispatcher.dispatch(disposables, commandParser.parse(line));
+    }
   }
 
-  
   private TargetRef activeTargetForServerOrStatus(String sid, TargetRef status) {
     TargetRef active = targetCoordinator.getActiveTarget();
     if (active != null && Objects.equals(active.serverId(), sid)) {

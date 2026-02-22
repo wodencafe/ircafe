@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.ui.settings.NotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.commands.UserCommandAlias;
 import cafe.woden.ircclient.ui.filter.FilterRule;
 import cafe.woden.ircclient.ui.filter.TagSpec;
 import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
@@ -886,6 +887,144 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized List<UserCommandAlias> readUserCommandAliases() {
+    try {
+      if (file.toString().isBlank()) return List.of();
+      if (!Files.exists(file)) return List.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return List.of();
+
+      Object commandsObj = ircafe.get("commands");
+      if (!(commandsObj instanceof Map<?, ?> commands)) return List.of();
+
+      Object aliasesObj = commands.get("aliases");
+      if (!(aliasesObj instanceof List<?> raw)) return List.of();
+
+      List<UserCommandAlias> out = new ArrayList<>();
+      for (Object item : raw) {
+        if (!(item instanceof Map<?, ?> m)) continue;
+
+        boolean enabled = asBoolean(m.get("enabled")).orElse(Boolean.TRUE);
+
+        String name = Objects.toString(m.get("name"), "").trim();
+
+        // Accept both "template" and legacy/alternate "expansion" key names.
+        String template = Objects.toString(m.get("template"), "");
+        if (template.isEmpty()) template = Objects.toString(m.get("expansion"), "");
+
+        out.add(new UserCommandAlias(enabled, name, template));
+      }
+
+      return List.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read user command aliases from '{}'", file, e);
+      return List.of();
+    }
+  }
+
+  public synchronized boolean readUnknownCommandAsRawEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object commandsObj = ircafe.get("commands");
+      if (!(commandsObj instanceof Map<?, ?> commands)) return defaultValue;
+
+      if (!commands.containsKey("unknownCommandAsRaw")) return defaultValue;
+      return asBoolean(commands.get("unknownCommandAsRaw")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read commands.unknownCommandAsRaw from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
+    return readCtcpAutoReplyValue("enabled", defaultValue);
+  }
+
+  public synchronized boolean readCtcpAutoReplyVersionEnabled(boolean defaultValue) {
+    return readCtcpAutoReplyValue("version", defaultValue);
+  }
+
+  public synchronized boolean readCtcpAutoReplyPingEnabled(boolean defaultValue) {
+    return readCtcpAutoReplyValue("ping", defaultValue);
+  }
+
+  public synchronized boolean readCtcpAutoReplyTimeEnabled(boolean defaultValue) {
+    return readCtcpAutoReplyValue("time", defaultValue);
+  }
+
+  private boolean readCtcpAutoReplyValue(String key, boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object ctcpObj = ui.get("ctcpReplies");
+      if (!(ctcpObj instanceof Map<?, ?> ctcpReplies)) return defaultValue;
+
+      if (!ctcpReplies.containsKey(key)) return defaultValue;
+      return asBoolean(ctcpReplies.get(key)).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.ctcpReplies.{} from '{}'", key, file, e);
+      return defaultValue;
+    }
+  }
+
+  public synchronized void rememberUserCommandAliases(List<UserCommandAlias> aliases) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> commands = getOrCreateMap(ircafe, "commands");
+
+      List<Map<String, Object>> out = new ArrayList<>();
+      if (aliases != null) {
+        for (UserCommandAlias alias : aliases) {
+          if (alias == null) continue;
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("enabled", alias.enabled());
+          m.put("name", Objects.toString(alias.name(), "").trim());
+          m.put("template", Objects.toString(alias.template(), ""));
+          out.add(m);
+        }
+      }
+
+      commands.put("aliases", out);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist user command aliases to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUnknownCommandAsRawEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> commands = getOrCreateMap(ircafe, "commands");
+
+      commands.put("unknownCommandAsRaw", enabled);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist commands.unknownCommandAsRaw to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberIrcEventNotificationRules(List<IrcEventNotificationRule> rules) {
     try {
       if (file.toString().isBlank()) return;
@@ -1223,6 +1362,39 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist CTCP request routing setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberCtcpAutoRepliesEnabled(boolean enabled) {
+    rememberCtcpAutoReplyValue("enabled", enabled);
+  }
+
+  public synchronized void rememberCtcpAutoReplyVersionEnabled(boolean enabled) {
+    rememberCtcpAutoReplyValue("version", enabled);
+  }
+
+  public synchronized void rememberCtcpAutoReplyPingEnabled(boolean enabled) {
+    rememberCtcpAutoReplyValue("ping", enabled);
+  }
+
+  public synchronized void rememberCtcpAutoReplyTimeEnabled(boolean enabled) {
+    rememberCtcpAutoReplyValue("time", enabled);
+  }
+
+  private void rememberCtcpAutoReplyValue(String key, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> ctcpReplies = getOrCreateMap(ui, "ctcpReplies");
+
+      ctcpReplies.put(key, enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.ctcpReplies.{} to '{}'", key, file, e);
     }
   }
 

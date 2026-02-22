@@ -76,8 +76,7 @@ public class ServerEditorDialog extends JDialog {
 
   private final JTextArea autoJoinArea = new JTextArea(8, 30);
   private final JTextArea autoJoinPmArea = new JTextArea(6, 30);
-
-  private final List<String> performSeed;
+  private final JTextArea performArea = new JTextArea(8, 30);
 
   // Per-server proxy override
   private final JCheckBox proxyOverrideBox = new JCheckBox("Override proxy for this server");
@@ -139,6 +138,7 @@ public class ServerEditorDialog extends JDialog {
     tabs.addTab("Identity", buildIdentityPanel());
     tabs.addTab("SASL", buildSaslPanel());
     tabs.addTab("Auto-Join", buildAutoJoinPanel());
+    tabs.addTab("Perform", buildPerformPanel());
     tabs.addTab("Proxy", buildProxyPanel());
     add(tabs, BorderLayout.CENTER);
 
@@ -164,7 +164,6 @@ public class ServerEditorDialog extends JDialog {
 
     // Seed values
     if (seed != null) {
-      performSeed = (seed.perform() == null) ? List.of() : List.copyOf(seed.perform());
       idField.setText(Objects.toString(seed.id(), ""));
       hostField.setText(Objects.toString(seed.host(), ""));
       portField.setText(String.valueOf(seed.port()));
@@ -185,11 +184,12 @@ public class ServerEditorDialog extends JDialog {
       List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
       autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
       autoJoinPmArea.setText(String.join("\n", AutoJoinEntryCodec.privateMessageNicks(autoJoinSeed)));
+      List<String> performSeed = seed.perform() == null ? List.of() : seed.perform();
+      performArea.setText(String.join("\n", performSeed));
       portAuto = false; // user likely set explicitly
 
       seedProxy(seed.proxy());
     } else {
-      performSeed = List.of();
       tlsBox.setSelected(true);
       portField.setText("6697");
       portAuto = true;
@@ -224,6 +224,12 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
     autoJoinPmArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "NickServ\nfriend_nick");
+    performArea.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT,
+        "/msg NickServ IDENTIFY password\n"
+            + "/join #project\n"
+            + "/quote MONITOR +friend\n"
+            + "/sleep 1000");
 
     // Auto-update default port when toggling TLS, if the user hasn't customized it.
     tlsBox.addActionListener(e -> maybeAdjustPortForTls());
@@ -699,6 +705,34 @@ public class ServerEditorDialog extends JDialog {
     return p;
   }
 
+  private JPanel buildPerformPanel() {
+    JPanel p = new JPanel(new BorderLayout(8, 8));
+    p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+    JLabel hint =
+        new JLabel(
+            "<html>Run commands automatically after connect.<br/>"
+                + "One command per line. Use slash commands (for example: /join, /msg, /quote, /sleep)."
+                + "</html>");
+    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    p.add(hint, BorderLayout.NORTH);
+
+    performArea.setLineWrap(true);
+    performArea.setWrapStyleWord(true);
+    JScrollPane sc = new JScrollPane(performArea);
+    sc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
+    p.add(sc, BorderLayout.CENTER);
+
+    JLabel hint2 =
+        new JLabel(
+            "<html>Notes: prefer explicit channels in perform commands. "
+                + "/sleep accepts milliseconds between commands.</html>");
+    hint2.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    p.add(hint2, BorderLayout.SOUTH);
+
+    return p;
+  }
+
   private void updateSaslEnabled() {
     boolean en = saslEnabledBox.isSelected();
     saslMechanism.setEnabled(en);
@@ -1046,6 +1080,13 @@ public class ServerEditorDialog extends JDialog {
       autoJoin.add(encoded);
     }
 
+    List<String> perform = new ArrayList<>();
+    for (String line : Objects.toString(performArea.getText(), "").split("\\R")) {
+      String cmd = trim(line);
+      if (cmd.isEmpty()) continue;
+      perform.add(cmd);
+    }
+
     IrcProperties.Proxy proxyOverride = null;
     if (proxyOverrideBox.isSelected()) {
       // Build a per-server override (including the ability to explicitly disable proxying).
@@ -1080,7 +1121,7 @@ public class ServerEditorDialog extends JDialog {
         realName,
         sasl,
         autoJoin,
-        performSeed,
+        perform,
         proxyOverride
     );
   }
