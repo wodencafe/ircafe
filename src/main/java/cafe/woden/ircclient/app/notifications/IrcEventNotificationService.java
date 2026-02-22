@@ -54,7 +54,9 @@ public class IrcEventNotificationService {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
+      String body,
+      String activeServerId,
+      String activeTarget
   ) {
     if (eventType == null) return false;
 
@@ -74,11 +76,14 @@ public class IrcEventNotificationService {
     if (t.isEmpty()) t = eventType.toString();
 
     String b = Objects.toString(body, "").trim();
+    String activeSid = Objects.toString(activeServerId, "").trim();
+    String activeTgt = Objects.toString(activeTarget, "").trim();
+    boolean activeSameServer = !activeSid.isEmpty() && sid.equalsIgnoreCase(activeSid);
     boolean anyMatched = false;
 
     for (IrcEventNotificationRule matched : rules) {
       if (matched == null) continue;
-      if (!matched.matches(eventType, sourceNick, sourceIsSelf, channel)) continue;
+      if (!matched.matches(eventType, sourceNick, sourceIsSelf, channel, activeSameServer, activeTgt)) continue;
       anyMatched = true;
       dispatchMatchedRule(matched, eventType, sid, target, source, sourceIsSelf, t, b);
     }

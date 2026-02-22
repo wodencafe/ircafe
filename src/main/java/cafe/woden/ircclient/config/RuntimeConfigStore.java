@@ -1817,6 +1817,24 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTypingTreeIndicatorStyle(String style) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = UiProperties.normalizeTypingTreeIndicatorStyle(style);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("typingTreeIndicatorStyle", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist typing tree indicator style to '{}'", file, e);
+    }
+  }
+
   /**
    * Reads persisted IRCv3 capability request overrides under {@code ircafe.ui.ircv3Capabilities}.
    *

@@ -78,7 +78,9 @@ class IrcEventNotificationServiceTest {
             "alice",
             Boolean.FALSE,
             "User restricted",
-            "alice appears restricted");
+            "alice appears restricted",
+            "libera",
+            "#general");
 
     assertTrue(matched);
     verify(tray, times(2))
@@ -101,5 +103,76 @@ class IrcEventNotificationServiceTest {
             eq("alice"),
             anyString(),
             anyString());
+  }
+
+  @Test
+  void activeChannelOnlyScopeRequiresActiveTargetChannelOnSameServer() {
+    IrcEventNotificationRulesBus rulesBus = mock(IrcEventNotificationRulesBus.class);
+    TrayNotificationService tray = mock(TrayNotificationService.class);
+    NotificationStore store = mock(NotificationStore.class);
+    PushyNotificationService pushy = null;
+
+    IrcEventNotificationRule activeOnlyRule =
+        new IrcEventNotificationRule(
+            true,
+            IrcEventNotificationRule.EventType.TOPIC_CHANGED,
+            IrcEventNotificationRule.SourceMode.ANY,
+            null,
+            IrcEventNotificationRule.ChannelScope.ACTIVE_TARGET_ONLY,
+            null,
+            true,
+            IrcEventNotificationRule.FocusScope.ANY,
+            true,
+            true,
+            false,
+            "NOTIF_1",
+            false,
+            null,
+            false,
+            null,
+            null,
+            null);
+    when(rulesBus.get()).thenReturn(List.of(activeOnlyRule));
+
+    IrcEventNotificationService service =
+        new IrcEventNotificationService(rulesBus, tray, store, pushy);
+
+    boolean noMatchDifferentChannel =
+        service.notifyConfigured(
+            IrcEventNotificationRule.EventType.TOPIC_CHANGED,
+            "libera",
+            "#chat",
+            "alice",
+            Boolean.FALSE,
+            "Topic changed",
+            "changed",
+            "libera",
+            "#other");
+    boolean noMatchDifferentServer =
+        service.notifyConfigured(
+            IrcEventNotificationRule.EventType.TOPIC_CHANGED,
+            "libera",
+            "#chat",
+            "alice",
+            Boolean.FALSE,
+            "Topic changed",
+            "changed",
+            "oftc",
+            "#chat");
+    boolean matchesActiveChannel =
+        service.notifyConfigured(
+            IrcEventNotificationRule.EventType.TOPIC_CHANGED,
+            "libera",
+            "#chat",
+            "alice",
+            Boolean.FALSE,
+            "Topic changed",
+            "changed",
+            "libera",
+            "#chat");
+
+    org.junit.jupiter.api.Assertions.assertFalse(noMatchDifferentChannel);
+    org.junit.jupiter.api.Assertions.assertFalse(noMatchDifferentServer);
+    assertTrue(matchesActiveChannel);
   }
 }

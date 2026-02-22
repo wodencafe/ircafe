@@ -97,6 +97,7 @@ public record IrcEventNotificationRule(
 
   public enum ChannelScope {
     ALL("All channels"),
+    ACTIVE_TARGET_ONLY("Active channel only"),
     ONLY("Only matching"),
     ALL_EXCEPT("All except matching");
 
@@ -140,7 +141,7 @@ public record IrcEventNotificationRule(
 
     if (channelScope == null) channelScope = ChannelScope.ALL;
     channelPatterns = normalizeToNull(channelPatterns);
-    if (channelScope == ChannelScope.ALL) {
+    if (channelScope == ChannelScope.ALL || channelScope == ChannelScope.ACTIVE_TARGET_ONLY) {
       channelPatterns = null;
     }
 
@@ -157,10 +158,21 @@ public record IrcEventNotificationRule(
   }
 
   public boolean matches(EventType type, String sourceNick, Boolean sourceIsSelf, String channel) {
+    return matches(type, sourceNick, sourceIsSelf, channel, false, null);
+  }
+
+  public boolean matches(
+      EventType type,
+      String sourceNick,
+      Boolean sourceIsSelf,
+      String channel,
+      boolean activeTargetOnSameServer,
+      String activeTarget
+  ) {
     if (!enabled) return false;
     if (type == null || eventType != type) return false;
     if (!matchesSource(sourceNick, sourceIsSelf)) return false;
-    return matchesChannel(channel);
+    return matchesChannel(channel, activeTargetOnSameServer, activeTarget);
   }
 
   /**
@@ -188,11 +200,22 @@ public record IrcEventNotificationRule(
   }
 
   public boolean matchesChannel(String channel) {
+    return matchesChannel(channel, false, null);
+  }
+
+  public boolean matchesChannel(
+      String channel,
+      boolean activeTargetOnSameServer,
+      String activeTarget
+  ) {
     String ch = normalizeToNull(channel);
+    String active = normalizeToNull(activeTarget);
     List<String> masks = parseMaskList(channelPatterns);
 
     return switch (channelScope) {
       case ALL -> true;
+      case ACTIVE_TARGET_ONLY ->
+          activeTargetOnSameServer && ch != null && active != null && ch.equalsIgnoreCase(active);
       case ONLY -> ch != null && !masks.isEmpty() && matchesAnyMask(masks, ch);
       case ALL_EXCEPT -> ch == null || masks.isEmpty() || !matchesAnyMask(masks, ch);
     };

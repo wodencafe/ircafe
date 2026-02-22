@@ -166,6 +166,34 @@ class IrcEventNotificationRuleTest {
     assertFalse(rule.matches(IrcEventNotificationRule.EventType.KLINED, null, null, "#ops"));
   }
 
+  @Test
+  void activeTargetOnlyScopeRequiresSameServerAndMatchingActiveChannel() {
+    IrcEventNotificationRule rule = new IrcEventNotificationRule(
+        true,
+        IrcEventNotificationRule.EventType.TOPIC_CHANGED,
+        IrcEventNotificationRule.SourceMode.ANY,
+        null,
+        IrcEventNotificationRule.ChannelScope.ACTIVE_TARGET_ONLY,
+        "#ignored",
+        true,
+        IrcEventNotificationRule.FocusScope.ANY,
+        true,
+        true,
+        false,
+        BuiltInSound.TOPIC_CHANGED_1.name(),
+        false,
+        null,
+        false,
+        null,
+        null,
+        null);
+
+    assertFalse(rule.matches(IrcEventNotificationRule.EventType.TOPIC_CHANGED, null, null, "#chat"));
+    assertFalse(rule.matches(IrcEventNotificationRule.EventType.TOPIC_CHANGED, null, null, "#chat", false, "#chat"));
+    assertFalse(rule.matches(IrcEventNotificationRule.EventType.TOPIC_CHANGED, null, null, "#chat", true, "#other"));
+    assertTrue(rule.matches(IrcEventNotificationRule.EventType.TOPIC_CHANGED, null, null, "#chat", true, "#chat"));
+  }
+
   private static void assertHasStatusBarAnyCompanion(
       java.util.List<IrcEventNotificationRule> rules,
       IrcEventNotificationRule.EventType eventType

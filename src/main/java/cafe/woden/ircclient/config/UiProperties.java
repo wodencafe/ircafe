@@ -94,6 +94,13 @@ public record UiProperties(
     Boolean typingIndicatorsReceiveEnabled,
 
     /**
+     * Style used for typing-activity markers in the server tree channel list.
+     *
+     * <p>Allowed values: {@code dots}, {@code keyboard}, {@code glow-dot}.
+     */
+    String typingTreeIndicatorStyle,
+
+    /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same server).
      * If disabled, they are routed to their origin target (channel/PM) instead.
      */
@@ -618,6 +625,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (typingIndicatorsReceiveEnabled == null) {
       typingIndicatorsReceiveEnabled = typingIndicatorsEnabled;
     }
+    typingTreeIndicatorStyle = normalizeTypingTreeIndicatorStyle(typingTreeIndicatorStyle);
 
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
@@ -682,6 +690,17 @@ if (historyPlaceholdersEnabledByDefault == null) {
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  static String normalizeTypingTreeIndicatorStyle(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "dots";
+    return switch (s) {
+      case "dots", "ellipsis" -> "dots";
+      case "keyboard", "kbd" -> "keyboard";
+      case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
+      default -> "dots";
+    };
   }
 
 }

@@ -1459,8 +1459,20 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
     String src = Objects.toString(sourceNick, "").trim();
     Boolean sourceIsSelf = src.isEmpty() ? null : isFromSelf(sid, src);
+    TargetRef active = targetCoordinator != null ? targetCoordinator.getActiveTarget() : null;
+    String activeSid = active != null ? active.serverId() : null;
+    String activeTgt = active != null ? active.target() : null;
     try {
-      return ircEventNotificationService.notifyConfigured(eventType, sid, channel, src, sourceIsSelf, title, body);
+      return ircEventNotificationService.notifyConfigured(
+          eventType,
+          sid,
+          channel,
+          src,
+          sourceIsSelf,
+          title,
+          body,
+          activeSid,
+          activeTgt);
     } catch (Exception ignored) {
       return false;
     }

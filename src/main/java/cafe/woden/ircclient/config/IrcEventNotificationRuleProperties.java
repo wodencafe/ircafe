@@ -77,6 +77,7 @@ public record IrcEventNotificationRuleProperties(
 
   public enum ChannelScope {
     ALL,
+    ACTIVE_TARGET_ONLY,
     ONLY,
     ALL_EXCEPT
   }
@@ -136,7 +137,7 @@ public record IrcEventNotificationRuleProperties(
         channelPatterns = excludeLegacy;
       }
     }
-    if (channelScope == ChannelScope.ALL) {
+    if (channelScope == ChannelScope.ALL || channelScope == ChannelScope.ACTIVE_TARGET_ONLY) {
       channelPatterns = null;
     }
 

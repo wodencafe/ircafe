@@ -9,6 +9,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
@@ -31,6 +32,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.awt.Dialog;
+import java.beans.PropertyChangeListener;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -118,8 +120,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final int TYPING_ACTIVITY_FADE_MS = 900;
   private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
   private static final int TYPING_ACTIVITY_TICK_MS = 100;
-  private static final Color TYPING_ACTIVITY_DOT = new Color(65, 210, 108);
-  private static final Color TYPING_ACTIVITY_GLOW = new Color(120, 255, 150);
+  private static final int TYPING_ACTIVITY_DOT_COUNT = 3;
+  private static final int TYPING_ACTIVITY_DOT_SIZE = 3;
+  private static final int TYPING_ACTIVITY_DOT_GAP = 2;
+  private static final int TYPING_ACTIVITY_DOT_FRAME_MS = 220;
+  private static final int TYPING_ACTIVITY_LEFT_SLOT_WIDTH = 12;
+  private static final Color TYPING_ACTIVITY_GLOW_DOT = new Color(65, 210, 108);
+  private static final Color TYPING_ACTIVITY_GLOW_HALO = new Color(120, 255, 150);
+  private static final Color TYPING_ACTIVITY_INDICATOR_FALLBACK = new Color(90, 150, 235);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
   public static final String PROP_APPLICATION_ROOT_VISIBLE = "applicationRootVisible";
@@ -246,6 +254,9 @@ private static final class InsertionLine {
 
   private final NotificationStore notificationStore;
   private final ServerDialogs serverDialogs;
+  private final UiSettingsBus settingsBus;
+  private PropertyChangeListener settingsListener;
+  private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
   private volatile boolean showApplicationRoot = true;
@@ -259,6 +270,7 @@ private static final class InsertionLine {
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
       NotificationStore notificationStore,
+      UiSettingsBus settingsBus,
       ServerDialogs serverDialogs) {
     super(new BorderLayout());
 
@@ -268,7 +280,9 @@ private static final class InsertionLine {
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
+    this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
+    syncTypingIndicatorStyleFromSettings();
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -390,6 +404,16 @@ private static final class InsertionLine {
                   err -> log.error("[ircafe] znc auto-connect store stream error", err))
       );
     }
+
+    if (this.settingsBus != null) {
+      settingsListener = evt -> {
+        if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+        syncTypingIndicatorStyleFromSettings();
+        tree.repaint();
+      };
+      this.settingsBus.addListener(settingsListener);
+    }
+
     TreeSelectionListener tsl = e -> {
       DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
       if (!suppressSelectionBroadcast && node != null) {
@@ -3040,6 +3064,34 @@ private void removeServerRoot(String serverId) {
     }
   }
 
+  private void syncTypingIndicatorStyleFromSettings() {
+    String configured = null;
+    try {
+      configured =
+          settingsBus != null && settingsBus.get() != null
+              ? settingsBus.get().typingIndicatorsTreeStyle()
+              : null;
+    } catch (Exception ignored) {
+    }
+    this.typingIndicatorStyle = TreeTypingIndicatorStyle.from(configured);
+  }
+
+  private enum TreeTypingIndicatorStyle {
+    DOTS,
+    KEYBOARD,
+    GLOW_DOT;
+
+    static TreeTypingIndicatorStyle from(String raw) {
+      String s = Objects.toString(raw, "").trim().toLowerCase(java.util.Locale.ROOT);
+      if (s.isEmpty()) return DOTS;
+      return switch (s) {
+        case "keyboard", "kbd" -> KEYBOARD;
+        case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> GLOW_DOT;
+        default -> DOTS;
+      };
+    }
+  }
+
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
@@ -3092,7 +3144,8 @@ private void removeServerRoot(String serverId) {
   }
 
 private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
-  private float typingDotAlpha = 0f;
+  private float typingIndicatorAlpha = 0f;
+  private boolean typingIndicatorSlotVisible = false;
 
   private void setTreeIcon(String name) {
     Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
@@ -3115,7 +3168,8 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Font base = tree.getFont();
     if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
-    typingDotAlpha = 0f;
+    typingIndicatorAlpha = 0f;
+    typingIndicatorSlotVisible = false;
 
     if (value instanceof DefaultMutableTreeNode node) {
       Object uo = node.getUserObject();
@@ -3151,7 +3205,9 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("dock-right");
         }
         if (supportsTypingActivity(nd.ref)) {
-          typingDotAlpha = nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
+          typingIndicatorSlotVisible = true;
+          typingIndicatorAlpha =
+              nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
         }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(serverNodeDisplayLabel(id));
@@ -3194,26 +3250,105 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
-    if (typingDotAlpha <= 0.01f) return;
+    if (!typingIndicatorSlotVisible || typingIndicatorAlpha <= 0.01f) return;
 
     Graphics2D g2 = (Graphics2D) g.create();
     try {
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      int dot = 8;
-      int x = Math.max(0, getWidth() - dot - 6);
-      int y = Math.max(0, (getHeight() - dot) / 2);
-      float a = Math.max(0f, Math.min(1f, typingDotAlpha));
 
-      g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, a * 0.45f)));
-      g2.setColor(TYPING_ACTIVITY_GLOW);
-      g2.fillOval(x - 2, y - 2, dot + 4, dot + 4);
+      TreeTypingIndicatorStyle style = typingIndicatorStyle;
+      int width = indicatorWidth(style);
+      int height = indicatorHeight(style);
+      java.awt.Insets insets = getInsets();
+      int leftInset = insets != null ? insets.left : 0;
+      int slotWidth = Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, width + 2);
+      int slotLeft = Math.max(0, leftInset - slotWidth - 1);
+      int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
+      int y = Math.max(0, (getHeight() - height) / 2);
+      float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
 
-      g2.setComposite(AlphaComposite.SrcOver.derive(a));
-      g2.setColor(TYPING_ACTIVITY_DOT);
-      g2.fillOval(x, y, dot, dot);
+      switch (style) {
+        case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
+        case GLOW_DOT -> drawGlowDotIndicator(g2, x, y, width, height, alpha);
+        case DOTS -> drawDotsIndicator(g2, x, y, alpha);
+      }
     } finally {
       g2.dispose();
     }
+  }
+
+  private static int indicatorWidth(TreeTypingIndicatorStyle style) {
+    return switch (style) {
+      case KEYBOARD -> 10;
+      case GLOW_DOT -> 8;
+      case DOTS -> TYPING_ACTIVITY_DOT_COUNT * TYPING_ACTIVITY_DOT_SIZE
+          + (TYPING_ACTIVITY_DOT_COUNT - 1) * TYPING_ACTIVITY_DOT_GAP;
+    };
+  }
+
+  private static int indicatorHeight(TreeTypingIndicatorStyle style) {
+    return switch (style) {
+      case KEYBOARD -> 7;
+      case GLOW_DOT -> 8;
+      case DOTS -> TYPING_ACTIVITY_DOT_SIZE;
+    };
+  }
+
+  private void drawDotsIndicator(Graphics2D g2, int x, int y, float alpha) {
+    int dot = TYPING_ACTIVITY_DOT_SIZE;
+    int gap = TYPING_ACTIVITY_DOT_GAP;
+    int phase = (int) ((System.currentTimeMillis() / Math.max(80, TYPING_ACTIVITY_DOT_FRAME_MS)) % TYPING_ACTIVITY_DOT_COUNT);
+    Color base = typingIndicatorColor();
+    g2.setComposite(AlphaComposite.SrcOver);
+    for (int i = 0; i < TYPING_ACTIVITY_DOT_COUNT; i++) {
+      float pulse = (i == phase) ? 1.0f : 0.42f;
+      int a = Math.max(12, Math.min(255, Math.round(255f * alpha * pulse)));
+      g2.setColor(withAlpha(base, a));
+      g2.fillOval(x + (i * (dot + gap)), y, dot, dot);
+    }
+  }
+
+  private void drawKeyboardIndicator(Graphics2D g2, int x, int y, int width, int height, float alpha) {
+    Color base = typingIndicatorColor();
+    int fillA = Math.max(8, Math.min(255, Math.round(50f * alpha)));
+    int strokeA = Math.max(18, Math.min(255, Math.round(225f * alpha)));
+    int keyA = Math.max(14, Math.min(255, Math.round(165f * alpha)));
+    g2.setComposite(AlphaComposite.SrcOver);
+    g2.setColor(withAlpha(base, fillA));
+    g2.fillRoundRect(x, y, width, height, 3, 3);
+    g2.setColor(withAlpha(base, strokeA));
+    g2.drawRoundRect(x, y, width - 1, height - 1, 3, 3);
+
+    int keyY1 = y + 2;
+    int keyY2 = y + 4;
+    g2.setColor(withAlpha(base, keyA));
+    int[] top = {x + 2, x + 4, x + 6, x + 8};
+    for (int keyX : top) {
+      g2.fillRect(keyX, keyY1, 1, 1);
+    }
+    g2.fillRect(x + 3, keyY2, 4, 1);
+  }
+
+  private void drawGlowDotIndicator(Graphics2D g2, int x, int y, int width, int height, float alpha) {
+    int dot = 6;
+    int halo = 4;
+    int cx = x + Math.max(0, (width - dot) / 2);
+    int cy = y + Math.max(0, (height - dot) / 2);
+    g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, alpha * 0.45f)));
+    g2.setColor(TYPING_ACTIVITY_GLOW_HALO);
+    g2.fillOval(cx - (halo / 2), cy - (halo / 2), dot + halo, dot + halo);
+
+    g2.setComposite(AlphaComposite.SrcOver.derive(alpha));
+    g2.setColor(TYPING_ACTIVITY_GLOW_DOT);
+    g2.fillOval(cx, cy, dot, dot);
+  }
+
+  private Color typingIndicatorColor() {
+    Color c = UIManager.getColor("@accentColor");
+    if (c == null) c = UIManager.getColor("Component.focusColor");
+    if (c == null) c = UIManager.getColor("Label.foreground");
+    if (c == null) c = TYPING_ACTIVITY_INDICATOR_FALLBACK;
+    return c;
   }
 }
 
@@ -3320,6 +3455,10 @@ static final class NodeData {
   @PreDestroy
   void shutdown() {
     try {
+      if (settingsBus != null && settingsListener != null) {
+        settingsBus.removeListener(settingsListener);
+        settingsListener = null;
+      }
       if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
       nodeActions.close();
