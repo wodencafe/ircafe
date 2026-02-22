@@ -65,8 +65,14 @@ public class IrcEventNotificationRulesBus {
       return new IrcEventNotificationRule(
           false,
           IrcEventNotificationRule.EventType.INVITE_RECEIVED,
-          IrcEventNotificationRule.SourceFilter.ANY,
+          IrcEventNotificationRule.SourceMode.ANY,
+          null,
+          IrcEventNotificationRule.ChannelScope.ALL,
+          null,
           true,
+          true,
+          false,
+          null,
           false,
           null,
           false,
@@ -82,24 +88,37 @@ public class IrcEventNotificationRulesBus {
       eventType = IrcEventNotificationRule.EventType.INVITE_RECEIVED;
     }
 
-    IrcEventNotificationRule.SourceFilter sourceFilter;
+    IrcEventNotificationRule.SourceMode sourceMode;
     try {
-      sourceFilter = IrcEventNotificationRule.SourceFilter.valueOf(p.sourceFilter().name());
+      sourceMode = IrcEventNotificationRule.SourceMode.valueOf(p.sourceMode().name());
     } catch (Exception ignored) {
-      sourceFilter = IrcEventNotificationRule.SourceFilter.ANY;
+      sourceMode = IrcEventNotificationRule.SourceMode.ANY;
+    }
+
+    IrcEventNotificationRule.ChannelScope channelScope;
+    try {
+      channelScope = IrcEventNotificationRule.ChannelScope.valueOf(p.channelScope().name());
+    } catch (Exception ignored) {
+      channelScope = IrcEventNotificationRule.ChannelScope.ALL;
     }
 
     return new IrcEventNotificationRule(
         Boolean.TRUE.equals(p.enabled()),
         eventType,
-        sourceFilter,
+        sourceMode,
+        p.sourcePattern(),
+        channelScope,
+        p.channelPatterns(),
         Boolean.TRUE.equals(p.toastEnabled()),
+        Boolean.TRUE.equals(p.notificationsNodeEnabled()),
         Boolean.TRUE.equals(p.soundEnabled()),
         p.soundId(),
         Boolean.TRUE.equals(p.soundUseCustom()),
         p.soundCustomPath(),
-        p.channelWhitelist(),
-        p.channelBlacklist());
+        Boolean.TRUE.equals(p.scriptEnabled()),
+        p.scriptPath(),
+        p.scriptArgs(),
+        p.scriptWorkingDirectory());
   }
 
   private static List<IrcEventNotificationRule> sanitize(List<IrcEventNotificationRule> rules) {

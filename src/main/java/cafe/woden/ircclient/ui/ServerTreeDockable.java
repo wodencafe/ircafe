@@ -22,6 +22,7 @@ import java.awt.Dimension;
 import java.awt.Cursor;
 import java.awt.Rectangle;
 import java.awt.Window;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
@@ -61,6 +62,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.JViewport;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
+import javax.swing.Timer;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -103,6 +105,12 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final int SERVER_ACTION_BUTTON_SIZE = 16;
   private static final int SERVER_ACTION_BUTTON_ICON_SIZE = 12;
   private static final int SERVER_ACTION_BUTTON_MARGIN = 6;
+  private static final int TYPING_ACTIVITY_HOLD_MS = 8000;
+  private static final int TYPING_ACTIVITY_FADE_MS = 900;
+  private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
+  private static final int TYPING_ACTIVITY_TICK_MS = 50;
+  private static final Color TYPING_ACTIVITY_DOT = new Color(65, 210, 108);
+  private static final Color TYPING_ACTIVITY_GLOW = new Color(120, 255, 150);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
 
@@ -196,6 +204,7 @@ private static final class InsertionLine {
   private final Map<String, String> serverLastError = new HashMap<>();
   private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
   private final Map<String, ServerRuntimeMetadata> serverRuntimeMetadata = new HashMap<>();
+  private final Timer typingActivityTimer;
 
   private static final DateTimeFormatter SERVER_META_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
@@ -286,6 +295,8 @@ private static final class InsertionLine {
     tree.setRowHeight(0);
 
     tree.setCellRenderer(treeCellRenderer);
+    this.typingActivityTimer = new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
+    this.typingActivityTimer.setRepeats(true);
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
     this.nodeActions = new TreeNodeActions<>(
@@ -376,6 +387,7 @@ private static final class InsertionLine {
       @Override
       public void mousePressed(MouseEvent e) {
         if (maybeHandleHoveredServerActionClick(e)) return;
+        maybeSelectRowFromLeftClick(e);
         updateHoveredServerAction(e);
       }
 
@@ -403,17 +415,8 @@ private static final class InsertionLine {
 
         int x = e.getX();
         int y = e.getY();
-        // Resolve by row (Y-position) so right-click works anywhere across the row,
-        // not only directly over the node text/icon bounds.
-        int row = tree.getClosestRowForLocation(x, y);
-        if (row < 0) return;
-        Rectangle rb = tree.getRowBounds(row);
-        if (rb == null) return;
-        if (y < rb.y || y >= (rb.y + rb.height)) return;
-        TreePath path = tree.getPathForRow(row);
-        if (path == null) {
-          return;
-        }
+        TreePath path = treePathForRowHit(x, y);
+        if (path == null) return;
         suppressSelectionBroadcast = true;
         try {
           tree.setSelectionPath(path);
@@ -877,6 +880,31 @@ private static final class InsertionLine {
     event.consume();
     tree.repaint(btn);
     return true;
+  }
+
+  private boolean maybeSelectRowFromLeftClick(MouseEvent event) {
+    if (event == null || event.isConsumed()) return false;
+    if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
+
+    TreePath hit = treePathForRowHit(event.getX(), event.getY());
+    if (hit == null) return false;
+
+    TreePath current = tree.getSelectionPath();
+    if (!Objects.equals(current, hit)) {
+      tree.setSelectionPath(hit);
+    }
+    return true;
+  }
+
+  private TreePath treePathForRowHit(int x, int y) {
+    // Resolve by row (Y-position) so click selection works anywhere across the row,
+    // not only directly over the node text/icon bounds.
+    int row = tree.getClosestRowForLocation(x, y);
+    if (row < 0) return null;
+    Rectangle rb = tree.getRowBounds(row);
+    if (rb == null) return null;
+    if (y < rb.y || y >= (rb.y + rb.height)) return null;
+    return tree.getPathForRow(row);
   }
 
   private void paintVisibleServerActions(Graphics g) {
@@ -1812,11 +1840,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private void installTreeKeyBindings() {
+    // Legacy/alternate move bindings.
     tree.getInputMap(JComponent.WHEN_FOCUSED).put(
         KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
         "ircafe.tree.nodeMoveUp");
     tree.getInputMap(JComponent.WHEN_FOCUSED).put(
         KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        "ircafe.tree.nodeMoveDown");
+    // Primary move bindings: Alt + Up/Down.
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK),
+        "ircafe.tree.nodeMoveUp");
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK),
         "ircafe.tree.nodeMoveDown");
     tree.getInputMap(JComponent.WHEN_FOCUSED).put(
         KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK),
@@ -2139,7 +2175,65 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     nd.highlightUnread = 0;
     model.nodeChanged(node);
   }
-private void syncServers(List<ServerEntry> latest) {
+
+  public void markTypingActivity(TargetRef ref, String state) {
+    if (!supportsTypingActivity(ref)) return;
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    if (!(node.getUserObject() instanceof NodeData nd)) return;
+
+    long now = System.currentTimeMillis();
+    boolean changed = nd.applyTypingState(state, now, TYPING_ACTIVITY_HOLD_MS);
+    if (changed) {
+      repaintTreeNode(node);
+    }
+    if (nd.hasTypingActivity() && !typingActivityTimer.isRunning()) {
+      typingActivityTimer.start();
+    }
+  }
+
+  private void onTypingActivityAnimationTick() {
+    long now = System.currentTimeMillis();
+    boolean visible = false;
+
+    for (DefaultMutableTreeNode node : leaves.values()) {
+      if (node == null) continue;
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData nd)) continue;
+      if (!nd.hasTypingActivity()) continue;
+      nd.clearTypingActivityIfExpired(now, TYPING_ACTIVITY_FADE_MS);
+      if (nd.typingDotAlpha(now, TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS) > 0.01f) {
+        visible = true;
+      }
+    }
+
+    if (visible) {
+      tree.repaint();
+      return;
+    }
+    typingActivityTimer.stop();
+    tree.repaint();
+  }
+
+  private void repaintTreeNode(DefaultMutableTreeNode node) {
+    if (node == null) return;
+    TreePath path = new TreePath(node.getPath());
+    Rectangle r = tree.getPathBounds(path);
+    if (r == null) {
+      tree.repaint();
+      return;
+    }
+    tree.repaint(r.x, r.y, tree.getWidth(), r.height);
+  }
+
+  private static boolean supportsTypingActivity(TargetRef ref) {
+    if (ref == null) return false;
+    if (ref.isStatus() || ref.isUiOnly() || ref.isNotifications()) return false;
+    if (ref.isChannelList() || ref.isDccTransfers()) return false;
+    return ref.isChannel();
+  }
+
+  private void syncServers(List<ServerEntry> latest) {
   Set<String> newIds = new HashSet<>();
   Map<String, String> nextDisplay = new HashMap<>();
   Set<String> nextEphemeral = new HashSet<>();
@@ -2658,6 +2752,7 @@ private void removeServerRoot(String serverId) {
       NodeData nd = new NodeData(statusRef, label);
       nd.unread = old.unread;
       nd.highlightUnread = old.highlightUnread;
+      nd.copyTypingFrom(old);
       node.setUserObject(nd);
       model.nodeChanged(node);
     }
@@ -2763,6 +2858,8 @@ private void removeServerRoot(String serverId) {
   }
 
 private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
+  private float typingDotAlpha = 0f;
+
   private void setTreeIcon(String name) {
     Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
     Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
@@ -2784,6 +2881,7 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Font base = tree.getFont();
     if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
+    typingDotAlpha = 0f;
 
     if (value instanceof DefaultMutableTreeNode node) {
       Object uo = node.getUserObject();
@@ -2811,6 +2909,9 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
           setTreeIcon("dock-right");
+        }
+        if (supportsTypingActivity(nd.ref)) {
+          typingDotAlpha = nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
         }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(serverNodeDisplayLabel(id));
@@ -2841,6 +2942,31 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     return c;
   }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+    super.paintComponent(g);
+    if (typingDotAlpha <= 0.01f) return;
+
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      int dot = 8;
+      int x = Math.max(0, getWidth() - dot - 6);
+      int y = Math.max(0, (getHeight() - dot) / 2);
+      float a = Math.max(0f, Math.min(1f, typingDotAlpha));
+
+      g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, a * 0.45f)));
+      g2.setColor(TYPING_ACTIVITY_GLOW);
+      g2.fillOval(x - 2, y - 2, dot + 4, dot + 4);
+
+      g2.setComposite(AlphaComposite.SrcOver.derive(a));
+      g2.setColor(TYPING_ACTIVITY_DOT);
+      g2.fillOval(x, y, dot, dot);
+    } finally {
+      g2.dispose();
+    }
+  }
 }
 
 static final class NodeData {
@@ -2848,10 +2974,90 @@ static final class NodeData {
     final String label;
     int unread = 0;
     int highlightUnread = 0;
+    long typingPulseUntilMs = 0L;
+    long typingDoneFadeStartMs = 0L;
 
     NodeData(TargetRef ref, String label) {
       this.ref = ref;
       this.label = label;
+    }
+
+    void copyTypingFrom(NodeData other) {
+      if (other == null) return;
+      this.typingPulseUntilMs = other.typingPulseUntilMs;
+      this.typingDoneFadeStartMs = other.typingDoneFadeStartMs;
+    }
+
+    boolean hasTypingActivity() {
+      return typingPulseUntilMs > 0L || typingDoneFadeStartMs > 0L;
+    }
+
+    boolean applyTypingState(String state, long now, int holdMs) {
+      long prevPulse = typingPulseUntilMs;
+      long prevFade = typingDoneFadeStartMs;
+      String normalized = normalizeTypingState(state);
+      if ("done".equals(normalized)) {
+        if (hasTypingActivity()) {
+          typingPulseUntilMs = 0L;
+          typingDoneFadeStartMs = now;
+        }
+      } else {
+        long until = now + Math.max(500L, holdMs);
+        if (until > typingPulseUntilMs) {
+          typingPulseUntilMs = until;
+        }
+        typingDoneFadeStartMs = 0L;
+      }
+      return prevPulse != typingPulseUntilMs || prevFade != typingDoneFadeStartMs;
+    }
+
+    void clearTypingActivityIfExpired(long now, int fadeMs) {
+      int fadeWindow = Math.max(1, fadeMs);
+      if (typingDoneFadeStartMs > 0L) {
+        if (now - typingDoneFadeStartMs >= fadeWindow) {
+          typingPulseUntilMs = 0L;
+          typingDoneFadeStartMs = 0L;
+        }
+        return;
+      }
+      if (typingPulseUntilMs <= 0L) return;
+      if (now - typingPulseUntilMs >= fadeWindow) {
+        typingPulseUntilMs = 0L;
+      }
+    }
+
+    float typingDotAlpha(long now, int pulseMs, int fadeMs) {
+      int pulseWindow = Math.max(300, pulseMs);
+      int fadeWindow = Math.max(1, fadeMs);
+
+      if (typingDoneFadeStartMs > 0L) {
+        return fadeAlpha(now, typingDoneFadeStartMs, fadeWindow);
+      }
+      if (typingPulseUntilMs <= 0L) return 0f;
+      if (now < typingPulseUntilMs) {
+        double phase = (now % pulseWindow) / (double) pulseWindow;
+        double wave = 0.5d + (0.5d * Math.sin((phase * (Math.PI * 2.0d)) - (Math.PI / 2.0d)));
+        return (float) (0.35d + (0.65d * wave));
+      }
+      return fadeAlpha(now, typingPulseUntilMs, fadeWindow);
+    }
+
+    private static float fadeAlpha(long now, long fadeStartMs, int fadeWindowMs) {
+      if (fadeStartMs <= 0L) return 0f;
+      long elapsed = now - fadeStartMs;
+      if (elapsed <= 0L) return 1f;
+      if (elapsed >= fadeWindowMs) return 0f;
+      float progress = elapsed / (float) fadeWindowMs;
+      return Math.max(0f, 1f - progress);
+    }
+
+    private static String normalizeTypingState(String state) {
+      String s = Objects.toString(state, "").trim().toLowerCase(java.util.Locale.ROOT);
+      return switch (s) {
+        case "active", "composing", "paused" -> "active";
+        case "done", "inactive" -> "done";
+        default -> "active";
+      };
     }
 
     @Override
@@ -2866,6 +3072,7 @@ static final class NodeData {
   @PreDestroy
   void shutdown() {
     try {
+      if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
       nodeActions.close();
     } catch (Exception ignored) {

@@ -119,6 +119,34 @@ public class RuntimeConfigStore {
   }
 
   /**
+   * Reads {@code ircafe.ui.tray.closeToTrayHintShown} from runtime config.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readTrayCloseToTrayHintShown(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object trayObj = ui.get("tray");
+      if (!(trayObj instanceof Map<?, ?> tray)) return defaultValue;
+
+      if (!tray.containsKey("closeToTrayHintShown")) return defaultValue;
+      return asBoolean(tray.get("closeToTrayHintShown")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read tray.closeToTrayHintShown from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  /**
    * Reads {@code ircafe.ui.invites.autoJoinOnInvite} from runtime config.
    *
    * <p>Returns {@code defaultValue} when the key is missing or invalid.
@@ -560,6 +588,23 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTrayCloseToTrayHintShown(boolean shown) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      tray.put("closeToTrayHintShown", shown);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.closeToTrayHintShown setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberTrayMinimizeToTray(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -857,8 +902,16 @@ public class RuntimeConfigStore {
           Map<String, Object> m = new LinkedHashMap<>();
           m.put("enabled", r.enabled());
           m.put("eventType", r.eventType() != null ? r.eventType().name() : "INVITE_RECEIVED");
-          m.put("sourceFilter", r.sourceFilter() != null ? r.sourceFilter().name() : "ANY");
+          m.put("sourceMode", r.sourceMode() != null ? r.sourceMode().name() : "ANY");
+          String sourcePattern = Objects.toString(r.sourcePattern(), "").trim();
+          if (!sourcePattern.isEmpty()) m.put("sourcePattern", sourcePattern);
+
+          m.put("channelScope", r.channelScope() != null ? r.channelScope().name() : "ALL");
+          String channelPatterns = Objects.toString(r.channelPatterns(), "").trim();
+          if (!channelPatterns.isEmpty()) m.put("channelPatterns", channelPatterns);
+
           m.put("toastEnabled", r.toastEnabled());
+          m.put("notificationsNodeEnabled", r.notificationsNodeEnabled());
           m.put("soundEnabled", r.soundEnabled());
           m.put("soundId", Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());
           m.put("soundUseCustom", r.soundUseCustom());
@@ -866,11 +919,13 @@ public class RuntimeConfigStore {
           String custom = Objects.toString(r.soundCustomPath(), "").trim();
           if (!custom.isEmpty()) m.put("soundCustomPath", custom);
 
-          String include = Objects.toString(r.channelWhitelist(), "").trim();
-          if (!include.isEmpty()) m.put("channelWhitelist", include);
-
-          String exclude = Objects.toString(r.channelBlacklist(), "").trim();
-          if (!exclude.isEmpty()) m.put("channelBlacklist", exclude);
+          m.put("scriptEnabled", r.scriptEnabled());
+          String scriptPath = Objects.toString(r.scriptPath(), "").trim();
+          if (!scriptPath.isEmpty()) m.put("scriptPath", scriptPath);
+          String scriptArgs = Objects.toString(r.scriptArgs(), "").trim();
+          if (!scriptArgs.isEmpty()) m.put("scriptArgs", scriptArgs);
+          String scriptWorkingDirectory = Objects.toString(r.scriptWorkingDirectory(), "").trim();
+          if (!scriptWorkingDirectory.isEmpty()) m.put("scriptWorkingDirectory", scriptWorkingDirectory);
 
           out.add(m);
         }

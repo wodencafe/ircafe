@@ -31,8 +31,13 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Component
 @Lazy
@@ -40,6 +45,13 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   public static final String ID = "users";
 
   private static final int ACCOUNT_ICON_SIZE = 10;
+  private static final int TYPING_ICON_SIZE = 12;
+  private static final int TYPING_ICON_RIGHT_PAD = 6;
+  private static final int TYPING_FADE_IN_MS = 220;
+  private static final int TYPING_HOLD_MS = 8000;
+  private static final int TYPING_FADE_OUT_MS = 900;
+  private static final int TYPING_PULSE_MS = 1200;
+  private static final int TYPING_TICK_MS = 50;
 
   private static Icon accountIcon(AccountState state) {
     AccountState s = state != null ? state : AccountState.UNKNOWN;
@@ -180,6 +192,9 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private record IgnoreMark(boolean ignore, boolean softIgnore) {}
 
   private TargetRef active = new TargetRef("default", "status");
+  private final Map<String, TypingIndicatorState> typingByNick = new HashMap<>();
+  private final Set<String> nickKeys = new HashSet<>();
+  private final Timer typingIndicatorTimer = new Timer(TYPING_TICK_MS, e -> onTypingIndicatorTick());
 
   public UserListDockable(
                          NickColorService nickColors,
@@ -241,40 +256,9 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     list.setToolTipText("");
-    final ListCellRenderer<? super NickInfo> baseRenderer = list.getCellRenderer();
-    list.setCellRenderer((JList<? extends NickInfo> l, NickInfo value, int index, boolean isSelected, boolean cellHasFocus) -> {
-      java.awt.Component c = baseRenderer.getListCellRendererComponent(l, value, index, isSelected, cellHasFocus);
-
-      if (!(c instanceof JLabel lbl)) return c;
-
-      String nick = value == null ? "" : Objects.toString(value.nick(), "");
-      String prefix = value == null ? "" : Objects.toString(value.prefix(), "");
-      String raw = prefix + nick;
-
-      IgnoreMark mark = ignoreMark(value);
-      String display = raw;
-      AwayState away = (value == null || value.awayState() == null) ? AwayState.UNKNOWN : value.awayState();
-      AccountState acct = (value == null || value.accountState() == null) ? AccountState.UNKNOWN : value.accountState();
-
-      // Account indicator (logged in/out/unknown).
-      lbl.setIcon(accountIcon(acct));
-      lbl.setIconTextGap(6);
-      if (mark.ignore) display += "  [IGN]";
-      if (mark.softIgnore) display += "  [SOFT]";
-      lbl.setText(display);
-      Font f = lbl.getFont();
-      int style = f.getStyle();
-      if (mark.ignore) style |= Font.BOLD;
-      if (mark.softIgnore) style |= Font.ITALIC;
-      if (away == AwayState.AWAY) style |= Font.ITALIC;
-      lbl.setFont(f.deriveFont(style));
-      if (nick != null && !nick.isBlank() && nickColors != null && nickColors.enabled()) {
-        Color fg = nickColors.colorForNick(nick, lbl.getBackground(), lbl.getForeground());
-        lbl.setForeground(fg);
-      }
-
-      return c;
-    });
+    list.setCellRenderer(new NickCellRenderer());
+    typingIndicatorTimer.setRepeats(true);
+    typingIndicatorTimer.setCoalesce(true);
     scroll = new JScrollPane(
         list,
         ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
@@ -341,6 +325,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
   @PreDestroy
   void shutdown() {
+    typingIndicatorTimer.stop();
     closeables.closeQuietly();
   }
 
@@ -353,25 +338,68 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setChannel(TargetRef target) {
-    this.active = target;
+    TargetRef next = target != null ? target : new TargetRef("default", "status");
+    boolean changed = !Objects.equals(this.active, next);
+    this.active = next;
+    if (changed) {
+      clearTypingIndicators();
+    }
     list.repaint();
   }
 
   public void setNicks(List<NickInfo> nicks) {
+    nickKeys.clear();
     model.clear();
-    if (nicks == null || nicks.isEmpty()) return;
+    if (nicks == null || nicks.isEmpty()) {
+      clearTypingIndicators();
+      return;
+    }
     // Bulk add to avoid firing an interval-added event per nick (big channels can be thousands).
     model.addAll(nicks);
+    for (NickInfo ni : nicks) {
+      String key = foldNick(ni == null ? "" : ni.nick());
+      if (key != null) {
+        nickKeys.add(key);
+      }
+    }
+    pruneTypingIndicatorsToKnownNicks();
   }
 
   public void setPlaceholder(String... nicks) {
+    nickKeys.clear();
     model.clear();
     if (nicks == null) return;
     for (String n : nicks) {
       String nick = Objects.toString(n, "").trim();
       if (nick.isEmpty()) continue;
       model.addElement(new NickInfo(nick, "", ""));
+      String key = foldNick(nick);
+      if (key != null) {
+        nickKeys.add(key);
+      }
     }
+    pruneTypingIndicatorsToKnownNicks();
+  }
+
+  public void showTypingIndicator(TargetRef target, String nick, String state) {
+    if (!sameChannelTarget(active, target)) return;
+    String key = foldNick(nick);
+    if (key == null || !nickKeys.contains(key)) return;
+
+    long now = System.currentTimeMillis();
+    TypingIndicatorState indicator = typingByNick.computeIfAbsent(key, __ -> new TypingIndicatorState());
+    indicator.apply(state, now);
+    indicator.expireIfNeeded(now);
+    if (indicator.isFinished(now)) {
+      typingByNick.remove(key);
+    }
+
+    if (!typingByNick.isEmpty() && !typingIndicatorTimer.isRunning()) {
+      typingIndicatorTimer.start();
+    } else if (typingByNick.isEmpty()) {
+      typingIndicatorTimer.stop();
+    }
+    list.repaint();
   }
 
   public TargetRef getChannel() {
@@ -396,6 +424,246 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
     IgnoreStatusService.Status st = ignoreStatusService.status(active.serverId(), nick, hostmask);
     return new IgnoreMark(st.hard(), st.soft());
+  }
+
+  private void onTypingIndicatorTick() {
+    long now = System.currentTimeMillis();
+    boolean visible = false;
+    boolean changed = false;
+
+    java.util.Iterator<Map.Entry<String, TypingIndicatorState>> it = typingByNick.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<String, TypingIndicatorState> e = it.next();
+      TypingIndicatorState state = e.getValue();
+      if (state == null) {
+        it.remove();
+        changed = true;
+        continue;
+      }
+      state.expireIfNeeded(now);
+      if (state.isFinished(now)) {
+        it.remove();
+        changed = true;
+        continue;
+      }
+      if (state.alpha(now) > 0.01f) {
+        visible = true;
+      }
+    }
+
+    if (typingByNick.isEmpty()) {
+      typingIndicatorTimer.stop();
+    }
+    if (visible || changed) {
+      list.repaint();
+    }
+  }
+
+  private void clearTypingIndicators() {
+    if (typingByNick.isEmpty()) return;
+    typingByNick.clear();
+    typingIndicatorTimer.stop();
+  }
+
+  private void pruneTypingIndicatorsToKnownNicks() {
+    if (typingByNick.isEmpty()) return;
+    if (nickKeys.isEmpty()) {
+      clearTypingIndicators();
+      return;
+    }
+    boolean changed = typingByNick.keySet().removeIf(k -> k == null || !nickKeys.contains(k));
+    if (typingByNick.isEmpty()) {
+      typingIndicatorTimer.stop();
+    }
+    if (changed) {
+      list.repaint();
+    }
+  }
+
+  private float typingAlphaForNick(String nick) {
+    String key = foldNick(nick);
+    if (key == null) return 0f;
+    TypingIndicatorState state = typingByNick.get(key);
+    if (state == null) return 0f;
+    return state.alpha(System.currentTimeMillis());
+  }
+
+  private boolean isPausedTypingForNick(String nick) {
+    String key = foldNick(nick);
+    if (key == null) return false;
+    TypingIndicatorState state = typingByNick.get(key);
+    return state != null && state.isPaused();
+  }
+
+  private static boolean sameChannelTarget(TargetRef a, TargetRef b) {
+    if (a == null || b == null) return false;
+    if (!a.isChannel() || !b.isChannel()) return false;
+    if (!Objects.equals(a.serverId(), b.serverId())) return false;
+    return a.matches(b.target());
+  }
+
+  private static String foldNick(String nick) {
+    String n = Objects.toString(nick, "").trim();
+    if (n.isEmpty()) return null;
+    return n.toLowerCase(Locale.ROOT);
+  }
+
+  private static String normalizeTypingState(String state) {
+    String s = Objects.toString(state, "").trim().toLowerCase(Locale.ROOT);
+    return switch (s) {
+      case "active", "composing" -> "active";
+      case "paused" -> "paused";
+      case "done", "inactive" -> "done";
+      default -> "active";
+    };
+  }
+
+  private final class NickCellRenderer extends DefaultListCellRenderer {
+    private final Icon keyboardIcon = SvgIcons.icon("keyboard", TYPING_ICON_SIZE, Palette.QUIET);
+    private float typingIconAlpha = 0f;
+
+    @Override
+    public java.awt.Component getListCellRendererComponent(
+        JList<?> list,
+        Object value,
+        int index,
+        boolean isSelected,
+        boolean cellHasFocus
+    ) {
+      JLabel lbl = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+      NickInfo ni = (value instanceof NickInfo n) ? n : null;
+
+      String nick = ni == null ? "" : Objects.toString(ni.nick(), "");
+      String prefix = ni == null ? "" : Objects.toString(ni.prefix(), "");
+      String display = prefix + nick;
+
+      IgnoreMark mark = ignoreMark(ni);
+      AwayState away = (ni == null || ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
+      AccountState acct = (ni == null || ni.accountState() == null) ? AccountState.UNKNOWN : ni.accountState();
+
+      lbl.setIcon(accountIcon(acct));
+      lbl.setIconTextGap(6);
+      if (mark.ignore) display += "  [IGN]";
+      if (mark.softIgnore) display += "  [SOFT]";
+      lbl.setText(display);
+
+      Font f = lbl.getFont();
+      int style = f.getStyle();
+      if (mark.ignore) style |= Font.BOLD;
+      if (mark.softIgnore) style |= Font.ITALIC;
+      if (away == AwayState.AWAY) style |= Font.ITALIC;
+      lbl.setFont(f.deriveFont(style));
+
+      if (!nick.isBlank() && nickColors != null && nickColors.enabled()) {
+        Color fg = nickColors.colorForNick(nick, lbl.getBackground(), lbl.getForeground());
+        lbl.setForeground(fg);
+      }
+
+      typingIconAlpha = typingAlphaForNick(nick);
+      if (isPausedTypingForNick(nick)) {
+        typingIconAlpha = Math.min(typingIconAlpha, 0.4f);
+      }
+
+      int rightPad = (keyboardIcon == null) ? 2 : (keyboardIcon.getIconWidth() + TYPING_ICON_RIGHT_PAD + 2);
+      lbl.setBorder(BorderFactory.createEmptyBorder(1, 2, 1, rightPad));
+      return lbl;
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+      super.paintComponent(g);
+      if (keyboardIcon == null || typingIconAlpha <= 0.01f) return;
+
+      Graphics2D g2 = (Graphics2D) g.create();
+      try {
+        g2.setComposite(AlphaComposite.SrcOver.derive(Math.max(0f, Math.min(1f, typingIconAlpha))));
+        int x = Math.max(0, getWidth() - keyboardIcon.getIconWidth() - TYPING_ICON_RIGHT_PAD);
+        int y = Math.max(0, (getHeight() - keyboardIcon.getIconHeight()) / 2);
+        keyboardIcon.paintIcon(this, g2, x, y);
+      } finally {
+        g2.dispose();
+      }
+    }
+  }
+
+  private enum TypingVisualState {
+    ACTIVE,
+    PAUSED,
+    FADING
+  }
+
+  private static final class TypingIndicatorState {
+    private TypingVisualState mode = TypingVisualState.ACTIVE;
+    private long visibleSinceMs = 0L;
+    private long expiresAtMs = 0L;
+    private long fadeStartedMs = 0L;
+    private float fadeFromAlpha = 0f;
+
+    void apply(String rawState, long now) {
+      String state = normalizeTypingState(rawState);
+      if ("done".equals(state)) {
+        startFade(now, alpha(now));
+        return;
+      }
+
+      if (!isVisible(now)) {
+        visibleSinceMs = now;
+      }
+      mode = "paused".equals(state) ? TypingVisualState.PAUSED : TypingVisualState.ACTIVE;
+      expiresAtMs = now + TYPING_HOLD_MS;
+      fadeStartedMs = 0L;
+      fadeFromAlpha = 0f;
+    }
+
+    void expireIfNeeded(long now) {
+      if (mode == TypingVisualState.FADING) return;
+      if (expiresAtMs > 0L && now >= expiresAtMs) {
+        startFade(now, alpha(now));
+      }
+    }
+
+    boolean isFinished(long now) {
+      if (mode != TypingVisualState.FADING) return false;
+      return now - fadeStartedMs >= TYPING_FADE_OUT_MS;
+    }
+
+    boolean isPaused() {
+      return mode == TypingVisualState.PAUSED;
+    }
+
+    float alpha(long now) {
+      if (mode == TypingVisualState.FADING) {
+        if (fadeStartedMs <= 0L) return 0f;
+        long elapsed = Math.max(0L, now - fadeStartedMs);
+        if (elapsed >= TYPING_FADE_OUT_MS) return 0f;
+        float progress = elapsed / (float) TYPING_FADE_OUT_MS;
+        return Math.max(0f, fadeFromAlpha * (1f - progress));
+      }
+
+      float fadeIn = 1f;
+      if (visibleSinceMs > 0L) {
+        fadeIn = Math.max(0f, Math.min(1f, (now - visibleSinceMs) / (float) TYPING_FADE_IN_MS));
+      }
+      if (mode == TypingVisualState.PAUSED) {
+        return 0.38f * fadeIn;
+      }
+
+      double phase = (now % TYPING_PULSE_MS) / (double) TYPING_PULSE_MS;
+      double wave = 0.5d + (0.5d * Math.sin((phase * (Math.PI * 2d)) - (Math.PI / 2d)));
+      float pulse = (float) (0.45d + (0.55d * wave));
+      return Math.max(0f, Math.min(1f, fadeIn * pulse));
+    }
+
+    private void startFade(long now, float fromAlpha) {
+      mode = TypingVisualState.FADING;
+      fadeStartedMs = now;
+      expiresAtMs = 0L;
+      fadeFromAlpha = Math.max(0f, Math.min(1f, fromAlpha));
+    }
+
+    private boolean isVisible(long now) {
+      return alpha(now) > 0.01f;
+    }
   }
 
   private static String escapeHtml(String s) {

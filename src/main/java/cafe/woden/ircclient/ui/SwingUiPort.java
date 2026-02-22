@@ -626,6 +626,24 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void showTypingActivity(TargetRef target, String state) {
+    onEdt(() -> {
+      if (serverTree != null) {
+        serverTree.markTypingActivity(target, state);
+      }
+    });
+  }
+
+  @Override
+  public void showUsersTypingIndicator(TargetRef target, String nick, String state) {
+    onEdt(() -> {
+      if (users != null) {
+        users.showTypingIndicator(target, nick, state);
+      }
+    });
+  }
+
+  @Override
   public void setReadMarker(TargetRef target, long markerEpochMs) {
     onEdt(() -> transcripts.updateReadMarker(target, markerEpochMs));
   }

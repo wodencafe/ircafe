@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.tray;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.StatusBar;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -54,6 +55,7 @@ public class TrayNotificationService {
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<TrayService> trayServiceProvider;
   private final ObjectProvider<MainFrame> mainFrameProvider;
+  private final ObjectProvider<StatusBar> statusBarProvider;
   private final ObjectProvider<TargetCoordinator> targetCoordinatorProvider;
   private final ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
@@ -66,6 +68,7 @@ public class TrayNotificationService {
       UiSettingsBus settingsBus,
       ObjectProvider<TrayService> trayServiceProvider,
       ObjectProvider<MainFrame> mainFrameProvider,
+      ObjectProvider<StatusBar> statusBarProvider,
       ObjectProvider<TargetCoordinator> targetCoordinatorProvider,
       ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
       ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
@@ -74,6 +77,7 @@ public class TrayNotificationService {
     this.settingsBus = settingsBus;
     this.trayServiceProvider = trayServiceProvider;
     this.mainFrameProvider = mainFrameProvider;
+    this.statusBarProvider = statusBarProvider;
     this.targetCoordinatorProvider = targetCoordinatorProvider;
     this.serverTreeProvider = serverTreeProvider;
     this.gnomeDbusProvider = gnomeDbusProvider;
@@ -163,6 +167,26 @@ public class TrayNotificationService {
   }
 
   /**
+   * One-time discoverability hint shown when IRCafe is first hidden to tray.
+   */
+  public void notifyCloseToTrayHint() {
+    UiSettings s = settingsBus.get();
+    if (s == null || !s.trayEnabled()) return;
+
+    String title = "IRCafe is still running";
+    String body = "IRCafe was hidden to the system tray. Use the tray icon/menu to reopen it.";
+    String targetKey = targetKey("ircafe", "tray");
+    notifyAsync(
+        targetKey,
+        contentKey(targetKey, "tray-close-hint", body),
+        title,
+        body,
+        this::showMainWindowOnly,
+        true,
+        SoundDirective.none());
+  }
+
+  /**
    * Sends a custom notification driven by user-configured IRC event rules.
    */
   public void notifyCustom(
@@ -177,7 +201,9 @@ public class TrayNotificationService {
       String soundCustomPath
   ) {
     UiSettings s = settingsBus.get();
-    if (s == null || !s.trayEnabled()) return;
+    boolean trayEnabled = s != null && s.trayEnabled();
+    StatusBar statusBar = statusBarProvider != null ? statusBarProvider.getIfAvailable() : null;
+    if (!trayEnabled && statusBar == null) return;
 
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
@@ -186,24 +212,27 @@ public class TrayNotificationService {
     if (tgt.isEmpty()) tgt = "status";
 
     TargetRef openTarget = safeTargetRef(sid, tgt, "status");
-    if (!passesNotifyConditions(openTarget)) return;
+    if (trayEnabled && !passesNotifyConditions(openTarget)) return;
 
     String finalTitle = Objects.toString(title, "").trim();
     if (finalTitle.isEmpty()) finalTitle = "IRCafe";
     String finalBody = safeBody(body);
 
+    boolean effectiveShowToast = trayEnabled && showToast;
+    boolean effectivePlaySound = trayEnabled && playSound;
+
     String targetKey = targetKey(sid, tgt);
     String contentKey = contentKey(
         targetKey,
         "event",
-        (showToast ? "toast|" : "sound|") + finalTitle + "|" + finalBody);
+        (effectiveShowToast ? "toast|" : "status|") + finalTitle + "|" + finalBody);
 
-    SoundDirective soundDirective = playSound
+    SoundDirective soundDirective = effectivePlaySound
         ? SoundDirective.override(soundId, soundUseCustom, soundCustomPath)
         : SoundDirective.none();
 
-    Runnable onClick = showToast ? () -> openTarget(openTarget) : null;
-    notifyAsync(targetKey, contentKey, finalTitle, finalBody, onClick, showToast, soundDirective);
+    Runnable onClick = () -> openTarget(openTarget);
+    notifyAsync(targetKey, contentKey, finalTitle, finalBody, onClick, effectiveShowToast, soundDirective);
   }
 
   private boolean passesNotifyConditions(TargetRef target) {
@@ -317,6 +346,8 @@ public class TrayNotificationService {
   private void sendNow(NotificationRequest req) {
     if (req == null) return;
     try {
+      enqueueStatusBarNotice(req);
+
       if (soundService != null && req.soundDirective() != null) {
         switch (req.soundDirective().mode()) {
           case GLOBAL -> soundService.play();
@@ -340,6 +371,25 @@ public class TrayNotificationService {
     } catch (Exception e) {
       log.debug("[ircafe] tray notify failed", e);
     }
+  }
+
+  private void enqueueStatusBarNotice(NotificationRequest req) {
+    if (req == null) return;
+    StatusBar statusBar = statusBarProvider != null ? statusBarProvider.getIfAvailable() : null;
+    if (statusBar == null) return;
+
+    String title = Objects.toString(req.title(), "").trim();
+    String body = Objects.toString(req.body(), "").trim();
+    String text;
+    if (title.isEmpty()) {
+      text = body;
+    } else if (body.isEmpty()) {
+      text = title;
+    } else {
+      text = title + ": " + body;
+    }
+    if (text.isBlank()) return;
+    statusBar.enqueueNotification(text, req.onClick());
   }
 
   private boolean tryWindowsToastPopup(String title, String body, Runnable onClick) {

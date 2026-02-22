@@ -25,19 +25,31 @@ class RuntimeConfigStoreIrcEventNotificationRulesTest {
         new IrcEventNotificationRule(
             true,
             IrcEventNotificationRule.EventType.KICKED,
-            IrcEventNotificationRule.SourceFilter.OTHERS,
+            IrcEventNotificationRule.SourceMode.OTHERS,
+            null,
+            IrcEventNotificationRule.ChannelScope.ONLY,
+            "#general",
+            true,
             true,
             true,
             "NOTIF_3",
             false,
             null,
-            "#general",
-            "#general-offtopic")));
+            true,
+            "/tmp/ircafe-event-hook.sh",
+            "--flag \"value with spaces\"",
+            "/tmp")));
 
     String yaml = Files.readString(cfg);
     assertTrue(yaml.contains("ircEventNotificationRules"));
     assertTrue(yaml.contains("eventType: KICKED"));
-    assertTrue(yaml.contains("sourceFilter: OTHERS"));
-    assertTrue(yaml.contains("channelWhitelist: '#general'") || yaml.contains("channelWhitelist: \"#general\"") || yaml.contains("channelWhitelist: #general"));
+    assertTrue(yaml.contains("sourceMode: OTHERS"));
+    assertTrue(yaml.contains("channelScope: ONLY"));
+    assertTrue(yaml.contains("channelPatterns: '#general'") || yaml.contains("channelPatterns: \"#general\"") || yaml.contains("channelPatterns: #general"));
+    assertTrue(yaml.contains("notificationsNodeEnabled: true"));
+    assertTrue(yaml.contains("scriptEnabled: true"));
+    assertTrue(yaml.contains("scriptPath: /tmp/ircafe-event-hook.sh") || yaml.contains("scriptPath: '/tmp/ircafe-event-hook.sh'") || yaml.contains("scriptPath: \"/tmp/ircafe-event-hook.sh\""));
+    assertTrue(yaml.contains("scriptArgs: '--flag \"value with spaces\"'") || yaml.contains("scriptArgs: \"--flag \\\"value with spaces\\\"\"") || yaml.contains("scriptArgs: --flag \"value with spaces\""));
+    assertTrue(yaml.contains("scriptWorkingDirectory: /tmp") || yaml.contains("scriptWorkingDirectory: '/tmp'") || yaml.contains("scriptWorkingDirectory: \"/tmp\""));
   }
 }

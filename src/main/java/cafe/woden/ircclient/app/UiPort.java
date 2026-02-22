@@ -368,6 +368,20 @@ Flowable<TargetRef> targetActivations();
   default void showTypingIndicator(TargetRef target, String nick, String state) {}
 
   /**
+   * Mark target-level typing activity (for buffer list indicators).
+   *
+   * <p>This is intentionally non-transcript UI state.
+   */
+  default void showTypingActivity(TargetRef target, String state) {}
+
+  /**
+   * Show typing activity for nicks in the active channel user list.
+   *
+   * <p>This is intentionally non-transcript UI state.
+   */
+  default void showUsersTypingIndicator(TargetRef target, String nick, String state) {}
+
+  /**
    * Update the read-marker boundary for a target using epoch milliseconds.
    */
   default void setReadMarker(TargetRef target, long markerEpochMs) {}

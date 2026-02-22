@@ -96,6 +96,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   private record ParsedInviteLine(String fromNick, String inviteeNick, String channel, String reason) {}
 
+  private record ParsedWallopsLine(String from, String message) {}
+
 
   private record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
 
@@ -178,6 +180,32 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (channel.isBlank()) return null;
 
     return new ParsedInviteLine(from, invitee, channel, reason);
+  }
+
+  private static ParsedWallopsLine parseWallopsLine(ParsedIrcLine parsed) {
+    if (parsed == null) return null;
+    String cmd = Objects.toString(parsed.command(), "").trim();
+    if (!"WALLOPS".equalsIgnoreCase(cmd)) return null;
+
+    String from = Objects.toString(nickFromPrefix(parsed.prefix()), "").trim();
+    if (from.isEmpty()) {
+      from = Objects.toString(parsed.prefix(), "").trim();
+    }
+    if (from.isEmpty()) from = "server";
+
+    String message = Objects.toString(parsed.trailing(), "").trim();
+    if (message.isEmpty()) {
+      List<String> params = parsed.params();
+      if (params != null && !params.isEmpty()) {
+        message = Objects.toString(params.get(params.size() - 1), "").trim();
+      }
+    }
+    if (message.startsWith(":")) {
+      message = message.substring(1).trim();
+    }
+    if (message.isEmpty()) return null;
+
+    return new ParsedWallopsLine(from, message);
   }
 
   private static String nickFromPrefix(String prefix) {
@@ -1413,6 +1441,19 @@ public void onFinger(FingerEvent event) throws Exception {
         return;
       }
 
+      ParsedWallopsLine parsedWallops = parseWallopsLine(parsedRawLine);
+      if (parsedWallops != null) {
+        Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
+        if (at == null) at = Instant.now();
+        bus.onNext(new ServerIrcEvent(
+            serverId,
+            new IrcEvent.WallopsReceived(
+                at,
+                parsedWallops.from(),
+                parsedWallops.message())));
+        return;
+      }
+
       if (handleBatchControlLine(line, rawLine)) {
         return;
       }
@@ -1983,6 +2024,24 @@ if (fromSelf) {
         }
 
         emitServerResponseLine(event.getBot(), code, line);
+        return;
+      }
+
+      if (code == 324) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        PircbotxChannelModeParsers.ParsedRpl324 parsed = PircbotxChannelModeParsers.parseRpl324(line);
+        if (parsed != null) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+        } else {
+          // Defensive fallback: if parsing fails, still surface the raw numeric.
+          emitServerResponseLine(event.getBot(), code, line);
+        }
         return;
       }
 
