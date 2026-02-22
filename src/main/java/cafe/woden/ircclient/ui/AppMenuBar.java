@@ -514,6 +514,13 @@ public class AppMenuBar extends JMenuBar {
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
         showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
+    JCheckBoxMenuItem showApplicationRoot = new JCheckBoxMenuItem("Show Application Root");
+    showApplicationRoot.setSelected(serverTree.isApplicationRootVisible());
+    showApplicationRoot.addActionListener(e ->
+        serverTree.setApplicationRootVisible(showApplicationRoot.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_APPLICATION_ROOT_VISIBLE, evt ->
+        showApplicationRoot.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
     JMenuItem openSelectedNodeDock = new JMenuItem("Open Selected Node in Chat Dock");
     openSelectedNodeDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
@@ -527,6 +534,7 @@ public class AppMenuBar extends JMenuBar {
     window.addSeparator();
     window.add(showChannelListNodes);
     window.add(showDccNodes);
+    window.add(showApplicationRoot);
     window.addSeparator();
     window.add(openSelectedNodeDock);
     window.addSeparator();

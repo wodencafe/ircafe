@@ -103,6 +103,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
+  private static final String IRC_ROOT_LABEL = "IRC";
+  private static final String APPLICATION_ROOT_LABEL = "Application";
+  private static final String APP_UNHANDLED_ERRORS_LABEL = "Unhandled Errors";
+  private static final String APP_ASSERTJ_SWING_LABEL = "AssertJ Swing";
+  private static final String APP_JHICCUP_LABEL = "jHiccup";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
   private static final int TREE_NODE_ICON_SIZE = 13;
@@ -117,6 +122,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final Color TYPING_ACTIVITY_GLOW = new Color(120, 255, 150);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
+  public static final String PROP_APPLICATION_ROOT_VISIBLE = "applicationRootVisible";
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
@@ -145,7 +151,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
-  private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
+  // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
+  private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("(root)");
+  private final DefaultMutableTreeNode ircRoot = new DefaultMutableTreeNode(IRC_ROOT_LABEL);
+  private final DefaultMutableTreeNode applicationRoot = new DefaultMutableTreeNode(APPLICATION_ROOT_LABEL);
+  private final TargetRef applicationUnhandledErrorsRef = TargetRef.applicationUnhandledErrors();
+  private final TargetRef applicationAssertjSwingRef = TargetRef.applicationAssertjSwing();
+  private final TargetRef applicationJhiccupRef = TargetRef.applicationJhiccup();
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
   private volatile InsertionLine insertionLine;
@@ -236,6 +248,7 @@ private static final class InsertionLine {
   private final ServerDialogs serverDialogs;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
+  private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -294,9 +307,15 @@ private static final class InsertionLine {
     header.add(disconnectBtn);
     header.add(Box.createHorizontalGlue());
 
+    root.add(ircRoot);
+    initializeApplicationTreeNodes();
+    if (showApplicationRoot) {
+      root.add(applicationRoot);
+    }
+
     add(header, BorderLayout.NORTH);
     setConnectionControlsEnabled(true, false);
-    tree.setRootVisible(true);
+    tree.setRootVisible(false);
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
 
@@ -629,7 +648,7 @@ private static final class InsertionLine {
       if (first != null) {
         selectTarget(first);
       } else {
-        tree.setSelectionPath(new TreePath(root.getPath()));
+        tree.setSelectionPath(defaultSelectionPath());
       }
     });
   }
@@ -1071,7 +1090,7 @@ private static final class InsertionLine {
         menu.add(save);
       }
 
-      // Only show server editing for the primary, configured server entries directly under the IRC root.
+      // Only show server editing for the primary, configured server entries directly under the IRC branch.
       if (canReorder) {
         boolean editable = serverDialogs != null
             && serverCatalog != null
@@ -1203,7 +1222,15 @@ private boolean isServerNode(DefaultMutableTreeNode node) {
 }
 
 private boolean isRootServerNode(DefaultMutableTreeNode node) {
-  return node != null && node.getParent() == root && isServerNode(node);
+  return node != null && node.getParent() == ircRoot && isServerNode(node);
+}
+
+private boolean isIrcRootNode(DefaultMutableTreeNode node) {
+  return node != null && node == ircRoot;
+}
+
+private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
+  return node != null && node == applicationRoot;
 }
 
 
@@ -1870,6 +1897,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return showDccTransfersNodes;
   }
 
+  public boolean isApplicationRootVisible() {
+    return showApplicationRoot;
+  }
+
   public void setChannelListNodesVisible(boolean visible) {
     boolean old = showChannelListNodes;
     boolean next = visible;
@@ -1886,6 +1917,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     showDccTransfersNodes = next;
     syncUiLeafVisibility();
     firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
+  }
+
+  public void setApplicationRootVisible(boolean visible) {
+    boolean old = showApplicationRoot;
+    boolean next = visible;
+    if (old == next) return;
+    showApplicationRoot = next;
+    syncApplicationRootVisibility();
+    firePropertyChange(PROP_APPLICATION_ROOT_VISIBLE, old, next);
   }
 
   public boolean canOpenSelectedNodeInChatDock() {
@@ -1997,6 +2037,67 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
   }
 
+  private void initializeApplicationTreeNodes() {
+    applicationRoot.removeAllChildren();
+    addApplicationLeaf(applicationUnhandledErrorsRef, APP_UNHANDLED_ERRORS_LABEL);
+    addApplicationLeaf(applicationAssertjSwingRef, APP_ASSERTJ_SWING_LABEL);
+    addApplicationLeaf(applicationJhiccupRef, APP_JHICCUP_LABEL);
+  }
+
+  private void addApplicationLeaf(TargetRef ref, String label) {
+    if (ref == null) return;
+    DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, label));
+    leaves.put(ref, leaf);
+    applicationRoot.add(leaf);
+  }
+
+  private void syncApplicationRootVisibility() {
+    if (showApplicationRoot) {
+      if (applicationRoot.getParent() != root) {
+        root.insert(applicationRoot, Math.min(1, root.getChildCount()));
+        model.nodeStructureChanged(root);
+      }
+      tree.expandPath(new TreePath(applicationRoot.getPath()));
+      return;
+    }
+
+    TargetRef selected = selectedTargetRef();
+    if (selected != null && selected.isApplicationUi()) {
+      TargetRef first = servers.values().stream()
+          .findFirst()
+          .map(sn -> sn.statusRef)
+          .orElse(null);
+      if (first != null) {
+        selectTarget(first);
+      } else {
+        tree.setSelectionPath(defaultSelectionPath());
+      }
+    }
+
+    if (applicationRoot.getParent() == root) {
+      root.remove(applicationRoot);
+      model.nodeStructureChanged(root);
+    }
+  }
+
+  private TreePath defaultSelectionPath() {
+    if (ircRoot.getParent() == root) {
+      return new TreePath(ircRoot.getPath());
+    }
+    if (applicationRoot.getParent() == root) {
+      return new TreePath(applicationRoot.getPath());
+    }
+    return new TreePath(root.getPath());
+  }
+
+  private static String applicationLeafLabel(TargetRef ref) {
+    if (ref == null) return "";
+    if (ref.isApplicationUnhandledErrors()) return APP_UNHANDLED_ERRORS_LABEL;
+    if (ref.isApplicationAssertjSwing()) return APP_ASSERTJ_SWING_LABEL;
+    if (ref.isApplicationJhiccup()) return APP_JHICCUP_LABEL;
+    return ref.target();
+  }
+
   private void syncUiLeafVisibility() {
     TargetRef selected = selectedTargetRef();
 
@@ -2083,6 +2184,16 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public void ensureNode(TargetRef ref) {
     Objects.requireNonNull(ref, "ref");
+    if (ref.isApplicationUi()) {
+      if (!showApplicationRoot) {
+        setApplicationRootVisible(true);
+      }
+      if (!leaves.containsKey(ref)) {
+        addApplicationLeaf(ref, applicationLeafLabel(ref));
+        model.nodeStructureChanged(applicationRoot);
+      }
+      return;
+    }
     if (ref.isChannelList() && !showChannelListNodes) {
       setChannelListNodesVisible(true);
     }
@@ -2445,7 +2556,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (first != null) {
       selectTarget(first);
     } else {
-      tree.setSelectionPath(new TreePath(root.getPath()));
+      tree.setSelectionPath(defaultSelectionPath());
     }
   });
 }
@@ -2585,6 +2696,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     Object comp = path.getLastPathComponent();
     if (!(comp instanceof DefaultMutableTreeNode node)) return null;
 
+    if (isIrcRootNode(node)) {
+      return "Configured IRC servers and discovered bouncer networks.";
+    }
+
+    if (isApplicationRootNode(node)) {
+      return "Application diagnostics buffers.";
+    }
+
     if (isSojuNetworksGroupNode(node)) {
       return "Soju networks discovered from the bouncer (not saved).";
     }
@@ -2595,6 +2714,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd && nd.ref != null) {
+      if (nd.ref.isApplicationUnhandledErrors()) {
+        return "Uncaught JVM exceptions captured by IRCafe.";
+      }
+      if (nd.ref.isApplicationAssertjSwing()) {
+        return "Diagnostic buffer for AssertJ Swing/watchdog output.";
+      }
+      if (nd.ref.isApplicationJhiccup()) {
+        return "Diagnostic buffer for jHiccup latency output.";
+      }
       if (nd.ref.isStatus() && BOUNCER_CONTROL_LABEL.equals(nd.label)
           && (sojuBouncerControlServerIds.contains(nd.ref.serverId())
               || zncBouncerControlServerIds.contains(nd.ref.serverId()))) {
@@ -2733,7 +2861,7 @@ private void removeServerRoot(String serverId) {
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
 
-    DefaultMutableTreeNode parent = root;
+    DefaultMutableTreeNode parent = ircRoot;
     if (id.startsWith("soju:")) {
       String origin = sojuOriginByServerId.get(id);
       if (origin == null || origin.isBlank()) {
@@ -3007,6 +3135,12 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, pal);
           setIcon(icon);
           setDisabledIcon(icon);
+        } else if (nd.ref != null && nd.ref.isApplicationUnhandledErrors()) {
+          setTreeIcon("info");
+        } else if (nd.ref != null && nd.ref.isApplicationAssertjSwing()) {
+          setTreeIcon("settings");
+        } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
+          setTreeIcon("refresh");
         } else if (nd.ref != null && nd.ref.isStatus()) {
           setTreeIcon("terminal");
         } else if (nd.ref != null && nd.ref.isNotifications()) {
@@ -3033,6 +3167,14 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
         setIcon(icon);
         setDisabledIcon(disabled);
+      } else if (isIrcRootNode(node)) {
+        setText(IRC_ROOT_LABEL);
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("terminal");
+      } else if (isApplicationRootNode(node)) {
+        setText(APPLICATION_ROOT_LABEL);
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("settings");
       } else if (isPrivateMessagesGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("account-unknown");

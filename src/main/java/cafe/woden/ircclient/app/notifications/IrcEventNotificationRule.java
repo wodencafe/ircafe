@@ -19,7 +19,8 @@ public record IrcEventNotificationRule(
     ChannelScope channelScope,
     String channelPatterns,
     boolean toastEnabled,
-    boolean toastWhenFocused,
+    FocusScope focusScope,
+    boolean statusBarEnabled,
     boolean notificationsNodeEnabled,
     boolean soundEnabled,
     String soundId,
@@ -111,6 +112,23 @@ public record IrcEventNotificationRule(
     }
   }
 
+  public enum FocusScope {
+    ANY("Any"),
+    FOREGROUND_ONLY("Foreground Only"),
+    BACKGROUND_ONLY("Background Only");
+
+    private final String label;
+
+    FocusScope(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
   public IrcEventNotificationRule {
     if (eventType == null) eventType = EventType.INVITE_RECEIVED;
 
@@ -125,6 +143,8 @@ public record IrcEventNotificationRule(
     if (channelScope == ChannelScope.ALL) {
       channelPatterns = null;
     }
+
+    if (focusScope == null) focusScope = defaultFocusScopeForEvent(eventType);
 
     if (soundId == null || soundId.isBlank()) soundId = defaultBuiltInSoundForEvent(eventType).name();
     if (soundCustomPath != null && soundCustomPath.isBlank()) soundCustomPath = null;
@@ -189,7 +209,29 @@ public record IrcEventNotificationRule(
           ChannelScope.ALL,
           null,
           true,
+          defaultFocusScopeForEvent(t),
+          true,
+          true,
           false,
+          defaultBuiltInSoundForEvent(t).name(),
+          false,
+          null,
+          false,
+          null,
+          null,
+          null));
+    }
+    for (EventType t : defaultStatusBarAnyCompanionEvents()) {
+      out.add(new IrcEventNotificationRule(
+          true,
+          t,
+          defaultSourceModeForEvent(t),
+          null,
+          ChannelScope.ALL,
+          null,
+          false,
+          FocusScope.ANY,
+          true,
           true,
           false,
           defaultBuiltInSoundForEvent(t).name(),
@@ -248,6 +290,17 @@ public record IrcEventNotificationRule(
            YOU_KLINED -> true;
       default -> false;
     };
+  }
+
+  private static FocusScope defaultFocusScopeForEvent(EventType eventType) {
+    return FocusScope.BACKGROUND_ONLY;
+  }
+
+  private static List<EventType> defaultStatusBarAnyCompanionEvents() {
+    return List.of(
+        EventType.KICKED,
+        EventType.BANNED,
+        EventType.KLINED);
   }
 
   private static SourceMode defaultSourceModeForEvent(EventType eventType) {

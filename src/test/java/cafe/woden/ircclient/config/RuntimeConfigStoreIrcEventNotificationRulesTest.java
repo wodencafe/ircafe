@@ -30,7 +30,8 @@ class RuntimeConfigStoreIrcEventNotificationRulesTest {
             IrcEventNotificationRule.ChannelScope.ONLY,
             "#general",
             true,
-            false,
+            IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+            true,
             true,
             true,
             "NOTIF_3",
@@ -47,7 +48,9 @@ class RuntimeConfigStoreIrcEventNotificationRulesTest {
     assertTrue(yaml.contains("sourceMode: OTHERS"));
     assertTrue(yaml.contains("channelScope: ONLY"));
     assertTrue(yaml.contains("channelPatterns: '#general'") || yaml.contains("channelPatterns: \"#general\"") || yaml.contains("channelPatterns: #general"));
+    assertTrue(yaml.contains("focusScope: BACKGROUND_ONLY"));
     assertTrue(yaml.contains("toastWhenFocused: false"));
+    assertTrue(yaml.contains("statusBarEnabled: true"));
     assertTrue(yaml.contains("notificationsNodeEnabled: true"));
     assertTrue(yaml.contains("scriptEnabled: true"));
     assertTrue(yaml.contains("scriptPath: /tmp/ircafe-event-hook.sh") || yaml.contains("scriptPath: '/tmp/ircafe-event-hook.sh'") || yaml.contains("scriptPath: \"/tmp/ircafe-event-hook.sh\""));

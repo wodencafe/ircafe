@@ -944,6 +944,231 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized boolean readAppDiagnosticsAssertjSwingEnabled(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("enabled", defaultValue);
+  }
+
+  public synchronized boolean readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("edtFreezeWatchdogEnabled", defaultValue);
+  }
+
+  public synchronized int readAppDiagnosticsAssertjSwingFreezeThresholdMs(int defaultValue) {
+    try {
+      if (file.toString().isBlank()) return clampAssertjFreezeThresholdMs(defaultValue);
+      if (!Files.exists(file)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      if (!assertjSwing.containsKey("edtFreezeThresholdMs")) return clampAssertjFreezeThresholdMs(defaultValue);
+      return clampAssertjFreezeThresholdMs(asInt(assertjSwing.get("edtFreezeThresholdMs")).orElse(defaultValue));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs from '{}'", file, e);
+      return clampAssertjFreezeThresholdMs(defaultValue);
+    }
+  }
+
+  public synchronized int readAppDiagnosticsAssertjSwingWatchdogPollMs(int defaultValue) {
+    try {
+      if (file.toString().isBlank()) return clampAssertjWatchdogPollMs(defaultValue);
+      if (!Files.exists(file)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      if (!assertjSwing.containsKey("edtWatchdogPollMs")) return clampAssertjWatchdogPollMs(defaultValue);
+      return clampAssertjWatchdogPollMs(asInt(assertjSwing.get("edtWatchdogPollMs")).orElse(defaultValue));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtWatchdogPollMs from '{}'", file, e);
+      return clampAssertjWatchdogPollMs(defaultValue);
+    }
+  }
+
+  public synchronized boolean readAppDiagnosticsJhiccupEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return defaultValue;
+
+      if (!jhiccup.containsKey("enabled")) return defaultValue;
+      return asBoolean(jhiccup.get("enabled")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.enabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  public synchronized String readAppDiagnosticsJhiccupJarPath(String defaultValue) {
+    try {
+      if (file.toString().isBlank()) return Objects.toString(defaultValue, "").trim();
+      if (!Files.exists(file)) return Objects.toString(defaultValue, "").trim();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Objects.toString(defaultValue, "").trim();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Objects.toString(defaultValue, "").trim();
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return Objects.toString(defaultValue, "").trim();
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return Objects.toString(defaultValue, "").trim();
+
+      if (!jhiccup.containsKey("jarPath")) return Objects.toString(defaultValue, "").trim();
+      String raw = Objects.toString(jhiccup.get("jarPath"), "").trim();
+      return raw.isEmpty() ? Objects.toString(defaultValue, "").trim() : raw;
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.jarPath from '{}'", file, e);
+      return Objects.toString(defaultValue, "").trim();
+    }
+  }
+
+  public synchronized String readAppDiagnosticsJhiccupJavaCommand(String defaultValue) {
+    try {
+      String fallback = Objects.toString(defaultValue, "").trim();
+      if (fallback.isEmpty()) fallback = "java";
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return fallback;
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return fallback;
+
+      if (!jhiccup.containsKey("javaCommand")) return fallback;
+      String raw = Objects.toString(jhiccup.get("javaCommand"), "").trim();
+      return raw.isEmpty() ? fallback : raw;
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.javaCommand from '{}'", file, e);
+      String fallback = Objects.toString(defaultValue, "").trim();
+      return fallback.isEmpty() ? "java" : fallback;
+    }
+  }
+
+  public synchronized List<String> readAppDiagnosticsJhiccupArgs(List<String> defaultValue) {
+    try {
+      if (file.toString().isBlank()) return sanitizeArgs(defaultValue);
+      if (!Files.exists(file)) return sanitizeArgs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return sanitizeArgs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return sanitizeArgs(defaultValue);
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return sanitizeArgs(defaultValue);
+
+      if (!jhiccup.containsKey("args")) return sanitizeArgs(defaultValue);
+      Object argsObj = jhiccup.get("args");
+      if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
+
+      List<String> out = new ArrayList<>();
+      for (Object entry : raw) {
+        String a = Objects.toString(entry, "").trim();
+        if (!a.isEmpty()) out.add(a);
+      }
+      return List.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.args from '{}'", file, e);
+      return sanitizeArgs(defaultValue);
+    }
+  }
+
+  private boolean readAppDiagnosticsAssertjSwingBoolean(String key, boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return defaultValue;
+
+      if (!assertjSwing.containsKey(key)) return defaultValue;
+      return asBoolean(assertjSwing.get(key)).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.{} from '{}'", key, file, e);
+      return defaultValue;
+    }
+  }
+
+  private static int clampAssertjFreezeThresholdMs(int value) {
+    if (value < 500) return 500;
+    if (value > 120_000) return 120_000;
+    return value;
+  }
+
+  private static int clampAssertjWatchdogPollMs(int value) {
+    if (value < 100) return 100;
+    if (value > 10_000) return 10_000;
+    return value;
+  }
+
+  private static List<String> sanitizeArgs(List<String> args) {
+    if (args == null || args.isEmpty()) return List.of();
+    List<String> out = new ArrayList<>();
+    for (String a : args) {
+      String t = Objects.toString(a, "").trim();
+      if (!t.isEmpty()) out.add(t);
+    }
+    return List.copyOf(out);
+  }
+
   public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("enabled", defaultValue);
   }
@@ -1025,6 +1250,163 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberAppDiagnosticsAssertjSwingEnabled(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean("enabled", enabled, "enabled");
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean(
+        "edtFreezeWatchdogEnabled", enabled, "edtFreezeWatchdogEnabled");
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingFreezeThresholdMs(int ms) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampAssertjFreezeThresholdMs(ms);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put("edtFreezeThresholdMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingWatchdogPollMs(int ms) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampAssertjWatchdogPollMs(ms);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put("edtWatchdogPollMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtWatchdogPollMs to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      jhiccup.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.enabled to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupJarPath(String jarPath) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(jarPath, "").trim();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      if (v.isEmpty()) {
+        jhiccup.remove("jarPath");
+      } else {
+        jhiccup.put("jarPath", v);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.jarPath to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupJavaCommand(String javaCommand) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(javaCommand, "").trim();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      if (v.isEmpty()) {
+        jhiccup.remove("javaCommand");
+      } else {
+        jhiccup.put("javaCommand", v);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.javaCommand to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupArgs(List<String> args) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      List<String> sanitized = sanitizeArgs(args);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      if (sanitized.isEmpty()) {
+        jhiccup.remove("args");
+      } else {
+        jhiccup.put("args", sanitized);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.args to '{}'", file, e);
+    }
+  }
+
+  private void rememberAppDiagnosticsAssertjSwingBoolean(String key, boolean value, String label) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put(key, value);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.{} to '{}'", label, file, e);
+    }
+  }
+
   public synchronized void rememberIrcEventNotificationRules(List<IrcEventNotificationRule> rules) {
     try {
       if (file.toString().isBlank()) return;
@@ -1050,7 +1432,12 @@ public class RuntimeConfigStore {
           if (!channelPatterns.isEmpty()) m.put("channelPatterns", channelPatterns);
 
           m.put("toastEnabled", r.toastEnabled());
-          m.put("toastWhenFocused", r.toastWhenFocused());
+          IrcEventNotificationRule.FocusScope focusScope =
+              r.focusScope() != null ? r.focusScope() : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+          m.put("focusScope", focusScope.name());
+          // Legacy compatibility for older builds that only understand toastWhenFocused.
+          m.put("toastWhenFocused", focusScope != IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
+          m.put("statusBarEnabled", r.statusBarEnabled());
           m.put("notificationsNodeEnabled", r.notificationsNodeEnabled());
           m.put("soundEnabled", r.soundEnabled());
           m.put("soundId", Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());
@@ -2743,6 +3130,20 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
   private static String normalizeCapabilityKey(String capability) {
     String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
     return c.isEmpty() ? null : c;
+  }
+
+  private static Optional<Integer> asInt(Object value) {
+    if (value instanceof Number n) return Optional.of(n.intValue());
+    if (value instanceof String s) {
+      String t = s.trim();
+      if (t.isEmpty()) return Optional.empty();
+      try {
+        return Optional.of(Integer.parseInt(t));
+      } catch (Exception ignored) {
+        return Optional.empty();
+      }
+    }
+    return Optional.empty();
   }
 
   private static Optional<Boolean> asBoolean(Object value) {

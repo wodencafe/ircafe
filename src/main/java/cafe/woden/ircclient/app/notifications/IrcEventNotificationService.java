@@ -45,7 +45,7 @@ public class IrcEventNotificationService {
   }
 
   /**
-   * Returns true if a rule matched and actions were evaluated.
+   * Returns true if at least one rule matched and actions were evaluated.
    */
   public boolean notifyConfigured(
       IrcEventNotificationRule.EventType eventType,
@@ -61,16 +61,6 @@ public class IrcEventNotificationService {
     List<IrcEventNotificationRule> rules = rulesBus != null ? rulesBus.get() : List.of();
     if (rules == null || rules.isEmpty()) return false;
 
-    IrcEventNotificationRule matched = null;
-    for (IrcEventNotificationRule r : rules) {
-      if (r == null) continue;
-      if (r.matches(eventType, sourceNick, sourceIsSelf, channel)) {
-        matched = r;
-        break;
-      }
-    }
-    if (matched == null) return false;
-
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
 
@@ -84,22 +74,46 @@ public class IrcEventNotificationService {
     if (t.isEmpty()) t = eventType.toString();
 
     String b = Objects.toString(body, "").trim();
+    boolean anyMatched = false;
+
+    for (IrcEventNotificationRule matched : rules) {
+      if (matched == null) continue;
+      if (!matched.matches(eventType, sourceNick, sourceIsSelf, channel)) continue;
+      anyMatched = true;
+      dispatchMatchedRule(matched, eventType, sid, target, source, sourceIsSelf, t, b);
+    }
+
+    return anyMatched;
+  }
+
+  private void dispatchMatchedRule(
+      IrcEventNotificationRule matched,
+      IrcEventNotificationRule.EventType eventType,
+      String sid,
+      String target,
+      String source,
+      Boolean sourceIsSelf,
+      String title,
+      String body
+  ) {
+    if (matched == null) return;
 
     if (matched.notificationsNodeEnabled() && notificationStore != null) {
-      notificationStore.recordIrcEvent(sid, target, source, t, b);
+      notificationStore.recordIrcEvent(sid, target, source, title, body);
     }
 
     boolean showToast = matched.toastEnabled();
+    boolean showStatusBar = matched.statusBarEnabled();
     boolean playSound = matched.soundEnabled();
-    boolean allowWhenFocused = (showToast || playSound) && matched.toastWhenFocused();
-    if ((showToast || playSound) && trayNotificationService != null) {
+    if ((showToast || showStatusBar || playSound) && trayNotificationService != null) {
       trayNotificationService.notifyCustom(
           sid,
           target,
-          t,
-          b,
+          title,
+          body,
           showToast,
-          allowWhenFocused,
+          showStatusBar,
+          matched.focusScope(),
           playSound,
           matched.soundId(),
           matched.soundUseCustom(),
@@ -107,17 +121,15 @@ public class IrcEventNotificationService {
     }
 
     if (matched.scriptEnabled()) {
-      dispatchScript(matched, eventType, sid, target, source, sourceIsSelf, t, b);
+      dispatchScript(matched, eventType, sid, target, source, sourceIsSelf, title, body);
     }
 
     if (pushyNotificationService != null) {
       try {
-        pushyNotificationService.notifyEvent(eventType, sid, target, source, sourceIsSelf, t, b);
+        pushyNotificationService.notifyEvent(eventType, sid, target, source, sourceIsSelf, title, body);
       } catch (Exception ignored) {
       }
     }
-
-    return true;
   }
 
   public boolean hasEnabledRuleFor(IrcEventNotificationRule.EventType eventType) {

@@ -10,6 +10,14 @@ import org.junit.jupiter.api.Test;
 class IrcEventNotificationRuleTest {
 
   @Test
+  void defaultsIncludeStatusBarAnyCompanionsForCoreModerationEvents() {
+    java.util.List<IrcEventNotificationRule> defaults = IrcEventNotificationRule.defaults();
+    assertHasStatusBarAnyCompanion(defaults, IrcEventNotificationRule.EventType.KICKED);
+    assertHasStatusBarAnyCompanion(defaults, IrcEventNotificationRule.EventType.BANNED);
+    assertHasStatusBarAnyCompanion(defaults, IrcEventNotificationRule.EventType.KLINED);
+  }
+
+  @Test
   void defaultsUseEventSpecificBuiltInSoundMappings() {
     assertEquals(
         BuiltInSound.YOU_DEOPPED,
@@ -41,7 +49,8 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ONLY,
         "#staff*",
         true,
-        false,
+        IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+        true,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -68,7 +77,8 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
-        false,
+        IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+        true,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -87,7 +97,8 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
-        false,
+        IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+        true,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -106,7 +117,8 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL,
         null,
         true,
-        false,
+        IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+        true,
         true,
         false,
         BuiltInSound.NOTIF_1.name(),
@@ -137,7 +149,8 @@ class IrcEventNotificationRuleTest {
         IrcEventNotificationRule.ChannelScope.ALL_EXCEPT,
         "#ops*",
         true,
-        false,
+        IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+        true,
         true,
         true,
         BuiltInSound.NOTIF_2.name(),
@@ -151,5 +164,20 @@ class IrcEventNotificationRuleTest {
     assertTrue(rule.matches(IrcEventNotificationRule.EventType.KLINED, null, null, null));
     assertTrue(rule.matches(IrcEventNotificationRule.EventType.KLINED, null, null, "#general"));
     assertFalse(rule.matches(IrcEventNotificationRule.EventType.KLINED, null, null, "#ops"));
+  }
+
+  private static void assertHasStatusBarAnyCompanion(
+      java.util.List<IrcEventNotificationRule> rules,
+      IrcEventNotificationRule.EventType eventType
+  ) {
+    assertTrue(
+        rules.stream().anyMatch(r ->
+            r != null
+                && r.eventType() == eventType
+                && r.enabled()
+                && !r.toastEnabled()
+                && r.focusScope() == IrcEventNotificationRule.FocusScope.ANY
+                && r.statusBarEnabled()
+                && !r.soundEnabled()));
   }
 }

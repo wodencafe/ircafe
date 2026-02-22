@@ -125,6 +125,8 @@ public record UiProperties(
 
     Layout layout,
 
+    AppDiagnostics appDiagnostics,
+
     Tray tray
 ) {
 
@@ -295,6 +297,61 @@ if (historyPlaceholdersEnabledByDefault == null) {
     public Layout {
       if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
       if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
+    }
+  }
+
+  /**
+   * Optional application diagnostics integrations shown under the "Application" tree node.
+   */
+  public record AppDiagnostics(
+      AssertjSwing assertjSwing,
+      Jhiccup jhiccup
+  ) {
+    public AppDiagnostics {
+      if (assertjSwing == null) assertjSwing = new AssertjSwing(null, null, null, null);
+      if (jhiccup == null) jhiccup = new Jhiccup(null, null, null, null);
+    }
+  }
+
+  /**
+   * AssertJ Swing integration + EDT freeze watchdog.
+   */
+  public record AssertjSwing(
+      Boolean enabled,
+      Boolean edtFreezeWatchdogEnabled,
+      Integer edtFreezeThresholdMs,
+      Integer edtWatchdogPollMs
+  ) {
+    public AssertjSwing {
+      if (enabled == null) enabled = true;
+      if (edtFreezeWatchdogEnabled == null) edtFreezeWatchdogEnabled = true;
+      if (edtFreezeThresholdMs == null || edtFreezeThresholdMs < 500) edtFreezeThresholdMs = 2500;
+      if (edtFreezeThresholdMs > 120_000) edtFreezeThresholdMs = 120_000;
+      if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 500;
+      if (edtWatchdogPollMs > 10_000) edtWatchdogPollMs = 10_000;
+    }
+  }
+
+  /**
+   * External jHiccup process integration.
+   */
+  public record Jhiccup(
+      Boolean enabled,
+      String jarPath,
+      String javaCommand,
+      List<String> args
+  ) {
+    public Jhiccup {
+      if (enabled == null) enabled = false;
+      if (jarPath != null && jarPath.isBlank()) jarPath = null;
+      if (javaCommand == null || javaCommand.isBlank()) javaCommand = "java";
+      args = (args == null)
+          ? List.of()
+          : args.stream()
+              .filter(Objects::nonNull)
+              .map(String::trim)
+              .filter(s -> !s.isEmpty())
+              .toList();
     }
   }
 
@@ -489,6 +546,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
 
     if (layout == null) {
       layout = new Layout(null, null);
+    }
+
+    if (appDiagnostics == null) {
+      appDiagnostics = new AppDiagnostics(null, null);
     }
 
     // Image embeds default: disabled.

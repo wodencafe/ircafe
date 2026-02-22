@@ -80,6 +80,13 @@ Flowable<TargetRef> targetActivations();
   void setStatusBarCounts(int users, int ops);
   void setStatusBarServer(String serverText);
 
+  /**
+   * Enqueue a transient status notice in the bottom status bar.
+   *
+   * <p>If {@code clickTarget} is provided, clicking the notice should navigate to that target.
+   */
+  default void enqueueStatusNotice(String text, TargetRef clickTarget) {}
+
   
   void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled);
 

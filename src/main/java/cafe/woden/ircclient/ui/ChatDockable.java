@@ -1017,6 +1017,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isNotifications()) return "Notifications";
     if (t.isChannelList()) return "Channel List";
     if (t.isDccTransfers()) return "DCC Transfers";
+    if (t.isApplicationUnhandledErrors()) return "Unhandled Errors";
+    if (t.isApplicationAssertjSwing()) return "AssertJ Swing";
+    if (t.isApplicationJhiccup()) return "jHiccup";
     if (t.isStatus()) return "Server";
     String name = t.target();
     if (name == null || name.isBlank()) return "Chat";

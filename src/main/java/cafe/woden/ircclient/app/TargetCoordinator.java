@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
+import java.util.Comparator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -312,6 +313,27 @@ public class TargetCoordinator {
     return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
   }
 
+  /**
+   * Channel targets where this nick is currently present in our cached roster for the server.
+   */
+  public List<TargetRef> sharedChannelTargetsForNick(String serverId, String nick) {
+    String sid = Objects.toString(serverId, "").trim();
+    String n = Objects.toString(nick, "").trim();
+    if (sid.isEmpty() || n.isEmpty()) return List.of();
+
+    Set<String> channels = userListStore.channelsContainingNick(sid, n);
+    if (channels.isEmpty()) return List.of();
+
+    java.util.ArrayList<TargetRef> out = new java.util.ArrayList<>(channels.size());
+    for (String ch : channels) {
+      if (ch == null || ch.isBlank()) continue;
+      out.add(new TargetRef(sid, ch));
+    }
+    if (out.isEmpty()) return List.of();
+    out.sort(Comparator.comparing(TargetRef::key));
+    return List.copyOf(out);
+  }
+
 
   public void refreshInputEnabledForActiveTarget() {
     if (activeTarget == null) {
@@ -326,7 +348,9 @@ public class TargetCoordinator {
   }
 
   public TargetRef safeStatusTarget() {
-    if (activeTarget != null) return new TargetRef(activeTarget.serverId(), "status");
+    if (activeTarget != null && !activeTarget.isApplicationServer()) {
+      return new TargetRef(activeTarget.serverId(), "status");
+    }
     String sid = serverRegistry.serverIds().stream().findFirst().orElse("default");
     return new TargetRef(sid, "status");
   }
@@ -403,6 +427,12 @@ public class TargetCoordinator {
       statusBarChannel = "Channel List";
     } else if (target.isDccTransfers()) {
       statusBarChannel = "DCC Transfers";
+    } else if (target.isApplicationUnhandledErrors()) {
+      statusBarChannel = "Unhandled Errors";
+    } else if (target.isApplicationAssertjSwing()) {
+      statusBarChannel = "AssertJ Swing";
+    } else if (target.isApplicationJhiccup()) {
+      statusBarChannel = "jHiccup";
     }
     ui.setStatusBarChannel(statusBarChannel);
     ui.setStatusBarServer(serverDisplay(target.serverId()));
@@ -671,6 +701,9 @@ public class TargetCoordinator {
   }
 
   private String serverDisplay(String serverId) {
+    if (TargetRef.APPLICATION_SERVER_ID.equals(serverId)) {
+      return "Application";
+    }
     return serverRegistry.find(serverId)
         .map(s -> serverId + "  (" + s.host() + ":" + s.port() + ")")
         .orElse(serverId);
