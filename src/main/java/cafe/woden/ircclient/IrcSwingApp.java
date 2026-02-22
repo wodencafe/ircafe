@@ -3,6 +3,7 @@ package cafe.woden.ircclient;
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.IgnoreProperties;
@@ -24,6 +25,7 @@ import org.springframework.context.annotation.Bean;
 @EnableConfigurationProperties({
     IrcProperties.class,
     UiProperties.class,
+    PushyProperties.class,
     IgnoreProperties.class,
     LogProperties.class,
     SojuProperties.class,

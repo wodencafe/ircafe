@@ -4,6 +4,7 @@ import cafe.woden.ircclient.irc.soju.SojuNetwork;
 import cafe.woden.ircclient.irc.znc.ZncNetwork;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,6 +19,17 @@ import org.pircbotx.PircBotX;
  * turning PircbotxIrcClientService into a god-file.
  */
 final class PircbotxConnectionState {
+  private static final long PRIVATE_TARGET_HINT_TTL_MS = 120_000L;
+  private static final int PRIVATE_TARGET_HINT_MAX = 1_024;
+
+  private record PrivateTargetHint(
+      String fromLower,
+      String target,
+      String kind,
+      String payload,
+      long observedAtMs
+  ) {}
+
   final String serverId;
   final AtomicReference<PircBotX> botRef = new AtomicReference<>();
   final AtomicReference<String> selfNickHint = new AtomicReference<>("");
@@ -143,6 +155,10 @@ final class PircbotxConnectionState {
   // One-time connect log summary of negotiated caps.
   final AtomicBoolean capSummaryLogged = new AtomicBoolean(false);
 
+  // Best-effort bridge between InputParser command metadata and PrivateMessageEvent objects.
+  private final Map<String, PrivateTargetHint> privateTargetHintByMessageId = new ConcurrentHashMap<>();
+  private final Map<String, PrivateTargetHint> privateTargetHintByFingerprint = new ConcurrentHashMap<>();
+
   PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
   }
@@ -169,5 +185,133 @@ final class PircbotxConnectionState {
     standardRepliesCapAcked.set(false);
     capSummaryLogged.set(false);
     typingMissingWarned.set(false);
+    clearPrivateTargetHints();
+  }
+
+  void rememberPrivateTargetHint(
+      String fromNick,
+      String target,
+      String kind,
+      String payload,
+      String messageId,
+      long observedAtMs
+  ) {
+    String from = normalizeLower(fromNick);
+    String dest = normalizeTarget(target);
+    String k = normalizeKind(kind);
+    String body = normalizePayload(payload);
+    String msgId = normalizeMessageId(messageId);
+    if (from.isEmpty() || dest.isEmpty() || k.isEmpty()) return;
+    if (body.isEmpty() && msgId.isEmpty()) return;
+
+    long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
+    cleanupPrivateTargetHints(now);
+
+    PrivateTargetHint hint = new PrivateTargetHint(from, dest, k, body, now);
+    if (!msgId.isEmpty()) {
+      privateTargetHintByMessageId.put(msgId, hint);
+    }
+    if (!body.isEmpty()) {
+      privateTargetHintByFingerprint.put(fingerprint(from, k, body), hint);
+    }
+  }
+
+  String findPrivateTargetHint(
+      String fromNick,
+      String kind,
+      String payload,
+      String messageId,
+      long nowMs
+  ) {
+    String from = normalizeLower(fromNick);
+    String k = normalizeKind(kind);
+    String body = normalizePayload(payload);
+    String msgId = normalizeMessageId(messageId);
+    long now = nowMs > 0 ? nowMs : System.currentTimeMillis();
+    if (from.isEmpty() || k.isEmpty()) return "";
+
+    cleanupPrivateTargetHints(now);
+
+    if (!msgId.isEmpty()) {
+      PrivateTargetHint byId = privateTargetHintByMessageId.get(msgId);
+      if (isUsableById(byId, from, k, now)) {
+        return byId.target();
+      }
+    }
+
+    if (!body.isEmpty()) {
+      PrivateTargetHint byFingerprint = privateTargetHintByFingerprint.get(fingerprint(from, k, body));
+      if (isUsableByFingerprint(byFingerprint, from, k, body, now)) {
+        return byFingerprint.target();
+      }
+    }
+    return "";
+  }
+
+  void clearPrivateTargetHints() {
+    privateTargetHintByMessageId.clear();
+    privateTargetHintByFingerprint.clear();
+  }
+
+  private static boolean isUsableById(PrivateTargetHint hint, String from, String kind, long now) {
+    if (hint == null) return false;
+    if (hint.observedAtMs() + PRIVATE_TARGET_HINT_TTL_MS < now) return false;
+    if (!Objects.equals(hint.fromLower(), from)) return false;
+    return Objects.equals(hint.kind(), kind);
+  }
+
+  private static boolean isUsableByFingerprint(
+      PrivateTargetHint hint,
+      String from,
+      String kind,
+      String payload,
+      long now
+  ) {
+    if (!isUsableById(hint, from, kind, now)) return false;
+    return Objects.equals(hint.payload(), payload);
+  }
+
+  private void cleanupPrivateTargetHints(long now) {
+    long cutoff = now - PRIVATE_TARGET_HINT_TTL_MS;
+    privateTargetHintByMessageId.entrySet().removeIf(e -> e.getValue() == null || e.getValue().observedAtMs() < cutoff);
+    privateTargetHintByFingerprint.entrySet().removeIf(e -> e.getValue() == null || e.getValue().observedAtMs() < cutoff);
+
+    // Hard cap in case event volume is very high and many entries have identical timestamps.
+    if (privateTargetHintByMessageId.size() > PRIVATE_TARGET_HINT_MAX * 2) {
+      privateTargetHintByMessageId.clear();
+    }
+    if (privateTargetHintByFingerprint.size() > PRIVATE_TARGET_HINT_MAX * 2) {
+      privateTargetHintByFingerprint.clear();
+    }
+  }
+
+  private static String normalizeLower(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    return s.isEmpty() ? "" : s.toLowerCase(java.util.Locale.ROOT);
+  }
+
+  private static String normalizeTarget(String raw) {
+    return Objects.toString(raw, "").trim();
+  }
+
+  private static String normalizeKind(String raw) {
+    String s = Objects.toString(raw, "").trim().toUpperCase(java.util.Locale.ROOT);
+    if (s.isEmpty()) return "";
+    return switch (s) {
+      case "PRIVMSG", "ACTION" -> s;
+      default -> "";
+    };
+  }
+
+  private static String normalizePayload(String raw) {
+    return Objects.toString(raw, "").trim();
+  }
+
+  private static String normalizeMessageId(String raw) {
+    return Objects.toString(raw, "").trim();
+  }
+
+  private static String fingerprint(String fromLower, String kind, String payload) {
+    return fromLower + '\n' + kind + '\n' + payload;
   }
 }

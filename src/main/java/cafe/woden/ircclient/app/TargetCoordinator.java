@@ -15,6 +15,8 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +55,7 @@ public class TargetCoordinator {
   private final AtomicBoolean usersRefreshScheduled = new AtomicBoolean(false);
 
   private final CompositeDisposable disposables = new CompositeDisposable();
+  private final Set<TargetRef> closedPrivateTargetsByUser = ConcurrentHashMap.newKeySet();
 
   private TargetRef activeTarget;
 
@@ -127,12 +130,14 @@ public class TargetCoordinator {
     if (sid.isEmpty() || nick.isEmpty()) return;
 
     TargetRef pm = new TargetRef(sid, nick);
+    clearClosedPrivateTargetByUser(pm);
     ensureTargetExists(pm);
     ui.selectTarget(pm);
   }
 
   public void onTargetActivated(TargetRef target) {
     if (target == null) return;
+    if (isClosedPrivateTargetByUser(target)) return;
 
     ensureTargetExists(target);
     // Do NOT change the main Chat dock's displayed transcript.
@@ -142,6 +147,7 @@ public class TargetCoordinator {
 
   public void onTargetSelected(TargetRef target) {
     if (target == null) return;
+    if (isClosedPrivateTargetByUser(target)) return;
 
     ensureTargetExists(target);
 
@@ -162,6 +168,7 @@ public class TargetCoordinator {
     userListStore.clearServer(sid);
     userhostQueryService.clearServer(sid);
     userInfoEnrichmentService.clearServer(sid);
+    closedPrivateTargetsByUser.removeIf(t -> t != null && Objects.equals(t.serverId(), sid));
     if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
       ui.setStatusBarCounts(0, 0);
       ui.setUsersNicks(List.of());
@@ -333,6 +340,10 @@ public class TargetCoordinator {
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
     if (Objects.equals(activeTarget, target)) {
+      // Make close deterministic for an active PM/channel: switch coordinator + chat context
+      // to status before events from focus/selection can replay the closing target.
+      applyTargetContext(status);
+      ui.setChatActiveTarget(status);
       ui.selectTarget(status);
     }
 
@@ -351,6 +362,7 @@ public class TargetCoordinator {
         ui.appendStatus(status, "(ui)", "Closed " + target.target());
       }
     } else {
+      markClosedPrivateTargetByUser(target);
       ui.appendStatus(status, "(ui)", "Closed " + target.target());
     }
 
@@ -621,6 +633,41 @@ public class TargetCoordinator {
 
   private void ensureTargetExists(TargetRef target) {
     ui.ensureTargetExists(target);
+  }
+
+  /**
+   * Decide whether an inbound private event may auto-open a user-closed PM target.
+   *
+   * <p>If the user explicitly closed a PM:
+   * <ul>
+   *   <li>self-authored events do <em>not</em> reopen it</li>
+   *   <li>peer-authored events do reopen it (and clear the closed flag)</li>
+   * </ul>
+   */
+  public boolean allowPrivateAutoOpenFromInbound(TargetRef target, boolean fromSelf) {
+    if (!isPrivateTarget(target)) return true;
+    if (!closedPrivateTargetsByUser.contains(target)) return true;
+    if (fromSelf) return false;
+    closedPrivateTargetsByUser.remove(target);
+    return true;
+  }
+
+  private void markClosedPrivateTargetByUser(TargetRef target) {
+    if (!isPrivateTarget(target)) return;
+    closedPrivateTargetsByUser.add(target);
+  }
+
+  private void clearClosedPrivateTargetByUser(TargetRef target) {
+    if (target == null) return;
+    closedPrivateTargetsByUser.remove(target);
+  }
+
+  private boolean isClosedPrivateTargetByUser(TargetRef target) {
+    return isPrivateTarget(target) && closedPrivateTargetsByUser.contains(target);
+  }
+
+  private static boolean isPrivateTarget(TargetRef target) {
+    return target != null && !target.isStatus() && !target.isUiOnly() && !target.isChannel();
   }
 
   private String serverDisplay(String serverId) {

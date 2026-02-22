@@ -299,9 +299,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target == null) return;
     if (Objects.equals(activeTarget, target)) return;
 
+    // Incoming typing indicators are per-target. Clear the shared banner before switching
+    // so typing users from the previous buffer do not linger in the next buffer UI.
+    inputPanel.clearRemoteTypingIndicator();
+
     // Persist state + draft of the current target before swapping.
     if (activeTarget != null) {
-      inputPanel.flushTypingDone();
+      inputPanel.flushTypingForBufferSwitch();
       draftByTarget.put(activeTarget, inputPanel.getDraftText());
       updateScrollStateFromBar();
     }

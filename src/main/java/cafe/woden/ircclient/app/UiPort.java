@@ -114,6 +114,36 @@ Flowable<TargetRef> targetActivations();
    */
   default void clearPrivateMessageOnlineStates(String serverId) {}
 
+  /**
+   * Update connection identity metadata for a server/network.
+   */
+  default void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {}
+
+  /**
+   * Update one IRCv3 capability status observed from CAP events.
+   *
+   * @param subcommand normalized CAP verb (ACK/NEW/DEL/etc) when known
+   */
+  default void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {}
+
+  /**
+   * Update one RPL_ISUPPORT (005) token.
+   *
+   * @param tokenValue null to remove/clear
+   */
+  default void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {}
+
+  /**
+   * Update server version/details parsed from numerics (for example RPL_MYINFO/004).
+   */
+  default void setServerVersionDetails(
+      String serverId,
+      String serverName,
+      String serverVersion,
+      String userModes,
+      String channelModes
+  ) {}
+
   
   void setInputEnabled(boolean enabled);
 
@@ -336,6 +366,20 @@ Flowable<TargetRef> targetActivations();
    * <p>This is intentionally non-transcript UI state.
    */
   default void showTypingIndicator(TargetRef target, String nick, String state) {}
+
+  /**
+   * Mark target-level typing activity (for buffer list indicators).
+   *
+   * <p>This is intentionally non-transcript UI state.
+   */
+  default void showTypingActivity(TargetRef target, String state) {}
+
+  /**
+   * Show typing activity for nicks in the active channel user list.
+   *
+   * <p>This is intentionally non-transcript UI state.
+   */
+  default void showUsersTypingIndicator(TargetRef target, String nick, String state) {}
 
   /**
    * Update the read-marker boundary for a target using epoch milliseconds.

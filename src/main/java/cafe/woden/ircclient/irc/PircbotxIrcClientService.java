@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
@@ -53,6 +54,7 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final ZncEphemeralNetworkImporter zncImporter;
   private final SojuProperties sojuProps;
   private final ZncProperties zncProps;
+  private final RuntimeConfigStore runtimeConfig;
   private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
   public PircbotxIrcClientService(IrcProperties props,
@@ -61,6 +63,7 @@ public class PircbotxIrcClientService implements IrcClientService {
                                  PircbotxBotFactory botFactory,
                                  SojuProperties sojuProps,
                                  ZncProperties zncProps,
+                                 RuntimeConfigStore runtimeConfig,
                                  SojuEphemeralNetworkImporter sojuImporter,
                                  ZncEphemeralNetworkImporter zncImporter,
                                  PircbotxConnectionTimersRx timers,
@@ -71,6 +74,7 @@ public class PircbotxIrcClientService implements IrcClientService {
     this.botFactory = botFactory;
     this.sojuProps = sojuProps;
     this.zncProps = zncProps;
+    this.runtimeConfig = runtimeConfig;
     this.sojuImporter = Objects.requireNonNull(sojuImporter, "sojuImporter");
     this.zncImporter = Objects.requireNonNull(zncImporter, "zncImporter");
     this.timers = timers;
@@ -774,6 +778,14 @@ public class PircbotxIrcClientService implements IrcClientService {
         Objects.toString(n1, ""),
         Objects.toString(n2, ""),
         Objects.toString(n3, ""));
+    if (!isCtcpAutoReplyEnabled(cmd)) {
+      log.debug(
+          "[ircafe] CTCPDBG service-drop-disabled from={} cmd={}",
+          Objects.toString(fromNick, ""),
+          cmd);
+      // Treat known CTCP requests as handled even when auto-replies are disabled.
+      return "VERSION".equals(cmd) || "PING".equals(cmd) || "TIME".equals(cmd);
+    }
     if ("VERSION".equals(cmd)) {
       String v = (version == null) ? "IRCafe" : version;
       log.debug("[ircafe] CTCPDBG service-send cmd=VERSION to={} payload={}",
@@ -803,6 +815,21 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
 
     return false;
+  }
+
+  private boolean isCtcpAutoReplyEnabled(String command) {
+    if (runtimeConfig == null) return true;
+    String cmd = (command == null) ? "" : command.trim().toUpperCase(Locale.ROOT);
+    if (!"VERSION".equals(cmd) && !"PING".equals(cmd) && !"TIME".equals(cmd)) {
+      return true;
+    }
+    if (!runtimeConfig.readCtcpAutoRepliesEnabled(true)) return false;
+    return switch (cmd) {
+      case "VERSION" -> runtimeConfig.readCtcpAutoReplyVersionEnabled(true);
+      case "PING" -> runtimeConfig.readCtcpAutoReplyPingEnabled(true);
+      case "TIME" -> runtimeConfig.readCtcpAutoReplyTimeEnabled(true);
+      default -> true;
+    };
   }
 
   private void cancelReconnect(PircbotxConnectionState c) {

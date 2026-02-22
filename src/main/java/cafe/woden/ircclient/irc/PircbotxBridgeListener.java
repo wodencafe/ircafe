@@ -96,6 +96,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   private record ParsedInviteLine(String fromNick, String inviteeNick, String channel, String reason) {}
 
+  private record ParsedWallopsLine(String from, String message) {}
+
 
   private record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
 
@@ -178,6 +180,32 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (channel.isBlank()) return null;
 
     return new ParsedInviteLine(from, invitee, channel, reason);
+  }
+
+  private static ParsedWallopsLine parseWallopsLine(ParsedIrcLine parsed) {
+    if (parsed == null) return null;
+    String cmd = Objects.toString(parsed.command(), "").trim();
+    if (!"WALLOPS".equalsIgnoreCase(cmd)) return null;
+
+    String from = Objects.toString(nickFromPrefix(parsed.prefix()), "").trim();
+    if (from.isEmpty()) {
+      from = Objects.toString(parsed.prefix(), "").trim();
+    }
+    if (from.isEmpty()) from = "server";
+
+    String message = Objects.toString(parsed.trailing(), "").trim();
+    if (message.isEmpty()) {
+      List<String> params = parsed.params();
+      if (params != null && !params.isEmpty()) {
+        message = Objects.toString(params.get(params.size() - 1), "").trim();
+      }
+    }
+    if (message.startsWith(":")) {
+      message = message.substring(1).trim();
+    }
+    if (message.isEmpty()) return null;
+
+    return new ParsedWallopsLine(from, message);
   }
 
   private static String nickFromPrefix(String prefix) {
@@ -407,6 +435,19 @@ private static String derivePrivateConversationTarget(String botNick, String fro
 
   // Otherwise (including echo-message), the conversation key is the destination.
   return d;
+}
+
+private String inferPrivateDestinationFromHints(
+    String from,
+    String kind,
+    String payload,
+    String messageId
+) {
+  String fromNick = Objects.toString(from, "").trim();
+  String k = Objects.toString(kind, "").trim().toUpperCase(Locale.ROOT);
+  String body = Objects.toString(payload, "").trim();
+  if (fromNick.isBlank() || k.isBlank() || body.isBlank()) return "";
+  return conn.findPrivateTargetHint(fromNick, k, body, messageId, System.currentTimeMillis());
 }
 
 private static boolean isZncPlayStarCursorCommand(String msg) {
@@ -785,6 +826,14 @@ public void onAction(ActionEvent event) {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+      boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+      String batchMsgId = ircv3MessageId(ircv3TagsFromEvent(event));
+      if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+        String hinted = inferPrivateDestinationFromHints(from, "ACTION", action, batchMsgId);
+        if (!hinted.isBlank()) {
+          pmDest = hinted;
+        }
+      }
 
       String fallbackTarget;
       if (event.getChannel() != null) {
@@ -802,12 +851,20 @@ public void onAction(ActionEvent event) {
   Instant at = inboundAt(event);
   String from = (event.getUser() != null) ? event.getUser().getNick() : "";
   String action = PircbotxUtil.safeStr(() -> event.getAction(), "");
+  boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
   Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
+  String messageId = ircv3MessageId(tags);
+  if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+    String hinted = inferPrivateDestinationFromHints(from, "ACTION", action, messageId);
+    if (!hinted.isBlank()) {
+      pmDest = hinted;
+    }
+  }
   if (pmDest != null && !pmDest.isBlank()) {
     tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
   }
   Map<String, String> ircv3Tags = tags;
-  String messageId = ircv3MessageId(ircv3Tags);
+  messageId = ircv3MessageId(ircv3Tags);
 
   if (event.getChannel() != null) {
     String channel = event.getChannel().getName();
@@ -910,8 +967,17 @@ public void onPrivateMessage(PrivateMessageEvent event) {
       String from = (event.getUser() != null) ? event.getUser().getNick() : "";
       String msg = PircbotxUtil.safeStr(event::getMessage, "");
       String action = PircbotxUtil.parseCtcpAction(msg);
+      String kind = action == null ? "PRIVMSG" : "ACTION";
+      String hintPayload = action == null ? msg : action;
+      String batchMsgId = ircv3MessageId(ircv3TagsFromEvent(event));
 
       boolean fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
+      if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+        String hinted = inferPrivateDestinationFromHints(from, kind, hintPayload, batchMsgId);
+        if (!hinted.isBlank()) {
+          pmDest = hinted;
+        }
+      }
       if (fromSelf) {
         // Don't show our internal ZNC playback bootstrap line.
         if (isZncPlayStarCursorCommand(msg)) {
@@ -942,19 +1008,29 @@ public void onPrivateMessage(PrivateMessageEvent event) {
   Instant at = inboundAt(event);
   String from = event.getUser().getNick();
   String msg = event.getMessage();
-
-  Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
-  if (pmDest != null && !pmDest.isBlank()) {
-    tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
-  }
-  Map<String, String> ircv3Tags = tags;
-  String messageId = ircv3MessageId(ircv3Tags);
+  String actionPayload = PircbotxUtil.parseCtcpAction(msg);
+  String hintKind = actionPayload == null ? "PRIVMSG" : "ACTION";
+  String hintPayload = actionPayload == null ? msg : actionPayload;
 
   boolean fromSelf = false;
   try {
     fromSelf = botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
   } catch (Exception ignored) {
   }
+
+  Map<String, String> tags = new HashMap<>(ircv3TagsFromEvent(event));
+  String messageId = ircv3MessageId(tags);
+  if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
+    String hinted = inferPrivateDestinationFromHints(from, hintKind, hintPayload, messageId);
+    if (!hinted.isBlank()) {
+      pmDest = hinted;
+    }
+  }
+  if (pmDest != null && !pmDest.isBlank()) {
+    tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
+  }
+  Map<String, String> ircv3Tags = tags;
+  messageId = ircv3MessageId(ircv3Tags);
 
   // Suppress our own internal ZNC control messages that might be echoed back (echo-message)
   // or replayed by servers that emulate ZNC playback (e.g., Ergo).
@@ -1000,7 +1076,7 @@ public void onPrivateMessage(PrivateMessageEvent event) {
 
   maybeEmitHostmaskObserved("", event.getUser());
 
-  String action = PircbotxUtil.parseCtcpAction(msg);
+  String action = actionPayload;
   if (action != null) {
     bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.PrivateAction(at, from, action, messageId, ircv3Tags)));
     return;
@@ -1362,6 +1438,19 @@ public void onFinger(FingerEvent event) throws Exception {
                 parsedInvite.inviteeNick(),
                 parsedInvite.reason(),
                 true)));
+        return;
+      }
+
+      ParsedWallopsLine parsedWallops = parseWallopsLine(parsedRawLine);
+      if (parsedWallops != null) {
+        Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
+        if (at == null) at = Instant.now();
+        bus.onNext(new ServerIrcEvent(
+            serverId,
+            new IrcEvent.WallopsReceived(
+                at,
+                parsedWallops.from(),
+                parsedWallops.message())));
         return;
       }
 
@@ -1935,6 +2024,24 @@ if (fromSelf) {
         }
 
         emitServerResponseLine(event.getBot(), code, line);
+        return;
+      }
+
+      if (code == 324) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+
+        PircbotxChannelModeParsers.ParsedRpl324 parsed = PircbotxChannelModeParsers.parseRpl324(line);
+        if (parsed != null) {
+          bus.onNext(new ServerIrcEvent(serverId,
+              new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+        } else {
+          // Defensive fallback: if parsing fails, still surface the raw numeric.
+          emitServerResponseLine(event.getBot(), code, line);
+        }
         return;
       }
 

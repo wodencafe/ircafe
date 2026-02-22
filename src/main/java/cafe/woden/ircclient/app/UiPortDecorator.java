@@ -195,6 +195,32 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
+    delegate.setServerConnectedIdentity(serverId, connectedHost, connectedPort, nick, at);
+  }
+
+  @Override
+  public void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {
+    delegate.setServerIrcv3Capability(serverId, capability, subcommand, enabled);
+  }
+
+  @Override
+  public void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {
+    delegate.setServerIsupportToken(serverId, tokenName, tokenValue);
+  }
+
+  @Override
+  public void setServerVersionDetails(
+      String serverId,
+      String serverName,
+      String serverVersion,
+      String userModes,
+      String channelModes
+  ) {
+    delegate.setServerVersionDetails(serverId, serverName, serverVersion, userModes, channelModes);
+  }
+
+  @Override
   public void setInputEnabled(boolean enabled) {
     delegate.setInputEnabled(enabled);
   }
@@ -409,6 +435,16 @@ public abstract class UiPortDecorator implements UiPort {
   @Override
   public void showTypingIndicator(TargetRef target, String nick, String state) {
     delegate.showTypingIndicator(target, nick, state);
+  }
+
+  @Override
+  public void showTypingActivity(TargetRef target, String state) {
+    delegate.showTypingActivity(target, state);
+  }
+
+  @Override
+  public void showUsersTypingIndicator(TargetRef target, String nick, String state) {
+    delegate.showUsersTypingIndicator(target, nick, state);
   }
 
   @Override

@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.app.outbound;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -9,6 +12,7 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final LocalFilterCommandService filter = mock(LocalFilterCommandService.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final UiPort ui = mock(UiPort.class);
+  private final UserCommandAliasesBus userCommandAliasesBus = mock(UserCommandAliasesBus.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final DefaultOutboundCommandDispatcher dispatcher =
@@ -34,7 +39,8 @@ class DefaultOutboundCommandDispatcherTest {
           ignore,
           filter,
           targetCoordinator,
-          ui
+          ui,
+          userCommandAliasesBus
       );
 
   @AfterEach
@@ -191,9 +197,20 @@ class DefaultOutboundCommandDispatcherTest {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(null);
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(userCommandAliasesBus.unknownCommandAsRawEnabled()).thenReturn(false);
 
     dispatcher.dispatch(disposables, new ParsedInput.Unknown("/wat"));
 
     verify(ui).appendStatus(status, "(system)", "Unknown command: /wat");
+  }
+
+  @Test
+  void dispatchUnknownFallsBackToRawQuoteWhenEnabled() {
+    when(userCommandAliasesBus.unknownCommandAsRawEnabled()).thenReturn(true);
+
+    dispatcher.dispatch(disposables, new ParsedInput.Unknown("/wat arg"));
+
+    verify(chat).handleQuote(disposables, "wat arg");
+    verify(ui, never()).appendStatus(any(), any(), startsWith("Unknown command:"));
   }
 }

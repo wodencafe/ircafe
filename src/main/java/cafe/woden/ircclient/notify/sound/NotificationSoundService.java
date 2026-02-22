@@ -85,6 +85,26 @@ public class NotificationSoundService {
   }
 
   /**
+   * Play a one-off sound override for a specific notification event.
+   */
+  public void playOverride(String soundId, boolean useCustom, String customPath) {
+    if (!enabled) {
+      return;
+    }
+
+    if (useCustom) {
+      Path overridePath = resolveCustomPath(customPath);
+      if (overridePath != null && Files.exists(overridePath)) {
+        playFile(overridePath, false);
+        return;
+      }
+    }
+
+    BuiltInSound override = BuiltInSound.fromId(soundId);
+    playResource(override.resourcePath(), false);
+  }
+
+  /**
    * Play the given sound for preview/testing, even if sounds are disabled.
    */
   public void preview(BuiltInSound sound) {

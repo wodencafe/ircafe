@@ -22,6 +22,7 @@ import java.awt.Dimension;
 import java.awt.Cursor;
 import java.awt.Rectangle;
 import java.awt.Window;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
@@ -29,6 +30,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
+import java.awt.Dialog;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -47,7 +49,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
+import javax.swing.JDialog;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
 import javax.swing.JTree;
+import javax.swing.SwingConstants;
 import javax.swing.ToolTipManager;
 import javax.swing.JOptionPane;
 import javax.swing.UIManager;
@@ -57,18 +65,28 @@ import javax.swing.SwingUtilities;
 import javax.swing.JViewport;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
+import javax.swing.Timer;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreePath;
+import javax.swing.table.DefaultTableModel;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.HierarchyEvent;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+import net.miginfocom.swing.MigLayout;
 
 import jakarta.annotation.PreDestroy;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -76,7 +94,7 @@ import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 
 @org.springframework.stereotype.Component
 @Lazy
-public class ServerTreeDockable extends JPanel implements Dockable {
+public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
 
   // UI label for the per-server "status" transcript target.
@@ -91,6 +109,12 @@ public class ServerTreeDockable extends JPanel implements Dockable {
   private static final int SERVER_ACTION_BUTTON_SIZE = 16;
   private static final int SERVER_ACTION_BUTTON_ICON_SIZE = 12;
   private static final int SERVER_ACTION_BUTTON_MARGIN = 6;
+  private static final int TYPING_ACTIVITY_HOLD_MS = 8000;
+  private static final int TYPING_ACTIVITY_FADE_MS = 900;
+  private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
+  private static final int TYPING_ACTIVITY_TICK_MS = 100;
+  private static final Color TYPING_ACTIVITY_DOT = new Color(65, 210, 108);
+  private static final Color TYPING_ACTIVITY_GLOW = new Color(120, 255, 150);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
 
@@ -166,6 +190,7 @@ private static final class InsertionLine {
       return ServerTreeDockable.this.toolTipForEvent(event);
     }
   };
+  private final JScrollPane treeScroll = new JScrollPane(tree);
 
   private final ServerTreeCellRenderer treeCellRenderer = new ServerTreeCellRenderer();
 
@@ -183,6 +208,12 @@ private static final class InsertionLine {
   private final Map<String, Boolean> serverDesiredOnline = new HashMap<>();
   private final Map<String, String> serverLastError = new HashMap<>();
   private final Map<String, Long> serverNextRetryAtEpochMs = new HashMap<>();
+  private final Map<String, ServerRuntimeMetadata> serverRuntimeMetadata = new HashMap<>();
+  private final Timer typingActivityTimer;
+  private final Set<DefaultMutableTreeNode> typingActivityNodes = new HashSet<>();
+
+  private static final DateTimeFormatter SERVER_META_TIME_FMT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
 
   private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
@@ -270,6 +301,17 @@ private static final class InsertionLine {
     tree.setRowHeight(0);
 
     tree.setCellRenderer(treeCellRenderer);
+    this.typingActivityTimer = new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
+    this.typingActivityTimer.setRepeats(true);
+    tree.addHierarchyListener(e -> {
+      if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
+      if (tree.isShowing()) {
+        startTypingActivityTimerIfNeeded();
+        tree.repaint();
+        return;
+      }
+      typingActivityTimer.stop();
+    });
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
     this.nodeActions = new TreeNodeActions<>(
@@ -285,11 +327,11 @@ private static final class InsertionLine {
     );
     installTreeKeyBindings();
 
-    JScrollPane scroll = new JScrollPane(tree);
-    scroll.setPreferredSize(new Dimension(260, 400));
-    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-    treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
-    add(scroll, BorderLayout.CENTER);
+    treeScroll.setPreferredSize(new Dimension(260, 400));
+    treeScroll.setMinimumSize(new Dimension(0, 0));
+    enforceTreeScrollPanePolicies();
+    treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, treeScroll);
+    add(treeScroll, BorderLayout.CENTER);
     if (serverCatalog != null) {
       syncServers(serverCatalog.entries());
 
@@ -360,6 +402,7 @@ private static final class InsertionLine {
       @Override
       public void mousePressed(MouseEvent e) {
         if (maybeHandleHoveredServerActionClick(e)) return;
+        maybeSelectRowFromLeftClick(e);
         updateHoveredServerAction(e);
       }
 
@@ -387,17 +430,8 @@ private static final class InsertionLine {
 
         int x = e.getX();
         int y = e.getY();
-        // Resolve by row (Y-position) so right-click works anywhere across the row,
-        // not only directly over the node text/icon bounds.
-        int row = tree.getClosestRowForLocation(x, y);
-        if (row < 0) return;
-        Rectangle rb = tree.getRowBounds(row);
-        if (rb == null) return;
-        if (y < rb.y || y >= (rb.y + rb.height)) return;
-        TreePath path = tree.getPathForRow(row);
-        if (path == null) {
-          return;
-        }
+        TreePath path = treePathForRowHit(x, y);
+        if (path == null) return;
         suppressSelectionBroadcast = true;
         try {
           tree.setSelectionPath(path);
@@ -598,6 +632,20 @@ private static final class InsertionLine {
         tree.setSelectionPath(new TreePath(root.getPath()));
       }
     });
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    SwingUtilities.invokeLater(this::enforceTreeScrollPanePolicies);
+  }
+
+  private void enforceTreeScrollPanePolicies() {
+    treeScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    treeScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+    if (treeScroll.getVerticalScrollBar() != null) {
+      treeScroll.getVerticalScrollBar().setUnitIncrement(16);
+    }
   }
 
   private ConnectionState connectionStateForServer(String serverId) {
@@ -863,6 +911,31 @@ private static final class InsertionLine {
     return true;
   }
 
+  private boolean maybeSelectRowFromLeftClick(MouseEvent event) {
+    if (event == null || event.isConsumed()) return false;
+    if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
+
+    TreePath hit = treePathForRowHit(event.getX(), event.getY());
+    if (hit == null) return false;
+
+    TreePath current = tree.getSelectionPath();
+    if (!Objects.equals(current, hit)) {
+      tree.setSelectionPath(hit);
+    }
+    return true;
+  }
+
+  private TreePath treePathForRowHit(int x, int y) {
+    // Resolve by row (Y-position) so click selection works anywhere across the row,
+    // not only directly over the node text/icon bounds.
+    int row = tree.getClosestRowForLocation(x, y);
+    if (row < 0) return null;
+    Rectangle rb = tree.getRowBounds(row);
+    if (rb == null) return null;
+    if (y < rb.y || y >= (rb.y + rb.height)) return null;
+    return tree.getPathForRow(row);
+  }
+
   private void paintVisibleServerActions(Graphics g) {
     String selected = selectedServerActionServerId();
     if (!selected.isEmpty()) {
@@ -973,6 +1046,12 @@ private static final class InsertionLine {
       disconnectOne.setEnabled(canDisconnectServer(state));
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
+
+      JMenuItem networkInfo = new JMenuItem("View Network Info...");
+      networkInfo.setIcon(SvgIcons.action("info", 16));
+      networkInfo.setDisabledIcon(SvgIcons.actionDisabled("info", 16));
+      networkInfo.addActionListener(ev -> openServerInfoDialog(serverId));
+      menu.add(networkInfo);
 
       // Ephemeral servers can be promoted to persisted servers. This is especially useful for
       // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
@@ -1252,6 +1331,36 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return "Servers";
   }
 
+  // If the docking framework wraps this Dockable in an outer JScrollPane, keep that wrapper
+  // passive and let our inner tree scrollpane own scrolling behavior.
+  @Override
+  public Dimension getPreferredScrollableViewportSize() {
+    return getPreferredSize();
+  }
+
+  @Override
+  public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+    return orientation == SwingConstants.VERTICAL ? 16 : 16;
+  }
+
+  @Override
+  public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+    if (visibleRect == null) return 64;
+    return orientation == SwingConstants.VERTICAL
+        ? Math.max(32, visibleRect.height - 24)
+        : Math.max(32, visibleRect.width - 24);
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportWidth() {
+    return true;
+  }
+
+  @Override
+  public boolean getScrollableTracksViewportHeight() {
+    return true;
+  }
+
   public Flowable<TargetRef> selectionStream() {
     return selections.onBackpressureLatest();
   }
@@ -1357,6 +1466,378 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     tree.repaint();
   }
 
+  public void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    boolean changed = false;
+
+    String host = Objects.toString(connectedHost, "").trim();
+    if (!host.isEmpty() && !Objects.equals(meta.connectedHost, host)) {
+      meta.connectedHost = host;
+      changed = true;
+    }
+
+    if (connectedPort > 0 && meta.connectedPort != connectedPort) {
+      meta.connectedPort = connectedPort;
+      changed = true;
+    }
+
+    String n = Objects.toString(nick, "").trim();
+    if (!n.isEmpty() && !Objects.equals(meta.nick, n)) {
+      meta.nick = n;
+      changed = true;
+    }
+
+    Instant connectedAt = at != null ? at : (meta.connectedAt == null ? Instant.now() : meta.connectedAt);
+    if (!Objects.equals(meta.connectedAt, connectedAt)) {
+      meta.connectedAt = connectedAt;
+      changed = true;
+    }
+
+    if (changed) {
+      ServerNodes sn = servers.get(sid);
+      if (sn != null && sn.serverNode != null) {
+        model.nodeChanged(sn.serverNode);
+      }
+    }
+  }
+
+  public void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {
+    String sid = Objects.toString(serverId, "").trim();
+    String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    if (sid.isEmpty() || cap.isEmpty()) return;
+
+    String sub = Objects.toString(subcommand, "").trim().toUpperCase(java.util.Locale.ROOT);
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    boolean changed = false;
+
+    CapabilityState next = null;
+    if ("DEL".equals(sub)) {
+      next = CapabilityState.REMOVED;
+    } else if ("NEW".equals(sub)) {
+      next = CapabilityState.AVAILABLE;
+    } else if ("ACK".equals(sub)) {
+      next = enabled ? CapabilityState.ENABLED : CapabilityState.DISABLED;
+    } else {
+      next = enabled ? CapabilityState.ENABLED : CapabilityState.DISABLED;
+    }
+
+    CapabilityState prev = meta.ircv3Caps.put(cap, next);
+    if (!Objects.equals(prev, next)) {
+      changed = true;
+    }
+
+    if (changed) {
+      ServerNodes sn = servers.get(sid);
+      if (sn != null && sn.serverNode != null) {
+        model.nodeChanged(sn.serverNode);
+      }
+    }
+  }
+
+  public void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = Objects.toString(tokenName, "").trim().toUpperCase(java.util.Locale.ROOT);
+    if (sid.isEmpty() || key.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    String val = tokenValue != null ? tokenValue.trim() : null;
+    if (val != null && val.isEmpty()) val = "";
+
+    String prev;
+    if (val == null) {
+      prev = meta.isupport.remove(key);
+    } else {
+      prev = meta.isupport.put(key, val);
+    }
+    if (Objects.equals(prev, val)) return;
+
+    ServerNodes sn = servers.get(sid);
+    if (sn != null && sn.serverNode != null) {
+      model.nodeChanged(sn.serverNode);
+    }
+  }
+
+  public void setServerVersionDetails(
+      String serverId,
+      String serverName,
+      String serverVersion,
+      String userModes,
+      String channelModes
+  ) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    boolean changed = false;
+
+    String srv = Objects.toString(serverName, "").trim();
+    if (!srv.isEmpty() && !Objects.equals(meta.serverName, srv)) {
+      meta.serverName = srv;
+      changed = true;
+    }
+
+    String ver = Objects.toString(serverVersion, "").trim();
+    if (!ver.isEmpty() && !Objects.equals(meta.serverVersion, ver)) {
+      meta.serverVersion = ver;
+      changed = true;
+    }
+
+    String um = Objects.toString(userModes, "").trim();
+    if (!um.isEmpty() && !Objects.equals(meta.userModes, um)) {
+      meta.userModes = um;
+      changed = true;
+    }
+
+    String cm = Objects.toString(channelModes, "").trim();
+    if (!cm.isEmpty() && !Objects.equals(meta.channelModes, cm)) {
+      meta.channelModes = cm;
+      changed = true;
+    }
+
+    if (changed) {
+      ServerNodes sn = servers.get(sid);
+      if (sn != null && sn.serverNode != null) {
+        model.nodeChanged(sn.serverNode);
+      }
+    }
+  }
+
+  private ServerRuntimeMetadata metadataForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) sid = "(server)";
+    return serverRuntimeMetadata.computeIfAbsent(sid, __ -> new ServerRuntimeMetadata());
+  }
+
+  private void openServerInfoDialog(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerRuntimeMetadata meta = metadataForServer(sid);
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    String title = "Network Info - " + prettyServerLabel(sid);
+
+    JDialog dialog = new JDialog(owner, title, Dialog.ModalityType.APPLICATION_MODAL);
+    dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+    JPanel content = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill][]"));
+    content.add(buildNetworkSummaryPanel(sid, meta), "growx");
+
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.addTab("Overview", buildOverviewTab(sid, meta));
+    tabs.addTab("Capabilities (" + meta.ircv3Caps.size() + ")", buildCapabilitiesInfoPanel(meta));
+    tabs.addTab("ISUPPORT (" + meta.isupport.size() + ")", buildIsupportInfoPanel(meta));
+    content.add(tabs, "grow");
+
+    JButton close = new JButton("Close");
+    close.addActionListener(ev -> dialog.dispose());
+    JPanel actions = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill][]", "[]"));
+    actions.add(new JLabel(""), "growx");
+    actions.add(close, "tag ok");
+    content.add(actions, "growx");
+
+    dialog.setContentPane(content);
+    dialog.getRootPane().setDefaultButton(close);
+    dialog.pack();
+    int width = Math.max(820, dialog.getWidth());
+    int height = Math.max(620, dialog.getHeight());
+    dialog.setSize(width, height);
+    dialog.setLocationRelativeTo(owner);
+    dialog.setVisible(true);
+  }
+
+  private JPanel buildNetworkSummaryPanel(String serverId, ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[grow,fill][right]", "[]4[]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Summary"));
+
+    ConnectionState state = connectionStateForServer(serverId);
+    boolean desired = desiredOnlineForServer(serverId);
+
+    JLabel title = new JLabel(prettyServerLabel(serverId));
+    Font base = title.getFont();
+    if (base != null) {
+      title.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1.5f));
+    }
+    panel.add(title, "growx");
+    panel.add(new JLabel("State: " + serverStateLabel(state)));
+
+    String endpoint = formatConnectedEndpoint(meta.connectedHost, meta.connectedPort);
+    String nick = fallbackInfoValue(meta.nick);
+    panel.add(new JLabel("Network ID: " + serverId), "span 2, growx");
+    panel.add(new JLabel("Endpoint: " + endpoint + "    Nick: " + nick + "    Intent: " + serverDesiredIntentLabel(desired)),
+        "span 2, growx");
+    return panel;
+  }
+
+  private JComponent buildOverviewTab(String serverId, ServerRuntimeMetadata meta) {
+    JPanel overview = new JPanel(new MigLayout("insets 8, fill, wrap 2", "[grow,fill]12[grow,fill]", "[top]"));
+    overview.add(buildConnectionInfoPanel(serverId, meta), "grow");
+    overview.add(buildServerInfoPanel(meta), "grow");
+    return overview;
+  }
+
+  private JPanel buildConnectionInfoPanel(String serverId, ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[right][grow,fill]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Connection"));
+
+    ConnectionState state = connectionStateForServer(serverId);
+    boolean desired = desiredOnlineForServer(serverId);
+
+    addInfoRow(panel, "Network ID", serverId);
+    addInfoRow(panel, "Display", prettyServerLabel(serverId));
+    addInfoRow(panel, "State", serverStateLabel(state));
+    addInfoRow(panel, "Intent", serverDesiredIntentLabel(desired));
+    addInfoRow(panel, "Connected endpoint", formatConnectedEndpoint(meta.connectedHost, meta.connectedPort));
+    addInfoRow(panel, "Current nick", fallbackInfoValue(meta.nick));
+    addInfoRow(panel, "Connected at", meta.connectedAt == null ? "(unknown)" : SERVER_META_TIME_FMT.format(meta.connectedAt));
+
+    String diagnostics = connectionDiagnosticsTipForServer(serverId).trim();
+    if (!diagnostics.isEmpty()) {
+      addInfoRow(panel, "Diagnostics", diagnostics);
+    }
+    return panel;
+  }
+
+  private JPanel buildServerInfoPanel(ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[right][grow,fill]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Server"));
+    addInfoRow(panel, "Server name", fallbackInfoValue(meta.serverName));
+    addInfoRow(panel, "Version", fallbackInfoValue(meta.serverVersion));
+    addInfoRow(panel, "User modes", fallbackInfoValue(meta.userModes));
+    addInfoRow(panel, "Channel modes", fallbackInfoValue(meta.channelModes));
+    return panel;
+  }
+
+  private JPanel buildCapabilitiesInfoPanel(ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+    panel.add(buildCapabilityCountsRow(meta), "growx");
+
+    if (meta.ircv3Caps.isEmpty()) {
+      panel.add(new JLabel("No IRCv3 capabilities observed yet."), "grow");
+      return panel;
+    }
+
+    TreeMap<String, CapabilityState> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    sorted.putAll(meta.ircv3Caps);
+    Object[][] rows = new Object[sorted.size()][2];
+    int idx = 0;
+    for (Map.Entry<String, CapabilityState> e : sorted.entrySet()) {
+      CapabilityState st = e.getValue();
+      rows[idx][0] = e.getKey();
+      rows[idx][1] = st == null ? "unknown" : st.label;
+      idx++;
+    }
+
+    JTable table = buildReadOnlyTable(new String[] { "Capability", "State" }, rows);
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    panel.add(scroll, "grow");
+    return panel;
+  }
+
+  private JPanel buildIsupportInfoPanel(ServerRuntimeMetadata meta) {
+    JPanel panel = new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[grow,fill]"));
+    if (meta.isupport.isEmpty()) {
+      panel.add(new JLabel("No ISUPPORT tokens observed yet."), "grow");
+      return panel;
+    }
+
+    TreeMap<String, String> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    sorted.putAll(meta.isupport);
+    Object[][] rows = new Object[sorted.size()][2];
+    int idx = 0;
+    for (Map.Entry<String, String> e : sorted.entrySet()) {
+      String val = Objects.toString(e.getValue(), "");
+      rows[idx][0] = e.getKey();
+      rows[idx][1] = val.isBlank() ? "(present)" : val;
+      idx++;
+    }
+
+    JTable table = buildReadOnlyTable(new String[] { "Token", "Value" }, rows);
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    panel.add(scroll, "grow");
+    return panel;
+  }
+
+  private JPanel buildCapabilityCountsRow(ServerRuntimeMetadata meta) {
+    Map<CapabilityState, Integer> counts = new java.util.EnumMap<>(CapabilityState.class);
+    for (CapabilityState state : CapabilityState.values()) {
+      counts.put(state, 0);
+    }
+    for (CapabilityState state : meta.ircv3Caps.values()) {
+      if (state == null) continue;
+      counts.put(state, counts.getOrDefault(state, 0) + 1);
+    }
+
+    JPanel row = new JPanel(new MigLayout("insets 0, fillx, wrap 4", "[grow,fill]8[grow,fill]8[grow,fill]8[grow,fill]", "[]"));
+    row.add(buildCountChip("Enabled", counts.getOrDefault(CapabilityState.ENABLED, 0)), "growx");
+    row.add(buildCountChip("Available", counts.getOrDefault(CapabilityState.AVAILABLE, 0)), "growx");
+    row.add(buildCountChip("Disabled", counts.getOrDefault(CapabilityState.DISABLED, 0)), "growx");
+    row.add(buildCountChip("Removed", counts.getOrDefault(CapabilityState.REMOVED, 0)), "growx");
+    return row;
+  }
+
+  private static JPanel buildCountChip(String label, int count) {
+    JPanel chip = new JPanel(new MigLayout("insets 6, wrap 1", "[grow,fill]", "[]0[]"));
+    Color border = UIManager.getColor("Separator.foreground");
+    if (border == null) border = UIManager.getColor("Component.borderColor");
+    if (border == null) border = Color.GRAY;
+    chip.setBorder(BorderFactory.createLineBorder(withAlpha(border, 180)));
+
+    JLabel countLabel = new JLabel(Integer.toString(Math.max(0, count)));
+    Font f = countLabel.getFont();
+    if (f != null) {
+      countLabel.setFont(f.deriveFont(Font.BOLD, f.getSize2D() + 1f));
+    }
+    JLabel textLabel = new JLabel(label);
+    Color muted = UIManager.getColor("Label.disabledForeground");
+    if (muted != null) textLabel.setForeground(muted);
+
+    chip.add(countLabel, "alignx center");
+    chip.add(textLabel, "alignx center");
+    return chip;
+  }
+
+  private static JTable buildReadOnlyTable(String[] columns, Object[][] rows) {
+    DefaultTableModel model = new DefaultTableModel(rows, columns) {
+      @Override
+      public boolean isCellEditable(int row, int column) {
+        return false;
+      }
+    };
+
+    JTable table = new JTable(model);
+    table.setFillsViewportHeight(true);
+    table.setAutoCreateRowSorter(true);
+    table.setRowSelectionAllowed(false);
+    table.setColumnSelectionAllowed(false);
+    table.getTableHeader().setReorderingAllowed(false);
+    return table;
+  }
+
+  private static void addInfoRow(JPanel panel, String key, String value) {
+    panel.add(new JLabel(key + ":"), "aligny top");
+    JLabel valueLabel = new JLabel(fallbackInfoValue(value));
+    valueLabel.setToolTipText(fallbackInfoValue(value));
+    panel.add(valueLabel, "growx, wrap");
+  }
+
+  private static String fallbackInfoValue(String value) {
+    String v = Objects.toString(value, "").trim();
+    return v.isEmpty() ? "(unknown)" : v;
+  }
+
+  private static String formatConnectedEndpoint(String host, int port) {
+    String h = Objects.toString(host, "").trim();
+    if (h.isEmpty() && port <= 0) return "(unknown)";
+    if (h.isEmpty()) return ":" + port;
+    if (port <= 0) return h;
+    return h + ":" + port;
+  }
+
   public void setStatusText(String text) {
     String t = Objects.toString(text, "").trim();
     statusLabel.setText(t);
@@ -1418,11 +1899,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private void installTreeKeyBindings() {
+    // Legacy/alternate move bindings.
     tree.getInputMap(JComponent.WHEN_FOCUSED).put(
         KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
         "ircafe.tree.nodeMoveUp");
     tree.getInputMap(JComponent.WHEN_FOCUSED).put(
         KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+        "ircafe.tree.nodeMoveDown");
+    // Primary move bindings: Alt + Up/Down.
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK),
+        "ircafe.tree.nodeMoveUp");
+    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK),
         "ircafe.tree.nodeMoveDown");
     tree.getInputMap(JComponent.WHEN_FOCUSED).put(
         KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK),
@@ -1540,6 +2029,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       DefaultMutableTreeNode parent = (DefaultMutableTreeNode) existing.getParent();
       int idx = parent == null ? -1 : parent.getIndex(existing);
       leaves.remove(ref);
+      typingActivityNodes.remove(existing);
       if (parent != null) {
         Object[] removed = new Object[] { existing };
         if (idx < 0) {
@@ -1671,8 +2161,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public void removeTarget(TargetRef ref) {
     if (ref == null || ref.isStatus() || ref.isUiOnly()) return;
-    DefaultMutableTreeNode node = leaves.remove(ref);
-    if (node == null) return;
+    DefaultMutableTreeNode mappedNode = leaves.remove(ref);
+    java.util.Set<DefaultMutableTreeNode> nodesToRemove = new HashSet<>();
+    if (mappedNode != null) {
+      nodesToRemove.add(mappedNode);
+    }
+    nodesToRemove.addAll(findTreeNodesByTarget(ref));
+    if (nodesToRemove.isEmpty()) return;
+
     if (isPrivateMessageTarget(ref)) {
       privateMessageOnlineByTarget.remove(ref);
       if (shouldPersistPrivateMessageList()) {
@@ -1680,13 +2176,40 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       }
     }
 
-    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
-    if (parent != null) {
+    boolean removedAny = false;
+    for (DefaultMutableTreeNode node : nodesToRemove) {
+      if (node == null) continue;
+      typingActivityNodes.remove(node);
+      DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+      if (parent == null) continue;
+      int idx = parent.getIndex(node);
+      if (idx < 0) continue;
+      Object[] removed = new Object[] { node };
       parent.remove(node);
-      model.reload(parent);
-    } else {
+      model.nodesWereRemoved(parent, new int[] { idx }, removed);
+      removedAny = true;
+    }
+
+    if (!removedAny) {
       model.reload(root);
     }
+  }
+
+  private java.util.List<DefaultMutableTreeNode> findTreeNodesByTarget(TargetRef ref) {
+    java.util.ArrayList<DefaultMutableTreeNode> out = new java.util.ArrayList<>();
+    if (ref == null) return out;
+
+    Enumeration<?> en = root.depthFirstEnumeration();
+    while (en.hasMoreElements()) {
+      Object o = en.nextElement();
+      if (!(o instanceof DefaultMutableTreeNode node)) continue;
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData nd)) continue;
+      if (nd.ref == null) continue;
+      if (!ref.equals(nd.ref)) continue;
+      out.add(node);
+    }
+    return out;
   }
 
   public void markUnread(TargetRef ref) {
@@ -1713,7 +2236,104 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     nd.highlightUnread = 0;
     model.nodeChanged(node);
   }
-private void syncServers(List<ServerEntry> latest) {
+
+  public void markTypingActivity(TargetRef ref, String state) {
+    if (!supportsTypingActivity(ref)) return;
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    if (!(node.getUserObject() instanceof NodeData nd)) return;
+
+    long now = System.currentTimeMillis();
+    boolean changed = nd.applyTypingState(state, now, TYPING_ACTIVITY_HOLD_MS);
+    if (changed) {
+      repaintTreeNode(node);
+    }
+    if (nd.hasTypingActivity()) {
+      typingActivityNodes.add(node);
+      startTypingActivityTimerIfNeeded();
+      return;
+    }
+    typingActivityNodes.remove(node);
+    if (typingActivityNodes.isEmpty()) {
+      typingActivityTimer.stop();
+    }
+  }
+
+  private void onTypingActivityAnimationTick() {
+    if (!isShowing() || !tree.isShowing()) {
+      typingActivityTimer.stop();
+      return;
+    }
+
+    long now = System.currentTimeMillis();
+    java.util.ArrayList<DefaultMutableTreeNode> repaintNodes = new java.util.ArrayList<>();
+
+    java.util.Iterator<DefaultMutableTreeNode> it = typingActivityNodes.iterator();
+    while (it.hasNext()) {
+      DefaultMutableTreeNode node = it.next();
+      if (node == null) {
+        it.remove();
+        continue;
+      }
+      if (node.getParent() == null) {
+        it.remove();
+        continue;
+      }
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData nd)) {
+        it.remove();
+        continue;
+      }
+      if (!nd.hasTypingActivity()) {
+        it.remove();
+        continue;
+      }
+
+      boolean hadTyping = nd.hasTypingActivity();
+      nd.clearTypingActivityIfExpired(now, TYPING_ACTIVITY_FADE_MS);
+      if (!nd.hasTypingActivity()) {
+        it.remove();
+      }
+      if (hadTyping) repaintNodes.add(node);
+    }
+
+    if (typingActivityNodes.isEmpty()) {
+      typingActivityTimer.stop();
+    }
+
+    for (DefaultMutableTreeNode node : repaintNodes) {
+      repaintTreeNode(node);
+    }
+  }
+
+  private void startTypingActivityTimerIfNeeded() {
+    if (typingActivityNodes.isEmpty()) return;
+    if (!isShowing() || !tree.isShowing()) return;
+    if (!typingActivityTimer.isRunning()) {
+      typingActivityTimer.start();
+    }
+  }
+
+  private void repaintTreeNode(DefaultMutableTreeNode node) {
+    if (node == null) return;
+    TreePath path = new TreePath(node.getPath());
+    Rectangle r = tree.getPathBounds(path);
+    if (r == null) return;
+    Rectangle visible = tree.getVisibleRect();
+    if (visible == null || visible.isEmpty()) return;
+    Rectangle dirty = r.intersection(visible);
+    if (dirty.isEmpty()) return;
+    tree.repaint(dirty.x, dirty.y, dirty.width, dirty.height);
+  }
+
+  private static boolean supportsTypingActivity(TargetRef ref) {
+    if (ref == null) return false;
+    if (ref.isStatus() || ref.isUiOnly() || ref.isNotifications()) return false;
+    if (ref.isChannelList() || ref.isDccTransfers()) return false;
+    return ref.isChannel();
+  }
+
+  private void syncServers(List<ServerEntry> latest) {
   Set<String> newIds = new HashSet<>();
   Map<String, String> nextDisplay = new HashMap<>();
   Set<String> nextEphemeral = new HashSet<>();
@@ -2072,8 +2692,15 @@ private void removeServerRoot(String serverId) {
   serverDesiredOnline.remove(serverId);
   serverLastError.remove(serverId);
   serverNextRetryAtEpochMs.remove(serverId);
+  serverRuntimeMetadata.remove(serverId);
   clearPrivateMessageOnlineStates(serverId);
   leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
+  typingActivityNodes.removeIf(node -> {
+    if (node == null || node.getParent() == null) return true;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd) || nd.ref == null) return false;
+    return Objects.equals(nd.ref.serverId(), serverId);
+  });
 
   DefaultMutableTreeNode parent = (DefaultMutableTreeNode) sn.serverNode.getParent();
   if (parent != null) {
@@ -2231,6 +2858,7 @@ private void removeServerRoot(String serverId) {
       NodeData nd = new NodeData(statusRef, label);
       nd.unread = old.unread;
       nd.highlightUnread = old.highlightUnread;
+      nd.copyTypingFrom(old);
       node.setUserObject(nd);
       model.nodeChanged(node);
     }
@@ -2307,9 +2935,37 @@ private void removeServerRoot(String serverId) {
     }
   }
 
-  
+  private enum CapabilityState {
+    AVAILABLE("available"),
+    ENABLED("enabled"),
+    DISABLED("disabled"),
+    REMOVED("removed");
+
+    private final String label;
+
+    CapabilityState(String label) {
+      this.label = label;
+    }
+  }
+
+  private static final class ServerRuntimeMetadata {
+    String connectedHost = "";
+    int connectedPort = 0;
+    String nick = "";
+    Instant connectedAt;
+
+    String serverName = "";
+    String serverVersion = "";
+    String userModes = "";
+    String channelModes = "";
+
+    final Map<String, CapabilityState> ircv3Caps = new LinkedHashMap<>();
+    final Map<String, String> isupport = new LinkedHashMap<>();
+  }
 
 private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
+  private float typingDotAlpha = 0f;
+
   private void setTreeIcon(String name) {
     Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
     Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
@@ -2331,6 +2987,7 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Font base = tree.getFont();
     if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
+    typingDotAlpha = 0f;
 
     if (value instanceof DefaultMutableTreeNode node) {
       Object uo = node.getUserObject();
@@ -2358,6 +3015,9 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
           setTreeIcon("dock-right");
+        }
+        if (supportsTypingActivity(nd.ref)) {
+          typingDotAlpha = nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
         }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(serverNodeDisplayLabel(id));
@@ -2388,6 +3048,31 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     return c;
   }
+
+  @Override
+  protected void paintComponent(Graphics g) {
+    super.paintComponent(g);
+    if (typingDotAlpha <= 0.01f) return;
+
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      int dot = 8;
+      int x = Math.max(0, getWidth() - dot - 6);
+      int y = Math.max(0, (getHeight() - dot) / 2);
+      float a = Math.max(0f, Math.min(1f, typingDotAlpha));
+
+      g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, a * 0.45f)));
+      g2.setColor(TYPING_ACTIVITY_GLOW);
+      g2.fillOval(x - 2, y - 2, dot + 4, dot + 4);
+
+      g2.setComposite(AlphaComposite.SrcOver.derive(a));
+      g2.setColor(TYPING_ACTIVITY_DOT);
+      g2.fillOval(x, y, dot, dot);
+    } finally {
+      g2.dispose();
+    }
+  }
 }
 
 static final class NodeData {
@@ -2395,10 +3080,90 @@ static final class NodeData {
     final String label;
     int unread = 0;
     int highlightUnread = 0;
+    long typingPulseUntilMs = 0L;
+    long typingDoneFadeStartMs = 0L;
 
     NodeData(TargetRef ref, String label) {
       this.ref = ref;
       this.label = label;
+    }
+
+    void copyTypingFrom(NodeData other) {
+      if (other == null) return;
+      this.typingPulseUntilMs = other.typingPulseUntilMs;
+      this.typingDoneFadeStartMs = other.typingDoneFadeStartMs;
+    }
+
+    boolean hasTypingActivity() {
+      return typingPulseUntilMs > 0L || typingDoneFadeStartMs > 0L;
+    }
+
+    boolean applyTypingState(String state, long now, int holdMs) {
+      long prevPulse = typingPulseUntilMs;
+      long prevFade = typingDoneFadeStartMs;
+      String normalized = normalizeTypingState(state);
+      if ("done".equals(normalized)) {
+        if (hasTypingActivity()) {
+          typingPulseUntilMs = 0L;
+          typingDoneFadeStartMs = now;
+        }
+      } else {
+        long until = now + Math.max(500L, holdMs);
+        if (until > typingPulseUntilMs) {
+          typingPulseUntilMs = until;
+        }
+        typingDoneFadeStartMs = 0L;
+      }
+      return prevPulse != typingPulseUntilMs || prevFade != typingDoneFadeStartMs;
+    }
+
+    void clearTypingActivityIfExpired(long now, int fadeMs) {
+      int fadeWindow = Math.max(1, fadeMs);
+      if (typingDoneFadeStartMs > 0L) {
+        if (now - typingDoneFadeStartMs >= fadeWindow) {
+          typingPulseUntilMs = 0L;
+          typingDoneFadeStartMs = 0L;
+        }
+        return;
+      }
+      if (typingPulseUntilMs <= 0L) return;
+      if (now - typingPulseUntilMs >= fadeWindow) {
+        typingPulseUntilMs = 0L;
+      }
+    }
+
+    float typingDotAlpha(long now, int pulseMs, int fadeMs) {
+      int pulseWindow = Math.max(300, pulseMs);
+      int fadeWindow = Math.max(1, fadeMs);
+
+      if (typingDoneFadeStartMs > 0L) {
+        return fadeAlpha(now, typingDoneFadeStartMs, fadeWindow);
+      }
+      if (typingPulseUntilMs <= 0L) return 0f;
+      if (now < typingPulseUntilMs) {
+        double phase = (now % pulseWindow) / (double) pulseWindow;
+        double wave = 0.5d + (0.5d * Math.sin((phase * (Math.PI * 2.0d)) - (Math.PI / 2.0d)));
+        return (float) (0.35d + (0.65d * wave));
+      }
+      return fadeAlpha(now, typingPulseUntilMs, fadeWindow);
+    }
+
+    private static float fadeAlpha(long now, long fadeStartMs, int fadeWindowMs) {
+      if (fadeStartMs <= 0L) return 0f;
+      long elapsed = now - fadeStartMs;
+      if (elapsed <= 0L) return 1f;
+      if (elapsed >= fadeWindowMs) return 0f;
+      float progress = elapsed / (float) fadeWindowMs;
+      return Math.max(0f, 1f - progress);
+    }
+
+    private static String normalizeTypingState(String state) {
+      String s = Objects.toString(state, "").trim().toLowerCase(java.util.Locale.ROOT);
+      return switch (s) {
+        case "active", "composing", "paused" -> "active";
+        case "done", "inactive" -> "done";
+        default -> "active";
+      };
     }
 
     @Override
@@ -2413,6 +3178,7 @@ static final class NodeData {
   @PreDestroy
   void shutdown() {
     try {
+      if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
       nodeActions.close();
     } catch (Exception ignored) {

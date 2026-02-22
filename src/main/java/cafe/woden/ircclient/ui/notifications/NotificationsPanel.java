@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.notifications;
 
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.NotificationStore.HighlightEvent;
+import cafe.woden.ircclient.app.NotificationStore.IrcEventRuleEvent;
 import cafe.woden.ircclient.app.NotificationStore.RuleMatchEvent;
 import cafe.woden.ircclient.app.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -153,6 +154,12 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     for (RuleMatchEvent ev : rules) {
       if (ev == null) continue;
       rows.add(new Row(ev.at(), ev.channel(), ev.fromNick(), ev.ruleLabel(), ev.snippet()));
+    }
+
+    List<IrcEventRuleEvent> ircEvents = store.listAllIrcEventRules(sid);
+    for (IrcEventRuleEvent ev : ircEvents) {
+      if (ev == null) continue;
+      rows.add(new Row(ev.at(), ev.channel(), ev.fromNick(), ev.title(), ev.body()));
     }
 
     if (!rows.isEmpty()) {

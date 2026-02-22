@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.tray;
 
 import cafe.woden.ircclient.ApplicationShutdownCoordinator;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import dorkbox.systemTray.MenuItem;
@@ -25,7 +26,9 @@ public class TrayService {
 
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<MainFrame> frameProvider;
+  private final ObjectProvider<TrayNotificationService> trayNotificationServiceProvider;
   private final ApplicationShutdownCoordinator shutdownCoordinator;
+  private final RuntimeConfigStore runtimeConfigStore;
 
   private final AtomicBoolean installed = new AtomicBoolean(false);
   private final AtomicBoolean exitRequested = new AtomicBoolean(false);
@@ -37,11 +40,20 @@ public class TrayService {
   public TrayService(
       UiSettingsBus settingsBus,
       ObjectProvider<MainFrame> frameProvider,
-      ApplicationShutdownCoordinator shutdownCoordinator
+      ObjectProvider<TrayNotificationService> trayNotificationServiceProvider,
+      ApplicationShutdownCoordinator shutdownCoordinator,
+      RuntimeConfigStore runtimeConfigStore
   ) {
     this.settingsBus = settingsBus;
     this.frameProvider = frameProvider;
+    this.trayNotificationServiceProvider = trayNotificationServiceProvider;
     this.shutdownCoordinator = shutdownCoordinator;
+    this.runtimeConfigStore = runtimeConfigStore;
+    try {
+      closeBalloonShown.set(runtimeConfigStore.readTrayCloseToTrayHintShown(false));
+    } catch (Exception ignored) {
+      closeBalloonShown.set(false);
+    }
   }
 
   @PreDestroy
@@ -198,6 +210,22 @@ public class TrayService {
     if (tray == null) return;
     if (!closeBalloonShown.compareAndSet(false, true)) {
       return;
+    }
+
+    try {
+      if (runtimeConfigStore != null) {
+        runtimeConfigStore.rememberTrayCloseToTrayHintShown(true);
+      }
+    } catch (Exception ignored) {
+    }
+
+    try {
+      TrayNotificationService notificationService =
+          trayNotificationServiceProvider != null ? trayNotificationServiceProvider.getIfAvailable() : null;
+      if (notificationService != null) {
+        notificationService.notifyCloseToTrayHint();
+      }
+    } catch (Exception ignored) {
     }
 
     // SystemTray doesn't provide cross-platform "balloon" notifications.

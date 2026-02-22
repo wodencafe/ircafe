@@ -191,6 +191,16 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+tasks.register('themeValidate', Test) {
+    group = 'verification'
+    description = 'Runs Swing theme validation smoke tests.'
+    useJUnitPlatform()
+    systemProperty 'java.awt.headless', 'true'
+    filter {
+        includeTestsMatching 'cafe.woden.ircclient.ui.settings.ThemeValidatorTest'
+    }
+}
+
 tasks.named('bootJar') {
     archiveFileName = "ircafe-${project.version}.jar"
 }

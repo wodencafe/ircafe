@@ -38,7 +38,9 @@ final class MessageInputTypingSupport {
   // after the user stops typing (until PAUSED fires). Emit "active" only from user edits.
   private static final int TYPING_ACTIVE_THROTTLE_MS = 3000;
 
-  private static final int REMOTE_TYPING_HINT_MS = 5000;
+  // Keep incoming typing hints visible a bit longer than the common remote refresh cadence
+  // so short network delays do not cause the banner to blink out before "done" arrives.
+  private static final int REMOTE_TYPING_HINT_MS = 8000;
 
   private final JTextField input;
   private final JPanel typingBanner;
@@ -59,8 +61,9 @@ final class MessageInputTypingSupport {
   private long lastUserEditAtMs = 0L;
   private long lastActiveSentAtMs = 0L;
 
-  // Track the last applied setting so we can react specifically to "toggle OFF".
-  private boolean lastTypingIndicatorsEnabled = true;
+  // Track the last applied settings so we can react specifically to "toggle OFF".
+  private boolean lastTypingSendEnabled = true;
+  private boolean lastTypingReceiveEnabled = true;
   private boolean typingSignalAvailable;
 
   MessageInputTypingSupport(
@@ -87,7 +90,8 @@ final class MessageInputTypingSupport {
     this.remoteTypingHintTimer.setRepeats(false);
 
     UiSettings initial = this.settingsSupplier.get();
-    this.lastTypingIndicatorsEnabled = initial != null && initial.typingIndicatorsEnabled();
+    this.lastTypingSendEnabled = initial == null || initial.typingIndicatorsEnabled();
+    this.lastTypingReceiveEnabled = initial == null || initial.typingIndicatorsReceiveEnabled();
     this.typingSignalAvailable = false;
     this.typingSignalIndicator.setAvailable(false);
   }
@@ -127,6 +131,26 @@ final class MessageInputTypingSupport {
     lastActiveSentAtMs = 0L;
   }
 
+  /**
+   * Called when the user switches away from the current chat buffer.
+   *
+   * <p>If there is still draft text, emit PAUSED instead of DONE so peers can
+   * distinguish "still composing, temporarily away" from "finished typing".</p>
+   */
+  void flushTypingForBufferSwitch() {
+    typingPauseTimer.stop();
+    lastUserEditAtMs = 0L;
+    lastActiveSentAtMs = 0L;
+
+    String text = input.getText();
+    if (text != null && !text.isBlank() && !text.startsWith("/")) {
+      emitTypingState("paused");
+      return;
+    }
+
+    emitTypingState("done");
+  }
+
   void flushTypingDone() {
     typingPauseTimer.stop();
     lastUserEditAtMs = 0L;
@@ -136,18 +160,23 @@ final class MessageInputTypingSupport {
 
   void onSettingsApplied(UiSettings s) {
     if (s == null) return;
-    boolean enabledNow = s.typingIndicatorsEnabled();
-    // If typing indicators were just toggled OFF, immediately emit DONE (cleanup)
-    // and hide any remote banner.
-    if (lastTypingIndicatorsEnabled && !enabledNow) {
+    boolean sendEnabledNow = s.typingIndicatorsEnabled();
+    boolean receiveEnabledNow = s.typingIndicatorsReceiveEnabled();
+
+    // If outgoing typing was just toggled OFF, immediately emit DONE (cleanup).
+    if (lastTypingSendEnabled && !sendEnabledNow) {
       flushTypingDone();
+    }
+    // If incoming typing was just toggled OFF, hide any remote banner.
+    if (lastTypingReceiveEnabled && !receiveEnabledNow) {
       clearRemoteTypingIndicator();
     }
-    lastTypingIndicatorsEnabled = enabledNow;
+    lastTypingSendEnabled = sendEnabledNow;
+    lastTypingReceiveEnabled = receiveEnabledNow;
   }
 
   void showRemoteTypingIndicator(String nick, String state) {
-    if (!typingIndicatorsEnabled()) return;
+    if (!typingIndicatorsReceiveEnabled()) return;
 
     String n = nick == null ? "" : nick.trim();
     if (n.isEmpty()) return;
@@ -262,11 +291,21 @@ final class MessageInputTypingSupport {
     emitTypingState("paused");
   }
 
-  private boolean typingIndicatorsEnabled() {
+  private boolean typingIndicatorsSendEnabled() {
     try {
       UiSettings s = settingsSupplier.get();
       // Default: enabled if settings are not available yet.
       return s == null || s.typingIndicatorsEnabled();
+    } catch (Exception ex) {
+      return true;
+    }
+  }
+
+  private boolean typingIndicatorsReceiveEnabled() {
+    try {
+      UiSettings s = settingsSupplier.get();
+      // Default: enabled if settings are not available yet.
+      return s == null || s.typingIndicatorsReceiveEnabled();
     } catch (Exception ex) {
       return true;
     }
@@ -283,7 +322,7 @@ final class MessageInputTypingSupport {
     // Preferences gating: if typing indicators are disabled, never emit ACTIVE/PAUSED.
     // Still allow DONE to flow through as a cleanup signal so we can clear any existing
     // indicator on the server / other clients.
-    if (!typingIndicatorsEnabled() && !"done".equals(normalized)) {
+    if (!typingIndicatorsSendEnabled() && !"done".equals(normalized)) {
       return;
     }
 

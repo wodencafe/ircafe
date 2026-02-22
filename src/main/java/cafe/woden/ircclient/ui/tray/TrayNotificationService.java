@@ -4,6 +4,8 @@ import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.StatusBar;
+import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
@@ -57,6 +59,7 @@ public class TrayNotificationService {
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<TrayService> trayServiceProvider;
   private final ObjectProvider<MainFrame> mainFrameProvider;
+  private final ObjectProvider<StatusBar> statusBarProvider;
   private final ObjectProvider<TargetCoordinator> targetCoordinatorProvider;
   private final ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
@@ -66,483 +69,38 @@ public class TrayNotificationService {
   private final Map<String, Long> lastContentAtMs = new ConcurrentHashMap<>();
 
   public TrayNotificationService(
-          UiSettingsBus settingsBus,
-          ObjectProvider<TrayService> trayServiceProvider,
-          ObjectProvider<MainFrame> mainFrameProvider,
-          ObjectProvider<TargetCoordinator> targetCoordinatorProvider,
-          ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
-          ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
-          NotificationSoundService soundService) {
-    this.settingsBus = settingsBus;
-    this.trayServiceProvider = trayServiceProvider;
-    this.mainFrameProvider = mainFrameProvider;
-    this.targetCoordinatorProvider = targetCoordinatorProvider;
-    this.serverTreeProvider = serverTreeProvider;
-    this.gnomeDbusProvider = gnomeDbusProvider;
-    this.soundService = soundService;
-
-    this.requests = PublishProcessor.<NotificationRequest>create().toSerialized();
-    installRateLimiterPipeline();
+      String targetKey,
+      String contentKey,
+      String title,
+      String body,
+      Runnable onClick,
+      boolean showToast,
+      SoundDirective soundDirective
+  ) {
   }
 
-  @PreDestroy
-  void shutdown() {
-    try {
-      disposables.dispose();
-    } catch (Exception ignored) {
-    }
+  private enum SoundMode {
+    GLOBAL,
+    NONE,
+    OVERRIDE
   }
 
-  public void notifyHighlight(String serverId, String channel, String fromNick, String message) {
-    UiSettings s = settingsBus.get();
-    if (!s.trayEnabled() || !s.trayNotifyHighlights()) return;
-    String title = "Highlight" + (channel != null && !channel.isBlank() ? " in " + channel : "");
-    String body =
-            (fromNick != null && !fromNick.isBlank() ? fromNick + ": " : "") + safeBody(message);
-    TargetRef target = safeTargetRef(serverId, channel, "status");
-    if (!passesNotifyConditions(target)) return;
-    String targetKey = targetKey(serverId, channel);
-    notifyAsync(
-            targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
-  }
-
-  public void notifyPrivateMessage(String serverId, String fromNick, String message) {
-    UiSettings s = settingsBus.get();
-    if (!s.trayEnabled() || !s.trayNotifyPrivateMessages()) return;
-    String title = "PM" + (fromNick != null && !fromNick.isBlank() ? " from " + fromNick : "");
-    String body = safeBody(message);
-    TargetRef target = safeTargetRef(serverId, fromNick, "status");
-    if (!passesNotifyConditions(target)) return;
-    String targetKey = targetKey(serverId, fromNick);
-    notifyAsync(
-            targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
-  }
-
-  public void notifyInvite(String serverId, String channel, String fromNick, String reason) {
-    UiSettings s = settingsBus.get();
-    if (!s.trayEnabled() || !s.trayNotifyPrivateMessages()) return;
-
-    String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
-    String from = Objects.toString(fromNick, "").trim();
-    String rsn = Objects.toString(reason, "").trim();
-
-    String title = "Invite" + (!ch.isBlank() ? " to " + ch : "");
-    StringBuilder body = new StringBuilder();
-    if (!from.isBlank()) {
-      body.append(from).append(" invited you");
-    } else {
-      body.append("Channel invitation");
-    }
-    if (!sid.isBlank()) body.append(" on ").append(sid);
-    if (!rsn.isBlank()) body.append(": ").append(safeBody(rsn));
-
-    TargetRef target = safeTargetRef(serverId, "status", "status");
-    if (!passesNotifyConditions(target)) return;
-    String targetKey = targetKey(serverId, ch.isBlank() ? "status" : ch);
-    notifyAsync(
-            targetKey,
-            contentKey(targetKey, title, body.toString()),
-            title,
-            body.toString(),
-            () -> openTarget(target));
-  }
-
-  public void notifyConnectionState(String serverId, String state, String detail) {
-    UiSettings s = settingsBus.get();
-    if (!s.trayEnabled() || !s.trayNotifyConnectionState()) return;
-    String title =
-            "Connection" + (serverId != null && !serverId.isBlank() ? " (" + serverId + ")" : "");
-    String body =
-            (state != null && !state.isBlank() ? state : "")
-                    + (detail != null && !detail.isBlank()
-                    ? (state != null && !state.isBlank() ? ": " : "") + safeBody(detail)
-                    : "");
-    TargetRef target = safeTargetRef(serverId, "status", "status");
-    if (!passesNotifyConditions(target)) return;
-    String targetKey = targetKey(serverId, "status");
-    notifyAsync(
-            targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
-  }
-
-  /**
-   * Sends a test notification from the preferences UI.
-   */
-  public void notifyTest() {
-    UiSettings s = settingsBus.get();
-    if (s == null || !s.trayEnabled()) return;
-    String title = "IRCafe";
-    String body = "Test notification (click to open IRCafe)";
-    String targetKey = targetKey("", "");
-    notifyAsync(
-            targetKey, contentKey(targetKey, title, body), title, body, this::showMainWindowOnly);
-  }
-
-  private boolean passesNotifyConditions(TargetRef target) {
-    UiSettings s = settingsBus.get();
-    if (s == null || !s.trayEnabled()) return false;
-
-    if (s.trayNotifyOnlyWhenUnfocused() && isMainWindowFocused()) {
-      return false;
+  private record SoundDirective(
+      SoundMode mode,
+      String soundId,
+      boolean soundUseCustom,
+      String soundCustomPath
+  ) {
+    static SoundDirective global() {
+      return new SoundDirective(SoundMode.GLOBAL, null, false, null);
     }
 
-    if (s.trayNotifyOnlyWhenMinimizedOrHidden() && !isMainWindowMinimizedOrHidden()) {
-      return false;
+    static SoundDirective none() {
+      return new SoundDirective(SoundMode.NONE, null, false, null);
     }
 
-    if (s.trayNotifySuppressWhenTargetActive() && isTargetActive(target)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  private boolean isMainWindowFocused() {
-    MainFrame frame = mainFrameProvider != null ? mainFrameProvider.getIfAvailable() : null;
-    if (frame == null) return false;
-    return frame.isVisible() && frame.isActive();
-  }
-
-  private boolean isMainWindowMinimizedOrHidden() {
-    MainFrame frame = mainFrameProvider != null ? mainFrameProvider.getIfAvailable() : null;
-    if (frame == null) return true;
-    if (!frame.isVisible()) return true;
-    int st = frame.getExtendedState();
-    return (st & Frame.ICONIFIED) != 0;
-  }
-
-  private boolean isTargetActive(TargetRef target) {
-    try {
-      TargetCoordinator tc =
-              targetCoordinatorProvider != null ? targetCoordinatorProvider.getIfAvailable() : null;
-      if (tc == null) return false;
-      TargetRef active = tc.getActiveTarget();
-      return active != null && active.equals(target);
-    } catch (Exception ignored) {
-      return false;
+    static SoundDirective override(String soundId, boolean soundUseCustom, String soundCustomPath) {
+      return new SoundDirective(SoundMode.OVERRIDE, soundId, soundUseCustom, soundCustomPath);
     }
   }
-
-  private void notifyAsync(
-          String targetKey, String contentKey, String title, String body, Runnable onClick) {
-    // Push into the Rx pipeline; rate limiting and dedupe happen there.
-    requests.onNext(new NotificationRequest(targetKey, contentKey, title, body, onClick));
-  }
-
-  private void installRateLimiterPipeline() {
-    // Periodic cleanup of dedupe keys so long-running sessions don't accumulate unlimited entries.
-    disposables.add(
-            io.reactivex.rxjava3.core.Flowable.interval(
-                            1, 1, TimeUnit.MINUTES, RxVirtualSchedulers.computation())
-                    .subscribe(
-                            tick -> cleanupContentKeys(),
-                            err -> log.debug("[ircafe] notify cleanup failed", err)));
-
-    disposables.add(
-            requests
-                    .onBackpressureDrop(
-                            req ->
-                                    log.debug(
-                                            "[ircafe] dropping tray notification due to backpressure: {}",
-                                            req.targetKey()))
-                    .filter(this::allowByContentDedupe)
-                    // Per-target: allow up to N per window.
-                    .groupBy(NotificationRequest::targetKey)
-                    .flatMap(
-                            group ->
-                                    group
-                                            .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
-                                            .flatMap(win -> win.take(PER_TARGET_MAX_PER_WINDOW)))
-                    // Global: allow up to N per window.
-                    .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
-                    .flatMap(win -> win.take(GLOBAL_MAX_PER_WINDOW))
-                    .observeOn(RxVirtualSchedulers.io())
-                    .subscribe(this::sendNow, err -> log.debug("[ircafe] tray notify stream failed", err)));
-  }
-
-  private boolean allowByContentDedupe(NotificationRequest req) {
-    if (req == null) return false;
-    String k = req.contentKey();
-    if (k == null || k.isBlank()) return true;
-
-    long now = System.currentTimeMillis();
-    Long last = lastContentAtMs.put(k, now);
-    return last == null || (now - last) >= CONTENT_DEDUPE_WINDOW.toMillis();
-  }
-
-  private void cleanupContentKeys() {
-    long cutoff = System.currentTimeMillis() - CONTENT_KEY_TTL.toMillis();
-    lastContentAtMs.entrySet().removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
-  }
-
-  private void sendNow(NotificationRequest req) {
-    if (req == null) return;
-    try {
-      // Phase 2: single global sound for all delivered tray notifications.
-      // This uses the same rate-limited/deduped pipeline as the tray popup itself.
-      if (soundService != null) {
-        soundService.play();
-      }
-
-      if (tryWindowsToastPopup(req.title(), req.body(), req.onClick())) return;
-      if (tryLinuxNotifySend(req.title(), req.body(), req.onClick())) return;
-      if (tryMacOsascript(req.title(), req.body())) return;
-
-      // Last-resort fallback: don't crash the app because a desktop notification couldn't be shown.
-      Toolkit.getDefaultToolkit().beep();
-    } catch (Exception e) {
-      log.debug("[ircafe] tray notify failed", e);
-    }
-  }
-
-  private boolean tryWindowsToastPopup(String title, String body, Runnable onClick) {
-    String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-    if (!os.contains("win")) return false;
-
-    // dorkbox/Notify uses its own lightweight, toast-like popup window. It's not a native Windows
-    // Action Center
-    // notification, but it's reliable and requires no extra system components.
-    try {
-      UiSettings s = settingsBus.get();
-      boolean light =
-              s != null && s.theme() != null && s.theme().toLowerCase(Locale.ROOT).contains("light");
-
-      Runnable show =
-              () -> {
-                try {
-                  Function1<Notify, Unit> click =
-                          n -> {
-                            if (onClick != null) {
-                              try {
-                                onClick.run();
-                              } catch (Throwable ignored) {
-                              }
-                            }
-                            return Unit.INSTANCE;
-                          };
-
-                  Notify.Companion.create()
-                          .title(title)
-                          .text(body)
-                          .position(Position.BOTTOM_RIGHT)
-                          .hideAfter(5_000)
-                          .theme(
-                                  light ? Theme.Companion.getDefaultLight() : Theme.Companion.getDefaultDark())
-                          .onClickAction(click)
-                          .showWarning();
-                } catch (Throwable t) {
-                  // If this fails for any reason, we fall back to other mechanisms.
-                  throw new RuntimeException(t);
-                }
-              };
-
-      // Keep it Swing-safe.
-      if (SwingUtilities.isEventDispatchThread()) {
-        show.run();
-      } else {
-        SwingUtilities.invokeLater(show);
-      }
-      return true;
-    } catch (Throwable ignored) {
-      return false;
-    }
-  }
-
-  private void openTarget(TargetRef target) {
-    if (target == null) return;
-
-    Runnable r =
-            () -> {
-              try {
-                TrayService tray = trayServiceProvider.getIfAvailable();
-                if (tray == null) {
-                  tray = trayServiceProvider.getObject();
-                }
-                if (tray != null) {
-                  tray.showMainWindow();
-                }
-              } catch (Throwable ignored) {
-              }
-
-              try {
-                cafe.woden.ircclient.ui.ServerTreeDockable serverTree =
-                        serverTreeProvider.getIfAvailable();
-                if (serverTree == null) {
-                  serverTree = serverTreeProvider.getObject();
-                }
-                if (serverTree != null) {
-                  serverTree.selectTarget(target);
-                }
-              } catch (Throwable ignored) {
-              }
-            };
-
-    // Jumping to a buffer is a UI action.
-    if (SwingUtilities.isEventDispatchThread()) {
-      r.run();
-    } else {
-      SwingUtilities.invokeLater(r);
-    }
-  }
-
-  private void showMainWindowOnly() {
-    Runnable r =
-            () -> {
-              try {
-                TrayService tray = trayServiceProvider.getIfAvailable();
-                if (tray == null) {
-                  tray = trayServiceProvider.getObject();
-                }
-                if (tray != null) {
-                  tray.showMainWindow();
-                }
-              } catch (Throwable ignored) {
-              }
-            };
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      r.run();
-    } else {
-      SwingUtilities.invokeLater(r);
-    }
-  }
-
-  private static TargetRef safeTargetRef(String serverId, String target, String fallbackTarget) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return null;
-
-    String t = Objects.toString(target, "").trim();
-    if (t.isEmpty()) {
-      t = Objects.toString(fallbackTarget, "").trim();
-    }
-    if (t.isEmpty()) return null;
-
-    try {
-      return new TargetRef(sid, t);
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private boolean tryLinuxNotifySend(String title, String body, Runnable onClick) {
-    String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-    if (!os.contains("linux")) return false;
-
-    // Step G2: if the notifications server supports actions, prefer D-Bus Notify().
-    // Click handling (routing back into IRCafe) comes in G3.
-    boolean preferDbus = false;
-    try {
-      UiSettings s = settingsBus.get();
-      preferDbus = s != null && s.trayLinuxDbusActionsEnabled();
-    } catch (Exception ignored) {
-    }
-
-    if (preferDbus) {
-      try {
-        GnomeDbusNotificationBackend backend = gnomeDbusProvider.getIfAvailable();
-        if (backend != null) {
-          GnomeDbusNotificationBackend.ProbeResult pr = backend.probe();
-          if (pr != null && pr.sessionBusReachable() && pr.actionsSupported()) {
-            GnomeDbusNotificationBackend.NotifyResult nr =
-                    backend.notifyWithDefaultAction(title, body, 5_000, onClick);
-            if (nr != null && nr.sent()) {
-              log.debug("[ircafe] Sent notification via DBus (id={})", nr.id());
-              return true;
-            }
-          }
-        }
-      } catch (Throwable ignored) {
-        // Best-effort only.
-      }
-    }
-
-    // Very common on GNOME/KDE/etc. If missing, we'll silently fall back.
-    ProcessBuilder pb =
-            new ProcessBuilder("notify-send", "--app-name=IRCafe", "--expire-time=5000", title, body);
-    pb.redirectErrorStream(true);
-    try {
-      Process p = pb.start();
-      drain(p);
-      return p.waitFor() == 0;
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private static boolean tryMacOsascript(String title, String body) {
-    String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-    if (!(os.contains("mac") || os.contains("darwin"))) return false;
-
-    try {
-      // Path to Resources inside the .app bundle
-      File appResourcesDir = new File(
-              new File(System.getProperty("jpackage.app-path")).getParentFile(),
-              "../Resources"
-      ).getCanonicalFile();
-
-      File notifierApp = new File(appResourcesDir, "terminal-notifier.app");
-
-      // 1️⃣ Try terminal-notifier if it exists
-      if (notifierApp.exists()) {
-        new ProcessBuilder(
-                "open",
-                notifierApp.getAbsolutePath(),
-                "--args",
-                "-title", escapeApple(title),
-                "-message", escapeApple(body),
-                "-sender", "com.woden.ircafe"
-        ).start();
-        return true; // success
-      }
-    } catch (Exception ignored) {
-    }
-
-    try {
-      var builder = Toast.builder();
-      builder.title(escapeApple(title));
-      builder.content(escapeApple(body));
-      builder.toast();
-      return true;
-    } catch (Exception e) {
-      return false; // both methods failed
-    }
-  }
-  private static void drain(Process p) {
-    try (BufferedReader br =
-        new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-      while (br.readLine() != null) {
-        // discard
-      }
-    } catch (Exception ignored) {
-    }
-  }
-
-  private static String escapeApple(String s) {
-    if (s == null) return "";
-    // AppleScript uses backslash escaping inside quoted strings.
-    return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ");
-  }
-
-  private static String safeBody(String s) {
-    if (s == null) return "";
-    String v = s.replace('\n', ' ').replace('\r', ' ').trim();
-    if (v.length() <= MAX_BODY_LEN) return v;
-    return v.substring(0, MAX_BODY_LEN - 1) + "…";
-  }
-
-  private static String targetKey(String serverId, String target) {
-    return Objects.toString(serverId, "").trim() + "|" + Objects.toString(target, "").trim();
-  }
-
-  private static String contentKey(String targetKey, String title, String body) {
-    // Body is already bounded and sanitized; keep the key readable for debug.
-    return Objects.toString(targetKey, "")
-        + "|"
-        + Objects.toString(title, "")
-        + "|"
-        + Objects.toString(body, "");
-  }
-
-  private record NotificationRequest(
-      String targetKey, String contentKey, String title, String body, Runnable onClick) {}
 }

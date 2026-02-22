@@ -410,7 +410,7 @@ public class AppMenuBar extends JMenuBar {
     }
 
     themeMenu.addSeparator();
-    JMenuItem themeSelector = new JMenuItem("Theme Selector...");
+    JMenuItem themeSelector = new JMenuItem("More Themes...");
     themeSelector.setIcon(SvgIcons.action("theme", 16));
     themeSelector.setDisabledIcon(SvgIcons.actionDisabled("theme", 16));
     themeSelector.addActionListener(e -> {

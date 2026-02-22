@@ -13,8 +13,10 @@ import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 
 /**
- * Decorates a {@link JTree} so the mousewheel moves the selection up/down
- * by one row at a time (instead of scrolling the viewport).
+ * Decorates a {@link JTree} with Alt+wheel row navigation.
+ *
+ * <p>Default wheel behavior remains normal viewport scrolling. Holding Alt while wheeling moves
+ * the tree selection up/down by one row at a time.
  *
  */
 public final class TreeWheelSelectionDecorator implements AutoCloseable {
@@ -42,7 +44,6 @@ public final class TreeWheelSelectionDecorator implements AutoCloseable {
     this.scroll = scroll;
 
     this.previousWheelScrollingEnabled = scroll.isWheelScrollingEnabled();
-    scroll.setWheelScrollingEnabled(false);
 
     // Debounce micro-bursts so some touchpads don't skip nodes.
     this.subscription = stepRequests
@@ -74,6 +75,12 @@ public final class TreeWheelSelectionDecorator implements AutoCloseable {
   private void onMouseWheel(MouseWheelEvent e) {
     if (closed) return;
     if (!tree.isShowing() || !tree.isEnabled()) return;
+    if (!e.isAltDown()) {
+      // Keep default behavior: let the scrollpane handle wheel scrolling.
+      wheelDeltaAccumulator = 0.0d;
+      lastWheelEventNanos = 0L;
+      return;
+    }
 
     int rowCount = tree.getRowCount();
     if (rowCount <= 0) return;

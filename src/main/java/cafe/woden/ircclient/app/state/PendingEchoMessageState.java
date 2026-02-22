@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.state;
 
 import cafe.woden.ircclient.app.TargetRef;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -90,6 +91,29 @@ public class PendingEchoMessageState {
       if (target == null || !sid.equals(target.serverId())) continue;
       out.add(0, entry);
       pending.remove(i);
+    }
+    return out;
+  }
+
+  public synchronized List<PendingOutboundChat> collectTimedOut(Duration timeout, int maxCount, Instant now) {
+    Duration safeTimeout = (timeout == null || timeout.isZero() || timeout.isNegative())
+        ? Duration.ofSeconds(45)
+        : timeout;
+    int cap = Math.max(1, maxCount);
+    Instant anchor = (now != null) ? now : Instant.now();
+    Instant cutoff = anchor.minus(safeTimeout);
+
+    List<PendingOutboundChat> out = new ArrayList<>();
+    for (int i = 0; i < pending.size(); i++) {
+      PendingOutboundChat entry = pending.get(i);
+      Instant created = entry != null && entry.createdAt() != null ? entry.createdAt() : Instant.EPOCH;
+      if (created.isAfter(cutoff)) continue;
+      pending.remove(i);
+      i--;
+      out.add(entry);
+      if (out.size() >= cap) {
+        break;
+      }
     }
     return out;
   }
