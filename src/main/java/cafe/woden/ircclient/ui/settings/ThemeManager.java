@@ -41,6 +41,8 @@ public class ThemeManager {
   public enum ThemePack {
     SYSTEM,
     FLATLAF,
+    RETRO,
+    MODERN,
     IRCAFE,
     INTELLIJ
   }
@@ -49,6 +51,15 @@ public class ThemeManager {
     public boolean isDark() {
       return tone == ThemeTone.DARK;
     }
+  }
+
+  private record LegacySystemThemeDefinition(
+      String id,
+      String label,
+      ThemeTone tone,
+      String lafClassName,
+      boolean featured
+  ) {
   }
 
   private static final Map<String, String> ORANGE_DARK_DEFAULTS = Map.ofEntries(
@@ -321,6 +332,114 @@ public class ThemeManager {
       Map.entry("Tree.selectionBackground", "#254A72")
   );
 
+  private static final Map<String, String> CRT_GREEN_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#0B100B"),
+      Map.entry("@foreground", "#9BF2A6"),
+      Map.entry("@componentBackground", "#101710"),
+      Map.entry("@buttonBackground", "#152015"),
+      Map.entry("@menuBackground", "#090E09"),
+      Map.entry("@accentColor", "#57D36E"),
+      Map.entry("@accentBaseColor", "#42BF5C"),
+      Map.entry("@accentBase2Color", "#7EEA92"),
+      Map.entry("Component.focusColor", "#7EEA92"),
+      Map.entry("Component.linkColor", "#8EF7A3"),
+      Map.entry("TextComponent.selectionBackground", "#1F5C2A"),
+      Map.entry("TextComponent.selectionForeground", "#E8FFE9"),
+      Map.entry("List.selectionBackground", "#1F5C2A"),
+      Map.entry("Table.selectionBackground", "#1F5C2A"),
+      Map.entry("Tree.selectionBackground", "#1F5C2A")
+  );
+
+  private static final Map<String, String> CDE_BLUE_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#D5DCE9"),
+      Map.entry("@foreground", "#13243A"),
+      Map.entry("@componentBackground", "#E2E8F2"),
+      Map.entry("@buttonBackground", "#C9D3E2"),
+      Map.entry("@menuBackground", "#C5CFDF"),
+      Map.entry("@accentColor", "#2D63A8"),
+      Map.entry("@accentBaseColor", "#2D63A8"),
+      Map.entry("@accentBase2Color", "#4F80BE"),
+      Map.entry("Component.focusColor", "#4F80BE"),
+      Map.entry("Component.linkColor", "#285A99"),
+      Map.entry("TextComponent.selectionBackground", "#AFC3E5"),
+      Map.entry("TextComponent.selectionForeground", "#0D1D33"),
+      Map.entry("List.selectionBackground", "#AFC3E5"),
+      Map.entry("Table.selectionBackground", "#AFC3E5"),
+      Map.entry("Tree.selectionBackground", "#AFC3E5")
+  );
+
+  private static final Map<String, String> TOKYO_NIGHT_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#1A1B26"),
+      Map.entry("@foreground", "#C0CAF5"),
+      Map.entry("@componentBackground", "#202331"),
+      Map.entry("@buttonBackground", "#2A2F45"),
+      Map.entry("@menuBackground", "#171925"),
+      Map.entry("@accentColor", "#7AA2F7"),
+      Map.entry("@accentBaseColor", "#7AA2F7"),
+      Map.entry("@accentBase2Color", "#9AB8FF"),
+      Map.entry("Component.focusColor", "#9AB8FF"),
+      Map.entry("Component.linkColor", "#A9C2FF"),
+      Map.entry("TextComponent.selectionBackground", "#3A4B7A"),
+      Map.entry("TextComponent.selectionForeground", "#F3F6FF"),
+      Map.entry("List.selectionBackground", "#3A4B7A"),
+      Map.entry("Table.selectionBackground", "#3A4B7A"),
+      Map.entry("Tree.selectionBackground", "#3A4B7A")
+  );
+
+  private static final Map<String, String> CATPPUCCIN_MOCHA_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#1E1E2E"),
+      Map.entry("@foreground", "#CDD6F4"),
+      Map.entry("@componentBackground", "#24273A"),
+      Map.entry("@buttonBackground", "#313244"),
+      Map.entry("@menuBackground", "#181825"),
+      Map.entry("@accentColor", "#89B4FA"),
+      Map.entry("@accentBaseColor", "#89B4FA"),
+      Map.entry("@accentBase2Color", "#B4BEFE"),
+      Map.entry("Component.focusColor", "#B4BEFE"),
+      Map.entry("Component.linkColor", "#A6C8FF"),
+      Map.entry("TextComponent.selectionBackground", "#45475A"),
+      Map.entry("TextComponent.selectionForeground", "#F5F7FF"),
+      Map.entry("List.selectionBackground", "#45475A"),
+      Map.entry("Table.selectionBackground", "#45475A"),
+      Map.entry("Tree.selectionBackground", "#45475A")
+  );
+
+  private static final Map<String, String> GRUVBOX_DARK_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#282828"),
+      Map.entry("@foreground", "#EBDBB2"),
+      Map.entry("@componentBackground", "#32302F"),
+      Map.entry("@buttonBackground", "#3C3836"),
+      Map.entry("@menuBackground", "#1D2021"),
+      Map.entry("@accentColor", "#D79921"),
+      Map.entry("@accentBaseColor", "#D79921"),
+      Map.entry("@accentBase2Color", "#FABD2F"),
+      Map.entry("Component.focusColor", "#FABD2F"),
+      Map.entry("Component.linkColor", "#FFD266"),
+      Map.entry("TextComponent.selectionBackground", "#665C54"),
+      Map.entry("TextComponent.selectionForeground", "#FBF1C7"),
+      Map.entry("List.selectionBackground", "#665C54"),
+      Map.entry("Table.selectionBackground", "#665C54"),
+      Map.entry("Tree.selectionBackground", "#665C54")
+  );
+
+  private static final Map<String, String> GITHUB_SOFT_LIGHT_DEFAULTS = Map.ofEntries(
+      Map.entry("@background", "#FFFFFF"),
+      Map.entry("@foreground", "#24292F"),
+      Map.entry("@componentBackground", "#F6F8FA"),
+      Map.entry("@buttonBackground", "#EFF2F5"),
+      Map.entry("@menuBackground", "#F3F5F7"),
+      Map.entry("@accentColor", "#0969DA"),
+      Map.entry("@accentBaseColor", "#0969DA"),
+      Map.entry("@accentBase2Color", "#218BFF"),
+      Map.entry("Component.focusColor", "#218BFF"),
+      Map.entry("Component.linkColor", "#0550AE"),
+      Map.entry("TextComponent.selectionBackground", "#DDF4FF"),
+      Map.entry("TextComponent.selectionForeground", "#0A3069"),
+      Map.entry("List.selectionBackground", "#DDF4FF"),
+      Map.entry("Table.selectionBackground", "#DDF4FF"),
+      Map.entry("Tree.selectionBackground", "#DDF4FF")
+  );
+
   private static final Map<String, String> VIOLET_NEBULA_DEFAULTS = Map.ofEntries(
       Map.entry("@background", "#1B1629"),
       Map.entry("@foreground", "#E9E3FF"),
@@ -339,6 +458,21 @@ public class ThemeManager {
       Map.entry("Tree.selectionBackground", "#4A3688")
   );
 
+  private static final String NIMBUS_LAF_CLASS = "javax.swing.plaf.nimbus.NimbusLookAndFeel";
+  private static final String METAL_LAF_CLASS = "javax.swing.plaf.metal.MetalLookAndFeel";
+  private static final String MOTIF_LAF_CLASS = "com.sun.java.swing.plaf.motif.MotifLookAndFeel";
+  private static final String WINDOWS_LAF_CLASS = "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
+  private static final String GTK_LAF_CLASS = "com.sun.java.swing.plaf.gtk.GTKLookAndFeel";
+
+  private static final LegacySystemThemeDefinition[] LEGACY_SYSTEM_THEME_DEFINITIONS =
+      new LegacySystemThemeDefinition[] {
+          new LegacySystemThemeDefinition("nimbus", "Nimbus", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, true),
+          new LegacySystemThemeDefinition("metal", "Metal", ThemeTone.LIGHT, METAL_LAF_CLASS, true),
+          new LegacySystemThemeDefinition("motif", "Motif", ThemeTone.LIGHT, MOTIF_LAF_CLASS, true),
+          new LegacySystemThemeDefinition("windows", "Windows Classic", ThemeTone.SYSTEM, WINDOWS_LAF_CLASS, false),
+          new LegacySystemThemeDefinition("gtk", "GTK", ThemeTone.SYSTEM, GTK_LAF_CLASS, false)
+      };
+
   private static final ThemeOption[] BASE_THEMES = new ThemeOption[] {
       new ThemeOption("system", "Native (System)", ThemeTone.SYSTEM, ThemePack.SYSTEM, true),
 
@@ -346,6 +480,16 @@ public class ThemeManager {
       new ThemeOption("dark", "Flat Dark", ThemeTone.DARK, ThemePack.FLATLAF, true),
       new ThemeOption("darcula", "Flat Darcula", ThemeTone.DARK, ThemePack.FLATLAF, true),
       new ThemeOption("light", "Flat Light", ThemeTone.LIGHT, ThemePack.FLATLAF, true),
+
+      // Retro-styled custom variants
+      new ThemeOption("crt-green", "CRT Green", ThemeTone.DARK, ThemePack.RETRO, false),
+      new ThemeOption("cde-blue", "CDE Blue", ThemeTone.LIGHT, ThemePack.RETRO, false),
+
+      // Modern curated custom variants
+      new ThemeOption("tokyo-night", "Tokyo Night", ThemeTone.DARK, ThemePack.MODERN, true),
+      new ThemeOption("catppuccin-mocha", "Catppuccin Mocha", ThemeTone.DARK, ThemePack.MODERN, false),
+      new ThemeOption("gruvbox-dark", "Gruvbox Dark", ThemeTone.DARK, ThemePack.MODERN, false),
+      new ThemeOption("github-soft-light", "GitHub Soft Light", ThemeTone.LIGHT, ThemePack.MODERN, true),
 
       // IRCafe curated variants
       new ThemeOption("blue-dark", "Flat Blue (Dark)", ThemeTone.DARK, ThemePack.IRCAFE, true),
@@ -367,6 +511,33 @@ public class ThemeManager {
       new ThemeOption("solarized-light", "Solarized Light", ThemeTone.LIGHT, ThemePack.IRCAFE, false)
   };
 
+  private static List<ThemeOption> legacySystemThemes() {
+    Set<String> installed = installedLookAndFeelClassNames();
+    if (installed.isEmpty()) return List.of();
+
+    List<ThemeOption> out = new ArrayList<>();
+    for (LegacySystemThemeDefinition def : LEGACY_SYSTEM_THEME_DEFINITIONS) {
+      if (def == null || def.lafClassName() == null || def.lafClassName().isBlank()) continue;
+      if (!installed.contains(def.lafClassName().toLowerCase(Locale.ROOT))) continue;
+      out.add(new ThemeOption(def.id(), def.label(), def.tone(), ThemePack.SYSTEM, def.featured()));
+    }
+    return out;
+  }
+
+  private static Set<String> installedLookAndFeelClassNames() {
+    Set<String> out = new HashSet<>();
+    try {
+      UIManager.LookAndFeelInfo[] infos = UIManager.getInstalledLookAndFeels();
+      if (infos == null) return out;
+      for (UIManager.LookAndFeelInfo info : infos) {
+        if (info == null || info.getClassName() == null || info.getClassName().isBlank()) continue;
+        out.add(info.getClassName().toLowerCase(Locale.ROOT));
+      }
+    } catch (Exception ignored) {
+    }
+    return out;
+  }
+
   private static volatile ThemeOption[] CACHED_THEMES;
   private static volatile ThemeOption[] CACHED_THEMES_WITH_ALL_INTELLIJ;
 
@@ -376,6 +547,7 @@ public class ThemeManager {
 
     List<ThemeOption> out = new ArrayList<>();
     Collections.addAll(out, BASE_THEMES);
+    out.addAll(legacySystemThemes());
 
     // Keep it sane — only include a small curated subset from the IntelliJ Themes Pack.
     out.addAll(buildCuratedIntelliJThemes());
@@ -402,6 +574,7 @@ public class ThemeManager {
 
     List<ThemeOption> out = new ArrayList<>();
     Collections.addAll(out, BASE_THEMES);
+    out.addAll(legacySystemThemes());
 
     // Include all IntelliJ themes (not curated) for the picker.
     List<IntelliJThemePack.PackTheme> pack = IntelliJThemePack.listThemes();
@@ -437,6 +610,11 @@ public class ThemeManager {
     // Prioritized picks by name fragments (case-insensitive). We pick the first match for each.
     // If a fragment does not exist in the installed pack version, it is skipped.
     String[] priority = new String[] {
+        "tokyo night",
+        "catppuccin",
+        "gruvbox",
+        "github dark",
+        "github light",
         "one dark",
         "dracula",
         "arc dark",
@@ -445,7 +623,6 @@ public class ThemeManager {
         "solarized dark",
         "solarized light",
         "gradianto",
-        "github dark",
         "github",
         "material",
         "cobalt"
@@ -708,8 +885,43 @@ public class ThemeManager {
     try {
       switch (lower) {
         case "system" -> UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        case "nimbus" -> applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+        case "metal" -> applyLegacySystemLookAndFeelOrFallback(METAL_LAF_CLASS);
+        case "motif" -> applyLegacySystemLookAndFeelOrFallback(MOTIF_LAF_CLASS);
+        case "windows" -> applyLegacySystemLookAndFeelOrFallback(WINDOWS_LAF_CLASS);
+        case "gtk" -> applyLegacySystemLookAndFeelOrFallback(GTK_LAF_CLASS);
         case "light" -> UIManager.setLookAndFeel(new FlatLightLaf());
         case "darcula" -> UIManager.setLookAndFeel(new FlatDarculaLaf());
+        case "crt-green" -> {
+          FlatDarkLaf crtGreen = new FlatDarkLaf();
+          crtGreen.setExtraDefaults(CRT_GREEN_DEFAULTS);
+          UIManager.setLookAndFeel(crtGreen);
+        }
+        case "cde-blue" -> {
+          FlatLightLaf cdeBlue = new FlatLightLaf();
+          cdeBlue.setExtraDefaults(CDE_BLUE_DEFAULTS);
+          UIManager.setLookAndFeel(cdeBlue);
+        }
+        case "tokyo-night" -> {
+          FlatDarkLaf tokyoNight = new FlatDarkLaf();
+          tokyoNight.setExtraDefaults(TOKYO_NIGHT_DEFAULTS);
+          UIManager.setLookAndFeel(tokyoNight);
+        }
+        case "catppuccin-mocha" -> {
+          FlatDarkLaf catppuccinMocha = new FlatDarkLaf();
+          catppuccinMocha.setExtraDefaults(CATPPUCCIN_MOCHA_DEFAULTS);
+          UIManager.setLookAndFeel(catppuccinMocha);
+        }
+        case "gruvbox-dark" -> {
+          FlatDarkLaf gruvboxDark = new FlatDarkLaf();
+          gruvboxDark.setExtraDefaults(GRUVBOX_DARK_DEFAULTS);
+          UIManager.setLookAndFeel(gruvboxDark);
+        }
+        case "github-soft-light" -> {
+          FlatLightLaf githubSoftLight = new FlatLightLaf();
+          githubSoftLight.setExtraDefaults(GITHUB_SOFT_LIGHT_DEFAULTS);
+          UIManager.setLookAndFeel(githubSoftLight);
+        }
         case "blue-dark" -> {
           FlatDarkLaf blueDark = new FlatDarkLaf();
           blueDark.setExtraDefaults(BLUE_DARK_DEFAULTS);
@@ -797,6 +1009,18 @@ public class ThemeManager {
       // Fail soft; keep existing LAF.
       log.warn("[ircafe] Could not set Look & Feel '{}'", raw, e);
     }
+  }
+
+  private void applyLegacySystemLookAndFeelOrFallback(String className) throws Exception {
+    if (className == null || className.isBlank() || !isLookAndFeelInstalled(className)
+        || !trySetLookAndFeelByClassName(className)) {
+      UIManager.setLookAndFeel(new FlatDarculaLaf());
+    }
+  }
+
+  private static boolean isLookAndFeelInstalled(String className) {
+    if (className == null || className.isBlank()) return false;
+    return installedLookAndFeelClassNames().contains(className.toLowerCase(Locale.ROOT));
   }
 
   private boolean trySetLookAndFeelByClassName(String className) {

@@ -65,6 +65,11 @@ final class ChatImageComponent extends JPanel {
   };
 
   private java.awt.Component resizeListeningOn;
+  private boolean visibilityListenerInstalled;
+  private final java.awt.event.HierarchyListener visibilityListener = e -> {
+    if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) == 0) return;
+    SwingUtilities.invokeLater(this::syncGifPlaybackState);
+  };
   private final java.awt.event.ComponentListener resizeListener = new java.awt.event.ComponentAdapter() {
     @Override
     public void componentResized(java.awt.event.ComponentEvent e) {
@@ -117,15 +122,10 @@ final class ChatImageComponent extends JPanel {
     this.gifAnimationAllowed = allowed;
 
     if (gifPlayer != null) {
-      if (allowed && gifAnimationEnabled && !collapsed) {
-        gifPlayer.start();
-      } else {
-        gifPlayer.stop();
-        // Prefer a stable first frame when disabled.
-        if (gifFrames != null && !gifFrames.isEmpty()) {
-          imageLabel.setIcon(gifFrames.get(0));
-          setLabelPreferredSize(gifFrames.get(0));
-        }
+      syncGifPlaybackState();
+      if (!shouldAnimateGifNow() && gifFrames != null && !gifFrames.isEmpty()) {
+        imageLabel.setIcon(gifFrames.get(0));
+        setLabelPreferredSize(gifFrames.get(0));
       }
       revalidate();
       repaint();
@@ -221,10 +221,10 @@ final class ChatImageComponent extends JPanel {
     }
 
     if (gifPlayer != null) {
-      if (collapsed || !gifAnimationAllowed) {
-        gifPlayer.stop();
-      } else {
-        gifPlayer.start();
+      syncGifPlaybackState();
+      if (!shouldAnimateGifNow() && gifFrames != null && !gifFrames.isEmpty()) {
+        imageLabel.setIcon(gifFrames.get(0));
+        setLabelPreferredSize(gifFrames.get(0));
       }
     }
 
@@ -283,6 +283,7 @@ final class ChatImageComponent extends JPanel {
   public void addNotify() {
     super.addNotify();
 
+    hookVisibilityListener();
     hookResizeListener();
     hookSettingsListener();
 
@@ -294,9 +295,7 @@ final class ChatImageComponent extends JPanel {
       }
     }
 
-    if (gifPlayer != null && !collapsed && gifAnimationAllowed) {
-      gifPlayer.start();
-    }
+    syncGifPlaybackState();
   }
 
   @Override
@@ -308,6 +307,7 @@ final class ChatImageComponent extends JPanel {
     if (gifPlayer != null) {
       gifPlayer.stop();
     }
+    unhookVisibilityListener();
     unhookResizeListener();
     unhookSettingsListener();
     super.removeNotify();
@@ -367,14 +367,9 @@ final class ChatImageComponent extends JPanel {
         gifPlayer = new AnimatedGifPlayer(imageLabel);
       }
       gifPlayer.setFrames(icons, gif.delaysMs());
-      if (!collapsed && gifAnimationAllowed && gifAnimationEnabled) {
-        gifPlayer.start();
-      } else {
-        gifPlayer.stop();
-        // Ensure a stable still frame when disabled.
-        if (!icons.isEmpty()) {
-          imageLabel.setIcon(icons.get(0));
-        }
+      syncGifPlaybackState();
+      if (!shouldAnimateGifNow() && !icons.isEmpty()) {
+        imageLabel.setIcon(icons.get(0));
       }
 
       // Set sizing based on the first frame.
@@ -414,6 +409,18 @@ final class ChatImageComponent extends JPanel {
     resizeListeningOn = EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
   }
 
+  private void hookVisibilityListener() {
+    if (visibilityListenerInstalled) return;
+    addHierarchyListener(visibilityListener);
+    visibilityListenerInstalled = true;
+  }
+
+  private void unhookVisibilityListener() {
+    if (!visibilityListenerInstalled) return;
+    removeHierarchyListener(visibilityListener);
+    visibilityListenerInstalled = false;
+  }
+
   private void unhookResizeListener() {
     resizeListeningOn = EmbedHostLayoutUtil.unhookResizeListener(resizeListener, resizeListeningOn);
   }
@@ -430,6 +437,22 @@ final class ChatImageComponent extends JPanel {
     if (!settingsListenerInstalled) return;
     uiSettingsBus.removeListener(settingsListener);
     settingsListenerInstalled = false;
+  }
+
+  private boolean shouldAnimateGifNow() {
+    if (gifPlayer == null) return false;
+    if (collapsed) return false;
+    if (!gifAnimationAllowed || !gifAnimationEnabled) return false;
+    return isShowing();
+  }
+
+  private void syncGifPlaybackState() {
+    if (gifPlayer == null) return;
+    if (shouldAnimateGifNow()) {
+      gifPlayer.start();
+    } else {
+      gifPlayer.stop();
+    }
   }
 
   private void installPopup(JPanel target) {

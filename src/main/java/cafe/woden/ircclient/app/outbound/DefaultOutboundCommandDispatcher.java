@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final LocalFilterCommandService localFilterCommandService;
   private final TargetCoordinator targetCoordinator;
   private final UiPort ui;
+  private final UserCommandAliasesBus userCommandAliasesBus;
 
   public DefaultOutboundCommandDispatcher(
       OutboundModeCommandService outboundModeCommandService,
@@ -28,7 +30,8 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandService localFilterCommandService,
       TargetCoordinator targetCoordinator,
-      UiPort ui) {
+      UiPort ui,
+      UserCommandAliasesBus userCommandAliasesBus) {
     this.outboundModeCommandService = outboundModeCommandService;
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
@@ -37,6 +40,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.localFilterCommandService = localFilterCommandService;
     this.targetCoordinator = targetCoordinator;
     this.ui = ui;
+    this.userCommandAliasesBus = userCommandAliasesBus;
   }
 
   @Override
@@ -126,10 +130,23 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
       case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
       case ParsedInput.Unknown cmd -> {
+        if (userCommandAliasesBus != null && userCommandAliasesBus.unknownCommandAsRawEnabled()) {
+          String rawLine = unknownCommandAsRawLine(cmd.raw());
+          if (!rawLine.isBlank()) {
+            outboundChatCommandService.handleQuote(disposables, rawLine);
+            break;
+          }
+        }
         TargetRef at = targetCoordinator.getActiveTarget();
         TargetRef tgt = (at != null) ? at : targetCoordinator.safeStatusTarget();
         ui.appendStatus(tgt, "(system)", "Unknown command: " + cmd.raw());
       }
     }
+  }
+
+  private static String unknownCommandAsRawLine(String rawUnknown) {
+    String line = rawUnknown == null ? "" : rawUnknown.trim();
+    if (line.startsWith("/")) line = line.substring(1);
+    return line.trim();
   }
 }

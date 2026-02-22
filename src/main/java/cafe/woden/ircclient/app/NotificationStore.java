@@ -50,6 +50,18 @@ public class NotificationStore {
       Instant at
   ) {}
 
+  /**
+   * A configured IRC event notification entry (kick/invite/mode/etc).
+   */
+  public record IrcEventRuleEvent(
+      String serverId,
+      String channel,
+      String fromNick,
+      String title,
+      String body,
+      Instant at
+  ) {}
+
   /** Notification store update signal (used by the UI to refresh). */
   public record Change(String serverId) {}
 
@@ -68,6 +80,8 @@ public class NotificationStore {
   private final ConcurrentHashMap<String, List<HighlightEvent>> eventsByServer = new ConcurrentHashMap<>();
 
   private final ConcurrentHashMap<String, List<RuleMatchEvent>> ruleEventsByServer = new ConcurrentHashMap<>();
+
+  private final ConcurrentHashMap<String, List<IrcEventRuleEvent>> ircEventRuleEventsByServer = new ConcurrentHashMap<>();
 
   private record RuleMatchKey(String serverId, String channel, String ruleLabel) {}
 
@@ -174,6 +188,35 @@ public class NotificationStore {
     changes.onNext(new Change(sid));
   }
 
+  /**
+   * Record a configured IRC event notification for the Notifications node.
+   */
+  public void recordIrcEvent(String serverId, String target, String fromNick, String title, String body) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    String chan = normalizeChannel(target);
+    if (chan.isEmpty()) chan = "status";
+
+    String nick = normalizeNick(fromNick);
+    String normalizedTitle = normalizeLabel(title);
+    String normalizedBody = normalizeSnippet(body);
+    Instant now = Instant.now();
+
+    List<IrcEventRuleEvent> list = ircEventRuleEventsByServer.computeIfAbsent(
+        sid, k -> Collections.synchronizedList(new ArrayList<>()));
+
+    synchronized (list) {
+      list.add(new IrcEventRuleEvent(sid, chan, nick, normalizedTitle, normalizedBody, now));
+      int overflow = list.size() - maxEventsPerServer;
+      if (overflow > 0) {
+        list.subList(0, overflow).clear();
+      }
+    }
+
+    changes.onNext(new Change(sid));
+  }
+
   /** Returns a defensive copy of all highlight events for a server, oldest to newest. */
   public List<HighlightEvent> listAll(String serverId) {
     String sid = normalizeServerId(serverId);
@@ -190,6 +233,17 @@ public class NotificationStore {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
     List<RuleMatchEvent> list = ruleEventsByServer.get(sid);
+    if (list == null) return List.of();
+    synchronized (list) {
+      return List.copyOf(list);
+    }
+  }
+
+  /** Returns a defensive copy of all configured IRC event notifications for a server, oldest to newest. */
+  public List<IrcEventRuleEvent> listAllIrcEventRules(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return List.of();
+    List<IrcEventRuleEvent> list = ircEventRuleEventsByServer.get(sid);
     if (list == null) return List.of();
     synchronized (list) {
       return List.copyOf(list);
@@ -229,6 +283,13 @@ public class NotificationStore {
       }
     }
 
+    List<IrcEventRuleEvent> ircEvents = ircEventRuleEventsByServer.get(sid);
+    if (ircEvents != null) {
+      synchronized (ircEvents) {
+        total += ircEvents.size();
+      }
+    }
+
     return total;
   }
 
@@ -257,6 +318,13 @@ public class NotificationStore {
         changed |= rules.removeIf(ev -> ev != null && channel.equalsIgnoreCase(ev.channel()));
       }
     }
+
+    List<IrcEventRuleEvent> ircEvents = ircEventRuleEventsByServer.get(sid);
+    if (ircEvents != null) {
+      synchronized (ircEvents) {
+        changed |= ircEvents.removeIf(ev -> ev != null && channel.equalsIgnoreCase(ev.channel()));
+      }
+    }
     clearRuleMatchCooldownForChannel(sid, channel);
 
     if (changed) {
@@ -279,6 +347,13 @@ public class NotificationStore {
     if (rules != null) {
       synchronized (rules) {
         rules.clear();
+      }
+    }
+
+    List<IrcEventRuleEvent> ircEvents = ircEventRuleEventsByServer.get(sid);
+    if (ircEvents != null) {
+      synchronized (ircEvents) {
+        ircEvents.clear();
       }
     }
 

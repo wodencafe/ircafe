@@ -87,8 +87,11 @@ public record UiProperties(
 
     Boolean presenceFoldsEnabled,
 
-    /** Enable IRCv3 typing indicators (send + display). */
+    /** Enable sending IRCv3 typing indicators. */
     Boolean typingIndicatorsEnabled,
+
+    /** Enable displaying incoming IRCv3 typing indicators. */
+    Boolean typingIndicatorsReceiveEnabled,
 
     /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same server).
@@ -102,6 +105,11 @@ public record UiProperties(
      * <p>These are evaluated only for channel messages.
      */
     List<NotificationRuleProperties> notificationRules,
+
+    /**
+     * User-configured IRC event notifications (kicks/modes/invites/etc).
+     */
+    List<IrcEventNotificationRuleProperties> ircEventNotificationRules,
 
     /** Cooldown (seconds) to dedupe repeated rule-match notifications per channel + rule. */
     Integer notificationRuleCooldownSeconds,
@@ -545,6 +553,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (typingIndicatorsEnabled == null) {
       typingIndicatorsEnabled = true;
     }
+    // Incoming typing indicators default: follows the main typing toggle.
+    if (typingIndicatorsReceiveEnabled == null) {
+      typingIndicatorsReceiveEnabled = typingIndicatorsEnabled;
+    }
 
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
@@ -560,6 +572,11 @@ if (historyPlaceholdersEnabledByDefault == null) {
       notificationRules = List.of();
     } else {
       notificationRules = notificationRules.stream().filter(Objects::nonNull).toList();
+    }
+    if (ircEventNotificationRules == null) {
+      ircEventNotificationRules = IrcEventNotificationRuleProperties.defaultRules();
+    } else {
+      ircEventNotificationRules = ircEventNotificationRules.stream().filter(Objects::nonNull).toList();
     }
     if (nickColors == null) {
       nickColors = List.of();

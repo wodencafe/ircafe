@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.tray;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.StatusBar;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -54,6 +55,7 @@ public class TrayNotificationService {
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<TrayService> trayServiceProvider;
   private final ObjectProvider<MainFrame> mainFrameProvider;
+  private final ObjectProvider<StatusBar> statusBarProvider;
   private final ObjectProvider<TargetCoordinator> targetCoordinatorProvider;
   private final ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
@@ -66,6 +68,7 @@ public class TrayNotificationService {
       UiSettingsBus settingsBus,
       ObjectProvider<TrayService> trayServiceProvider,
       ObjectProvider<MainFrame> mainFrameProvider,
+      ObjectProvider<StatusBar> statusBarProvider,
       ObjectProvider<TargetCoordinator> targetCoordinatorProvider,
       ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
       ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
@@ -74,6 +77,7 @@ public class TrayNotificationService {
     this.settingsBus = settingsBus;
     this.trayServiceProvider = trayServiceProvider;
     this.mainFrameProvider = mainFrameProvider;
+    this.statusBarProvider = statusBarProvider;
     this.targetCoordinatorProvider = targetCoordinatorProvider;
     this.serverTreeProvider = serverTreeProvider;
     this.gnomeDbusProvider = gnomeDbusProvider;
@@ -162,11 +166,85 @@ public class TrayNotificationService {
     notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, this::showMainWindowOnly);
   }
 
+  /**
+   * One-time discoverability hint shown when IRCafe is first hidden to tray.
+   */
+  public void notifyCloseToTrayHint() {
+    UiSettings s = settingsBus.get();
+    if (s == null || !s.trayEnabled()) return;
+
+    String title = "IRCafe is still running";
+    String body = "IRCafe was hidden to the system tray. Use the tray icon/menu to reopen it.";
+    String targetKey = targetKey("ircafe", "tray");
+    notifyAsync(
+        targetKey,
+        contentKey(targetKey, "tray-close-hint", body),
+        title,
+        body,
+        this::showMainWindowOnly,
+        true,
+        SoundDirective.none());
+  }
+
+  /**
+   * Sends a custom notification driven by user-configured IRC event rules.
+   */
+  public void notifyCustom(
+      String serverId,
+      String target,
+      String title,
+      String body,
+      boolean showToast,
+      boolean allowWhenFocused,
+      boolean playSound,
+      String soundId,
+      boolean soundUseCustom,
+      String soundCustomPath
+  ) {
+    UiSettings s = settingsBus.get();
+    boolean trayEnabled = s != null && s.trayEnabled();
+    StatusBar statusBar = statusBarProvider != null ? statusBarProvider.getIfAvailable() : null;
+    if (!trayEnabled && statusBar == null) return;
+
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    String tgt = Objects.toString(target, "").trim();
+    if (tgt.isEmpty()) tgt = "status";
+
+    TargetRef openTarget = safeTargetRef(sid, tgt, "status");
+    if (trayEnabled && !passesNotifyConditions(openTarget, allowWhenFocused)) return;
+
+    String finalTitle = Objects.toString(title, "").trim();
+    if (finalTitle.isEmpty()) finalTitle = "IRCafe";
+    String finalBody = safeBody(body);
+
+    boolean effectiveShowToast = trayEnabled && showToast;
+    boolean effectivePlaySound = trayEnabled && playSound;
+
+    String targetKey = targetKey(sid, tgt);
+    String contentKey = contentKey(
+        targetKey,
+        "event",
+        (effectiveShowToast ? "toast|" : "status|") + finalTitle + "|" + finalBody);
+
+    SoundDirective soundDirective = effectivePlaySound
+        ? SoundDirective.override(soundId, soundUseCustom, soundCustomPath)
+        : SoundDirective.none();
+
+    Runnable onClick = () -> openTarget(openTarget);
+    notifyAsync(targetKey, contentKey, finalTitle, finalBody, onClick, effectiveShowToast, soundDirective);
+  }
+
   private boolean passesNotifyConditions(TargetRef target) {
+    return passesNotifyConditions(target, false);
+  }
+
+  private boolean passesNotifyConditions(TargetRef target, boolean allowWhenFocused) {
     UiSettings s = settingsBus.get();
     if (s == null || !s.trayEnabled()) return false;
 
-    if (s.trayNotifyOnlyWhenUnfocused() && isMainWindowFocused()) {
+    if (!allowWhenFocused && s.trayNotifyOnlyWhenUnfocused() && isMainWindowFocused()) {
       return false;
     }
 
@@ -208,7 +286,26 @@ public class TrayNotificationService {
 
   private void notifyAsync(String targetKey, String contentKey, String title, String body, Runnable onClick) {
     // Push into the Rx pipeline; rate limiting and dedupe happen there.
-    requests.onNext(new NotificationRequest(targetKey, contentKey, title, body, onClick));
+    notifyAsync(targetKey, contentKey, title, body, onClick, true, SoundDirective.global());
+  }
+
+  private void notifyAsync(
+      String targetKey,
+      String contentKey,
+      String title,
+      String body,
+      Runnable onClick,
+      boolean showToast,
+      SoundDirective soundDirective
+  ) {
+    requests.onNext(new NotificationRequest(
+        targetKey,
+        contentKey,
+        title,
+        body,
+        onClick,
+        showToast,
+        soundDirective != null ? soundDirective : SoundDirective.global()));
   }
 
   private void installRateLimiterPipeline() {
@@ -254,11 +351,21 @@ public class TrayNotificationService {
   private void sendNow(NotificationRequest req) {
     if (req == null) return;
     try {
-      // Phase 2: single global sound for all delivered tray notifications.
-      // This uses the same rate-limited/deduped pipeline as the tray popup itself.
-      if (soundService != null) {
-        soundService.play();
+      enqueueStatusBarNotice(req);
+
+      if (soundService != null && req.soundDirective() != null) {
+        switch (req.soundDirective().mode()) {
+          case GLOBAL -> soundService.play();
+          case NONE -> {
+          }
+          case OVERRIDE -> soundService.playOverride(
+              req.soundDirective().soundId(),
+              req.soundDirective().soundUseCustom(),
+              req.soundDirective().soundCustomPath());
+        }
       }
+
+      if (!req.showToast()) return;
 
       if (tryWindowsToastPopup(req.title(), req.body(), req.onClick())) return;
       if (tryLinuxNotifySend(req.title(), req.body(), req.onClick())) return;
@@ -269,6 +376,25 @@ public class TrayNotificationService {
     } catch (Exception e) {
       log.debug("[ircafe] tray notify failed", e);
     }
+  }
+
+  private void enqueueStatusBarNotice(NotificationRequest req) {
+    if (req == null) return;
+    StatusBar statusBar = statusBarProvider != null ? statusBarProvider.getIfAvailable() : null;
+    if (statusBar == null) return;
+
+    String title = Objects.toString(req.title(), "").trim();
+    String body = Objects.toString(req.body(), "").trim();
+    String text;
+    if (title.isEmpty()) {
+      text = body;
+    } else if (body.isEmpty()) {
+      text = title;
+    } else {
+      text = title + ": " + body;
+    }
+    if (text.isBlank()) return;
+    statusBar.enqueueNotification(text, req.onClick());
   }
 
   private boolean tryWindowsToastPopup(String title, String body, Runnable onClick) {
@@ -493,7 +619,34 @@ public class TrayNotificationService {
       String contentKey,
       String title,
       String body,
-      Runnable onClick
+      Runnable onClick,
+      boolean showToast,
+      SoundDirective soundDirective
   ) {
+  }
+
+  private enum SoundMode {
+    GLOBAL,
+    NONE,
+    OVERRIDE
+  }
+
+  private record SoundDirective(
+      SoundMode mode,
+      String soundId,
+      boolean soundUseCustom,
+      String soundCustomPath
+  ) {
+    static SoundDirective global() {
+      return new SoundDirective(SoundMode.GLOBAL, null, false, null);
+    }
+
+    static SoundDirective none() {
+      return new SoundDirective(SoundMode.NONE, null, false, null);
+    }
+
+    static SoundDirective override(String soundId, boolean soundUseCustom, String soundCustomPath) {
+      return new SoundDirective(SoundMode.OVERRIDE, soundId, soundUseCustom, soundCustomPath);
+    }
   }
 }

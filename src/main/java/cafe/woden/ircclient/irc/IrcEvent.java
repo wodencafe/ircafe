@@ -23,6 +23,7 @@ public sealed interface IrcEvent permits
     IrcEvent.PrivateAction,
 
     IrcEvent.Notice,
+    IrcEvent.WallopsReceived,
 
     IrcEvent.AwayStatusChanged,
     IrcEvent.UserJoinedChannel,
@@ -188,6 +189,8 @@ public sealed interface IrcEvent permits
       this(at, from, target, text, "", Map.of());
     }
   }
+
+  record WallopsReceived(Instant at, String from, String text) implements IrcEvent {}
 
   /**
    * A server response line (usually a numeric like 421/433/etc) that doesn't map cleanly onto

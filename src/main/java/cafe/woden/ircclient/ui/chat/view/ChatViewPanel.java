@@ -13,6 +13,7 @@ import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Desktop;
@@ -22,7 +23,12 @@ import java.awt.BorderLayout;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import java.awt.Rectangle;
@@ -37,8 +43,14 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
 import javax.swing.text.Element;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class ChatViewPanel extends JPanel implements Scrollable {
+
+  private static final Logger log = LoggerFactory.getLogger(ChatViewPanel.class);
+  private static final Pattern URL_TOKEN_PATTERN =
+      Pattern.compile("(?i)(https?://[^\\s<>\"\\u0000-\\u001F]+|www\\.[^\\s<>\"\\u0000-\\u001F]+)");
 
   protected final WrapTextPane chat = new WrapTextPane();
   protected final JScrollPane scroll = new JScrollPane(chat);
@@ -568,11 +580,199 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         || c == '-';
   }
   private void openUrl(String url) {
+    String raw = sanitizeUrlForBrowser(url);
+    if (raw == null || raw.isBlank()) return;
+
+    VirtualThreads.start("ircafe-open-url", () -> {
+      // On Linux, prefer explicit browser executables before Desktop/xdg handlers.
+      // Some desktop MIME associations can route URLs to non-browser apps.
+      if (isLinux() && tryPlatformOpen(raw)) return;
+      if (tryDesktopBrowse(raw)) return;
+      if (!isLinux() && tryPlatformOpen(raw)) return;
+      log.warn("[ircafe] Could not open URL in browser: {}", raw);
+    });
+  }
+
+  private static boolean tryDesktopBrowse(String url) {
     try {
-      Desktop.getDesktop().browse(new URI(url));
-    } catch (Exception ignored) {
-      // Best-effort.
+      if (!Desktop.isDesktopSupported()) return false;
+      Desktop desktop = Desktop.getDesktop();
+      if (desktop == null) return false;
+      if (!desktop.isSupported(Desktop.Action.BROWSE)) return false;
+      desktop.browse(new URI(url));
+      return true;
+    } catch (Exception e) {
+      log.debug("[ircafe] Desktop browse failed for {}", url, e);
+      return false;
     }
+  }
+
+  private static boolean tryPlatformOpen(String url) {
+    if (isLinux()) {
+      return tryKnownLinuxBrowser(url)
+          || tryStart("xdg-open", url)
+          || tryStart("gio", "open", url)
+          || tryStart("sensible-browser", url)
+          || tryStart("x-www-browser", url)
+          || tryStart("gnome-open", url)
+          || tryStart("kde-open", url);
+    }
+    String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+    if (os.contains("mac") || os.contains("darwin")) {
+      return tryStart("open", url);
+    }
+    if (os.contains("win")) {
+      return tryStart("rundll32", "url.dll,FileProtocolHandler", url)
+          || tryStart("cmd", "/c", "start", "", url);
+    }
+    return false;
+  }
+
+  private static boolean tryKnownLinuxBrowser(String url) {
+    List<String> browsers = List.of(
+        "librewolf",
+        "zen-browser",
+        "firefox",
+        "google-chrome",
+        "chromium",
+        "chromium-browser",
+        "brave-browser",
+        "microsoft-edge",
+        "opera",
+        "vivaldi");
+    for (String browser : browsers) {
+      if (tryStart(browser, url)) return true;
+    }
+    return false;
+  }
+
+  private static boolean isLinux() {
+    String os = System.getProperty("os.name", "");
+    return os.toLowerCase(Locale.ROOT).contains("linux");
+  }
+
+  private static boolean tryStart(String... cmd) {
+    if (cmd == null || cmd.length == 0) return false;
+    try {
+      Process process = new ProcessBuilder(cmd)
+          .redirectErrorStream(true)
+          .start();
+      if (process == null) return false;
+
+      // If the command exits immediately with a non-zero status, treat it as a failure
+      // so we can fall back to the next opener.
+      try {
+        if (process.waitFor(450, TimeUnit.MILLISECONDS)) {
+          return process.exitValue() == 0;
+        }
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+      }
+
+      // Still running after a short window generally means launch succeeded.
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private static String sanitizeUrlForBrowser(String rawUrl) {
+    String s = Objects.toString(rawUrl, "").trim();
+    if (s.isEmpty()) return null;
+
+    // Be defensive: if a malformed token leaked extra text, pull the first URL-looking token.
+    Matcher m = URL_TOKEN_PATTERN.matcher(s);
+    if (m.find()) {
+      s = Objects.toString(m.group(1), "").trim();
+    }
+
+    s = trimEdgeNoise(s);
+    if (s.isEmpty()) return null;
+
+    if (s.startsWith("<") && s.endsWith(">") && s.length() > 2) {
+      s = s.substring(1, s.length() - 1).trim();
+    }
+
+    int ws = firstWhitespaceIndex(s);
+    if (ws > 0) {
+      // Be defensive if an invalid token accidentally captured trailing chat text.
+      s = s.substring(0, ws).trim();
+    }
+
+    // Trim common trailing punctuation introduced by prose.
+    while (!s.isEmpty()) {
+      char c = s.charAt(s.length() - 1);
+      if (c == '.'
+          || c == ','
+          || c == ')'
+          || c == ']'
+          || c == '}'
+          || c == '>'
+          || c == '!'
+          || c == '?'
+          || c == ';'
+          || c == ':'
+          || c == '\''
+          || c == '"') {
+        s = s.substring(0, s.length() - 1).trim();
+        continue;
+      }
+      break;
+    }
+    s = trimEdgeNoise(s);
+
+    if (s.isBlank()) return null;
+
+    String lower = s.toLowerCase(Locale.ROOT);
+    if (lower.startsWith("www.")) {
+      s = "https://" + s;
+      lower = s.toLowerCase(Locale.ROOT);
+    }
+
+    if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+      return null;
+    }
+
+    try {
+      URI uri = new URI(s);
+      String scheme = Objects.toString(uri.getScheme(), "").toLowerCase(Locale.ROOT);
+      if (!scheme.equals("http") && !scheme.equals("https")) return null;
+      if (Objects.toString(uri.getHost(), "").isBlank()) return null;
+      return uri.toASCIIString();
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static String trimEdgeNoise(String s) {
+    if (s == null || s.isEmpty()) return "";
+    int start = 0;
+    int end = s.length();
+    while (start < end) {
+      char c = s.charAt(start);
+      if (Character.isWhitespace(c) || Character.isISOControl(c)) {
+        start++;
+      } else {
+        break;
+      }
+    }
+    while (end > start) {
+      char c = s.charAt(end - 1);
+      if (Character.isWhitespace(c) || Character.isISOControl(c)) {
+        end--;
+      } else {
+        break;
+      }
+    }
+    return (start == 0 && end == s.length()) ? s : s.substring(start, end);
+  }
+
+  private static int firstWhitespaceIndex(String s) {
+    if (s == null || s.isEmpty()) return -1;
+    for (int i = 0; i < s.length(); i++) {
+      if (Character.isWhitespace(s.charAt(i))) return i;
+    }
+    return -1;
   }
 
   // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of scrollbars.
