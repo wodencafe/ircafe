@@ -2318,11 +2318,12 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (node == null) return;
     TreePath path = new TreePath(node.getPath());
     Rectangle r = tree.getPathBounds(path);
-    if (r == null) {
-      tree.repaint();
-      return;
-    }
-    tree.repaint(r.x, r.y, tree.getWidth(), r.height);
+    if (r == null) return;
+    Rectangle visible = tree.getVisibleRect();
+    if (visible == null || visible.isEmpty()) return;
+    Rectangle dirty = r.intersection(visible);
+    if (dirty.isEmpty()) return;
+    tree.repaint(dirty.x, dirty.y, dirty.width, dirty.height);
   }
 
   private static boolean supportsTypingActivity(TargetRef ref) {

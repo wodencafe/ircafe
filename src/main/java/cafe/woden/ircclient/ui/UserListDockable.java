@@ -516,24 +516,19 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void repaintTypingRows() {
-    if (typingByNick.isEmpty()) {
-      list.repaint();
-      return;
-    }
+    if (typingByNick.isEmpty()) return;
 
-    boolean repaintedAny = false;
+    Rectangle visible = list.getVisibleRect();
+    if (visible == null || visible.isEmpty()) return;
     for (String key : typingByNick.keySet()) {
       Integer idx = nickIndexByKey.get(key);
       if (idx == null) continue;
       if (idx < 0 || idx >= model.size()) continue;
       Rectangle row = list.getCellBounds(idx, idx);
       if (row == null) continue;
-      list.repaint(row);
-      repaintedAny = true;
-    }
-
-    if (!repaintedAny) {
-      list.repaint();
+      Rectangle dirty = row.intersection(visible);
+      if (dirty.isEmpty()) continue;
+      list.repaint(dirty);
     }
   }
 
