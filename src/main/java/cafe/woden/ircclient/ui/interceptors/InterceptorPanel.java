@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.interceptors;
 
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
 import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
 import cafe.woden.ircclient.app.interceptors.InterceptorHit;
@@ -20,6 +21,10 @@ import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -31,6 +36,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
@@ -49,6 +55,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import net.miginfocom.swing.MigLayout;
 
@@ -113,6 +120,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JMenuItem rulesPopupEdit = new JMenuItem("Edit...");
   private final JMenuItem rulesPopupRemove = new JMenuItem("Delete...");
   private final JButton clearHits = new JButton("Clear");
+  private final JButton exportHitsCsv = new JButton("Export CSV");
+  private final JButton createInterceptorButton = new JButton("Create Interceptor");
 
   private final RulesTableModel rulesModel = new RulesTableModel();
   private final JTable rulesTable = new JTable(rulesModel);
@@ -123,6 +132,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private volatile String interceptorId = "";
   private boolean loading = false;
   private boolean controlsEnabled = false;
+  private Consumer<TargetRef> onSelectTarget;
 
   public InterceptorPanel(InterceptorStore store) {
     super(new BorderLayout());
@@ -131,6 +141,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     buildHeader();
     buildBody();
     installListeners();
+    createInterceptorButton.setVisible(false);
     setControlsEnabled(false);
 
     disposables.add(
@@ -154,6 +165,10 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     this.serverId = Objects.toString(serverId, "").trim();
     this.interceptorId = Objects.toString(interceptorId, "").trim();
     refreshFromStore();
+  }
+
+  public void setOnSelectTarget(Consumer<TargetRef> onSelectTarget) {
+    this.onSelectTarget = onSelectTarget;
   }
 
   @Override
@@ -224,6 +239,10 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JPanel footer = new JPanel(new BorderLayout());
     footer.setBorder(BorderFactory.createEmptyBorder(4, 10, 8, 10));
     footer.add(status, BorderLayout.CENTER);
+    JPanel footerActions = new JPanel(new MigLayout("insets 0, gapx 6", "[]", "[]"));
+    footerActions.setOpaque(false);
+    footerActions.add(createInterceptorButton);
+    footer.add(footerActions, BorderLayout.EAST);
     add(footer, BorderLayout.SOUTH);
   }
 
@@ -362,8 +381,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private JPanel buildHitsTab() {
     JPanel tab = new JPanel(new BorderLayout());
 
-    JPanel toolbar = new JPanel(new MigLayout("insets 6 0 6 0,fillx", "[grow,fill][]", "[]"));
+    JPanel toolbar = new JPanel(new MigLayout("insets 6 0 6 0,fillx", "[grow,fill][][]", "[]"));
     toolbar.add(new JLabel(""), "growx");
+    toolbar.add(exportHitsCsv);
     toolbar.add(clearHits);
 
     tab.add(toolbar, BorderLayout.NORTH);
@@ -499,6 +519,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     removeRule.addActionListener(e -> removeSelectedRule());
 
     rulesTable.getSelectionModel().addListSelectionListener(e -> updateRuleButtons());
+
+    exportHitsCsv.addActionListener(e -> exportHitsTableAsCsv());
+    createInterceptorButton.addActionListener(e -> createInterceptorFromOverview());
 
     clearHits.addActionListener(
         e -> {
@@ -798,6 +821,12 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     configureIconButton(editRule, "edit", "Edit selected trigger rule");
     configureIconButton(removeRule, "trash", "Remove selected trigger rule");
     configureIconButton(clearHits, "close", "Clear interceptor hits");
+    configureIconButton(exportHitsCsv, "copy", "Export interceptor hits to CSV");
+    createInterceptorButton.setIcon(SvgIcons.action("plus", 16));
+    createInterceptorButton.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    createInterceptorButton.setMargin(new Insets(2, 8, 2, 8));
+    createInterceptorButton.setToolTipText("Create a new interceptor for this server");
+    createInterceptorButton.setFocusable(false);
     configureIconButton(testSound, "play", "Test selected sound");
     configureIconButton(browseScriptPath, "terminal", "Browse for script/program");
     configureIconButton(browseScriptWorkingDirectory, "settings", "Browse for script working directory");
@@ -820,6 +849,146 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         selectedSoundId(),
         actionSoundUseCustom.isSelected(),
         actionSoundCustomPath.getText());
+  }
+
+  private void createInterceptorFromOverview() {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isBlank()) {
+      status.setText("Select a server first.");
+      return;
+    }
+    if (!Objects.toString(interceptorId, "").trim().isBlank()) {
+      status.setText("Create new interceptors from the Interceptors overview node.");
+      return;
+    }
+
+    try {
+      InterceptorDefinition created = store.createInterceptor(sid, "Interceptor");
+      if (created == null || Objects.toString(created.id(), "").isBlank()) {
+        status.setText("Failed to create interceptor.");
+        return;
+      }
+      status.setText("Created interceptor: " + created.name());
+
+      Consumer<TargetRef> cb = onSelectTarget;
+      if (cb != null) {
+        cb.accept(TargetRef.interceptor(sid, created.id()));
+      } else {
+        setInterceptorTarget(sid, created.id());
+      }
+    } catch (Exception ex) {
+      String msg = Objects.toString(ex.getMessage(), ex.getClass().getSimpleName());
+      status.setText("Create failed: " + msg);
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Failed to create interceptor:\n" + msg,
+          "Create Interceptor Error",
+          JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private void exportHitsTableAsCsv() {
+    if (hitsTable.getRowCount() <= 0) {
+      status.setText("No interceptor hits to export.");
+      return;
+    }
+
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Export Interceptor Hits");
+    chooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+    chooser.setAcceptAllFileFilterUsed(true);
+    chooser.setSelectedFile(new File(defaultHitsExportFileName()));
+
+    int result = chooser.showSaveDialog(SwingUtilities.getWindowAncestor(this));
+    if (result != JFileChooser.APPROVE_OPTION) return;
+
+    File selected = chooser.getSelectedFile();
+    if (selected == null) return;
+
+    Path path = selected.toPath();
+    String fileName = path.getFileName() == null ? "" : path.getFileName().toString();
+    if (!fileName.toLowerCase(Locale.ROOT).endsWith(".csv")) {
+      path = path.resolveSibling(fileName + ".csv");
+    }
+
+    try {
+      writeHitsCsv(path);
+      status.setText("Exported " + hitsTable.getRowCount() + " hit(s) to " + path.toAbsolutePath());
+    } catch (Exception ex) {
+      String msg = Objects.toString(ex.getMessage(), ex.getClass().getSimpleName());
+      status.setText("Export failed: " + msg);
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Failed to export interceptor hits:\n" + msg,
+          "CSV Export Error",
+          JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private void writeHitsCsv(Path path) throws Exception {
+    if (path == null) throw new IllegalArgumentException("Output path is required.");
+    if (path.getParent() != null) {
+      Files.createDirectories(path.getParent());
+    }
+
+    try (var out =
+        Files.newBufferedWriter(
+            path,
+            StandardCharsets.UTF_8,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.WRITE)) {
+
+      int viewColumnCount = hitsTable.getColumnCount();
+      ArrayList<String> headers = new ArrayList<>(viewColumnCount);
+      for (int viewCol = 0; viewCol < viewColumnCount; viewCol++) {
+        headers.add(Objects.toString(hitsTable.getColumnName(viewCol), ""));
+      }
+      out.write(joinCsv(headers));
+      out.newLine();
+
+      for (int viewRow = 0; viewRow < hitsTable.getRowCount(); viewRow++) {
+        int modelRow = hitsTable.convertRowIndexToModel(viewRow);
+        ArrayList<String> row = new ArrayList<>(viewColumnCount);
+
+        for (int viewCol = 0; viewCol < viewColumnCount; viewCol++) {
+          int modelCol = hitsTable.convertColumnIndexToModel(viewCol);
+          row.add(Objects.toString(hitsModel.getValueAt(modelRow, modelCol), ""));
+        }
+
+        out.write(joinCsv(row));
+        out.newLine();
+      }
+    }
+  }
+
+  private static String joinCsv(List<String> cols) {
+    if (cols == null || cols.isEmpty()) return "";
+    StringBuilder sb = new StringBuilder(cols.size() * 24);
+    for (int i = 0; i < cols.size(); i++) {
+      if (i > 0) sb.append(',');
+      sb.append(csvCell(cols.get(i)));
+    }
+    return sb.toString();
+  }
+
+  private static String csvCell(String value) {
+    String s = Objects.toString(value, "");
+    boolean needsQuote =
+        s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0;
+    if (!needsQuote) return s;
+    return "\"" + s.replace("\"", "\"\"") + "\"";
+  }
+
+  private String defaultHitsExportFileName() {
+    String sid = serverId.isBlank() ? "server" : serverId.replaceAll("[^A-Za-z0-9._-]+", "_");
+    String iid =
+        interceptorId.isBlank() ? "interceptor" : interceptorId.replaceAll("[^A-Za-z0-9._-]+", "_");
+    String ts =
+        DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT)
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.now());
+    return "ircafe-interceptor-hits-" + sid + "-" + iid + "-" + ts + ".csv";
   }
 
   private void browseForScriptPath() {
@@ -930,17 +1099,35 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     title.setText("Interceptor");
     subtitle.setText("Loading interceptor...");
     status.setText("Loading...");
+    createInterceptorButton.setVisible(false);
+    createInterceptorButton.setEnabled(false);
     setControlsEnabled(false);
   }
 
   private void applyNoSelectionState(long req) {
     if (req != refreshSeq.get()) return;
     loading = true;
-    title.setText("Interceptor");
-    subtitle.setText("Select an interceptor node.");
+
+    boolean interceptorsOverview = !Objects.toString(serverId, "").trim().isBlank()
+        && Objects.toString(interceptorId, "").trim().isBlank();
+    if (interceptorsOverview) {
+      title.setText("Interceptors");
+      subtitle.setText(
+          "<html><b>Interceptors</b> watch IRC events/messages and trigger actions when rules match."
+              + " Create one to highlight, notify, play a sound, or run a script for important patterns.</html>");
+      status.setText("Tip: Add/select an interceptor to configure rules and review captured hits.");
+      createInterceptorButton.setVisible(true);
+      createInterceptorButton.setEnabled(true);
+    } else {
+      title.setText("Interceptor");
+      subtitle.setText("Select an interceptor node.");
+      status.setText(" ");
+      createInterceptorButton.setVisible(false);
+      createInterceptorButton.setEnabled(false);
+    }
+
     rulesModel.setRows(List.of());
     hitsModel.setRows(List.of());
-    status.setText(" ");
     resetControls();
     loading = false;
     setControlsEnabled(false);
@@ -954,6 +1141,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     rulesModel.setRows(List.of());
     hitsModel.setRows(List.of());
     status.setText(" ");
+    createInterceptorButton.setVisible(false);
+    createInterceptorButton.setEnabled(false);
     resetControls();
     loading = false;
     setControlsEnabled(false);
@@ -1008,6 +1197,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     loading = true;
     title.setText("Interceptor - " + def.name());
     subtitle.setText(def.scopeAnyServer() ? "Scope: any server" : "Scope: this server");
+    createInterceptorButton.setVisible(false);
+    createInterceptorButton.setEnabled(false);
 
     interceptorName.setText(def.name());
     enabled.setSelected(def.enabled());
@@ -1102,6 +1293,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     actionScriptEnabled.setEnabled(enabled);
 
     clearHits.setEnabled(enabled);
+    exportHitsCsv.setEnabled(enabled && hitsModel.getRowCount() > 0);
     rulesTable.setEnabled(enabled);
     hitsTable.setEnabled(enabled);
 

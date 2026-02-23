@@ -1859,56 +1859,161 @@ public class ThemeManager {
     );
   }
 
-  private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
-                                                     ColorUIResource nimbusBlueGrey,
-                                                     ColorUIResource focus,
-                                                     ColorUIResource link,
-                                                     ColorUIResource selectionBg,
-                                                     ColorUIResource menuSelectionBg,
-                                                     ColorUIResource nimbusInfoBlue,
-                                                     ColorUIResource nimbusOrange,
-                                                     ColorUIResource nimbusAlertYellow,
-                                                     ColorUIResource nimbusRed,
-                                                     ColorUIResource nimbusGreen,
-                                                     ColorUIResource splitPaneDraggingColor) {
-    applyNimbusDarkOverrides();
+private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
+                                                   ColorUIResource nimbusBlueGrey,
+                                                   ColorUIResource focus,
+                                                   ColorUIResource link,
+                                                   ColorUIResource selectionBg,
+                                                   ColorUIResource menuSelectionBg,
+                                                   ColorUIResource nimbusInfoBlue,
+                                                   ColorUIResource nimbusOrange,
+                                                   ColorUIResource nimbusAlertYellow,
+                                                   ColorUIResource nimbusRed,
+                                                   ColorUIResource nimbusGreen,
+                                                   ColorUIResource splitPaneDraggingColor) {
+  applyNimbusDarkOverrides();
 
-    ColorUIResource selectionFg = uiColor(0xF3, 0xF7, 0xFD);
-    UIManager.put("nimbusBase", nimbusBase);
-    UIManager.put("nimbusBlueGrey", nimbusBlueGrey);
-    UIManager.put("nimbusFocus", focus);
-    UIManager.put("nimbusSelectionBackground", selectionBg);
-    UIManager.put("nimbusInfoBlue", nimbusInfoBlue);
-    UIManager.put("nimbusOrange", nimbusOrange);
-    UIManager.put("nimbusAlertYellow", nimbusAlertYellow);
-    UIManager.put("nimbusRed", nimbusRed);
-    UIManager.put("nimbusGreen", nimbusGreen);
-    UIManager.put("Component.focusColor", focus);
-    UIManager.put("Component.accentColor", focus);
-    UIManager.put("Component.linkColor", link);
-    UIManager.put("textHighlight", selectionBg);
-    UIManager.put("textHighlightText", selectionFg);
-    UIManager.put("TextComponent.selectionBackground", selectionBg);
-    UIManager.put("TextComponent.selectionForeground", selectionFg);
-    UIManager.put("List.selectionBackground", selectionBg);
-    UIManager.put("List.selectionForeground", selectionFg);
-    UIManager.put("Table.selectionBackground", selectionBg);
-    UIManager.put("Table.selectionForeground", selectionFg);
-    UIManager.put("Tree.selectionBackground", selectionBg);
-    UIManager.put("Tree.selectionForeground", selectionFg);
-    UIManager.put("Menu.selectionBackground", menuSelectionBg);
-    UIManager.put("Menu.selectionForeground", selectionFg);
-    UIManager.put("MenuItem.selectionBackground", menuSelectionBg);
-    UIManager.put("MenuItem.selectionForeground", selectionFg);
-    UIManager.put("CheckBoxMenuItem.selectionBackground", menuSelectionBg);
-    UIManager.put("CheckBoxMenuItem.selectionForeground", selectionFg);
-    UIManager.put("RadioButtonMenuItem.selectionBackground", menuSelectionBg);
-    UIManager.put("RadioButtonMenuItem.selectionForeground", selectionFg);
-    UIManager.put("Button.select", selectionBg);
-    UIManager.put("ToggleButton.select", selectionBg);
-    UIManager.put("TabbedPane.focus", focus);
-    UIManager.put("SplitPaneDivider.draggingColor", splitPaneDraggingColor);
+  // Tint the dark neutral surfaces for each Nimbus dark accent variant.
+  // Without this, all dark variants inherit the same gray base from applyNimbusDarkOverrides().
+  ColorUIResource control = new ColorUIResource(mix(nimbusBlueGrey, nimbusBase, 0.35));
+  ColorUIResource bg = new ColorUIResource(darken(control, 0.10));
+  ColorUIResource menuBg = new ColorUIResource(darken(control, 0.05));
+  ColorUIResource border = new ColorUIResource(lighten(control, 0.10));
+  ColorUIResource separator = new ColorUIResource(lighten(control, 0.05));
+
+  // Chef's-kiss pass: tint the supporting neutrals so the whole theme reads as one palette.
+  ColorUIResource controlShadow = new ColorUIResource(darken(control, 0.20));
+  ColorUIResource controlDkShadow = new ColorUIResource(darken(control, 0.34));
+  ColorUIResource controlLtHighlight = new ColorUIResource(lighten(control, 0.12));
+  ColorUIResource viewportBg = bg;
+  ColorUIResource tableHeaderBg = new ColorUIResource(lighten(control, 0.04));
+  ColorUIResource tooltipBg = new ColorUIResource(lighten(menuBg, 0.04));
+
+  UIManager.put("control", control);
+  UIManager.put("info", control);
+  UIManager.put("Panel.background", control);
+  UIManager.put("menu", menuBg);
+
+  UIManager.put("nimbusLightBackground", bg);
+  UIManager.put("nimbusBorder", border);
+
+  UIManager.put("Component.borderColor", border);
+  UIManager.put("controlShadow", controlShadow);
+  UIManager.put("controlDkShadow", controlDkShadow);
+  UIManager.put("controlLtHighlight", controlLtHighlight);
+
+  UIManager.put("TextField.background", bg);
+  UIManager.put("TextField.borderColor", border);
+
+  UIManager.put("PasswordField.background", bg);
+  UIManager.put("PasswordField.borderColor", border);
+
+  UIManager.put("FormattedTextField.background", bg);
+  UIManager.put("FormattedTextField.borderColor", border);
+
+  UIManager.put("TextArea.background", bg);
+  UIManager.put("TextPane.background", bg);
+  UIManager.put("EditorPane.background", bg);
+
+  UIManager.put("List.background", bg);
+  UIManager.put("Tree.background", bg);
+  UIManager.put("Tree.textBackground", bg);
+
+  UIManager.put("Table.background", bg);
+  UIManager.put("Table.gridColor", separator);
+  UIManager.put("TableHeader.background", tableHeaderBg);
+  UIManager.put("TableHeader:\"TableHeader.renderer\".background", tableHeaderBg);
+
+  UIManager.put("Viewport.background", viewportBg);
+
+  UIManager.put("ComboBox.background", bg);
+  UIManager.put("ComboBox.disabled", control);
+  UIManager.put("ComboBox:\"ComboBox.listRenderer\".background", bg);
+  UIManager.put("ComboBox:\"ComboBox.renderer\".background", bg);
+  UIManager.put("ComboBox:\"ComboBox.textField\".background", bg);
+  UIManager.put("ComboBox:\"ComboBox.arrowButton\".background", control);
+
+  UIManager.put("Spinner.background", bg);
+  UIManager.put("Spinner:\"Spinner.formattedTextField\".background", bg);
+
+  UIManager.put("Button.background", control);
+  UIManager.put("ToggleButton.background", control);
+  UIManager.put("CheckBox.background", control);
+  UIManager.put("RadioButton.background", control);
+
+  UIManager.put("MenuBar.background", menuBg);
+  UIManager.put("MenuBar.borderColor", border);
+  UIManager.put("Menu.background", menuBg);
+  UIManager.put("MenuItem.background", menuBg);
+  UIManager.put("CheckBoxMenuItem.background", menuBg);
+  UIManager.put("RadioButtonMenuItem.background", menuBg);
+  UIManager.put("PopupMenu.background", menuBg);
+
+  UIManager.put("PopupMenu.borderColor", border);
+  UIManager.put("PopupMenuSeparator.background", menuBg);
+  UIManager.put("PopupMenuSeparator.foreground", separator);
+  UIManager.put("ScrollPane.borderColor", border);
+  UIManager.put("Separator.foreground", separator);
+  UIManager.put("Separator.background", control);
+  UIManager.put("ToolBar.separatorColor", separator);
+
+  UIManager.put("ToolTip.background", tooltipBg);
+
+  UIManager.put("SplitPane.background", control);
+  UIManager.put("SplitPane.foreground", separator);
+
+  ColorUIResource selectionFg = uiColor(0xF3, 0xF7, 0xFD);
+  UIManager.put("nimbusBase", nimbusBase);
+  UIManager.put("nimbusBlueGrey", nimbusBlueGrey);
+  UIManager.put("nimbusFocus", focus);
+  UIManager.put("nimbusSelectionBackground", selectionBg);
+  UIManager.put("nimbusInfoBlue", nimbusInfoBlue);
+  UIManager.put("nimbusOrange", nimbusOrange);
+  UIManager.put("nimbusAlertYellow", nimbusAlertYellow);
+  UIManager.put("nimbusRed", nimbusRed);
+  UIManager.put("nimbusGreen", nimbusGreen);
+  UIManager.put("Component.focusColor", focus);
+  UIManager.put("Component.accentColor", focus);
+  UIManager.put("Component.linkColor", link);
+  UIManager.put("textHighlight", selectionBg);
+  UIManager.put("textHighlightText", selectionFg);
+  UIManager.put("TextComponent.selectionBackground", selectionBg);
+  UIManager.put("TextComponent.selectionForeground", selectionFg);
+  UIManager.put("List.selectionBackground", selectionBg);
+  UIManager.put("List.selectionForeground", selectionFg);
+  UIManager.put("Table.selectionBackground", selectionBg);
+  UIManager.put("Table.selectionForeground", selectionFg);
+  UIManager.put("Tree.selectionBackground", selectionBg);
+  UIManager.put("Tree.selectionForeground", selectionFg);
+  UIManager.put("Menu.selectionBackground", menuSelectionBg);
+  UIManager.put("Menu.selectionForeground", selectionFg);
+  UIManager.put("MenuItem.selectionBackground", menuSelectionBg);
+  UIManager.put("MenuItem.selectionForeground", selectionFg);
+  UIManager.put("CheckBoxMenuItem.selectionBackground", menuSelectionBg);
+  UIManager.put("CheckBoxMenuItem.selectionForeground", selectionFg);
+  UIManager.put("RadioButtonMenuItem.selectionBackground", menuSelectionBg);
+  UIManager.put("RadioButtonMenuItem.selectionForeground", selectionFg);
+  UIManager.put("Button.select", selectionBg);
+  UIManager.put("ToggleButton.select", selectionBg);
+
+  // Match text on newly tinted surfaces.
+  Object labelText = UIManager.get("Label.foreground");
+  if (labelText != null) {
+    UIManager.put("PasswordField.foreground", labelText);
+    UIManager.put("FormattedTextField.foreground", labelText);
+    UIManager.put("TextPane.foreground", labelText);
+    UIManager.put("EditorPane.foreground", labelText);
+    UIManager.put("TableHeader.foreground", labelText);
+    UIManager.put("TableHeader:\"TableHeader.renderer\".foreground", labelText);
+    UIManager.put("ToolTip.foreground", labelText);
+    UIManager.put("Viewport.foreground", labelText);
+    UIManager.put("Spinner.foreground", labelText);
+    UIManager.put("Spinner:\"Spinner.formattedTextField\".foreground", labelText);
   }
+
+  UIManager.put("TabbedPane.focus", focus);
+  UIManager.put("SplitPaneDivider.draggingColor", splitPaneDraggingColor);
+}
 
   private static void applyNimbusOrangeOverrides() {
     applyNimbusTintOverrides(

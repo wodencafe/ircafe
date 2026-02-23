@@ -243,6 +243,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"),
         sid -> (this.serverTree == null) ? java.util.List.of() : this.serverTree.openChannelsForServer(sid));
     this.interceptorPanel = new InterceptorPanel(this.interceptorStore);
+    this.interceptorPanel.setOnSelectTarget(ref -> {
+      if (ref == null) return;
+      if (ChatDockable.this.serverTree != null) {
+        ChatDockable.this.serverTree.selectTarget(ref);
+      } else {
+        ChatDockable.this.setActiveTarget(ref);
+      }
+    });
 
     centerCards.add(topicSplit, CARD_TRANSCRIPT);
     centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
@@ -379,6 +387,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.isLogViewer()) {
       showLogViewerCard(target.serverId());
       // Log viewer does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isInterceptorsGroup()) {
+      showInterceptorCard(target.serverId(), "");
+      // Interceptors overview does not accept input; clear any draft to avoid confusion.
       inputPanel.setDraftText("");
       updateTopicPanelForActiveTarget();
       return;
@@ -1113,6 +1128,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isNotifications()) return "Notifications";
     if (t.isChannelList()) return "Channel List";
     if (t.isDccTransfers()) return "DCC Transfers";
+    if (t.isInterceptorsGroup()) return "Interceptors";
     if (t.isApplicationUnhandledErrors()) return "Unhandled Errors";
     if (t.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (t.isApplicationJhiccup()) return "jHiccup";

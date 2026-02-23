@@ -439,7 +439,15 @@ private static final class InsertionLine {
       if (!suppressSelectionBroadcast && node != null) {
         Object uo = node.getUserObject();
         if (uo instanceof NodeData nd) {
-          if (nd.ref != null) selections.onNext(nd.ref);
+          if (nd.ref != null) {
+            selections.onNext(nd.ref);
+          } else if (isInterceptorsGroupNode(node)) {
+            String serverId = owningServerIdForNode(node);
+            if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
+          }
+        } else if (isInterceptorsGroupNode(node)) {
+          String serverId = owningServerIdForNode(node);
+          if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
         }
       }
       tree.repaint();
@@ -1604,6 +1612,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   return new InsertionLine(x1, y, x2);
 }
 
+  private String owningServerIdForNode(DefaultMutableTreeNode node) {
+    DefaultMutableTreeNode cur = node;
+    while (cur != null) {
+      if (isServerNode(cur)) {
+        Object uo = cur.getUserObject();
+        if (uo instanceof String sid) return sid.trim();
+      }
+      javax.swing.tree.TreeNode parent = cur.getParent();
+      cur = (parent instanceof DefaultMutableTreeNode dmtn) ? dmtn : null;
+    }
+    return "";
+  }
+
   private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
     if (node == null) return false;
     Object uo = node.getUserObject();
@@ -2597,6 +2618,16 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   public void selectTarget(TargetRef ref) {
+    if (ref == null) return;
+    if (ref.isInterceptorsGroup()) {
+      ServerNodes sn = servers.get(ref.serverId());
+      DefaultMutableTreeNode node = (sn == null) ? null : sn.interceptorsNode;
+      if (node == null) return;
+      TreePath path = new TreePath(node.getPath());
+      tree.setSelectionPath(path);
+      tree.scrollPathToVisible(path);
+      return;
+    }
     ensureNode(ref);
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
