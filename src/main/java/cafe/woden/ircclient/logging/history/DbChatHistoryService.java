@@ -345,6 +345,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   @Override
   public void onTargetSelected(TargetRef target) {
     if (target == null) return;
+    if (target.isUiOnly()) return;
 
     // Don't preload the same target multiple times during a single app run.
     // (Prevents duplicate inserts when users re-select the same node.)

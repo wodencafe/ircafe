@@ -17,8 +17,10 @@ import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
+import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -108,10 +110,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private static final String CARD_NOTIFICATIONS = "notifications";
   private static final String CARD_CHANNEL_LIST = "channel-list";
   private static final String CARD_DCC_TRANSFERS = "dcc-transfers";
+  private static final String CARD_LOG_VIEWER = "log-viewer";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel = new ChannelListPanel();
   private final DccTransfersPanel dccTransfersPanel;
+  private final LogViewerPanel logViewerPanel;
 
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private int lastTopicHeightPx = 58;
@@ -135,6 +139,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      NickContextMenuFactory nickContextMenuFactory,
                      ServerProxyResolver proxyResolver,
                      ChatHistoryService chatHistoryService,
+                     ChatLogViewerService chatLogViewerService,
                      DccTransferStore dccTransferStore,
                      UiSettingsBus settingsBus,
                      CommandHistoryStore commandHistoryStore) {
@@ -227,11 +232,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       armTailPinOnNextAppendIfAtBottom();
       outboundBus.emit(cmd);
     });
+    this.logViewerPanel = new LogViewerPanel(java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"));
 
     centerCards.add(topicSplit, CARD_TRANSCRIPT);
     centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
     centerCards.add(channelListPanel, CARD_CHANNEL_LIST);
     centerCards.add(dccTransfersPanel, CARD_DCC_TRANSFERS);
+    centerCards.add(logViewerPanel, CARD_LOG_VIEWER);
     add(centerCards, BorderLayout.CENTER);
     showTranscriptCard();
     hideTopicPanel();
@@ -313,6 +320,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     activeTarget = target;
     updateDockTitle();
     refreshTypingSignalAvailabilityForActiveTarget();
+    setInputPanelVisibleForTarget(target);
 
     // UI-only targets do not have a transcript.
     if (target.isNotifications()) {
@@ -332,6 +340,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.isDccTransfers()) {
       showDccTransfersCard(target.serverId());
       // DCC transfers view doesn't accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isLogViewer()) {
+      showLogViewerCard(target.serverId());
+      // Log viewer does not accept input; clear any draft to avoid confusion.
       inputPanel.setDraftText("");
       updateTopicPanelForActiveTarget();
       return;
@@ -387,6 +402,23 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       cl.show(centerCards, CARD_DCC_TRANSFERS);
     } catch (Exception ignored) {
     }
+  }
+
+  private void showLogViewerCard(String serverId) {
+    try {
+      logViewerPanel.setServerId(serverId);
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_LOG_VIEWER);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void setInputPanelVisibleForTarget(TargetRef target) {
+    boolean visible = target != null && !target.isUiOnly();
+    if (inputPanel.isVisible() == visible) return;
+    inputPanel.setVisible(visible);
+    revalidate();
+    repaint();
   }
 
   /**
@@ -1020,6 +1052,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isApplicationUnhandledErrors()) return "Unhandled Errors";
     if (t.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (t.isApplicationJhiccup()) return "jHiccup";
+    if (t.isLogViewer()) return "Log Viewer";
     if (t.isStatus()) return "Server";
     String name = t.target();
     if (name == null || name.isBlank()) return "Chat";
@@ -1234,6 +1267,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
     try {
       dccTransfersPanel.close();
+    } catch (Exception ignored) {
+    }
+    try {
+      logViewerPanel.close();
     } catch (Exception ignored) {
     }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.

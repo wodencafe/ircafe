@@ -431,6 +431,8 @@ public class TargetCoordinator {
       statusBarChannel = "AssertJ Swing";
     } else if (target.isApplicationJhiccup()) {
       statusBarChannel = "jHiccup";
+    } else if (target.isLogViewer()) {
+      statusBarChannel = "Log Viewer";
     }
     ui.setStatusBarChannel(statusBarChannel);
     ui.setStatusBarServer(serverDisplay(target.serverId()));

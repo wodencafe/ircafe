@@ -80,6 +80,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private static final int ERR_SASL_ALREADY = 907;
   private static final String IRCafe_WHOX_TOKEN = "1";
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
+  private static final String TAG_IRCAFE_HOSTMASK = "ircafe/hostmask";
 
   private static boolean isJoinFailureNumeric(int code) {
     return code == 403
@@ -789,7 +790,7 @@ private static boolean isZncPlayStarCursorCommand(String msg) {
       String channel = event.getChannel().getName();
       maybeEmitHostmaskObserved(channel, event.getUser());
       String msg = event.getMessage();
-      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
+      Map<String, String> ircv3Tags = withObservedHostmaskTag(new HashMap<>(ircv3TagsFromEvent(event)), event.getUser());
       String messageId = ircv3MessageId(ircv3Tags);
 
       String action = PircbotxUtil.parseCtcpAction(msg);
@@ -863,6 +864,7 @@ public void onAction(ActionEvent event) {
   if (pmDest != null && !pmDest.isBlank()) {
     tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
   }
+  withObservedHostmaskTag(tags, event.getUser());
   Map<String, String> ircv3Tags = tags;
   messageId = ircv3MessageId(ircv3Tags);
 
@@ -1029,6 +1031,7 @@ public void onPrivateMessage(PrivateMessageEvent event) {
   if (pmDest != null && !pmDest.isBlank()) {
     tags.put(TAG_IRCAFE_PM_TARGET, pmDest);
   }
+  withObservedHostmaskTag(tags, event.getUser());
   Map<String, String> ircv3Tags = tags;
   messageId = ircv3MessageId(ircv3Tags);
 
@@ -1112,7 +1115,7 @@ public void onPrivateMessage(PrivateMessageEvent event) {
       Instant at = inboundAt(event);
       String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
       String notice = event.getNotice();
-      Map<String, String> ircv3Tags = ircv3TagsFromEvent(event);
+      Map<String, String> ircv3Tags = withObservedHostmaskTag(new HashMap<>(ircv3TagsFromEvent(event)), event.getUser());
       String messageId = ircv3MessageId(ircv3Tags);
 
       // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
@@ -2902,6 +2905,15 @@ if (code == 302 || code == 352 || code == 354) {
 
   private static Map<String, String> ircv3TagsFromEvent(Object event) {
     return PircbotxIrcv3Tags.fromEvent(event);
+  }
+
+  private static Map<String, String> withObservedHostmaskTag(Map<String, String> tags, User user) {
+    Map<String, String> out = (tags == null) ? new HashMap<>() : tags;
+    if (user == null) return out;
+    String hostmask = PircbotxUtil.hostmaskFromUser(user);
+    if (!PircbotxUtil.isUsefulHostmask(hostmask)) return out;
+    out.put(TAG_IRCAFE_HOSTMASK, hostmask.trim());
+    return out;
   }
 
   private static String ircv3MessageId(Map<String, String> tags) {

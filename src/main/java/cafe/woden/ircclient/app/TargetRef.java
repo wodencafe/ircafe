@@ -21,6 +21,7 @@ public final class TargetRef {
   public static final String APPLICATION_UNHANDLED_ERRORS_TARGET = "__app_unhandled_errors__";
   public static final String APPLICATION_ASSERTJ_SWING_TARGET = "__app_assertj_swing__";
   public static final String APPLICATION_JHICCUP_TARGET = "__app_jhiccup__";
+  public static final String LOG_VIEWER_TARGET = "__log_viewer__";
 
   private final String serverId;
   private final String target;
@@ -56,6 +57,10 @@ public final class TargetRef {
 
   public static TargetRef applicationJhiccup() {
     return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_JHICCUP_TARGET);
+  }
+
+  public static TargetRef logViewer(String serverId) {
+    return new TargetRef(serverId, LOG_VIEWER_TARGET);
   }
 
   public String serverId() {
@@ -118,10 +123,14 @@ public final class TargetRef {
     return isApplicationUnhandledErrors() || isApplicationAssertjSwing() || isApplicationJhiccup();
   }
 
+  public boolean isLogViewer() {
+    return LOG_VIEWER_TARGET.equals(key);
+  }
+
   public boolean isUiOnly() {
     // UI-only targets are pseudo-buffers that do not represent a real IRC target.
     // "status" is a real transcript buffer in ircafe (and can accept raw server input).
-    return isNotifications() || isChannelList() || isDccTransfers() || isApplicationUi();
+    return isNotifications() || isChannelList() || isDccTransfers() || isLogViewer() || isApplicationUi();
   }
 
   public boolean isChannel() {
@@ -146,6 +155,7 @@ public final class TargetRef {
     if (APPLICATION_UNHANDLED_ERRORS_TARGET.equals(t)) return APPLICATION_UNHANDLED_ERRORS_TARGET;
     if (APPLICATION_ASSERTJ_SWING_TARGET.equals(t)) return APPLICATION_ASSERTJ_SWING_TARGET;
     if (APPLICATION_JHICCUP_TARGET.equals(t)) return APPLICATION_JHICCUP_TARGET;
+    if (LOG_VIEWER_TARGET.equals(t)) return LOG_VIEWER_TARGET;
     return t.toLowerCase(Locale.ROOT);
   }
 

@@ -6,6 +6,7 @@ import cafe.woden.ircclient.logging.model.LogLine;
 import cafe.woden.ircclient.logging.model.LogRow;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalLong;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
@@ -268,6 +269,39 @@ public class ChatLogRepository {
         beforeId,
         limit
     );
+  }
+
+  /**
+   * Search rows for a server within an optional timestamp range (newest-first).
+   *
+   * <p>This intentionally keeps filtering simple and DB-portable; higher-level viewers can apply
+   * additional filtering (glob/regex/metadata) in-memory.
+   */
+  public List<LogRow> searchRows(String serverId, Long fromEpochMs, Long toEpochMs, int limit) {
+    String sid = (serverId == null) ? "" : serverId.trim();
+    if (sid.isEmpty() || limit <= 0) return List.of();
+
+    StringBuilder sql = new StringBuilder("""
+        SELECT id, server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
+               outgoing_local_echo, soft_ignored, meta
+          FROM chat_log
+         WHERE server_id = ?
+        """);
+    ArrayList<Object> args = new ArrayList<>();
+    args.add(sid);
+
+    if (fromEpochMs != null) {
+      sql.append(" AND ts_epoch_ms >= ?");
+      args.add(fromEpochMs);
+    }
+    if (toEpochMs != null) {
+      sql.append(" AND ts_epoch_ms <= ?");
+      args.add(toEpochMs);
+    }
+
+    sql.append(" ORDER BY ts_epoch_ms DESC, id DESC LIMIT ?");
+    args.add(limit);
+    return jdbc.query(sql.toString(), ROW_WITH_ID_MAPPER, args.toArray());
   }
 
   

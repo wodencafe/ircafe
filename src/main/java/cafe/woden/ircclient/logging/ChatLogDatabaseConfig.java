@@ -26,6 +26,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -96,6 +98,11 @@ public class ChatLogDatabaseConfig {
   @Bean
   public ChatLogRepository chatLogRepository(@Qualifier("chatLogJdbcTemplate") JdbcTemplate jdbc) {
     return new ChatLogRepository(jdbc);
+  }
+
+  @Bean
+  public ChatLogViewerService chatLogViewerService(ChatLogRepository repo) {
+    return new DbChatLogViewerService(repo);
   }
 
   @Bean(destroyMethod = "close")

@@ -104,6 +104,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
+  private static final String LOG_VIEWER_LABEL = "Log Viewer";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String IRC_ROOT_LABEL = "IRC";
   private static final String APPLICATION_ROOT_LABEL = "Application";
@@ -2182,9 +2183,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (leaves.containsKey(sn.statusRef)) idx++;
     if (leaves.containsKey(sn.notificationsRef)) idx++;
 
+    boolean hasLogViewer = leaves.containsKey(sn.logViewerRef);
     boolean hasChannelList = leaves.containsKey(sn.channelListRef);
     boolean hasDccTransfers = leaves.containsKey(sn.dccTransfersRef);
 
+    if (ref.equals(sn.logViewerRef)) {
+      return idx;
+    }
+
+    if (hasLogViewer) idx++;
     if (ref.equals(sn.channelListRef)) {
       return idx;
     }
@@ -2244,6 +2251,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       parent = sn.serverNode;
     } else if (ref.isDccTransfers()) {
       parent = sn.serverNode;
+    } else if (ref.isLogViewer()) {
+      parent = sn.serverNode;
     } else if (ref.isChannel()) {
       parent = sn.serverNode;
     } else {
@@ -2253,6 +2262,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     String leafLabel = ref.target();
     if (ref.isNotifications()) {
       leafLabel = "Notifications";
+    } else if (ref.isLogViewer()) {
+      leafLabel = LOG_VIEWER_LABEL;
     } else if (ref.isChannelList()) {
       leafLabel = CHANNEL_LIST_LABEL;
     } else if (ref.isDccTransfers()) {
@@ -2704,6 +2715,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     int count = 0;
     if (leaves.containsKey(originNodes.statusRef)) count++;
     if (leaves.containsKey(originNodes.notificationsRef)) count++;
+    if (leaves.containsKey(originNodes.logViewerRef)) count++;
     if (leaves.containsKey(originNodes.channelListRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
     return count;
@@ -2929,16 +2941,21 @@ private void removeServerRoot(String serverId) {
     serverNode.insert(notificationsLeaf, 1);
     leaves.put(notificationsRef, notificationsLeaf);
 
+    TargetRef logViewerRef = TargetRef.logViewer(id);
+    DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
+    serverNode.insert(logViewerLeaf, 2);
+    leaves.put(logViewerRef, logViewerLeaf);
+
     TargetRef channelListRef = TargetRef.channelList(id);
     if (showChannelListNodes) {
       DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
-      serverNode.insert(channelListLeaf, 2);
+      serverNode.insert(channelListLeaf, 3);
       leaves.put(channelListRef, channelListLeaf);
     }
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
-      int dccIndex = showChannelListNodes ? 3 : 2;
+      int dccIndex = showChannelListNodes ? 4 : 3;
       DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
       serverNode.insert(dccTransfersLeaf, dccIndex);
       leaves.put(dccTransfersRef, dccTransfersLeaf);
@@ -2946,7 +2963,7 @@ private void removeServerRoot(String serverId) {
 
     serverNode.add(pmNode);
 
-    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, channelListRef, dccTransfersRef);
+    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, logViewerRef, channelListRef, dccTransfersRef);
     servers.put(id, sn);
 
     model.reload(root);
@@ -3097,6 +3114,7 @@ private void removeServerRoot(String serverId) {
     final DefaultMutableTreeNode pmNode;
     final TargetRef statusRef;
     final TargetRef notificationsRef;
+    final TargetRef logViewerRef;
     final TargetRef channelListRef;
     final TargetRef dccTransfersRef;
 
@@ -3104,12 +3122,14 @@ private void removeServerRoot(String serverId) {
         DefaultMutableTreeNode pmNode,
         TargetRef statusRef,
         TargetRef notificationsRef,
+        TargetRef logViewerRef,
         TargetRef channelListRef,
         TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
       this.statusRef = statusRef;
       this.notificationsRef = notificationsRef;
+      this.logViewerRef = logViewerRef;
       this.channelListRef = channelListRef;
       this.dccTransfersRef = dccTransfersRef;
     }
@@ -3199,6 +3219,8 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("terminal");
         } else if (nd.ref != null && nd.ref.isNotifications()) {
           setTreeIcon("info");
+        } else if (nd.ref != null && nd.ref.isLogViewer()) {
+          setTreeIcon("terminal");
         } else if (nd.ref != null && nd.ref.isChannelList()) {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
