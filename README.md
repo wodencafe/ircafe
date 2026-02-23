@@ -46,11 +46,13 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
 ### Chat UX
 
 - Docked chat workspaces with per-buffer state.
+- Have multiple buffers on the screen open simultaneously.
 - Unread + highlight counters in the server tree.
 - Presence folding (join/part/quit/nick condensation).
-- Transcript context menu actions (reply, react, redact, inspect).
+- Transcript context menu actions (reply, react, redact, inspect, must be enabled on the server).
 - Find-in-transcript support and auto-load older history.
 - Command history, nick completion, and alias expansion.
+- Bouncer ephemeral server support - can create ephemeral servers from Soju and ZNC.
 
 ### Filtering and Ignore
 
@@ -90,6 +92,7 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
 - Notification sound selection (built-in and custom).
 - Event-driven notification rules (kicks, bans, invites, modes, joins/parts, PM/notice/CTCP, topic changes, netsplit, etc.).
 - Rule actions can route to toast, status bar, sound, notifications node, script, and optional Pushy forwarding.
+- A number of built-in sounds to choose from, or customize with your own.
 
 ### Media and Previews
 
@@ -97,23 +100,19 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
 - Optional animated GIF playback.
 - Link previews (OpenGraph/oEmbed + dedicated resolvers for common sites).
 
-### DCC and Utility Panels
+### DCC
 
 - DCC chat and file transfer commands plus DCC Transfers panel.
+
+### Utility Panels
+
 - Channel List node for `/list` results with filtering and double-click join.
 - User command alias editor with HexChat `commands.conf` import.
 - Runtime diagnostics surfaces under `Application` (including terminal mirror and diagnostics streams).
 
-## Current Limits
-
-- DCC `RESUME`/`ACCEPT` incoming control messages are currently surfaced as unsupported.
-- Filter rule actions are currently `HIDE`-only.
-- Pushy notification integration is configuration-driven (`ircafe.pushy`) and does not currently have a dedicated GUI editor.
-- Chat log writer queue/batch sizing is currently fixed in code (not yet configurable in UI/runtime config).
-
 ## Requirements
 
-- Java 25
+- Java 25 (Only if running as a jar)
 
 ## Run from source
 
@@ -219,6 +218,10 @@ export IRCAFE_REALNAME="My IRC Client"
 ```
 
 To enable SASL, set `irc.servers[].sasl.enabled: true` in your config and set `IRCAFE_SASL_USERNAME` and `IRCAFE_SASL_PASSWORD`.
+
+## Project support
+
+Please feel free to file an issue, or get in touch on Libera.Chat channel `#ircafe`
 
 ## License
 
