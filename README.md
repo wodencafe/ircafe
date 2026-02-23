@@ -17,15 +17,102 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
   </figcaption>
 </figure>
 
-## Theming update
+## Features
 
-- DarkLaf is now a supported theme option in **Settings -> Theme** and **Settings -> Preferences -> Appearance**.
-- FlatLaf remains fully supported, including the IRCafe appearance tweak controls.
-- In Appearance, **Density** and **Corner radius** are FlatLaf-specific controls and are disabled for non-Flat themes (for example, DarkLaf/system LAFs).
+### Core IRC
+
+- Multi-server connections with per-server configuration.
+- TLS and SASL (including `PLAIN`, `EXTERNAL`, `AUTO` flows).
+- Auto-reconnect with backoff + jitter, plus heartbeat timeout detection.
+- Global or per-server SOCKS5 proxy support (including optional auth and remote DNS).
+- Auto-join channels and perform-on-connect commands.
+- Rich slash command support, including:
+  - `/join`, `/part`, `/msg`, `/notice`, `/me`, `/query`, `/whois`, `/whowas`
+  - `/mode`, `/op`, `/deop`, `/voice`, `/devoice`, `/ban`, `/unban`
+  - `/invite`, `/invites`, `/invjoin`, `/invignore`, `/invwhois`, `/invblock`, `/inviteautojoin`
+  - `/dcc ...`, `/chathistory ...`, `/filter ...`, `/quote`, `/say`, `/help`
+
+### IRCv3 and Bouncer Support
+
+- Capability negotiation with per-capability toggles.
+- Support for modern IRCv3 capabilities such as:
+  - `message-tags`, `server-time`, `standard-replies`, `labeled-response`
+  - `draft/reply`, `draft/react`, `message-edit`, `message-redaction`
+  - `typing`, `read-marker`, `batch`, `chathistory`, `znc.in/playback`
+- Message reply/reaction/edit/redaction flows in chat UI and command layer.
+- Typing indicators (send + receive) and read-marker updates.
+- ZNC and soju network discovery with ephemeral server entries and optional auto-connect preferences.
+
+### Chat UX
+
+- Docked chat workspaces with per-buffer state.
+- Have multiple buffers on the screen open simultaneously.
+- Unread + highlight counters in the server tree.
+- Presence folding (join/part/quit/nick condensation).
+- Transcript context menu actions (reply, react, redact, inspect, must be enabled on the server).
+- Find-in-transcript support and auto-load older history.
+- Command history, nick completion, and alias expansion.
+- Bouncer ephemeral server support - can create ephemeral servers from Soju and ZNC.
+
+### Filtering and Ignore
+
+- Hard ignore and soft ignore lists (with CTCP behavior toggles).
+- WeeChat-style render-time filters with:
+  - Scope matching
+  - Direction/kind/source/tag/text matching
+  - Global defaults and per-scope overrides
+- Filter placeholders/hints with collapse behavior and history-batch controls.
+
+### Logging and History
+
+- Optional embedded HSQLDB logging with Flyway-managed schema.
+- Logging controls for PM logging, soft-ignored line logging, and retention.
+- Duplicate suppression in storage paths (message-id and exact-match checks where applicable).
+- Per-server Log Viewer node with async search/export (off-EDT), sortable columns, and configurable column visibility.
+- Log Viewer filters: nick, message text, hostmask, channel, date range, and protocol/server-event suppression controls.
+
+### Interceptors
+
+- Per-server interceptor system with a dedicated `Interceptors` tree group.
+- Multiple interceptor definitions, each with:
+  - Server scope (`this server` or `any server`)
+  - Channel include/exclude rules (`All`, `None`, `Like`, `Glob`, `Regex`)
+  - Trigger rules by event type plus message/nick/hostmask matching
+- Action pipeline per interceptor:
+  - Status bar notification
+  - Desktop toast
+  - Sound (built-in or custom file)
+  - External script execution
+- Captured hits table and per-server hit counts shown in the tree.
+
+### Notifications
+
+- System tray integration (close-to-tray, minimize-to-tray, start minimized).
+- Desktop notifications for highlights, private messages, and connection state.
+- Notification sound selection (built-in and custom).
+- Event-driven notification rules (kicks, bans, invites, modes, joins/parts, PM/notice/CTCP, topic changes, netsplit, etc.).
+- Rule actions can route to toast, status bar, sound, notifications node, script, and optional Pushy forwarding.
+- A number of built-in sounds to choose from, or customize with your own.
+
+### Media and Previews
+
+- Optional inline image embedding for direct image links (`png`, `jpg`, `gif`, `webp`).
+- Optional animated GIF playback.
+- Link previews (OpenGraph/oEmbed + dedicated resolvers for common sites).
+
+### DCC
+
+- DCC chat and file transfer commands plus DCC Transfers panel.
+
+### Utility Panels
+
+- Channel List node for `/list` results with filtering and double-click join.
+- User command alias editor with HexChat `commands.conf` import.
+- Runtime diagnostics surfaces under `Application` (including terminal mirror and diagnostics streams).
 
 ## Requirements
 
-- Java 25
+- Java 25 (Only if running as a jar)
 
 ## Run from source
 
@@ -60,7 +147,7 @@ IRCAFE_RUNTIME_CONFIG=/path/to/ircafe.yml java -jar build/libs/ircafe-*.jar
 java -jar build/libs/ircafe-*.jar --ircafe.runtime-config=/path/to/ircafe.yml
 ```
 
-The IRC settings use the prefix `irc.server`.
+The IRC server list uses the `irc.servers` section.
 
 Example:
 
@@ -101,6 +188,9 @@ ircafe:
 
 You can toggle this at runtime from the GUI: **Settings -> Preferences… -> Inline images**.
 
+Other runtime settings (tray/notifications, filters, command aliases, interceptors, logging preferences, and more)
+are persisted to the runtime config file as you change them in the UI.
+
 
 ### Environment variables
 
@@ -127,7 +217,11 @@ export IRCAFE_IDENT=myIdent
 export IRCAFE_REALNAME="My IRC Client"
 ```
 
-To enable SASL, set `irc.server.sasl.enabled: true` in `application.yml` and set `IRCAFE_SASL_USERNAME` and `IRCAFE_SASL_PASSWORD`.
+To enable SASL, set `irc.servers[].sasl.enabled: true` in your config and set `IRCAFE_SASL_USERNAME` and `IRCAFE_SASL_PASSWORD`.
+
+## Project support
+
+Please feel free to file an issue, or get in touch on Libera.Chat channel `#ircafe`
 
 ## License
 
