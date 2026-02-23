@@ -49,6 +49,7 @@ public record UiSettings(
 
     boolean typingIndicatorsEnabled,
     boolean typingIndicatorsReceiveEnabled,
+    String typingIndicatorsTreeStyle,
 
     boolean timestampsEnabled,
 
@@ -135,6 +136,7 @@ public record UiSettings(
     if (imageEmbedsMaxHeightPx < 0) imageEmbedsMaxHeightPx = 0;
 
     if (timestampFormat == null || timestampFormat.isBlank()) timestampFormat = "HH:mm:ss";
+    typingIndicatorsTreeStyle = normalizeTypingTreeIndicatorStyle(typingIndicatorsTreeStyle);
 
     if (chatHistoryInitialLoadLines < 0) chatHistoryInitialLoadLines = 0;
     if (chatHistoryPageSize <= 0) chatHistoryPageSize = 200;
@@ -231,7 +233,7 @@ public record UiSettings(
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
-        true, true,
+        true, true, "dots",
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, true,
         chatHistoryInitialLoadLines, chatHistoryPageSize, 500,
         clientLineColorEnabled, clientLineColor,
@@ -265,6 +267,17 @@ public record UiSettings(
     }
   }
 
+  static String normalizeTypingTreeIndicatorStyle(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(java.util.Locale.ROOT);
+    if (s.isEmpty()) return "dots";
+    return switch (s) {
+      case "dots", "ellipsis" -> "dots";
+      case "keyboard", "kbd" -> "keyboard";
+      case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
+      default -> "dots";
+    };
+  }
+
   public UiSettings withTheme(String nextTheme) {
     return new UiSettings(nextTheme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
@@ -274,6 +287,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -297,6 +311,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -320,6 +335,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -343,6 +359,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -366,6 +383,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -389,6 +407,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -412,6 +431,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -435,6 +455,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -458,6 +479,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -481,6 +503,7 @@ public record UiSettings(
         enabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -504,6 +527,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         enabled,
         enabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -527,6 +551,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         enabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -550,6 +575,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         enabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -573,6 +599,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, format, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -596,6 +623,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, enabled, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -619,6 +647,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, enabled,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,
@@ -647,6 +676,7 @@ public record UiSettings(
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
         typingIndicatorsEnabled,
         typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
         timestampsEnabled, timestampFormat, timestampsIncludeChatMessages, timestampsIncludePresenceMessages,
         chatHistoryInitialLoadLines, chatHistoryPageSize, commandHistoryMaxSize,
         clientLineColorEnabled, clientLineColor,

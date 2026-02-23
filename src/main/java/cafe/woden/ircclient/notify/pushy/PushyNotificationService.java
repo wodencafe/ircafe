@@ -1,9 +1,8 @@
 package cafe.woden.ircclient.notify.pushy;
 
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.PushyProperties;
-import cafe.woden.ircclient.util.VirtualThreads;
-import jakarta.annotation.PreDestroy;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -16,6 +15,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -32,12 +32,14 @@ public class PushyNotificationService {
 
   private final PushyProperties properties;
   private final HttpClient client;
-  private final ExecutorService executor = VirtualThreads.newThreadPerTaskExecutor("ircafe-pushy");
+  private final ExecutorService executor;
 
-  public PushyNotificationService(PushyProperties properties) {
+  public PushyNotificationService(PushyProperties properties,
+                                  @Qualifier(ExecutorConfig.PUSHY_NOTIFICATION_EXECUTOR) ExecutorService executor) {
     this.properties = properties != null
         ? properties
         : new PushyProperties(false, null, null, null, null, null, null, null);
+    this.executor = executor;
     this.client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(this.properties.connectTimeoutSeconds()))
         .build();
@@ -75,14 +77,6 @@ public class PushyNotificationService {
     String url = endpoint + "?api_key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
     executor.execute(() -> sendPush(url, payload));
     return true;
-  }
-
-  @PreDestroy
-  void shutdown() {
-    try {
-      executor.shutdownNow();
-    } catch (Exception ignored) {
-    }
   }
 
   private void sendPush(String url, String payload) {

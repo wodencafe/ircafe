@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
@@ -10,19 +11,20 @@ import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.logging.ChatLogMaintenance;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
-import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
+import java.util.Comparator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -43,15 +45,14 @@ public class TargetCoordinator {
   private final ChatHistoryService chatHistoryService;
   private final ChatLogMaintenance chatLogMaintenance;
 
-  private final ExecutorService maintenanceExec = VirtualThreads.newSingleThreadExecutor("ircafe-chatlog-maintenance");
+  private final ExecutorService maintenanceExec;
 
   /**
    * UI refreshes for user-list metadata (away/account/hostmask/real-name) can arrive in huge bursts
    * (e.g., WHOX scans on big channels). Coalesce these to avoid rebuilding nick completions
    * on the EDT thousands of times.
    */
-  private final ScheduledExecutorService usersRefreshExec =
-      VirtualThreads.newSingleThreadScheduledExecutor("ircafe-users-refresh");
+  private final ScheduledExecutorService usersRefreshExec;
   private final AtomicBoolean usersRefreshScheduled = new AtomicBoolean(false);
 
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -70,7 +71,11 @@ public class TargetCoordinator {
       UserhostQueryService userhostQueryService,
       UserInfoEnrichmentService userInfoEnrichmentService,
       ChatHistoryService chatHistoryService,
-      ChatLogMaintenance chatLogMaintenance
+      ChatLogMaintenance chatLogMaintenance,
+      @Qualifier(ExecutorConfig.TARGET_COORDINATOR_MAINTENANCE_EXECUTOR)
+      ExecutorService maintenanceExec,
+      @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
+      ScheduledExecutorService usersRefreshExec
   ) {
     this.ui = ui;
     this.userListStore = userListStore;
@@ -83,19 +88,13 @@ public class TargetCoordinator {
     this.userInfoEnrichmentService = userInfoEnrichmentService;
     this.chatHistoryService = chatHistoryService;
     this.chatLogMaintenance = chatLogMaintenance;
+    this.maintenanceExec = maintenanceExec;
+    this.usersRefreshExec = usersRefreshExec;
   }
 
   @PreDestroy
   void shutdown() {
     disposables.dispose();
-    maintenanceExec.shutdown();
-    usersRefreshExec.shutdown();
-    try {
-      maintenanceExec.awaitTermination(500, TimeUnit.MILLISECONDS);
-      usersRefreshExec.awaitTermination(500, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
-    }
   }
 
   public void clearLog(TargetRef target) {
@@ -312,6 +311,27 @@ public class TargetCoordinator {
     return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
   }
 
+  /**
+   * Channel targets where this nick is currently present in our cached roster for the server.
+   */
+  public List<TargetRef> sharedChannelTargetsForNick(String serverId, String nick) {
+    String sid = Objects.toString(serverId, "").trim();
+    String n = Objects.toString(nick, "").trim();
+    if (sid.isEmpty() || n.isEmpty()) return List.of();
+
+    Set<String> channels = userListStore.channelsContainingNick(sid, n);
+    if (channels.isEmpty()) return List.of();
+
+    java.util.ArrayList<TargetRef> out = new java.util.ArrayList<>(channels.size());
+    for (String ch : channels) {
+      if (ch == null || ch.isBlank()) continue;
+      out.add(new TargetRef(sid, ch));
+    }
+    if (out.isEmpty()) return List.of();
+    out.sort(Comparator.comparing(TargetRef::key));
+    return List.copyOf(out);
+  }
+
 
   public void refreshInputEnabledForActiveTarget() {
     if (activeTarget == null) {
@@ -326,7 +346,9 @@ public class TargetCoordinator {
   }
 
   public TargetRef safeStatusTarget() {
-    if (activeTarget != null) return new TargetRef(activeTarget.serverId(), "status");
+    if (activeTarget != null && !activeTarget.isApplicationServer()) {
+      return new TargetRef(activeTarget.serverId(), "status");
+    }
     String sid = serverRegistry.serverIds().stream().findFirst().orElse("default");
     return new TargetRef(sid, "status");
   }
@@ -403,6 +425,12 @@ public class TargetCoordinator {
       statusBarChannel = "Channel List";
     } else if (target.isDccTransfers()) {
       statusBarChannel = "DCC Transfers";
+    } else if (target.isApplicationUnhandledErrors()) {
+      statusBarChannel = "Unhandled Errors";
+    } else if (target.isApplicationAssertjSwing()) {
+      statusBarChannel = "AssertJ Swing";
+    } else if (target.isApplicationJhiccup()) {
+      statusBarChannel = "jHiccup";
     }
     ui.setStatusBarChannel(statusBarChannel);
     ui.setStatusBarServer(serverDisplay(target.serverId()));
@@ -671,6 +699,9 @@ public class TargetCoordinator {
   }
 
   private String serverDisplay(String serverId) {
+    if (TargetRef.APPLICATION_SERVER_ID.equals(serverId)) {
+      return "Application";
+    }
     return serverRegistry.find(serverId)
         .map(s -> serverId + "  (" + s.host() + ":" + s.port() + ")")
         .orElse(serverId);

@@ -151,6 +151,29 @@ public class UserListStore {
     return false;
   }
 
+  /**
+   * Returns channel keys (lower-cased) where {@code nick} is currently present in cached rosters.
+   */
+  public Set<String> channelsContainingNick(String serverId, String nick) {
+    String sid = norm(serverId);
+    String nk = nickKey(nick);
+    if (sid.isEmpty() || nk.isEmpty()) return Set.of();
+
+    Map<String, Set<String>> byChannel = lowerNickSetByServerAndChannel.get(sid);
+    if (byChannel == null || byChannel.isEmpty()) return Set.of();
+
+    java.util.Set<String> out = new java.util.LinkedHashSet<>();
+    for (Map.Entry<String, Set<String>> e : byChannel.entrySet()) {
+      Set<String> nicks = e.getValue();
+      if (nicks != null && nicks.contains(nk)) {
+        String ch = channelKey(e.getKey());
+        if (!ch.isEmpty()) out.add(ch);
+      }
+    }
+    if (out.isEmpty()) return Set.of();
+    return java.util.Set.copyOf(out);
+  }
+
   public Set<String> getLowerNickSet(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
     String ch = channelKey(channel);

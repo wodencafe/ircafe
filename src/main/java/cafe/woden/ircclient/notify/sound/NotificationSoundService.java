@@ -1,11 +1,12 @@
 package cafe.woden.ircclient.notify.sound;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;
@@ -15,7 +16,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
@@ -24,8 +27,11 @@ public class NotificationSoundService {
   private static final Logger log = LoggerFactory.getLogger(NotificationSoundService.class);
 
   private static final Duration MIN_INTERVAL = Duration.ofMillis(500);
+  private static final long CLIP_FINISH_GRACE_MS = 1_500L;
+  private static final long CLIP_WAIT_MIN_MS = 2_000L;
+  private static final long CLIP_WAIT_MAX_MS = 30_000L;
 
-  private final ExecutorService executor = VirtualThreads.newSingleThreadExecutor("notification-sound-thread");
+  private final ExecutorService executor;
 
   private final NotificationSoundSettingsBus settingsBus;
   private final RuntimeConfigStore runtimeConfig;
@@ -46,9 +52,13 @@ public class NotificationSoundService {
   /** Resolved absolute path for the custom sound file (when enabled). */
   private volatile Path customSoundPath;
 
-  public NotificationSoundService(NotificationSoundSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+  public NotificationSoundService(NotificationSoundSettingsBus settingsBus,
+                                  RuntimeConfigStore runtimeConfig,
+                                  @Qualifier(ExecutorConfig.NOTIFICATION_SOUND_EXECUTOR)
+                                  ExecutorService executor) {
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;
+    this.executor = executor;
 
     NotificationSoundSettings seed = settingsBus != null ? settingsBus.get() : null;
     applySettings(seed);
@@ -236,8 +246,42 @@ public class NotificationSoundService {
 
     try (AudioInputStream toPlay = decodedStream) {
       Clip clip = AudioSystem.getClip();
-      clip.open(toPlay);
-      clip.start();
+      CountDownLatch finished = new CountDownLatch(1);
+      LineListener listener = event -> {
+        if (event == null) return;
+        LineEvent.Type t = event.getType();
+        if (t == LineEvent.Type.STOP || t == LineEvent.Type.CLOSE) {
+          finished.countDown();
+        }
+      };
+
+      try {
+        clip.addLineListener(listener);
+        clip.open(toPlay);
+        clip.setFramePosition(0);
+        clip.start();
+
+        long durationMs = TimeUnit.MICROSECONDS.toMillis(Math.max(0L, clip.getMicrosecondLength()));
+        long waitMs = Math.max(CLIP_WAIT_MIN_MS, Math.min(CLIP_WAIT_MAX_MS, durationMs + CLIP_FINISH_GRACE_MS));
+        try {
+          finished.await(waitMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+        }
+      } finally {
+        try {
+          clip.removeLineListener(listener);
+        } catch (Exception ignored) {
+        }
+        try {
+          if (clip.isRunning()) clip.stop();
+        } catch (Exception ignored) {
+        }
+        try {
+          if (clip.isOpen()) clip.close();
+        } catch (Exception ignored) {
+        }
+      }
     }
   }
 
@@ -256,6 +300,5 @@ public class NotificationSoundService {
       }
     } catch (Exception ignored) {
     }
-    executor.shutdownNow();
   }
 }

@@ -1272,11 +1272,10 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserHostChanged ev -> {
-        boolean knownNick = targetCoordinator.onUserHostChanged(sid, ev);
-        if (knownNick) return;
+        targetCoordinator.onUserHostChanged(sid, ev);
 
-        TargetRef dest = resolveActiveOrStatus(sid, status);
         String nick = Objects.toString(ev.nick(), "").trim();
+        List<TargetRef> sharedChannels = targetCoordinator.sharedChannelTargetsForNick(sid, nick);
         String user = Objects.toString(ev.user(), "").trim();
         String host = Objects.toString(ev.host(), "").trim();
         if (nick.isEmpty()) nick = "(unknown)";
@@ -1286,6 +1285,14 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           renderedText = renderedText + " to " + uh;
         }
         String rendered = renderedText;
+        if (!sharedChannels.isEmpty()) {
+          for (TargetRef dest : sharedChannels) {
+            postTo(dest, false, d -> ui.appendStatusAt(d, ev.at(), "(chghost)", rendered));
+          }
+          return;
+        }
+
+        TargetRef dest = (status != null) ? status : safeStatusTarget();
         postTo(dest, false, d -> ui.appendStatusAt(d, ev.at(), "(chghost)", rendered));
       }
 
@@ -1304,15 +1311,22 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserSetNameObserved ev -> {
-        boolean knownNick = targetCoordinator.onUserSetNameObserved(sid, ev);
-        if (knownNick) return;
+        targetCoordinator.onUserSetNameObserved(sid, ev);
 
-        TargetRef dest = resolveActiveOrStatus(sid, status);
         String nick = Objects.toString(ev.nick(), "").trim();
+        List<TargetRef> sharedChannels = targetCoordinator.sharedChannelTargetsForNick(sid, nick);
         String realName = Objects.toString(ev.realName(), "").trim();
         if (nick.isEmpty()) nick = "(unknown)";
         if (realName.isEmpty()) realName = "(empty)";
         String rendered = nick + " set name to: " + realName;
+        if (!sharedChannels.isEmpty()) {
+          for (TargetRef dest : sharedChannels) {
+            postTo(dest, false, d -> ui.appendStatusAt(d, ev.at(), "(setname)", rendered));
+          }
+          return;
+        }
+
+        TargetRef dest = (status != null) ? status : safeStatusTarget();
         postTo(dest, false, d -> ui.appendStatusAt(d, ev.at(), "(setname)", rendered));
       }
 
@@ -1445,8 +1459,20 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
     String src = Objects.toString(sourceNick, "").trim();
     Boolean sourceIsSelf = src.isEmpty() ? null : isFromSelf(sid, src);
+    TargetRef active = targetCoordinator != null ? targetCoordinator.getActiveTarget() : null;
+    String activeSid = active != null ? active.serverId() : null;
+    String activeTgt = active != null ? active.target() : null;
     try {
-      return ircEventNotificationService.notifyConfigured(eventType, sid, channel, src, sourceIsSelf, title, body);
+      return ircEventNotificationService.notifyConfigured(
+          eventType,
+          sid,
+          channel,
+          src,
+          sourceIsSelf,
+          title,
+          body,
+          activeSid,
+          activeTgt);
     } catch (Exception ignored) {
       return false;
     }

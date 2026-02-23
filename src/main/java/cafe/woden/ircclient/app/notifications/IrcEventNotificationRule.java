@@ -19,7 +19,8 @@ public record IrcEventNotificationRule(
     ChannelScope channelScope,
     String channelPatterns,
     boolean toastEnabled,
-    boolean toastWhenFocused,
+    FocusScope focusScope,
+    boolean statusBarEnabled,
     boolean notificationsNodeEnabled,
     boolean soundEnabled,
     String soundId,
@@ -96,12 +97,30 @@ public record IrcEventNotificationRule(
 
   public enum ChannelScope {
     ALL("All channels"),
+    ACTIVE_TARGET_ONLY("Active channel only"),
     ONLY("Only matching"),
     ALL_EXCEPT("All except matching");
 
     private final String label;
 
     ChannelScope(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
+  public enum FocusScope {
+    ANY("Any"),
+    FOREGROUND_ONLY("Foreground Only"),
+    BACKGROUND_ONLY("Background Only");
+
+    private final String label;
+
+    FocusScope(String label) {
       this.label = label;
     }
 
@@ -122,9 +141,11 @@ public record IrcEventNotificationRule(
 
     if (channelScope == null) channelScope = ChannelScope.ALL;
     channelPatterns = normalizeToNull(channelPatterns);
-    if (channelScope == ChannelScope.ALL) {
+    if (channelScope == ChannelScope.ALL || channelScope == ChannelScope.ACTIVE_TARGET_ONLY) {
       channelPatterns = null;
     }
+
+    if (focusScope == null) focusScope = defaultFocusScopeForEvent(eventType);
 
     if (soundId == null || soundId.isBlank()) soundId = defaultBuiltInSoundForEvent(eventType).name();
     if (soundCustomPath != null && soundCustomPath.isBlank()) soundCustomPath = null;
@@ -137,10 +158,21 @@ public record IrcEventNotificationRule(
   }
 
   public boolean matches(EventType type, String sourceNick, Boolean sourceIsSelf, String channel) {
+    return matches(type, sourceNick, sourceIsSelf, channel, false, null);
+  }
+
+  public boolean matches(
+      EventType type,
+      String sourceNick,
+      Boolean sourceIsSelf,
+      String channel,
+      boolean activeTargetOnSameServer,
+      String activeTarget
+  ) {
     if (!enabled) return false;
     if (type == null || eventType != type) return false;
     if (!matchesSource(sourceNick, sourceIsSelf)) return false;
-    return matchesChannel(channel);
+    return matchesChannel(channel, activeTargetOnSameServer, activeTarget);
   }
 
   /**
@@ -168,11 +200,22 @@ public record IrcEventNotificationRule(
   }
 
   public boolean matchesChannel(String channel) {
+    return matchesChannel(channel, false, null);
+  }
+
+  public boolean matchesChannel(
+      String channel,
+      boolean activeTargetOnSameServer,
+      String activeTarget
+  ) {
     String ch = normalizeToNull(channel);
+    String active = normalizeToNull(activeTarget);
     List<String> masks = parseMaskList(channelPatterns);
 
     return switch (channelScope) {
       case ALL -> true;
+      case ACTIVE_TARGET_ONLY ->
+          activeTargetOnSameServer && ch != null && active != null && ch.equalsIgnoreCase(active);
       case ONLY -> ch != null && !masks.isEmpty() && matchesAnyMask(masks, ch);
       case ALL_EXCEPT -> ch == null || masks.isEmpty() || !matchesAnyMask(masks, ch);
     };
@@ -189,7 +232,29 @@ public record IrcEventNotificationRule(
           ChannelScope.ALL,
           null,
           true,
+          defaultFocusScopeForEvent(t),
+          true,
+          true,
           false,
+          defaultBuiltInSoundForEvent(t).name(),
+          false,
+          null,
+          false,
+          null,
+          null,
+          null));
+    }
+    for (EventType t : defaultStatusBarAnyCompanionEvents()) {
+      out.add(new IrcEventNotificationRule(
+          true,
+          t,
+          defaultSourceModeForEvent(t),
+          null,
+          ChannelScope.ALL,
+          null,
+          false,
+          FocusScope.ANY,
+          true,
           true,
           false,
           defaultBuiltInSoundForEvent(t).name(),
@@ -248,6 +313,17 @@ public record IrcEventNotificationRule(
            YOU_KLINED -> true;
       default -> false;
     };
+  }
+
+  private static FocusScope defaultFocusScopeForEvent(EventType eventType) {
+    return FocusScope.BACKGROUND_ONLY;
+  }
+
+  private static List<EventType> defaultStatusBarAnyCompanionEvents() {
+    return List.of(
+        EventType.KICKED,
+        EventType.BANNED,
+        EventType.KLINED);
   }
 
   private static SourceMode defaultSourceModeForEvent(EventType eventType) {

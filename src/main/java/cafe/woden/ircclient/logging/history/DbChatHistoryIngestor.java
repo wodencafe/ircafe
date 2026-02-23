@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.model.LogDirection;
 import cafe.woden.ircclient.logging.model.LogKind;
 import cafe.woden.ircclient.logging.model.LogLine;
-import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -39,12 +39,12 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
 
   public DbChatHistoryIngestor(ChatLogRepository repo,
                                @Qualifier("chatLogTx") TransactionTemplate tx,
-                               LogProperties props) {
+                               LogProperties props,
+                               @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_INGEST_EXECUTOR) ExecutorService exec) {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
-
-    this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-chathistory-ingest");
+    this.exec = Objects.requireNonNull(exec, "exec");
   }
 
   @Override

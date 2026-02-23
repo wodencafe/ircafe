@@ -1,7 +1,10 @@
 package cafe.woden.ircclient.logging.history;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
+import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** In-memory bus for coordinating CHATHISTORY requests with DB ingest. */
@@ -20,9 +23,11 @@ public final class ChatHistoryIngestBus extends AbstractTargetWaiterBus<ChatHist
       long latestTsEpochMs
   ) {}
 
-  public ChatHistoryIngestBus() {
+  public ChatHistoryIngestBus(
+      @Qualifier(ExecutorConfig.CHATHISTORY_INGEST_BUS_SCHEDULER) ScheduledExecutorService scheduler
+  ) {
     super(
-        "ircafe-chathistory-bus",
+        scheduler,
         "CHATHISTORY ingest",
         "CHATHISTORY ingest bus completion failed",
         log

@@ -17,6 +17,12 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
   </figcaption>
 </figure>
 
+## Theming update
+
+- DarkLaf is now a supported theme option in **Settings -> Theme** and **Settings -> Preferences -> Appearance**.
+- FlatLaf remains fully supported, including the IRCafe appearance tweak controls.
+- In Appearance, **Density** and **Corner radius** are FlatLaf-specific controls and are disabled for non-Flat themes (for example, DarkLaf/system LAFs).
+
 ## Requirements
 
 - Java 25

@@ -61,4 +61,17 @@ class UserListStoreTest {
     NickInfo merged = store.get(serverId, "#ircafe").get(0);
     assertEquals("Alice Liddell", merged.realName());
   }
+
+  @Test
+  void channelsContainingNickReturnsOnlyChannelsThatContainThatNick() {
+    UserListStore store = new UserListStore();
+    String serverId = "libera";
+
+    store.put(serverId, "##chat", List.of(new NickInfo("quinsmith", "", "quinsmith!u@h")));
+    store.put(serverId, "##Llamas", List.of(new NickInfo("alpaca", "", "alpaca!u@h")));
+    store.put(serverId, "##Chat-Overflow", List.of(new NickInfo("QuinSmith", "", "QuinSmith!u@h")));
+
+    assertEquals(Set.of("##chat", "##chat-overflow"), store.channelsContainingNick(serverId, "QUINSMITH"));
+    assertTrue(store.channelsContainingNick(serverId, "nobody").isEmpty());
+  }
 }

@@ -70,7 +70,8 @@ public class IrcEventNotificationRulesBus {
           IrcEventNotificationRule.ChannelScope.ALL,
           null,
           true,
-          false,
+          IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+          true,
           true,
           false,
           null,
@@ -103,6 +104,15 @@ public class IrcEventNotificationRulesBus {
       channelScope = IrcEventNotificationRule.ChannelScope.ALL;
     }
 
+    IrcEventNotificationRule.FocusScope focusScope;
+    try {
+      focusScope = IrcEventNotificationRule.FocusScope.valueOf(p.focusScope().name());
+    } catch (Exception ignored) {
+      focusScope = Boolean.TRUE.equals(p.toastWhenFocused())
+          ? IrcEventNotificationRule.FocusScope.ANY
+          : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+    }
+
     return new IrcEventNotificationRule(
         Boolean.TRUE.equals(p.enabled()),
         eventType,
@@ -111,7 +121,8 @@ public class IrcEventNotificationRulesBus {
         channelScope,
         p.channelPatterns(),
         Boolean.TRUE.equals(p.toastEnabled()),
-        Boolean.TRUE.equals(p.toastWhenFocused()),
+        focusScope,
+        Boolean.TRUE.equals(p.statusBarEnabled()),
         Boolean.TRUE.equals(p.notificationsNodeEnabled()),
         Boolean.TRUE.equals(p.soundEnabled()),
         p.soundId(),

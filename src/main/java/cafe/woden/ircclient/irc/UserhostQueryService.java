@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.irc;
 
-import cafe.woden.ircclient.util.VirtualThreads;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -48,16 +49,20 @@ public class UserhostQueryService {
 
   private final IrcClientService irc;
   private final ObjectProvider<UiSettingsBus> settingsBusProvider;
-  private final ScheduledExecutorService exec = VirtualThreads.newSingleThreadScheduledExecutor("userhost-query");
+  private final ScheduledExecutorService exec;
   private final Object scheduleLock = new Object();
   private ScheduledFuture<?> scheduledTick;
   private long scheduledAtEpochMs = Long.MAX_VALUE;
 
   private final ConcurrentHashMap<String, ServerState> stateByServer = new ConcurrentHashMap<>();
 
-  public UserhostQueryService(IrcClientService irc, ObjectProvider<UiSettingsBus> settingsBusProvider) {
+  public UserhostQueryService(IrcClientService irc,
+                              ObjectProvider<UiSettingsBus> settingsBusProvider,
+                              @Qualifier(ExecutorConfig.USERHOST_QUERY_SCHEDULER)
+                              ScheduledExecutorService exec) {
     this.irc = irc;
     this.settingsBusProvider = settingsBusProvider;
+    this.exec = exec;
   }
 
   @PreDestroy
@@ -69,7 +74,6 @@ public class UserhostQueryService {
       }
       scheduledAtEpochMs = Long.MAX_VALUE;
     }
-    exec.shutdownNow();
   }
 
   public void clearServer(String serverId) {

@@ -11,7 +11,6 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.time.Instant;
@@ -23,11 +22,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import jakarta.annotation.PreDestroy;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
@@ -69,20 +68,22 @@ public final class DbChatHistoryService implements ChatHistoryService {
   
   private final Set<TargetRef> loading = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-  private final ExecutorService exec = VirtualThreads.newSingleThreadExecutor("ircafe-chat-history");
+  private final ExecutorService exec;
 
   public DbChatHistoryService(ChatLogRepository repo,
                               LogProperties props,
                               ChatTranscriptStore transcripts,
                               UiSettingsBus settingsBus,
                               IrcClientService irc,
-                              ChatHistoryIngestBus ingestBus) {
+                              ChatHistoryIngestBus ingestBus,
+                              ExecutorService exec) {
     this.repo = repo;
     this.props = props;
     this.transcripts = transcripts;
     this.settingsBus = settingsBus;
     this.irc = irc;
     this.ingestBus = ingestBus;
+    this.exec = Objects.requireNonNull(exec, "exec");
   }
 
   /**
@@ -779,8 +780,4 @@ public final class DbChatHistoryService implements ChatHistoryService {
     }
   }
 
-  @PreDestroy
-  public void shutdown() {
-    exec.shutdownNow();
-  }
 }

@@ -313,6 +313,23 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void enqueueStatusNotice(String text, TargetRef clickTarget) {
+    onEdt(
+        () -> {
+          Runnable onClick = null;
+          if (clickTarget != null) {
+            onClick =
+                () -> {
+                  transcripts.ensureTargetExists(clickTarget);
+                  serverTree.ensureNode(clickTarget);
+                  serverTree.selectTarget(clickTarget);
+                };
+          }
+          statusBar.enqueueNotification(text, onClick);
+        });
+  }
+
+  @Override
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
     onEdt(() -> serverTree.setConnectionControlsEnabled(connectEnabled, disconnectEnabled));
   }

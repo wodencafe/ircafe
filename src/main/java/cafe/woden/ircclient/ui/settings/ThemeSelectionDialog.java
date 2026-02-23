@@ -23,6 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -100,6 +101,7 @@ public class ThemeSelectionDialog {
         new PackChoice("All packs", null),
         new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
         new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
+        new PackChoice("DarkLaf", ThemeManager.ThemePack.DARKLAF),
         new PackChoice("Retro", ThemeManager.ThemePack.RETRO),
         new PackChoice("Modern", ThemeManager.ThemePack.MODERN),
         new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE),
@@ -145,6 +147,7 @@ public class ThemeSelectionDialog {
         String pack = switch (value.pack()) {
           case SYSTEM -> "System";
           case FLATLAF -> "FlatLaf";
+          case DARKLAF -> "DarkLaf";
           case RETRO -> "Retro";
           case MODERN -> "Modern";
           case IRCAFE -> "IRCafe";
@@ -187,17 +190,15 @@ public class ThemeSelectionDialog {
     listScroll.setPreferredSize(new Dimension(250, 280));
 
     JPanel listPanel = new JPanel(new BorderLayout(8, 8));
-    JPanel header = new JPanel(new BorderLayout(0, 6));
-    header.add(new JLabel("Themes"), BorderLayout.NORTH);
-    header.add(filterBar, BorderLayout.SOUTH);
-    listPanel.add(header, BorderLayout.NORTH);
+    listPanel.add(new JLabel("Themes"), BorderLayout.NORTH);
     listPanel.add(listScroll, BorderLayout.CENTER);
 
     transcriptPreview = new JEditorPane("text/html", "");
     transcriptPreview.setEditable(false);
     transcriptPreview.setFocusable(false);
     transcriptPreview.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-    transcriptPreview.putClientProperty(FlatClientProperties.STYLE, "border:0");
+    // Avoid FlatLaf style parsing here so cross-LAF previews (e.g. DarkLaf -> FlatLaf) stay robust.
+    transcriptPreview.setBorder(BorderFactory.createEmptyBorder());
     refreshTranscriptPreview();
 
     JScrollPane previewScroll = new JScrollPane(transcriptPreview);
@@ -237,14 +238,20 @@ public class ThemeSelectionDialog {
     JLabel help = new JLabel("Select a theme to preview it live. Click Apply/OK to save your selection.");
     help.putClientProperty(FlatClientProperties.STYLE, "font: -1");
 
-    JPanel center = new JPanel(new BorderLayout(12, 0));
-    center.add(listPanel, BorderLayout.WEST);
-    center.add(previewPanel, BorderLayout.CENTER);
+    JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listPanel, previewPanel);
+    split.setContinuousLayout(true);
+    split.setOneTouchExpandable(true);
+    split.setResizeWeight(0.36);
+    split.setBorder(BorderFactory.createEmptyBorder());
+
+    JPanel top = new JPanel(new BorderLayout(0, 6));
+    top.add(help, BorderLayout.NORTH);
+    top.add(filterBar, BorderLayout.SOUTH);
 
     JPanel root = new JPanel(new BorderLayout(10, 10));
     root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-    root.add(help, BorderLayout.NORTH);
-    root.add(center, BorderLayout.CENTER);
+    root.add(top, BorderLayout.NORTH);
+    root.add(split, BorderLayout.CENTER);
     root.add(buttons, BorderLayout.SOUTH);
 
     dialog = new JDialog(owner, "More Themes", JDialog.ModalityType.APPLICATION_MODAL);
@@ -257,6 +264,7 @@ public class ThemeSelectionDialog {
     dialog.setContentPane(root);
     dialog.pack();
     dialog.setMinimumSize(new Dimension(760, 430));
+    split.setDividerLocation(0.36);
     dialog.setLocationRelativeTo(owner);
     dialog.setVisible(true);
   }
@@ -436,15 +444,15 @@ public class ThemeSelectionDialog {
 
     String html =
         "<html><body style='margin:0;padding:10px;background:" + toHex(textBg) + ";color:" + toHex(textFg) + ";'>"
-            + "<div style='color:" + toHex(system) + ";'>[12:41] *** Connected to Libera.Chat as wodencafe</div>"
+            + "<div style='color:" + toHex(system) + ";'>[12:41] *** Connected to Libera.Chat as bob</div>"
             + "<div><span style='color:" + toHex(muted) + ";'>[12:42]</span> "
             + "<span style='color:" + toHex(nick) + ";'>&lt;alice&gt;</span> anyone up for #java?</div>"
             + "<div><span style='color:" + toHex(muted) + ";'>[12:42]</span> "
-            + "<span style='color:" + toHex(self) + ";'>&lt;wodencafe&gt;</span> sure, joining now.</div>"
+            + "<span style='color:" + toHex(self) + ";'>&lt;bob&gt;</span> sure, joining now.</div>"
             + "<div style='margin-top:4px;padding:2px 4px;background:" + toHex(highlightBg)
             + ";color:" + toHex(highlightFg) + ";'>"
             + "<span style='color:" + toHex(muted) + ";'>[12:43]</span> "
-            + "<span style='color:" + toHex(nick) + ";'>&lt;bob&gt;</span> this is a highlight message for you."
+            + "<span style='color:" + toHex(nick) + ";'>&lt;dave&gt;</span> this is a highlight message for bob."
             + "</div>"
             + "<div style='color:" + toHex(system) + ";'>[12:44] * carol waves</div>"
             + "<div style='color:" + toHex(accent) + ";'>[12:45] -- Invite: dave invited you to #retro "
