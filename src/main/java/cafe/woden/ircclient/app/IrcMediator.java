@@ -588,6 +588,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.text());
         if (mention) {
+          recordInterceptorEvent(
+              sid,
+              ev.channel(),
+              ev.from(),
+              learnedHostmaskForNick(sid, ev.from()),
+              ev.text(),
+              InterceptorEventType.HIGHLIGHT);
           if (!chan.equals(active)) {
             ui.markHighlight(chan);
             ui.recordHighlight(chan, ev.from());
@@ -646,6 +653,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.action());
         if (mention) {
+          recordInterceptorEvent(
+              sid,
+              ev.channel(),
+              ev.from(),
+              learnedHostmaskForNick(sid, ev.from()),
+              ev.action(),
+              InterceptorEventType.HIGHLIGHT);
           if (!chan.equals(active)) {
             ui.markHighlight(chan);
             ui.recordHighlight(chan, ev.from());

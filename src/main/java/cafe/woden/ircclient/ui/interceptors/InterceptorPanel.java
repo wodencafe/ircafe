@@ -79,6 +79,12 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     InterceptorRuleMode.GLOB,
     InterceptorRuleMode.REGEX
   };
+  private static final InterceptorRuleMode[] RULE_DIMENSION_MODES_WITH_ANY = {
+    InterceptorRuleMode.ALL,
+    InterceptorRuleMode.LIKE,
+    InterceptorRuleMode.GLOB,
+    InterceptorRuleMode.REGEX
+  };
 
   private final InterceptorStore store;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -106,6 +112,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JComboBox<BuiltInSound> actionSoundId = new JComboBox<>(BuiltInSound.valuesForUi());
   private final JCheckBox actionSoundUseCustom = new JCheckBox("Custom file");
   private final JTextField actionSoundCustomPath = new JTextField();
+  private final JButton browseSoundCustomPath = new JButton("Browse...");
   private final JButton testSound = new JButton("Test sound");
 
   private final JCheckBox actionScriptEnabled = new JCheckBox("Run script");
@@ -233,6 +240,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         });
 
     actionSoundCustomPath.setToolTipText("Custom sound path relative to runtime config directory.");
+    actionSoundCustomPath.setEditable(false);
     actionScriptPath.setToolTipText("Executable script/program path.");
     actionScriptArgs.setToolTipText("Optional script arguments (quote-aware). Environment variables are injected.");
     actionScriptWorkingDirectory.setToolTipText("Optional working directory for script execution.");
@@ -360,18 +368,19 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JPanel sound =
         new JPanel(
             new MigLayout(
-                "insets 8,fillx,wrap 3,hidemode 3",
-                "[pref!][grow,fill][pref!]",
-                "[]6[]"));
+                "insets 8,fillx,wrap 4,hidemode 3",
+                "[pref!][grow,fill][pref!][pref!]",
+                "[]6[]6[]"));
     sound.setBorder(BorderFactory.createTitledBorder("Sound"));
-    sound.add(actionSoundEnabled, "span 2,growx");
+    sound.add(actionSoundEnabled, "span 3,growx");
     sound.add(testSound, "align right,wrap");
     sound.add(new JLabel("Built-in:"));
-    sound.add(actionSoundId, "growx");
-    sound.add(new JLabel(""));
-    sound.add(actionSoundUseCustom, "span 3,wrap");
+    sound.add(actionSoundId, "span 3,growx,wrap");
+    sound.add(actionSoundUseCustom, "span 4,wrap");
     sound.add(new JLabel("File:"));
-    sound.add(actionSoundCustomPath, "span 2,growx,wrap");
+    sound.add(actionSoundCustomPath, "growx,pushx,wmin 0");
+    sound.add(browseSoundCustomPath, "w 105!");
+    sound.add(new JLabel(""), "wrap");
 
     JPanel script =
         new JPanel(
@@ -495,6 +504,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
           refreshActionControlEnabledState();
           saveCurrentDefinition();
         });
+    browseSoundCustomPath.addActionListener(e -> browseForCustomSoundPath());
     installSaveOnEnterAndBlur(actionSoundCustomPath);
     testSound.addActionListener(e -> previewSelectedSound());
 
@@ -638,6 +648,58 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     };
   }
 
+  private DefaultListCellRenderer ruleDimensionModeComboRenderer() {
+    return new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(
+          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+        if (value instanceof InterceptorRuleMode mode) {
+          setText(mode == InterceptorRuleMode.ALL ? "Any" : modeLabel(mode));
+        }
+        return this;
+      }
+    };
+  }
+
+  private static Runnable bindRuleDimensionModeFieldEnabled(
+      JComboBox<InterceptorRuleMode> messageMode,
+      JTextField messagePattern,
+      JComboBox<InterceptorRuleMode> nickMode,
+      JTextField nickPattern,
+      JComboBox<InterceptorRuleMode> hostmaskMode,
+      JTextField hostmaskPattern
+  ) {
+    Runnable refresh =
+        () -> {
+          setRuleDimensionFieldEnabled(messageMode, messagePattern);
+          setRuleDimensionFieldEnabled(nickMode, nickPattern);
+          setRuleDimensionFieldEnabled(hostmaskMode, hostmaskPattern);
+        };
+    if (messageMode != null) messageMode.addActionListener(e -> refresh.run());
+    if (nickMode != null) nickMode.addActionListener(e -> refresh.run());
+    if (hostmaskMode != null) hostmaskMode.addActionListener(e -> refresh.run());
+    return refresh;
+  }
+
+  private static void setRuleDimensionFieldEnabled(
+      JComboBox<InterceptorRuleMode> modeCombo,
+      JTextField field
+  ) {
+    if (field == null) return;
+    InterceptorRuleMode mode = selectedMode(modeCombo, InterceptorRuleMode.LIKE);
+    boolean enabled = mode != InterceptorRuleMode.ALL;
+    field.setEnabled(enabled);
+    field.setEditable(enabled);
+  }
+
+  private static String effectiveRulePattern(JComboBox<InterceptorRuleMode> modeCombo, JTextField field) {
+    if (selectedMode(modeCombo, InterceptorRuleMode.LIKE) == InterceptorRuleMode.ALL) {
+      return "";
+    }
+    return field == null ? "" : field.getText();
+  }
+
   private void installSaveOnEnterAndBlur(JTextField field) {
     field.addActionListener(e -> saveCurrentDefinition());
     field.addFocusListener(
@@ -658,24 +720,24 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         new JCheckBox(RULE_ANY_EVENT_LABEL, Objects.toString(base.eventTypesCsv(), "").trim().isBlank());
     LinkedHashMap<InterceptorEventType, JCheckBox> eventSelectors = buildRuleEventSelectors(base.eventTypesCsv());
 
-    JComboBox<InterceptorRuleMode> messageMode = new JComboBox<>(RULE_DIMENSION_MODES.clone());
-    messageMode.setRenderer(modeComboRenderer());
+    JComboBox<InterceptorRuleMode> messageMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
+    messageMode.setRenderer(ruleDimensionModeComboRenderer());
     messageMode.setSelectedItem(base.messageMode());
     JTextField messagePattern = new JTextField(base.messagePattern());
     messagePattern.putClientProperty(
         FlatClientProperties.PLACEHOLDER_TEXT,
         "Message pattern");
 
-    JComboBox<InterceptorRuleMode> nickMode = new JComboBox<>(RULE_DIMENSION_MODES.clone());
-    nickMode.setRenderer(modeComboRenderer());
+    JComboBox<InterceptorRuleMode> nickMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
+    nickMode.setRenderer(ruleDimensionModeComboRenderer());
     nickMode.setSelectedItem(base.nickMode());
     JTextField nickPattern = new JTextField(base.nickPattern());
     nickPattern.putClientProperty(
         FlatClientProperties.PLACEHOLDER_TEXT,
         "Nick pattern");
 
-    JComboBox<InterceptorRuleMode> hostmaskMode = new JComboBox<>(RULE_DIMENSION_MODES.clone());
-    hostmaskMode.setRenderer(modeComboRenderer());
+    JComboBox<InterceptorRuleMode> hostmaskMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
+    hostmaskMode.setRenderer(ruleDimensionModeComboRenderer());
     hostmaskMode.setSelectedItem(base.hostmaskMode());
     JTextField hostmaskPattern = new JTextField(base.hostmaskPattern());
     hostmaskPattern.putClientProperty(
@@ -744,6 +806,10 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     panel.add(hostmaskMode, "w 78!");
     panel.add(hostmaskPattern, "growx,pushx,wmin 0,wrap");
 
+    Runnable refreshDimensionFieldState =
+        bindRuleDimensionModeFieldEnabled(messageMode, messagePattern, nickMode, nickPattern, hostmaskMode, hostmaskPattern);
+    refreshDimensionFieldState.run();
+
     Window owner = SwingUtilities.getWindowAncestor(this);
     int choice =
         JOptionPane.showConfirmDialog(
@@ -769,11 +835,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         ruleLabel.getText(),
         eventTypesCsv,
         selectedMode(messageMode, InterceptorRuleMode.LIKE),
-        messagePattern.getText(),
+        effectiveRulePattern(messageMode, messagePattern),
         selectedMode(nickMode, InterceptorRuleMode.LIKE),
-        nickPattern.getText(),
+        effectiveRulePattern(nickMode, nickPattern),
         selectedMode(hostmaskMode, InterceptorRuleMode.GLOB),
-        hostmaskPattern.getText());
+        effectiveRulePattern(hostmaskMode, hostmaskPattern));
   }
 
   private LinkedHashMap<InterceptorEventType, JCheckBox> buildRuleEventSelectors(String selectedCsv) {
@@ -819,7 +885,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
       tokens.add(type.token());
     }
     if (tokens.isEmpty()) return null;
-    if (tokens.size() == selectors.size()) return "";
+    if (tokens.size() == selectors.size()) {
+      // Preserve explicit synthetic/derived selectors (e.g. Highlight) instead of
+      // collapsing to blank "Any", which intentionally excludes them for compatibility.
+      boolean hasSynthetic = selectors.containsKey(InterceptorEventType.HIGHLIGHT)
+          && selectors.get(InterceptorEventType.HIGHLIGHT) != null
+          && selectors.get(InterceptorEventType.HIGHLIGHT).isSelected();
+      if (!hasSynthetic) return "";
+    }
     return String.join(",", tokens);
   }
 
@@ -858,6 +931,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     createInterceptorButton.setToolTipText("Create a new interceptor for this server");
     createInterceptorButton.setFocusable(false);
     configureIconButton(testSound, "play", "Test selected sound");
+    configureIconButton(browseSoundCustomPath, "folder-open", "Browse/import custom sound file");
     configureIconButton(browseScriptPath, "terminal", "Browse for script/program");
     configureIconButton(browseScriptWorkingDirectory, "settings", "Browse for script working directory");
   }
@@ -1019,6 +1093,38 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
             .withZone(ZoneId.systemDefault())
             .format(Instant.now());
     return "ircafe-interceptor-hits-" + sid + "-" + iid + "-" + ts + ".csv";
+  }
+
+  private void browseForCustomSoundPath() {
+    if (!controlsEnabled) return;
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Choose interceptor sound (MP3 or WAV)");
+    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+    chooser.setAcceptAllFileFilterUsed(true);
+    chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+    int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(this));
+    if (result != JFileChooser.APPROVE_OPTION) return;
+
+    File selected = chooser.getSelectedFile();
+    if (selected == null) return;
+
+    try {
+      String rel = store.importInterceptorCustomSoundFile(selected);
+      if (rel == null || rel.isBlank()) return;
+      actionSoundCustomPath.setText(rel);
+      actionSoundUseCustom.setSelected(true);
+      actionSoundEnabled.setSelected(true);
+      refreshActionControlEnabledState();
+      saveCurrentDefinition();
+      status.setText("Imported custom sound: " + rel);
+    } catch (Exception ex) {
+      String msg = Objects.toString(ex.getMessage(), ex.getClass().getSimpleName());
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Could not import custom sound file.\n\n" + msg,
+          "Import failed",
+          JOptionPane.ERROR_MESSAGE);
+    }
   }
 
   private void browseForScriptPath() {
@@ -1331,9 +1437,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
   private void refreshActionControlEnabledState() {
     boolean soundOn = controlsEnabled && actionSoundEnabled.isSelected();
-    actionSoundId.setEnabled(soundOn);
+    boolean soundCustom = soundOn && actionSoundUseCustom.isSelected();
+    actionSoundId.setEnabled(soundOn && !actionSoundUseCustom.isSelected());
     actionSoundUseCustom.setEnabled(soundOn);
-    actionSoundCustomPath.setEnabled(soundOn && actionSoundUseCustom.isSelected());
+    actionSoundCustomPath.setEnabled(soundCustom);
+    browseSoundCustomPath.setEnabled(soundCustom);
     testSound.setEnabled(soundOn);
 
     boolean scriptOn = controlsEnabled && actionScriptEnabled.isSelected();
@@ -1386,6 +1494,12 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     InterceptorDefinition current = store.interceptor(sid, iid);
     if (current == null) return;
 
+    List<InterceptorRule> rules = rulesModel.snapshot();
+    String soundId = defaultInterceptorSoundIdForRulesIfGeneric(
+        selectedSoundId(),
+        actionSoundUseCustom.isSelected(),
+        rules);
+
     InterceptorDefinition updated =
         new InterceptorDefinition(
             current.id(),
@@ -1399,14 +1513,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
             actionSoundEnabled.isSelected(),
             actionStatusBarEnabled.isSelected(),
             actionToastEnabled.isSelected(),
-            selectedSoundId(),
+            soundId,
             actionSoundUseCustom.isSelected(),
             actionSoundCustomPath.getText(),
             actionScriptEnabled.isSelected(),
             actionScriptPath.getText(),
             actionScriptArgs.getText(),
             actionScriptWorkingDirectory.getText(),
-            rulesModel.snapshot());
+            rules);
 
     store.saveInterceptor(sid, updated);
   }
@@ -1436,6 +1550,90 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     Object selected = actionSoundId.getSelectedItem();
     if (selected instanceof BuiltInSound sound) return sound.name();
     return BuiltInSound.NOTIF_1.name();
+  }
+
+  private static String defaultInterceptorSoundIdForRulesIfGeneric(
+      String selectedSoundId,
+      boolean useCustomSound,
+      List<InterceptorRule> rules
+  ) {
+    BuiltInSound current = BuiltInSound.fromId(selectedSoundId);
+    if (useCustomSound || current != BuiltInSound.NOTIF_1) return current.name();
+
+    BuiltInSound suggested = suggestedDefaultSoundForRules(rules);
+    return suggested != null ? suggested.name() : current.name();
+  }
+
+  private static BuiltInSound suggestedDefaultSoundForRules(List<InterceptorRule> rules) {
+    if (rules == null || rules.isEmpty()) return null;
+
+    BuiltInSound best = null;
+    int bestPriority = Integer.MIN_VALUE;
+
+    // If multiple enabled rules/event types are present, prefer the most specific
+    // event sound over generic message/action sounds.
+    for (InterceptorRule rule : rules) {
+      if (rule == null || !rule.enabled()) continue;
+
+      EnumSet<InterceptorEventType> eventTypes = InterceptorEventType.parseCsv(rule.eventTypesCsv());
+      for (InterceptorEventType eventType : eventTypes) {
+        if (eventType == null) continue;
+
+        BuiltInSound candidate = defaultBuiltInSoundForInterceptorEventType(eventType);
+        if (candidate == null) continue;
+
+        int priority = defaultSoundPriorityForInterceptorEventType(eventType);
+        if (best == null || priority > bestPriority) {
+          best = candidate;
+          bestPriority = priority;
+        }
+      }
+    }
+    return best;
+  }
+
+  private static BuiltInSound defaultBuiltInSoundForInterceptorEventType(InterceptorEventType eventType) {
+    if (eventType == null) return null;
+    return switch (eventType) {
+      case HIGHLIGHT -> BuiltInSound.YOU_HIGHLIGHTED_1;
+      case PRIVATE_MESSAGE -> BuiltInSound.PM_RECEIVED_1;
+      case PRIVATE_ACTION -> BuiltInSound.PM_RECEIVED_1;
+      case NOTICE -> BuiltInSound.NOTICE_RECEIVED_1;
+      case INVITE -> BuiltInSound.CHANNEL_INVITE_1;
+      case KICK -> BuiltInSound.SOMEBODY_GOT_KICKED;
+      case CTCP -> BuiltInSound.SOMEBODY_SENT_CTCP_1;
+      case JOIN -> BuiltInSound.USER_JOINED;
+      case PART -> BuiltInSound.USER_LEFT_CHANNEL;
+      case QUIT -> BuiltInSound.USER_DISCONNECTED_SERVER;
+      case NICK -> BuiltInSound.SOMEBODY_NICK_CHANGED;
+      case TOPIC -> BuiltInSound.TOPIC_CHANGED_1;
+      case MESSAGE -> BuiltInSound.SOMEBODY_SAID_SOMETHING_1;
+      case ACTION -> BuiltInSound.SOMEBODY_SAID_SOMETHING_1;
+      case MODE -> BuiltInSound.UNKNOWN_EVENT_2;
+      case SERVER -> BuiltInSound.UNKNOWN_EVENT_1;
+      case ERROR -> BuiltInSound.UNKNOWN_EVENT_3;
+    };
+  }
+
+  private static int defaultSoundPriorityForInterceptorEventType(InterceptorEventType eventType) {
+    if (eventType == null) return Integer.MIN_VALUE;
+    return switch (eventType) {
+      case HIGHLIGHT -> 1000;
+      case PRIVATE_MESSAGE, PRIVATE_ACTION -> 900;
+      case ERROR -> 850;
+      case NOTICE -> 800;
+      case INVITE -> 750;
+      case KICK -> 700;
+      case CTCP -> 650;
+      case QUIT -> 600;
+      case PART -> 590;
+      case JOIN -> 580;
+      case NICK -> 570;
+      case TOPIC -> 560;
+      case MODE -> 550;
+      case SERVER -> 500;
+      case MESSAGE, ACTION -> 100;
+    };
   }
 
   private static String modeLabel(InterceptorRuleMode mode) {
@@ -1551,6 +1749,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     }
 
     private static String summarizeDimension(InterceptorRuleMode mode, String pattern) {
+      if (mode == InterceptorRuleMode.ALL) return "(any)";
       String p = Objects.toString(pattern, "").trim();
       if (p.isEmpty()) return "(any)";
       return modeLabel(mode) + ": " + p;

@@ -20,6 +20,7 @@ public enum InterceptorEventType {
   CTCP("ctcp", "CTCP"),
   PRIVATE_MESSAGE("private-message", "Private Message"),
   PRIVATE_ACTION("private-action", "Private Action"),
+  HIGHLIGHT("highlight", "Highlight"),
   SERVER("server", "Server"),
   ERROR("error", "Error");
 
@@ -58,6 +59,7 @@ public enum InterceptorEventType {
       case "ctcp" -> CTCP;
       case "pm", "private", "private-message", "private_message" -> PRIVATE_MESSAGE;
       case "pm-action", "pm_action", "private-action", "private_action" -> PRIVATE_ACTION;
+      case "highlight", "highlighted", "mention", "mentioned" -> HIGHLIGHT;
       case "server", "status" -> SERVER;
       case "error" -> ERROR;
       default -> null;
@@ -67,7 +69,7 @@ public enum InterceptorEventType {
   public static EnumSet<InterceptorEventType> parseCsv(String csv) {
     String raw = Objects.toString(csv, "").trim();
     if (raw.isEmpty()) {
-      return EnumSet.allOf(InterceptorEventType.class);
+      return defaultImplicitEventTypes();
     }
 
     EnumSet<InterceptorEventType> out = EnumSet.noneOf(InterceptorEventType.class);
@@ -76,7 +78,7 @@ public enum InterceptorEventType {
       String token = normalizeToken(part);
       if (token.isEmpty()) continue;
       if ("*".equals(token) || "any".equals(token) || "all".equals(token)) {
-        return EnumSet.allOf(InterceptorEventType.class);
+        return defaultImplicitEventTypes();
       }
       InterceptorEventType type = fromToken(token);
       if (type != null) out.add(type);
@@ -85,7 +87,15 @@ public enum InterceptorEventType {
   }
 
   public static String suggestedTokens() {
-    return "message,action,notice,mode,join,part,quit,nick,topic,invite,kick,ctcp,private-message,private-action,server,error";
+    return "message,action,notice,mode,join,part,quit,nick,topic,invite,kick,ctcp,private-message,private-action,highlight,server,error";
+  }
+
+  private static EnumSet<InterceptorEventType> defaultImplicitEventTypes() {
+    // Keep synthetic/derived event types opt-in so existing rules using blank/any/all
+    // do not start generating duplicate hits (e.g. MESSAGE + HIGHLIGHT for one line).
+    EnumSet<InterceptorEventType> out = EnumSet.allOf(InterceptorEventType.class);
+    out.remove(HIGHLIGHT);
+    return out;
   }
 
   private static String normalizeToken(String raw) {
