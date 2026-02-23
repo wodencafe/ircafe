@@ -13,6 +13,7 @@ import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Font;
 import java.awt.Insets;
 import java.awt.Window;
@@ -54,6 +55,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
@@ -127,6 +129,16 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JTable rulesTable = new JTable(rulesModel);
   private final HitsTableModel hitsModel = new HitsTableModel();
   private final JTable hitsTable = new JTable(hitsModel);
+  private final JTabbedPane tabs = new JTabbedPane();
+  private final JPanel centerPanel = new JPanel(new CardLayout());
+  private final JPanel emptyStatePanel =
+      new JPanel(
+          new MigLayout(
+              "insets 20,fill,wrap 1,hidemode 3", "[grow,center]", "[grow]8[]8[]12[][grow]"));
+  private final JLabel emptyStateTitle = new JLabel("Interceptors");
+  private final JLabel emptyStateBody = new JLabel();
+  private static final String CENTER_CARD_EDITOR = "editor";
+  private static final String CENTER_CARD_EMPTY = "empty";
 
   private volatile String serverId = "";
   private volatile String interceptorId = "";
@@ -229,21 +241,39 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     configureRulesTable();
     configureHitsTable();
 
-    JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Definition", buildDefinitionTab());
     tabs.addTab("Triggers", buildTriggersTab());
     tabs.addTab("Actions", wrapVerticalScroll(buildActionsTab()));
     tabs.addTab("Hits", buildHitsTab());
-    add(tabs, BorderLayout.CENTER);
+
+    buildEmptyStatePanel();
+    centerPanel.add(tabs, CENTER_CARD_EDITOR);
+    centerPanel.add(emptyStatePanel, CENTER_CARD_EMPTY);
+    add(centerPanel, BorderLayout.CENTER);
 
     JPanel footer = new JPanel(new BorderLayout());
     footer.setBorder(BorderFactory.createEmptyBorder(4, 10, 8, 10));
     footer.add(status, BorderLayout.CENTER);
-    JPanel footerActions = new JPanel(new MigLayout("insets 0, gapx 6", "[]", "[]"));
-    footerActions.setOpaque(false);
-    footerActions.add(createInterceptorButton);
-    footer.add(footerActions, BorderLayout.EAST);
     add(footer, BorderLayout.SOUTH);
+  }
+
+  private void buildEmptyStatePanel() {
+    emptyStatePanel.setOpaque(false);
+
+    emptyStateTitle.setFont(
+        emptyStateTitle.getFont().deriveFont(Font.BOLD, emptyStateTitle.getFont().getSize2D() + 2f));
+    emptyStateTitle.setHorizontalAlignment(SwingConstants.CENTER);
+
+    emptyStateBody.setHorizontalAlignment(SwingConstants.CENTER);
+    emptyStateBody.setVerticalAlignment(SwingConstants.TOP);
+
+    createInterceptorButton.setMargin(new Insets(4, 10, 4, 10));
+
+    emptyStatePanel.add(new JLabel(""), "growy,pushy");
+    emptyStatePanel.add(emptyStateTitle, "center");
+    emptyStatePanel.add(emptyStateBody, "center,wmin 320");
+    emptyStatePanel.add(createInterceptorButton, "center");
+    emptyStatePanel.add(new JLabel(""), "growy,pushy");
   }
 
   private JPanel buildDefinitionTab() {
@@ -1073,6 +1103,25 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return hint;
   }
 
+  private void setEditorTabsVisible(boolean visible) {
+    tabs.setVisible(visible);
+    showCenterCard(visible ? CENTER_CARD_EDITOR : CENTER_CARD_EMPTY);
+    revalidate();
+    repaint();
+  }
+
+  private void showCenterCard(String cardName) {
+    CardLayout layout = (CardLayout) centerPanel.getLayout();
+    layout.show(centerPanel, cardName);
+  }
+
+  private void setEmptyStateContent(String heading, String bodyHtml, boolean showCreateButton) {
+    emptyStateTitle.setText(Objects.toString(heading, ""));
+    emptyStateBody.setText(Objects.toString(bodyHtml, ""));
+    createInterceptorButton.setVisible(showCreateButton);
+    createInterceptorButton.setEnabled(showCreateButton);
+  }
+
   private void refreshFromStore() {
     if (!SwingUtilities.isEventDispatchThread()) {
       SwingUtilities.invokeLater(this::refreshFromStore);
@@ -1099,8 +1148,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     title.setText("Interceptor");
     subtitle.setText("Loading interceptor...");
     status.setText("Loading...");
-    createInterceptorButton.setVisible(false);
-    createInterceptorButton.setEnabled(false);
+    setEmptyStateContent(
+        "Interceptors",
+        "<html><div style='text-align:center;'>Loading interceptor...</div></html>",
+        false);
+    setEditorTabsVisible(!Objects.toString(interceptorId, "").trim().isBlank());
     setControlsEnabled(false);
   }
 
@@ -1112,18 +1164,32 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         && Objects.toString(interceptorId, "").trim().isBlank();
     if (interceptorsOverview) {
       title.setText("Interceptors");
-      subtitle.setText(
-          "<html><b>Interceptors</b> watch IRC events/messages and trigger actions when rules match."
-              + " Create one to highlight, notify, play a sound, or run a script for important patterns.</html>");
+      subtitle.setText("Automation rules for IRC events on this server.");
+      setEmptyStateContent(
+          "Interceptors",
+          "<html><div style='text-align:center;'>"
+              + "Interceptors watch IRC events/messages and trigger actions when rules match."
+              + " Create one to automate the stuff you care about."
+              + "<br><br><b>What Interceptors can do:</b><br>"
+              + "&bull; Match by event type (messages, notices, joins/parts, and more)<br>"
+              + "&bull; Filter by channel include/exclude patterns<br>"
+              + "&bull; Trigger notifications (status bar + desktop toast)<br>"
+              + "&bull; Play built-in or custom sounds<br>"
+              + "&bull; Run scripts/programs with injected event context<br>"
+              + "&bull; Record hit history so you can review what matched"
+              + "</div></html>",
+          true);
       status.setText("Tip: Add/select an interceptor to configure rules and review captured hits.");
-      createInterceptorButton.setVisible(true);
-      createInterceptorButton.setEnabled(true);
+      setEditorTabsVisible(false);
     } else {
       title.setText("Interceptor");
       subtitle.setText("Select an interceptor node.");
+      setEmptyStateContent(
+          "Interceptor",
+          "<html><div style='text-align:center;'>Select an interceptor from the server tree to edit its rules, actions, and hit history.</div></html>",
+          false);
       status.setText(" ");
-      createInterceptorButton.setVisible(false);
-      createInterceptorButton.setEnabled(false);
+      setEditorTabsVisible(false);
     }
 
     rulesModel.setRows(List.of());
@@ -1141,8 +1207,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     rulesModel.setRows(List.of());
     hitsModel.setRows(List.of());
     status.setText(" ");
-    createInterceptorButton.setVisible(false);
-    createInterceptorButton.setEnabled(false);
+    setEmptyStateContent(
+        "Interceptor",
+        "<html><div style='text-align:center;'>This interceptor was removed or is no longer available.</div></html>",
+        false);
+    setEditorTabsVisible(false);
     resetControls();
     loading = false;
     setControlsEnabled(false);
@@ -1197,8 +1266,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     loading = true;
     title.setText("Interceptor - " + def.name());
     subtitle.setText(def.scopeAnyServer() ? "Scope: any server" : "Scope: this server");
-    createInterceptorButton.setVisible(false);
-    createInterceptorButton.setEnabled(false);
+    setEmptyStateContent("", "", false);
+    setEditorTabsVisible(true);
 
     interceptorName.setText(def.name());
     enabled.setSelected(def.enabled());
