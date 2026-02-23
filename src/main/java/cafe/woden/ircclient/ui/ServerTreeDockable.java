@@ -2543,6 +2543,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref.isDccTransfers() && !showDccTransfersNodes) {
       setDccTransfersNodesVisible(true);
     }
+    if (ref.isInterceptorsGroup()) {
+      // This is a built-in grouping node (not a leaf/PM/channel). Selecting it should not
+      // create a synthetic leaf like "__interceptors_group__" under private messages.
+      if (servers.containsKey(ref.serverId())) return;
+      if (serverCatalog == null || serverCatalog.containsId(ref.serverId()) || servers.isEmpty()) {
+        addServerRoot(ref.serverId());
+      }
+      return;
+    }
     if (leaves.containsKey(ref)) return;
 
     ServerNodes sn = servers.get(ref.serverId());
