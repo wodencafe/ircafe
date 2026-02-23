@@ -6367,7 +6367,7 @@ panel.add(subTabs, "growx, wmin 0");
 
     String lower = raw.toLowerCase(Locale.ROOT);
     return switch (lower) {
-      case "system", "nimbus", "nimbus-dark", "nimbus-orange", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
+      case "system", "nimbus", "nimbus-dark", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
       default -> true;
     };
   }

@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.util.VirtualThreads;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
@@ -44,21 +44,28 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
   private final Flyway flyway;
 
   private final ScheduledExecutorService exec;
+  private final ScheduledFuture<?> startupTask;
+  private final ScheduledFuture<?> recurringTask;
 
   public ChatLogRetentionPruner(ChatLogRepository repo,
                                TransactionTemplate tx,
                                LogProperties props,
-                               Flyway flyway) {
+                               Flyway flyway,
+                               ScheduledExecutorService exec) {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
     this.flyway = Objects.requireNonNull(flyway, "flyway");
-
-    this.exec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-chatlog-retention");
+    this.exec = Objects.requireNonNull(exec, "exec");
 
     // Run once shortly after startup, then periodically.
-    exec.schedule(this::pruneSafely, 10, TimeUnit.SECONDS);
-    exec.scheduleWithFixedDelay(this::pruneSafely, RUN_EVERY_HOURS, RUN_EVERY_HOURS, TimeUnit.HOURS);
+    this.startupTask = exec.schedule(this::pruneSafely, 10, TimeUnit.SECONDS);
+    this.recurringTask = exec.scheduleWithFixedDelay(
+        this::pruneSafely,
+        RUN_EVERY_HOURS,
+        RUN_EVERY_HOURS,
+        TimeUnit.HOURS
+    );
   }
 
   private boolean retentionEnabled() {
@@ -102,11 +109,13 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
 
   @Override
   public void close() {
-    exec.shutdown();
     try {
-      exec.awaitTermination(250, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
+      startupTask.cancel(false);
+    } catch (Exception ignored) {
+    }
+    try {
+      recurringTask.cancel(false);
+    } catch (Exception ignored) {
     }
   }
 }

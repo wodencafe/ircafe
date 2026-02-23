@@ -1,10 +1,13 @@
 package cafe.woden.ircclient.logging.history;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** In-memory bus that carries ZNC Playback module ranges. */
@@ -29,9 +32,11 @@ public final class ZncPlaybackBus extends AbstractTargetWaiterBus<ZncPlaybackBus
     }
   }
 
-  public ZncPlaybackBus() {
+  public ZncPlaybackBus(
+      @Qualifier(ExecutorConfig.ZNC_PLAYBACK_BUS_SCHEDULER) ScheduledExecutorService scheduler
+  ) {
     super(
-        "ircafe-znc-playback-bus",
+        scheduler,
         "ZNC playback",
         "ZNC playback bus completion failed",
         log

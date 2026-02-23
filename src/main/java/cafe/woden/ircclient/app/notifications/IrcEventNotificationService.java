@@ -1,9 +1,8 @@
 package cafe.woden.ircclient.app.notifications;
 
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
-import cafe.woden.ircclient.util.VirtualThreads;
-import jakarta.annotation.PreDestroy;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.context.annotation.Lazy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 
@@ -30,18 +30,20 @@ public class IrcEventNotificationService {
   private final TrayNotificationService trayNotificationService;
   private final NotificationStore notificationStore;
   private final PushyNotificationService pushyNotificationService;
-  private final ExecutorService scriptExecutor = VirtualThreads.newThreadPerTaskExecutor("ircafe-event-script");
+  private final ExecutorService scriptExecutor;
 
   public IrcEventNotificationService(
       IrcEventNotificationRulesBus rulesBus,
       TrayNotificationService trayNotificationService,
       NotificationStore notificationStore,
-      PushyNotificationService pushyNotificationService
+      PushyNotificationService pushyNotificationService,
+      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService scriptExecutor
   ) {
     this.rulesBus = rulesBus;
     this.trayNotificationService = trayNotificationService;
     this.notificationStore = notificationStore;
     this.pushyNotificationService = pushyNotificationService;
+    this.scriptExecutor = scriptExecutor;
   }
 
   /**
@@ -147,14 +149,6 @@ public class IrcEventNotificationService {
       if (r.eventType() == eventType) return true;
     }
     return false;
-  }
-
-  @PreDestroy
-  void shutdownScriptExecutor() {
-    try {
-      scriptExecutor.shutdownNow();
-    } catch (Exception ignored) {
-    }
   }
 
   private void dispatchScript(

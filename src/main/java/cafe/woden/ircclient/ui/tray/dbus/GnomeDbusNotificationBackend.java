@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.tray.dbus;
 
-import cafe.woden.ircclient.util.VirtualThreads;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,6 +22,7 @@ import org.freedesktop.dbus.types.UInt32;
 import org.freedesktop.dbus.types.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -42,12 +43,17 @@ public class GnomeDbusNotificationBackend {
   // Live signal handling state (G3).
   private final AtomicBoolean handlersInstalled = new AtomicBoolean(false);
   private final Map<Long, ClickEntry> clickHandlers = new ConcurrentHashMap<>();
-  private final ScheduledExecutorService cleanup =
-      VirtualThreads.newSingleThreadScheduledExecutor("ircafe-dbus-notify");
+  private final ScheduledExecutorService cleanup;
 
   private volatile DBusConnection liveConn;
   private volatile FreedesktopNotifications liveSvc;
   private volatile Boolean liveActionsSupported;
+
+  public GnomeDbusNotificationBackend(
+      @Qualifier(ExecutorConfig.GNOME_DBUS_CLEANUP_SCHEDULER)
+      ScheduledExecutorService cleanup) {
+    this.cleanup = cleanup;
+  }
 
   /**
    * Sends a notification via D-Bus and registers a click handler.
@@ -152,10 +158,6 @@ public class GnomeDbusNotificationBackend {
 
   @PreDestroy
   void shutdown() {
-    try {
-      cleanup.shutdownNow();
-    } catch (Exception ignored) {
-    }
     resetLive();
   }
 

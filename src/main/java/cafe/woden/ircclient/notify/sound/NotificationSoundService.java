@@ -1,11 +1,12 @@
 package cafe.woden.ircclient.notify.sound;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;
@@ -30,7 +31,7 @@ public class NotificationSoundService {
   private static final long CLIP_WAIT_MIN_MS = 2_000L;
   private static final long CLIP_WAIT_MAX_MS = 30_000L;
 
-  private final ExecutorService executor = VirtualThreads.newSingleThreadExecutor("notification-sound-thread");
+  private final ExecutorService executor;
 
   private final NotificationSoundSettingsBus settingsBus;
   private final RuntimeConfigStore runtimeConfig;
@@ -51,9 +52,13 @@ public class NotificationSoundService {
   /** Resolved absolute path for the custom sound file (when enabled). */
   private volatile Path customSoundPath;
 
-  public NotificationSoundService(NotificationSoundSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+  public NotificationSoundService(NotificationSoundSettingsBus settingsBus,
+                                  RuntimeConfigStore runtimeConfig,
+                                  @Qualifier(ExecutorConfig.NOTIFICATION_SOUND_EXECUTOR)
+                                  ExecutorService executor) {
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;
+    this.executor = executor;
 
     NotificationSoundSettings seed = settingsBus != null ? settingsBus.get() : null;
     applySettings(seed);
@@ -295,6 +300,5 @@ public class NotificationSoundService {
       }
     } catch (Exception ignored) {
     }
-    executor.shutdownNow();
   }
 }

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -32,6 +33,7 @@ import javax.swing.RepaintManager;
 import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,8 +51,7 @@ public class AssertjSwingDiagnosticsService {
   private final UiProperties uiProps;
   private final RuntimeConfigStore runtimeConfig;
 
-  private final ScheduledExecutorService watchdogExec =
-      VirtualThreads.newSingleThreadScheduledExecutor("ircafe-assertj-watchdog");
+  private final ScheduledExecutorService watchdogExec;
 
   private volatile ScheduledFuture<?> watchdogTask;
   private volatile int freezeThresholdMs;
@@ -68,10 +69,13 @@ public class AssertjSwingDiagnosticsService {
   public AssertjSwingDiagnosticsService(
       ApplicationDiagnosticsService diagnostics,
       UiProperties uiProps,
-      RuntimeConfigStore runtimeConfig) {
+      RuntimeConfigStore runtimeConfig,
+      @Qualifier(ExecutorConfig.ASSERTJ_WATCHDOG_SCHEDULER)
+      ScheduledExecutorService watchdogExec) {
     this.diagnostics = diagnostics;
     this.uiProps = uiProps;
     this.runtimeConfig = runtimeConfig;
+    this.watchdogExec = watchdogExec;
   }
 
   @PostConstruct
@@ -128,7 +132,6 @@ public class AssertjSwingDiagnosticsService {
       task.cancel(true);
       watchdogTask = null;
     }
-    watchdogExec.shutdownNow();
   }
 
   private UiProperties.AssertjSwing resolveSettings() {
