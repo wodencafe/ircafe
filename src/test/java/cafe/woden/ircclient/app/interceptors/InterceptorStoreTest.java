@@ -153,6 +153,120 @@ class InterceptorStoreTest {
     }
   }
 
+  @Test
+  void channelFilterModesAllAndNoneOverridePatternText() throws Exception {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Mode test");
+      InterceptorRule rule = new InterceptorRule(
+          true,
+          "Any ping",
+          "message",
+          InterceptorRuleMode.LIKE,
+          "ping",
+          InterceptorRuleMode.LIKE,
+          "",
+          InterceptorRuleMode.GLOB,
+          "");
+
+      store.saveInterceptor("srv", new InterceptorDefinition(
+          def.id(),
+          def.name(),
+          true,
+          "srv",
+          InterceptorRuleMode.ALL,
+          "#never-match-this",
+          InterceptorRuleMode.NONE,
+          "#also-ignored",
+          false,
+          false,
+          false,
+          "NOTIF_1",
+          false,
+          "",
+          false,
+          "",
+          "",
+          "",
+          List.of(rule)));
+
+      store.ingestEvent(
+          "srv",
+          "#general",
+          "alice",
+          "alice!id@host",
+          "ping",
+          InterceptorEventType.MESSAGE);
+      assertEquals(1, waitForHits(store, "srv", def.id(), 1).size());
+
+      store.clearHits("srv", def.id());
+
+      store.saveInterceptor("srv", new InterceptorDefinition(
+          def.id(),
+          def.name(),
+          true,
+          "srv",
+          InterceptorRuleMode.NONE,
+          "#general",
+          InterceptorRuleMode.NONE,
+          "",
+          false,
+          false,
+          false,
+          "NOTIF_1",
+          false,
+          "",
+          false,
+          "",
+          "",
+          "",
+          List.of(rule)));
+
+      store.ingestEvent(
+          "srv",
+          "#general",
+          "alice",
+          "alice!id@host",
+          "ping",
+          InterceptorEventType.MESSAGE);
+      assertEquals(0, waitForHits(store, "srv", def.id(), 1).size());
+
+      store.clearHits("srv", def.id());
+
+      store.saveInterceptor("srv", new InterceptorDefinition(
+          def.id(),
+          def.name(),
+          true,
+          "srv",
+          InterceptorRuleMode.ALL,
+          "",
+          InterceptorRuleMode.ALL,
+          "",
+          false,
+          false,
+          false,
+          "NOTIF_1",
+          false,
+          "",
+          false,
+          "",
+          "",
+          "",
+          List.of(rule)));
+
+      store.ingestEvent(
+          "srv",
+          "#general",
+          "alice",
+          "alice!id@host",
+          "ping",
+          InterceptorEventType.MESSAGE);
+      assertEquals(0, waitForHits(store, "srv", def.id(), 1).size());
+    } finally {
+      store.shutdown();
+    }
+  }
+
   private static List<InterceptorHit> waitForHits(
       InterceptorStore store,
       String ownerServerId,

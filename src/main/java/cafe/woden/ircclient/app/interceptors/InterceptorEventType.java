@@ -18,8 +18,8 @@ public enum InterceptorEventType {
   INVITE("invite", "Invite"),
   KICK("kick", "Kick"),
   CTCP("ctcp", "CTCP"),
-  PRIVATE_MESSAGE("private-message", "Private message"),
-  PRIVATE_ACTION("private-action", "Private action"),
+  PRIVATE_MESSAGE("private-message", "Private Message"),
+  PRIVATE_ACTION("private-action", "Private Action"),
   SERVER("server", "Server"),
   ERROR("error", "Error");
 

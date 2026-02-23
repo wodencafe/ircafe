@@ -5,8 +5,12 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.app.UiPortDecorator;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.logging.model.LogDirection;
+import cafe.woden.ircclient.logging.model.LogKind;
 import cafe.woden.ircclient.logging.model.LogLine;
 import java.time.Instant;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -20,10 +24,14 @@ import org.slf4j.LoggerFactory;
 public final class LoggingUiPortDecorator extends UiPortDecorator {
 
   private static final Logger log = LoggerFactory.getLogger(LoggingUiPortDecorator.class);
+  private static final int DEDUP_MAX_ENTRIES = 50_000;
+  private static final long DEDUP_TTL_MS = 10L * 60L * 1000L;
 
   private final ChatLogWriter writer;
   private final LogLineFactory factory;
   private final LogProperties props;
+  private final Object dedupLock = new Object();
+  private final LinkedHashMap<LogDedupKey, Long> recentDedup = new LinkedHashMap<>(256, 0.75f, true);
 
   public LoggingUiPortDecorator(
       UiPort delegate,
@@ -271,10 +279,113 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
     if (!shouldLogTarget(target)) return;
 
     try {
-      writer.log(supplier.get());
+      LogLine line = supplier.get();
+      if (line == null) return;
+      if (shouldSkipDuplicate(line)) return;
+      writer.log(line);
     } catch (Throwable t) {
       // Never let logging failures break the UI.
       log.warn("[ircafe] Failed to persist chat log line", t);
+    }
+  }
+
+  private boolean shouldSkipDuplicate(LogLine line) {
+    if (line == null) return true;
+    long now = System.currentTimeMillis();
+    LogDedupKey key = LogDedupKey.from(line);
+    synchronized (dedupLock) {
+      pruneDedupCache(now);
+      Long prev = recentDedup.get(key);
+      if (prev != null) {
+        recentDedup.put(key, now);
+        return true;
+      }
+      recentDedup.put(key, now);
+      while (recentDedup.size() > DEDUP_MAX_ENTRIES) {
+        Iterator<LogDedupKey> it = recentDedup.keySet().iterator();
+        if (!it.hasNext()) break;
+        it.next();
+        it.remove();
+      }
+      return false;
+    }
+  }
+
+  private void pruneDedupCache(long now) {
+    Iterator<Map.Entry<LogDedupKey, Long>> it = recentDedup.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<LogDedupKey, Long> e = it.next();
+      Long seenAt = e.getValue();
+      if (seenAt != null && (now - seenAt) > DEDUP_TTL_MS) {
+        it.remove();
+        continue;
+      }
+      break;
+    }
+  }
+
+  private static String extractMessageId(String metaJson) {
+    String meta = Objects.toString(metaJson, "").trim();
+    if (meta.isEmpty()) return "";
+    String key = "\"messageId\"";
+    int keyPos = meta.indexOf(key);
+    if (keyPos < 0) return "";
+    int colon = meta.indexOf(':', keyPos + key.length());
+    if (colon < 0) return "";
+    int firstQuote = meta.indexOf('"', colon + 1);
+    if (firstQuote < 0) return "";
+
+    StringBuilder out = new StringBuilder(32);
+    boolean escaped = false;
+    for (int i = firstQuote + 1; i < meta.length(); i++) {
+      char c = meta.charAt(i);
+      if (escaped) {
+        out.append(c);
+        escaped = false;
+        continue;
+      }
+      if (c == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (c == '"') {
+        break;
+      }
+      out.append(c);
+    }
+    return out.toString().trim();
+  }
+
+  private record LogDedupKey(
+      String serverId,
+      String target,
+      LogDirection direction,
+      LogKind kind,
+      String messageId,
+      long tsEpochMs,
+      String fromNick,
+      String text,
+      boolean outgoingLocalEcho,
+      boolean softIgnored
+  ) {
+    static LogDedupKey from(LogLine line) {
+      String sid = Objects.toString(line.serverId(), "").trim();
+      String target = Objects.toString(line.target(), "").trim();
+      LogDirection direction = line.direction();
+      LogKind kind = line.kind();
+      String msgId = extractMessageId(line.metaJson());
+      boolean keyedByMessageId = !msgId.isBlank();
+      return new LogDedupKey(
+          sid,
+          target,
+          direction,
+          kind,
+          msgId,
+          keyedByMessageId ? 0L : line.tsEpochMs(),
+          keyedByMessageId ? "" : Objects.toString(line.fromNick(), "").trim(),
+          keyedByMessageId ? "" : Objects.toString(line.text(), ""),
+          keyedByMessageId ? false : line.outgoingLocalEcho(),
+          keyedByMessageId ? false : line.softIgnored());
     }
   }
 

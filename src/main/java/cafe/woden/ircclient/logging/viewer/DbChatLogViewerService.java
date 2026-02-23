@@ -266,6 +266,9 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
 
   private static boolean isServerEventLine(LogLine line) {
     if (line == null) return false;
+    if (isStatusTarget(line.target())) return true;
+    if (isNoticeServerFrom(line.fromNick())) return true;
+
     LogKind kind = line.kind();
     if (kind == null) kind = LogKind.STATUS;
     if (kind == LogKind.ERROR) return false;
@@ -274,6 +277,17 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
     String from = fromToken(line.fromNick());
     if (SERVER_EVENT_FROM_TOKENS.contains(from)) return true;
     return kind == LogKind.STATUS;
+  }
+
+  private static boolean isStatusTarget(String rawTarget) {
+    String target = Objects.toString(rawTarget, "").trim();
+    return target.equalsIgnoreCase("status");
+  }
+
+  private static boolean isNoticeServerFrom(String rawFrom) {
+    String from = Objects.toString(rawFrom, "").trim().toLowerCase(Locale.ROOT);
+    if (from.isEmpty()) return false;
+    return from.equals("(notice) server");
   }
 
   private static boolean isProtocolDebugLine(LogLine line) {

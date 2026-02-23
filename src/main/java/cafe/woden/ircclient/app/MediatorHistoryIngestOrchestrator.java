@@ -14,8 +14,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Component;
@@ -27,6 +30,8 @@ import org.springframework.stereotype.Component;
 public class MediatorHistoryIngestOrchestrator {
   private static final Duration LIVE_REQUEST_MAX_AGE = Duration.ofMinutes(2);
   private static final String HISTORY_STATUS_TAG = "(history)";
+  private static final int HISTORY_RENDER_DEDUP_MAX = 50_000;
+  private static final long HISTORY_RENDER_DEDUP_TTL_MS = 10L * 60L * 1000L;
 
   private final UiPort ui;
   private final ChatHistoryIngestor chatHistoryIngestor;
@@ -36,6 +41,9 @@ public class MediatorHistoryIngestOrchestrator {
   private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
   private final ChatTranscriptStore transcripts;
   private final IrcClientService irc;
+  private final Object historyRenderDedupLock = new Object();
+  private final LinkedHashMap<HistoryRenderKey, Long> recentRenderedHistory =
+      new LinkedHashMap<>(512, 0.75f, true);
 
   public MediatorHistoryIngestOrchestrator(
       UiPort ui,
@@ -245,6 +253,9 @@ public class MediatorHistoryIngestOrchestrator {
         if (!seen.add(fp)) {
           continue;
         }
+        if (alreadyRenderedRecently(renderTarget, fp)) {
+          continue;
+        }
 
         String from = Objects.toString(entry.from(), "");
         String text = Objects.toString(entry.text(), "");
@@ -354,7 +365,43 @@ public class MediatorHistoryIngestOrchestrator {
     return entries.stream().mapToLong(entry -> entry.at().toEpochMilli()).max().orElse(0L);
   }
 
+  private boolean alreadyRenderedRecently(TargetRef target, HistoryFingerprint fp) {
+    if (target == null || fp == null) return false;
+    long now = System.currentTimeMillis();
+    HistoryRenderKey key = new HistoryRenderKey(target, fp);
+    synchronized (historyRenderDedupLock) {
+      pruneHistoryRenderDedup(now);
+      Long prev = recentRenderedHistory.get(key);
+      if (prev != null) {
+        recentRenderedHistory.put(key, now);
+        return true;
+      }
+      recentRenderedHistory.put(key, now);
+      while (recentRenderedHistory.size() > HISTORY_RENDER_DEDUP_MAX) {
+        Iterator<HistoryRenderKey> it = recentRenderedHistory.keySet().iterator();
+        if (!it.hasNext()) break;
+        it.next();
+        it.remove();
+      }
+      return false;
+    }
+  }
+
+  private void pruneHistoryRenderDedup(long now) {
+    Iterator<Map.Entry<HistoryRenderKey, Long>> it = recentRenderedHistory.entrySet().iterator();
+    while (it.hasNext()) {
+      Map.Entry<HistoryRenderKey, Long> e = it.next();
+      Long seenAt = e.getValue();
+      if (seenAt != null && (now - seenAt) > HISTORY_RENDER_DEDUP_TTL_MS) {
+        it.remove();
+        continue;
+      }
+      break;
+    }
+  }
+
   private record LiveRenderResult(TargetRef target, int displayedCount) {}
+  private record HistoryRenderKey(TargetRef target, HistoryFingerprint fingerprint) {}
 
   private record HistoryFingerprint(long tsEpochMs, ChatHistoryEntry.Kind kind, String from, String text) {
     static HistoryFingerprint from(ChatHistoryEntry entry) {

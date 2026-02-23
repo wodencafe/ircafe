@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -185,6 +187,48 @@ class LoggingUiPortDecoratorTest {
 
     assertNull(captured.get());
     verify(delegate).appendChat(pm, "alice", "hello", false);
+  }
+
+  @Test
+  void duplicateMessageIdIsLoggedOnlyOnce() {
+    UiPort delegate = mock(UiPort.class);
+    AtomicInteger writes = new AtomicInteger();
+    AtomicReference<LogLine> captured = new AtomicReference<>();
+    ChatLogWriter writer =
+        line -> {
+          writes.incrementAndGet();
+          captured.set(line);
+        };
+    LoggingUiPortDecorator d = new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+
+    TargetRef target = new TargetRef("srv", "#chan");
+    Instant at = Instant.ofEpochMilli(1_732_000_100_000L);
+    Map<String, String> tags = Map.of("msgid", "dup-1");
+
+    d.appendChatAt(target, at, "alice", "hello", false, "dup-1", tags);
+    d.appendChatAt(target, at.plusMillis(50), "alice", "hello", false, "dup-1", tags);
+
+    assertEquals(1, writes.get());
+    assertNotNull(captured.get());
+    verify(delegate).appendChatAt(target, at, "alice", "hello", false, "dup-1", tags);
+    verify(delegate).appendChatAt(target, at.plusMillis(50), "alice", "hello", false, "dup-1", tags);
+  }
+
+  @Test
+  void duplicateLineWithoutMessageIdUsesFallbackFingerprintDedupe() {
+    UiPort delegate = mock(UiPort.class);
+    AtomicInteger writes = new AtomicInteger();
+    ChatLogWriter writer = line -> writes.incrementAndGet();
+    LoggingUiPortDecorator d = new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+
+    TargetRef target = new TargetRef("srv", "#chan");
+    Instant at = Instant.ofEpochMilli(1_732_000_200_000L);
+
+    d.appendNoticeAt(target, at, "server", "maintenance");
+    d.appendNoticeAt(target, at, "server", "maintenance");
+
+    assertEquals(1, writes.get());
+    verify(delegate, times(2)).appendNoticeAt(target, at, "server", "maintenance");
   }
 
   private static LoggingUiPortDecorator newDecorator(UiPort delegate, AtomicReference<LogLine> captured) {

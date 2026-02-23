@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.interceptors;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.util.VirtualThreads;
@@ -104,6 +105,22 @@ public class InterceptorStore {
 
   public Flowable<Change> changes() {
     return changes.onBackpressureBuffer();
+  }
+
+  /** Preview interceptor sound settings without waiting for a real interceptor hit. */
+  public void previewSoundOverride(String soundId, boolean useCustom, String customPath) {
+    if (notificationSoundService == null) return;
+    try {
+      if (useCustom) {
+        String rel = norm(customPath);
+        if (!rel.isEmpty()) {
+          notificationSoundService.previewCustom(rel);
+          return;
+        }
+      }
+      notificationSoundService.preview(BuiltInSound.fromId(soundId));
+    } catch (Exception ignored) {
+    }
   }
 
   public InterceptorDefinition createInterceptor(String serverId, String requestedName) {
@@ -653,12 +670,23 @@ public class InterceptorStore {
     List<String> includes = splitPatterns(def.channelIncludes());
     List<String> excludes = splitPatterns(def.channelExcludes());
 
-    boolean included = includes.isEmpty()
-        || matchesAnyPattern(def.channelIncludeMode(), includes, chan, true);
+    InterceptorRuleMode includeMode =
+        def.channelIncludeMode() == null ? InterceptorRuleMode.GLOB : def.channelIncludeMode();
+    boolean included = switch (includeMode) {
+      case ALL -> true;
+      case NONE -> false;
+      case LIKE, GLOB, REGEX -> includes.isEmpty() || matchesAnyPattern(includeMode, includes, chan, true);
+    };
     if (!included) return false;
 
-    if (excludes.isEmpty()) return true;
-    return !matchesAnyPattern(def.channelExcludeMode(), excludes, chan, true);
+    InterceptorRuleMode excludeMode =
+        def.channelExcludeMode() == null ? InterceptorRuleMode.GLOB : def.channelExcludeMode();
+    boolean excluded = switch (excludeMode) {
+      case ALL -> true;
+      case NONE -> false;
+      case LIKE, GLOB, REGEX -> !excludes.isEmpty() && matchesAnyPattern(excludeMode, excludes, chan, true);
+    };
+    return !excluded;
   }
 
   private boolean matchesRule(
@@ -711,8 +739,10 @@ public class InterceptorStore {
       String value,
       boolean strictText
   ) {
-    if (patterns == null || patterns.isEmpty()) return false;
     InterceptorRuleMode m = mode == null ? InterceptorRuleMode.LIKE : mode;
+    if (m == InterceptorRuleMode.ALL) return true;
+    if (m == InterceptorRuleMode.NONE) return false;
+    if (patterns == null || patterns.isEmpty()) return false;
     String hay = Objects.toString(value, "");
 
     for (String pattern : patterns) {
@@ -733,6 +763,8 @@ public class InterceptorStore {
     if (source.isBlank() || hay.isBlank()) return false;
 
     return switch (mode) {
+      case ALL -> true;
+      case NONE -> false;
       case LIKE -> {
         if (strictText) {
           yield hay.equalsIgnoreCase(source);

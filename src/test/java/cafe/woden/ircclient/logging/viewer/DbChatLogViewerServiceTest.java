@@ -153,6 +153,8 @@ class DbChatLogViewerServiceTest {
 
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
         .thenReturn(List.of(
+            row(103L, "status", LogKind.CHAT, "Alice", "hello from status", "{}", LogDirection.IN),
+            row(102L, "status", LogKind.STATUS, "(notice) server", "maintenance in 10 min", "{}", LogDirection.SYSTEM),
             row(101L, LogKind.STATUS, "(server)", "[315] End of WHO list. (#chan)", "{}", LogDirection.SYSTEM),
             row(100L, LogKind.STATUS, "(mode)", "Channel modes: +nt", "{}", LogDirection.SYSTEM),
             row(99L, LogKind.ERROR, "(conn)", "Disconnected: timeout", "{}", LogDirection.SYSTEM),
@@ -240,9 +242,13 @@ class DbChatLogViewerServiceTest {
   }
 
   private static LogRow row(long id, LogKind kind, String fromNick, String text, String metaJson, LogDirection direction) {
+    return row(id, "#chan", kind, fromNick, text, metaJson, direction);
+  }
+
+  private static LogRow row(long id, String target, LogKind kind, String fromNick, String text, String metaJson, LogDirection direction) {
     return new LogRow(id, new LogLine(
         "srv",
-        "#chan",
+        target,
         1_700_000_000_000L,
         direction,
         kind,

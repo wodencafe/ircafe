@@ -1817,6 +1817,13 @@ public void appendChatAt(TargetRef ref,
                          String notificationRuleHighlightColor) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  if (!normalizedMsgId.isBlank()) {
+    StyledDocument existingDoc = docs.get(ref);
+    if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+      return;
+    }
+  }
 
   LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
   LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
@@ -1838,7 +1845,6 @@ public void appendChatAt(TargetRef ref,
   applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
   applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
-  String normalizedMsgId = normalizeMessageId(messageId);
   String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
   String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
   if (!replyToMsgId.isBlank()) {
@@ -3571,6 +3577,13 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
     long tsEpochMs = epochMs != null ? epochMs : System.currentTimeMillis();
     noteEpochMs(ref, tsEpochMs);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank()) {
+      StyledDocument existingDoc = docs.get(ref);
+      if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+        return;
+      }
+    }
 
     LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null, messageId, ircv3Tags);
 
@@ -3584,7 +3597,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
 
-    String normalizedMsgId = normalizeMessageId(messageId);
     String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
     String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
     if (!replyToMsgId.isBlank()) {
@@ -3748,6 +3760,13 @@ public void appendNoticeAt(
 ) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  if (!normalizedMsgId.isBlank()) {
+    StyledDocument existingDoc = docs.get(ref);
+    if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+      return;
+    }
+  }
   LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
   if (m != null) {
@@ -3755,7 +3774,6 @@ public void appendNoticeAt(
     return;
   }
   breakPresenceRun(ref);
-  String normalizedMsgId = normalizeMessageId(messageId);
   String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
   String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
   if (!replyToMsgId.isBlank()) {
@@ -3789,6 +3807,13 @@ public void appendStatusAt(
 ) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  if (!normalizedMsgId.isBlank()) {
+    StyledDocument existingDoc = docs.get(ref);
+    if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+      return;
+    }
+  }
   LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
   if (m != null) {

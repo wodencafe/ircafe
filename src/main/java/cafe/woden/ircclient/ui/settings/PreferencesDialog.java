@@ -4573,6 +4573,14 @@ panel.add(subTabs, "growx, wmin 0");
     JButton clearScript = new JButton("Clear");
     JButton browseScriptWorkingDirectory = new JButton("Browse...");
     JButton clearScriptWorkingDirectory = new JButton("Clear");
+    configureIconOnlyButton(browseCustom, "plus", "Choose custom notification sound file");
+    configureIconOnlyButton(clearCustom, "close", "Clear custom sound file");
+    configureIconOnlyButton(testSound, "play", "Test selected sound");
+    configureIconOnlyButton(browseScript, "terminal", "Choose external script");
+    configureIconOnlyButton(clearScript, "close", "Clear script path");
+    configureIconOnlyButton(
+        browseScriptWorkingDirectory, "settings", "Choose script working directory");
+    configureIconOnlyButton(clearScriptWorkingDirectory, "close", "Clear script working directory");
     JCheckBox detailEnabled = new JCheckBox("Rule enabled");
     JComboBox<IrcEventNotificationRule.EventType> detailEvent = new JComboBox<>(IrcEventNotificationRule.EventType.values());
     JComboBox<IrcEventNotificationRule.SourceMode> detailSource = new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
@@ -4911,8 +4919,10 @@ panel.add(subTabs, "growx, wmin 0");
     JComboBox<IrcEventNotificationPreset> defaultsPreset = new JComboBox<>(IrcEventNotificationPreset.values());
     JButton applyDefaults = new JButton("Apply defaults");
     JButton resetToIrcafeDefaults = new JButton("Reset to IRCafe defaults");
-    applyDefaults.setToolTipText("Apply a starter set. Existing rows for the same event type are updated.");
-    resetToIrcafeDefaults.setToolTipText("Replace all rules with IRCafe defaults.");
+    configureIconOnlyButton(
+        applyDefaults, "check", "Apply preset defaults to matching IRC event types");
+    configureIconOnlyButton(
+        resetToIrcafeDefaults, "refresh", "Replace all IRC event rules with IRCafe defaults");
 
     applyDefaults.addActionListener(e -> {
       if (controls.table.isEditing()) {
@@ -4964,14 +4974,19 @@ panel.add(subTabs, "growx, wmin 0");
     defaultsRow.setOpaque(false);
     defaultsRow.add(new JLabel("Defaults"));
     defaultsRow.add(defaultsPreset, "w 240!");
-    defaultsRow.add(applyDefaults, "w 130!");
-    defaultsRow.add(resetToIrcafeDefaults, "w 205!");
+    defaultsRow.add(applyDefaults, "w 36!, h 28!");
+    defaultsRow.add(resetToIrcafeDefaults, "w 36!, h 28!");
 
     JButton add = new JButton("Add");
     JButton duplicate = new JButton("Duplicate");
     JButton remove = new JButton("Remove");
     JButton up = new JButton("Up");
     JButton down = new JButton("Down");
+    configureIconOnlyButton(add, "plus", "Add IRC event rule");
+    configureIconOnlyButton(duplicate, "copy", "Duplicate selected IRC event rule");
+    configureIconOnlyButton(remove, "trash", "Remove selected IRC event rule");
+    configureIconOnlyButton(up, "arrow-up", "Move selected IRC event rule up");
+    configureIconOnlyButton(down, "arrow-down", "Move selected IRC event rule down");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
@@ -5127,12 +5142,12 @@ panel.add(subTabs, "growx, wmin 0");
         10, 10, 10, 10);
     soundPanel.add(new JLabel("Built-in"));
     soundPanel.add(controls.sound, "growx, wmin 160");
-    soundPanel.add(controls.testSound, "w 110!");
+    soundPanel.add(controls.testSound, "w 36!, h 28!");
     soundPanel.add(controls.useCustom, "wrap");
     soundPanel.add(new JLabel("Custom file"));
     soundPanel.add(controls.customPath, "growx, pushx, wmin 0");
-    soundPanel.add(controls.browseCustom, "w 100!");
-    soundPanel.add(controls.clearCustom, "w 80!");
+    soundPanel.add(controls.browseCustom, "w 36!, h 28!");
+    soundPanel.add(controls.clearCustom, "w 36!, h 28!");
     soundPanel.add(controls.selectionHint, "span 4, growx, wmin 0, wrap");
     soundPanel.add(helpText("When Sound is disabled on a rule, no sound is played for that event."),
         "span 4, growx, wmin 0, wrap");
@@ -5147,14 +5162,14 @@ panel.add(subTabs, "growx, wmin 0");
     scriptPanel.add(controls.runScript, "span 3, growx, wrap");
     scriptPanel.add(new JLabel("Script path"));
     scriptPanel.add(controls.scriptPath, "growx, pushx, wmin 0");
-    scriptPanel.add(controls.browseScript, "w 100!");
-    scriptPanel.add(controls.clearScript, "w 80!");
+    scriptPanel.add(controls.browseScript, "w 36!, h 28!");
+    scriptPanel.add(controls.clearScript, "w 36!, h 28!");
     scriptPanel.add(new JLabel("Arguments"));
     scriptPanel.add(controls.scriptArgs, "span 3, growx, wmin 0, wrap");
     scriptPanel.add(new JLabel("Working dir"));
     scriptPanel.add(controls.scriptWorkingDirectory, "growx, pushx, wmin 0");
-    scriptPanel.add(controls.browseScriptWorkingDirectory, "w 100!");
-    scriptPanel.add(controls.clearScriptWorkingDirectory, "w 80!");
+    scriptPanel.add(controls.browseScriptWorkingDirectory, "w 36!, h 28!");
+    scriptPanel.add(controls.clearScriptWorkingDirectory, "w 36!, h 28!");
     scriptPanel.add(helpText(
             "If enabled, IRCafe executes the script and sets env vars:\n"
                 + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
@@ -5274,9 +5289,14 @@ panel.add(subTabs, "growx, wmin 0");
     JButton down = new JButton("Down");
     JButton pickColor = new JButton("Color…");
     JButton clearColor = new JButton("Clear color");
-
-    pickColor.setToolTipText("Choose a highlight color for this rule.");
-    clearColor.setToolTipText("Clear the rule's highlight color.");
+    configureIconOnlyButton(add, "plus", "Add notification rule");
+    configureIconOnlyButton(edit, "edit", "Edit selected notification rule");
+    configureIconOnlyButton(duplicate, "copy", "Duplicate selected notification rule");
+    configureIconOnlyButton(remove, "trash", "Remove selected notification rule");
+    configureIconOnlyButton(up, "arrow-up", "Move selected notification rule up");
+    configureIconOnlyButton(down, "arrow-down", "Move selected notification rule down");
+    configureIconOnlyButton(pickColor, "palette", "Choose highlight color for selected rule");
+    configureIconOnlyButton(clearColor, "close", "Clear highlight color for selected rule");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
@@ -5454,6 +5474,8 @@ panel.add(subTabs, "growx, wmin 0");
 
     JButton runTest = new JButton("Test");
     JButton clearTest = new JButton("Clear");
+    configureIconOnlyButton(runTest, "check", "Test sample message against notification rules");
+    configureIconOnlyButton(clearTest, "close", "Clear rule test input/output");
 
     JPanel testButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     testButtons.add(runTest);
@@ -5562,6 +5584,12 @@ panel.add(subTabs, "growx, wmin 0");
     JButton remove = new JButton("Remove");
     JButton up = new JButton("Up");
     JButton down = new JButton("Down");
+    configureIconOnlyButton(add, "plus", "Add command alias");
+    configureIconOnlyButton(importHexChat, "copy", "Import aliases from HexChat commands.conf");
+    configureIconOnlyButton(duplicate, "copy", "Duplicate selected alias");
+    configureIconOnlyButton(remove, "trash", "Remove selected alias");
+    configureIconOnlyButton(up, "arrow-up", "Move selected alias up");
+    configureIconOnlyButton(down, "arrow-down", "Move selected alias down");
     JCheckBox unknownCommandAsRaw = new JCheckBox(
         "Fallback unknown /commands to raw IRC (HexChat-compatible)");
     unknownCommandAsRaw.setSelected(unknownCommandAsRawEnabled);
@@ -6393,6 +6421,16 @@ panel.add(subTabs, "growx, wmin 0");
     };
   }
 
+
+  private static void configureIconOnlyButton(JButton button, String iconName, String tooltip) {
+    if (button == null) return;
+    button.setText("");
+    button.setIcon(SvgIcons.action(iconName, 16));
+    button.setDisabledIcon(SvgIcons.actionDisabled(iconName, 16));
+    button.setMargin(new Insets(2, 6, 2, 6));
+    button.setToolTipText(tooltip);
+    button.setFocusable(false);
+  }
 
   private static JDialog createDialog(Window owner) {
     final JDialog d = new JDialog(owner, "Preferences", JDialog.ModalityType.APPLICATION_MODAL);
@@ -8683,6 +8721,8 @@ panel.add(subTabs, "growx, wmin 0");
 
     JButton add = new JButton("Add override...");
     JButton remove = new JButton("Remove");
+    configureIconOnlyButton(add, "plus", "Add scope override");
+    configureIconOnlyButton(remove, "trash", "Remove selected scope override");
     remove.setEnabled(false);
 
     table.getSelectionModel().addListSelectionListener(e -> {
@@ -8844,6 +8884,11 @@ panel.add(subTabs, "growx, wmin 0");
     JButton deleteRule = new JButton("Delete");
     JButton moveRuleUp = new JButton("Move up");
     JButton moveRuleDown = new JButton("Move down");
+    configureIconOnlyButton(addRule, "plus", "Add filter rule");
+    configureIconOnlyButton(editRule, "edit", "Edit selected filter rule");
+    configureIconOnlyButton(deleteRule, "trash", "Delete selected filter rule");
+    configureIconOnlyButton(moveRuleUp, "arrow-up", "Move selected filter rule up");
+    configureIconOnlyButton(moveRuleDown, "arrow-down", "Move selected filter rule down");
     editRule.setEnabled(false);
     deleteRule.setEnabled(false);
     moveRuleUp.setEnabled(false);

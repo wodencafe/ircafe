@@ -267,7 +267,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   private void repinAfterInputAreaGeometryChange(boolean atBottomBefore, boolean inputAreaChangedHeight) {
-    if (!atBottomBefore || !inputAreaChangedHeight) return;
+    if (!inputAreaChangedHeight) return;
+    if (!atBottomBefore && !isFollowTail()) return;
     SwingUtilities.invokeLater(this::scrollToBottom);
   }
 

@@ -729,7 +729,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private void repinAfterInputAreaGeometryChange(boolean atBottomBefore, boolean inputAreaChangedHeight) {
-    if (!atBottomBefore || !inputAreaChangedHeight) return;
+    if (!inputAreaChangedHeight) return;
+    if (!atBottomBefore && !isFollowTail()) return;
     SwingUtilities.invokeLater(this::scrollToBottom);
   }
 
