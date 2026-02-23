@@ -11,10 +11,14 @@ public record ChatLogViewerQuery(
     String serverId,
     String nickPattern,
     ChatLogViewerMatchMode nickMode,
+    String messagePattern,
+    ChatLogViewerMatchMode messageMode,
     String hostmaskPattern,
     ChatLogViewerMatchMode hostmaskMode,
     String channelPattern,
     ChatLogViewerMatchMode channelMode,
+    boolean includeServerEvents,
+    boolean includeProtocolDetails,
     Long fromEpochMs,
     Long toEpochMs,
     int limit
@@ -23,9 +27,11 @@ public record ChatLogViewerQuery(
   public ChatLogViewerQuery {
     serverId = norm(serverId);
     nickPattern = norm(nickPattern);
+    messagePattern = norm(messagePattern);
     hostmaskPattern = norm(hostmaskPattern);
     channelPattern = norm(channelPattern);
     if (nickMode == null) nickMode = ChatLogViewerMatchMode.CONTAINS;
+    if (messageMode == null) messageMode = ChatLogViewerMatchMode.CONTAINS;
     if (hostmaskMode == null) hostmaskMode = ChatLogViewerMatchMode.CONTAINS;
     if (channelMode == null) channelMode = ChatLogViewerMatchMode.CONTAINS;
     if (limit <= 0) limit = 500;

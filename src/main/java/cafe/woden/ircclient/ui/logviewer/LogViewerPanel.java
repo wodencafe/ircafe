@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
@@ -101,10 +102,14 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
 
   private final javax.swing.JTextField nickField = new javax.swing.JTextField();
   private final JComboBox<ChatLogViewerMatchMode> nickMode = new JComboBox<>(ChatLogViewerMatchMode.values());
+  private final javax.swing.JTextField messageField = new javax.swing.JTextField();
+  private final JComboBox<ChatLogViewerMatchMode> messageMode = new JComboBox<>(ChatLogViewerMatchMode.values());
   private final javax.swing.JTextField hostmaskField = new javax.swing.JTextField();
   private final JComboBox<ChatLogViewerMatchMode> hostmaskMode = new JComboBox<>(ChatLogViewerMatchMode.values());
   private final javax.swing.JTextField channelField = new javax.swing.JTextField();
   private final JComboBox<ChatLogViewerMatchMode> channelMode = new JComboBox<>(ChatLogViewerMatchMode.values());
+  private final JCheckBox includeServerEvents = new JCheckBox("Server events");
+  private final JCheckBox includeProtocolDetails = new JCheckBox("Protocol/debug");
   private final JComboBox<DateRangePreset> datePreset = new JComboBox<>(DateRangePreset.values());
 
   private final JLabel fromLabel = new JLabel("From:");
@@ -202,20 +207,26 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
         "[]2[]2[]"));
 
     nickMode.setRenderer(modeRenderer());
+    messageMode.setRenderer(modeRenderer());
     hostmaskMode.setRenderer(modeRenderer());
     channelMode.setRenderer(modeRenderer());
     datePreset.setRenderer(datePresetRenderer());
     nickMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
+    messageMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
     hostmaskMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
     channelMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
 
     nickField.setToolTipText("Filter by nick (quick filter).");
     nickField.putClientProperty("JTextField.placeholderText", "Nick filter");
+    messageField.setToolTipText("Filter by message text.");
+    messageField.putClientProperty("JTextField.placeholderText", "Message text");
     hostmaskField.setToolTipText("Filter by full hostmask when available.");
     hostmaskField.putClientProperty("JTextField.placeholderText", "Hostmask filter");
     channelField.setToolTipText("Filter by channel/target.");
     channelField.putClientProperty("JTextField.placeholderText", "Channel filter (e.g. #ircafe)");
     datePreset.setToolTipText("Date window for search.");
+    includeServerEvents.setToolTipText("Include mode/join/part/server status lines.");
+    includeProtocolDetails.setToolTipText("Include CAP and other low-level protocol lines.");
 
     JPanel quickRow = new JPanel(new MigLayout(
         "insets 0,fillx,hidemode 3",
@@ -228,6 +239,16 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     quickRow.add(channelField, "pushx,growx");
     quickRow.add(channelMode, "w 88!");
     filters.add(quickRow, "growx");
+
+    JPanel messageRow = new JPanel(new MigLayout(
+        "insets 0,fillx,hidemode 3",
+        "[right][grow,fill][pref!][grow,fill]",
+        "[]"));
+    messageRow.add(new JLabel("Message:"), "");
+    messageRow.add(messageField, "pushx,growx");
+    messageRow.add(messageMode, "w 88!");
+    messageRow.add(new JLabel(""), "pushx,growx");
+    filters.add(messageRow, "growx");
 
     JPanel dateRow = new JPanel(new MigLayout(
         "insets 0,fillx,hidemode 3",
@@ -247,6 +268,16 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     advancedPanel.add(hostmaskMode, "w 88!");
     advancedPanel.add(new JLabel(""), "pushx,growx");
     filters.add(advancedPanel, "growx");
+
+    JPanel visibilityRow = new JPanel(new MigLayout(
+        "insets 0,fillx,hidemode 3",
+        "[right][pref!][pref!][grow,fill]",
+        "[]"));
+    visibilityRow.add(new JLabel("Show:"), "");
+    visibilityRow.add(includeServerEvents, "");
+    visibilityRow.add(includeProtocolDetails, "");
+    visibilityRow.add(new JLabel(""), "pushx,growx");
+    filters.add(visibilityRow, "growx");
 
     footer.add(filters, BorderLayout.NORTH);
     updateDatePresetUi();
@@ -291,8 +322,11 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     resetButton.addActionListener(e -> resetFiltersAndSearch());
     exportButton.addActionListener(e -> exportVisibleRows());
     columnsButton.addActionListener(e -> showColumnsMenu(columnsButton));
+    includeServerEvents.addActionListener(e -> runSearch(false));
+    includeProtocolDetails.addActionListener(e -> runSearch(false));
 
     nickField.addActionListener(e -> runSearch(false));
+    messageField.addActionListener(e -> runSearch(false));
     hostmaskField.addActionListener(e -> runSearch(false));
     channelField.addActionListener(e -> runSearch(false));
   }
@@ -313,12 +347,16 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   private void setControlsEnabled(boolean enabled) {
     nickField.setEnabled(enabled);
     nickMode.setEnabled(enabled);
+    messageField.setEnabled(enabled);
+    messageMode.setEnabled(enabled);
     hostmaskField.setEnabled(enabled);
     hostmaskMode.setEnabled(enabled);
     channelField.setEnabled(enabled);
     channelMode.setEnabled(enabled);
     datePreset.setEnabled(enabled);
     limitSpinner.setEnabled(enabled);
+    includeServerEvents.setEnabled(enabled);
+    includeProtocolDetails.setEnabled(enabled);
     fromSpinner.setEnabled(enabled && selectedDatePreset() == DateRangePreset.CUSTOM);
     toSpinner.setEnabled(enabled && selectedDatePreset() == DateRangePreset.CUSTOM);
     updateButtons(false);
@@ -339,11 +377,15 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
 
   private void resetFiltersAndSearch() {
     nickField.setText("");
+    messageField.setText("");
     hostmaskField.setText("");
     channelField.setText("");
     nickMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
+    messageMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
     hostmaskMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
     channelMode.setSelectedItem(ChatLogViewerMatchMode.CONTAINS);
+    includeServerEvents.setSelected(false);
+    includeProtocolDetails.setSelected(false);
     datePreset.setSelectedItem(DateRangePreset.ALL_TIME);
     updateDatePresetUi();
     Date now = new Date();
@@ -414,10 +456,14 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
         sid,
         nickField.getText(),
         selectedMode(nickMode),
+        messageField.getText(),
+        selectedMode(messageMode),
         hostmaskField.getText(),
         selectedMode(hostmaskMode),
         channelField.getText(),
         selectedMode(channelMode),
+        includeServerEvents.isSelected(),
+        includeProtocolDetails.isSelected(),
         fromMs,
         toMs,
         limit

@@ -2,6 +2,8 @@ package cafe.woden.ircclient.app;
 
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
+import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
+import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
@@ -27,6 +29,7 @@ import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
+import cafe.woden.ircclient.model.UserListStore;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -74,6 +77,7 @@ public class IrcMediator {
   private final UiSettingsBus uiSettingsBus;
   private final TrayNotificationService trayNotificationService;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
+  private final UserListStore userListStore;
   private final InboundIgnorePolicy inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final WhoisRoutingState whoisRoutingState;
@@ -87,6 +91,7 @@ public class IrcMediator {
   private final PendingInviteState pendingInviteState;
   private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotificationService ircEventNotificationService;
+  private final InterceptorStore interceptorStore;
 
   private final NotificationRuleMatcher notificationRuleMatcher;
 
@@ -128,6 +133,7 @@ public class IrcMediator {
       TrayNotificationService trayNotificationService,
       NotificationRuleMatcher notificationRuleMatcher,
       UserInfoEnrichmentService userInfoEnrichmentService,
+      UserListStore userListStore,
       WhoisRoutingState whoisRoutingState,
       CtcpRoutingState ctcpRoutingState,
       ModeRoutingState modeRoutingState,
@@ -139,6 +145,7 @@ public class IrcMediator {
       PendingInviteState pendingInviteState,
       InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotificationService ircEventNotificationService,
+      InterceptorStore interceptorStore,
       InboundIgnorePolicy inboundIgnorePolicy
   ) {
 
@@ -159,6 +166,7 @@ public class IrcMediator {
     this.trayNotificationService = trayNotificationService;
     this.notificationRuleMatcher = notificationRuleMatcher;
     this.userInfoEnrichmentService = userInfoEnrichmentService;
+    this.userListStore = userListStore;
     this.whoisRoutingState = whoisRoutingState;
     this.ctcpRoutingState = ctcpRoutingState;
     this.modeRoutingState = modeRoutingState;
@@ -170,6 +178,7 @@ public class IrcMediator {
     this.pendingInviteState = pendingInviteState;
     this.inboundModeEventHandler = inboundModeEventHandler;
     this.ircEventNotificationService = ircEventNotificationService;
+    this.interceptorStore = interceptorStore;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
   }
 
@@ -569,6 +578,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
 
         recordRuleMatchIfPresent(chan, ev.from(), ev.text(), ruleMatch);
+        recordInterceptorEvent(
+            sid,
+            ev.channel(),
+            ev.from(),
+            learnedHostmaskForNick(sid, ev.from()),
+            ev.text(),
+            InterceptorEventType.MESSAGE);
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.text());
         if (mention) {
@@ -620,6 +636,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
 
         recordRuleMatchIfPresent(chan, ev.from(), ev.action(), ruleMatch);
+        recordInterceptorEvent(
+            sid,
+            ev.channel(),
+            ev.from(),
+            learnedHostmaskForNick(sid, ev.from()),
+            ev.action(),
+            InterceptorEventType.ACTION);
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.action());
         if (mention) {
@@ -637,6 +660,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       case IrcEvent.ChannelModeChanged ev -> {
         inboundModeEventHandler.handleChannelModeChanged(sid, ev);
         maybeNotifyModeEvents(sid, ev);
+        recordInterceptorEvent(
+            sid,
+            ev.channel(),
+            ev.by(),
+            learnedHostmaskForNick(sid, ev.by()),
+            ev.details(),
+            InterceptorEventType.MODE);
       }
 
       case IrcEvent.ChannelModesListed ev -> {
@@ -663,6 +693,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
             null,
             "Topic changed" + (channel.isEmpty() ? "" : " in " + channel),
             body);
+        recordInterceptorEvent(
+            sid,
+            channel,
+            "server",
+            "",
+            topic.isEmpty() ? "(topic cleared)" : topic,
+            InterceptorEventType.TOPIC);
       }
       
 case IrcEvent.PrivateMessage ev -> {
@@ -738,6 +775,14 @@ case IrcEvent.PrivateMessage ev -> {
     }
   }
 
+  recordInterceptorEvent(
+      sid,
+      "pm:" + Objects.toString(peer, "").trim(),
+      ev.from(),
+      learnedHostmaskForNick(sid, ev.from()),
+      ev.text(),
+      InterceptorEventType.PRIVATE_MESSAGE);
+
   if (!fromSelf) {
     String fromNick = Objects.toString(ev.from(), "").trim();
     String title = fromNick.isEmpty() ? "Private message" : ("Private message from " + fromNick);
@@ -802,6 +847,14 @@ case IrcEvent.PrivateAction ev -> {
     }
   }
 
+  recordInterceptorEvent(
+      sid,
+      "pm:" + Objects.toString(peer, "").trim(),
+      ev.from(),
+      learnedHostmaskForNick(sid, ev.from()),
+      ev.action(),
+      InterceptorEventType.PRIVATE_ACTION);
+
   if (!fromSelf) {
     String fromNick = Objects.toString(ev.from(), "").trim();
     String title = fromNick.isEmpty() ? "Private action" : ("Private action from " + fromNick);
@@ -865,6 +918,22 @@ case IrcEvent.Notice ev -> {
             ev.messageId(),
             ev.ircv3Tags());
 
+        String noticeChannel = "status";
+        String rawNoticeTarget = Objects.toString(ev.target(), "").trim();
+        if (!rawNoticeTarget.isEmpty()) {
+          TargetRef targetRef = new TargetRef(sid, rawNoticeTarget);
+          if (targetRef.isChannel()) {
+            noticeChannel = targetRef.target();
+          }
+        }
+        recordInterceptorEvent(
+            sid,
+            noticeChannel,
+            ev.from(),
+            learnedHostmaskForNick(sid, ev.from()),
+            ev.text(),
+            InterceptorEventType.NOTICE);
+
         if (!fromSelf && !suppress) {
           String fromNick = Objects.toString(ev.from(), "").trim();
           String title = fromNick.isEmpty() ? "Notice" : ("Notice from " + fromNick);
@@ -896,6 +965,13 @@ case IrcEvent.Notice ev -> {
         String fromFinal = from;
         String rendered = fromFinal + ": " + body;
         postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(wallops)", rendered));
+        recordInterceptorEvent(
+            sid,
+            "status",
+            fromFinal,
+            learnedHostmaskForNick(sid, fromFinal),
+            body,
+            InterceptorEventType.SERVER);
 
         notifyIrcEvent(
             IrcEventNotificationRule.EventType.WALLOPS_RECEIVED,
@@ -907,9 +983,23 @@ case IrcEvent.Notice ev -> {
       }
 case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.appendStatus(status, "(ircv3)", ev.message());
+        recordInterceptorEvent(
+            sid,
+            "status",
+            "server",
+            "",
+            ev.message(),
+            InterceptorEventType.SERVER);
       }
       case IrcEvent.StandardReply ev -> {
         handleStandardReply(sid, status, ev);
+        recordInterceptorEvent(
+            sid,
+            "status",
+            "server",
+            "",
+            Objects.toString(ev.description(), "").trim(),
+            InterceptorEventType.SERVER);
       }
       case IrcEvent.ChannelListStarted ev -> {
         ui.beginChannelList(sid, ev.banner());
@@ -922,6 +1012,15 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
       case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {
         handleServerResponseLine(sid, status, ev);
+        String rawLine = Objects.toString(ev.rawLine(), "").trim();
+        if (rawLine.isEmpty()) rawLine = Objects.toString(ev.message(), "").trim();
+        recordInterceptorEvent(
+            sid,
+            "status",
+            "server",
+            "",
+            rawLine,
+            InterceptorEventType.SERVER);
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
         mediatorHistoryIngestOrchestrator.onChatHistoryBatchReceived(sid, ev);
@@ -962,6 +1061,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         } else {
           postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(ctcp)", rendered));
         }
+        recordInterceptorEvent(
+            sid,
+            Objects.toString(ev.channel(), "").trim().isEmpty() ? "status" : ev.channel(),
+            ev.from(),
+            learnedHostmaskForNick(sid, ev.from()),
+            rendered,
+            InterceptorEventType.CTCP);
 
         String fromNick = Objects.toString(ev.from(), "").trim();
         String channel = Objects.toString(ev.channel(), "").trim();
@@ -1027,6 +1133,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         if (channel.isEmpty()) {
           String invalidLine = inviter + " sent an invalid invite.";
           postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite)", invalidLine));
+          recordInterceptorEvent(
+              sid,
+              "status",
+              inviter,
+              learnedHostmaskForNick(sid, inviter),
+              invalidLine,
+              InterceptorEventType.INVITE);
         } else {
           String invitee = Objects.toString(ev.invitee(), "").trim();
           String selfNick = irc.currentNick(sid).orElse("");
@@ -1035,6 +1148,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           if (!isSelfInvite) {
             String rendered = inviter + " invited " + invitee + " to " + channel;
             postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite-notify)", rendered));
+            recordInterceptorEvent(
+                sid,
+                channel,
+                inviter,
+                learnedHostmaskForNick(sid, inviter),
+                rendered,
+                InterceptorEventType.INVITE);
           } else {
             PendingInviteState.RecordResult recorded = pendingInviteState.record(
                 ev.at(), sid, channel, inviter, invitee, ev.reason(), ev.inviteNotify());
@@ -1060,6 +1180,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
                 ui.appendStatusAt(d, ev.at(), "(invite)", finalRendered);
                 ui.appendStatus(d, "(invite)", actions);
               });
+              recordInterceptorEvent(
+                  sid,
+                  channel,
+                  inviter,
+                  learnedHostmaskForNick(sid, inviter),
+                  finalRendered,
+                  InterceptorEventType.INVITE);
 
               boolean customInviteNotified = notifyIrcEvent(
                   IrcEventNotificationRule.EventType.INVITE_RECEIVED,
@@ -1109,6 +1236,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             joinedNick,
             "Join in " + ev.channel(),
             body);
+        recordInterceptorEvent(
+            sid,
+            ev.channel(),
+            joinedNick,
+            learnedHostmaskForNick(sid, joinedNick),
+            body,
+            InterceptorEventType.JOIN);
       }
 
       case IrcEvent.UserPartedChannel ev -> {
@@ -1127,6 +1261,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             nick,
             "Part in " + channel,
             body);
+        recordInterceptorEvent(
+            sid,
+            channel,
+            nick,
+            learnedHostmaskForNick(sid, nick),
+            body,
+            InterceptorEventType.PART);
       }
 
       case IrcEvent.LeftChannel ev -> {
@@ -1153,6 +1294,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             ev.by(),
             "Kick in " + ev.channel(),
             rendered);
+        recordInterceptorEvent(
+            sid,
+            ev.channel(),
+            ev.by(),
+            learnedHostmaskForNick(sid, ev.by()),
+            rendered,
+            InterceptorEventType.KICK);
       }
 
       case IrcEvent.KickedFromChannel ev -> {
@@ -1174,6 +1322,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             ev.by(),
             "You were kicked from " + ev.channel(),
             rendered);
+        recordInterceptorEvent(
+            sid,
+            ev.channel(),
+            ev.by(),
+            learnedHostmaskForNick(sid, ev.by()),
+            rendered,
+            InterceptorEventType.KICK);
       }
 
       case IrcEvent.UserQuitChannel ev -> {
@@ -1194,6 +1349,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             nick,
             "Quit" + (channel.isEmpty() ? "" : " in " + channel),
             body);
+        recordInterceptorEvent(
+            sid,
+            channel,
+            nick,
+            learnedHostmaskForNick(sid, nick),
+            body,
+            InterceptorEventType.QUIT);
         maybeNotifyUserKlineFromQuit(sid, ev);
         maybeNotifyNetsplitDetected(sid, ev);
       }
@@ -1215,6 +1377,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             oldNick,
             "Nick changed" + (channel.isEmpty() ? "" : " in " + channel),
             body);
+        recordInterceptorEvent(
+            sid,
+            channel,
+            oldNick,
+            learnedHostmaskForNick(sid, oldNick),
+            body,
+            InterceptorEventType.NICK);
       }
 
       case IrcEvent.JoinedChannel ev -> {
@@ -1415,6 +1584,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       case IrcEvent.Error ev -> {
           connectionCoordinator.noteConnectionError(sid, ev.message());
           ui.appendError(status, "(error)", ev.message());
+          recordInterceptorEvent(
+              sid,
+              "status",
+              "server",
+              "",
+              ev.message(),
+              InterceptorEventType.ERROR);
           maybeNotifyKline(sid, ev.message(), "Server restriction");
       }
 
@@ -1795,6 +1971,37 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     if (chan == null || match == null) return;
     ui.markHighlight(chan);
     ui.recordRuleMatch(chan, from, match.ruleLabel(), snippetAround(text, match.start(), match.end()));
+  }
+
+  private void recordInterceptorEvent(
+      String serverId,
+      String channel,
+      String fromNick,
+      String fromHostmask,
+      String text,
+      InterceptorEventType eventType
+  ) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    String from = Objects.toString(fromNick, "").trim();
+    if (sid.isEmpty() || from.isEmpty()) return;
+    if (isFromSelf(sid, from)) return;
+    interceptorStore.ingestEvent(
+        sid,
+        channel,
+        from,
+        Objects.toString(fromHostmask, "").trim(),
+        Objects.toString(text, "").trim(),
+        eventType);
+  }
+
+  private String learnedHostmaskForNick(String serverId, String nick) {
+    if (userListStore == null) return "";
+    String sid = Objects.toString(serverId, "").trim();
+    String n = Objects.toString(nick, "").trim();
+    if (sid.isEmpty() || n.isEmpty()) return "";
+    String hostmask = userListStore.getLearnedHostmask(sid, n);
+    return Objects.toString(hostmask, "").trim();
   }
 
   private boolean tryResolvePendingEchoChannelMessage(

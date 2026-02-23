@@ -448,12 +448,16 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
 
 
 
-  public void showRemoteTypingIndicator(String nick, String state) {
+  public boolean showRemoteTypingIndicator(String nick, String state) {
+    boolean wasVisible = typingBanner.isVisible();
     typingSupport.showRemoteTypingIndicator(nick, state);
+    return wasVisible != typingBanner.isVisible();
   }
 
-  public void clearRemoteTypingIndicator() {
+  public boolean clearRemoteTypingIndicator() {
+    boolean wasVisible = typingBanner.isVisible();
     typingSupport.clearRemoteTypingIndicator();
+    return wasVisible != typingBanner.isVisible();
   }
 
   public void setTypingSignalAvailable(boolean available) {

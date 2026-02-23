@@ -433,6 +433,8 @@ public class TargetCoordinator {
       statusBarChannel = "jHiccup";
     } else if (target.isLogViewer()) {
       statusBarChannel = "Log Viewer";
+    } else if (target.isInterceptor()) {
+      statusBarChannel = "Interceptor";
     }
     ui.setStatusBarChannel(statusBarChannel);
     ui.setStatusBarServer(serverDisplay(target.serverId()));

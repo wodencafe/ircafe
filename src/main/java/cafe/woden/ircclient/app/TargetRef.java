@@ -17,6 +17,7 @@ public final class TargetRef {
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
   public static final String CHANNEL_LIST_TARGET = "__channel_list__";
   public static final String DCC_TRANSFERS_TARGET = "__dcc_transfers__";
+  public static final String INTERCEPTOR_PREFIX = "__interceptor__:";
   public static final String APPLICATION_SERVER_ID = "__application__";
   public static final String APPLICATION_UNHANDLED_ERRORS_TARGET = "__app_unhandled_errors__";
   public static final String APPLICATION_ASSERTJ_SWING_TARGET = "__app_assertj_swing__";
@@ -45,6 +46,12 @@ public final class TargetRef {
 
   public static TargetRef dccTransfers(String serverId) {
     return new TargetRef(serverId, DCC_TRANSFERS_TARGET);
+  }
+
+  public static TargetRef interceptor(String serverId, String interceptorId) {
+    String id = norm(interceptorId);
+    if (id.isEmpty()) throw new IllegalArgumentException("interceptorId must not be blank");
+    return new TargetRef(serverId, INTERCEPTOR_PREFIX + id);
   }
 
   public static TargetRef applicationUnhandledErrors() {
@@ -102,6 +109,16 @@ public final class TargetRef {
     return DCC_TRANSFERS_TARGET.equals(key);
   }
 
+  public boolean isInterceptor() {
+    return key.startsWith(INTERCEPTOR_PREFIX);
+  }
+
+  public String interceptorId() {
+    if (!isInterceptor()) return "";
+    if (target.length() <= INTERCEPTOR_PREFIX.length()) return "";
+    return target.substring(INTERCEPTOR_PREFIX.length()).trim();
+  }
+
   public boolean isApplicationServer() {
     return APPLICATION_SERVER_ID.equals(serverId);
   }
@@ -130,7 +147,12 @@ public final class TargetRef {
   public boolean isUiOnly() {
     // UI-only targets are pseudo-buffers that do not represent a real IRC target.
     // "status" is a real transcript buffer in ircafe (and can accept raw server input).
-    return isNotifications() || isChannelList() || isDccTransfers() || isLogViewer() || isApplicationUi();
+    return isNotifications()
+        || isChannelList()
+        || isDccTransfers()
+        || isLogViewer()
+        || isInterceptor()
+        || isApplicationUi();
   }
 
   public boolean isChannel() {
@@ -152,6 +174,9 @@ public final class TargetRef {
     if (NOTIFICATIONS_TARGET.equals(t)) return NOTIFICATIONS_TARGET;
     if (CHANNEL_LIST_TARGET.equals(t)) return CHANNEL_LIST_TARGET;
     if (DCC_TRANSFERS_TARGET.equals(t)) return DCC_TRANSFERS_TARGET;
+    if (t.startsWith(INTERCEPTOR_PREFIX)) {
+      return INTERCEPTOR_PREFIX + t.substring(INTERCEPTOR_PREFIX.length()).toLowerCase(Locale.ROOT);
+    }
     if (APPLICATION_UNHANDLED_ERRORS_TARGET.equals(t)) return APPLICATION_UNHANDLED_ERRORS_TARGET;
     if (APPLICATION_ASSERTJ_SWING_TARGET.equals(t)) return APPLICATION_ASSERTJ_SWING_TARGET;
     if (APPLICATION_JHICCUP_TARGET.equals(t)) return APPLICATION_JHICCUP_TARGET;

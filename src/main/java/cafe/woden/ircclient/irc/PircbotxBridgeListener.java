@@ -403,6 +403,7 @@ private static String privmsgTargetFromEvent(Object event) {
     try {
       Object t = reflectCall(event, "getTarget");
       if (t == null) t = reflectCall(event, "getRecipient");
+      if (t == null) t = reflectCall(event, "getChannelSource");
       if (t == null) t = reflectCall(event, "getMessageTarget");
       if (t == null) t = reflectCall(event, "getMessageTargetName");
       if (t == null) t = reflectCall(event, "getDestination");

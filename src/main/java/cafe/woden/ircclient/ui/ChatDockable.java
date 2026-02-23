@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.DccTransferStore;
+import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -19,6 +20,7 @@ import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
+import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -111,11 +113,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private static final String CARD_CHANNEL_LIST = "channel-list";
   private static final String CARD_DCC_TRANSFERS = "dcc-transfers";
   private static final String CARD_LOG_VIEWER = "log-viewer";
+  private static final String CARD_INTERCEPTOR = "interceptor";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel = new ChannelListPanel();
   private final DccTransfersPanel dccTransfersPanel;
   private final LogViewerPanel logViewerPanel;
+  private final InterceptorStore interceptorStore;
+  private final InterceptorPanel interceptorPanel;
 
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private int lastTopicHeightPx = 58;
@@ -140,6 +145,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      ServerProxyResolver proxyResolver,
                      ChatHistoryService chatHistoryService,
                      ChatLogViewerService chatLogViewerService,
+                     InterceptorStore interceptorStore,
                      DccTransferStore dccTransferStore,
                      UiSettingsBus settingsBus,
                      CommandHistoryStore commandHistoryStore) {
@@ -156,6 +162,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.userListStore = userListStore;
     this.proxyResolver = proxyResolver;
     this.chatHistoryService = chatHistoryService;
+    this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
 
     this.nickContextMenu = nickContextMenuFactory.create(new NickContextMenuFactory.Callbacks() {
       @Override
@@ -233,12 +240,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       outboundBus.emit(cmd);
     });
     this.logViewerPanel = new LogViewerPanel(java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"));
+    this.interceptorPanel = new InterceptorPanel(this.interceptorStore);
 
     centerCards.add(topicSplit, CARD_TRANSCRIPT);
     centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
     centerCards.add(channelListPanel, CARD_CHANNEL_LIST);
     centerCards.add(dccTransfersPanel, CARD_DCC_TRANSFERS);
     centerCards.add(logViewerPanel, CARD_LOG_VIEWER);
+    centerCards.add(interceptorPanel, CARD_INTERCEPTOR);
     add(centerCards, BorderLayout.CENTER);
     showTranscriptCard();
     hideTopicPanel();
@@ -289,6 +298,19 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.activeTarget = new TargetRef("default", "status");
     stateByTarget.put(activeTarget, new ViewState());
     updateDockTitle();
+
+    disposables.add(this.interceptorStore.changes().subscribe(ch -> {
+      TargetRef at = activeTarget;
+      if (at == null || !at.isInterceptor()) return;
+      if (!Objects.equals(at.serverId(), ch.serverId())) return;
+      if (!Objects.equals(at.interceptorId(), ch.interceptorId())) return;
+      SwingUtilities.invokeLater(() -> {
+        updateDockTitle();
+        interceptorPanel.setInterceptorTarget(at.serverId(), at.interceptorId());
+      });
+    }, err -> {
+      // Keep chat UI usable even if interceptor updates fail.
+    }));
   }
 
   @Override
@@ -351,6 +373,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       updateTopicPanelForActiveTarget();
       return;
     }
+    if (target.isInterceptor()) {
+      showInterceptorCard(target.serverId(), target.interceptorId());
+      // Interceptor view does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
 
     showTranscriptCard();
     transcripts.ensureTargetExists(target);
@@ -409,6 +438,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       logViewerPanel.setServerId(serverId);
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_LOG_VIEWER);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showInterceptorCard(String serverId, String interceptorId) {
+    try {
+      interceptorPanel.setInterceptorTarget(serverId, interceptorId);
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_INTERCEPTOR);
     } catch (Exception ignored) {
     }
   }
@@ -640,7 +678,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   public void showTypingIndicator(TargetRef target, String nick, String state) {
     if (target == null || nick == null || nick.isBlank()) return;
     if (activeTarget == null || !activeTarget.equals(target)) return;
-    inputPanel.showRemoteTypingIndicator(nick, state);
+    boolean atBottomBefore = isTranscriptAtBottom();
+    if (atBottomBefore) {
+      armTailPinOnNextAppendIfAtBottom();
+    }
+    boolean typingBannerVisibilityChanged = inputPanel.showRemoteTypingIndicator(nick, state);
+    repinAfterInputAreaGeometryChange(atBottomBefore, typingBannerVisibilityChanged);
   }
 
   public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
@@ -650,7 +693,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     if ("typing".equals(cap) || "message-tags".equals(cap)) {
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
-        inputPanel.clearRemoteTypingIndicator();
+        boolean atBottomBefore = isTranscriptAtBottom();
+        if (atBottomBefore) {
+          armTailPinOnNextAppendIfAtBottom();
+        }
+        boolean typingBannerVisibilityChanged = inputPanel.clearRemoteTypingIndicator();
+        repinAfterInputAreaGeometryChange(atBottomBefore, typingBannerVisibilityChanged);
         refreshTypingSignalAvailabilityForActiveTarget();
       }
       return;
@@ -678,6 +726,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         draftByTarget.put(t, after);
       }
     }
+  }
+
+  private void repinAfterInputAreaGeometryChange(boolean atBottomBefore, boolean inputAreaChangedHeight) {
+    if (!atBottomBefore || !inputAreaChangedHeight) return;
+    SwingUtilities.invokeLater(this::scrollToBottom);
   }
 
   @Override
@@ -1053,6 +1106,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (t.isApplicationJhiccup()) return "jHiccup";
     if (t.isLogViewer()) return "Log Viewer";
+    if (t.isInterceptor()) {
+      String name = interceptorStore.interceptorName(t.serverId(), t.interceptorId());
+      return (name == null || name.isBlank()) ? "Interceptor" : name;
+    }
     if (t.isStatus()) return "Server";
     String name = t.target();
     if (name == null || name.isBlank()) return "Chat";
@@ -1271,6 +1328,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
     try {
       logViewerPanel.close();
+    } catch (Exception ignored) {
+    }
+    try {
+      interceptorPanel.close();
     } catch (Exception ignored) {
     }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.

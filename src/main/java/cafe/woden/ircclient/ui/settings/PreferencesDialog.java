@@ -4452,14 +4452,17 @@ panel.add(subTabs, "growx, wmin 0");
           modelCol = table.convertColumnIndexToModel(column);
         } catch (Exception ignored) {
         }
-        boolean editable = table.getModel() != null && table.getModel().isCellEditable(modelRow, modelCol);
+        boolean applicable = true;
+        if (table.getModel() instanceof IrcEventNotificationTableModel tm) {
+          applicable = IrcEventNotificationTableModel.sourcePatternAllowed(tm.sourceModeAt(modelRow));
+        }
         Font base = table != null ? table.getFont() : c.getFont();
         if (base != null) {
-          c.setFont(editable ? base : base.deriveFont(Font.ITALIC));
+          c.setFont(applicable ? base : base.deriveFont(Font.ITALIC));
         }
-        c.setEnabled(editable);
+        c.setEnabled(applicable);
 
-        if (!editable) {
+        if (!applicable) {
           String text = Objects.toString(value, "").trim();
           c.setText(text.isEmpty() ? "N/A" : text);
 
@@ -4521,14 +4524,17 @@ panel.add(subTabs, "growx, wmin 0");
           modelCol = table.convertColumnIndexToModel(column);
         } catch (Exception ignored) {
         }
-        boolean editable = table.getModel() != null && table.getModel().isCellEditable(modelRow, modelCol);
+        boolean applicable = true;
+        if (table.getModel() instanceof IrcEventNotificationTableModel tm) {
+          applicable = IrcEventNotificationTableModel.channelPatternAllowed(tm.channelScopeAt(modelRow));
+        }
         Font base = table != null ? table.getFont() : c.getFont();
         if (base != null) {
-          c.setFont(editable ? base : base.deriveFont(Font.ITALIC));
+          c.setFont(applicable ? base : base.deriveFont(Font.ITALIC));
         }
-        c.setEnabled(editable);
+        c.setEnabled(applicable);
 
-        if (!editable) {
+        if (!applicable) {
           String text = Objects.toString(value, "").trim();
           c.setText(text.isEmpty() ? "N/A" : text);
 
@@ -4681,24 +4687,30 @@ panel.add(subTabs, "growx, wmin 0");
       int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
       if (row < 0) return;
 
-      BuiltInSound selectedSound = (BuiltInSound) sound.getSelectedItem();
-      String soundId = selectedSound != null ? selectedSound.name() : BuiltInSound.NOTIF_1.name();
-      boolean custom = useCustom.isSelected();
-      String rel = customPath.getText() != null ? customPath.getText().trim() : "";
-      if (rel.isBlank()) rel = null;
-      model.setSoundConfig(row, soundId, custom, rel);
+      syncing[0] = true;
+      try {
+        BuiltInSound selectedSound = (BuiltInSound) sound.getSelectedItem();
+        String soundId = selectedSound != null ? selectedSound.name() : BuiltInSound.NOTIF_1.name();
+        boolean custom = useCustom.isSelected();
+        String rel = customPath.getText() != null ? customPath.getText().trim() : "";
+        if (rel.isBlank()) rel = null;
+        model.setSoundConfig(row, soundId, custom, rel);
 
-      clearCustom.setEnabled(rel != null);
+        clearCustom.setEnabled(rel != null);
 
-      String script = scriptPath.getText() != null ? scriptPath.getText().trim() : "";
-      if (script.isBlank()) script = null;
-      String args = scriptArgs.getText() != null ? scriptArgs.getText().trim() : "";
-      if (args.isBlank()) args = null;
-      String cwd = scriptWorkingDirectory.getText() != null ? scriptWorkingDirectory.getText().trim() : "";
-      if (cwd.isBlank()) cwd = null;
-      model.setScriptConfig(row, runScript.isSelected(), script, args, cwd);
-      clearScript.setEnabled(script != null);
-      clearScriptWorkingDirectory.setEnabled(cwd != null);
+        String script = scriptPath.getText() != null ? scriptPath.getText().trim() : "";
+        if (script.isBlank()) script = null;
+        String args = scriptArgs.getText() != null ? scriptArgs.getText().trim() : "";
+        if (args.isBlank()) args = null;
+        String cwd = scriptWorkingDirectory.getText() != null ? scriptWorkingDirectory.getText().trim() : "";
+        if (cwd.isBlank()) cwd = null;
+        model.setScriptConfig(row, runScript.isSelected(), script, args, cwd);
+        clearScript.setEnabled(script != null);
+        clearScriptWorkingDirectory.setEnabled(cwd != null);
+      } finally {
+        syncing[0] = false;
+      }
+      loadSelectedRuleActions.run();
     };
 
     Runnable persistSelectedRuleCore = () -> {
@@ -4707,17 +4719,23 @@ panel.add(subTabs, "growx, wmin 0");
       int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
       if (row < 0) return;
 
-      model.setValueAt(detailEnabled.isSelected(), row, IrcEventNotificationTableModel.COL_ENABLED);
-      model.setValueAt(detailEvent.getSelectedItem(), row, IrcEventNotificationTableModel.COL_EVENT);
-      model.setValueAt(detailSource.getSelectedItem(), row, IrcEventNotificationTableModel.COL_SOURCE);
-      model.setValueAt(detailSourcePattern.getText(), row, IrcEventNotificationTableModel.COL_SOURCE_PATTERN);
-      model.setValueAt(detailChannelScope.getSelectedItem(), row, IrcEventNotificationTableModel.COL_CHANNEL_SCOPE);
-      model.setValueAt(detailChannelPatterns.getText(), row, IrcEventNotificationTableModel.COL_CHANNEL_PATTERNS);
-      model.setValueAt(detailFocus.getSelectedItem(), row, IrcEventNotificationTableModel.COL_FOCUS_SCOPE);
-      model.setValueAt(detailToast.isSelected(), row, IrcEventNotificationTableModel.COL_TOAST);
-      model.setValueAt(detailStatusBar.isSelected(), row, IrcEventNotificationTableModel.COL_STATUS_BAR);
-      model.setValueAt(detailNode.isSelected(), row, IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
-      model.setValueAt(detailSound.isSelected(), row, IrcEventNotificationTableModel.COL_SOUND);
+      syncing[0] = true;
+      try {
+        model.setValueAt(detailEnabled.isSelected(), row, IrcEventNotificationTableModel.COL_ENABLED);
+        model.setValueAt(detailEvent.getSelectedItem(), row, IrcEventNotificationTableModel.COL_EVENT);
+        model.setValueAt(detailSource.getSelectedItem(), row, IrcEventNotificationTableModel.COL_SOURCE);
+        model.setValueAt(detailSourcePattern.getText(), row, IrcEventNotificationTableModel.COL_SOURCE_PATTERN);
+        model.setValueAt(detailChannelScope.getSelectedItem(), row, IrcEventNotificationTableModel.COL_CHANNEL_SCOPE);
+        model.setValueAt(detailChannelPatterns.getText(), row, IrcEventNotificationTableModel.COL_CHANNEL_PATTERNS);
+        model.setValueAt(detailFocus.getSelectedItem(), row, IrcEventNotificationTableModel.COL_FOCUS_SCOPE);
+        model.setValueAt(detailToast.isSelected(), row, IrcEventNotificationTableModel.COL_TOAST);
+        model.setValueAt(detailStatusBar.isSelected(), row, IrcEventNotificationTableModel.COL_STATUS_BAR);
+        model.setValueAt(detailNode.isSelected(), row, IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
+        model.setValueAt(detailSound.isSelected(), row, IrcEventNotificationTableModel.COL_SOUND);
+      } finally {
+        syncing[0] = false;
+      }
+      loadSelectedRuleActions.run();
     };
 
     table.getSelectionModel().addListSelectionListener(e -> {
@@ -4725,7 +4743,10 @@ panel.add(subTabs, "growx, wmin 0");
       loadSelectedRuleActions.run();
     });
 
-    model.addTableModelListener(e -> loadSelectedRuleActions.run());
+    model.addTableModelListener(e -> {
+      if (syncing[0]) return;
+      loadSelectedRuleActions.run();
+    });
 
     sound.addActionListener(e -> persistSelectedRuleActions.run());
     useCustom.addActionListener(e -> persistSelectedRuleActions.run());
@@ -6367,7 +6388,7 @@ panel.add(subTabs, "growx, wmin 0");
 
     String lower = raw.toLowerCase(Locale.ROOT);
     return switch (lower) {
-      case "system", "nimbus", "nimbus-dark", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
+      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
       default -> true;
     };
   }
@@ -7121,17 +7142,7 @@ panel.add(subTabs, "growx, wmin 0");
 
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return false;
-      if (columnIndex < 0 || columnIndex >= COLS.length) return false;
-
-      MutableRule r = rows.get(rowIndex);
-      if (columnIndex == COL_SOURCE_PATTERN) {
-        return sourcePatternAllowed(r != null ? r.sourceMode : null);
-      }
-      if (columnIndex == COL_CHANNEL_PATTERNS) {
-        return channelPatternAllowed(r != null ? r.channelScope : null);
-      }
-      return true;
+      return false;
     }
 
     @Override

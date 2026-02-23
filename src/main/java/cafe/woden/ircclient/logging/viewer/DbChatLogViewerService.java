@@ -2,6 +2,7 @@ package cafe.woden.ircclient.logging.viewer;
 
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.logging.model.LogKind;
 import cafe.woden.ircclient.logging.model.LogRow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -26,6 +28,58 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
 
   private static final TextMatcher MATCH_ALL = value -> true;
   private static final Meta EMPTY_META = new Meta("", "", Map.of());
+  private static final Pattern NUMERIC_REPLY_PREFIX = Pattern.compile("^\\s*\\[(\\d{3,4})]");
+
+  private static final Set<String> SERVER_EVENT_FROM_TOKENS = Set.of(
+      "server",
+      "mode",
+      "join",
+      "part",
+      "quit",
+      "nick",
+      "conn",
+      "ui",
+      "names",
+      "who",
+      "topic"
+  );
+
+  private static final Set<String> PROTOCOL_FROM_TOKENS = Set.of(
+      "cap",
+      "sasl",
+      "raw",
+      "protocol",
+      "debug",
+      "isupport",
+      "who",
+      "names",
+      "list"
+  );
+
+  private static final String[] PROTOCOL_TEXT_MARKERS = {
+      "cap ls",
+      "cap req",
+      "cap ack",
+      "cap nak",
+      "cap new",
+      "cap del",
+      "cap end",
+      " authenticate ",
+      " sasl",
+      "isupport",
+      "chathistory",
+      "batch",
+      "znc.in/",
+      "draft/",
+      "channel modes:",
+      "end of /who",
+      "end of who",
+      "end of /names",
+      "end of names",
+      "end of /list",
+      "end of list",
+      "end of motd"
+  };
 
   private final ChatLogRepository repo;
 
@@ -47,10 +101,19 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
 
     int wanted = clampLimit(query.limit());
     TextMatcher nickMatcher = compileMatcher(query.nickPattern(), query.nickMode(), "nick");
+    TextMatcher messageMatcher = compileMatcher(query.messagePattern(), query.messageMode(), "message");
     TextMatcher hostmaskMatcher = compileMatcher(query.hostmaskPattern(), query.hostmaskMode(), "hostmask");
     TextMatcher channelMatcher = compileMatcher(query.channelPattern(), query.channelMode(), "channel");
+    boolean includeServerEvents = query.includeServerEvents();
+    boolean includeProtocolDetails = query.includeProtocolDetails();
 
-    boolean hasPostFilters = nickMatcher != MATCH_ALL || hostmaskMatcher != MATCH_ALL || channelMatcher != MATCH_ALL;
+    boolean hasPostFilters =
+        nickMatcher != MATCH_ALL
+            || messageMatcher != MATCH_ALL
+            || hostmaskMatcher != MATCH_ALL
+            || channelMatcher != MATCH_ALL
+            || !includeServerEvents
+            || !includeProtocolDetails;
     int scanLimit = wanted;
     if (hasPostFilters) {
       long expanded = (long) wanted * FILTER_SCAN_MULTIPLIER;
@@ -71,9 +134,13 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
       Meta meta = parseMeta(line.metaJson());
       String fromNick = Objects.toString(line.fromNick(), "").trim();
       String target = Objects.toString(line.target(), "").trim();
+      String text = Objects.toString(line.text(), "").trim();
       if (!nickMatcher.matches(fromNick)) continue;
+      if (!messageMatcher.matches(text)) continue;
       if (!hostmaskMatcher.matches(meta.hostmask())) continue;
       if (!channelMatcher.matches(target)) continue;
+      if (!includeServerEvents && isServerEventLine(line)) continue;
+      if (!includeProtocolDetails && isProtocolDebugLine(line)) continue;
 
       out.add(new ChatLogViewerRow(
           row.id(),
@@ -195,6 +262,46 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
     if (n == null || n.isNull()) return "";
     String s = n.asText("");
     return Objects.toString(s, "").trim();
+  }
+
+  private static boolean isServerEventLine(LogLine line) {
+    if (line == null) return false;
+    LogKind kind = line.kind();
+    if (kind == null) kind = LogKind.STATUS;
+    if (kind == LogKind.ERROR) return false;
+    if (kind == LogKind.PRESENCE) return true;
+
+    String from = fromToken(line.fromNick());
+    if (SERVER_EVENT_FROM_TOKENS.contains(from)) return true;
+    return kind == LogKind.STATUS;
+  }
+
+  private static boolean isProtocolDebugLine(LogLine line) {
+    if (line == null) return false;
+    LogKind kind = line.kind();
+    if (kind == LogKind.CHAT || kind == LogKind.ACTION || kind == LogKind.SPOILER) return false;
+
+    String from = fromToken(line.fromNick());
+    if (PROTOCOL_FROM_TOKENS.contains(from)) return true;
+
+    String text = Objects.toString(line.text(), "").trim();
+    if (text.isEmpty()) return false;
+    if (NUMERIC_REPLY_PREFIX.matcher(text).find()) return true;
+
+    String lower = text.toLowerCase(Locale.ROOT);
+    for (String marker : PROTOCOL_TEXT_MARKERS) {
+      if (marker == null || marker.isBlank()) continue;
+      if (lower.contains(marker)) return true;
+    }
+    return false;
+  }
+
+  private static String fromToken(String rawFrom) {
+    String from = Objects.toString(rawFrom, "").trim().toLowerCase(Locale.ROOT);
+    if (from.length() >= 2 && from.charAt(0) == '(' && from.charAt(from.length() - 1) == ')') {
+      from = from.substring(1, from.length() - 1).trim();
+    }
+    return from;
   }
 
   private interface TextMatcher {

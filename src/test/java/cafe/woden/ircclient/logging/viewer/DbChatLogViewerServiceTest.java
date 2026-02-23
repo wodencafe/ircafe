@@ -34,10 +34,14 @@ class DbChatLogViewerServiceTest {
         "srv",
         "ali",
         ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
         "example.com",
         ChatLogViewerMatchMode.CONTAINS,
         "#chan",
         ChatLogViewerMatchMode.CONTAINS,
+        false,
+        false,
         null,
         null,
         200
@@ -66,10 +70,14 @@ class DbChatLogViewerServiceTest {
         "srv",
         "A*",
         ChatLogViewerMatchMode.GLOB,
+        "he*o",
+        ChatLogViewerMatchMode.GLOB,
         "example\\.net$",
         ChatLogViewerMatchMode.REGEX,
         "#ch?n",
         ChatLogViewerMatchMode.GLOB,
+        false,
+        false,
         null,
         null,
         100
@@ -78,6 +86,39 @@ class DbChatLogViewerServiceTest {
     ChatLogViewerResult res = svc.search(q);
     assertEquals(1, res.rows().size());
     assertEquals("alice!u@example.net", res.rows().getFirst().hostmask());
+  }
+
+  @Test
+  void filtersByMessageText() {
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    DbChatLogViewerService svc = new DbChatLogViewerService(repo);
+
+    when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
+        .thenReturn(List.of(
+            row(21L, LogKind.CHAT, "Alice", "hello world", "{}", LogDirection.IN),
+            row(20L, LogKind.CHAT, "Bob", "goodbye", "{}", LogDirection.IN)
+        ));
+
+    ChatLogViewerQuery q = new ChatLogViewerQuery(
+        "srv",
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "hello",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        false,
+        false,
+        null,
+        null,
+        100
+    );
+
+    ChatLogViewerResult res = svc.search(q);
+    assertEquals(1, res.rows().size());
+    assertEquals(21L, res.rows().getFirst().id());
   }
 
   @Test
@@ -93,6 +134,10 @@ class DbChatLogViewerServiceTest {
         ChatLogViewerMatchMode.CONTAINS,
         "",
         ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        false,
+        false,
         null,
         null,
         100
@@ -101,15 +146,108 @@ class DbChatLogViewerServiceTest {
     assertThrows(IllegalArgumentException.class, () -> svc.search(q));
   }
 
+  @Test
+  void hidesServerAndProtocolNoiseByDefault() {
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    DbChatLogViewerService svc = new DbChatLogViewerService(repo);
+
+    when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
+        .thenReturn(List.of(
+            row(101L, LogKind.STATUS, "(server)", "[315] End of WHO list. (#chan)", "{}", LogDirection.SYSTEM),
+            row(100L, LogKind.STATUS, "(mode)", "Channel modes: +nt", "{}", LogDirection.SYSTEM),
+            row(99L, LogKind.ERROR, "(conn)", "Disconnected: timeout", "{}", LogDirection.SYSTEM),
+            row(98L, LogKind.CHAT, "Alice", "hello", "{}", LogDirection.IN)
+        ));
+
+    ChatLogViewerQuery q = new ChatLogViewerQuery(
+        "srv",
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        false,
+        false,
+        null,
+        null,
+        200
+    );
+
+    ChatLogViewerResult res = svc.search(q);
+    assertEquals(2, res.rows().size());
+    assertEquals(99L, res.rows().get(0).id());
+    assertEquals(98L, res.rows().get(1).id());
+  }
+
+  @Test
+  void canIncludeServerEventsButKeepProtocolDetailsHidden() {
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    DbChatLogViewerService svc = new DbChatLogViewerService(repo);
+
+    when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
+        .thenReturn(List.of(
+            row(201L, LogKind.STATUS, "(server)", "[315] End of WHO list. (#chan)", "{}", LogDirection.SYSTEM),
+            row(200L, LogKind.STATUS, "(server)", "Connected to irc.libera.chat", "{}", LogDirection.SYSTEM)
+        ));
+
+    ChatLogViewerQuery hideProtocol = new ChatLogViewerQuery(
+        "srv",
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        true,
+        false,
+        null,
+        null,
+        200
+    );
+
+    ChatLogViewerResult withoutProtocol = svc.search(hideProtocol);
+    assertEquals(1, withoutProtocol.rows().size());
+    assertEquals(200L, withoutProtocol.rows().getFirst().id());
+
+    ChatLogViewerQuery showProtocol = new ChatLogViewerQuery(
+        "srv",
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        true,
+        true,
+        null,
+        null,
+        200
+    );
+
+    ChatLogViewerResult withProtocol = svc.search(showProtocol);
+    assertEquals(2, withProtocol.rows().size());
+  }
+
   private static LogRow row(long id, String fromNick, String metaJson) {
+    return row(id, LogKind.CHAT, fromNick, "hello", metaJson, LogDirection.IN);
+  }
+
+  private static LogRow row(long id, LogKind kind, String fromNick, String text, String metaJson, LogDirection direction) {
     return new LogRow(id, new LogLine(
         "srv",
         "#chan",
         1_700_000_000_000L,
-        LogDirection.IN,
-        LogKind.CHAT,
+        direction,
+        kind,
         fromNick,
-        "hello",
+        text,
         false,
         false,
         metaJson
