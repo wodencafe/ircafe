@@ -127,6 +127,12 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class PreferencesDialog {
+  private static final String DENSITY_TOOLTIP =
+      "Changes the overall UI spacing / row height. Changes preview live; Apply/OK saves.";
+  private static final String CORNER_RADIUS_TOOLTIP =
+      "Controls rounded corner radius for buttons/fields/etc. Changes preview live; Apply/OK saves.";
+  private static final String FLAT_ONLY_TOOLTIP =
+      "Available for FlatLaf-based themes only.";
 
   private final UiSettingsBus settingsBus;
   private final ThemeManager themeManager;
@@ -223,7 +229,7 @@ public class PreferencesDialog {
         ? accentSettingsBus.get()
         : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
     AccentControls accent = buildAccentControls(initialAccent);
-    ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+    ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
     TweakControls tweaks = buildTweakControls(initialTweaks);
 
     ChatThemeSettings initialChatTheme = chatThemeSettingsBus != null
@@ -246,7 +252,7 @@ public class PreferencesDialog {
             ? initialAccent
             : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
     final java.util.concurrent.atomic.AtomicReference<ThemeTweakSettings> committedTweakSettings = new java.util.concurrent.atomic.AtomicReference<>(
-        initialTweaks != null ? initialTweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+        initialTweaks != null ? initialTweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
     final java.util.concurrent.atomic.AtomicReference<ChatThemeSettings> committedChatThemeSettings = new java.util.concurrent.atomic.AtomicReference<>(
         initialChatTheme != null
             ? initialChatTheme
@@ -275,7 +281,7 @@ public class PreferencesDialog {
 
       if (tweakSettingsBus != null) {
         DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
-        String densityId = opt != null ? opt.id() : "cozy";
+        String densityId = opt != null ? opt.id() : "auto";
         ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
             ThemeTweakSettings.ThemeDensity.from(densityId),
             tweaks.cornerRadius.getValue()
@@ -412,7 +418,7 @@ public class PreferencesDialog {
         }
         if (tweakSettingsBus != null) {
           ThemeTweakSettings tw = committedTweakSettings.get();
-          tweakSettingsBus.set(tw != null ? tw : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10));
+          tweakSettingsBus.set(tw != null ? tw : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
         }
         if (chatThemeSettingsBus != null) {
           ChatThemeSettings ct = committedChatThemeSettings.get();
@@ -431,9 +437,21 @@ public class PreferencesDialog {
       }
     };
 
+    final Runnable updateFlatTweakCapabilityUi = () -> {
+      Object selectedTheme = theme.combo.getSelectedItem();
+      String selectedThemeId = selectedTheme != null ? selectedTheme.toString() : "";
+      boolean flatTweakCapable = supportsFlatLafTweaksInternal(selectedThemeId);
+      tweaks.density.setEnabled(flatTweakCapable);
+      tweaks.cornerRadius.setEnabled(flatTweakCapable);
+      tweaks.density.setToolTipText(flatTweakCapable ? DENSITY_TOOLTIP : FLAT_ONLY_TOOLTIP);
+      tweaks.cornerRadius.setToolTipText(flatTweakCapable ? CORNER_RADIUS_TOOLTIP : FLAT_ONLY_TOOLTIP);
+    };
+    updateFlatTweakCapabilityUi.run();
+
     final boolean[] ignoreThemeComboEvents = new boolean[] { true };
     theme.combo.addActionListener(e -> {
       if (ignoreThemeComboEvents[0]) return;
+      updateFlatTweakCapabilityUi.run();
       scheduleLafPreview.run();
     });
     ignoreThemeComboEvents[0] = false;
@@ -593,9 +611,9 @@ public class PreferencesDialog {
 
       ThemeTweakSettings prevTweaks = tweakSettingsBus != null
           ? tweakSettingsBus.get()
-          : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+          : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
       DensityOption densityOpt = (DensityOption) tweaks.density.getSelectedItem();
-      String densityIdV = densityOpt != null ? densityOpt.id() : "cozy";
+      String densityIdV = densityOpt != null ? densityOpt.id() : "auto";
       int cornerRadiusV = tweaks.cornerRadius.getValue();
       ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
           ThemeTweakSettings.ThemeDensity.from(densityIdV),
@@ -2061,16 +2079,17 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
 
   private TweakControls buildTweakControls(ThemeTweakSettings current) {
-    ThemeTweakSettings cur = current != null ? current : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.COZY, 10);
+    ThemeTweakSettings cur = current != null ? current : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
 
     DensityOption[] opts = new DensityOption[] {
+        new DensityOption("auto", "Auto (theme default)"),
         new DensityOption("compact", "Compact"),
-        new DensityOption("cozy", "Cozy (default)"),
+        new DensityOption("cozy", "Cozy"),
         new DensityOption("spacious", "Spacious")
     };
 
     JComboBox<DensityOption> density = new JComboBox<>(opts);
-    density.setToolTipText("Changes the overall UI spacing / row height. Changes preview live; Apply/OK saves.");
+    density.setToolTipText(DENSITY_TOOLTIP);
     String curId = cur.densityId();
     for (DensityOption o : opts) {
       if (o != null && o.id().equalsIgnoreCase(curId)) {
@@ -2083,7 +2102,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     cornerRadius.setPaintTicks(true);
     cornerRadius.setMajorTickSpacing(5);
     cornerRadius.setMinorTickSpacing(1);
-    cornerRadius.setToolTipText("Controls rounded corner radius for buttons/fields/etc. Changes preview live; Apply/OK saves.");
+    cornerRadius.setToolTipText(CORNER_RADIUS_TOOLTIP);
 
     return new TweakControls(density, cornerRadius);
   }
@@ -2095,6 +2114,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JComboBox<String> fontFamily = new JComboBox<>(families);
     fontFamily.setEditable(true);
     fontFamily.setSelectedItem(current.chatFontFamily());
+    applyEditableComboEditorPalette(fontFamily);
+    fontFamily.addPropertyChangeListener("UI", e -> applyEditableComboEditorPalette(fontFamily));
 
     // Allow scrolling through the font list while hovering with the mousewheel.
     if (closeables != null) {
@@ -2180,6 +2201,44 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JSpinner fontSize = numberSpinner(current.chatFontSize(), 8, 48, 1, closeables);
 
     return new FontControls(fontFamily, fontSize);
+  }
+
+  private static void applyEditableComboEditorPalette(JComboBox<?> combo) {
+    if (combo == null || !combo.isEditable()) return;
+    javax.swing.ComboBoxEditor editor = combo.getEditor();
+    if (editor == null) return;
+
+    java.awt.Component editorComponent = editor.getEditorComponent();
+    if (!(editorComponent instanceof JTextField field)) return;
+
+    Color bg = firstUiColor("ComboBox.background", "TextField.background", "TextComponent.background");
+    Color fg = firstUiColor("ComboBox.foreground", "TextField.foreground", "Label.foreground");
+    Color selBg = firstUiColor("ComboBox.selectionBackground", "TextComponent.selectionBackground", "List.selectionBackground");
+    Color selFg = firstUiColor("ComboBox.selectionForeground", "TextComponent.selectionForeground", "List.selectionForeground");
+
+    if (bg != null) field.setBackground(asUiResource(bg));
+    if (fg != null) {
+      Color uiFg = asUiResource(fg);
+      field.setForeground(uiFg);
+      field.setCaretColor(uiFg);
+    }
+    if (selBg != null) field.setSelectionColor(asUiResource(selBg));
+    if (selFg != null) field.setSelectedTextColor(asUiResource(selFg));
+  }
+
+  private static Color firstUiColor(String... keys) {
+    if (keys == null) return null;
+    for (String key : keys) {
+      if (key == null || key.isBlank()) continue;
+      Color c = UIManager.getColor(key);
+      if (c != null) return c;
+    }
+    return null;
+  }
+
+  private static Color asUiResource(Color c) {
+    if (c == null || c instanceof javax.swing.plaf.ColorUIResource) return c;
+    return new javax.swing.plaf.ColorUIResource(c);
   }
 
   private JCheckBox buildAutoConnectCheckbox(UiSettings current) {
@@ -3774,6 +3833,11 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(new JLabel("Corner radius"));
     form.add(tweaks.cornerRadius, "growx");
 
+    JTextArea tweakHint = subtleInfoText();
+    tweakHint.setText("Density and corner radius are available for FlatLaf-based themes.");
+    form.add(new JLabel(""));
+    form.add(tweakHint, "growx, wmin 0");
+
     JButton reset = new JButton("Reset to defaults");
     reset.setToolTipText("Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
     reset.addActionListener(e -> {
@@ -3787,7 +3851,7 @@ panel.add(subTabs, "growx, wmin 0");
       // LAF tweak defaults
       for (int i = 0; i < tweaks.density.getItemCount(); i++) {
         DensityOption o = tweaks.density.getItemAt(i);
-        if (o != null && "cozy".equalsIgnoreCase(o.id())) {
+        if (o != null && "auto".equalsIgnoreCase(o.id())) {
           tweaks.density.setSelectedIndex(i);
           break;
         }
@@ -6288,6 +6352,24 @@ panel.add(subTabs, "growx, wmin 0");
     if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
     String last = s.substring(s.lastIndexOf('.') + 1);
     return !last.isBlank() && Character.isUpperCase(last.charAt(0));
+  }
+
+  private static boolean supportsFlatLafTweaksInternal(String themeId) {
+    String raw = themeId != null ? themeId.trim() : "";
+    if (raw.isEmpty()) return true; // defaults to darcula
+
+    if (raw.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+      return true;
+    }
+    if (looksLikeClassNameInternal(raw)) {
+      return raw.toLowerCase(Locale.ROOT).contains("flatlaf");
+    }
+
+    String lower = raw.toLowerCase(Locale.ROOT);
+    return switch (lower) {
+      case "system", "nimbus", "nimbus-dark", "nimbus-orange", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
+      default -> true;
+    };
   }
 
 

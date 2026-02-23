@@ -420,10 +420,10 @@ public class RuntimeConfigStore {
       String d = density != null ? density.trim().toLowerCase(java.util.Locale.ROOT) : "";
       if (d.isEmpty()) {
         ui.remove("density");
-      } else if (d.equals("compact") || d.equals("cozy") || d.equals("spacious")) {
+      } else if (d.equals("auto") || d.equals("compact") || d.equals("cozy") || d.equals("spacious")) {
         ui.put("density", d);
       } else {
-        ui.put("density", "cozy");
+        ui.put("density", "auto");
       }
 
       writeFile(doc);

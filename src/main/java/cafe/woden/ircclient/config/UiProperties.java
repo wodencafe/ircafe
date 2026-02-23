@@ -496,10 +496,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (accentStrength > 100) accentStrength = 100;
 
     // Global LAF tweaks (cheap wins).
-    if (density == null || density.isBlank()) density = "cozy";
+    if (density == null || density.isBlank()) density = "auto";
     density = density.trim().toLowerCase(Locale.ROOT);
-    if (!density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
-      density = "cozy";
+    if (!density.equals("auto") && !density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
+      density = "auto";
     }
 
     if (cornerRadius == null) cornerRadius = 10;
