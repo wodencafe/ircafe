@@ -7,6 +7,7 @@ import cafe.woden.ircclient.logging.model.LogRow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -165,17 +166,48 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
     return new ChatLogViewerResult(List.copyOf(out), candidates.size(), truncated, scanCapped);
   }
 
+  @Override
+  public List<String> listUniqueChannels(String serverId, int limit) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return List.of();
+    int wanted = clampDistinctLimit(limit);
+    if (wanted <= 0) return List.of();
+
+    List<String> targets = repo.distinctTargets(sid, wanted * 3);
+    if (targets == null || targets.isEmpty()) return List.of();
+
+    LinkedHashSet<String> seen = new LinkedHashSet<>();
+    ArrayList<String> out = new ArrayList<>(Math.min(wanted, targets.size()));
+    for (String raw : targets) {
+      String target = Objects.toString(raw, "").trim();
+      if (!isChannelTarget(target)) continue;
+      String key = target.toLowerCase(Locale.ROOT);
+      if (!seen.add(key)) continue;
+      out.add(target);
+      if (out.size() >= wanted) break;
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
+  }
+
   private static int clampLimit(int limit) {
     if (limit <= 0) return DEFAULT_LIMIT;
     return Math.min(limit, MAX_LIMIT);
   }
 
+  private static int clampDistinctLimit(int limit) {
+    if (limit <= 0) return 3000;
+    return Math.min(limit, 20_000);
+  }
+
   private static TextMatcher compileMatcher(String pattern, ChatLogViewerMatchMode mode, String fieldLabel) {
     String p = Objects.toString(pattern, "").trim();
-    if (p.isEmpty()) return MATCH_ALL;
     ChatLogViewerMatchMode m = (mode == null) ? ChatLogViewerMatchMode.CONTAINS : mode;
+    if (m == ChatLogViewerMatchMode.ANY) return MATCH_ALL;
+    if (p.isEmpty()) return MATCH_ALL;
 
     return switch (m) {
+      case ANY -> MATCH_ALL;
       case CONTAINS -> {
         String needle = p.toLowerCase(Locale.ROOT);
         yield value -> Objects.toString(value, "").toLowerCase(Locale.ROOT).contains(needle);
@@ -188,7 +220,28 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
         Pattern re = compileRegex(p, fieldLabel);
         yield value -> re.matcher(Objects.toString(value, "")).find();
       }
+      case LIST -> {
+        Set<String> wanted = parseListTokens(p);
+        if (wanted.isEmpty()) {
+          yield MATCH_ALL;
+        }
+        yield value -> wanted.contains(Objects.toString(value, "").trim().toLowerCase(Locale.ROOT));
+      }
     };
+  }
+
+  private static Set<String> parseListTokens(String raw) {
+    String text = Objects.toString(raw, "").trim();
+    if (text.isEmpty()) return Set.of();
+    String[] parts = text.split("[,;\\s]+");
+    LinkedHashSet<String> out = new LinkedHashSet<>(parts.length);
+    for (String part : parts) {
+      String token = Objects.toString(part, "").trim().toLowerCase(Locale.ROOT);
+      if (token.isEmpty()) continue;
+      out.add(token);
+    }
+    if (out.isEmpty()) return Set.of();
+    return Set.copyOf(out);
   }
 
   private static Pattern compileRegex(String pattern, String fieldLabel) {
@@ -282,6 +335,13 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
   private static boolean isStatusTarget(String rawTarget) {
     String target = Objects.toString(rawTarget, "").trim();
     return target.equalsIgnoreCase("status");
+  }
+
+  private static boolean isChannelTarget(String rawTarget) {
+    String target = Objects.toString(rawTarget, "").trim();
+    if (target.isEmpty()) return false;
+    char first = target.charAt(0);
+    return first == '#' || first == '&';
   }
 
   private static boolean isNoticeServerFrom(String rawFrom) {

@@ -26,6 +26,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import org.slf4j.Logger;
@@ -53,6 +55,11 @@ public class InterceptorStore {
   private final int maxHitsPerInterceptor;
   private final ExecutorService ingestExecutor =
       VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-store");
+  private final ExecutorService persistExecutor =
+      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-persist");
+  private final AtomicLong persistRequestSeq = new AtomicLong(0L);
+  private final AtomicReference<Map<String, List<InterceptorDefinition>>> pendingPersistSnapshot =
+      new AtomicReference<>();
 
   private final ConcurrentHashMap<String, LinkedHashMap<String, InterceptorDefinition>> defsByServer =
       new ConcurrentHashMap<>();
@@ -218,6 +225,49 @@ public class InterceptorStore {
     return changed;
   }
 
+  public boolean setInterceptorEnabled(String serverId, String interceptorId, boolean enabled) {
+    String sid = norm(serverId);
+    String iid = norm(interceptorId);
+    if (sid.isEmpty() || iid.isEmpty()) return false;
+
+    LinkedHashMap<String, InterceptorDefinition> defs = defsByServer.get(sid);
+    if (defs == null) return false;
+
+    boolean changed = false;
+    synchronized (defs) {
+      InterceptorDefinition prev = defs.get(iid);
+      if (prev == null) return false;
+      if (prev.enabled() == enabled) return false;
+      defs.put(iid, new InterceptorDefinition(
+          iid,
+          prev.name(),
+          enabled,
+          prev.scopeServerId(),
+          prev.channelIncludeMode(),
+          prev.channelIncludes(),
+          prev.channelExcludeMode(),
+          prev.channelExcludes(),
+          prev.actionSoundEnabled(),
+          prev.actionStatusBarEnabled(),
+          prev.actionToastEnabled(),
+          prev.actionSoundId(),
+          prev.actionSoundUseCustom(),
+          prev.actionSoundCustomPath(),
+          prev.actionScriptEnabled(),
+          prev.actionScriptPath(),
+          prev.actionScriptArgs(),
+          prev.actionScriptWorkingDirectory(),
+          prev.rules()));
+      changed = true;
+    }
+
+    if (changed) {
+      persistDefinitions();
+      changes.onNext(new Change(sid, iid));
+    }
+    return changed;
+  }
+
   public boolean removeInterceptor(String serverId, String interceptorId) {
     String sid = norm(serverId);
     String iid = norm(interceptorId);
@@ -348,6 +398,15 @@ public class InterceptorStore {
     changes.onNext(new Change(sid, ""));
   }
 
+  /** Clears only captured hits for a server while preserving persisted interceptor definitions. */
+  public void clearServerHits(String serverId) {
+    String sid = norm(serverId);
+    if (sid.isEmpty()) return;
+    Map<String, List<InterceptorHit>> removed = hitsByServer.remove(sid);
+    if (removed == null || removed.isEmpty()) return;
+    changes.onNext(new Change(sid, ""));
+  }
+
   /** Enqueue event evaluation off the EDT. */
   public void ingestEvent(
       String serverId,
@@ -399,6 +458,8 @@ public class InterceptorStore {
 
   @PreDestroy
   void shutdown() {
+    flushPersistNow();
+    persistExecutor.shutdownNow();
     ingestExecutor.shutdownNow();
   }
 
@@ -884,10 +945,30 @@ public class InterceptorStore {
 
   private void persistDefinitions() {
     if (runtimeConfig == null) return;
+    Map<String, List<InterceptorDefinition>> snapshot = snapshotDefinitionsByServer();
+    pendingPersistSnapshot.set(snapshot);
+    long seq = persistRequestSeq.incrementAndGet();
+    persistExecutor.execute(() -> persistDefinitionsNow(seq));
+  }
+
+  private void persistDefinitionsNow(long requestSeq) {
+    if (runtimeConfig == null) return;
+    if (requestSeq != persistRequestSeq.get()) return;
+    Map<String, List<InterceptorDefinition>> snapshot = pendingPersistSnapshot.get();
     try {
-      runtimeConfig.rememberInterceptorDefinitions(snapshotDefinitionsByServer());
+      runtimeConfig.rememberInterceptorDefinitions(snapshot != null ? snapshot : Map.of());
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist interceptor definitions", e);
+    }
+  }
+
+  private void flushPersistNow() {
+    if (runtimeConfig == null) return;
+    try {
+      Map<String, List<InterceptorDefinition>> snapshot = snapshotDefinitionsByServer();
+      runtimeConfig.rememberInterceptorDefinitions(snapshot);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not flush interceptor definitions", e);
     }
   }
 

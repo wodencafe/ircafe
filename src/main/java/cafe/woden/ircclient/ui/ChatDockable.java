@@ -239,7 +239,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       armTailPinOnNextAppendIfAtBottom();
       outboundBus.emit(cmd);
     });
-    this.logViewerPanel = new LogViewerPanel(java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"));
+    this.logViewerPanel = new LogViewerPanel(
+        java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"),
+        sid -> (this.serverTree == null) ? java.util.List.of() : this.serverTree.openChannelsForServer(sid));
     this.interceptorPanel = new InterceptorPanel(this.interceptorStore);
 
     centerCards.add(topicSplit, CARD_TRANSCRIPT);
@@ -327,6 +329,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   public void setActiveTarget(TargetRef target) {
     if (target == null) return;
     if (Objects.equals(activeTarget, target)) return;
+    boolean leavingInterceptor = activeTarget != null && activeTarget.isInterceptor();
 
     // Incoming typing indicators are per-target. Clear the shared banner before switching
     // so typing users from the previous buffer do not linger in the next buffer UI.
@@ -343,6 +346,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     updateDockTitle();
     refreshTypingSignalAvailabilityForActiveTarget();
     setInputPanelVisibleForTarget(target);
+
+    if (leavingInterceptor && !target.isInterceptor()) {
+      try {
+        interceptorPanel.setInterceptorTarget("", "");
+      } catch (Exception ignored) {
+      }
+    }
 
     // UI-only targets do not have a transcript.
     if (target.isNotifications()) {

@@ -8,6 +8,7 @@ import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
@@ -28,6 +29,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
@@ -70,6 +73,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
   private final InterceptorStore store;
   private final CompositeDisposable disposables = new CompositeDisposable();
+  private final ExecutorService refreshExecutor =
+      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-panel-refresh");
+  private final AtomicLong refreshSeq = new AtomicLong(0L);
 
   private final JLabel title = new JLabel("Interceptor");
   private final JLabel subtitle = new JLabel("Select an interceptor node.");
@@ -88,7 +94,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JCheckBox actionStatusBarEnabled = new JCheckBox("Status bar notice");
   private final JCheckBox actionToastEnabled = new JCheckBox("Desktop toast");
   private final JCheckBox actionSoundEnabled = new JCheckBox("Play sound");
-  private final JComboBox<BuiltInSound> actionSoundId = new JComboBox<>(BuiltInSound.values());
+  private final JComboBox<BuiltInSound> actionSoundId = new JComboBox<>(BuiltInSound.valuesForUi());
   private final JCheckBox actionSoundUseCustom = new JCheckBox("Custom file");
   private final JTextField actionSoundCustomPath = new JTextField();
   private final JButton testSound = new JButton("Test sound");
@@ -105,6 +111,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JButton removeRule = new JButton("Remove");
   private final JPopupMenu rulesPopupMenu = new JPopupMenu();
   private final JMenuItem rulesPopupEdit = new JMenuItem("Edit...");
+  private final JMenuItem rulesPopupRemove = new JMenuItem("Delete...");
   private final JButton clearHits = new JButton("Clear");
 
   private final RulesTableModel rulesModel = new RulesTableModel();
@@ -151,7 +158,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
   @Override
   public void close() {
+    refreshSeq.incrementAndGet();
     disposables.dispose();
+    refreshExecutor.shutdownNow();
   }
 
   private void buildHeader() {
@@ -190,7 +199,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
               boolean cellHasFocus) {
             super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
             if (value instanceof BuiltInSound sound) {
-              setText(sound.displayName());
+              setText(sound.displayNameForUi());
             }
             return this;
           }
@@ -208,7 +217,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Definition", buildDefinitionTab());
     tabs.addTab("Triggers", buildTriggersTab());
-    tabs.addTab("Actions", buildActionsTab());
+    tabs.addTab("Actions", wrapVerticalScroll(buildActionsTab()));
     tabs.addTab("Hits", buildHitsTab());
     add(tabs, BorderLayout.CENTER);
 
@@ -306,14 +315,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
                 "[pref!][grow,fill][pref!]",
                 "[]6[]"));
     sound.setBorder(BorderFactory.createTitledBorder("Sound"));
-    sound.add(actionSoundEnabled, "span 3,wrap");
+    sound.add(actionSoundEnabled, "span 2,growx");
+    sound.add(testSound, "align right,wrap");
     sound.add(new JLabel("Built-in:"));
     sound.add(actionSoundId, "growx");
     sound.add(new JLabel(""));
     sound.add(actionSoundUseCustom, "span 3,wrap");
     sound.add(new JLabel("File:"));
     sound.add(actionSoundCustomPath, "span 2,growx,wrap");
-    sound.add(testSound, "span 3,right");
 
     JPanel script =
         new JPanel(
@@ -337,6 +346,17 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     tab.add(script, "growx");
 
     return tab;
+  }
+
+  private static JScrollPane wrapVerticalScroll(JPanel content) {
+    JScrollPane scroll =
+        new JScrollPane(
+            content,
+            JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+            JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    scroll.setBorder(BorderFactory.createEmptyBorder());
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    return scroll;
   }
 
   private JPanel buildHitsTab() {
@@ -365,7 +385,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     rulesTable.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
 
     rulesPopupEdit.addActionListener(e -> editSelectedRule());
+    rulesPopupRemove.addActionListener(e -> removeSelectedRule());
+    rulesPopupEdit.setIcon(SvgIcons.action("edit", 16));
+    rulesPopupRemove.setIcon(SvgIcons.action("trash", 16));
+    rulesPopupEdit.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+    rulesPopupRemove.setDisabledIcon(SvgIcons.actionDisabled("trash", 16));
+    rulesPopupMenu.setLightWeightPopupEnabled(true);
     rulesPopupMenu.add(rulesPopupEdit);
+    rulesPopupMenu.add(rulesPopupRemove);
 
     rulesTable.getColumnModel().getColumn(0).setPreferredWidth(56); // On
     rulesTable.getColumnModel().getColumn(1).setPreferredWidth(220); // Why
@@ -469,15 +496,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
           }
         });
 
-    removeRule.addActionListener(
-        e -> {
-          int row = selectedRuleModelRow();
-          if (row < 0) return;
-          if (!confirmRuleRemoval(row)) return;
-          rulesModel.removeRow(row);
-          saveCurrentDefinition();
-          updateRuleButtons();
-        });
+    removeRule.addActionListener(e -> removeSelectedRule());
 
     rulesTable.getSelectionModel().addListSelectionListener(e -> updateRuleButtons());
 
@@ -511,8 +530,24 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     } else {
       rulesTable.clearSelection();
     }
-    rulesPopupEdit.setEnabled(controlsEnabled && selectedRuleModelRow() >= 0);
+    boolean hasSelection = controlsEnabled && selectedRuleModelRow() >= 0;
+    rulesPopupEdit.setEnabled(hasSelection);
+    rulesPopupRemove.setEnabled(hasSelection);
+    // Popup menus may be created before theme changes; refresh delegates before showing.
+    try {
+      SwingUtilities.updateComponentTreeUI(rulesPopupMenu);
+    } catch (Exception ignored) {
+    }
     rulesPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+  }
+
+  private void removeSelectedRule() {
+    int row = selectedRuleModelRow();
+    if (row < 0) return;
+    if (!confirmRuleRemoval(row)) return;
+    rulesModel.removeRow(row);
+    saveCurrentDefinition();
+    updateRuleButtons();
   }
 
   private boolean confirmRuleRemoval(int modelRow) {
@@ -870,46 +905,105 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private void refreshFromStore() {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::refreshFromStore);
+      return;
+    }
+
+    long req = refreshSeq.incrementAndGet();
     String sid = serverId;
     String iid = interceptorId;
+    applyLoadingState();
+
     if (sid.isBlank() || iid.isBlank()) {
-      loading = true;
-      title.setText("Interceptor");
-      subtitle.setText("Select an interceptor node.");
-      rulesModel.setRows(List.of());
-      hitsModel.setRows(List.of());
-      status.setText(" ");
-      resetControls();
-      loading = false;
-      setControlsEnabled(false);
+      applyNoSelectionState(req);
       return;
     }
 
-    InterceptorDefinition def = store.interceptor(sid, iid);
+    final String loadSid = sid;
+    final String loadIid = iid;
+    refreshExecutor.execute(() -> loadInterceptorSnapshot(req, loadSid, loadIid));
+  }
+
+  private void applyLoadingState() {
+    loading = true;
+    title.setText("Interceptor");
+    subtitle.setText("Loading interceptor...");
+    status.setText("Loading...");
+    setControlsEnabled(false);
+  }
+
+  private void applyNoSelectionState(long req) {
+    if (req != refreshSeq.get()) return;
+    loading = true;
+    title.setText("Interceptor");
+    subtitle.setText("Select an interceptor node.");
+    rulesModel.setRows(List.of());
+    hitsModel.setRows(List.of());
+    status.setText(" ");
+    resetControls();
+    loading = false;
+    setControlsEnabled(false);
+  }
+
+  private void applyMissingInterceptorState(long req) {
+    if (req != refreshSeq.get()) return;
+    loading = true;
+    title.setText("Interceptor");
+    subtitle.setText("Interceptor was removed.");
+    rulesModel.setRows(List.of());
+    hitsModel.setRows(List.of());
+    status.setText(" ");
+    resetControls();
+    loading = false;
+    setControlsEnabled(false);
+  }
+
+  private void loadInterceptorSnapshot(long req, String sid, String iid) {
+    InterceptorDefinition def;
+    List<InterceptorHit> sorted;
+    try {
+      def = store.interceptor(sid, iid);
+      if (def == null) {
+        SwingUtilities.invokeLater(() -> applyMissingInterceptorState(req));
+        return;
+      }
+
+      List<InterceptorHit> hits = store.listHits(sid, iid, 2_000);
+      ArrayList<InterceptorHit> tmp = new ArrayList<>(hits);
+      tmp.sort(
+          (a, b) -> {
+            Instant aa = a == null ? null : a.at();
+            Instant bb = b == null ? null : b.at();
+            if (aa == null && bb == null) return 0;
+            if (aa == null) return 1;
+            if (bb == null) return -1;
+            return bb.compareTo(aa);
+          });
+      sorted = List.copyOf(tmp);
+    } catch (Exception ignored) {
+      SwingUtilities.invokeLater(() -> applyMissingInterceptorState(req));
+      return;
+    }
+
+    InterceptorDefinition loadedDef = def;
+    List<InterceptorHit> loadedHits = sorted;
+    SwingUtilities.invokeLater(() -> applyLoadedInterceptorSnapshot(req, sid, iid, loadedDef, loadedHits));
+  }
+
+  private void applyLoadedInterceptorSnapshot(
+      long req,
+      String sid,
+      String iid,
+      InterceptorDefinition def,
+      List<InterceptorHit> sortedHits
+  ) {
+    if (req != refreshSeq.get()) return;
+    if (!Objects.equals(serverId, sid) || !Objects.equals(interceptorId, iid)) return;
     if (def == null) {
-      loading = true;
-      title.setText("Interceptor");
-      subtitle.setText("Interceptor was removed.");
-      rulesModel.setRows(List.of());
-      hitsModel.setRows(List.of());
-      status.setText(" ");
-      resetControls();
-      loading = false;
-      setControlsEnabled(false);
+      applyMissingInterceptorState(req);
       return;
     }
-
-    List<InterceptorHit> hits = store.listHits(sid, iid, 2_000);
-    ArrayList<InterceptorHit> sorted = new ArrayList<>(hits);
-    sorted.sort(
-        (a, b) -> {
-          Instant aa = a == null ? null : a.at();
-          Instant bb = b == null ? null : b.at();
-          if (aa == null && bb == null) return 0;
-          if (aa == null) return 1;
-          if (bb == null) return -1;
-          return bb.compareTo(aa);
-        });
 
     loading = true;
     title.setText("Interceptor - " + def.name());
@@ -938,8 +1032,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     actionScriptWorkingDirectory.setText(def.actionScriptWorkingDirectory());
 
     rulesModel.setRows(def.rules());
-    hitsModel.setRows(sorted);
-    status.setText("Hits: " + sorted.size() + "  Rules: " + def.rules().size());
+    List<InterceptorHit> hits = sortedHits == null ? List.of() : sortedHits;
+    hitsModel.setRows(hits);
+    status.setText("Hits: " + hits.size() + "  Rules: " + def.rules().size());
 
     loading = false;
     setControlsEnabled(true);

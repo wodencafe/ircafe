@@ -2386,7 +2386,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     notificationSoundCustomPath.setToolTipText("Custom sound path (relative to the runtime config directory).\n" +
         "Click Browse... to import a file.");
 
-    JComboBox<BuiltInSound> notificationSound = new JComboBox<>(BuiltInSound.values());
+    JComboBox<BuiltInSound> notificationSound = new JComboBox<>(BuiltInSound.valuesForUi());
+    configureBuiltInSoundCombo(notificationSound);
     notificationSound.setSelectedItem(BuiltInSound.fromId(soundSettings.soundId()));
     notificationSound.setToolTipText("Choose which bundled sound to use for notifications.");
 
@@ -2680,6 +2681,27 @@ panel.add(subTabs, "growx, wmin 0");
       }
     }
     return combo;
+  }
+
+  private static void configureBuiltInSoundCombo(JComboBox<BuiltInSound> combo) {
+    if (combo == null) return;
+    combo.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list,
+              Object value,
+              int index,
+              boolean isSelected,
+              boolean cellHasFocus
+          ) {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            if (value instanceof BuiltInSound sound) {
+              setText(sound.displayNameForUi());
+            }
+            return this;
+          }
+        });
   }
 
   private static String typingTreeIndicatorStyleValue(
@@ -4555,7 +4577,8 @@ panel.add(subTabs, "growx, wmin 0");
       }
     });
 
-    JComboBox<BuiltInSound> sound = new JComboBox<>(BuiltInSound.values());
+    JComboBox<BuiltInSound> sound = new JComboBox<>(BuiltInSound.valuesForUi());
+    configureBuiltInSoundCombo(sound);
     JCheckBox useCustom = new JCheckBox("Use custom file");
     JTextField customPath = new JTextField();
     customPath.setEditable(false);
@@ -6416,7 +6439,7 @@ panel.add(subTabs, "growx, wmin 0");
 
     String lower = raw.toLowerCase(Locale.ROOT);
     return switch (lower) {
-      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
+      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-dark-green", "nimbus-dark-orange", "nimbus-dark-magenta", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
       default -> true;
     };
   }

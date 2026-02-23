@@ -87,6 +87,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -1251,6 +1252,21 @@ private static final class InsertionLine {
 
         if (nd.ref.isInterceptor()) {
           menu.addSeparator();
+          String sid = Objects.toString(nd.ref.serverId(), "").trim();
+          String iid = Objects.toString(nd.ref.interceptorId(), "").trim();
+          InterceptorDefinition def =
+              interceptorStore != null && !sid.isEmpty() && !iid.isEmpty()
+                  ? interceptorStore.interceptor(sid, iid)
+                  : null;
+          boolean currentlyEnabled = def == null || def.enabled();
+
+          JMenuItem toggleEnabled = new JMenuItem(currentlyEnabled ? "Disable Interceptor" : "Enable Interceptor");
+          toggleEnabled.setIcon(SvgIcons.action(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setDisabledIcon(SvgIcons.actionDisabled(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setEnabled(interceptorStore != null && def != null);
+          toggleEnabled.addActionListener(ev -> setInterceptorEnabled(nd.ref, !currentlyEnabled));
+          menu.add(toggleEnabled);
+
           JMenuItem rename = new JMenuItem("Rename Interceptor...");
           rename.setIcon(SvgIcons.action("edit", 16));
           rename.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
@@ -1361,6 +1377,22 @@ private static final class InsertionLine {
     }
   }
 
+  private void setInterceptorEnabled(TargetRef ref, boolean enabled) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    try {
+      if (interceptorStore.setInterceptorEnabled(sid, iid, enabled)) {
+        refreshInterceptorNodeLabel(sid, iid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not set interceptor enabled={} for {} on {}", enabled, iid, sid, ex);
+    }
+  }
+
   private void confirmDeleteInterceptor(TargetRef ref, String label) {
     if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
     String sid = Objects.toString(ref.serverId(), "").trim();
@@ -1406,13 +1438,14 @@ private static final class InsertionLine {
 
     String nextLabel = Objects.toString(interceptorStore.interceptorName(sid, iid), "").trim();
     if (nextLabel.isEmpty()) nextLabel = "Interceptor";
-    if (Objects.equals(prev.label, nextLabel)) return;
 
     NodeData next = new NodeData(prev.ref, nextLabel);
     next.unread = prev.unread;
     next.highlightUnread = prev.highlightUnread;
     next.copyTypingFrom(prev);
-    node.setUserObject(next);
+    if (!Objects.equals(prev.label, nextLabel)) {
+      node.setUserObject(next);
+    }
     model.nodeChanged(node);
   }
 
@@ -1654,6 +1687,45 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public Flowable<TargetRef> openPinnedChatRequests() {
     return openPinnedChatRequests.onBackpressureLatest();
+  }
+
+  /**
+   * Returns currently open channel targets for a server.
+   *
+   * <p>Safe to call from any thread.
+   */
+  public List<String> openChannelsForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return List.of();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return snapshotOpenChannelsForServer(sid);
+    }
+
+    AtomicReference<List<String>> out = new AtomicReference<>(List.of());
+    try {
+      SwingUtilities.invokeAndWait(() -> out.set(snapshotOpenChannelsForServer(sid)));
+      return out.get();
+    } catch (Exception ex) {
+      log.debug("[ircafe] open channel snapshot failed for server={}", sid, ex);
+      return List.of();
+    }
+  }
+
+  private List<String> snapshotOpenChannelsForServer(String serverId) {
+    LinkedHashMap<String, String> byKey = new LinkedHashMap<>();
+    for (TargetRef ref : leaves.keySet()) {
+      if (ref == null) continue;
+      if (!Objects.equals(serverId, ref.serverId())) continue;
+      if (!ref.isChannel()) continue;
+      String target = Objects.toString(ref.target(), "").trim();
+      if (target.isEmpty()) continue;
+      String key = target.toLowerCase(java.util.Locale.ROOT);
+      byKey.putIfAbsent(key, target);
+    }
+    if (byKey.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(byKey.values());
+    out.sort(String.CASE_INSENSITIVE_ORDER);
+    return List.copyOf(out);
   }
 
   public Action moveNodeUpAction() {
@@ -2520,7 +2592,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
     parent.insert(leaf, idx);
 
-    model.reload(parent);
+    model.nodesWereInserted(parent, new int[] { idx });
     tree.expandPath(new TreePath(parent.getPath()));
   }
 
@@ -3087,7 +3159,7 @@ private void removeServerRoot(String serverId) {
 
   if (interceptorStore != null) {
     try {
-      interceptorStore.clearServer(serverId);
+      interceptorStore.clearServerHits(serverId);
     } catch (Exception ignored) {
     }
   }
@@ -3502,13 +3574,13 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         } else if (nd.ref != null && nd.ref.isLogViewer()) {
           setTreeIcon("terminal");
         } else if (nd.ref != null && nd.ref.isInterceptor()) {
-          setTreeIcon("interceptor");
+          setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
         } else if (nd.ref != null && nd.ref.isChannelList()) {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
           setTreeIcon("dock-right");
         } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
-          setTreeIcon("interceptor");
+          setTreeIcon("eye");
         }
         if (supportsTypingActivity(nd.ref)) {
           typingIndicatorSlotVisible = true;
@@ -3542,7 +3614,7 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         setTreeIcon("account-unknown");
       } else if (isInterceptorsGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("interceptor");
+        setTreeIcon("eye");
       } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("dock-left");
@@ -3554,6 +3626,16 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     }
 
     return c;
+  }
+
+  private boolean isInterceptorEnabled(TargetRef ref) {
+    if (ref == null || !ref.isInterceptor()) return true;
+    if (interceptorStore == null) return true;
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return true;
+    InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
+    return def == null || def.enabled();
   }
 
   @Override

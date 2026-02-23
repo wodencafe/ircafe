@@ -734,6 +734,9 @@ public class ThemeManager {
       new LegacySystemThemeDefinition("nimbus-dark-amber", "Nimbus (Dark Amber)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-dark-blue", "Nimbus (Dark Blue)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-dark-violet", "Nimbus (Dark Violet)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-green", "Nimbus (Dark Green)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-orange", "Nimbus (Dark Orange)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-magenta", "Nimbus (Dark Magenta)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-orange", "Nimbus (Orange)", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-green", "Nimbus (Green)", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-blue", "Nimbus (Blue)", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
@@ -1245,6 +1248,9 @@ public class ThemeManager {
         case "nimbus-dark-amber" -> applyNimbusDarkAmberLookAndFeelOrFallback();
         case "nimbus-dark-blue" -> applyNimbusDarkBlueLookAndFeelOrFallback();
         case "nimbus-dark-violet" -> applyNimbusDarkVioletLookAndFeelOrFallback();
+        case "nimbus-dark-green" -> applyNimbusDarkGreenLookAndFeelOrFallback();
+        case "nimbus-dark-orange" -> applyNimbusDarkOrangeLookAndFeelOrFallback();
+        case "nimbus-dark-magenta" -> applyNimbusDarkMagentaLookAndFeelOrFallback();
         case "nimbus-orange" -> applyNimbusOrangeLookAndFeelOrFallback();
         case "nimbus-green" -> applyNimbusGreenLookAndFeelOrFallback();
         case "nimbus-blue" -> applyNimbusBlueLookAndFeelOrFallback();
@@ -1483,6 +1489,33 @@ public class ThemeManager {
     LookAndFeel laf = UIManager.getLookAndFeel();
     if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
       applyNimbusDarkVioletOverrides();
+    }
+  }
+
+  private void applyNimbusDarkGreenLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkGreenOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkGreenOverrides();
+    }
+  }
+
+  private void applyNimbusDarkOrangeLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkOrangeOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkOrangeOverrides();
+    }
+  }
+
+  private void applyNimbusDarkMagentaLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkMagentaOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkMagentaOverrides();
     }
   }
 
@@ -1772,6 +1805,57 @@ public class ThemeManager {
         uiColor(0xC0, 0x72, 0x8B),
         uiColor(0x74, 0xA9, 0x89),
         uiColor(0x6A, 0x59, 0x91)
+    );
+  }
+
+  private static void applyNimbusDarkGreenOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x1F, 0x33, 0x27),
+        uiColor(0x2A, 0x3F, 0x31),
+        uiColor(0x57, 0xB8, 0x79),
+        uiColor(0x86, 0xD6, 0xA2),
+        uiColor(0x24, 0x4D, 0x34),
+        uiColor(0x2A, 0x5A, 0x3D),
+        uiColor(0x6E, 0xA3, 0x88),
+        uiColor(0x72, 0xB7, 0x8B),
+        uiColor(0xA3, 0xD3, 0xA4),
+        uiColor(0xB9, 0x6E, 0x68),
+        uiColor(0x57, 0xB8, 0x79),
+        uiColor(0x45, 0x6A, 0x55)
+    );
+  }
+
+  private static void applyNimbusDarkOrangeOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x3D, 0x24, 0x18),
+        uiColor(0x4A, 0x2F, 0x24),
+        uiColor(0xE0, 0x7A, 0x2C),
+        uiColor(0xF0, 0xA7, 0x66),
+        uiColor(0x70, 0x40, 0x22),
+        uiColor(0x7E, 0x4A, 0x24),
+        uiColor(0xB0, 0x83, 0x5C),
+        uiColor(0xE0, 0x7A, 0x2C),
+        uiColor(0xE8, 0xA9, 0x5A),
+        uiColor(0xC5, 0x6E, 0x5F),
+        uiColor(0x77, 0xAA, 0x82),
+        uiColor(0x89, 0x61, 0x46)
+    );
+  }
+
+  private static void applyNimbusDarkMagentaOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x35, 0x1F, 0x33),
+        uiColor(0x43, 0x27, 0x44),
+        uiColor(0xC4, 0x6B, 0xD1),
+        uiColor(0xE1, 0x9B, 0xE8),
+        uiColor(0x5E, 0x2F, 0x62),
+        uiColor(0x6B, 0x36, 0x70),
+        uiColor(0x9C, 0x7C, 0xAD),
+        uiColor(0xC2, 0x6F, 0xC9),
+        uiColor(0xD7, 0x9A, 0xE0),
+        uiColor(0xC2, 0x76, 0x90),
+        uiColor(0x78, 0xAA, 0x86),
+        uiColor(0x7A, 0x54, 0x7C)
     );
   }
 
@@ -2088,7 +2172,10 @@ public class ThemeManager {
     return "nimbus-dark".equals(lower)
         || "nimbus-dark-amber".equals(lower)
         || "nimbus-dark-blue".equals(lower)
-        || "nimbus-dark-violet".equals(lower);
+        || "nimbus-dark-violet".equals(lower)
+        || "nimbus-dark-green".equals(lower)
+        || "nimbus-dark-orange".equals(lower)
+        || "nimbus-dark-magenta".equals(lower);
   }
 
   private static void clearFlatAccentDefaults() {
@@ -2407,7 +2494,7 @@ public class ThemeManager {
 
     String lower = raw.toLowerCase(Locale.ROOT);
     return switch (lower) {
-      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
+      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-dark-green", "nimbus-dark-orange", "nimbus-dark-magenta", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
       default -> true;
     };
   }

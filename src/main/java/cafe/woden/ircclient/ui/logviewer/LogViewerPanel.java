@@ -11,6 +11,10 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Insets;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,22 +24,33 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
+import javax.swing.JList;
+import javax.swing.JCheckBox;
+import javax.swing.KeyStroke;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -43,6 +58,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.RowSorter;
 import javax.swing.SortOrder;
 import javax.swing.SpinnerDateModel;
@@ -52,6 +68,8 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import net.miginfocom.swing.MigLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +82,19 @@ import org.slf4j.LoggerFactory;
 public final class LogViewerPanel extends JPanel implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(LogViewerPanel.class);
+  private static final int CHANNEL_PICKER_LIMIT = 3000;
+  private static final ChatLogViewerMatchMode[] TEXT_MATCH_MODES = {
+      ChatLogViewerMatchMode.CONTAINS,
+      ChatLogViewerMatchMode.GLOB,
+      ChatLogViewerMatchMode.REGEX
+  };
+  private static final ChatLogViewerMatchMode[] CHANNEL_MATCH_MODES = {
+      ChatLogViewerMatchMode.ANY,
+      ChatLogViewerMatchMode.CONTAINS,
+      ChatLogViewerMatchMode.GLOB,
+      ChatLogViewerMatchMode.REGEX,
+      ChatLogViewerMatchMode.LIST
+  };
 
   private static final DateTimeFormatter TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
@@ -89,6 +120,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   };
 
   private final ChatLogViewerService service;
+  private final java.util.function.Function<String, List<String>> openChannelsProvider;
   private final ExecutorService exec = VirtualThreads.newSingleThreadExecutor("ircafe-log-viewer");
   private final AtomicLong requestSeq = new AtomicLong(0);
 
@@ -101,13 +133,14 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   private final JPanel footer = new JPanel(new BorderLayout());
 
   private final javax.swing.JTextField nickField = new javax.swing.JTextField();
-  private final JComboBox<ChatLogViewerMatchMode> nickMode = new JComboBox<>(ChatLogViewerMatchMode.values());
+  private final JComboBox<ChatLogViewerMatchMode> nickMode = new JComboBox<>(TEXT_MATCH_MODES.clone());
   private final javax.swing.JTextField messageField = new javax.swing.JTextField();
-  private final JComboBox<ChatLogViewerMatchMode> messageMode = new JComboBox<>(ChatLogViewerMatchMode.values());
+  private final JComboBox<ChatLogViewerMatchMode> messageMode = new JComboBox<>(TEXT_MATCH_MODES.clone());
   private final javax.swing.JTextField hostmaskField = new javax.swing.JTextField();
-  private final JComboBox<ChatLogViewerMatchMode> hostmaskMode = new JComboBox<>(ChatLogViewerMatchMode.values());
+  private final JComboBox<ChatLogViewerMatchMode> hostmaskMode = new JComboBox<>(TEXT_MATCH_MODES.clone());
   private final javax.swing.JTextField channelField = new javax.swing.JTextField();
-  private final JComboBox<ChatLogViewerMatchMode> channelMode = new JComboBox<>(ChatLogViewerMatchMode.values());
+  private final JComboBox<ChatLogViewerMatchMode> channelMode = new JComboBox<>(CHANNEL_MATCH_MODES.clone());
+  private final JButton channelListButton = new JButton("Pick...");
   private final JCheckBox includeServerEvents = new JCheckBox("Server events");
   private final JCheckBox includeProtocolDetails = new JCheckBox("Protocol/debug");
   private final JComboBox<DateRangePreset> datePreset = new JComboBox<>(DateRangePreset.values());
@@ -131,12 +164,30 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   private final JTable table = new JTable(model);
   private final TableRowSorter<LogViewerTableModel> sorter = new TableRowSorter<>(model);
   private final LinkedHashMap<Integer, TableColumn> allColumnByModelIndex = new LinkedHashMap<>();
+  private final LinkedHashSet<String> channelPickerSelectedKeys = new LinkedHashSet<>();
+
+  private JPopupMenu channelPickerPopup;
+  private JTextField channelPickerFilterField;
+  private JLabel channelPickerSummaryLabel;
+  private JList<ChannelOption> channelPickerList;
+  private DefaultListModel<ChannelOption> channelPickerModel;
+  private List<ChannelOption> channelPickerAllOptions = List.of();
+  private boolean channelPickerUpdatingModel = false;
 
   private volatile String serverId = "";
 
   public LogViewerPanel(ChatLogViewerService service) {
+    this(service, sid -> List.of());
+  }
+
+  public LogViewerPanel(
+      ChatLogViewerService service,
+      java.util.function.Function<String, List<String>> openChannelsProvider
+  ) {
     super(new BorderLayout());
     this.service = Objects.requireNonNull(service, "service");
+    this.openChannelsProvider =
+        (openChannelsProvider == null) ? sid -> List.of() : openChannelsProvider;
 
     Date now = new Date();
     Date dayAgo = new Date(Math.max(0L, now.getTime() - Duration.ofDays(1).toMillis()));
@@ -160,6 +211,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     String sid = Objects.toString(serverId, "").trim();
     if (Objects.equals(this.serverId, sid)) return;
     this.serverId = sid;
+    hideChannelPickerPopup();
     updateHeader();
     model.setRows(List.of());
     updateButtons(false);
@@ -179,6 +231,12 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       }
     }
     exec.shutdownNow();
+    SwingUtilities.invokeLater(() -> {
+      if (channelPickerPopup != null) {
+        channelPickerPopup.setVisible(false);
+        channelPickerPopup = null;
+      }
+    });
   }
 
   private void buildHeader() {
@@ -222,15 +280,17 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     messageField.putClientProperty("JTextField.placeholderText", "Message text");
     hostmaskField.setToolTipText("Filter by full hostmask when available.");
     hostmaskField.putClientProperty("JTextField.placeholderText", "Hostmask filter");
-    channelField.setToolTipText("Filter by channel/target.");
+    channelField.setToolTipText("Filter by channel/target. Use List mode for multiple channels.");
     channelField.putClientProperty("JTextField.placeholderText", "Channel filter (e.g. #ircafe)");
+    channelListButton.setToolTipText("Choose channels for List mode");
+    configureInlineActionButton(channelListButton, "channel", "Choose channels for List mode");
     datePreset.setToolTipText("Date window for search.");
     includeServerEvents.setToolTipText("Include mode/join/part/server status lines.");
     includeProtocolDetails.setToolTipText("Include CAP and other low-level protocol lines.");
 
     JPanel quickRow = new JPanel(new MigLayout(
         "insets 0,fillx,hidemode 3",
-        "[right][grow,fill][pref!][right][grow,fill][pref!]",
+        "[right][grow,fill][pref!][right][grow,fill][pref!][pref!]",
         "[]"));
     quickRow.add(new JLabel("Nick:"), "");
     quickRow.add(nickField, "pushx,growx");
@@ -238,6 +298,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     quickRow.add(new JLabel("Channel:"), "");
     quickRow.add(channelField, "pushx,growx");
     quickRow.add(channelMode, "w 88!");
+    quickRow.add(channelListButton, "w 34!");
     filters.add(quickRow, "growx");
 
     JPanel messageRow = new JPanel(new MigLayout(
@@ -280,6 +341,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     filters.add(visibilityRow, "growx");
 
     footer.add(filters, BorderLayout.NORTH);
+    updateChannelFilterUi();
     updateDatePresetUi();
   }
 
@@ -322,6 +384,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     resetButton.addActionListener(e -> resetFiltersAndSearch());
     exportButton.addActionListener(e -> exportVisibleRows());
     columnsButton.addActionListener(e -> showColumnsMenu(columnsButton));
+    channelListButton.addActionListener(e -> showChannelListPickerDialog());
     includeServerEvents.addActionListener(e -> runSearch(false));
     includeProtocolDetails.addActionListener(e -> runSearch(false));
 
@@ -329,6 +392,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     messageField.addActionListener(e -> runSearch(false));
     hostmaskField.addActionListener(e -> runSearch(false));
     channelField.addActionListener(e -> runSearch(false));
+    channelMode.addActionListener(e -> updateChannelFilterUi());
   }
 
   private void refreshAvailability() {
@@ -351,7 +415,6 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     messageMode.setEnabled(enabled);
     hostmaskField.setEnabled(enabled);
     hostmaskMode.setEnabled(enabled);
-    channelField.setEnabled(enabled);
     channelMode.setEnabled(enabled);
     datePreset.setEnabled(enabled);
     limitSpinner.setEnabled(enabled);
@@ -359,6 +422,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     includeProtocolDetails.setEnabled(enabled);
     fromSpinner.setEnabled(enabled && selectedDatePreset() == DateRangePreset.CUSTOM);
     toSpinner.setEnabled(enabled && selectedDatePreset() == DateRangePreset.CUSTOM);
+    updateChannelFilterUi();
     updateButtons(false);
   }
 
@@ -528,8 +592,8 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
 
   private void configureTopActionButtons() {
     limitSpinner.setToolTipText("Maximum rows returned per search.");
-    configureTopButton(searchButton, "check", "Search logs");
-    configureTopButton(resetButton, "refresh", "Reset all filters");
+    configureTopButton(searchButton, "hourglass", "Search logs");
+    configureTopButton(resetButton, "reset", "Reset all filters");
     configureTopButton(columnsButton, "settings", "Choose visible columns");
     configureTopButton(exportButton, "copy", "Export visible rows to CSV");
   }
@@ -540,6 +604,16 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     button.setIcon(SvgIcons.action(iconName, 16));
     button.setDisabledIcon(SvgIcons.actionDisabled(iconName, 16));
     button.setMargin(new Insets(2, 6, 2, 6));
+    button.setToolTipText(tooltip);
+    button.setFocusable(false);
+  }
+
+  private static void configureInlineActionButton(JButton button, String iconName, String tooltip) {
+    if (button == null) return;
+    button.setText("");
+    button.setIcon(SvgIcons.action(iconName, 14));
+    button.setDisabledIcon(SvgIcons.actionDisabled(iconName, 14));
+    button.setMargin(new Insets(1, 4, 1, 4));
     button.setToolTipText(tooltip);
     button.setFocusable(false);
   }
@@ -760,6 +834,482 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     }
   }
 
+  private void updateChannelFilterUi() {
+    boolean enabled = service.enabled() && channelMode.isEnabled();
+    ChatLogViewerMatchMode mode = selectedMode(channelMode);
+    boolean any = mode == ChatLogViewerMatchMode.ANY;
+    boolean list = mode == ChatLogViewerMatchMode.LIST;
+
+    channelField.setEnabled(enabled && !any);
+    channelListButton.setEnabled(enabled && !serverId.isBlank());
+
+    if (list) {
+      channelField.putClientProperty("JTextField.placeholderText", "Channel list: #a, #b or #a #b");
+      channelField.setToolTipText("List mode: enter channels separated by commas, semicolons, or spaces.");
+      channelListButton.setToolTipText("Choose channels from open buffers and known logged channels");
+    } else if (any) {
+      channelField.putClientProperty("JTextField.placeholderText", "Any channel/target");
+      channelField.setToolTipText("Any mode ignores the channel field.");
+      channelListButton.setToolTipText("Choose channels to switch to List mode");
+    } else {
+      channelField.putClientProperty("JTextField.placeholderText", "Channel filter (e.g. #ircafe)");
+      channelField.setToolTipText("Filter by channel/target. Use List mode for multiple channels.");
+      channelListButton.setToolTipText("Choose channels for List mode");
+    }
+  }
+
+  private void showChannelListPickerDialog() {
+    if (!service.enabled()) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) {
+      status.setText("Select a server first.");
+      return;
+    }
+
+    List<String> openChannels = safeOpenChannels(sid);
+    status.setText("Loading channel options...");
+    exec.submit(() -> {
+      List<ChannelOption> options = collectChannelOptions(sid, openChannels);
+      SwingUtilities.invokeLater(() -> presentChannelListPicker(sid, options, openChannels));
+    });
+  }
+
+  private List<ChannelOption> collectChannelOptions(String serverId, List<String> openChannels) {
+    LinkedHashMap<String, ChannelOption> byKey = new LinkedHashMap<>();
+
+    List<String> open = (openChannels == null) ? List.of() : openChannels;
+    for (String channel : open) {
+      mergeChannelOption(byKey, channel, true, false);
+    }
+
+    try {
+      List<String> fromLogs = service.listUniqueChannels(serverId, CHANNEL_PICKER_LIMIT);
+      if (fromLogs != null) {
+        for (String channel : fromLogs) {
+          mergeChannelOption(byKey, channel, false, true);
+        }
+      }
+    } catch (Exception ex) {
+      log.debug("[ircafe] log viewer channel options lookup failed for server={}", serverId, ex);
+    }
+
+    ArrayList<ChannelOption> out = new ArrayList<>(byKey.values());
+    out.sort(
+        Comparator.comparing(ChannelOption::open).reversed()
+            .thenComparing(ChannelOption::name, String.CASE_INSENSITIVE_ORDER));
+    return List.copyOf(out);
+  }
+
+  private List<String> safeOpenChannels(String serverId) {
+    try {
+      List<String> open = openChannelsProvider.apply(serverId);
+      if (open == null || open.isEmpty()) return List.of();
+      ArrayList<String> out = new ArrayList<>(open.size());
+      for (String raw : open) {
+        String value = Objects.toString(raw, "").trim();
+        if (!isChannelName(value)) continue;
+        out.add(value);
+      }
+      return List.copyOf(out);
+    } catch (Exception ignored) {
+      return List.of();
+    }
+  }
+
+  private static void mergeChannelOption(
+      Map<String, ChannelOption> byKey,
+      String rawChannel,
+      boolean open,
+      boolean fromLog
+  ) {
+    if (byKey == null) return;
+    String channel = Objects.toString(rawChannel, "").trim();
+    if (!isChannelName(channel)) return;
+
+    String key = channel.toLowerCase(Locale.ROOT);
+    ChannelOption cur = byKey.get(key);
+    if (cur == null) {
+      byKey.put(key, new ChannelOption(channel, open, fromLog));
+      return;
+    }
+    String name = cur.name().isBlank() ? channel : cur.name();
+    byKey.put(key, new ChannelOption(name, cur.open() || open, cur.fromLog() || fromLog));
+  }
+
+  private void presentChannelListPicker(String serverId, List<ChannelOption> options, List<String> openChannels) {
+    if (!Objects.equals(this.serverId, serverId)) return;
+    if (options == null || options.isEmpty()) {
+      status.setText("No channel names available yet for this server.");
+      JOptionPane.showMessageDialog(
+          this,
+          "No channel names were found yet.\nOpen channels or run a broader log search first.",
+          "Choose Channels",
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+
+    channelPickerAllOptions = List.copyOf(options);
+    channelPickerSelectedKeys.clear();
+
+    List<String> open = (openChannels == null) ? List.of() : openChannels;
+    for (String openChannel : open) {
+      channelPickerSelectedKeys.add(normalizedChannelKey(openChannel));
+    }
+    for (String listed : parseChannelListTokens(channelField.getText())) {
+      channelPickerSelectedKeys.add(normalizedChannelKey(listed));
+    }
+
+    ensureChannelPickerPopup();
+    if (channelPickerPopup == null) {
+      status.setText("Unable to open channel picker.");
+      return;
+    }
+
+    if (channelPickerFilterField != null) {
+      channelPickerUpdatingModel = true;
+      try {
+        channelPickerFilterField.setText("");
+        channelPickerFilterField.requestFocusInWindow();
+      } finally {
+        channelPickerUpdatingModel = false;
+      }
+    }
+    refreshChannelPickerList();
+
+    if (channelPickerPopup.isVisible()) {
+      channelPickerPopup.setVisible(false);
+    }
+    channelPickerPopup.show(channelListButton, 0, channelListButton.getHeight());
+    if (channelPickerFilterField != null) {
+      channelPickerFilterField.requestFocusInWindow();
+      channelPickerFilterField.selectAll();
+    }
+    status.setText("Loaded " + options.size() + " channel option(s).");
+  }
+
+  private static boolean isChannelName(String value) {
+    String s = Objects.toString(value, "").trim();
+    if (s.isEmpty()) return false;
+    char first = s.charAt(0);
+    return first == '#' || first == '&';
+  }
+
+  private static String normalizedChannelKey(String value) {
+    return Objects.toString(value, "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static Set<String> parseChannelListTokens(String raw) {
+    String text = Objects.toString(raw, "").trim();
+    if (text.isEmpty()) return Set.of();
+    String[] parts = text.split("[,;\\s]+");
+    LinkedHashSet<String> out = new LinkedHashSet<>(parts.length);
+    for (String part : parts) {
+      String token = Objects.toString(part, "").trim();
+      if (!isChannelName(token)) continue;
+      out.add(token);
+    }
+    if (out.isEmpty()) return Set.of();
+    return Set.copyOf(out);
+  }
+
+  private void ensureChannelPickerPopup() {
+    if (channelPickerPopup != null) return;
+
+    JPopupMenu popup = new JPopupMenu();
+    popup.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createEtchedBorder(),
+        BorderFactory.createEmptyBorder(6, 6, 6, 6)));
+
+    channelPickerFilterField = new JTextField();
+    channelPickerFilterField.putClientProperty("JTextField.placeholderText", "Filter channels (type to narrow)");
+    channelPickerFilterField.setToolTipText("Type to filter the channel list. Shortcut: Ctrl+F.");
+    channelPickerFilterField.getDocument().addDocumentListener(new DocumentListener() {
+      @Override
+      public void insertUpdate(DocumentEvent e) {
+        refreshChannelPickerList();
+      }
+
+      @Override
+      public void removeUpdate(DocumentEvent e) {
+        refreshChannelPickerList();
+      }
+
+      @Override
+      public void changedUpdate(DocumentEvent e) {
+        refreshChannelPickerList();
+      }
+    });
+
+    JButton clearFilterButton = new JButton("Clear");
+    clearFilterButton.setToolTipText("Clear channel search filter");
+    clearFilterButton.addActionListener(e -> channelPickerFilterField.setText(""));
+
+    channelPickerModel = new DefaultListModel<>();
+    channelPickerList = new JList<>(channelPickerModel);
+    channelPickerList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+    channelPickerList.setVisibleRowCount(18);
+    channelPickerList.setCellRenderer(channelPickerRenderer());
+    channelPickerList.addMouseListener(new MouseAdapter() {
+      @Override
+      public void mousePressed(MouseEvent e) {
+        if (!SwingUtilities.isLeftMouseButton(e)) return;
+        int idx = channelPickerList.locationToIndex(e.getPoint());
+        if (idx < 0) return;
+        java.awt.Rectangle cell = channelPickerList.getCellBounds(idx, idx);
+        if (cell == null || !cell.contains(e.getPoint())) return;
+        channelPickerList.setSelectedIndex(idx);
+        toggleChannelPickerOptionAt(idx);
+      }
+    });
+    InputMap listInputMap = channelPickerList.getInputMap(JComponent.WHEN_FOCUSED);
+    ActionMap listActionMap = channelPickerList.getActionMap();
+    if (listInputMap != null && listActionMap != null) {
+      final String toggleKey = "channel-picker-toggle";
+      listInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), toggleKey);
+      listActionMap.put(toggleKey, new AbstractAction() {
+        @Override
+        public void actionPerformed(java.awt.event.ActionEvent e) {
+          int idx = channelPickerList.getSelectedIndex();
+          if (idx >= 0) {
+            toggleChannelPickerOptionAt(idx);
+          }
+        }
+      });
+    }
+
+    channelPickerSummaryLabel = new JLabel(" ");
+
+    JButton clearSelectionButton = new JButton("Clear");
+    clearSelectionButton.setToolTipText("Clear selected channels (switches to Any).");
+    clearSelectionButton.addActionListener(e -> {
+      channelPickerSelectedKeys.clear();
+      if (channelPickerList != null) {
+        channelPickerList.clearSelection();
+      }
+      applyChannelPickerSelection(true);
+      updateChannelPickerSummary();
+    });
+
+    JButton doneButton = new JButton("Done");
+    doneButton.setToolTipText("Close picker. Shortcut: Enter or Esc.");
+    doneButton.addActionListener(e -> hideChannelPickerPopup());
+
+    JPanel searchRow = new JPanel(new MigLayout(
+        "insets 0,fillx,hidemode 3",
+        "[right][grow,fill][pref!]",
+        "[]"));
+    searchRow.add(new JLabel("Filter:"), "");
+    searchRow.add(channelPickerFilterField, "pushx,growx");
+    searchRow.add(clearFilterButton, "");
+
+    JScrollPane scroll = new JScrollPane(channelPickerList);
+    scroll.setPreferredSize(new java.awt.Dimension(420, 280));
+
+    JPanel buttons = new JPanel(new MigLayout(
+        "insets 0,fillx,hidemode 3",
+        "[grow,fill][pref!][pref!]",
+        "[]"));
+    buttons.add(channelPickerSummaryLabel, "growx");
+    buttons.add(clearSelectionButton, "");
+    buttons.add(doneButton, "");
+
+    JPanel root = new JPanel(new MigLayout(
+        "insets 4,fill,wrap 1,hidemode 3",
+        "[grow,fill]",
+        "[]8[grow,fill]8[]"));
+    root.add(searchRow, "growx");
+    root.add(scroll, "grow,push,wmin 0,hmin 0");
+    root.add(buttons, "growx");
+    installChannelPickerShortcuts(root, doneButton);
+    popup.add(root);
+    channelPickerPopup = popup;
+  }
+
+  private void installChannelPickerShortcuts(JComponent root, JButton doneButton) {
+    if (root == null) return;
+
+    InputMap inputMap = root.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+    ActionMap actionMap = root.getActionMap();
+    if (inputMap == null || actionMap == null) return;
+
+    final String focusFilterKey = "channel-picker-focus-filter";
+    final String doneKey = "channel-picker-done";
+    final String closeKey = "channel-picker-close";
+
+    inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), focusFilterKey);
+    actionMap.put(focusFilterKey, new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        if (channelPickerFilterField == null) return;
+        channelPickerFilterField.requestFocusInWindow();
+        channelPickerFilterField.selectAll();
+      }
+    });
+
+    inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), doneKey);
+    actionMap.put(doneKey, new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        if (doneButton != null && doneButton.isEnabled()) {
+          doneButton.doClick();
+        } else {
+          hideChannelPickerPopup();
+        }
+      }
+    });
+
+    inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), closeKey);
+    actionMap.put(closeKey, new AbstractAction() {
+      @Override
+      public void actionPerformed(java.awt.event.ActionEvent e) {
+        hideChannelPickerPopup();
+      }
+    });
+  }
+
+  private void hideChannelPickerPopup() {
+    if (channelPickerPopup != null) {
+      channelPickerPopup.setVisible(false);
+    }
+  }
+
+  private javax.swing.ListCellRenderer<? super ChannelOption> channelPickerRenderer() {
+    return (list, value, index, isSelected, cellHasFocus) -> {
+      JCheckBox box = new JCheckBox();
+      ChannelOption option = (value instanceof ChannelOption co) ? co : null;
+      String name = (option == null) ? "" : Objects.toString(option.name(), "").trim();
+      StringBuilder suffix = new StringBuilder();
+      if (option != null && option.open()) suffix.append("open");
+      if (option != null && option.fromLog()) {
+        if (!suffix.isEmpty()) suffix.append(", ");
+        suffix.append("log");
+      }
+      if (suffix.isEmpty()) box.setText(name);
+      else box.setText(name + "  (" + suffix + ")");
+      box.setSelected(channelPickerSelectedKeys.contains(normalizedChannelKey(name)));
+      box.setOpaque(true);
+      box.setFocusPainted(false);
+      if (isSelected) {
+        box.setBackground(list.getSelectionBackground());
+        box.setForeground(list.getSelectionForeground());
+      } else {
+        box.setBackground(list.getBackground());
+        box.setForeground(list.getForeground());
+      }
+      return box;
+    };
+  }
+
+  private void refreshChannelPickerList() {
+    if (channelPickerModel == null || channelPickerList == null) return;
+    String q = Objects.toString(
+            (channelPickerFilterField == null) ? "" : channelPickerFilterField.getText(),
+            "")
+        .trim()
+        .toLowerCase(Locale.ROOT);
+    String[] tokens = q.isEmpty() ? new String[0] : q.split("\\s+");
+
+    channelPickerUpdatingModel = true;
+    try {
+      channelPickerModel.clear();
+      for (ChannelOption option : channelPickerAllOptions) {
+        if (option == null) continue;
+        if (!matchesChannelPickerFilter(option, tokens)) continue;
+        channelPickerModel.addElement(option);
+      }
+    } finally {
+      channelPickerUpdatingModel = false;
+    }
+    if (channelPickerModel.getSize() > 0 && channelPickerList.getSelectedIndex() < 0) {
+      channelPickerList.setSelectedIndex(0);
+    }
+    channelPickerList.repaint();
+    updateChannelPickerSummary();
+  }
+
+  private static boolean matchesChannelPickerFilter(ChannelOption option, String[] tokens) {
+    if (option == null) return false;
+    if (tokens == null || tokens.length == 0) return true;
+    String name = Objects.toString(option.name(), "").toLowerCase(Locale.ROOT);
+    for (String raw : tokens) {
+      String token = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+      if (token.isEmpty()) continue;
+      if (!name.contains(token)) return false;
+    }
+    return true;
+  }
+
+  private void toggleChannelPickerOptionAt(int index) {
+    if (channelPickerModel == null || channelPickerList == null) return;
+    if (index < 0 || index >= channelPickerModel.size()) return;
+    ChannelOption option = channelPickerModel.get(index);
+    if (option == null) return;
+    String key = normalizedChannelKey(option.name());
+    if (key.isEmpty()) return;
+    if (channelPickerSelectedKeys.contains(key)) {
+      channelPickerSelectedKeys.remove(key);
+    } else {
+      channelPickerSelectedKeys.add(key);
+    }
+    channelPickerList.repaint(channelPickerList.getCellBounds(index, index));
+    applyChannelPickerSelection(false);
+    updateChannelPickerSummary();
+  }
+
+  private void updateChannelPickerSummary() {
+    if (channelPickerSummaryLabel == null) return;
+    int visible = (channelPickerModel == null) ? 0 : channelPickerModel.getSize();
+    int total = channelPickerAllOptions.size();
+    int selected = channelPickerSelectedKeys.size();
+    channelPickerSummaryLabel.setText(
+        "Showing " + visible + " of " + total + " channel(s). Selected: " + selected + ".");
+  }
+
+  private void applyChannelPickerAnyMode(boolean updateStatus) {
+    channelPickerSelectedKeys.clear();
+    if (channelPickerList != null) {
+      channelPickerList.clearSelection();
+    }
+    channelMode.setSelectedItem(ChatLogViewerMatchMode.ANY);
+    channelField.setText("");
+    updateChannelFilterUi();
+    updateChannelPickerSummary();
+    if (updateStatus) {
+      status.setText("Channel filter set to Any.");
+    }
+  }
+
+  private void applyChannelPickerSelection(boolean updateStatus) {
+    if (channelPickerSelectedKeys.isEmpty()) {
+      applyChannelPickerAnyMode(updateStatus);
+      return;
+    }
+
+    LinkedHashMap<String, String> selectedNamesByKey = new LinkedHashMap<>();
+    for (ChannelOption option : channelPickerAllOptions) {
+      if (option == null) continue;
+      String name = Objects.toString(option.name(), "").trim();
+      if (!isChannelName(name)) continue;
+      String key = normalizedChannelKey(name);
+      if (!channelPickerSelectedKeys.contains(key)) continue;
+      selectedNamesByKey.putIfAbsent(key, name);
+    }
+
+    ArrayList<String> channels = new ArrayList<>(selectedNamesByKey.values());
+    if (channels.isEmpty()) {
+      applyChannelPickerAnyMode(updateStatus);
+      return;
+    }
+
+    channels.sort(String.CASE_INSENSITIVE_ORDER);
+    channelMode.setSelectedItem(ChatLogViewerMatchMode.LIST);
+    channelField.setText(String.join(", ", channels));
+    updateChannelFilterUi();
+    if (updateStatus) {
+      status.setText("Selected " + channels.size() + " channel(s) for List mode.");
+    }
+  }
+
   private static DefaultListCellRenderer modeRenderer() {
     return new DefaultListCellRenderer() {
       @Override
@@ -782,9 +1332,11 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   private static String modeLabel(ChatLogViewerMatchMode mode) {
     if (mode == null) return "Like";
     return switch (mode) {
+      case ANY -> "Any";
       case CONTAINS -> "Like";
       case GLOB -> "Glob (* ?)";
       case REGEX -> "Regex";
+      case LIST -> "List";
     };
   }
 
@@ -927,6 +1479,8 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       }
     }
   }
+
+  private record ChannelOption(String name, boolean open, boolean fromLog) {}
 
   private record ExportSnapshot(List<String> headers, List<List<String>> rows) {}
 }

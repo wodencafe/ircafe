@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.interceptors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -148,6 +149,39 @@ class InterceptorStoreTest {
       InterceptorDefinition b = store.createInterceptor("srv", "Watcher");
       assertTrue(b.name().startsWith("Watcher"));
       assertTrue(!a.id().equals(b.id()));
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
+  void clearServerHitsKeepsDefinitions() {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+      store.clearServerHits("srv");
+
+      List<InterceptorDefinition> defs = store.listInterceptors("srv");
+      assertEquals(1, defs.size());
+      assertEquals(def.id(), defs.getFirst().id());
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
+  void setInterceptorEnabledTogglesState() {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+      assertTrue(store.interceptor("srv", def.id()).enabled());
+
+      assertTrue(store.setInterceptorEnabled("srv", def.id(), false));
+      assertFalse(store.interceptor("srv", def.id()).enabled());
+      assertFalse(store.setInterceptorEnabled("srv", def.id(), false));
+
+      assertTrue(store.setInterceptorEnabled("srv", def.id(), true));
+      assertTrue(store.interceptor("srv", def.id()).enabled());
     } finally {
       store.shutdown();
     }

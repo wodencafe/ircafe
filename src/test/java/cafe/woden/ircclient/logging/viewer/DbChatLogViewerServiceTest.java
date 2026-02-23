@@ -237,6 +237,88 @@ class DbChatLogViewerServiceTest {
     assertEquals(2, withProtocol.rows().size());
   }
 
+  @Test
+  void anyChannelModeIgnoresChannelPattern() {
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    DbChatLogViewerService svc = new DbChatLogViewerService(repo);
+
+    when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
+        .thenReturn(List.of(
+            row(301L, "#alpha", LogKind.CHAT, "Alice", "hello", "{}", LogDirection.IN),
+            row(300L, "&local", LogKind.CHAT, "Bob", "hey", "{}", LogDirection.IN)
+        ));
+
+    ChatLogViewerQuery q = new ChatLogViewerQuery(
+        "srv",
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "#does-not-matter",
+        ChatLogViewerMatchMode.ANY,
+        true,
+        true,
+        null,
+        null,
+        100
+    );
+
+    ChatLogViewerResult res = svc.search(q);
+    assertEquals(2, res.rows().size());
+    assertEquals(301L, res.rows().get(0).id());
+    assertEquals(300L, res.rows().get(1).id());
+  }
+
+  @Test
+  void listChannelModeMatchesCommaAndSpaceSeparatedEntries() {
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    DbChatLogViewerService svc = new DbChatLogViewerService(repo);
+
+    when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
+        .thenReturn(List.of(
+            row(401L, "#chan", LogKind.CHAT, "Alice", "one", "{}", LogDirection.IN),
+            row(400L, "#ops", LogKind.CHAT, "Bob", "two", "{}", LogDirection.IN),
+            row(399L, "#other", LogKind.CHAT, "Carol", "three", "{}", LogDirection.IN)
+        ));
+
+    ChatLogViewerQuery q = new ChatLogViewerQuery(
+        "srv",
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "",
+        ChatLogViewerMatchMode.CONTAINS,
+        "#chan, #OPS #missing ; #chan",
+        ChatLogViewerMatchMode.LIST,
+        true,
+        true,
+        null,
+        null,
+        100
+    );
+
+    ChatLogViewerResult res = svc.search(q);
+    assertEquals(2, res.rows().size());
+    assertEquals(401L, res.rows().get(0).id());
+    assertEquals(400L, res.rows().get(1).id());
+  }
+
+  @Test
+  void listUniqueChannelsReturnsChannelTargetsOnlyAndDedupesCaseInsensitive() {
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    DbChatLogViewerService svc = new DbChatLogViewerService(repo);
+
+    when(repo.distinctTargets("srv", 15))
+        .thenReturn(List.of("status", "#Alpha", "Bob", "#alpha", "&local", "#beta"));
+
+    List<String> channels = svc.listUniqueChannels("srv", 5);
+    assertEquals(List.of("#Alpha", "&local", "#beta"), channels);
+    verify(repo).distinctTargets("srv", 15);
+  }
+
   private static LogRow row(long id, String fromNick, String metaJson) {
     return row(id, LogKind.CHAT, fromNick, "hello", metaJson, LogDirection.IN);
   }

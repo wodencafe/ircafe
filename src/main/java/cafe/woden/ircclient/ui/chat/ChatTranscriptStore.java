@@ -2142,6 +2142,22 @@ public void appendChatAt(TargetRef ref,
     return insertNoticeFromHistoryAt(ref, 0, from, text, tsEpochMs);
   }
 
+  private AttributeSet statusFromStyleFor(TargetRef ref) {
+    if (ref != null && ref.isApplicationUi()) {
+      // Application diagnostics read better when the source tag is visually distinct.
+      return styles.noticeFrom();
+    }
+    return styles.status();
+  }
+
+  private AttributeSet errorFromStyleFor(TargetRef ref) {
+    if (ref != null && ref.isApplicationUi()) {
+      // Keep source tags consistent across status/error lines in diagnostics buffers.
+      return styles.noticeFrom();
+    }
+    return styles.error();
+  }
+
   public synchronized int insertStatusFromHistoryAt(TargetRef ref,
                                                     int insertAt,
                                                     String from,
@@ -2164,8 +2180,15 @@ public void appendChatAt(TargetRef ref,
       return Math.max(0, insertAt);
     }
 
-    return insertLineInternalAt(ref, insertAt, from, text,
-        styles.status(), styles.status(), false, meta);
+    return insertLineInternalAt(
+        ref,
+        insertAt,
+        from,
+        text,
+        statusFromStyleFor(ref),
+        styles.status(),
+        false,
+        meta);
   }
 
   public synchronized int prependStatusFromHistory(TargetRef ref,
@@ -2197,8 +2220,15 @@ public void appendChatAt(TargetRef ref,
       return Math.max(0, insertAt);
     }
 
-    return insertLineInternalAt(ref, insertAt, from, text,
-        styles.error(), styles.error(), false, meta);
+    return insertLineInternalAt(
+        ref,
+        insertAt,
+        from,
+        text,
+        errorFromStyleFor(ref),
+        styles.error(),
+        false,
+        meta);
   }
 
   public synchronized int prependErrorFromHistory(TargetRef ref,
@@ -3691,7 +3721,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.status(), styles.status(), true, meta);
+    appendLineInternal(ref, from, text, statusFromStyleFor(ref), styles.status(), true, meta);
   }
 
   public void appendError(TargetRef ref, String from, String text) {
@@ -3702,7 +3732,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.error(), styles.error(), true, meta);
+    appendLineInternal(ref, from, text, errorFromStyleFor(ref), styles.error(), true, meta);
   }
 
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
@@ -3728,7 +3758,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.status(), styles.status(), false, meta);
+    appendLineInternal(ref, from, text, statusFromStyleFor(ref), styles.status(), false, meta);
   }
 
   public void appendErrorFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
@@ -3741,7 +3771,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.error(), styles.error(), false, meta);
+    appendLineInternal(ref, from, text, errorFromStyleFor(ref), styles.error(), false, meta);
   }
 /**
  * Append a notice with a timestamp, allowing embeds.
@@ -3821,7 +3851,7 @@ public void appendStatusAt(
     return;
   }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.status(), styles.status(), true, meta);
+  appendLineInternal(ref, from, text, statusFromStyleFor(ref), styles.status(), true, meta);
 }
 
 /**
@@ -3837,7 +3867,7 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     return;
   }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.error(), styles.error(), true, meta);
+  appendLineInternal(ref, from, text, errorFromStyleFor(ref), styles.error(), true, meta);
 }
   public void appendPresenceFromHistory(TargetRef ref, String displayText, long tsEpochMs) {
     ensureTargetExists(ref);

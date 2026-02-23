@@ -97,6 +97,14 @@ public class ChatLogRepository {
        WHERE server_id = ?
       """;
 
+  private static final String SELECT_DISTINCT_TARGETS_SQL = """
+      SELECT DISTINCT target
+        FROM chat_log
+       WHERE server_id = ?
+    ORDER BY target ASC
+       LIMIT ?
+      """;
+
   // Exact-existence check used for remote history ingestion de-duplication.
   // NOTE: there is no unique constraint in the schema, so we must check before insert.
   private static final String SELECT_EXISTS_EXACT_SQL = """
@@ -247,6 +255,18 @@ public class ChatLogRepository {
     } catch (Exception ex) {
       return OptionalLong.empty();
     }
+  }
+
+  /** Returns distinct targets for a server (ascending, up to {@code limit}). */
+  public List<String> distinctTargets(String serverId, int limit) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || limit <= 0) return List.of();
+    int wanted = Math.min(limit, 100_000);
+    return jdbc.query(
+        SELECT_DISTINCT_TARGETS_SQL,
+        (rs, rowNum) -> Objects.toString(rs.getString(1), "").trim(),
+        sid,
+        wanted);
   }
 
   /**
