@@ -6,8 +6,12 @@ import cafe.woden.ircclient.logging.model.LogLine;
 import cafe.woden.ircclient.logging.model.LogRow;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalLong;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -27,8 +31,9 @@ public class ChatLogRepository {
         text,
         outgoing_local_echo,
         soft_ignored,
-        meta
-      ) VALUES (?,?,?,?,?,?,?,?,?,?)
+        meta,
+        message_id
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
       """;
 
   private static final String SELECT_RECENT_SQL = """
@@ -92,6 +97,14 @@ public class ChatLogRepository {
        WHERE server_id = ?
       """;
 
+  private static final String SELECT_DISTINCT_TARGETS_SQL = """
+      SELECT DISTINCT target
+        FROM chat_log
+       WHERE server_id = ?
+    ORDER BY target ASC
+       LIMIT ?
+      """;
+
   // Exact-existence check used for remote history ingestion de-duplication.
   // NOTE: there is no unique constraint in the schema, so we must check before insert.
   private static final String SELECT_EXISTS_EXACT_SQL = """
@@ -148,48 +161,52 @@ public class ChatLogRepository {
   
   public void insert(LogLine line) {
     if (line == null) return;
-    jdbc.update(
-        INSERT_SQL,
-        line.serverId(),
-        line.target(),
-        line.tsEpochMs(),
-        line.direction().name(),
-        line.kind().name(),
-        line.fromNick(),
-        truncate(line.text()),
-        line.outgoingLocalEcho(),
-        line.softIgnored(),
-        line.metaJson()
-    );
+    try {
+      insertOne(line);
+    } catch (DataAccessException ex) {
+      if (isDuplicateKey(ex)) return;
+      throw ex;
+    }
   }
 
   
   public int[] insertBatch(List<LogLine> lines) {
     if (lines == null || lines.isEmpty()) return new int[0];
 
-    return jdbc.batchUpdate(
-        INSERT_SQL,
-        new BatchPreparedStatementSetter() {
-          @Override
-          public void setValues(PreparedStatement ps, int i) throws SQLException {
-            LogLine l = lines.get(i);
-            ps.setString(1, l.serverId());
-            ps.setString(2, l.target());
-            ps.setLong(3, l.tsEpochMs());
-            ps.setString(4, l.direction().name());
-            ps.setString(5, l.kind().name());
-            ps.setString(6, l.fromNick());
-            ps.setString(7, truncate(l.text()));
-            ps.setBoolean(8, l.outgoingLocalEcho());
-            ps.setBoolean(9, l.softIgnored());
-            ps.setString(10, l.metaJson());
-          }
+    try {
+      return jdbc.batchUpdate(
+          INSERT_SQL,
+          new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+              setInsertArgs(ps, lines.get(i));
+            }
 
-          @Override
-          public int getBatchSize() {
-            return lines.size();
+            @Override
+            public int getBatchSize() {
+              return lines.size();
+            }
+          });
+    } catch (DataAccessException ex) {
+      if (!isDuplicateKey(ex)) throw ex;
+
+      // Batch execution fails as a unit on duplicate-key conflicts. Re-run row-by-row so
+      // non-duplicate lines still persist while duplicate message-ids are ignored.
+      int[] out = new int[lines.size()];
+      for (int i = 0; i < lines.size(); i++) {
+        LogLine line = lines.get(i);
+        try {
+          out[i] = insertOne(line);
+        } catch (DataAccessException rowEx) {
+          if (isDuplicateKey(rowEx)) {
+            out[i] = 0;
+            continue;
           }
-        });
+          throw rowEx;
+        }
+      }
+      return out;
+    }
   }
 
   /**
@@ -240,6 +257,18 @@ public class ChatLogRepository {
     }
   }
 
+  /** Returns distinct targets for a server (ascending, up to {@code limit}). */
+  public List<String> distinctTargets(String serverId, int limit) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || limit <= 0) return List.of();
+    int wanted = Math.min(limit, 100_000);
+    return jdbc.query(
+        SELECT_DISTINCT_TARGETS_SQL,
+        (rs, rowNum) -> Objects.toString(rs.getString(1), "").trim(),
+        sid,
+        wanted);
+  }
+
   /**
    * Fetch the most recent {@code limit} rows including their identity id (newest-first).
    *
@@ -268,6 +297,39 @@ public class ChatLogRepository {
         beforeId,
         limit
     );
+  }
+
+  /**
+   * Search rows for a server within an optional timestamp range (newest-first).
+   *
+   * <p>This intentionally keeps filtering simple and DB-portable; higher-level viewers can apply
+   * additional filtering (glob/regex/metadata) in-memory.
+   */
+  public List<LogRow> searchRows(String serverId, Long fromEpochMs, Long toEpochMs, int limit) {
+    String sid = (serverId == null) ? "" : serverId.trim();
+    if (sid.isEmpty() || limit <= 0) return List.of();
+
+    StringBuilder sql = new StringBuilder("""
+        SELECT id, server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
+               outgoing_local_echo, soft_ignored, meta
+          FROM chat_log
+         WHERE server_id = ?
+        """);
+    ArrayList<Object> args = new ArrayList<>();
+    args.add(sid);
+
+    if (fromEpochMs != null) {
+      sql.append(" AND ts_epoch_ms >= ?");
+      args.add(fromEpochMs);
+    }
+    if (toEpochMs != null) {
+      sql.append(" AND ts_epoch_ms <= ?");
+      args.add(toEpochMs);
+    }
+
+    sql.append(" ORDER BY ts_epoch_ms DESC, id DESC LIMIT ?");
+    args.add(limit);
+    return jdbc.query(sql.toString(), ROW_WITH_ID_MAPPER, args.toArray());
   }
 
   
@@ -306,6 +368,87 @@ public class ChatLogRepository {
     if (s == null) return "";
     if (s.length() <= TEXT_MAX) return s;
     return s.substring(0, TEXT_MAX);
+  }
+
+  private int insertOne(LogLine line) {
+    return jdbc.update(
+        INSERT_SQL,
+        line.serverId(),
+        line.target(),
+        line.tsEpochMs(),
+        line.direction().name(),
+        line.kind().name(),
+        line.fromNick(),
+        truncate(line.text()),
+        line.outgoingLocalEcho(),
+        line.softIgnored(),
+        line.metaJson(),
+        normalizeMessageId(extractMessageId(line.metaJson()))
+    );
+  }
+
+  private static void setInsertArgs(PreparedStatement ps, LogLine line) throws SQLException {
+    ps.setString(1, line.serverId());
+    ps.setString(2, line.target());
+    ps.setLong(3, line.tsEpochMs());
+    ps.setString(4, line.direction().name());
+    ps.setString(5, line.kind().name());
+    ps.setString(6, line.fromNick());
+    ps.setString(7, truncate(line.text()));
+    ps.setBoolean(8, line.outgoingLocalEcho());
+    ps.setBoolean(9, line.softIgnored());
+    ps.setString(10, line.metaJson());
+    ps.setString(11, normalizeMessageId(extractMessageId(line.metaJson())));
+  }
+
+  private static boolean isDuplicateKey(Throwable ex) {
+    Throwable cur = ex;
+    while (cur != null) {
+      if (cur instanceof DuplicateKeyException) return true;
+      if (cur instanceof SQLException sqlEx) {
+        String state = Objects.toString(sqlEx.getSQLState(), "").trim();
+        if ("23505".equals(state)) return true;
+      }
+      cur = cur.getCause();
+    }
+    return false;
+  }
+
+  private static String extractMessageId(String metaJson) {
+    String meta = Objects.toString(metaJson, "").trim();
+    if (meta.isEmpty()) return "";
+    String key = "\"messageId\"";
+    int keyPos = meta.indexOf(key);
+    if (keyPos < 0) return "";
+    int colon = meta.indexOf(':', keyPos + key.length());
+    if (colon < 0) return "";
+    int firstQuote = meta.indexOf('"', colon + 1);
+    if (firstQuote < 0) return "";
+
+    StringBuilder out = new StringBuilder(32);
+    boolean escaped = false;
+    for (int i = firstQuote + 1; i < meta.length(); i++) {
+      char c = meta.charAt(i);
+      if (escaped) {
+        out.append(c);
+        escaped = false;
+        continue;
+      }
+      if (c == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (c == '"') {
+        break;
+      }
+      out.append(c);
+    }
+    return out.toString().trim();
+  }
+
+  private static String normalizeMessageId(String raw) {
+    String msgId = Objects.toString(raw, "").trim();
+    return msgId.isEmpty() ? null : msgId;
   }
 
   private static LogDirection parseDirection(String s) {

@@ -3,6 +3,8 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
+import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -85,6 +87,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -104,6 +107,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
+  private static final String LOG_VIEWER_LABEL = "Log Viewer";
+  private static final String INTERCEPTORS_GROUP_LABEL = "Interceptors";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String IRC_ROOT_LABEL = "IRC";
   private static final String APPLICATION_ROOT_LABEL = "Application";
@@ -253,6 +258,7 @@ private static final class InsertionLine {
   private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin = new HashMap<>();
 
   private final NotificationStore notificationStore;
+  private final InterceptorStore interceptorStore;
   private final ServerDialogs serverDialogs;
   private final UiSettingsBus settingsBus;
   private PropertyChangeListener settingsListener;
@@ -270,6 +276,7 @@ private static final class InsertionLine {
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
       NotificationStore notificationStore,
+      InterceptorStore interceptorStore,
       UiSettingsBus settingsBus,
       ServerDialogs serverDialogs) {
     super(new BorderLayout());
@@ -280,6 +287,7 @@ private static final class InsertionLine {
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
+    this.interceptorStore = interceptorStore;
     this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
     syncTypingIndicatorStyleFromSettings();
@@ -384,6 +392,18 @@ private static final class InsertionLine {
                   err -> log.error("[ircafe] notification store stream error", err))
       );
     }
+    if (interceptorStore != null) {
+      disposables.add(
+          interceptorStore.changes()
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(
+                  ch -> {
+                    refreshInterceptorNodeLabel(ch.serverId(), ch.interceptorId());
+                    refreshInterceptorGroupCount(ch.serverId());
+                  },
+                  err -> log.error("[ircafe] interceptor store stream error", err))
+      );
+    }
 
     if (sojuAutoConnect != null) {
       disposables.add(
@@ -419,7 +439,7 @@ private static final class InsertionLine {
       if (!suppressSelectionBroadcast && node != null) {
         Object uo = node.getUserObject();
         if (uo instanceof NodeData nd) {
-          selections.onNext(nd.ref);
+          if (nd.ref != null) selections.onNext(nd.ref);
         }
       }
       tree.repaint();
@@ -1096,6 +1116,14 @@ private static final class InsertionLine {
       networkInfo.addActionListener(ev -> openServerInfoDialog(serverId));
       menu.add(networkInfo);
 
+      menu.addSeparator();
+      JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
+      addInterceptor.setIcon(SvgIcons.action("plus", 16));
+      addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+      addInterceptor.setEnabled(interceptorStore != null);
+      addInterceptor.addActionListener(ev -> promptAndAddInterceptor(serverId));
+      menu.add(addInterceptor);
+
       // Ephemeral servers can be promoted to persisted servers. This is especially useful for
       // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
       boolean ephemeral = serverCatalog != null
@@ -1173,6 +1201,22 @@ private static final class InsertionLine {
       return menu;
     }
 
+    if (isInterceptorsGroupNode(node)) {
+      DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+      if (!isServerNode(parent)) return null;
+      String serverId = Objects.toString(parent.getUserObject(), "").trim();
+      if (serverId.isEmpty()) return null;
+
+      JPopupMenu menu = new JPopupMenu();
+      JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
+      addInterceptor.setIcon(SvgIcons.action("plus", 16));
+      addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+      addInterceptor.setEnabled(interceptorStore != null);
+      addInterceptor.addActionListener(ev -> promptAndAddInterceptor(serverId));
+      menu.add(addInterceptor);
+      return menu;
+    }
+
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd) {
       if (nd.ref != null) {
@@ -1206,6 +1250,38 @@ private static final class InsertionLine {
           }
         }
 
+        if (nd.ref.isInterceptor()) {
+          menu.addSeparator();
+          String sid = Objects.toString(nd.ref.serverId(), "").trim();
+          String iid = Objects.toString(nd.ref.interceptorId(), "").trim();
+          InterceptorDefinition def =
+              interceptorStore != null && !sid.isEmpty() && !iid.isEmpty()
+                  ? interceptorStore.interceptor(sid, iid)
+                  : null;
+          boolean currentlyEnabled = def == null || def.enabled();
+
+          JMenuItem toggleEnabled = new JMenuItem(currentlyEnabled ? "Disable Interceptor" : "Enable Interceptor");
+          toggleEnabled.setIcon(SvgIcons.action(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setDisabledIcon(SvgIcons.actionDisabled(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setEnabled(interceptorStore != null && def != null);
+          toggleEnabled.addActionListener(ev -> setInterceptorEnabled(nd.ref, !currentlyEnabled));
+          menu.add(toggleEnabled);
+
+          JMenuItem rename = new JMenuItem("Rename Interceptor...");
+          rename.setIcon(SvgIcons.action("edit", 16));
+          rename.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+          rename.setEnabled(interceptorStore != null);
+          rename.addActionListener(ev -> promptRenameInterceptor(nd.ref, nd.label));
+          menu.add(rename);
+
+          JMenuItem delete = new JMenuItem("Delete Interceptor...");
+          delete.setIcon(SvgIcons.action("exit", 16));
+          delete.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
+          delete.setEnabled(interceptorStore != null);
+          delete.addActionListener(ev -> confirmDeleteInterceptor(nd.ref, nd.label));
+          menu.add(delete);
+        }
+
         return menu;
       }
     }
@@ -1235,6 +1311,166 @@ private static final class InsertionLine {
     if (choice == JOptionPane.YES_OPTION) {
       clearLogRequests.onNext(target);
     }
+  }
+
+  private void promptAndAddInterceptor(String serverId) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    Object input = JOptionPane.showInputDialog(
+        w,
+        "Interceptor name:",
+        "Add Interceptor",
+        JOptionPane.PLAIN_MESSAGE,
+        null,
+        null,
+        "Interceptor");
+    if (input == null) return;
+
+    String requested = Objects.toString(input, "").trim();
+    if (requested.isEmpty()) return;
+
+    try {
+      InterceptorDefinition def = interceptorStore.createInterceptor(sid, requested);
+      TargetRef ref = TargetRef.interceptor(sid, def.id());
+      ensureNode(ref);
+      refreshInterceptorNodeLabel(sid, def.id());
+      refreshInterceptorGroupCount(sid);
+      selectTarget(ref);
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not add interceptor for server {}", sid, ex);
+    }
+  }
+
+  private void promptRenameInterceptor(TargetRef ref, String currentLabel) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    String before = Objects.toString(currentLabel, "").trim();
+    if (before.isEmpty()) before = interceptorStore.interceptorName(sid, iid);
+    if (before.isEmpty()) before = "Interceptor";
+
+    Object input = JOptionPane.showInputDialog(
+        w,
+        "Interceptor name:",
+        "Rename Interceptor",
+        JOptionPane.PLAIN_MESSAGE,
+        null,
+        null,
+        before);
+    if (input == null) return;
+    String next = Objects.toString(input, "").trim();
+    if (next.isEmpty()) return;
+
+    try {
+      if (interceptorStore.renameInterceptor(sid, iid, next)) {
+        refreshInterceptorNodeLabel(sid, iid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not rename interceptor {} on {}", iid, sid, ex);
+    }
+  }
+
+  private void setInterceptorEnabled(TargetRef ref, boolean enabled) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    try {
+      if (interceptorStore.setInterceptorEnabled(sid, iid, enabled)) {
+        refreshInterceptorNodeLabel(sid, iid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not set interceptor enabled={} for {} on {}", enabled, iid, sid, ex);
+    }
+  }
+
+  private void confirmDeleteInterceptor(TargetRef ref, String label) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    String pretty = Objects.toString(label, "").trim();
+    if (pretty.isEmpty()) pretty = interceptorStore.interceptorName(sid, iid);
+    if (pretty.isEmpty()) pretty = "Interceptor";
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    int choice = JOptionPane.showConfirmDialog(
+        w,
+        "Delete interceptor \"" + pretty + "\"?",
+        "Delete Interceptor",
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.WARNING_MESSAGE
+    );
+    if (choice != JOptionPane.YES_OPTION) return;
+
+    try {
+      if (interceptorStore.removeInterceptor(sid, iid)) {
+        selectTarget(new TargetRef(sid, "status"));
+        removeTarget(ref);
+        refreshInterceptorGroupCount(sid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not delete interceptor {} on {}", iid, sid, ex);
+    }
+  }
+
+  private void refreshInterceptorNodeLabel(String serverId, String interceptorId) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    String iid = Objects.toString(interceptorId, "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    TargetRef ref = TargetRef.interceptor(sid, iid);
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData prev) || prev.ref == null) return;
+
+    String nextLabel = Objects.toString(interceptorStore.interceptorName(sid, iid), "").trim();
+    if (nextLabel.isEmpty()) nextLabel = "Interceptor";
+
+    NodeData next = new NodeData(prev.ref, nextLabel);
+    next.unread = prev.unread;
+    next.highlightUnread = prev.highlightUnread;
+    next.copyTypingFrom(prev);
+    if (!Objects.equals(prev.label, nextLabel)) {
+      node.setUserObject(next);
+    }
+    model.nodeChanged(node);
+  }
+
+  private void refreshInterceptorGroupCount(String serverId) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerNodes sn = servers.get(sid);
+    if (sn == null || sn.interceptorsNode == null) return;
+
+    Object uo = sn.interceptorsNode.getUserObject();
+    NodeData nd;
+    if (uo instanceof NodeData existing) {
+      nd = existing;
+    } else {
+      nd = new NodeData(null, INTERCEPTORS_GROUP_LABEL);
+      sn.interceptorsNode.setUserObject(nd);
+    }
+
+    int total = Math.max(0, interceptorStore.totalHitCount(sid));
+    if (nd.unread == total && nd.highlightUnread == 0) return;
+    nd.unread = total;
+    nd.highlightUnread = 0;
+    model.nodeChanged(sn.interceptorsNode);
   }
 
 private boolean isServerNode(DefaultMutableTreeNode node) {
@@ -1272,12 +1508,16 @@ private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
     int min = 0;
     int count = serverNode.getChildCount();
     while (min < count) {
-      Object uo = ((DefaultMutableTreeNode) serverNode.getChildAt(min)).getUserObject();
-      if (uo instanceof NodeData nd && nd.ref != null) {
-        if (nd.ref.isStatus() || nd.ref.isUiOnly()) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNode.getChildAt(min);
+      Object uo = child.getUserObject();
+      if (uo instanceof NodeData nd) {
+        if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) {
           min++;
           continue;
         }
+      } else if (isInterceptorsGroupNode(child)) {
+        min++;
+        continue;
       }
       break;
     }
@@ -1372,6 +1612,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return label.equalsIgnoreCase("Private messages") || label.equalsIgnoreCase("Private Messages");
   }
 
+  private boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (uo instanceof String s) {
+      return INTERCEPTORS_GROUP_LABEL.equalsIgnoreCase(s.trim());
+    }
+    if (uo instanceof NodeData nd) {
+      if (nd.ref != null) return false;
+      return INTERCEPTORS_GROUP_LABEL.equalsIgnoreCase(Objects.toString(nd.label, "").trim());
+    }
+    return false;
+  }
+
   @Override
   public String getPersistentID() {
     return ID;
@@ -1434,6 +1687,45 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public Flowable<TargetRef> openPinnedChatRequests() {
     return openPinnedChatRequests.onBackpressureLatest();
+  }
+
+  /**
+   * Returns currently open channel targets for a server.
+   *
+   * <p>Safe to call from any thread.
+   */
+  public List<String> openChannelsForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return List.of();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return snapshotOpenChannelsForServer(sid);
+    }
+
+    AtomicReference<List<String>> out = new AtomicReference<>(List.of());
+    try {
+      SwingUtilities.invokeAndWait(() -> out.set(snapshotOpenChannelsForServer(sid)));
+      return out.get();
+    } catch (Exception ex) {
+      log.debug("[ircafe] open channel snapshot failed for server={}", sid, ex);
+      return List.of();
+    }
+  }
+
+  private List<String> snapshotOpenChannelsForServer(String serverId) {
+    LinkedHashMap<String, String> byKey = new LinkedHashMap<>();
+    for (TargetRef ref : leaves.keySet()) {
+      if (ref == null) continue;
+      if (!Objects.equals(serverId, ref.serverId())) continue;
+      if (!ref.isChannel()) continue;
+      String target = Objects.toString(ref.target(), "").trim();
+      if (target.isEmpty()) continue;
+      String key = target.toLowerCase(java.util.Locale.ROOT);
+      byKey.putIfAbsent(key, target);
+    }
+    if (byKey.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(byKey.values());
+    out.sort(String.CASE_INSENSITIVE_ORDER);
+    return List.copyOf(out);
   }
 
   public Action moveNodeUpAction() {
@@ -2182,9 +2474,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (leaves.containsKey(sn.statusRef)) idx++;
     if (leaves.containsKey(sn.notificationsRef)) idx++;
 
+    boolean hasLogViewer = leaves.containsKey(sn.logViewerRef);
     boolean hasChannelList = leaves.containsKey(sn.channelListRef);
     boolean hasDccTransfers = leaves.containsKey(sn.dccTransfersRef);
 
+    if (ref.equals(sn.logViewerRef)) {
+      return idx;
+    }
+
+    if (hasLogViewer) idx++;
     if (ref.equals(sn.channelListRef)) {
       return idx;
     }
@@ -2240,9 +2538,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       parent = sn.serverNode;
     } else if (ref.isNotifications()) {
       parent = sn.serverNode;
+    } else if (ref.isInterceptor()) {
+      parent = sn.interceptorsNode != null ? sn.interceptorsNode : sn.serverNode;
     } else if (ref.isChannelList()) {
       parent = sn.serverNode;
     } else if (ref.isDccTransfers()) {
+      parent = sn.serverNode;
+    } else if (ref.isLogViewer()) {
       parent = sn.serverNode;
     } else if (ref.isChannel()) {
       parent = sn.serverNode;
@@ -2253,6 +2555,11 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     String leafLabel = ref.target();
     if (ref.isNotifications()) {
       leafLabel = "Notifications";
+    } else if (ref.isInterceptor()) {
+      String name = interceptorStore != null ? interceptorStore.interceptorName(ref.serverId(), ref.interceptorId()) : "";
+      leafLabel = (name == null || name.isBlank()) ? "Interceptor" : name;
+    } else if (ref.isLogViewer()) {
+      leafLabel = LOG_VIEWER_LABEL;
     } else if (ref.isChannelList()) {
       leafLabel = CHANNEL_LIST_LABEL;
     } else if (ref.isDccTransfers()) {
@@ -2267,13 +2574,17 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       }
     }
     int idx;
-    if (ref.isChannel() && parent == sn.serverNode) {
+    if (ref.isInterceptor() && parent == sn.interceptorsNode) {
+      idx = parent.getChildCount();
+    } else if (ref.isChannel() && parent == sn.serverNode) {
       int beforePm = sn.serverNode.getChildCount();
-      if (beforePm > 0) {
+      while (beforePm > 0) {
         DefaultMutableTreeNode last = (DefaultMutableTreeNode) sn.serverNode.getChildAt(beforePm - 1);
-        if (isPrivateMessagesGroupNode(last)) {
-          beforePm = beforePm - 1;
+        if (isReservedServerTailNode(last)) {
+          beforePm--;
+          continue;
         }
+        break;
       }
       idx = Math.max(minInsertIndex(sn.serverNode), beforePm);
     } else {
@@ -2281,7 +2592,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
     parent.insert(leaf, idx);
 
-    model.reload(parent);
+    model.nodesWereInserted(parent, new int[] { idx });
     tree.expandPath(new TreePath(parent.getPath()));
   }
 
@@ -2295,7 +2606,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   public void removeTarget(TargetRef ref) {
-    if (ref == null || ref.isStatus() || ref.isUiOnly()) return;
+    if (ref == null || ref.isStatus()) return;
+    if (ref.isUiOnly() && !ref.isInterceptor()) return;
     DefaultMutableTreeNode mappedNode = leaves.remove(ref);
     java.util.Set<DefaultMutableTreeNode> nodesToRemove = new HashSet<>();
     if (mappedNode != null) {
@@ -2704,8 +3016,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     int count = 0;
     if (leaves.containsKey(originNodes.statusRef)) count++;
     if (leaves.containsKey(originNodes.notificationsRef)) count++;
+    if (leaves.containsKey(originNodes.logViewerRef)) count++;
     if (leaves.containsKey(originNodes.channelListRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
+    if (originNodes.interceptorsNode != null && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
     return count;
   }
 
@@ -2736,6 +3050,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       return "ZNC networks discovered from the bouncer (not saved).";
     }
 
+    if (isInterceptorsGroupNode(node)) {
+      return "Interceptors for this server. Count shows total captured hits.";
+    }
+
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd && nd.ref != null) {
       if (nd.ref.isApplicationUnhandledErrors()) {
@@ -2751,6 +3069,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
           && (sojuBouncerControlServerIds.contains(nd.ref.serverId())
               || zncBouncerControlServerIds.contains(nd.ref.serverId()))) {
         return "Bouncer Control connection (used to discover bouncer networks).";
+      }
+      if (nd.ref.isInterceptor()) {
+        return "Custom interceptor rules, actions, and captured matches. Scope can be this server or any server.";
       }
     }
 
@@ -2835,6 +3156,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 private void removeServerRoot(String serverId) {
   ServerNodes sn = servers.remove(serverId);
   if (sn == null) return;
+
+  if (interceptorStore != null) {
+    try {
+      interceptorStore.clearServerHits(serverId);
+    } catch (Exception ignored) {
+    }
+  }
 
   if (Objects.equals(hoveredServerActionServerId, serverId)) {
     hoveredServerActionServerId = "";
@@ -2929,29 +3257,66 @@ private void removeServerRoot(String serverId) {
     serverNode.insert(notificationsLeaf, 1);
     leaves.put(notificationsRef, notificationsLeaf);
 
+    TargetRef logViewerRef = TargetRef.logViewer(id);
+    DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
+    serverNode.insert(logViewerLeaf, 2);
+    leaves.put(logViewerRef, logViewerLeaf);
+
     TargetRef channelListRef = TargetRef.channelList(id);
     if (showChannelListNodes) {
       DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
-      serverNode.insert(channelListLeaf, 2);
+      serverNode.insert(channelListLeaf, 3);
       leaves.put(channelListRef, channelListLeaf);
     }
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
-      int dccIndex = showChannelListNodes ? 3 : 2;
+      int dccIndex = showChannelListNodes ? 4 : 3;
       DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
       serverNode.insert(dccTransfersLeaf, dccIndex);
       leaves.put(dccTransfersRef, dccTransfersLeaf);
     }
 
+    NodeData interceptorsData = new NodeData(null, INTERCEPTORS_GROUP_LABEL);
+    if (interceptorStore != null) {
+      interceptorsData.unread = Math.max(0, interceptorStore.totalHitCount(id));
+    }
+    DefaultMutableTreeNode interceptorsNode = new DefaultMutableTreeNode(interceptorsData);
+    serverNode.add(interceptorsNode);
+
+    if (interceptorStore != null) {
+      List<InterceptorDefinition> defs = interceptorStore.listInterceptors(id);
+      if (defs != null) {
+        for (InterceptorDefinition def : defs) {
+          if (def == null) continue;
+          TargetRef ref = TargetRef.interceptor(id, def.id());
+          String label = Objects.toString(def.name(), "").trim();
+          if (label.isEmpty()) label = "Interceptor";
+          DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, label));
+          interceptorsNode.add(leaf);
+          leaves.put(ref, leaf);
+        }
+      }
+    }
+
     serverNode.add(pmNode);
 
-    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, channelListRef, dccTransfersRef);
+    ServerNodes sn =
+        new ServerNodes(
+            serverNode,
+            pmNode,
+            interceptorsNode,
+            statusRef,
+            notificationsRef,
+            logViewerRef,
+            channelListRef,
+            dccTransfersRef);
     servers.put(id, sn);
 
     model.reload(root);
     tree.expandPath(new TreePath(serverNode.getPath()));
     refreshNotificationsCount(id);
+    refreshInterceptorGroupCount(id);
     return sn;
   }
 
@@ -3095,21 +3460,28 @@ private void removeServerRoot(String serverId) {
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
+    final DefaultMutableTreeNode interceptorsNode;
     final TargetRef statusRef;
     final TargetRef notificationsRef;
+    final TargetRef logViewerRef;
     final TargetRef channelListRef;
     final TargetRef dccTransfersRef;
 
-    ServerNodes(DefaultMutableTreeNode serverNode,
+    ServerNodes(
+        DefaultMutableTreeNode serverNode,
         DefaultMutableTreeNode pmNode,
+        DefaultMutableTreeNode interceptorsNode,
         TargetRef statusRef,
         TargetRef notificationsRef,
+        TargetRef logViewerRef,
         TargetRef channelListRef,
         TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
+      this.interceptorsNode = interceptorsNode;
       this.statusRef = statusRef;
       this.notificationsRef = notificationsRef;
+      this.logViewerRef = logViewerRef;
       this.channelListRef = channelListRef;
       this.dccTransfersRef = dccTransfersRef;
     }
@@ -3199,10 +3571,16 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("terminal");
         } else if (nd.ref != null && nd.ref.isNotifications()) {
           setTreeIcon("info");
+        } else if (nd.ref != null && nd.ref.isLogViewer()) {
+          setTreeIcon("terminal");
+        } else if (nd.ref != null && nd.ref.isInterceptor()) {
+          setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
         } else if (nd.ref != null && nd.ref.isChannelList()) {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
           setTreeIcon("dock-right");
+        } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
+          setTreeIcon("eye");
         }
         if (supportsTypingActivity(nd.ref)) {
           typingIndicatorSlotVisible = true;
@@ -3234,6 +3612,9 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       } else if (isPrivateMessagesGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("account-unknown");
+      } else if (isInterceptorsGroupNode(node)) {
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("eye");
       } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("dock-left");
@@ -3245,6 +3626,16 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     }
 
     return c;
+  }
+
+  private boolean isInterceptorEnabled(TargetRef ref) {
+    if (ref == null || !ref.isInterceptor()) return true;
+    if (interceptorStore == null) return true;
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return true;
+    InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
+    return def == null || def.enabled();
   }
 
   @Override

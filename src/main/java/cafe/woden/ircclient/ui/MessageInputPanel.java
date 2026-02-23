@@ -448,12 +448,35 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
 
 
 
-  public void showRemoteTypingIndicator(String nick, String state) {
+  public boolean showRemoteTypingIndicator(String nick, String state) {
+    int beforeHeight = inputAreaHeightPx();
+    boolean wasVisible = typingBanner.isVisible();
     typingSupport.showRemoteTypingIndicator(nick, state);
+    int afterHeight = inputAreaHeightPx();
+    // While typing banners are active, Swing layout can shift asynchronously (banner text / dots),
+    // so we treat updates as geometry-affecting to keep transcript tail anchoring reliable.
+    return (wasVisible != typingBanner.isVisible())
+        || (beforeHeight != afterHeight)
+        || wasVisible
+        || typingBanner.isVisible();
   }
 
-  public void clearRemoteTypingIndicator() {
+  public boolean clearRemoteTypingIndicator() {
+    int beforeHeight = inputAreaHeightPx();
+    boolean wasVisible = typingBanner.isVisible();
     typingSupport.clearRemoteTypingIndicator();
+    int afterHeight = inputAreaHeightPx();
+    return (wasVisible != typingBanner.isVisible())
+        || (beforeHeight != afterHeight)
+        || wasVisible
+        || typingBanner.isVisible();
+  }
+
+  private int inputAreaHeightPx() {
+    int h = getHeight();
+    if (h > 0) return h;
+    Dimension pref = getPreferredSize();
+    return pref != null ? Math.max(0, pref.height) : 0;
   }
 
   public void setTypingSignalAvailable(boolean available) {

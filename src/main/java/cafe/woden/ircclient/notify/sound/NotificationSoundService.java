@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
@@ -39,6 +40,7 @@ public class NotificationSoundService {
 
   private final AtomicReference<Instant> lastPlayed =
       new AtomicReference<>(Instant.EPOCH);
+  private final AtomicLong previewRequestSeq = new AtomicLong(0L);
 
   /** Global sound enable toggle (Phase 2: defaults to enabled, UI/persistence later). */
   private volatile boolean enabled = true;
@@ -86,12 +88,12 @@ public class NotificationSoundService {
     }
 
     if (useCustom && customSoundPath != null && Files.exists(customSoundPath)) {
-      playFile(customSoundPath, false);
+      playFile(customSoundPath, false, 0L);
       return;
     }
 
     if (selectedSound == null) return;
-    playResource(selectedSound.resourcePath(), false);
+    playResource(selectedSound.resourcePath(), false, 0L);
   }
 
   /**
@@ -105,13 +107,13 @@ public class NotificationSoundService {
     if (useCustom) {
       Path overridePath = resolveCustomPath(customPath);
       if (overridePath != null && Files.exists(overridePath)) {
-        playFile(overridePath, false);
+        playFile(overridePath, false, 0L);
         return;
       }
     }
 
     BuiltInSound override = BuiltInSound.fromId(soundId);
-    playResource(override.resourcePath(), false);
+    playResource(override.resourcePath(), false, 0L);
   }
 
   /**
@@ -119,21 +121,24 @@ public class NotificationSoundService {
    */
   public void preview(BuiltInSound sound) {
     if (sound == null) return;
-    playResource(sound.resourcePath(), true);
+    long seq = previewRequestSeq.incrementAndGet();
+    playResource(sound.resourcePath(), true, seq);
   }
 
   /** Play the configured custom file (if any) for preview/testing. */
   public void previewCustom() {
     Path p = this.customSoundPath;
     if (p == null || !Files.exists(p)) return;
-    playFile(p, true);
+    long seq = previewRequestSeq.incrementAndGet();
+    playFile(p, true, seq);
   }
 
   /** Play a specific custom file (relative to the runtime config directory) for preview/testing. */
   public void previewCustom(String relativePath) {
     Path p = resolveCustomPath(relativePath);
     if (p == null || !Files.exists(p)) return;
-    playFile(p, true);
+    long seq = previewRequestSeq.incrementAndGet();
+    playFile(p, true, seq);
   }
 
   private void applySettings(NotificationSoundSettings s) {
@@ -170,8 +175,11 @@ public class NotificationSoundService {
     }
   }
 
-  private void playResource(String resourcePath, boolean bypassLimiter) {
+  private void playResource(String resourcePath, boolean bypassLimiter, long previewSeq) {
     executor.submit(() -> {
+      if (isStalePreview(previewSeq)) {
+        return;
+      }
       if (!bypassLimiter && !canPlay()) {
         return;
       }
@@ -190,6 +198,9 @@ public class NotificationSoundService {
             AudioSystem.getAudioInputStream(
                 new BufferedInputStream(resource.openStream()))) {
 
+          if (isStalePreview(previewSeq)) {
+            return;
+          }
           playDecoded(originalStream);
           lastPlayed.set(Instant.now());
         }
@@ -201,8 +212,11 @@ public class NotificationSoundService {
     });
   }
 
-  private void playFile(Path path, boolean bypassLimiter) {
+  private void playFile(Path path, boolean bypassLimiter, long previewSeq) {
     executor.submit(() -> {
+      if (isStalePreview(previewSeq)) {
+        return;
+      }
       if (!bypassLimiter && !canPlay()) {
         return;
       }
@@ -214,6 +228,9 @@ public class NotificationSoundService {
       try (AudioInputStream originalStream =
           AudioSystem.getAudioInputStream(path.toFile())) {
 
+        if (isStalePreview(previewSeq)) {
+          return;
+        }
         playDecoded(originalStream);
         lastPlayed.set(Instant.now());
 
@@ -221,6 +238,10 @@ public class NotificationSoundService {
         log.debug("Failed to play custom notification sound: {}", path, e);
       }
     });
+  }
+
+  private boolean isStalePreview(long previewSeq) {
+    return previewSeq > 0L && previewSeq != previewRequestSeq.get();
   }
 
   private void playDecoded(AudioInputStream originalStream) throws Exception {

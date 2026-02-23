@@ -282,8 +282,9 @@ public class TrayNotificationService {
   private boolean passesNotifyConditions(TargetRef target, boolean allowWhenFocused) {
     UiSettings s = settingsBus.get();
     if (s == null || !s.trayEnabled()) return false;
+    boolean focusedNow = isMainWindowFocused();
 
-    if (!allowWhenFocused && s.trayNotifyOnlyWhenUnfocused() && isMainWindowFocused()) {
+    if (!allowWhenFocused && s.trayNotifyOnlyWhenUnfocused() && focusedNow) {
       return false;
     }
 
@@ -291,7 +292,9 @@ public class TrayNotificationService {
       return false;
     }
 
-    if (s.trayNotifySuppressWhenTargetActive() && isTargetActive(target)) {
+    // "Suppress active buffer" should only suppress while IRCafe is actively focused.
+    // If the app is backgrounded, users still expect highlight notifications.
+    if (s.trayNotifySuppressWhenTargetActive() && focusedNow && isTargetActive(target)) {
       return false;
     }
 

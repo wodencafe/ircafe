@@ -731,6 +731,12 @@ public class ThemeManager {
       new LegacySystemThemeDefinition[] {
       new LegacySystemThemeDefinition("nimbus", "Nimbus", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, true),
       new LegacySystemThemeDefinition("nimbus-dark", "Nimbus (Dark)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-amber", "Nimbus (Dark Amber)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-blue", "Nimbus (Dark Blue)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-violet", "Nimbus (Dark Violet)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-green", "Nimbus (Dark Green)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-orange", "Nimbus (Dark Orange)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+      new LegacySystemThemeDefinition("nimbus-dark-magenta", "Nimbus (Dark Magenta)", ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-orange", "Nimbus (Orange)", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-green", "Nimbus (Green)", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
       new LegacySystemThemeDefinition("nimbus-blue", "Nimbus (Blue)", ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
@@ -1217,7 +1223,7 @@ public class ThemeManager {
     if (raw.isEmpty()) raw = "darcula";
 
     String lower = raw.toLowerCase(Locale.ROOT);
-    if (!"nimbus-dark".equals(lower)) {
+    if (!isNimbusDarkVariant(lower)) {
       clearNimbusDarkOverrides();
     }
     if (!isNimbusTintVariant(lower)) {
@@ -1239,6 +1245,12 @@ public class ThemeManager {
         case "system" -> UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         case "nimbus" -> applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
         case "nimbus-dark" -> applyNimbusDarkLookAndFeelOrFallback();
+        case "nimbus-dark-amber" -> applyNimbusDarkAmberLookAndFeelOrFallback();
+        case "nimbus-dark-blue" -> applyNimbusDarkBlueLookAndFeelOrFallback();
+        case "nimbus-dark-violet" -> applyNimbusDarkVioletLookAndFeelOrFallback();
+        case "nimbus-dark-green" -> applyNimbusDarkGreenLookAndFeelOrFallback();
+        case "nimbus-dark-orange" -> applyNimbusDarkOrangeLookAndFeelOrFallback();
+        case "nimbus-dark-magenta" -> applyNimbusDarkMagentaLookAndFeelOrFallback();
         case "nimbus-orange" -> applyNimbusOrangeLookAndFeelOrFallback();
         case "nimbus-green" -> applyNimbusGreenLookAndFeelOrFallback();
         case "nimbus-blue" -> applyNimbusBlueLookAndFeelOrFallback();
@@ -1450,6 +1462,60 @@ public class ThemeManager {
     if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
       // Nimbus caches painters/state maps during install; re-applying here keeps idle states dark.
       applyNimbusDarkOverrides();
+    }
+  }
+
+  private void applyNimbusDarkAmberLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkAmberOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkAmberOverrides();
+    }
+  }
+
+  private void applyNimbusDarkBlueLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkBlueOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkBlueOverrides();
+    }
+  }
+
+  private void applyNimbusDarkVioletLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkVioletOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkVioletOverrides();
+    }
+  }
+
+  private void applyNimbusDarkGreenLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkGreenOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkGreenOverrides();
+    }
+  }
+
+  private void applyNimbusDarkOrangeLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkOrangeOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkOrangeOverrides();
+    }
+  }
+
+  private void applyNimbusDarkMagentaLookAndFeelOrFallback() throws Exception {
+    applyNimbusDarkMagentaOverrides();
+    applyLegacySystemLookAndFeelOrFallback(NIMBUS_LAF_CLASS);
+    LookAndFeel laf = UIManager.getLookAndFeel();
+    if (laf != null && NIMBUS_LAF_CLASS.equals(laf.getClass().getName())) {
+      applyNimbusDarkMagentaOverrides();
     }
   }
 
@@ -1689,6 +1755,159 @@ public class ThemeManager {
     UIManager.put("SplitPaneDivider.draggingColor", uiColor(0x50, 0x5F, 0x74));
     UIManager.put("ScrollPane.borderColor", border);
     UIManager.put("TabbedPane.focus", focus);
+  }
+
+  private static void applyNimbusDarkAmberOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x38, 0x29, 0x15),
+        uiColor(0x39, 0x31, 0x24),
+        uiColor(0xCC, 0x8E, 0x33),
+        uiColor(0xEB, 0xB8, 0x6D),
+        uiColor(0x5E, 0x42, 0x1C),
+        uiColor(0x6C, 0x4C, 0x20),
+        uiColor(0xAA, 0x8A, 0x5F),
+        uiColor(0xCC, 0x8E, 0x33),
+        uiColor(0xD3, 0xA4, 0x5B),
+        uiColor(0xC7, 0x73, 0x63),
+        uiColor(0x73, 0xAB, 0x7F),
+        uiColor(0x7B, 0x64, 0x40)
+    );
+  }
+
+  private static void applyNimbusDarkBlueOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x1A, 0x28, 0x3E),
+        uiColor(0x2A, 0x36, 0x49),
+        uiColor(0x5E, 0x8F, 0xD9),
+        uiColor(0x90, 0xB7, 0xF2),
+        uiColor(0x2E, 0x49, 0x70),
+        uiColor(0x35, 0x53, 0x7E),
+        uiColor(0x72, 0x93, 0xBB),
+        uiColor(0x6A, 0x96, 0xD8),
+        uiColor(0xBE, 0xA5, 0x6B),
+        uiColor(0xB7, 0x70, 0x67),
+        uiColor(0x73, 0xA9, 0x82),
+        uiColor(0x55, 0x6B, 0x87)
+    );
+  }
+
+  private static void applyNimbusDarkVioletOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x2C, 0x24, 0x43),
+        uiColor(0x34, 0x2E, 0x4A),
+        uiColor(0x8F, 0x72, 0xD9),
+        uiColor(0xB8, 0xA0, 0xF4),
+        uiColor(0x49, 0x36, 0x70),
+        uiColor(0x53, 0x3D, 0x7D),
+        uiColor(0x7A, 0x7F, 0xC0),
+        uiColor(0xA3, 0x78, 0xC5),
+        uiColor(0xC0, 0xA5, 0x73),
+        uiColor(0xC0, 0x72, 0x8B),
+        uiColor(0x74, 0xA9, 0x89),
+        uiColor(0x6A, 0x59, 0x91)
+    );
+  }
+
+  private static void applyNimbusDarkGreenOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x1F, 0x33, 0x27),
+        uiColor(0x2A, 0x3F, 0x31),
+        uiColor(0x57, 0xB8, 0x79),
+        uiColor(0x86, 0xD6, 0xA2),
+        uiColor(0x24, 0x4D, 0x34),
+        uiColor(0x2A, 0x5A, 0x3D),
+        uiColor(0x6E, 0xA3, 0x88),
+        uiColor(0x72, 0xB7, 0x8B),
+        uiColor(0xA3, 0xD3, 0xA4),
+        uiColor(0xB9, 0x6E, 0x68),
+        uiColor(0x57, 0xB8, 0x79),
+        uiColor(0x45, 0x6A, 0x55)
+    );
+  }
+
+  private static void applyNimbusDarkOrangeOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x3D, 0x24, 0x18),
+        uiColor(0x4A, 0x2F, 0x24),
+        uiColor(0xE0, 0x7A, 0x2C),
+        uiColor(0xF0, 0xA7, 0x66),
+        uiColor(0x70, 0x40, 0x22),
+        uiColor(0x7E, 0x4A, 0x24),
+        uiColor(0xB0, 0x83, 0x5C),
+        uiColor(0xE0, 0x7A, 0x2C),
+        uiColor(0xE8, 0xA9, 0x5A),
+        uiColor(0xC5, 0x6E, 0x5F),
+        uiColor(0x77, 0xAA, 0x82),
+        uiColor(0x89, 0x61, 0x46)
+    );
+  }
+
+  private static void applyNimbusDarkMagentaOverrides() {
+    applyNimbusDarkAccentOverrides(
+        uiColor(0x35, 0x1F, 0x33),
+        uiColor(0x43, 0x27, 0x44),
+        uiColor(0xC4, 0x6B, 0xD1),
+        uiColor(0xE1, 0x9B, 0xE8),
+        uiColor(0x5E, 0x2F, 0x62),
+        uiColor(0x6B, 0x36, 0x70),
+        uiColor(0x9C, 0x7C, 0xAD),
+        uiColor(0xC2, 0x6F, 0xC9),
+        uiColor(0xD7, 0x9A, 0xE0),
+        uiColor(0xC2, 0x76, 0x90),
+        uiColor(0x78, 0xAA, 0x86),
+        uiColor(0x7A, 0x54, 0x7C)
+    );
+  }
+
+  private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
+                                                     ColorUIResource nimbusBlueGrey,
+                                                     ColorUIResource focus,
+                                                     ColorUIResource link,
+                                                     ColorUIResource selectionBg,
+                                                     ColorUIResource menuSelectionBg,
+                                                     ColorUIResource nimbusInfoBlue,
+                                                     ColorUIResource nimbusOrange,
+                                                     ColorUIResource nimbusAlertYellow,
+                                                     ColorUIResource nimbusRed,
+                                                     ColorUIResource nimbusGreen,
+                                                     ColorUIResource splitPaneDraggingColor) {
+    applyNimbusDarkOverrides();
+
+    ColorUIResource selectionFg = uiColor(0xF3, 0xF7, 0xFD);
+    UIManager.put("nimbusBase", nimbusBase);
+    UIManager.put("nimbusBlueGrey", nimbusBlueGrey);
+    UIManager.put("nimbusFocus", focus);
+    UIManager.put("nimbusSelectionBackground", selectionBg);
+    UIManager.put("nimbusInfoBlue", nimbusInfoBlue);
+    UIManager.put("nimbusOrange", nimbusOrange);
+    UIManager.put("nimbusAlertYellow", nimbusAlertYellow);
+    UIManager.put("nimbusRed", nimbusRed);
+    UIManager.put("nimbusGreen", nimbusGreen);
+    UIManager.put("Component.focusColor", focus);
+    UIManager.put("Component.accentColor", focus);
+    UIManager.put("Component.linkColor", link);
+    UIManager.put("textHighlight", selectionBg);
+    UIManager.put("textHighlightText", selectionFg);
+    UIManager.put("TextComponent.selectionBackground", selectionBg);
+    UIManager.put("TextComponent.selectionForeground", selectionFg);
+    UIManager.put("List.selectionBackground", selectionBg);
+    UIManager.put("List.selectionForeground", selectionFg);
+    UIManager.put("Table.selectionBackground", selectionBg);
+    UIManager.put("Table.selectionForeground", selectionFg);
+    UIManager.put("Tree.selectionBackground", selectionBg);
+    UIManager.put("Tree.selectionForeground", selectionFg);
+    UIManager.put("Menu.selectionBackground", menuSelectionBg);
+    UIManager.put("Menu.selectionForeground", selectionFg);
+    UIManager.put("MenuItem.selectionBackground", menuSelectionBg);
+    UIManager.put("MenuItem.selectionForeground", selectionFg);
+    UIManager.put("CheckBoxMenuItem.selectionBackground", menuSelectionBg);
+    UIManager.put("CheckBoxMenuItem.selectionForeground", selectionFg);
+    UIManager.put("RadioButtonMenuItem.selectionBackground", menuSelectionBg);
+    UIManager.put("RadioButtonMenuItem.selectionForeground", selectionFg);
+    UIManager.put("Button.select", selectionBg);
+    UIManager.put("ToggleButton.select", selectionBg);
+    UIManager.put("TabbedPane.focus", focus);
+    UIManager.put("SplitPaneDivider.draggingColor", splitPaneDraggingColor);
   }
 
   private static void applyNimbusOrangeOverrides() {
@@ -1947,6 +2166,16 @@ public class ThemeManager {
         || "nimbus-violet".equals(lower)
         || "nimbus-magenta".equals(lower)
         || "nimbus-amber".equals(lower);
+  }
+
+  private static boolean isNimbusDarkVariant(String lower) {
+    return "nimbus-dark".equals(lower)
+        || "nimbus-dark-amber".equals(lower)
+        || "nimbus-dark-blue".equals(lower)
+        || "nimbus-dark-violet".equals(lower)
+        || "nimbus-dark-green".equals(lower)
+        || "nimbus-dark-orange".equals(lower)
+        || "nimbus-dark-magenta".equals(lower);
   }
 
   private static void clearFlatAccentDefaults() {
@@ -2265,7 +2494,7 @@ public class ThemeManager {
 
     String lower = raw.toLowerCase(Locale.ROOT);
     return switch (lower) {
-      case "system", "nimbus", "nimbus-dark", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
+      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-dark-green", "nimbus-dark-orange", "nimbus-dark-magenta", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
       default -> true;
     };
   }
