@@ -173,6 +173,7 @@ To install just the desktop entry for the current user on Linux:
 Common local checks:
 
 ```bash
+./gradlew lint
 ./gradlew test
 ./gradlew check
 ```
