@@ -628,12 +628,29 @@ tasks.register("bundleTerminalNotifier") {
     doLast {
         def notifierSrc = file("packaging/macos/terminal-notifier.app")
         if (!notifierSrc.exists()) {
-            throw new GradleException("terminal-notifier.app not found at: $notifierSrc")
+            logger.warn("[ircafe] Skipping terminal-notifier bundle; source app not found at: ${notifierSrc}")
+            return
         }
 
-        def resourcesDir = file("$buildDir/dist/${appName}.app/Contents/Resources")
+        def primaryAppBundle = file("$buildDir/dist/${appName}.app")
+        def appBundle = primaryAppBundle
+        if (!appBundle.exists()) {
+            def bundles = fileTree("$buildDir/dist") {
+                include("**/*.app")
+            }.files.sort { it.absolutePath }
+            appBundle = bundles.find { new File(it, "Contents/Resources").exists() }
+        }
+        if (appBundle == null || !appBundle.exists()) {
+            logger.warn(
+                "[ircafe] Skipping terminal-notifier bundle; no macOS app bundle found under ${buildDir}/dist")
+            return
+        }
+
+        def resourcesDir = new File(appBundle, "Contents/Resources")
         if (!resourcesDir.exists()) {
-            throw new GradleException("jpackage output Resources directory not found at: $resourcesDir")
+            logger.warn(
+                "[ircafe] Skipping terminal-notifier bundle; Resources directory not found at: ${resourcesDir}")
+            return
         }
 
         copy {
@@ -643,7 +660,9 @@ tasks.register("bundleTerminalNotifier") {
 
         def notifierDest = new File(resourcesDir, "terminal-notifier.app/Contents/MacOS/terminal-notifier")
         if (!notifierDest.exists()) {
-            throw new GradleException("terminal-notifier binary was not copied to: $notifierDest")
+            logger.warn(
+                "[ircafe] terminal-notifier bundle copy finished, but binary not found at: ${notifierDest}")
+            return
         }
         notifierDest.setExecutable(true, false)
 
