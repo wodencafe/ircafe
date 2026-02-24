@@ -42,6 +42,11 @@ public sealed interface IrcEvent permits
     IrcEvent.UserAwayStateObserved,
     IrcEvent.UserAccountStateObserved,
     IrcEvent.UserSetNameObserved,
+    IrcEvent.MonitorOnlineObserved,
+    IrcEvent.MonitorOfflineObserved,
+    IrcEvent.MonitorListObserved,
+    IrcEvent.MonitorListEnded,
+    IrcEvent.MonitorListFull,
     IrcEvent.UserTypingObserved,
     IrcEvent.ReadMarkerObserved,
     IrcEvent.MessageReplyObserved,
@@ -466,6 +471,44 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
   /** Observed IRCv3 SETNAME for a nick. */
   record UserSetNameObserved(Instant at, String nick, String realName) implements IrcEvent {}
 
+  /** Observed IRC MONITOR online numerics (RPL_MONONLINE 730). */
+  record MonitorOnlineObserved(Instant at, List<String> nicks) implements IrcEvent {
+    public MonitorOnlineObserved {
+      nicks = normalizeNickList(nicks);
+    }
+  }
+
+  /** Observed IRC MONITOR offline numerics (RPL_MONOFFLINE 731). */
+  record MonitorOfflineObserved(Instant at, List<String> nicks) implements IrcEvent {
+    public MonitorOfflineObserved {
+      nicks = normalizeNickList(nicks);
+    }
+  }
+
+  /** Observed IRC MONITOR list numerics (RPL_MONLIST 732). */
+  record MonitorListObserved(Instant at, List<String> nicks) implements IrcEvent {
+    public MonitorListObserved {
+      nicks = normalizeNickList(nicks);
+    }
+  }
+
+  /** Observed IRC MONITOR list end (RPL_ENDOFMONLIST 733). */
+  record MonitorListEnded(Instant at) implements IrcEvent {}
+
+  /** Observed IRC MONITOR list-full error (ERR_MONLISTFULL 734). */
+  record MonitorListFull(
+      Instant at,
+      int limit,
+      List<String> nicks,
+      String message
+  ) implements IrcEvent {
+    public MonitorListFull {
+      if (limit < 0) limit = 0;
+      nicks = normalizeNickList(nicks);
+      message = Objects.toString(message, "").trim();
+    }
+  }
+
   /** Observed IRCv3 typing indicator (typically from +typing tag). */
   record UserTypingObserved(Instant at, String from, String target, String state) implements IrcEvent {}
 
@@ -478,7 +521,7 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
   /** Observed IRCv3 draft/react tag. */
   record MessageReactObserved(Instant at, String from, String target, String reaction, String messageId) implements IrcEvent {}
 
-  /** Observed IRCv3 message redaction tag (for example draft/delete). */
+  /** Observed IRCv3 message redaction signal (for example draft/delete tags or REDACT command). */
   record MessageRedactionObserved(Instant at, String from, String target, String messageId) implements IrcEvent {}
 
   /** Observed CAP change line (ACK/NEW/DEL) for a capability. */
@@ -551,5 +594,22 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
     if (k.startsWith("+")) k = k.substring(1).trim();
     if (k.isEmpty()) return "";
     return k.toLowerCase(Locale.ROOT);
+  }
+
+  private static List<String> normalizeNickList(List<String> rawNicks) {
+    if (rawNicks == null || rawNicks.isEmpty()) return List.of();
+    LinkedHashMap<String, String> out = new LinkedHashMap<>();
+    for (String raw : rawNicks) {
+      String nick = Objects.toString(raw, "").trim();
+      if (nick.isEmpty()) continue;
+      if (nick.startsWith(":")) nick = nick.substring(1).trim();
+      int bang = nick.indexOf('!');
+      if (bang > 0) nick = nick.substring(0, bang).trim();
+      if (nick.isEmpty()) continue;
+      String key = nick.toLowerCase(Locale.ROOT);
+      out.putIfAbsent(key, nick);
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out.values());
   }
 }

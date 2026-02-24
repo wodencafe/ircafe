@@ -316,6 +316,64 @@ public class RuntimeConfigStore {
     return List.of();
   }
 
+  public synchronized void rememberMonitorNick(String serverId, String nick) {
+    updateServer(serverId, server -> {
+      String n = normalizeMonitorNick(nick);
+      if (n.isEmpty()) return;
+
+      List<String> monitorNicks = sanitizeMonitorNickList(server.get("monitorNicks"));
+      if (containsIgnoreCase(monitorNicks, n)) return;
+      monitorNicks.add(n);
+      server.put("monitorNicks", monitorNicks);
+    });
+  }
+
+  public synchronized void forgetMonitorNick(String serverId, String nick) {
+    updateServer(serverId, server -> {
+      String n = normalizeMonitorNick(nick);
+      if (n.isEmpty()) return;
+
+      List<String> monitorNicks = sanitizeMonitorNickList(server.get("monitorNicks"));
+      monitorNicks.removeIf(existing -> existing != null && existing.equalsIgnoreCase(n));
+      if (monitorNicks.isEmpty()) {
+        server.remove("monitorNicks");
+      } else {
+        server.put("monitorNicks", monitorNicks);
+      }
+    });
+  }
+
+  public synchronized void replaceMonitorNicks(String serverId, List<String> nicks) {
+    updateServer(serverId, server -> {
+      List<String> monitorNicks = sanitizeMonitorNickList(nicks);
+      if (monitorNicks.isEmpty()) {
+        server.remove("monitorNicks");
+      } else {
+        server.put("monitorNicks", monitorNicks);
+      }
+    });
+  }
+
+  public synchronized List<String> readMonitorNicks(String serverId) {
+    try {
+      if (file.toString().isBlank()) return List.of();
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return List.of();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      List<Map<String, Object>> servers = readServerList(irc).orElse(List.of());
+      for (Map<String, Object> server : servers) {
+        if (server == null) continue;
+        if (!sid.equalsIgnoreCase(Objects.toString(server.get("id"), "").trim())) continue;
+        return List.copyOf(sanitizeMonitorNickList(server.get("monitorNicks")));
+      }
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read monitor nick list from '{}'", file, e);
+    }
+    return List.of();
+  }
+
   public synchronized void rememberNick(String serverId, String nick) {
     updateServer(serverId, server -> {
       String n = Objects.toString(nick, "").trim();
@@ -432,6 +490,60 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist ui.density setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUiFontOverrideEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("uiFontOverrideEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.uiFontOverrideEnabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUiFontFamily(String family) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      String f = family != null ? family.trim() : "";
+      if (f.isBlank()) {
+        ui.remove("uiFontFamily");
+      } else {
+        ui.put("uiFontFamily", f);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.uiFontFamily setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUiFontSize(int size) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      int s = Math.max(8, Math.min(48, size));
+      ui.put("uiFontSize", s);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.uiFontSize setting to '{}'", file, e);
     }
   }
 
@@ -759,6 +871,26 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist tray.linuxDbusActionsEnabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTrayNotificationBackend(String backendToken) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(backendToken, "").trim().toLowerCase(Locale.ROOT);
+      if (v.isEmpty()) v = "auto";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      tray.put("notificationBackend", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.notificationBackend setting to '{}'", file, e);
     }
   }
 
@@ -1987,6 +2119,171 @@ public class RuntimeConfigStore {
   }
 
   /**
+   * Persisted IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}.
+   */
+  public record Ircv3StsPolicySnapshot(
+      long expiresAtEpochMs,
+      Integer port,
+      boolean preload,
+      long durationSeconds,
+      String rawValue
+  ) {}
+
+  /**
+   * Reads persisted IRCv3 STS policy snapshots under {@code ircafe.ircv3.stsPolicies}.
+   *
+   * <p>Entries with invalid hosts or missing/invalid expiry are ignored.
+   */
+  public synchronized Map<String, Ircv3StsPolicySnapshot> readIrcv3StsPolicies() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object ircv3Obj = ircafe.get("ircv3");
+      if (!(ircv3Obj instanceof Map<?, ?> ircv3)) return Map.of();
+
+      Object policiesObj = ircv3.get("stsPolicies");
+      if (!(policiesObj instanceof Map<?, ?> policies)) return Map.of();
+
+      Map<String, Ircv3StsPolicySnapshot> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : policies.entrySet()) {
+        String host = normalizeHostKey(Objects.toString(entry.getKey(), ""));
+        if (host == null) continue;
+        if (!(entry.getValue() instanceof Map<?, ?> rawPolicy)) continue;
+
+        long expiresAtEpochMs = asLong(rawPolicy.get("expiresAtEpochMs")).orElse(0L);
+        if (expiresAtEpochMs <= 0L) continue;
+
+        long durationSeconds = Math.max(0L, asLong(rawPolicy.get("durationSeconds")).orElse(0L));
+        Integer port = asInt(rawPolicy.get("port")).orElse(null);
+        if (port != null && (port <= 0 || port > 65_535)) {
+          port = null;
+        }
+        boolean preload = asBoolean(rawPolicy.get("preload")).orElse(false);
+        String rawValue = Objects.toString(rawPolicy.get("rawValue"), "").trim();
+
+        out.put(host, new Ircv3StsPolicySnapshot(
+            expiresAtEpochMs,
+            port,
+            preload,
+            durationSeconds,
+            rawValue));
+      }
+      return out;
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read IRCv3 STS policy cache from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists one IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}.
+   */
+  public synchronized void rememberIrcv3StsPolicy(
+      String host,
+      long expiresAtEpochMs,
+      Integer port,
+      boolean preload,
+      long durationSeconds,
+      String rawValue
+  ) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String hostKey = normalizeHostKey(host);
+      if (hostKey == null) return;
+      if (expiresAtEpochMs <= 0L || durationSeconds <= 0L) {
+        forgetIrcv3StsPolicy(hostKey);
+        return;
+      }
+
+      Integer normalizedPort = port;
+      if (normalizedPort != null && (normalizedPort <= 0 || normalizedPort > 65_535)) {
+        normalizedPort = null;
+      }
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ircv3 = getOrCreateMap(ircafe, "ircv3");
+      Map<String, Object> policies = getOrCreateMap(ircv3, "stsPolicies");
+
+      Map<String, Object> policy = new LinkedHashMap<>();
+      policy.put("expiresAtEpochMs", expiresAtEpochMs);
+      policy.put("durationSeconds", durationSeconds);
+      if (normalizedPort != null) {
+        policy.put("port", normalizedPort);
+      }
+      if (preload) {
+        policy.put("preload", true);
+      }
+      String normalizedRawValue = Objects.toString(rawValue, "").trim();
+      if (!normalizedRawValue.isEmpty()) {
+        policy.put("rawValue", normalizedRawValue);
+      }
+
+      policies.put(hostKey, policy);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist IRCv3 STS policy for host '{}' to '{}'", host, file, e);
+    }
+  }
+
+  /**
+   * Removes a persisted IRCv3 STS policy snapshot from {@code ircafe.ircv3.stsPolicies}.
+   */
+  public synchronized void forgetIrcv3StsPolicy(String host) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String hostKey = normalizeHostKey(host);
+      if (hostKey == null) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafeRaw)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> ircafe = (Map<String, Object>) ircafeRaw;
+
+      Object ircv3Obj = ircafe.get("ircv3");
+      if (!(ircv3Obj instanceof Map<?, ?> ircv3Raw)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> ircv3 = (Map<String, Object>) ircv3Raw;
+
+      Object policiesObj = ircv3.get("stsPolicies");
+      if (!(policiesObj instanceof Map<?, ?> policiesRaw)) return;
+      @SuppressWarnings("unchecked")
+      Map<String, Object> policies = (Map<String, Object>) policiesRaw;
+
+      boolean removed = false;
+      for (String k : new ArrayList<>(policies.keySet())) {
+        if (hostKey.equalsIgnoreCase(Objects.toString(k, "").trim())) {
+          policies.remove(k);
+          removed = true;
+        }
+      }
+      if (!removed) return;
+
+      if (policies.isEmpty()) {
+        ircv3.remove("stsPolicies");
+      }
+      if (ircv3.isEmpty()) {
+        ircafe.remove("ircv3");
+      }
+      if (ircafe.isEmpty()) {
+        doc.remove("ircafe");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not remove IRCv3 STS policy for host '{}' from '{}'", host, file, e);
+    }
+  }
+
+  /**
    * Reads persisted IRCv3 capability request overrides under {@code ircafe.ui.ircv3Capabilities}.
    *
    * <p>Keys are normalized to lowercase, values are booleans. Missing/invalid entries are ignored.
@@ -2600,6 +2897,24 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     }
   }
 
+  public synchronized void rememberMonitorIsonPollIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> monitorFallback = getOrCreateMap(ui, "monitorFallback");
+
+      int v = Math.max(5, Math.min(600, seconds));
+      monitorFallback.put("isonPollIntervalSeconds", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist monitor fallback ISON interval setting to '{}'", file, e);
+    }
+  }
+
 
   // --- User info enrichment fallback (ircafe.ui.userInfoEnrichment.*) ---
 
@@ -3158,6 +3473,43 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       log.warn("[ircafe] Could not persist znc auto-connect setting to '{}'", file, e);
     }
   }
+
+  private static List<String> sanitizeMonitorNickList(Object rawList) {
+    if (!(rawList instanceof List<?> list) || list.isEmpty()) return new ArrayList<>();
+    ArrayList<String> out = new ArrayList<>();
+    for (Object raw : list) {
+      String nick = normalizeMonitorNick(raw);
+      if (nick.isEmpty()) continue;
+      if (!containsIgnoreCase(out, nick)) out.add(nick);
+    }
+    if (out.isEmpty()) return new ArrayList<>();
+    return out;
+  }
+
+  private static String normalizeMonitorNick(Object rawNick) {
+    String nick = Objects.toString(rawNick, "").trim();
+    if (nick.isEmpty()) return "";
+    if (nick.startsWith(":")) nick = nick.substring(1).trim();
+    int comma = nick.indexOf(',');
+    if (comma >= 0) nick = nick.substring(0, comma).trim();
+    int bang = nick.indexOf('!');
+    if (bang > 0) nick = nick.substring(0, bang).trim();
+    if (nick.isEmpty()) return "";
+    if (nick.indexOf(' ') >= 0 || nick.indexOf('\t') >= 0) return "";
+    if (nick.startsWith("#") || nick.startsWith("&")) return "";
+    return nick;
+  }
+
+  private static boolean containsIgnoreCase(List<String> values, String needle) {
+    if (values == null || values.isEmpty()) return false;
+    String n = Objects.toString(needle, "").trim();
+    if (n.isEmpty()) return false;
+    for (String value : values) {
+      if (value != null && value.equalsIgnoreCase(n)) return true;
+    }
+    return false;
+  }
+
   private interface ServerUpdater {
     void update(Map<String, Object> serverMap);
   }
@@ -3433,6 +3785,25 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
   private static String normalizeCapabilityKey(String capability) {
     String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
     return c.isEmpty() ? null : c;
+  }
+
+  private static String normalizeHostKey(String host) {
+    String h = Objects.toString(host, "").trim().toLowerCase(Locale.ROOT);
+    return h.isEmpty() ? null : h;
+  }
+
+  private static Optional<Long> asLong(Object value) {
+    if (value instanceof Number n) return Optional.of(n.longValue());
+    if (value instanceof String s) {
+      String t = s.trim();
+      if (t.isEmpty()) return Optional.empty();
+      try {
+        return Optional.of(Long.parseLong(t));
+      } catch (Exception ignored) {
+        return Optional.empty();
+      }
+    }
+    return Optional.empty();
   }
 
   private static Optional<Integer> asInt(Object value) {

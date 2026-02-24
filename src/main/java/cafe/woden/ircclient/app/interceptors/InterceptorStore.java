@@ -12,6 +12,9 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -128,6 +131,52 @@ public class InterceptorStore {
       notificationSoundService.preview(BuiltInSound.fromId(soundId));
     } catch (Exception ignored) {
     }
+  }
+
+  /** Import a custom interceptor sound into IRCafe's runtime sounds directory and return its relative path. */
+  public String importInterceptorCustomSoundFile(File source) throws Exception {
+    if (source == null) throw new IllegalArgumentException("Source file is required");
+
+    String name = Objects.toString(source.getName(), "").trim();
+    if (name.isBlank()) throw new IllegalArgumentException("Invalid file name");
+
+    String lower = name.toLowerCase(Locale.ROOT);
+    boolean mp3 = lower.endsWith(".mp3");
+    boolean wav = lower.endsWith(".wav");
+    if (!mp3 && !wav) {
+      throw new IllegalArgumentException("Only .mp3 and .wav are supported");
+    }
+
+    Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
+    Path base = cfg != null ? cfg.getParent() : null;
+    if (base == null) {
+      throw new IllegalStateException("Runtime config directory is unavailable");
+    }
+
+    Path soundsDir = base.resolve("sounds");
+    Files.createDirectories(soundsDir);
+
+    String sanitized = name.replaceAll("[^A-Za-z0-9._-]+", "_");
+    if (sanitized.isBlank()) {
+      sanitized = mp3 ? "interceptor.mp3" : "interceptor.wav";
+    }
+
+    String ext = mp3 ? "mp3" : "wav";
+    String baseName = sanitized;
+    int dot = sanitized.lastIndexOf('.');
+    if (dot > 0) {
+      baseName = sanitized.substring(0, dot);
+    }
+
+    Path dest = soundsDir.resolve(baseName + "." + ext);
+    int i = 2;
+    while (Files.exists(dest)) {
+      dest = soundsDir.resolve(baseName + "-" + i + "." + ext);
+      i++;
+    }
+
+    Files.copy(source.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+    return "sounds/" + dest.getFileName();
   }
 
   public InterceptorDefinition createInterceptor(String serverId, String requestedName) {

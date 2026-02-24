@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.settings;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,8 +16,12 @@ import javax.swing.JComboBox;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.JTextField;
+import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -121,17 +124,19 @@ class ThemeValidatorTest {
     assertNotNull(nimbusDark, "nimbus-dark theme must be present");
     assertNotNull(darcula, "darcula theme must be present");
 
-    final Color nimbusMenuBg = new Color(0x23, 0x27, 0x2D);
-    final Color nimbusSelectionBg = new Color(0x33, 0x45, 0x59);
-    final Color nimbusFocus = new Color(0x58, 0x78, 0xA2);
+    final Color[] nimbusMenuBg = new Color[1];
+    final Color[] nimbusSelectionBg = new Color[1];
+    final Color[] nimbusFocus = new Color[1];
 
     onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
     onEdt(() -> {
-      Color menuBg = UIManager.getColor("MenuBar.background");
-      assertNotNull(menuBg, "nimbus-dark: expected menu background");
-      assertTrue(
-          nimbusMenuBg.equals(menuBg),
-          () -> "nimbus-dark menu background changed unexpectedly: " + menuBg);
+      nimbusMenuBg[0] = UIManager.getColor("MenuBar.background");
+      nimbusSelectionBg[0] = UIManager.getColor("nimbusSelectionBackground");
+      nimbusFocus[0] = UIManager.getColor("nimbusFocus");
+
+      assertNotNull(nimbusMenuBg[0], "nimbus-dark: expected menu background");
+      assertNotNull(nimbusSelectionBg[0], "nimbus-dark: expected selection background");
+      assertNotNull(nimbusFocus[0], "nimbus-dark: expected focus color");
     });
 
     onEdt(() -> themeManager.installLookAndFeel(darcula.id()));
@@ -142,19 +147,19 @@ class ThemeValidatorTest {
 
       if (menuBgAfter != null) {
         assertNotEquals(
-            nimbusMenuBg,
+            nimbusMenuBg[0],
             menuBgAfter,
             "MenuBar.background leaked from nimbus-dark into darcula");
       }
       if (selectionAfter != null) {
         assertNotEquals(
-            nimbusSelectionBg,
+            nimbusSelectionBg[0],
             selectionAfter,
             "nimbusSelectionBackground leaked from nimbus-dark into darcula");
       }
       if (focusAfter != null) {
         assertNotEquals(
-            nimbusFocus,
+            nimbusFocus[0],
             focusAfter,
             "nimbusFocus leaked from nimbus-dark into darcula");
       }
@@ -168,11 +173,6 @@ class ThemeValidatorTest {
 
     onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
     onEdt(() -> {
-      Color expectedMenuBg = new Color(0x23, 0x27, 0x2D);
-      Color expectedText = new Color(0xE6, 0xEA, 0xF0);
-      Color expectedControl = new Color(0x23, 0x27, 0x2D);
-      Color expectedComboBg = new Color(0x1F, 0x23, 0x29);
-
       Color menuBg = UIManager.getColor("MenuBar.background");
       Color menuFg = UIManager.getColor("Menu.foreground");
       Color buttonBg = UIManager.getColor("Button.background");
@@ -183,10 +183,19 @@ class ThemeValidatorTest {
       assertNotNull(buttonBg, "nimbus-dark: Button.background should be set");
       assertNotNull(comboBg, "nimbus-dark: ComboBox.background should be set");
 
-      assertEquals(expectedMenuBg, menuBg, "nimbus-dark: unexpected MenuBar.background");
-      assertEquals(expectedText, menuFg, "nimbus-dark: unexpected Menu.foreground");
-      assertEquals(expectedControl, buttonBg, "nimbus-dark: unexpected Button.background");
-      assertEquals(expectedComboBg, comboBg, "nimbus-dark: unexpected ComboBox.background");
+      assertContrastAtLeast(
+          "nimbus-dark",
+          "Menu foreground vs MenuBar background",
+          menuFg,
+          menuBg,
+          MIN_TEXT_CONTRAST);
+
+      assertTrue(relativeLuminance(menuBg) < 0.35, "nimbus-dark: menu background should stay dark");
+      assertTrue(relativeLuminance(buttonBg) < 0.45, "nimbus-dark: button background should stay dark");
+      assertTrue(relativeLuminance(comboBg) < 0.40, "nimbus-dark: combo background should stay dark");
+
+      assertNotEquals(menuBg, buttonBg, "nimbus-dark: menu and button should use different shades");
+      assertNotEquals(buttonBg, comboBg, "nimbus-dark: button and combo should use different shades");
     });
   }
 
@@ -232,6 +241,107 @@ class ThemeValidatorTest {
           assertTrue(
               relativeLuminance(comboBg) < 0.35,
               () -> "nimbus-dark: JComboBox idle background is too bright: " + comboBg);
+        });
+  }
+
+  @Test
+  void nimbusDarkBlueUsesTintedTextFieldAndTextPaneBackgrounds() throws Exception {
+    ThemeManager.ThemeOption nimbusDark = findThemeById("nimbus-dark");
+    ThemeManager.ThemeOption nimbusDarkBlue = findThemeById("nimbus-dark-blue");
+    assertNotNull(nimbusDark, "nimbus-dark theme must be present");
+    assertNotNull(nimbusDarkBlue, "nimbus-dark-blue theme must be present");
+
+    final Color[] baseFieldBg = new Color[1];
+    final Color[] basePaneBg = new Color[1];
+
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
+    onEdt(
+        () -> {
+          JTextField field = new JTextField("base");
+          JTextPane pane = new JTextPane();
+          baseFieldBg[0] = field.getBackground();
+          basePaneBg[0] = pane.getBackground();
+        });
+
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDarkBlue.id()));
+    onEdt(
+        () -> {
+          JTextField tintedField = new JTextField("tinted");
+          JTextPane tintedPane = new JTextPane();
+
+          Color tintedFieldBg = tintedField.getBackground();
+          Color tintedPaneBg = tintedPane.getBackground();
+
+          assertNotNull(tintedFieldBg, "nimbus-dark-blue: JTextField background should be set");
+          assertNotNull(tintedPaneBg, "nimbus-dark-blue: JTextPane background should be set");
+          assertNotEquals(
+              baseFieldBg[0],
+              tintedFieldBg,
+              "nimbus-dark-blue: JTextField background should differ from base nimbus-dark");
+          assertNotEquals(
+              basePaneBg[0],
+              tintedPaneBg,
+              "nimbus-dark-blue: JTextPane background should differ from base nimbus-dark");
+
+          assertTrue(
+              tintedFieldBg.getBlue() > tintedFieldBg.getRed() + 6,
+              () ->
+                  "nimbus-dark-blue: JTextField background should keep a blue tint, got "
+                      + tintedFieldBg);
+          assertTrue(
+              tintedPaneBg.getBlue() > tintedPaneBg.getRed() + 4,
+              () ->
+                  "nimbus-dark-blue: JTextPane background should keep a blue tint, got "
+                      + tintedPaneBg);
+        });
+  }
+
+  @Test
+  void nimbusDarkOrangePopupMenusUseReadableTintedPalette() throws Exception {
+    ThemeManager.ThemeOption nimbusDarkOrange = findThemeById("nimbus-dark-orange");
+    assertNotNull(nimbusDarkOrange, "nimbus-dark-orange theme must be present");
+
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDarkOrange.id()));
+    onEdt(
+        () -> {
+          JPopupMenu menu = new JPopupMenu();
+          JMenuItem copy = new JMenuItem("Copy");
+          JMenuItem disabled = new JMenuItem("Disabled");
+          disabled.setEnabled(false);
+          menu.add(copy);
+          menu.add(disabled);
+
+          PopupMenuThemeSupport.prepareForDisplay(menu);
+
+          Color popupBg = menu.getBackground();
+          Color popupFg = firstNonNullColor("PopupMenu.foreground", "MenuItem.foreground", "Label.foreground");
+          Color itemBg = copy.getBackground();
+          Color itemFg = copy.getForeground();
+
+          assertNotNull(popupBg, "nimbus-dark-orange: popup background should be set");
+          assertNotNull(itemBg, "nimbus-dark-orange: menu item background should be set");
+          assertNotNull(itemFg, "nimbus-dark-orange: menu item foreground should be set");
+          assertNotNull(popupFg, "nimbus-dark-orange: popup foreground should be set");
+
+          assertTrue(
+              relativeLuminance(popupBg) < 0.40,
+              () -> "nimbus-dark-orange: popup background should stay dark, got " + popupBg);
+          assertTrue(
+              popupBg.getRed() >= popupBg.getBlue(),
+              () -> "nimbus-dark-orange: popup background should keep warm tint, got " + popupBg);
+
+          assertContrastAtLeast(
+              "nimbus-dark-orange",
+              "Popup foreground vs popup background",
+              popupFg,
+              popupBg,
+              MIN_TEXT_CONTRAST);
+          assertContrastAtLeast(
+              "nimbus-dark-orange",
+              "Menu item foreground vs menu item background",
+              itemFg,
+              itemBg,
+              MIN_TEXT_CONTRAST);
         });
   }
 

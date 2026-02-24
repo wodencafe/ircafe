@@ -28,4 +28,14 @@ class TargetRefUiOnlyTest {
     assertEquals("abc-123", ref.interceptorId());
     assertEquals(ref, new TargetRef("srv", TargetRef.INTERCEPTOR_PREFIX + "ABC-123"));
   }
+
+  @Test
+  void monitorGroupTargetIsUiOnly() {
+    TargetRef ref = TargetRef.monitorGroup("srv");
+    assertTrue(ref.isMonitorGroup());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(ref, new TargetRef("srv", TargetRef.MONITOR_GROUP_TARGET));
+  }
 }

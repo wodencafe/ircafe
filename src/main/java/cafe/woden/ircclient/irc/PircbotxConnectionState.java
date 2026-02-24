@@ -115,6 +115,17 @@ final class PircbotxConnectionState {
   final AtomicBoolean labeledResponseCapAcked = new AtomicBoolean(false);
   final AtomicBoolean setnameCapAcked = new AtomicBoolean(false);
   final AtomicBoolean chghostCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean stsCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean multilineCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftMultilineCapAcked = new AtomicBoolean(false);
+  final AtomicLong multilineMaxBytes = new AtomicLong(0L);
+  final AtomicLong multilineMaxLines = new AtomicLong(0L);
+  final AtomicLong draftMultilineMaxBytes = new AtomicLong(0L);
+  final AtomicLong draftMultilineMaxLines = new AtomicLong(0L);
+  final AtomicLong multilineOfferedMaxBytes = new AtomicLong(0L);
+  final AtomicLong multilineOfferedMaxLines = new AtomicLong(0L);
+  final AtomicLong draftMultilineOfferedMaxBytes = new AtomicLong(0L);
+  final AtomicLong draftMultilineOfferedMaxLines = new AtomicLong(0L);
   final AtomicBoolean draftReplyCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftReactCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageEditCapAcked = new AtomicBoolean(false);
@@ -129,6 +140,8 @@ final class PircbotxConnectionState {
   final AtomicBoolean typingClientTagAllowed = new AtomicBoolean(true);
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean monitorCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean extendedMonitorCapAcked = new AtomicBoolean(false);
 
   // soju bouncer network discovery (cap: soju.im/bouncer-networks)
   final AtomicBoolean sojuBouncerNetworksCapAcked = new AtomicBoolean(false);
@@ -146,6 +159,8 @@ final class PircbotxConnectionState {
   // IRCv3 server-time support (canonical message timestamps).
   final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);
   final AtomicBoolean standardRepliesCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean monitorSupported = new AtomicBoolean(false);
+  final AtomicLong monitorMaxTargets = new AtomicLong(0L);
   // Warn once per application run if server-time wasn't negotiated on this server.
   final AtomicBoolean serverTimeMissingWarned = new AtomicBoolean(false);
 
@@ -154,6 +169,10 @@ final class PircbotxConnectionState {
 
   // One-time connect log summary of negotiated caps.
   final AtomicBoolean capSummaryLogged = new AtomicBoolean(false);
+
+  // Current connection metadata (used by transport/capability policy helpers).
+  final AtomicReference<String> connectedHost = new AtomicReference<>("");
+  final AtomicBoolean connectedWithTls = new AtomicBoolean(false);
 
   // Best-effort bridge between InputParser command metadata and PrivateMessageEvent objects.
   private final Map<String, PrivateTargetHint> privateTargetHintByMessageId = new ConcurrentHashMap<>();
@@ -172,6 +191,17 @@ final class PircbotxConnectionState {
     labeledResponseCapAcked.set(false);
     setnameCapAcked.set(false);
     chghostCapAcked.set(false);
+    stsCapAcked.set(false);
+    multilineCapAcked.set(false);
+    draftMultilineCapAcked.set(false);
+    multilineMaxBytes.set(0L);
+    multilineMaxLines.set(0L);
+    draftMultilineMaxBytes.set(0L);
+    draftMultilineMaxLines.set(0L);
+    multilineOfferedMaxBytes.set(0L);
+    multilineOfferedMaxLines.set(0L);
+    draftMultilineOfferedMaxBytes.set(0L);
+    draftMultilineOfferedMaxLines.set(0L);
     draftReplyCapAcked.set(false);
     draftReactCapAcked.set(false);
     draftMessageEditCapAcked.set(false);
@@ -180,11 +210,17 @@ final class PircbotxConnectionState {
     typingClientTagAllowed.set(true);
     typingCapAcked.set(false);
     readMarkerCapAcked.set(false);
+    monitorCapAcked.set(false);
+    extendedMonitorCapAcked.set(false);
     sojuBouncerNetworksCapAcked.set(false);
     serverTimeCapAcked.set(false);
     standardRepliesCapAcked.set(false);
+    monitorSupported.set(false);
+    monitorMaxTargets.set(0L);
     capSummaryLogged.set(false);
     typingMissingWarned.set(false);
+    connectedHost.set("");
+    connectedWithTls.set(false);
     clearPrivateTargetHints();
   }
 

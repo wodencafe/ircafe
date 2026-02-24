@@ -20,6 +20,24 @@ Flowable<TargetRef> targetActivations();
   Flowable<UserActionRequest> userActionRequests();
 
   Flowable<String> outboundLines();
+
+  /**
+   * Ask the user whether a multiline message should be sent as separate single-line messages.
+   *
+   * <p>This is used when IRCv3 multiline cannot be used for the current payload (not negotiated
+   * or over negotiated limits).
+   *
+   * @return {@code true} to send split lines, {@code false} to cancel sending.
+   */
+  default boolean confirmMultilineSplitFallback(
+      TargetRef target,
+      int lineCount,
+      long payloadUtf8Bytes,
+      String reason
+  ) {
+    return false;
+  }
+
   Flowable<Object> connectClicks();
   Flowable<Object> disconnectClicks();
 

@@ -21,6 +21,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
@@ -93,7 +94,7 @@ public final class ChatLineInspectorDialog {
     area.setWrapStyleWord(true);
     area.setCaretPosition(0);
     try {
-      area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+      area.setFont(defaultMonospaceFont());
     } catch (Exception ignored) {
     }
 
@@ -116,6 +117,14 @@ public final class ChatLineInspectorDialog {
     dialog.pack();
     dialog.setLocationRelativeTo(dialogAnchor);
     dialog.setVisible(true);
+  }
+
+  private static Font defaultMonospaceFont() {
+    Font base = UIManager.getFont("TextArea.font");
+    if (base == null) base = UIManager.getFont("TextPane.font");
+    if (base == null) base = UIManager.getFont("Label.font");
+    int size = base != null ? base.getSize() : 12;
+    return new Font(Font.MONOSPACED, Font.PLAIN, Math.max(10, size));
   }
 
   private static Dimension preferredDialogSize(Component anchor) {

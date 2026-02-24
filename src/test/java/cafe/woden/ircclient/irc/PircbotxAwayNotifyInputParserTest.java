@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -20,7 +21,7 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -48,7 +49,7 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -62,11 +63,77 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capAckTracksMonitorAndExtendedMonitorState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :monitor extended-monitor",
+        List.of("me", "ACK", ":monitor extended-monitor"),
+        ImmutableMap.of());
+
+    assertTrue(conn.monitorCapAcked.get());
+    assertTrue(conn.extendedMonitorCapAcked.get());
+  }
+
+  @Test
+  void capDelClearsMonitorAndExtendedMonitorState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :monitor extended-monitor",
+        List.of("me", "ACK", ":monitor extended-monitor"),
+        ImmutableMap.of());
+    assertTrue(conn.monitorCapAcked.get());
+    assertTrue(conn.extendedMonitorCapAcked.get());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me DEL :monitor extended-monitor",
+        List.of("me", "DEL", ":monitor extended-monitor"),
+        ImmutableMap.of());
+
+    assertFalse(conn.monitorCapAcked.get());
+    assertFalse(conn.extendedMonitorCapAcked.get());
+  }
+
+  @Test
+  void capAckTracksDraftExtendedMonitorAlias() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :draft/extended-monitor",
+        List.of("me", "ACK", ":draft/extended-monitor"),
+        ImmutableMap.of());
+
+    assertTrue(conn.extendedMonitorCapAcked.get());
+  }
+
+  @Test
   void capAckTracksMessageEditAndRedactionState() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -81,11 +148,112 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capAckTracksStsAndMultilineState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :sts multiline draft/multiline",
+        List.of("me", "ACK", ":sts multiline draft/multiline"),
+        ImmutableMap.of());
+
+    assertTrue(conn.stsCapAcked.get());
+    assertTrue(conn.multilineCapAcked.get());
+    assertTrue(conn.draftMultilineCapAcked.get());
+  }
+
+  @Test
+  void capAckWithMultilineValuesTracksNegotiatedMaxBytes() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :multiline=max-bytes=4096,max-lines=5,foo=bar draft/multiline=max-bytes=2048,max-lines=3",
+        List.of(
+            "me",
+            "ACK",
+            ":multiline=max-bytes=4096,max-lines=5,foo=bar draft/multiline=max-bytes=2048,max-lines=3"),
+        ImmutableMap.of());
+
+    assertTrue(conn.multilineCapAcked.get());
+    assertTrue(conn.draftMultilineCapAcked.get());
+    assertEquals(4096L, conn.multilineMaxBytes.get());
+    assertEquals(5L, conn.multilineMaxLines.get());
+    assertEquals(2048L, conn.draftMultilineMaxBytes.get());
+    assertEquals(3L, conn.draftMultilineMaxLines.get());
+  }
+
+  @Test
+  void capLsValueIsUsedWhenAckOmitsMultilineValue() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me LS * :multiline=max-bytes=3072,max-lines=4",
+        List.of("me", "LS", "*", ":multiline=max-bytes=3072,max-lines=4"),
+        ImmutableMap.of());
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :multiline",
+        List.of("me", "ACK", ":multiline"),
+        ImmutableMap.of());
+
+    assertTrue(conn.multilineCapAcked.get());
+    assertEquals(3072L, conn.multilineMaxBytes.get());
+    assertEquals(4L, conn.multilineMaxLines.get());
+  }
+
+  @Test
+  void capDelClearsMultilineMaxBytes() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :multiline=max-bytes=3072,max-lines=4",
+        List.of("me", "ACK", ":multiline=max-bytes=3072,max-lines=4"),
+        ImmutableMap.of());
+    assertEquals(3072L, conn.multilineMaxBytes.get());
+    assertEquals(4L, conn.multilineMaxLines.get());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me DEL :multiline",
+        List.of("me", "DEL", ":multiline"),
+        ImmutableMap.of());
+    assertEquals(0L, conn.multilineMaxBytes.get());
+    assertEquals(0L, conn.multilineMaxLines.get());
+  }
+
+  @Test
   void finalChathistoryCapAlsoUpdatesChatHistoryState() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -112,7 +280,7 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -133,11 +301,35 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capLsLearnsStsPolicyWhenConnectionIsSecure() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    conn.connectedHost.set("irc.example.net");
+    conn.connectedWithTls.set(true);
+    List<ServerIrcEvent> out = new ArrayList<>();
+    Ircv3StsPolicyService stsPolicies = new Ircv3StsPolicyService();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, stsPolicies);
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me LS * :sts=duration=86400,port=6697,preload",
+        List.of("me", "LS", "*", ":sts=duration=86400,port=6697,preload"),
+        ImmutableMap.of());
+
+    var policy = stsPolicies.activePolicyForHost("irc.example.net");
+    assertTrue(policy.isPresent());
+    assertEquals(86400L, policy.get().durationSeconds());
+    assertEquals(Integer.valueOf(6697), policy.get().port());
+  }
+
+  @Test
   void setnameAndChghostAreEmitted() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     UserHostmask alice = source("alice");
     parser.processCommand(
@@ -190,7 +382,7 @@ class PircbotxAwayNotifyInputParserTest {
     PircBotX bot = dummyBot();
     bot.getUserChannelDao().createChannel("#ircafe");
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(bot, "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -224,7 +416,7 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -279,11 +471,37 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void redactCommandEmitsMessageRedactionObserved() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "#ircafe",
+        source("bob"),
+        "REDACT",
+        ":bob!u@h REDACT #ircafe abc123 :cleanup",
+        List.of("#ircafe", "abc123", ":cleanup"),
+        ImmutableMap.of());
+
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.MessageRedactionObserved r
+                        && "bob".equals(r.from())
+                        && "#ircafe".equals(r.target())
+                        && "abc123".equals(r.messageId())));
+  }
+
+  @Test
   void markreadWithoutSourceStillEmitsReadMarker() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -309,7 +527,7 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add);
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",

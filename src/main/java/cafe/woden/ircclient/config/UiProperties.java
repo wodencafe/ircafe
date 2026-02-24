@@ -20,6 +20,9 @@ public record UiProperties(
     Integer accentStrength,
     String density,
     Integer cornerRadius,
+    Boolean uiFontOverrideEnabled,
+    String uiFontFamily,
+    Integer uiFontSize,
     String chatFontFamily,
     int chatFontSize,
 
@@ -78,6 +81,13 @@ public record UiProperties(
      * (account name + away message). These are rate-limited and disabled by default.
      */
     UserInfoEnrichment userInfoEnrichment,
+
+    /**
+     * Monitor presence fallback settings.
+     *
+     * <p>Used only when IRC MONITOR is unavailable; IRCafe will poll presence via ISON.
+     */
+    MonitorFallback monitorFallback,
 
     Boolean linkPreviewsEnabled,
 
@@ -182,6 +192,13 @@ public record UiProperties(
        */
       Boolean linuxDbusActionsEnabled,
 
+      /**
+       * Desktop notification backend mode.
+       *
+       * <p>Allowed values: {@code auto}, {@code native-only}, {@code two-slices-only}.
+       */
+      String notificationBackend,
+
       /** Play a sound alongside desktop notifications. */
       Boolean notificationSoundsEnabled,
 
@@ -212,6 +229,7 @@ public record UiProperties(
 
       // Default to "on" - we only actually use D-Bus if the session supports actions.
       if (linuxDbusActionsEnabled == null) linuxDbusActionsEnabled = true;
+      if (notificationBackend == null || notificationBackend.isBlank()) notificationBackend = "auto";
 
       // Keep Phase-2 behavior (on) unless explicitly disabled.
       if (notificationSoundsEnabled == null) notificationSoundsEnabled = true;
@@ -467,6 +485,26 @@ if (historyPlaceholdersEnabledByDefault == null) {
     }
   }
 
+  /**
+   * Monitor fallback configuration (used when IRC MONITOR is unavailable).
+   *
+   * <p>Defaults:
+   * <ul>
+   *   <li>{@code isonPollIntervalSeconds=30}
+   * </ul>
+   */
+  public record MonitorFallback(
+      Integer isonPollIntervalSeconds
+  ) {
+    public MonitorFallback {
+      if (isonPollIntervalSeconds == null || isonPollIntervalSeconds <= 0) {
+        isonPollIntervalSeconds = 30;
+      }
+      if (isonPollIntervalSeconds < 5) isonPollIntervalSeconds = 5;
+      if (isonPollIntervalSeconds > 600) isonPollIntervalSeconds = 600;
+    }
+  }
+
   public UiProperties {
     if (theme == null || theme.isBlank()) {
       theme = DEFAULT_THEME;
@@ -505,6 +543,21 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (cornerRadius == null) cornerRadius = 10;
     if (cornerRadius < 0) cornerRadius = 0;
     if (cornerRadius > 20) cornerRadius = 20;
+
+    if (uiFontOverrideEnabled == null) {
+      uiFontOverrideEnabled = false;
+    }
+    if (uiFontFamily == null || uiFontFamily.isBlank()) {
+      uiFontFamily = "Dialog";
+    } else {
+      uiFontFamily = uiFontFamily.trim();
+    }
+    if (uiFontSize == null) {
+      uiFontSize = 13;
+    }
+    if (uiFontSize < 8) uiFontSize = 8;
+    if (uiFontSize > 48) uiFontSize = 48;
+
     if (chatFontFamily == null || chatFontFamily.isBlank()) {
       chatFontFamily = Font.MONOSPACED;
     }
@@ -592,6 +645,11 @@ if (historyPlaceholdersEnabledByDefault == null) {
     // User info enrichment defaults (disabled by default).
     if (userInfoEnrichment == null) {
       userInfoEnrichment = new UserInfoEnrichment(false, 15, 3, 60, 5, false, 45, 120, false, 300, 2);
+    }
+
+    // Monitor fallback defaults.
+    if (monitorFallback == null) {
+      monitorFallback = new MonitorFallback(30);
     }
 
     // Link previews default: disabled (privacy + extra network traffic).

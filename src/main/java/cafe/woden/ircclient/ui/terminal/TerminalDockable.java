@@ -25,6 +25,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.text.BadLocationException;
@@ -58,7 +59,7 @@ public class TerminalDockable extends JPanel implements Dockable {
     area.setEditable(false);
     area.setLineWrap(false);
     area.setWrapStyleWord(false);
-    area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+    area.setFont(defaultMonospaceFont());
     installContextMenu();
 
     JScrollPane scroll = new JScrollPane(area);
@@ -177,6 +178,14 @@ public class TerminalDockable extends JPanel implements Dockable {
   private String defaultFileName() {
     String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
     return "ircafe-terminal-" + ts + ".log";
+  }
+
+  private static Font defaultMonospaceFont() {
+    Font base = UIManager.getFont("TextArea.font");
+    if (base == null) base = UIManager.getFont("TextPane.font");
+    if (base == null) base = UIManager.getFont("Label.font");
+    int size = base != null ? base.getSize() : 12;
+    return new Font(Font.MONOSPACED, Font.PLAIN, Math.max(10, size));
   }
 
   @Override

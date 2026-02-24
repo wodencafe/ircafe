@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.app.outbound;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -165,6 +167,85 @@ class OutboundChatCommandServiceTest {
 
     verify(ui, never()).appendChat(eq(chan), any(), eq("hello"), eq(true));
     verify(ui).appendPendingOutgoingChat(chan, "pending-1", createdAt, "me", "hello");
+  }
+
+  @Test
+  void multilineSendFallsBackToSplitLinesWhenNotNegotiatedAndUserConfirms() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.isMultilineAvailable("libera")).thenReturn(false);
+    when(ui.confirmMultilineSplitFallback(chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
+        .thenReturn(true);
+    when(irc.sendMessage("libera", "#ircafe", "line one")).thenReturn(Completable.complete());
+    when(irc.sendMessage("libera", "#ircafe", "line two")).thenReturn(Completable.complete());
+
+    service.handleSay(disposables, "line one\nline two");
+
+    verify(irc).sendMessage("libera", "#ircafe", "line one");
+    verify(irc).sendMessage("libera", "#ircafe", "line two");
+    verify(irc, never()).sendMessage("libera", "#ircafe", "line one\nline two");
+    verify(ui).appendStatus(eq(chan), eq("(send)"), contains("Sending as 2 separate lines."));
+  }
+
+  @Test
+  void multilineSendCancelsWhenNotNegotiatedAndUserDeclinesFallback() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isMultilineAvailable("libera")).thenReturn(false);
+    when(ui.confirmMultilineSplitFallback(chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
+        .thenReturn(false);
+
+    service.handleSay(disposables, "line one\nline two");
+
+    verify(irc, never()).sendMessage(eq("libera"), eq("#ircafe"), any());
+    verify(ui).appendStatus(chan, "(send)", "Send canceled.");
+  }
+
+  @Test
+  void multilineSendFallsBackToSplitLinesWhenOverNegotiatedMaxLines() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.isMultilineAvailable("libera")).thenReturn(true);
+    when(irc.negotiatedMultilineMaxLines("libera")).thenReturn(1);
+    when(ui.confirmMultilineSplitFallback(
+        eq(chan),
+        eq(2),
+        eq(17L),
+        contains("max-lines is 1")))
+        .thenReturn(true);
+    when(irc.sendMessage("libera", "#ircafe", "line one")).thenReturn(Completable.complete());
+    when(irc.sendMessage("libera", "#ircafe", "line two")).thenReturn(Completable.complete());
+
+    service.handleSay(disposables, "line one\nline two");
+
+    verify(irc).sendMessage("libera", "#ircafe", "line one");
+    verify(irc).sendMessage("libera", "#ircafe", "line two");
+    verify(irc, never()).sendMessage("libera", "#ircafe", "line one\nline two");
+  }
+
+  @Test
+  void multilineSendUsesBatchPathWhenNegotiatedAndWithinLimits() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.isMultilineAvailable("libera")).thenReturn(true);
+    when(irc.negotiatedMultilineMaxLines("libera")).thenReturn(5);
+    when(irc.negotiatedMultilineMaxBytes("libera")).thenReturn(4096L);
+    when(irc.sendMessage("libera", "#ircafe", "line one\nline two")).thenReturn(Completable.complete());
+
+    service.handleSay(disposables, "line one\nline two");
+
+    verify(irc).sendMessage("libera", "#ircafe", "line one\nline two");
+    verify(ui, never()).confirmMultilineSplitFallback(any(), anyInt(), anyLong(), any());
   }
 
   @Test
@@ -462,7 +543,7 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void redactCommandSendsTaggedTagmsgAndAppliesLocalRedactionWhenEchoUnavailable() {
+  void redactCommandSendsRedactAndAppliesLocalRedactionWhenEchoUnavailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
@@ -470,12 +551,12 @@ class OutboundChatCommandServiceTest {
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/delete=abc123 TAGMSG #ircafe"))
+    when(irc.sendRaw("libera", "REDACT #ircafe abc123"))
         .thenReturn(Completable.complete());
 
-    service.handleRedactMessage(disposables, "abc123");
+    service.handleRedactMessage(disposables, "abc123", "");
 
-    verify(irc).sendRaw("libera", "@+draft/delete=abc123 TAGMSG #ircafe");
+    verify(irc).sendRaw("libera", "REDACT #ircafe abc123");
     verify(ui).applyMessageRedaction(
         eq(chan),
         any(Instant.class),
@@ -486,13 +567,28 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void redactCommandWithReasonSendsTrailingReason() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
+    when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
+    when(irc.sendRaw("libera", "REDACT #ircafe abc123 :cleanup old context"))
+        .thenReturn(Completable.complete());
+
+    service.handleRedactMessage(disposables, "abc123", "cleanup old context");
+
+    verify(irc).sendRaw("libera", "REDACT #ircafe abc123 :cleanup old context");
+  }
+
+  @Test
   void redactCommandRejectsNonOwnedMessageBeforeSending() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(false);
 
-    service.handleRedactMessage(disposables, "abc123");
+    service.handleRedactMessage(disposables, "abc123", "");
 
     verify(ui).appendStatus(chan, "(redact)", "Can only redact your own messages in this buffer.");
     verify(irc, never()).sendRaw(eq("libera"), any());
@@ -521,7 +617,7 @@ class OutboundChatCommandServiceTest {
     verify(ui).appendStatus(
         eq(chan),
         eq("(help)"),
-        contains("/redact <msgid> (alias: /delete) (unavailable:"));
+        contains("/redact <msgid> [reason] (alias: /delete) (unavailable:"));
   }
 
   @Test
@@ -535,7 +631,7 @@ class OutboundChatCommandServiceTest {
     service.handleHelp("redact");
 
     verify(ui).appendStatus(chan, "(help)", "/edit <msgid> <message>");
-    verify(ui).appendStatus(chan, "(help)", "/redact <msgid> (alias: /delete)");
+    verify(ui).appendStatus(chan, "(help)", "/redact <msgid> [reason] (alias: /delete)");
   }
 
   @Test

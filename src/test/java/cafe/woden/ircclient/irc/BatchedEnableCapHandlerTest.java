@@ -61,4 +61,21 @@ class BatchedEnableCapHandlerTest {
     assertFalse(handler.handleACK(bot, ImmutableList.of(":away-notify")));
     assertTrue(handler.handleNAK(bot, ImmutableList.of("-batch")));
   }
+
+  @Test
+  void matchesValueCapabilitiesUsingCanonicalName() throws Exception {
+    BatchedEnableCapHandler handler = new BatchedEnableCapHandler(List.of("sts", "multiline"));
+    PircBotX bot = mock(PircBotX.class);
+    OutputCAP outputCap = mock(OutputCAP.class);
+    when(bot.sendCAP()).thenReturn(outputCap);
+
+    boolean finished = handler.handleLS(
+        bot,
+        ImmutableList.of("sts=duration=86400,port=6697,preload", "multiline=max-bytes=4096"));
+
+    assertFalse(finished);
+    verify(outputCap).request("sts", "multiline");
+    assertFalse(handler.handleACK(bot, ImmutableList.of("sts=duration=86400,port=6697,preload")));
+    assertTrue(handler.handleACK(bot, ImmutableList.of("multiline=max-bytes=4096")));
+  }
 }

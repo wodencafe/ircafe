@@ -226,6 +226,11 @@ public class CommandParser {
       return new ParsedInput.ListCmd(args);
     }
 
+    if (matchesCommand(line, "/monitor") || matchesCommand(line, "/mon")) {
+      String args = matchesCommand(line, "/monitor") ? argAfter(line, "/monitor") : argAfter(line, "/mon");
+      return new ParsedInput.Monitor(args);
+    }
+
 
     if (matchesCommand(line, "/mode")) {
       String rest = argAfter(line, "/mode");
@@ -508,10 +513,14 @@ public class CommandParser {
 
   private static ParsedInput parseRedactInput(String rest) {
     String r = rest == null ? "" : rest.trim();
-    if (r.isEmpty()) return new ParsedInput.RedactMessage("");
+    if (r.isEmpty()) return new ParsedInput.RedactMessage("", "");
     int sp = r.indexOf(' ');
-    String msgId = (sp < 0) ? r : r.substring(0, sp).trim();
-    return new ParsedInput.RedactMessage(msgId);
+    if (sp < 0) {
+      return new ParsedInput.RedactMessage(r, "");
+    }
+    String msgId = r.substring(0, sp).trim();
+    String reason = r.substring(sp + 1).trim();
+    return new ParsedInput.RedactMessage(msgId, reason);
   }
 
   private static boolean isIntegerToken(String raw) {

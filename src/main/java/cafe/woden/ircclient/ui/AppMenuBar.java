@@ -9,7 +9,7 @@ import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
-import cafe.woden.ircclient.ui.settings.IntelliJThemePack;
+import cafe.woden.ircclient.ui.settings.ThemeIdUtils;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -18,6 +18,7 @@ import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -420,8 +421,8 @@ public class AppMenuBar extends JMenuBar {
     themeMenu.add(themeSelector);
 
     Runnable syncThemeChecks = () -> {
-      String currentTheme = normalizeThemeId(settingsBus.get() != null ? settingsBus.get().theme() : null);
-      themeItems.forEach((id, mi) -> mi.setSelected(normalizeThemeId(id).equals(currentTheme)));
+      String currentTheme = ThemeIdUtils.normalizeThemeId(settingsBus.get() != null ? settingsBus.get().theme() : null);
+      themeItems.forEach((id, mi) -> mi.setSelected(ThemeIdUtils.normalizeThemeId(id).equals(currentTheme)));
     };
     syncThemeChecks.run();
     PropertyChangeListener themeListener = evt -> {
@@ -514,6 +515,34 @@ public class AppMenuBar extends JMenuBar {
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
         showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
+    JCheckBoxMenuItem showLogViewerNodes = new JCheckBoxMenuItem("Show Log Viewer Nodes");
+    showLogViewerNodes.setSelected(serverTree.isLogViewerNodesVisible());
+    showLogViewerNodes.addActionListener(e ->
+        serverTree.setLogViewerNodesVisible(showLogViewerNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_LOG_VIEWER_NODES_VISIBLE, evt ->
+        showLogViewerNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JCheckBoxMenuItem showNotificationsNodes = new JCheckBoxMenuItem("Show Notifications Nodes");
+    showNotificationsNodes.setSelected(serverTree.isNotificationsNodesVisible());
+    showNotificationsNodes.addActionListener(e ->
+        serverTree.setNotificationsNodesVisible(showNotificationsNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_NOTIFICATIONS_NODES_VISIBLE, evt ->
+        showNotificationsNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JCheckBoxMenuItem showMonitorNodes = new JCheckBoxMenuItem("Show Monitor Nodes");
+    showMonitorNodes.setSelected(serverTree.isMonitorNodesVisible());
+    showMonitorNodes.addActionListener(e ->
+        serverTree.setMonitorNodesVisible(showMonitorNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_MONITOR_NODES_VISIBLE, evt ->
+        showMonitorNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JCheckBoxMenuItem showInterceptorsNodes = new JCheckBoxMenuItem("Show Interceptors Nodes");
+    showInterceptorsNodes.setSelected(serverTree.isInterceptorsNodesVisible());
+    showInterceptorsNodes.addActionListener(e ->
+        serverTree.setInterceptorsNodesVisible(showInterceptorsNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_INTERCEPTORS_NODES_VISIBLE, evt ->
+        showInterceptorsNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
     JCheckBoxMenuItem showApplicationRoot = new JCheckBoxMenuItem("Show Application Root");
     showApplicationRoot.setSelected(serverTree.isApplicationRootVisible());
     showApplicationRoot.addActionListener(e ->
@@ -534,6 +563,10 @@ public class AppMenuBar extends JMenuBar {
     window.addSeparator();
     window.add(showChannelListNodes);
     window.add(showDccNodes);
+    window.add(showLogViewerNodes);
+    window.add(showNotificationsNodes);
+    window.add(showMonitorNodes);
+    window.add(showInterceptorsNodes);
     window.add(showApplicationRoot);
     window.addSeparator();
     window.add(openSelectedNodeDock);
@@ -599,6 +632,30 @@ public class AppMenuBar extends JMenuBar {
     add(settings);
     add(window);
     add(help);
+
+    installMenuPopupThemeSync(file, servers, edit, insert, settings, window, help);
+  }
+
+  private static void installMenuPopupThemeSync(JMenu... menus) {
+    if (menus == null || menus.length == 0) return;
+    for (JMenu menu : menus) {
+      if (menu == null) continue;
+      menu.addMenuListener(new MenuListener() {
+        @Override
+        public void menuSelected(MenuEvent e) {
+          try {
+            PopupMenuThemeSupport.prepareForDisplay(menu.getPopupMenu());
+          } catch (Exception ignored) {
+          }
+        }
+
+        @Override
+        public void menuDeselected(MenuEvent e) {}
+
+        @Override
+        public void menuCanceled(MenuEvent e) {}
+      });
+    }
   }
 
   private void resetDockLayout() {
@@ -937,11 +994,11 @@ public class AppMenuBar extends JMenuBar {
                                      ThemeManager themeManager,
                                      UiSettingsBus settingsBus,
                                      RuntimeConfigStore runtimeConfig) {
-    String next = normalizeThemeId(themeId);
+    String next = ThemeIdUtils.normalizeThemeId(themeId);
     UiSettings cur = settingsBus != null ? settingsBus.get() : null;
     if (cur == null) return;
 
-    if (!normalizeThemeId(cur.theme()).equals(next)) {
+    if (!ThemeIdUtils.normalizeThemeId(cur.theme()).equals(next)) {
       UiSettings updated = cur.withTheme(next);
       settingsBus.set(updated);
       if (runtimeConfig != null) {
@@ -953,25 +1010,4 @@ public class AppMenuBar extends JMenuBar {
     }
   }
 
-  private static String normalizeThemeId(String id) {
-    String s = Objects.toString(id, "").trim();
-    if (s.isEmpty()) return "darcula";
-
-    // Preserve case for IntelliJ theme ids and raw LookAndFeel class names.
-    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
-      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
-    }
-    if (looksLikeClassName(s)) return s;
-
-    return s.toLowerCase(Locale.ROOT);
-  }
-
-  private static boolean looksLikeClassName(String raw) {
-    if (raw == null) return false;
-    String s = raw.trim();
-    if (!s.contains(".")) return false;
-    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
-    String last = s.substring(s.lastIndexOf('.') + 1);
-    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
-  }
 }

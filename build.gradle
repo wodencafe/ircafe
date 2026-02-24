@@ -136,7 +136,7 @@ dependencies {
     implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
     implementation 'com.googlecode.soundlibs:tritonus-share:0.3.7.4'
-
+    implementation 'com.sshtools:two-slices:0.9.4'
     implementation 'org.springframework.boot:spring-boot-starter'
 
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -308,6 +308,7 @@ afterEvaluate {
 }
 
 def isLinux = OperatingSystem.current().isLinux()
+def isMac = OperatingSystem.current().isMacOsX()
 def appName = "IRCafe"
 def appImageDir = layout.buildDirectory.dir("dist/${appName}")
 def desktopFileName = "${appName}.desktop"
@@ -561,5 +562,47 @@ tasks.register("installLinuxDesktopEntry") {
 
 // When building a Linux app image, always include icon + .desktop alongside the output.
 tasks.named("jpackage").configure {
-    finalizedBy("copyLinuxAppImageIconToLib", "generateLinuxDesktopEntry", "generateLinuxInstallScript", "generateLinuxUninstallScript")
+    finalizedBy(
+        "copyLinuxAppImageIconToLib",
+        "generateLinuxDesktopEntry",
+        "generateLinuxInstallScript",
+        "generateLinuxUninstallScript",
+        "bundleTerminalNotifier"
+    )
+}
+tasks.register("bundleTerminalNotifier") {
+    onlyIf { isMac }
+
+    doLast {
+        def notifierSrc = file("packaging/macos/terminal-notifier.app")
+        if (!notifierSrc.exists()) {
+            throw new GradleException("terminal-notifier.app not found at: $notifierSrc")
+        }
+
+        def resourcesDir = file("$buildDir/dist/${appName}.app/Contents/Resources")
+        if (!resourcesDir.exists()) {
+            throw new GradleException("jpackage output Resources directory not found at: $resourcesDir")
+        }
+
+        copy {
+            from notifierSrc
+            into resourcesDir
+        }
+
+        def notifierDest = new File(resourcesDir, "terminal-notifier.app/Contents/MacOS/terminal-notifier")
+        if (!notifierDest.exists()) {
+            throw new GradleException("terminal-notifier binary was not copied to: $notifierDest")
+        }
+        notifierDest.setExecutable(true, false)
+
+        println "Bundled terminal-notifier into app: $notifierDest"
+    }
+}
+
+forbiddenApis {
+    // Keep this task configured so it fails on accidental shell execution shortcuts.
+    signatures = [
+        "java.lang.Runtime#exec(java.lang.String)",
+        "java.lang.Runtime#exec(java.lang.String[])"
+    ]
 }

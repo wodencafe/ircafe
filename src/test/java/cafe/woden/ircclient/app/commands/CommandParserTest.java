@@ -178,6 +178,17 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesMonitorAndAliasMon() {
+    ParsedInput monitor = parser.parse("/monitor +alice,bob");
+    assertTrue(monitor instanceof ParsedInput.Monitor);
+    assertEquals("+alice,bob", ((ParsedInput.Monitor) monitor).args());
+
+    ParsedInput mon = parser.parse("/mon list");
+    assertTrue(mon instanceof ParsedInput.Monitor);
+    assertEquals("list", ((ParsedInput.Monitor) mon).args());
+  }
+
+  @Test
   void parsesDccSendWithPath() {
     ParsedInput in = parser.parse("/dcc send alice /tmp/my file.txt");
     assertTrue(in instanceof ParsedInput.Dcc);
@@ -321,9 +332,16 @@ class CommandParserTest {
     ParsedInput redact = parser.parse("/redact abc123");
     assertTrue(redact instanceof ParsedInput.RedactMessage);
     assertEquals("abc123", ((ParsedInput.RedactMessage) redact).messageId());
+    assertEquals("", ((ParsedInput.RedactMessage) redact).reason());
 
     ParsedInput delete = parser.parse("/delete abc123");
     assertTrue(delete instanceof ParsedInput.RedactMessage);
     assertEquals("abc123", ((ParsedInput.RedactMessage) delete).messageId());
+    assertEquals("", ((ParsedInput.RedactMessage) delete).reason());
+
+    ParsedInput withReason = parser.parse("/redact abc123 cleanup old context");
+    assertTrue(withReason instanceof ParsedInput.RedactMessage);
+    assertEquals("abc123", ((ParsedInput.RedactMessage) withReason).messageId());
+    assertEquals("cleanup old context", ((ParsedInput.RedactMessage) withReason).reason());
   }
 }

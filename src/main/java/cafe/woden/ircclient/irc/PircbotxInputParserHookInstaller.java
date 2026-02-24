@@ -22,6 +22,12 @@ public class PircbotxInputParserHookInstaller {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxInputParserHookInstaller.class);
 
+  private final Ircv3StsPolicyService stsPolicies;
+
+  public PircbotxInputParserHookInstaller(Ircv3StsPolicyService stsPolicies) {
+    this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
+  }
+
   
   public void installAwayNotifyHook(PircBotX bot, String serverId, PircbotxConnectionState conn, Consumer<ServerIrcEvent> sink) {
     if (bot == null) return;
@@ -29,7 +35,7 @@ public class PircbotxInputParserHookInstaller {
     if (sid.isEmpty()) return;
 
     try {
-      InputParser replacement = new PircbotxAwayNotifyInputParser(bot, sid, conn, sink);
+      InputParser replacement = new PircbotxAwayNotifyInputParser(bot, sid, conn, sink, stsPolicies);
       boolean swapped = swapInputParser(bot, replacement);
       if (swapped) {
         log.info("[{}] installed IRCv3 InputParser hook (away/account/extended-join/account-tag/setname/chghost/tags/cap)", sid);

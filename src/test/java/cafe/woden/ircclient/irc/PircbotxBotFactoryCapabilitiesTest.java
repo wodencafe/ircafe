@@ -20,8 +20,11 @@ class PircbotxBotFactoryCapabilitiesTest {
     assertTrue(caps.contains("invite-notify"));
     assertTrue(caps.contains("labeled-response"));
     assertTrue(caps.contains("standard-replies"));
+    assertTrue(caps.contains("monitor"));
+    assertTrue(caps.contains("extended-monitor"));
     assertTrue(caps.contains("setname"));
     assertTrue(caps.contains("chghost"));
+    assertTrue(caps.contains("sts"));
     assertTrue(caps.contains("draft/reply"));
     assertTrue(caps.contains("draft/react"));
     assertTrue(caps.contains("draft/message-edit"));
@@ -30,6 +33,8 @@ class PircbotxBotFactoryCapabilitiesTest {
     assertTrue(caps.contains("message-redaction"));
     assertTrue(caps.contains("typing"));
     assertTrue(caps.contains("read-marker"));
+    assertTrue(caps.contains("multiline"));
+    assertTrue(caps.contains("draft/multiline"));
     assertTrue(caps.contains("chathistory"));
     assertTrue(caps.contains("draft/chathistory"));
   }

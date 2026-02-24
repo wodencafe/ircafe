@@ -17,6 +17,8 @@ public final class TargetRef {
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
   public static final String CHANNEL_LIST_TARGET = "__channel_list__";
   public static final String DCC_TRANSFERS_TARGET = "__dcc_transfers__";
+  public static final String MONITOR_GROUP_TARGET = "__monitor_group__";
+  public static final String INTERCEPTORS_GROUP_TARGET = "__interceptors_group__";
   public static final String INTERCEPTOR_PREFIX = "__interceptor__:";
   public static final String APPLICATION_SERVER_ID = "__application__";
   public static final String APPLICATION_UNHANDLED_ERRORS_TARGET = "__app_unhandled_errors__";
@@ -46,6 +48,14 @@ public final class TargetRef {
 
   public static TargetRef dccTransfers(String serverId) {
     return new TargetRef(serverId, DCC_TRANSFERS_TARGET);
+  }
+
+  public static TargetRef monitorGroup(String serverId) {
+    return new TargetRef(serverId, MONITOR_GROUP_TARGET);
+  }
+
+  public static TargetRef interceptorsGroup(String serverId) {
+    return new TargetRef(serverId, INTERCEPTORS_GROUP_TARGET);
   }
 
   public static TargetRef interceptor(String serverId, String interceptorId) {
@@ -109,6 +119,14 @@ public final class TargetRef {
     return DCC_TRANSFERS_TARGET.equals(key);
   }
 
+  public boolean isMonitorGroup() {
+    return MONITOR_GROUP_TARGET.equals(key);
+  }
+
+  public boolean isInterceptorsGroup() {
+    return INTERCEPTORS_GROUP_TARGET.equals(key);
+  }
+
   public boolean isInterceptor() {
     return key.startsWith(INTERCEPTOR_PREFIX);
   }
@@ -150,6 +168,8 @@ public final class TargetRef {
     return isNotifications()
         || isChannelList()
         || isDccTransfers()
+        || isMonitorGroup()
+        || isInterceptorsGroup()
         || isLogViewer()
         || isInterceptor()
         || isApplicationUi();
@@ -174,6 +194,8 @@ public final class TargetRef {
     if (NOTIFICATIONS_TARGET.equals(t)) return NOTIFICATIONS_TARGET;
     if (CHANNEL_LIST_TARGET.equals(t)) return CHANNEL_LIST_TARGET;
     if (DCC_TRANSFERS_TARGET.equals(t)) return DCC_TRANSFERS_TARGET;
+    if (MONITOR_GROUP_TARGET.equals(t)) return MONITOR_GROUP_TARGET;
+    if (INTERCEPTORS_GROUP_TARGET.equals(t)) return INTERCEPTORS_GROUP_TARGET;
     if (t.startsWith(INTERCEPTOR_PREFIX)) {
       return INTERCEPTOR_PREFIX + t.substring(INTERCEPTOR_PREFIX.length()).toLowerCase(Locale.ROOT);
     }

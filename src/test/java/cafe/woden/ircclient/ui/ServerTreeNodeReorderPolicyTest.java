@@ -82,6 +82,22 @@ class ServerTreeNodeReorderPolicyTest {
     assertNull(plan, "channel should not move above the Interceptors group node");
   }
 
+  @Test
+  void doesNotMoveChannelAboveMonitorGroup() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode ch1 = channelNode("test", "#alpha");
+    server.add(statusNode("test"));
+    server.add(notificationsNode("test"));
+    server.add(monitorGroupNode());
+    server.add(ch1);
+    server.add(new DefaultMutableTreeNode("Private messages"));
+
+    ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(ch1, -1);
+
+    assertNull(plan, "channel should not move above the Monitor group node");
+  }
+
   private static ServerTreeNodeReorderPolicy policyForServerLabel(String label) {
     return new ServerTreeNodeReorderPolicy(node -> node != null && label.equals(node.getUserObject()));
   }
@@ -104,6 +120,10 @@ class ServerTreeNodeReorderPolicyTest {
 
   private static DefaultMutableTreeNode interceptorsGroupNode() {
     return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Interceptors"));
+  }
+
+  private static DefaultMutableTreeNode monitorGroupNode() {
+    return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Monitor"));
   }
 
   private static DefaultMutableTreeNode leafNode(TargetRef ref, String label) {

@@ -6,11 +6,14 @@ import cafe.woden.ircclient.logging.viewer.ChatLogViewerResult;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerRow;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Cursor;
+import java.awt.Dialog;
 import java.awt.Insets;
+import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -48,8 +51,8 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
+import javax.swing.JDialog;
 import javax.swing.JList;
-import javax.swing.JCheckBox;
 import javax.swing.KeyStroke;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -58,6 +61,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.RowSorter;
 import javax.swing.SortOrder;
@@ -393,6 +397,102 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     hostmaskField.addActionListener(e -> runSearch(false));
     channelField.addActionListener(e -> runSearch(false));
     channelMode.addActionListener(e -> updateChannelFilterUi());
+    table.addMouseListener(new MouseAdapter() {
+      @Override
+      public void mouseClicked(MouseEvent e) {
+        if (!SwingUtilities.isLeftMouseButton(e)) return;
+        if (e.getClickCount() != 2) return;
+
+        int viewRow = table.rowAtPoint(e.getPoint());
+        if (viewRow < 0) return;
+        table.setRowSelectionInterval(viewRow, viewRow);
+        openRowDetailsDialog(viewRow);
+      }
+    });
+  }
+
+  private void openRowDetailsDialog(int viewRow) {
+    if (viewRow < 0) return;
+    int modelRow = table.convertRowIndexToModel(viewRow);
+    ChatLogViewerRow row = model.rowAt(modelRow);
+    if (row == null) return;
+    showRowDetailsDialog(row);
+  }
+
+  private void showRowDetailsDialog(ChatLogViewerRow row) {
+    if (row == null) return;
+
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    String sid = Objects.toString(row.serverId(), "").trim();
+    String title = sid.isEmpty() ? "Log Row Details" : ("Log Row Details - " + sid);
+
+    JDialog dialog = new JDialog(owner, title, Dialog.ModalityType.APPLICATION_MODAL);
+    dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+    JPanel content = new JPanel(new MigLayout(
+        "insets 12, fill, wrap 1",
+        "[grow,fill]",
+        "[][grow,fill][]"));
+
+    JPanel form = new JPanel(new MigLayout(
+        "insets 0, fillx, wrap 2",
+        "[right][grow,fill]",
+        ""));
+    addReadOnlyFormRow(form, "Row ID", row.id() > 0L ? String.valueOf(row.id()) : "");
+    addReadOnlyFormRow(form, "Time", formatEpochMs(row.tsEpochMs()));
+    addReadOnlyFormRow(form, "Server", row.serverId());
+    addReadOnlyFormRow(form, "Target", row.target());
+    addReadOnlyFormRow(form, "Nick", row.fromNick());
+    addReadOnlyFormRow(form, "Hostmask", row.hostmask());
+    addReadOnlyFormRow(
+        form,
+        "Direction",
+        row.direction() == null ? "" : row.direction().name());
+    addReadOnlyFormRow(
+        form,
+        "Kind",
+        row.kind() == null ? "" : row.kind().name());
+    addReadOnlyFormRow(form, "Message ID", row.messageId());
+    addReadOnlyFormRow(form, "Message Tags", formatTags(row.ircv3Tags()));
+    addReadOnlyFormRow(form, "Meta", row.metaJson());
+    content.add(form, "growx");
+
+    JPanel messagePanel = new JPanel(new MigLayout(
+        "insets 0, fill, wrap 1",
+        "[grow,fill]",
+        "[]4[grow,fill]"));
+    messagePanel.add(new JLabel("Message"), "growx");
+    JTextArea messageArea = new JTextArea(Objects.toString(row.text(), ""));
+    messageArea.setEditable(false);
+    messageArea.setLineWrap(true);
+    messageArea.setWrapStyleWord(true);
+    messageArea.setCaretPosition(0);
+    JScrollPane messageScroll = new JScrollPane(messageArea);
+    messagePanel.add(messageScroll, "grow,push,hmin 140");
+    content.add(messagePanel, "grow,push");
+
+    JButton close = new JButton("Close");
+    close.addActionListener(ev -> dialog.dispose());
+    JPanel actions = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill][]", "[]"));
+    actions.add(new JLabel(""), "growx");
+    actions.add(close, "tag ok");
+    content.add(actions, "growx");
+
+    dialog.setContentPane(content);
+    dialog.getRootPane().setDefaultButton(close);
+    dialog.pack();
+    dialog.setSize(Math.max(760, dialog.getWidth()), Math.max(520, dialog.getHeight()));
+    dialog.setLocationRelativeTo(owner == null ? this : owner);
+    dialog.setVisible(true);
+  }
+
+  private static void addReadOnlyFormRow(JPanel panel, String label, String value) {
+    if (panel == null) return;
+    panel.add(new JLabel(Objects.toString(label, "")));
+    JTextField field = new JTextField(Objects.toString(value, ""));
+    field.setEditable(false);
+    field.setCaretPosition(0);
+    panel.add(field, "growx");
   }
 
   private void refreshAvailability() {
@@ -749,6 +849,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       });
       menu.add(item);
     }
+    PopupMenuThemeSupport.prepareForDisplay(menu);
     menu.show(invoker, 0, invoker.getHeight());
   }
 
@@ -1384,6 +1485,15 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     repaint();
   }
 
+  private static String formatEpochMs(long epochMs) {
+    if (epochMs <= 0L) return "";
+    try {
+      return TS_FMT.format(java.time.Instant.ofEpochMilli(epochMs));
+    } catch (Exception e) {
+      return String.valueOf(epochMs);
+    }
+  }
+
   private static String formatTags(Map<String, String> tags) {
     if (tags == null || tags.isEmpty()) return "";
     StringBuilder sb = new StringBuilder(tags.size() * 16);
@@ -1434,6 +1544,11 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       fireTableDataChanged();
     }
 
+    ChatLogViewerRow rowAt(int rowIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+      return rows.get(rowIndex);
+    }
+
     @Override
     public int getRowCount() {
       return rows.size();
@@ -1456,7 +1571,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       if (row == null) return "";
 
       return switch (columnIndex) {
-        case COL_TIME -> formatTs(row.tsEpochMs());
+        case COL_TIME -> formatEpochMs(row.tsEpochMs());
         case COL_NICK -> row.fromNick();
         case COL_MESSAGE -> row.text();
         case COL_CHANNEL -> row.target();
@@ -1468,15 +1583,6 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
         case COL_META -> row.metaJson();
         default -> "";
       };
-    }
-
-    private static String formatTs(long epochMs) {
-      if (epochMs <= 0L) return "";
-      try {
-        return TS_FMT.format(java.time.Instant.ofEpochMilli(epochMs));
-      } catch (Exception e) {
-        return String.valueOf(epochMs);
-      }
     }
   }
 

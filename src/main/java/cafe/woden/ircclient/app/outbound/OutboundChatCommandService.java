@@ -15,9 +15,11 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -33,6 +35,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class OutboundChatCommandService {
+
+  private enum MultilineSendDecision {
+    SEND_AS_MULTILINE,
+    SEND_AS_SPLIT_LINES,
+    CANCEL
+  }
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
@@ -860,7 +868,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(
         out,
         "(help)",
-        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /chathistory /quote /dcc");
+        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
     ui.appendStatus(
         out,
         "(help)",
@@ -990,7 +998,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     sendEditMessage(disposables, at, msgId, text);
   }
 
-  public void handleRedactMessage(CompositeDisposable disposables, String messageId) {
+  public void handleRedactMessage(CompositeDisposable disposables, String messageId, String reason) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(redact)", "Select a server first.");
@@ -998,8 +1006,14 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     String msgId = normalizeIrcv3Token(messageId);
+    String redactReason = Objects.toString(reason, "").trim();
     if (msgId.isEmpty()) {
-      ui.appendStatus(at, "(redact)", "Usage: /redact <msgid>");
+      ui.appendStatus(at, "(redact)", "Usage: /redact <msgid> [reason]");
+      return;
+    }
+
+    if (containsCrlf(redactReason)) {
+      ui.appendStatus(at, "(redact)", "Reason must be a single line.");
       return;
     }
 
@@ -1012,7 +1026,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(redact)",
-          "draft/message-redaction is not negotiated on this server.");
+          "message-redaction is not negotiated on this server.");
       return;
     }
 
@@ -1021,7 +1035,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    sendRedactionTag(disposables, at, msgId);
+    sendRedactionTag(disposables, at, msgId, redactReason);
   }
 
   private void sendRawFromStatus(CompositeDisposable disposables, String serverId, String rawLine) {
@@ -1305,6 +1319,21 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
+    List<String> lines = normalizeMessageLines(m);
+    if (lines.size() > 1) {
+      MultilineSendDecision decision = resolveMultilineSendDecision(target, lines, "(send)");
+      if (decision == MultilineSendDecision.CANCEL) {
+        return;
+      }
+      if (decision == MultilineSendDecision.SEND_AS_SPLIT_LINES) {
+        for (String line : lines) {
+          sendMessage(disposables, target, line);
+        }
+        return;
+      }
+      m = joinMessageLines(lines);
+    }
+
     boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
     String me = irc.currentNick(target.serverId()).orElse("me");
     final PendingEchoMessageState.PendingOutboundChat pendingEntry;
@@ -1483,7 +1512,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
   private void sendRedactionTag(
       CompositeDisposable disposables,
       TargetRef target,
-      String targetMessageId
+      String targetMessageId,
+      String reason
   ) {
     if (target == null) return;
     String msgId = normalizeIrcv3Token(targetMessageId);
@@ -1498,8 +1528,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    String rawLine =
-        "@+draft/delete=" + escapeIrcv3TagValue(msgId) + " TAGMSG " + target.target();
+    String why = Objects.toString(reason, "").trim();
+    String rawLine = why.isEmpty()
+        ? ("REDACT " + target.target() + " " + msgId)
+        : ("REDACT " + target.target() + " " + msgId + " :" + why);
     PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
 
     String me = irc.currentNick(target.serverId()).orElse("me");
@@ -1536,6 +1568,21 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
+    List<String> lines = normalizeMessageLines(m);
+    if (lines.size() > 1) {
+      MultilineSendDecision decision = resolveMultilineSendDecision(echoTarget, lines, "(notice)");
+      if (decision == MultilineSendDecision.CANCEL) {
+        return;
+      }
+      if (decision == MultilineSendDecision.SEND_AS_SPLIT_LINES) {
+        for (String line : lines) {
+          sendNotice(disposables, echoTarget, t, line);
+        }
+        return;
+      }
+      m = joinMessageLines(lines);
+    }
+
     disposables.add(
         irc.sendNotice(echoTarget.serverId(), t, m)
             .subscribe(
@@ -1546,6 +1593,95 @@ public void handleMe(CompositeDisposable disposables, String action) {
       String me = irc.currentNick(echoTarget.serverId()).orElse("me");
       ui.appendNotice(echoTarget, "(" + me + ")", "NOTICE → " + t + ": " + m);
     }
+  }
+
+  private MultilineSendDecision resolveMultilineSendDecision(
+      TargetRef target,
+      List<String> lines,
+      String statusPrefix
+  ) {
+    if (target == null || lines == null || lines.size() <= 1) {
+      return MultilineSendDecision.SEND_AS_MULTILINE;
+    }
+
+    int lineCount = lines.size();
+    long payloadUtf8Bytes = multilinePayloadUtf8Bytes(lines);
+    String reason = multilineUnavailableOrLimitReason(target.serverId(), lineCount, payloadUtf8Bytes);
+    if (reason.isBlank()) {
+      return MultilineSendDecision.SEND_AS_MULTILINE;
+    }
+
+    boolean sendSplit = false;
+    try {
+      sendSplit = ui.confirmMultilineSplitFallback(target, lineCount, payloadUtf8Bytes, reason);
+    } catch (Exception ignored) {
+      sendSplit = false;
+    }
+
+    if (!sendSplit) {
+      ui.appendStatus(target, statusPrefix, "Send canceled.");
+      return MultilineSendDecision.CANCEL;
+    }
+
+    ui.appendStatus(target, statusPrefix, reason + " Sending as " + lineCount + " separate lines.");
+    return MultilineSendDecision.SEND_AS_SPLIT_LINES;
+  }
+
+  private String multilineUnavailableOrLimitReason(String serverId, int lineCount, long payloadUtf8Bytes) {
+    if (!irc.isMultilineAvailable(serverId)) {
+      return "IRCv3 multiline is not negotiated on this server.";
+    }
+
+    int maxLines = irc.negotiatedMultilineMaxLines(serverId);
+    if (maxLines > 0 && lineCount > maxLines) {
+      return "Message has " + lineCount + " lines; negotiated multiline max-lines is " + maxLines + ".";
+    }
+
+    long maxBytes = irc.negotiatedMultilineMaxBytes(serverId);
+    if (maxBytes > 0L && payloadUtf8Bytes > maxBytes) {
+      return "Message is " + payloadUtf8Bytes + " UTF-8 bytes; negotiated multiline max-bytes is " + maxBytes + ".";
+    }
+
+    return "";
+  }
+
+  private static List<String> normalizeMessageLines(String raw) {
+    String input = Objects.toString(raw, "");
+    if (input.isEmpty()) return List.of();
+    String normalized = input.replace("\r\n", "\n").replace('\r', '\n');
+    if (normalized.indexOf('\n') < 0) {
+      return List.of(normalized);
+    }
+    String[] parts = normalized.split("\n", -1);
+    List<String> out = new ArrayList<>(parts.length);
+    for (String part : parts) {
+      out.add(Objects.toString(part, ""));
+    }
+    return out;
+  }
+
+  private static String joinMessageLines(List<String> lines) {
+    if (lines == null || lines.isEmpty()) return "";
+    return String.join("\n", lines);
+  }
+
+  private static long multilinePayloadUtf8Bytes(List<String> lines) {
+    if (lines == null || lines.isEmpty()) return 0L;
+    long total = 0L;
+    for (int i = 0; i < lines.size(); i++) {
+      String line = Objects.toString(lines.get(i), "");
+      total = addSaturated(total, line.getBytes(StandardCharsets.UTF_8).length);
+      if (i < lines.size() - 1) {
+        total = addSaturated(total, 1L);
+      }
+    }
+    return total;
+  }
+
+  private static long addSaturated(long left, long right) {
+    if (right <= 0L) return left;
+    if (left >= Long.MAX_VALUE - right) return Long.MAX_VALUE;
+    return left + right;
   }
 
   private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
@@ -1775,7 +1911,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(
         out,
         "(help)",
-        "/redact <msgid> (alias: /delete)" + availabilitySuffix(
+        "/redact <msgid> [reason] (alias: /delete)" + availabilitySuffix(
             available,
             "requires negotiated draft/message-redaction or message-redaction"));
   }

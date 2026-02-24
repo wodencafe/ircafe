@@ -172,6 +172,27 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true if IRCv3 {@code multiline} (or {@code draft/multiline}) is negotiated.
+   */
+  default boolean isMultilineAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return negotiated IRCv3 multiline max-bytes limit, or {@code 0} if unlimited/unknown.
+   */
+  default long negotiatedMultilineMaxBytes(String serverId) {
+    return 0L;
+  }
+
+  /**
+   * @return negotiated IRCv3 multiline max-lines limit, or {@code 0} if unlimited/unknown.
+   */
+  default int negotiatedMultilineMaxLines(String serverId) {
+    return 0;
+  }
+
+  /**
    * @return true if IRCv3 {@code draft/message-edit} (or equivalent) is negotiated on this connection.
    */
   default boolean isMessageEditAvailable(String serverId) {
@@ -220,6 +241,20 @@ public interface IrcClientService {
    */
   default boolean isStandardRepliesAvailable(String serverId) {
     return false;
+  }
+
+  /**
+   * @return true if IRC MONITOR support is available via CAP and/or RPL_ISUPPORT.
+   */
+  default boolean isMonitorAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return advertised IRC MONITOR target limit (RPL_ISUPPORT MONITOR=...), or {@code 0} when unknown/unbounded.
+   */
+  default int negotiatedMonitorLimit(String serverId) {
+    return 0;
   }
 
   /**

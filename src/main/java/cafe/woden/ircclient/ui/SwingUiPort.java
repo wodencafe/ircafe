@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -52,6 +55,31 @@ public class SwingUiPort implements UiPort {
     } else {
       SwingUtilities.invokeLater(r);
     }
+  }
+
+  private <T> T onEdtCall(Supplier<T> supplier, T fallback) {
+    if (supplier == null) return fallback;
+    if (SwingUtilities.isEventDispatchThread()) {
+      try {
+        return supplier.get();
+      } catch (Exception ignored) {
+        return fallback;
+      }
+    }
+
+    AtomicReference<T> out = new AtomicReference<>(fallback);
+    try {
+      SwingUtilities.invokeAndWait(() -> {
+        try {
+          out.set(supplier.get());
+        } catch (Exception ignored) {
+          out.set(fallback);
+        }
+      });
+    } catch (Exception ignored) {
+      return fallback;
+    }
+    return out.get();
   }
 
   public SwingUiPort(
@@ -116,6 +144,45 @@ public class SwingUiPort implements UiPort {
     // The main chat dock forwards its embedded input into the outbound bus.
     // Other UI-originated command sources (e.g. transcript clicks) also flow through the bus.
     return outboundBus.stream();
+  }
+
+  @Override
+  public boolean confirmMultilineSplitFallback(
+      TargetRef target,
+      int lineCount,
+      long payloadUtf8Bytes,
+      String reason
+  ) {
+    return onEdtCall(() -> {
+      String where = (target == null) ? "this target" : target.target();
+      String why = Objects.toString(reason, "").trim();
+      StringBuilder body = new StringBuilder();
+      body.append("This message cannot be sent using IRCv3 multiline for ").append(where).append(".\n\n");
+      if (!why.isEmpty()) {
+        body.append("Reason: ").append(why).append("\n\n");
+      }
+      body.append("Message size: ")
+          .append(Math.max(0, lineCount))
+          .append(" lines, ")
+          .append(Math.max(0L, payloadUtf8Bytes))
+          .append(" UTF-8 bytes.\n\n")
+          .append("Send as separate lines instead?");
+
+      Object[] options = {
+          "Send " + Math.max(0, lineCount) + " Lines",
+          "Cancel"
+      };
+      int choice = JOptionPane.showOptionDialog(
+          chat,
+          body.toString(),
+          "Multiline Fallback",
+          JOptionPane.DEFAULT_OPTION,
+          JOptionPane.WARNING_MESSAGE,
+          null,
+          options,
+          options[0]);
+      return choice == 0;
+    }, false);
   }
 
   @Override
@@ -356,12 +423,18 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
-    onEdt(() -> serverTree.setPrivateMessageOnlineState(serverId, nick, online));
+    onEdt(() -> {
+      serverTree.setPrivateMessageOnlineState(serverId, nick, online);
+      chat.setPrivateMessageOnlineState(serverId, nick, online);
+    });
   }
 
   @Override
   public void clearPrivateMessageOnlineStates(String serverId) {
-    onEdt(() -> serverTree.clearPrivateMessageOnlineStates(serverId));
+    onEdt(() -> {
+      serverTree.clearPrivateMessageOnlineStates(serverId);
+      chat.clearPrivateMessageOnlineStates(serverId);
+    });
   }
 
   @Override

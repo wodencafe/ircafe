@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -143,6 +144,7 @@ public final class MessageInputComposeSupport {
     menu.add(custom);
 
     try {
+      PopupMenuThemeSupport.prepareForDisplay(menu);
       menu.show(input, Math.max(0, input.getWidth() - 8), input.getHeight());
     } catch (Exception ex) {
       log.warn("[MessageInputComposeSupport] showing quick reaction menu failed", ex);

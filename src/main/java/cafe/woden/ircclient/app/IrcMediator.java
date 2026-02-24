@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
+import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
@@ -92,6 +93,7 @@ public class IrcMediator {
   private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotificationService ircEventNotificationService;
   private final InterceptorStore interceptorStore;
+  private final MonitorIsonFallbackService monitorIsonFallbackService;
 
   private final NotificationRuleMatcher notificationRuleMatcher;
 
@@ -146,7 +148,8 @@ public class IrcMediator {
       InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotificationService ircEventNotificationService,
       InterceptorStore interceptorStore,
-      InboundIgnorePolicy inboundIgnorePolicy
+      InboundIgnorePolicy inboundIgnorePolicy,
+      MonitorIsonFallbackService monitorIsonFallbackService
   ) {
 
     this.irc = irc;
@@ -180,6 +183,7 @@ public class IrcMediator {
     this.ircEventNotificationService = ircEventNotificationService;
     this.interceptorStore = interceptorStore;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
+    this.monitorIsonFallbackService = monitorIsonFallbackService;
   }
 
   public void start() {
@@ -588,6 +592,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.text());
         if (mention) {
+          recordInterceptorEvent(
+              sid,
+              ev.channel(),
+              ev.from(),
+              learnedHostmaskForNick(sid, ev.from()),
+              ev.text(),
+              InterceptorEventType.HIGHLIGHT);
           if (!chan.equals(active)) {
             ui.markHighlight(chan);
             ui.recordHighlight(chan, ev.from());
@@ -646,6 +657,13 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
         boolean mention = containsSelfMention(sid, ev.from(), ev.action());
         if (mention) {
+          recordInterceptorEvent(
+              sid,
+              ev.channel(),
+              ev.from(),
+              learnedHostmaskForNick(sid, ev.from()),
+              ev.action(),
+              InterceptorEventType.HIGHLIGHT);
           if (!chan.equals(active)) {
             ui.markHighlight(chan);
             ui.recordHighlight(chan, ev.from());
@@ -1479,6 +1497,57 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         targetCoordinator.onUserAccountStateObserved(sid, ev);
       }
 
+      case IrcEvent.MonitorOnlineObserved ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        List<String> nicks = ev.nicks();
+        if (!nicks.isEmpty()) {
+          for (String nick : nicks) {
+            markPrivateMessagePeerOnline(sid, nick);
+          }
+          ui.appendStatusAt(monitor, ev.at(), "(monitor)", "Online: " + String.join(", ", nicks));
+        }
+      }
+
+      case IrcEvent.MonitorOfflineObserved ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        List<String> nicks = ev.nicks();
+        if (!nicks.isEmpty()) {
+          for (String nick : nicks) {
+            markPrivateMessagePeerOffline(sid, nick);
+          }
+          ui.appendStatusAt(monitor, ev.at(), "(monitor)", "Offline: " + String.join(", ", nicks));
+        }
+      }
+
+      case IrcEvent.MonitorListObserved ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        List<String> nicks = ev.nicks();
+        String rendered = nicks.isEmpty() ? "Monitor list: (empty)" : ("Monitor list: " + String.join(", ", nicks));
+        ui.appendStatusAt(monitor, ev.at(), "(monitor)", rendered);
+      }
+
+      case IrcEvent.MonitorListEnded ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        ui.appendStatusAt(monitor, ev.at(), "(monitor)", "End of monitor list.");
+      }
+
+      case IrcEvent.MonitorListFull ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+
+        String msg = Objects.toString(ev.message(), "").trim();
+        if (msg.isEmpty()) msg = "Monitor list is full.";
+        if (ev.limit() > 0) msg = msg + " (limit=" + ev.limit() + ")";
+        if (ev.nicks() != null && !ev.nicks().isEmpty()) {
+          msg = msg + " nicks=" + String.join(", ", ev.nicks());
+        }
+        ui.appendErrorAt(monitor, ev.at(), "(monitor)", msg);
+      }
+
       case IrcEvent.UserSetNameObserved ev -> {
         targetCoordinator.onUserSetNameObserved(sid, ev);
 
@@ -2233,6 +2302,9 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     String rendered = "[" + ev.code() + "] " + msg;
     updateServerMetadataFromServerResponseLine(sid, ev);
     boolean suppressStatusLine = (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
+    if (ev.code() == 303 && monitorIsonFallbackService.shouldSuppressIsonServerResponse(sid)) {
+      suppressStatusLine = true;
+    }
     if (ev.code() == 321) {
       rendered = "[321] " + (msg.isBlank() ? "Channel list follows (see Channel List)." : (msg + " (see Channel List)."));
     } else if (ev.code() == 323 && !msg.isBlank()) {
