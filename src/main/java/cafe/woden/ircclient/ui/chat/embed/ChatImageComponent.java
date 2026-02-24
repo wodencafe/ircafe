@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat.embed;
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.beans.PropertyChangeListener;
 import java.awt.BorderLayout;
@@ -476,12 +477,18 @@ final class ChatImageComponent extends JPanel {
     target.addMouseListener(new java.awt.event.MouseAdapter() {
       @Override
       public void mousePressed(java.awt.event.MouseEvent e) {
-        if (e.isPopupTrigger()) menu.show(target, e.getX(), e.getY());
+        if (e.isPopupTrigger()) {
+          PopupMenuThemeSupport.prepareForDisplay(menu);
+          menu.show(target, e.getX(), e.getY());
+        }
       }
 
       @Override
       public void mouseReleased(java.awt.event.MouseEvent e) {
-        if (e.isPopupTrigger()) menu.show(target, e.getX(), e.getY());
+        if (e.isPopupTrigger()) {
+          PopupMenuThemeSupport.prepareForDisplay(menu);
+          menu.show(target, e.getX(), e.getY());
+        }
       }
     });
   }

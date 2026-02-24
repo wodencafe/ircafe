@@ -133,6 +133,8 @@ public class PreferencesDialog {
       "Controls rounded corner radius for buttons/fields/etc. Changes preview live; Apply/OK saves.";
   private static final String FLAT_ONLY_TOOLTIP =
       "Available for FlatLaf-based themes only.";
+  private static final String UI_FONT_OVERRIDE_TOOLTIP =
+      "Overrides the global Swing UI font family and size for controls, menus, tabs, and dialogs.";
 
   private final UiSettingsBus settingsBus;
   private final ThemeManager themeManager;
@@ -230,7 +232,7 @@ public class PreferencesDialog {
         : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
     AccentControls accent = buildAccentControls(initialAccent);
     ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
-    TweakControls tweaks = buildTweakControls(initialTweaks);
+    TweakControls tweaks = buildTweakControls(initialTweaks, closeables);
 
     ChatThemeSettings initialChatTheme = chatThemeSettingsBus != null
         ? chatThemeSettingsBus.get()
@@ -282,9 +284,14 @@ public class PreferencesDialog {
       if (tweakSettingsBus != null) {
         DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
         String densityId = opt != null ? opt.id() : "auto";
+        String uiFontFamily = Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
+        if (uiFontFamily.isBlank()) uiFontFamily = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
         ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
             ThemeTweakSettings.ThemeDensity.from(densityId),
-            tweaks.cornerRadius.getValue()
+            tweaks.cornerRadius.getValue(),
+            tweaks.uiFontOverrideEnabled.isSelected(),
+            uiFontFamily,
+            ((Number) tweaks.uiFontSize.getValue()).intValue()
         );
         tweakSettingsBus.set(nextTweaks);
       }
@@ -473,6 +480,23 @@ public class PreferencesDialog {
     }));
     tweaks.density.addActionListener(e -> scheduleLafPreview.run());
     tweaks.cornerRadius.addChangeListener(e -> scheduleLafPreview.run());
+    tweaks.uiFontOverrideEnabled.addActionListener(e -> {
+      tweaks.applyUiFontEnabledState.run();
+      scheduleLafPreview.run();
+    });
+    tweaks.uiFontFamily.addActionListener(e -> scheduleLafPreview.run());
+    tweaks.uiFontFamily.addItemListener(e -> {
+      if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+        scheduleLafPreview.run();
+      }
+    });
+    java.awt.Component uiFontFamilyEditor = tweaks.uiFontFamily.getEditor() != null
+        ? tweaks.uiFontFamily.getEditor().getEditorComponent()
+        : null;
+    if (uiFontFamilyEditor instanceof JTextField tf) {
+      tf.getDocument().addDocumentListener(new SimpleDocListener(scheduleLafPreview));
+    }
+    tweaks.uiFontSize.addChangeListener(e -> scheduleLafPreview.run());
 
     // Chat theme preview (transcript-only)
     chatTheme.preset.addActionListener(e -> scheduleChatPreview.run());
@@ -615,9 +639,15 @@ public class PreferencesDialog {
       DensityOption densityOpt = (DensityOption) tweaks.density.getSelectedItem();
       String densityIdV = densityOpt != null ? densityOpt.id() : "auto";
       int cornerRadiusV = tweaks.cornerRadius.getValue();
+      String uiFontFamilyV = Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
+      if (uiFontFamilyV.isBlank()) uiFontFamilyV = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
+      int uiFontSizeV = ((Number) tweaks.uiFontSize.getValue()).intValue();
       ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
           ThemeTweakSettings.ThemeDensity.from(densityIdV),
-          cornerRadiusV
+          cornerRadiusV,
+          tweaks.uiFontOverrideEnabled.isSelected(),
+          uiFontFamilyV,
+          uiFontSizeV
       );
       boolean tweaksChanged = !java.util.Objects.equals(prevTweaks, nextTweaks);
 
@@ -1011,6 +1041,9 @@ public class PreferencesDialog {
       }
       runtimeConfig.rememberUiDensity(nextTweaks.densityId());
       runtimeConfig.rememberCornerRadius(nextTweaks.cornerRadius());
+      runtimeConfig.rememberUiFontOverrideEnabled(nextTweaks.uiFontOverrideEnabled());
+      runtimeConfig.rememberUiFontFamily(nextTweaks.uiFontFamily());
+      runtimeConfig.rememberUiFontSize(nextTweaks.uiFontSize());
 
       runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
       // Chat theme (transcript-only palette)
@@ -2078,7 +2111,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
 
 
 
-  private TweakControls buildTweakControls(ThemeTweakSettings current) {
+  private TweakControls buildTweakControls(ThemeTweakSettings current, List<AutoCloseable> closeables) {
     ThemeTweakSettings cur = current != null ? current : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
 
     DensityOption[] opts = new DensityOption[] {
@@ -2104,14 +2137,44 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     cornerRadius.setMinorTickSpacing(1);
     cornerRadius.setToolTipText(CORNER_RADIUS_TOOLTIP);
 
-    return new TweakControls(density, cornerRadius);
+    JComboBox<String> uiFontFamily = new JComboBox<>(availableFontFamiliesSorted());
+    uiFontFamily.setEditable(true);
+    uiFontFamily.setSelectedItem(cur.uiFontFamily());
+    uiFontFamily.setToolTipText(UI_FONT_OVERRIDE_TOOLTIP);
+    applyEditableComboEditorPalette(uiFontFamily);
+    uiFontFamily.addPropertyChangeListener("UI", e -> applyEditableComboEditorPalette(uiFontFamily));
+    if (closeables != null) {
+      try {
+        closeables.add(MouseWheelDecorator.decorateComboBoxSelection(uiFontFamily));
+      } catch (Exception ignored) {
+      }
+    }
+
+    JSpinner uiFontSize = numberSpinner(cur.uiFontSize(), 8, 48, 1, closeables);
+    uiFontSize.setToolTipText(UI_FONT_OVERRIDE_TOOLTIP);
+
+    JCheckBox uiFontOverrideEnabled = new JCheckBox("Override system UI font");
+    uiFontOverrideEnabled.setSelected(cur.uiFontOverrideEnabled());
+    uiFontOverrideEnabled.setToolTipText(UI_FONT_OVERRIDE_TOOLTIP);
+
+    Runnable applyUiFontEnabledState = () -> {
+      boolean enabled = uiFontOverrideEnabled.isSelected();
+      uiFontFamily.setEnabled(enabled);
+      uiFontSize.setEnabled(enabled);
+    };
+    applyUiFontEnabledState.run();
+
+    return new TweakControls(
+        density,
+        cornerRadius,
+        uiFontOverrideEnabled,
+        uiFontFamily,
+        uiFontSize,
+        applyUiFontEnabledState);
   }
 
   private FontControls buildFontControls(UiSettings current, List<AutoCloseable> closeables) {
-    String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
-    Arrays.sort(families, String.CASE_INSENSITIVE_ORDER);
-
-    JComboBox<String> fontFamily = new JComboBox<>(families);
+    JComboBox<String> fontFamily = new JComboBox<>(availableFontFamiliesSorted());
     fontFamily.setEditable(true);
     fontFamily.setSelectedItem(current.chatFontFamily());
     applyEditableComboEditorPalette(fontFamily);
@@ -2201,6 +2264,12 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JSpinner fontSize = numberSpinner(current.chatFontSize(), 8, 48, 1, closeables);
 
     return new FontControls(fontFamily, fontSize);
+  }
+
+  private static String[] availableFontFamiliesSorted() {
+    String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+    Arrays.sort(families, String.CASE_INSENSITIVE_ORDER);
+    return families;
   }
 
   private static void applyEditableComboEditorPalette(JComboBox<?> combo) {
@@ -3860,6 +3929,19 @@ panel.add(subTabs, "growx, wmin 0");
     form.add(new JLabel(""));
     form.add(tweakHint, "growx, wmin 0");
 
+    form.add(sectionTitle("UI text"), "span 2, growx, wmin 0, wrap");
+    form.add(new JLabel("Font override"));
+    form.add(tweaks.uiFontOverrideEnabled, "growx");
+    form.add(new JLabel("Font family"));
+    form.add(tweaks.uiFontFamily, "growx");
+    form.add(new JLabel("Font size"));
+    form.add(tweaks.uiFontSize, "w 110!");
+
+    JTextArea uiFontHint = subtleInfoText();
+    uiFontHint.setText("Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
+    form.add(new JLabel(""));
+    form.add(uiFontHint, "growx, wmin 0");
+
     JButton reset = new JButton("Reset to defaults");
     reset.setToolTipText("Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
     reset.addActionListener(e -> {
@@ -3879,6 +3961,9 @@ panel.add(subTabs, "growx, wmin 0");
         }
       }
       tweaks.cornerRadius.setValue(10);
+      tweaks.uiFontOverrideEnabled.setSelected(false);
+      tweaks.uiFontFamily.setSelectedItem(ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY);
+      tweaks.uiFontSize.setValue(ThemeTweakSettings.DEFAULT_UI_FONT_SIZE);
 
       // Chat theme
       chatTheme.preset.setSelectedItem(ChatThemeSettings.Preset.DEFAULT);
@@ -3892,6 +3977,7 @@ panel.add(subTabs, "growx, wmin 0");
 
       accent.applyEnabledState.run();
       accent.syncPresetFromHex.run();
+      tweaks.applyUiFontEnabledState.run();
     });
     form.add(new JLabel(""));
     form.add(reset, "alignx left");
@@ -4180,10 +4266,13 @@ panel.add(subTabs, "growx, wmin 0");
   private static String capabilityDisplayLabel(String capability) {
     return switch (capability) {
       case "message-tags" -> "Message tags";
+      case "sts" -> "Strict transport security";
       case "server-time" -> "Server timestamps";
       case "echo-message" -> "Echo own messages";
       case "account-tag" -> "Account tags";
       case "userhost-in-names" -> "USERHOST in NAMES";
+      case "multiline" -> "Multiline messages";
+      case "draft/multiline" -> "Multiline messages (draft)";
       case "typing" -> "Typing transport";
       case "read-marker" -> "Read markers";
       case "draft/reply" -> "Reply metadata";
@@ -4216,11 +4305,12 @@ panel.add(subTabs, "growx, wmin 0");
   private static String capabilityGroupKey(String capability) {
     return switch (capability) {
       case "multi-prefix", "cap-notify", "away-notify", "account-notify", "extended-join",
-           "setname", "chghost", "message-tags", "server-time", "standard-replies",
+           "setname", "chghost", "message-tags", "sts", "server-time", "standard-replies",
            "echo-message", "labeled-response", "account-tag", "userhost-in-names"
           -> "core";
       case "draft/reply", "draft/react", "draft/message-edit", "message-edit",
-           "draft/message-redaction", "message-redaction", "typing", "read-marker"
+           "draft/message-redaction", "message-redaction", "typing", "read-marker",
+           "multiline", "draft/multiline"
           -> "conversation";
       case "batch", "chathistory", "draft/chathistory", "znc.in/playback"
           -> "history";
@@ -4241,35 +4331,38 @@ panel.add(subTabs, "growx, wmin 0");
     return switch (capability) {
       // Core metadata and sync
       case "message-tags" -> 10;
-      case "server-time" -> 20;
-      case "echo-message" -> 30;
-      case "labeled-response" -> 40;
-      case "standard-replies" -> 50;
-      case "account-tag" -> 60;
-      case "account-notify" -> 70;
-      case "away-notify" -> 80;
-      case "extended-join" -> 90;
-      case "chghost" -> 100;
-      case "setname" -> 110;
-      case "multi-prefix" -> 120;
-      case "cap-notify" -> 130;
-      case "userhost-in-names" -> 140;
+      case "sts" -> 20;
+      case "server-time" -> 30;
+      case "echo-message" -> 40;
+      case "labeled-response" -> 50;
+      case "standard-replies" -> 60;
+      case "account-tag" -> 70;
+      case "account-notify" -> 80;
+      case "away-notify" -> 90;
+      case "extended-join" -> 100;
+      case "chghost" -> 110;
+      case "setname" -> 120;
+      case "multi-prefix" -> 130;
+      case "cap-notify" -> 140;
+      case "userhost-in-names" -> 150;
 
       // Conversation features
-      case "typing" -> 210;
-      case "read-marker" -> 220;
-      case "draft/reply" -> 230;
-      case "draft/react" -> 240;
-      case "message-edit" -> 250;
-      case "draft/message-edit" -> 260;
-      case "message-redaction" -> 270;
-      case "draft/message-redaction" -> 280;
+      case "multiline" -> 210;
+      case "draft/multiline" -> 220;
+      case "typing" -> 230;
+      case "read-marker" -> 240;
+      case "draft/reply" -> 250;
+      case "draft/react" -> 260;
+      case "message-edit" -> 270;
+      case "draft/message-edit" -> 280;
+      case "message-redaction" -> 290;
+      case "draft/message-redaction" -> 300;
 
       // History and playback
-      case "batch" -> 310;
-      case "chathistory" -> 320;
-      case "draft/chathistory" -> 330;
-      case "znc.in/playback" -> 340;
+      case "batch" -> 410;
+      case "chathistory" -> 420;
+      case "draft/chathistory" -> 430;
+      case "znc.in/playback" -> 440;
 
       default -> 10_000;
     };
@@ -4278,10 +4371,12 @@ panel.add(subTabs, "growx, wmin 0");
   private static String capabilityImpactSummary(String capability) {
     return switch (capability) {
       case "message-tags" -> "Foundation for many IRCv3 features: carries structured metadata on messages.";
+      case "sts" -> "Learns strict transport policy and upgrades future connects for this host to TLS.";
       case "server-time" -> "Uses server-provided timestamps to improve ordering and replay accuracy.";
       case "echo-message" -> "Server echoes your outbound messages, improving multi-client/bouncer consistency.";
       case "account-tag" -> "Attaches account metadata to messages for richer identity info.";
       case "userhost-in-names" -> "May provide richer host/user identity details during names lists.";
+      case "multiline", "draft/multiline" -> "Allows sending and receiving multiline messages as a single logical message.";
       case "typing" -> "Transport for typing indicators; required to send/receive typing events.";
       case "read-marker" -> "Enables read-position markers on servers that support them.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
@@ -6401,47 +6496,15 @@ panel.add(subTabs, "growx, wmin 0");
 
 
   private static String normalizeThemeIdInternal(String id) {
-    String s = java.util.Objects.toString(id, "").trim();
-    if (s.isEmpty()) return "darcula";
-
-    // Preserve case for IntelliJ theme ids and raw LookAndFeel class names.
-    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
-      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
-    }
-    if (looksLikeClassNameInternal(s)) return s;
-
-    return s.toLowerCase();
+    return ThemeIdUtils.normalizeThemeId(id);
   }
 
   private static boolean sameThemeInternal(String a, String b) {
-    return normalizeThemeIdInternal(a).equals(normalizeThemeIdInternal(b));
-  }
-
-  private static boolean looksLikeClassNameInternal(String raw) {
-    if (raw == null) return false;
-    String s = raw.trim();
-    if (!s.contains(".")) return false;
-    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
-    String last = s.substring(s.lastIndexOf('.') + 1);
-    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
+    return ThemeIdUtils.sameTheme(a, b);
   }
 
   private static boolean supportsFlatLafTweaksInternal(String themeId) {
-    String raw = themeId != null ? themeId.trim() : "";
-    if (raw.isEmpty()) return true; // defaults to darcula
-
-    if (raw.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
-      return true;
-    }
-    if (looksLikeClassNameInternal(raw)) {
-      return raw.toLowerCase(Locale.ROOT).contains("flatlaf");
-    }
-
-    String lower = raw.toLowerCase(Locale.ROOT);
-    return switch (lower) {
-      case "system", "nimbus", "nimbus-dark", "nimbus-dark-amber", "nimbus-dark-blue", "nimbus-dark-violet", "nimbus-dark-green", "nimbus-dark-orange", "nimbus-dark-magenta", "nimbus-orange", "nimbus-green", "nimbus-blue", "nimbus-violet", "nimbus-magenta", "nimbus-amber", "metal", "metal-ocean", "metal-steel", "motif", "windows", "gtk", "darklaf", "darklaf-darcula", "darklaf-solarized-dark", "darklaf-high-contrast-dark", "darklaf-light", "darklaf-high-contrast-light", "darklaf-intellij" -> false;
-      default -> true;
-    };
+    return ThemeIdUtils.isLikelyFlatTarget(themeId);
   }
 
 
@@ -8069,7 +8132,13 @@ panel.add(subTabs, "growx, wmin 0");
     }
   }
 
-  private record TweakControls(JComboBox<DensityOption> density, JSlider cornerRadius) {
+  private record TweakControls(
+      JComboBox<DensityOption> density,
+      JSlider cornerRadius,
+      JCheckBox uiFontOverrideEnabled,
+      JComboBox<String> uiFontFamily,
+      JSpinner uiFontSize,
+      Runnable applyUiFontEnabledState) {
   }
 
 

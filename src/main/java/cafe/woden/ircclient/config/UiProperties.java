@@ -20,6 +20,9 @@ public record UiProperties(
     Integer accentStrength,
     String density,
     Integer cornerRadius,
+    Boolean uiFontOverrideEnabled,
+    String uiFontFamily,
+    Integer uiFontSize,
     String chatFontFamily,
     int chatFontSize,
 
@@ -505,6 +508,21 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (cornerRadius == null) cornerRadius = 10;
     if (cornerRadius < 0) cornerRadius = 0;
     if (cornerRadius > 20) cornerRadius = 20;
+
+    if (uiFontOverrideEnabled == null) {
+      uiFontOverrideEnabled = false;
+    }
+    if (uiFontFamily == null || uiFontFamily.isBlank()) {
+      uiFontFamily = "Dialog";
+    } else {
+      uiFontFamily = uiFontFamily.trim();
+    }
+    if (uiFontSize == null) {
+      uiFontSize = 13;
+    }
+    if (uiFontSize < 8) uiFontSize = 8;
+    if (uiFontSize > 48) uiFontSize = 48;
+
     if (chatFontFamily == null || chatFontFamily.isBlank()) {
       chatFontFamily = Font.MONOSPACED;
     }

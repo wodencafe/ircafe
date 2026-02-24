@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -211,7 +212,7 @@ public final class MessageInputContextMenuSupport {
         }
 
         refreshEnabledStates.run();
-        SwingUtilities.updateComponentTreeUI(menu);
+        PopupMenuThemeSupport.prepareForDisplay(menu);
         menu.show(e.getComponent(), e.getX(), e.getY());
       }
 

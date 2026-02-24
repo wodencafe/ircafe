@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -488,6 +489,7 @@ public class StatusBar extends JPanel {
     if (historyPopupClearItem != null) {
       historyPopupClearItem.setEnabled(selectedHistoryNotice() != null);
     }
+    PopupMenuThemeSupport.prepareForDisplay(historyPopupMenu);
     historyPopupMenu.show(noticeHistoryTable, e.getX(), e.getY());
   }
 

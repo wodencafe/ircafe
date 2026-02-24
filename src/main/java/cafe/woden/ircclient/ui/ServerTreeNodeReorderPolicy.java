@@ -60,7 +60,7 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
   private int minMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
     if (!parentIsServer) return 0;
     // Keep fixed leaves at the top of the server node, if present.
-    // Today that's: status + UI-only utility leaves + Interceptors group.
+    // Today that's: status + UI-only utility leaves + Monitor/Interceptors groups.
     int min = 0;
     int count = parent.getChildCount();
     while (min < count) {

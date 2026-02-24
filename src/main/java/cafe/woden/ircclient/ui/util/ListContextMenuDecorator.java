@@ -58,6 +58,7 @@ public final class ListContextMenuDecorator<T> implements AutoCloseable {
         }
 
         if (menu == null || menu.getComponentCount() == 0) return;
+        PopupMenuThemeSupport.prepareForDisplay(menu);
         menu.show(list, e.getX(), e.getY());
       }
 

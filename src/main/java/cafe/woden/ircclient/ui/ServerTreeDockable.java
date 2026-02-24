@@ -13,6 +13,7 @@ import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -108,6 +109,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
   private static final String LOG_VIEWER_LABEL = "Log Viewer";
+  private static final String MONITOR_GROUP_LABEL = "Monitor";
   private static final String INTERCEPTORS_GROUP_LABEL = "Interceptors";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String IRC_ROOT_LABEL = "IRC";
@@ -135,6 +137,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final Color TYPING_ACTIVITY_INDICATOR_FALLBACK = new Color(90, 150, 235);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
+  public static final String PROP_LOG_VIEWER_NODES_VISIBLE = "logViewerNodesVisible";
+  public static final String PROP_INTERCEPTORS_NODES_VISIBLE = "interceptorsNodesVisible";
   public static final String PROP_APPLICATION_ROOT_VISIBLE = "applicationRootVisible";
 
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -265,6 +269,8 @@ private static final class InsertionLine {
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
+  private volatile boolean showLogViewerNodes = true;
+  private volatile boolean showInterceptorsNodes = true;
   private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
@@ -441,10 +447,16 @@ private static final class InsertionLine {
         if (uo instanceof NodeData nd) {
           if (nd.ref != null) {
             selections.onNext(nd.ref);
+          } else if (isMonitorGroupNode(node)) {
+            String serverId = owningServerIdForNode(node);
+            if (!serverId.isBlank()) selections.onNext(TargetRef.monitorGroup(serverId));
           } else if (isInterceptorsGroupNode(node)) {
             String serverId = owningServerIdForNode(node);
             if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
           }
+        } else if (isMonitorGroupNode(node)) {
+          String serverId = owningServerIdForNode(node);
+          if (!serverId.isBlank()) selections.onNext(TargetRef.monitorGroup(serverId));
         } else if (isInterceptorsGroupNode(node)) {
           String serverId = owningServerIdForNode(node);
           if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
@@ -513,6 +525,7 @@ private static final class InsertionLine {
 
         JPopupMenu menu = buildPopupMenu(path);
         if (menu == null || menu.getComponentCount() == 0) return;
+        PopupMenuThemeSupport.prepareForDisplay(menu);
         menu.show(tree, x, y);
       }
     };
@@ -1646,6 +1659,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return false;
   }
 
+  private boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (uo instanceof String s) {
+      return MONITOR_GROUP_LABEL.equalsIgnoreCase(s.trim());
+    }
+    if (uo instanceof NodeData nd) {
+      if (nd.ref != null) return false;
+      return MONITOR_GROUP_LABEL.equalsIgnoreCase(Objects.toString(nd.label, "").trim());
+    }
+    return false;
+  }
+
   @Override
   public String getPersistentID() {
     return ID;
@@ -2234,6 +2260,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return showDccTransfersNodes;
   }
 
+  public boolean isLogViewerNodesVisible() {
+    return showLogViewerNodes;
+  }
+
+  public boolean isInterceptorsNodesVisible() {
+    return showInterceptorsNodes;
+  }
+
   public boolean isApplicationRootVisible() {
     return showApplicationRoot;
   }
@@ -2254,6 +2288,24 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     showDccTransfersNodes = next;
     syncUiLeafVisibility();
     firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
+  }
+
+  public void setLogViewerNodesVisible(boolean visible) {
+    boolean old = showLogViewerNodes;
+    boolean next = visible;
+    if (old == next) return;
+    showLogViewerNodes = next;
+    syncUiLeafVisibility();
+    firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, next);
+  }
+
+  public void setInterceptorsNodesVisible(boolean visible) {
+    boolean old = showInterceptorsNodes;
+    boolean next = visible;
+    if (old == next) return;
+    showInterceptorsNodes = next;
+    syncUiLeafVisibility();
+    firePropertyChange(PROP_INTERCEPTORS_NODES_VISIBLE, old, next);
   }
 
   public void setApplicationRootVisible(boolean visible) {
@@ -2441,14 +2493,20 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     for (ServerNodes sn : servers.values()) {
       if (sn == null || sn.serverNode == null) continue;
 
+      ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, showLogViewerNodes);
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
+      ensureInterceptorsGroupVisible(sn, showInterceptorsNodes);
     }
 
     if (selected != null) {
-      if (selected.isChannelList() && !showChannelListNodes) {
+      if (selected.isLogViewer() && !showLogViewerNodes) {
+        selectTarget(new TargetRef(selected.serverId(), "status"));
+      } else if (selected.isChannelList() && !showChannelListNodes) {
         selectTarget(new TargetRef(selected.serverId(), "status"));
       } else if (selected.isDccTransfers() && !showDccTransfersNodes) {
+        selectTarget(new TargetRef(selected.serverId(), "status"));
+      } else if ((selected.isInterceptorsGroup() || selected.isInterceptor()) && !showInterceptorsNodes) {
         selectTarget(new TargetRef(selected.serverId(), "status"));
       }
     }
@@ -2488,6 +2546,43 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     sn.serverNode.insert(leaf, idx);
     model.nodesWereInserted(sn.serverNode, new int[] { idx });
     return true;
+  }
+
+  private boolean ensureInterceptorsGroupVisible(ServerNodes sn, boolean visible) {
+    if (sn == null || sn.serverNode == null || sn.interceptorsNode == null) return false;
+    DefaultMutableTreeNode group = sn.interceptorsNode;
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) group.getParent();
+
+    if (!visible) {
+      if (parent != sn.serverNode) return false;
+      int idx = sn.serverNode.getIndex(group);
+      if (idx < 0) return false;
+      sn.serverNode.remove(group);
+      model.nodesWereRemoved(sn.serverNode, new int[] { idx }, new Object[] { group });
+      return true;
+    }
+
+    if (parent == sn.serverNode) return false;
+    int idx = interceptorsGroupInsertIndex(sn);
+    sn.serverNode.insert(group, idx);
+    model.nodesWereInserted(sn.serverNode, new int[] { idx });
+    return true;
+  }
+
+  private int interceptorsGroupInsertIndex(ServerNodes sn) {
+    if (sn == null || sn.serverNode == null) return 0;
+
+    int pmIdx = sn.serverNode.getIndex(sn.pmNode);
+    if (pmIdx >= 0) {
+      int idx = pmIdx;
+      if (sn.monitorNode != null && sn.monitorNode.getParent() == sn.serverNode) {
+        int monitorIdx = sn.serverNode.getIndex(sn.monitorNode);
+        if (monitorIdx >= 0) idx = monitorIdx + 1;
+      }
+      return Math.max(0, Math.min(idx, sn.serverNode.getChildCount()));
+    }
+
+    return sn.serverNode.getChildCount();
   }
 
   private int fixedLeafInsertIndexFor(ServerNodes sn, TargetRef ref) {
@@ -2543,9 +2638,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref.isDccTransfers() && !showDccTransfersNodes) {
       setDccTransfersNodesVisible(true);
     }
-    if (ref.isInterceptorsGroup()) {
+    if (ref.isLogViewer() && !showLogViewerNodes) {
+      setLogViewerNodesVisible(true);
+    }
+    if ((ref.isInterceptorsGroup() || ref.isInterceptor()) && !showInterceptorsNodes) {
+      setInterceptorsNodesVisible(true);
+    }
+    if (ref.isMonitorGroup() || ref.isInterceptorsGroup()) {
       // This is a built-in grouping node (not a leaf/PM/channel). Selecting it should not
-      // create a synthetic leaf like "__interceptors_group__" under private messages.
+      // create a synthetic leaf (for example "__monitor_group__") under private messages.
       if (servers.containsKey(ref.serverId())) return;
       if (serverCatalog == null || serverCatalog.containsId(ref.serverId()) || servers.isEmpty()) {
         addServerRoot(ref.serverId());
@@ -2568,6 +2669,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       parent = sn.serverNode;
     } else if (ref.isNotifications()) {
       parent = sn.serverNode;
+    } else if (ref.isMonitorGroup()) {
+      parent = sn.monitorNode != null ? sn.monitorNode : sn.serverNode;
     } else if (ref.isInterceptor()) {
       parent = sn.interceptorsNode != null ? sn.interceptorsNode : sn.serverNode;
     } else if (ref.isChannelList()) {
@@ -2628,10 +2731,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public void selectTarget(TargetRef ref) {
     if (ref == null) return;
+    if (ref.isMonitorGroup()) {
+      ServerNodes sn = servers.get(ref.serverId());
+      DefaultMutableTreeNode node = (sn == null) ? null : sn.monitorNode;
+      if (node == null || node.getParent() != sn.serverNode) return;
+      TreePath path = new TreePath(node.getPath());
+      tree.setSelectionPath(path);
+      tree.scrollPathToVisible(path);
+      return;
+    }
     if (ref.isInterceptorsGroup()) {
       ServerNodes sn = servers.get(ref.serverId());
       DefaultMutableTreeNode node = (sn == null) ? null : sn.interceptorsNode;
-      if (node == null) return;
+      if (node == null || node.getParent() != sn.serverNode) return;
       TreePath path = new TreePath(node.getPath());
       tree.setSelectionPath(path);
       tree.scrollPathToVisible(path);
@@ -3060,6 +3172,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (leaves.containsKey(originNodes.channelListRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
     if (originNodes.interceptorsNode != null && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
+    if (originNodes.monitorNode != null && originNodes.monitorNode.getParent() == originNodes.serverNode) count++;
     return count;
   }
 
@@ -3092,6 +3205,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     if (isInterceptorsGroupNode(node)) {
       return "Interceptors for this server. Count shows total captured hits.";
+    }
+    if (isMonitorGroupNode(node)) {
+      return "Monitored nick presence for this server (IRC MONITOR).";
     }
 
     Object uo = node.getUserObject();
@@ -3298,22 +3414,24 @@ private void removeServerRoot(String serverId) {
     leaves.put(notificationsRef, notificationsLeaf);
 
     TargetRef logViewerRef = TargetRef.logViewer(id);
-    DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
-    serverNode.insert(logViewerLeaf, 2);
-    leaves.put(logViewerRef, logViewerLeaf);
+    int nextUiLeafIndex = 2;
+    if (showLogViewerNodes) {
+      DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
+      serverNode.insert(logViewerLeaf, nextUiLeafIndex++);
+      leaves.put(logViewerRef, logViewerLeaf);
+    }
 
     TargetRef channelListRef = TargetRef.channelList(id);
     if (showChannelListNodes) {
       DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
-      serverNode.insert(channelListLeaf, 3);
+      serverNode.insert(channelListLeaf, nextUiLeafIndex++);
       leaves.put(channelListRef, channelListLeaf);
     }
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
-      int dccIndex = showChannelListNodes ? 4 : 3;
       DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
-      serverNode.insert(dccTransfersLeaf, dccIndex);
+      serverNode.insert(dccTransfersLeaf, nextUiLeafIndex++);
       leaves.put(dccTransfersRef, dccTransfersLeaf);
     }
 
@@ -3321,8 +3439,11 @@ private void removeServerRoot(String serverId) {
     if (interceptorStore != null) {
       interceptorsData.unread = Math.max(0, interceptorStore.totalHitCount(id));
     }
+    NodeData monitorData = new NodeData(null, MONITOR_GROUP_LABEL);
+    DefaultMutableTreeNode monitorNode = new DefaultMutableTreeNode(monitorData);
+    serverNode.add(monitorNode);
+
     DefaultMutableTreeNode interceptorsNode = new DefaultMutableTreeNode(interceptorsData);
-    serverNode.add(interceptorsNode);
 
     if (interceptorStore != null) {
       List<InterceptorDefinition> defs = interceptorStore.listInterceptors(id);
@@ -3340,11 +3461,21 @@ private void removeServerRoot(String serverId) {
     }
 
     serverNode.add(pmNode);
+    if (showInterceptorsNodes) {
+      int interceptorsIdx = serverNode.getIndex(pmNode);
+      if (interceptorsIdx < 0) interceptorsIdx = serverNode.getChildCount();
+      int monitorIdx = serverNode.getIndex(monitorNode);
+      if (monitorIdx >= 0) {
+        interceptorsIdx = Math.max(monitorIdx + 1, Math.min(interceptorsIdx, serverNode.getChildCount()));
+      }
+      serverNode.insert(interceptorsNode, Math.max(0, Math.min(interceptorsIdx, serverNode.getChildCount())));
+    }
 
     ServerNodes sn =
         new ServerNodes(
             serverNode,
             pmNode,
+            monitorNode,
             interceptorsNode,
             statusRef,
             notificationsRef,
@@ -3500,6 +3631,7 @@ private void removeServerRoot(String serverId) {
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
+    final DefaultMutableTreeNode monitorNode;
     final DefaultMutableTreeNode interceptorsNode;
     final TargetRef statusRef;
     final TargetRef notificationsRef;
@@ -3510,6 +3642,7 @@ private void removeServerRoot(String serverId) {
     ServerNodes(
         DefaultMutableTreeNode serverNode,
         DefaultMutableTreeNode pmNode,
+        DefaultMutableTreeNode monitorNode,
         DefaultMutableTreeNode interceptorsNode,
         TargetRef statusRef,
         TargetRef notificationsRef,
@@ -3518,6 +3651,7 @@ private void removeServerRoot(String serverId) {
         TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
+      this.monitorNode = monitorNode;
       this.interceptorsNode = interceptorsNode;
       this.statusRef = statusRef;
       this.notificationsRef = notificationsRef;
@@ -3619,8 +3753,10 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
           setTreeIcon("dock-right");
-        } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
+        } else if (nd.ref == null && isMonitorGroupNode(node)) {
           setTreeIcon("eye");
+        } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
+          setTreeIcon("yin-yang");
         }
         if (supportsTypingActivity(nd.ref)) {
           typingIndicatorSlotVisible = true;
@@ -3652,9 +3788,12 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       } else if (isPrivateMessagesGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("account-unknown");
-      } else if (isInterceptorsGroupNode(node)) {
+      } else if (isMonitorGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("eye");
+      } else if (isInterceptorsGroupNode(node)) {
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("yin-yang");
       } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("dock-left");

@@ -206,12 +206,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
           }
           if (nickMenu != null && nickMenu.getComponentCount() > 0) {
             currentPopupUrl = null;
-            // If the menu instance was created before the Look & Feel was applied, it may appear unstyled.
-            // Refresh UI delegates at show time to match the current FlatLaf theme.
-            try {
-              SwingUtilities.updateComponentTreeUI(nickMenu);
-            } catch (Exception ignored) {
-            }
+            PopupMenuThemeSupport.prepareForDisplay(nickMenu);
             nickMenu.show(transcript, e.getX(), e.getY());
             return;
           }
@@ -226,12 +221,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         rebuildMenu(url);
         updateEnabledState(url);
 
-        // This popup menu is constructed once and reused; refresh UI delegates at show time so it
-        // matches the current Look & Feel (e.g., FlatLaf).
-        try {
-          SwingUtilities.updateComponentTreeUI(menu);
-        } catch (Exception ignored) {
-        }
+        PopupMenuThemeSupport.prepareForDisplay(menu);
         menu.show(transcript, e.getX(), e.getY());
       }
     };

@@ -1493,6 +1493,57 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         targetCoordinator.onUserAccountStateObserved(sid, ev);
       }
 
+      case IrcEvent.MonitorOnlineObserved ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        List<String> nicks = ev.nicks();
+        if (!nicks.isEmpty()) {
+          for (String nick : nicks) {
+            markPrivateMessagePeerOnline(sid, nick);
+          }
+          ui.appendStatusAt(monitor, ev.at(), "(monitor)", "Online: " + String.join(", ", nicks));
+        }
+      }
+
+      case IrcEvent.MonitorOfflineObserved ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        List<String> nicks = ev.nicks();
+        if (!nicks.isEmpty()) {
+          for (String nick : nicks) {
+            markPrivateMessagePeerOffline(sid, nick);
+          }
+          ui.appendStatusAt(monitor, ev.at(), "(monitor)", "Offline: " + String.join(", ", nicks));
+        }
+      }
+
+      case IrcEvent.MonitorListObserved ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        List<String> nicks = ev.nicks();
+        String rendered = nicks.isEmpty() ? "Monitor list: (empty)" : ("Monitor list: " + String.join(", ", nicks));
+        ui.appendStatusAt(monitor, ev.at(), "(monitor)", rendered);
+      }
+
+      case IrcEvent.MonitorListEnded ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+        ui.appendStatusAt(monitor, ev.at(), "(monitor)", "End of monitor list.");
+      }
+
+      case IrcEvent.MonitorListFull ev -> {
+        TargetRef monitor = TargetRef.monitorGroup(sid);
+        ensureTargetExists(monitor);
+
+        String msg = Objects.toString(ev.message(), "").trim();
+        if (msg.isEmpty()) msg = "Monitor list is full.";
+        if (ev.limit() > 0) msg = msg + " (limit=" + ev.limit() + ")";
+        if (ev.nicks() != null && !ev.nicks().isEmpty()) {
+          msg = msg + " nicks=" + String.join(", ", ev.nicks());
+        }
+        ui.appendErrorAt(monitor, ev.at(), "(monitor)", msg);
+      }
+
       case IrcEvent.UserSetNameObserved ev -> {
         targetCoordinator.onUserSetNameObserved(sid, ev);
 

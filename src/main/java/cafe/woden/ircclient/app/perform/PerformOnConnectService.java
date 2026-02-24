@@ -338,6 +338,20 @@ public class PerformOnConnectService {
         yield irc.sendRaw(serverId, args.isEmpty() ? "LIST" : ("LIST " + args));
       }
 
+      case ParsedInput.Monitor cmd -> {
+        String args = Objects.toString(cmd.args(), "").trim();
+        if (args.isEmpty()) {
+          ui.appendStatus(status, "(perform)", "Skipping /monitor (usage: /monitor <+|-|list|status|clear> [nicks])");
+          yield Completable.complete();
+        }
+        String line = "MONITOR " + args;
+        if (containsCrlf(line)) {
+          ui.appendStatus(status, "(perform)", "Skipping /monitor (contains CR/LF)");
+          yield Completable.complete();
+        }
+        yield irc.sendRaw(serverId, line);
+      }
+
       case ParsedInput.Mode cmd -> {
         String first = normTarget(cmd.first());
         String rest = Objects.toString(cmd.rest(), "").trim();

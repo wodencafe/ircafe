@@ -45,6 +45,16 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public boolean confirmMultilineSplitFallback(
+      TargetRef target,
+      int lineCount,
+      long payloadUtf8Bytes,
+      String reason
+  ) {
+    return delegate.confirmMultilineSplitFallback(target, lineCount, payloadUtf8Bytes, reason);
+  }
+
+  @Override
   public Flowable<Object> connectClicks() {
     return delegate.connectClicks();
   }

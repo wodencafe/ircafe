@@ -2,11 +2,11 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UserActionRequest;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import javax.swing.JMenu;
 import java.util.Objects;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
-import javax.swing.SwingUtilities;
 import org.springframework.stereotype.Component;
 
 /** Builds the standard context menu used when right-clicking a nickname. */
@@ -140,13 +140,7 @@ public final class NickContextMenuFactory {
     }
 
     public JPopupMenu forNick(TargetRef ctx, String nick, IgnoreMark mark) {
-      // This menu is not part of any visible component tree, so it won't automatically
-      // receive Look-and-Feel updates when the main frame is updated. Ensure that the
-      // current LAF (e.g. FlatLaf) is applied before showing.
-      try {
-        SwingUtilities.updateComponentTreeUI(menu);
-      } catch (Exception ignored) {
-      }
+      PopupMenuThemeSupport.prepareForDisplay(menu);
 
       this.popupCtx = ctx;
       this.popupNick = (nick == null) ? null : nick.trim();

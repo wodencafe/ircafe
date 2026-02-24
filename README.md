@@ -36,9 +36,9 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
 
 - Capability negotiation with per-capability toggles.
 - Support for modern IRCv3 capabilities such as:
-  - `message-tags`, `server-time`, `standard-replies`, `labeled-response`
+  - `message-tags`, `sts`, `server-time`, `standard-replies`, `labeled-response`
   - `draft/reply`, `draft/react`, `message-edit`, `message-redaction`
-  - `typing`, `read-marker`, `batch`, `chathistory`, `znc.in/playback`
+  - `typing`, `read-marker`, `multiline`, `batch`, `chathistory`, `znc.in/playback`
 - Message reply/reaction/edit/redaction flows in chat UI and command layer.
 - Typing indicators (send + receive) and read-marker updates.
 - ZNC and soju network discovery with ephemeral server entries and optional auto-connect preferences.

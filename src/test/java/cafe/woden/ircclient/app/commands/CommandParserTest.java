@@ -178,6 +178,17 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesMonitorAndAliasMon() {
+    ParsedInput monitor = parser.parse("/monitor +alice,bob");
+    assertTrue(monitor instanceof ParsedInput.Monitor);
+    assertEquals("+alice,bob", ((ParsedInput.Monitor) monitor).args());
+
+    ParsedInput mon = parser.parse("/mon list");
+    assertTrue(mon instanceof ParsedInput.Monitor);
+    assertEquals("list", ((ParsedInput.Monitor) mon).args());
+  }
+
+  @Test
   void parsesDccSendWithPath() {
     ParsedInput in = parser.parse("/dcc send alice /tmp/my file.txt");
     assertTrue(in instanceof ParsedInput.Dcc);

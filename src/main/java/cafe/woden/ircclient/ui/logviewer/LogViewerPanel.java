@@ -6,6 +6,7 @@ import cafe.woden.ircclient.logging.viewer.ChatLogViewerResult;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerRow;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -749,6 +750,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       });
       menu.add(item);
     }
+    PopupMenuThemeSupport.prepareForDisplay(menu);
     menu.show(invoker, 0, invoker.getHeight());
   }
 

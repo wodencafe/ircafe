@@ -78,7 +78,7 @@ public class ThemeSelectionDialog {
     }
 
     UiSettings cur = settingsBus.get();
-    committedThemeId = normalizeThemeId(cur != null ? cur.theme() : null);
+    committedThemeId = ThemeIdUtils.normalizeThemeId(cur != null ? cur.theme() : null);
     previewThemeId = committedThemeId;
 
     // Use curated themes by default, but allow the selector to expand to all IntelliJ themes.
@@ -115,7 +115,7 @@ public class ThemeSelectionDialog {
     count.putClientProperty(FlatClientProperties.STYLE, "font: -1; foreground: $Label.disabledForeground");
 
     Runnable refresh = () -> {
-      String keepId = normalizeThemeId(selectedThemeId());
+      String keepId = ThemeIdUtils.normalizeThemeId(selectedThemeId());
       ThemeManager.ThemeOption[] pool = themeManager.themesForPicker(allIntelliJ.isSelected());
       rebuildModel(model, pool, (ToneChoice) toneFilter.getSelectedItem(),
           (PackChoice) packFilter.getSelectedItem(), search.getText());
@@ -174,7 +174,7 @@ public class ThemeSelectionDialog {
     ensurePreviewTimer();
     themeList.addListSelectionListener(e -> {
       if (e.getValueIsAdjusting()) return;
-      schedulePreview(normalizeThemeId(selectedThemeId()));
+      schedulePreview(ThemeIdUtils.normalizeThemeId(selectedThemeId()));
     });
 
     JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -293,19 +293,19 @@ public class ThemeSelectionDialog {
   }
 
   private void commitSelectedTheme() {
-    String next = normalizeThemeId(selectedThemeId());
+    String next = ThemeIdUtils.normalizeThemeId(selectedThemeId());
     if (next.isBlank()) return;
 
     UiSettings cur = settingsBus.get();
     if (cur == null) return;
 
-    if (!sameTheme(cur.theme(), next)) {
+    if (!ThemeIdUtils.sameTheme(cur.theme(), next)) {
       UiSettings updated = cur.withTheme(next);
       settingsBus.set(updated);
       runtimeConfig.rememberUiSettings(updated.theme(), updated.chatFontFamily(), updated.chatFontSize());
     }
 
-    if (!sameTheme(committedThemeId, next)) {
+    if (!ThemeIdUtils.sameTheme(committedThemeId, next)) {
       themeManager.applyTheme(next);
       committedThemeId = next;
       refreshTranscriptPreview();
@@ -314,10 +314,10 @@ public class ThemeSelectionDialog {
 
   private void selectThemeInList(String id) {
     if (themeList == null) return;
-    String wanted = normalizeThemeId(id);
+    String wanted = ThemeIdUtils.normalizeThemeId(id);
     for (int i = 0; i < themeList.getModel().getSize(); i++) {
       ThemeManager.ThemeOption opt = themeList.getModel().getElementAt(i);
-      if (opt != null && sameTheme(opt.id(), wanted)) {
+      if (opt != null && ThemeIdUtils.sameTheme(opt.id(), wanted)) {
         themeList.setSelectedIndex(i);
         themeList.ensureIndexIsVisible(i);
         return;
@@ -325,7 +325,7 @@ public class ThemeSelectionDialog {
     }
     for (int i = 0; i < themeList.getModel().getSize(); i++) {
       ThemeManager.ThemeOption opt = themeList.getModel().getElementAt(i);
-      if (opt != null && sameTheme(opt.id(), "darcula")) {
+      if (opt != null && ThemeIdUtils.sameTheme(opt.id(), "darcula")) {
         themeList.setSelectedIndex(i);
         themeList.ensureIndexIsVisible(i);
         return;
@@ -333,7 +333,7 @@ public class ThemeSelectionDialog {
     }
     for (int i = 0; i < themeList.getModel().getSize(); i++) {
       ThemeManager.ThemeOption opt = themeList.getModel().getElementAt(i);
-      if (opt != null && sameTheme(opt.id(), "dark")) {
+      if (opt != null && ThemeIdUtils.sameTheme(opt.id(), "dark")) {
         themeList.setSelectedIndex(i);
         themeList.ensureIndexIsVisible(i);
         return;
@@ -350,29 +350,12 @@ public class ThemeSelectionDialog {
     return sel.id();
   }
 
-  private static String normalizeThemeId(String id) {
-    String s = Objects.toString(id, "").trim();
-    if (s.isEmpty()) return "darcula";
-
-    // Preserve case for IntelliJ theme ids and raw class names.
-    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
-      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
-    }
-    if (looksLikeClassName(s)) return s;
-
-    return s.toLowerCase();
-  }
-
-  private static boolean sameTheme(String a, String b) {
-    return normalizeThemeId(a).equals(normalizeThemeId(b));
-  }
-
   private void closeDialog() {
     if (dialog != null) {
       stopPreviewTimer();
-      String committed = normalizeThemeId(committedThemeId);
-      String preview = normalizeThemeId(previewThemeId);
-      if (!sameTheme(committed, preview)) {
+      String committed = ThemeIdUtils.normalizeThemeId(committedThemeId);
+      String preview = ThemeIdUtils.normalizeThemeId(previewThemeId);
+      if (!ThemeIdUtils.sameTheme(committed, preview)) {
         themeManager.applyTheme(committed);
         previewThemeId = committed;
         refreshTranscriptPreview();
@@ -395,8 +378,8 @@ public class ThemeSelectionDialog {
   private void schedulePreview(String next) {
     if (dialog == null || !dialog.isShowing() || themeList == null) return;
 
-    String wanted = normalizeThemeId(next);
-    if (sameTheme(previewThemeId, wanted)) return;
+    String wanted = ThemeIdUtils.normalizeThemeId(next);
+    if (ThemeIdUtils.sameTheme(previewThemeId, wanted)) return;
 
     pendingPreviewThemeId = wanted;
     ensurePreviewTimer();
@@ -405,20 +388,20 @@ public class ThemeSelectionDialog {
 
   private void applyPendingPreview() {
     if (dialog == null || !dialog.isShowing() || themeList == null) return;
-    String pending = normalizeThemeId(pendingPreviewThemeId);
+    String pending = ThemeIdUtils.normalizeThemeId(pendingPreviewThemeId);
     if (pending.isBlank()) return;
 
     // Only preview if the pending theme is still the current selection.
-    String current = normalizeThemeId(selectedThemeId());
-    if (!sameTheme(current, pending)) return;
-    if (sameTheme(previewThemeId, pending)) return;
+    String current = ThemeIdUtils.normalizeThemeId(selectedThemeId());
+    if (!ThemeIdUtils.sameTheme(current, pending)) return;
+    if (ThemeIdUtils.sameTheme(previewThemeId, pending)) return;
 
     // Defer one more turn just to ensure we never apply LAF while Swing is mid-dispatch.
     SwingUtilities.invokeLater(() -> {
       if (dialog == null || !dialog.isShowing() || themeList == null) return;
-      String stillSelected = normalizeThemeId(selectedThemeId());
-      if (!sameTheme(stillSelected, pending)) return;
-      if (sameTheme(previewThemeId, pending)) return;
+      String stillSelected = ThemeIdUtils.normalizeThemeId(selectedThemeId());
+      if (!ThemeIdUtils.sameTheme(stillSelected, pending)) return;
+      if (ThemeIdUtils.sameTheme(previewThemeId, pending)) return;
 
       themeManager.applyTheme(pending);
       previewThemeId = pending;
@@ -433,14 +416,14 @@ public class ThemeSelectionDialog {
     Color textBg = firstUiColor(panelBg, "TextArea.background", "TextComponent.background", "Panel.background");
     Color textFg = firstUiColor(Color.BLACK, "TextArea.foreground", "TextComponent.foreground", "Label.foreground", "textText");
     Color accent = firstUiColor(new Color(0x2D, 0x6B, 0xFF), "@accentColor", "Component.linkColor", "Component.focusColor", "textHighlight");
-    Color muted = mix(textFg, textBg, 0.45);
-    Color system = mix(textFg, textBg, 0.30);
-    Color nick = mix(accent, textFg, 0.20);
-    Color self = mix(accent, textFg, 0.35);
+    Color muted = ThemeColorUtils.mix(textFg, textBg, 0.45);
+    Color system = ThemeColorUtils.mix(textFg, textBg, 0.30);
+    Color nick = ThemeColorUtils.mix(accent, textFg, 0.20);
+    Color self = ThemeColorUtils.mix(accent, textFg, 0.35);
     Color highlightBg = firstUiColor(null, "List.selectionBackground", "TextComponent.selectionBackground");
-    if (highlightBg == null) highlightBg = mix(textBg, accent, 0.33);
+    if (highlightBg == null) highlightBg = ThemeColorUtils.mix(textBg, accent, 0.33);
     Color highlightFg = firstUiColor(null, "List.selectionForeground", "TextComponent.selectionForeground");
-    if (highlightFg == null) highlightFg = bestTextColor(highlightBg);
+    if (highlightFg == null) highlightFg = ThemeColorUtils.bestTextColor(highlightBg);
 
     String html =
         "<html><body style='margin:0;padding:10px;background:" + toHex(textBg) + ";color:" + toHex(textFg) + ";'>"
@@ -473,38 +456,6 @@ public class ThemeSelectionDialog {
     return fallback;
   }
 
-  private static Color mix(Color a, Color b, double t) {
-    if (a == null) return b;
-    if (b == null) return a;
-    double tt = Math.max(0.0, Math.min(1.0, t));
-    int r = (int) Math.round(a.getRed() + (b.getRed() - a.getRed()) * tt);
-    int g = (int) Math.round(a.getGreen() + (b.getGreen() - a.getGreen()) * tt);
-    int bl = (int) Math.round(a.getBlue() + (b.getBlue() - a.getBlue()) * tt);
-    return new Color(clamp255(r), clamp255(g), clamp255(bl));
-  }
-
-  private static int clamp255(int v) {
-    return Math.max(0, Math.min(255, v));
-  }
-
-  private static Color bestTextColor(Color bg) {
-    if (bg == null) return Color.WHITE;
-    double lum = relativeLuminance(bg);
-    return lum > 0.55 ? Color.BLACK : Color.WHITE;
-  }
-
-  private static double relativeLuminance(Color c) {
-    if (c == null) return 0.0;
-    double r = srgbToLinear(c.getRed() / 255.0);
-    double g = srgbToLinear(c.getGreen() / 255.0);
-    double b = srgbToLinear(c.getBlue() / 255.0);
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  }
-
-  private static double srgbToLinear(double v) {
-    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
-  }
-
   private static String toHex(Color c) {
     Color use = c != null ? c : Color.WHITE;
     return String.format("#%02X%02X%02X", use.getRed(), use.getGreen(), use.getBlue());
@@ -517,12 +468,4 @@ public class ThemeSelectionDialog {
     pendingPreviewThemeId = null;
   }
 
-  private static boolean looksLikeClassName(String raw) {
-    if (raw == null) return false;
-    String s = raw.trim();
-    if (!s.contains(".")) return false;
-    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
-    String last = s.substring(s.lastIndexOf('.') + 1);
-    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
-  }
 }

@@ -62,6 +62,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final Consumer<String> zncOriginDisconnected;
 
   private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
+  private final Ircv3MultilineAccumulator multilineAccumulator = new Ircv3MultilineAccumulator();
 
   private static final class ChatHistoryBatchBuffer {
     final String batchId;
@@ -78,6 +79,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private static final int ERR_SASL_TOO_LONG = 905;
   private static final int ERR_SASL_ABORTED = 906;
   private static final int ERR_SASL_ALREADY = 907;
+  private static final int RPL_MONONLINE = 730;
+  private static final int RPL_MONOFFLINE = 731;
+  private static final int RPL_MONLIST = 732;
+  private static final int RPL_ENDOFMONLIST = 733;
+  private static final int ERR_MONLISTFULL = 734;
   private static final String IRCafe_WHOX_TOKEN = "1";
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_IRCAFE_HOSTMASK = "ircafe/hostmask";
@@ -753,6 +759,8 @@ private static boolean isZncPlayStarCursorCommand(String msg) {
         conn.zncListNetworksRequestedThisSession.set(false);
       } catch (Exception ignored) {
       }
+      multilineAccumulator.clear();
+      activeChatHistoryBatches.clear();
 
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
       boolean suppressReconnect = conn.suppressAutoReconnectOnce.getAndSet(false);
@@ -791,26 +799,46 @@ private static boolean isZncPlayStarCursorCommand(String msg) {
       String channel = event.getChannel().getName();
       maybeEmitHostmaskObserved(channel, event.getUser());
       String msg = event.getMessage();
+      String from = (event.getUser() == null) ? "" : event.getUser().getNick();
       Map<String, String> ircv3Tags = withObservedHostmaskTag(new HashMap<>(ircv3TagsFromEvent(event)), event.getUser());
       String messageId = ircv3MessageId(ircv3Tags);
+      Ircv3MultilineAccumulator.FoldResult folded = multilineAccumulator.fold(
+          "PRIVMSG",
+          from,
+          channel,
+          at,
+          msg,
+          messageId,
+          ircv3Tags);
+      if (folded.suppressed()) {
+        return;
+      }
+      if (folded.at() != null) at = folded.at();
+      msg = folded.text();
+      ircv3Tags = folded.tags();
+      if (folded.messageId() != null && !folded.messageId().isBlank()) {
+        messageId = folded.messageId();
+      } else {
+        messageId = ircv3MessageId(ircv3Tags);
+      }
 
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, event.getUser().getNick(), action)) {
+        if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
           return;
         }
         bus.onNext(new ServerIrcEvent(serverId,
-            new IrcEvent.ChannelAction(at, channel, event.getUser().getNick(), action, messageId, ircv3Tags)
+            new IrcEvent.ChannelAction(at, channel, from, action, messageId, ircv3Tags)
         ));
         return;
       }
 
-      if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.PRIVMSG, event.getUser().getNick(), msg)) {
+      if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg)) {
         return;
       }
 
       bus.onNext(new ServerIrcEvent(serverId,
-          new IrcEvent.ChannelMessage(at, channel, event.getUser().getNick(), msg, messageId, ircv3Tags)
+          new IrcEvent.ChannelMessage(at, channel, from, msg, messageId, ircv3Tags)
       ));
     }
 
@@ -1069,6 +1097,26 @@ public void onPrivateMessage(PrivateMessageEvent event) {
   // If we're in the middle of an explicit playback range request for this query, capture and
   // suppress replayed lines. (Playback control lines from *playback are kept visible.)
   String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
+  Ircv3MultilineAccumulator.FoldResult folded = multilineAccumulator.fold(
+      "PRIVMSG",
+      from,
+      convTarget,
+      at,
+      msg,
+      messageId,
+      ircv3Tags);
+  if (folded.suppressed()) {
+    return;
+  }
+  if (folded.at() != null) at = folded.at();
+  msg = folded.text();
+  ircv3Tags = folded.tags();
+  if (folded.messageId() != null && !folded.messageId().isBlank()) {
+    messageId = folded.messageId();
+  } else {
+    messageId = ircv3MessageId(ircv3Tags);
+  }
+  actionPayload = PircbotxUtil.parseCtcpAction(msg);
   if (!"*playback".equalsIgnoreCase(from)) {
     String action = PircbotxUtil.parseCtcpAction(msg);
     if (action != null) {
@@ -1118,6 +1166,32 @@ public void onPrivateMessage(PrivateMessageEvent event) {
       String notice = event.getNotice();
       Map<String, String> ircv3Tags = withObservedHostmaskTag(new HashMap<>(ircv3TagsFromEvent(event)), event.getUser());
       String messageId = ircv3MessageId(ircv3Tags);
+      String foldTarget = null;
+      try {
+        Channel ch = event.getChannel();
+        if (ch != null) foldTarget = ch.getName();
+      } catch (Exception ignored) {
+      }
+      if (foldTarget == null || foldTarget.isBlank()) foldTarget = from;
+      Ircv3MultilineAccumulator.FoldResult folded = multilineAccumulator.fold(
+          "NOTICE",
+          from,
+          foldTarget,
+          at,
+          notice,
+          messageId,
+          ircv3Tags);
+      if (folded.suppressed()) {
+        return;
+      }
+      if (folded.at() != null) at = folded.at();
+      notice = folded.text();
+      ircv3Tags = folded.tags();
+      if (folded.messageId() != null && !folded.messageId().isBlank()) {
+        messageId = folded.messageId();
+      } else {
+        messageId = ircv3MessageId(ircv3Tags);
+      }
 
       // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
       if (maybeCaptureZncListNetworks(from, notice)) {
@@ -1458,6 +1532,10 @@ public void onFinger(FingerEvent event) throws Exception {
         return;
       }
 
+      if (maybeEmitMonitorNumeric(rawLine, line)) {
+        return;
+      }
+
       if (handleBatchControlLine(line, rawLine)) {
         return;
       }
@@ -1585,6 +1663,7 @@ if (fromSelf) {
         bus.onNext(new ServerIrcEvent(serverId,
             new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
       }
+      maybeApplyMonitorIsupport(rawLine);
       if (rawLine != null && rawLine.contains(" AWAY") && log.isDebugEnabled()) {
         log.debug("[{}] inbound AWAY-ish line received in onUnknown: {}", serverId, rawLine);
       }
@@ -1765,6 +1844,14 @@ if (fromSelf) {
       boolean labeled = conn.labeledResponseCapAcked.get();
       boolean setname = conn.setnameCapAcked.get();
       boolean chghost = conn.chghostCapAcked.get();
+      boolean sts = conn.stsCapAcked.get();
+      boolean multiline = conn.multilineCapAcked.get() || conn.draftMultilineCapAcked.get();
+      boolean multilineFinal = conn.multilineCapAcked.get();
+      boolean multilineDraft = conn.draftMultilineCapAcked.get();
+      long multilineFinalMaxBytes = conn.multilineMaxBytes.get();
+      long multilineFinalMaxLines = conn.multilineMaxLines.get();
+      long multilineDraftMaxBytes = conn.draftMultilineMaxBytes.get();
+      long multilineDraftMaxLines = conn.draftMultilineMaxLines.get();
       boolean reply = conn.draftReplyCapAcked.get();
       boolean react = conn.draftReactCapAcked.get();
       boolean edit = conn.draftMessageEditCapAcked.get();
@@ -1774,10 +1861,15 @@ if (fromSelf) {
       boolean typingTagAllowed = conn.typingClientTagAllowed.get();
       boolean typing = messageTags && (typingTagAllowed || typingCap);
       boolean readMarker = conn.readMarkerCapAcked.get();
+      boolean monitorSupported = conn.monitorSupported.get();
+      long monitorMaxTargets = conn.monitorMaxTargets.get();
       log.info(
           "[{}] negotiated caps: server-time={} standard-replies={} echo-message={} cap-notify={} labeled-response={} "
-              + "setname={} chghost={} draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
-              + "message-tags={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
+              + "setname={} chghost={} sts={} multiline={} multiline(final)={} multiline(final,max-bytes)={} "
+              + "multiline(final,max-lines)={} multiline(draft)={} multiline(draft,max-bytes)={} "
+              + "multiline(draft,max-lines)={} "
+              + "draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
+              + "message-tags={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} monitor={} monitor(max-targets)={} "
               + "chathistory={} batch={} znc.in/playback={}",
           serverId,
           st,
@@ -1787,6 +1879,14 @@ if (fromSelf) {
           labeled,
           setname,
           chghost,
+          sts,
+          multiline,
+          multilineFinal,
+          multilineFinalMaxBytes,
+          multilineFinalMaxLines,
+          multilineDraft,
+          multilineDraftMaxBytes,
+          multilineDraftMaxLines,
           reply,
           react,
           edit,
@@ -1796,6 +1896,8 @@ if (fromSelf) {
           typing,
           typingCap,
           readMarker,
+          monitorSupported,
+          monitorMaxTargets,
           ch,
           batch,
           znc);
@@ -1817,6 +1919,63 @@ if (fromSelf) {
         }
         log.warn("[{}] IRCv3 typing indicators are unavailable ({})", serverId, reason);
       }
+    }
+
+    private void maybeApplyMonitorIsupport(String rawLine) {
+      PircbotxMonitorParsers.ParsedMonitorSupport monitor =
+          PircbotxMonitorParsers.parseRpl005MonitorSupport(rawLine);
+      if (monitor == null) return;
+
+      boolean prevSupported = conn.monitorSupported.getAndSet(monitor.supported());
+      long prevLimit = conn.monitorMaxTargets.getAndSet(Math.max(0L, monitor.limit()));
+      if (prevSupported != monitor.supported() || prevLimit != Math.max(0L, monitor.limit())) {
+        log.info(
+            "[{}] monitor support changed: supported={} max-targets={}",
+            serverId,
+            monitor.supported(),
+            Math.max(0, monitor.limit()));
+      }
+    }
+
+    private boolean maybeEmitMonitorNumeric(String rawLine, String originalLine) {
+      String raw = Objects.toString(rawLine, "").trim();
+      if (raw.isEmpty()) return false;
+      Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(originalLine);
+      if (at == null) at = Instant.now();
+
+      List<String> online = PircbotxMonitorParsers.parseRpl730MonitorOnlineNicks(raw);
+      if (!online.isEmpty()) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.MonitorOnlineObserved(at, online)));
+        return true;
+      }
+
+      List<String> offline = PircbotxMonitorParsers.parseRpl731MonitorOfflineNicks(raw);
+      if (!offline.isEmpty()) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.MonitorOfflineObserved(at, offline)));
+        return true;
+      }
+
+      List<String> list = PircbotxMonitorParsers.parseRpl732MonitorListNicks(raw);
+      if (!list.isEmpty()) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.MonitorListObserved(at, list)));
+        return true;
+      }
+
+      if (PircbotxMonitorParsers.isRpl733MonitorListEnd(raw)) {
+        bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.MonitorListEnded(at)));
+        return true;
+      }
+
+      PircbotxMonitorParsers.ParsedMonitorListFull full =
+          PircbotxMonitorParsers.parseErr734MonitorListFull(raw);
+      if (full != null) {
+        bus.onNext(
+            new ServerIrcEvent(
+                serverId,
+                new IrcEvent.MonitorListFull(at, full.limit(), full.nicks(), full.message())));
+        return true;
+      }
+      return false;
     }
 
 
@@ -1960,6 +2119,22 @@ if (fromSelf) {
         return;
       }
 
+      if (code == RPL_MONONLINE
+          || code == RPL_MONOFFLINE
+          || code == RPL_MONLIST
+          || code == RPL_ENDOFMONLIST
+          || code == ERR_MONLISTFULL) {
+        String line = null;
+        Object l = reflectCall(event, "getLine");
+        if (l == null) l = reflectCall(event, "getRawLine");
+        if (l != null) line = String.valueOf(l);
+        if (line == null || line.isBlank()) line = String.valueOf(event);
+        String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+        if (maybeEmitMonitorNumeric(rawLine, line)) {
+          return;
+        }
+      }
+
       if (code == 4) {
         String line = null;
         Object l = reflectCall(event, "getLine");
@@ -2014,6 +2189,7 @@ if (fromSelf) {
           bus.onNext(new ServerIrcEvent(serverId,
               new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
         }
+        maybeApplyMonitorIsupport(rawLine);
 
         // IRCv3 client-only tags can be denied/allowed via RPL_ISUPPORT CLIENTTAGDENY.
         // Typing indicators use the +typing client tag (delivered via TAGMSG), so we treat

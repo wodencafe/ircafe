@@ -226,6 +226,11 @@ public class CommandParser {
       return new ParsedInput.ListCmd(args);
     }
 
+    if (matchesCommand(line, "/monitor") || matchesCommand(line, "/mon")) {
+      String args = matchesCommand(line, "/monitor") ? argAfter(line, "/monitor") : argAfter(line, "/mon");
+      return new ParsedInput.Monitor(args);
+    }
+
 
     if (matchesCommand(line, "/mode")) {
       String rest = argAfter(line, "/mode");

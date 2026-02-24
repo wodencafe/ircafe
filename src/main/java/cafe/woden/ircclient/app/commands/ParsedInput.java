@@ -49,6 +49,7 @@ public sealed interface ParsedInput permits
     ParsedInput.ChatHistoryLatest,
     ParsedInput.ChatHistoryBetween,
     ParsedInput.ChatHistoryAround,
+    ParsedInput.Monitor,
     ParsedInput.Help,
     ParsedInput.ReplyMessage,
     ParsedInput.ReactMessage,
@@ -235,6 +236,13 @@ public sealed interface ParsedInput permits
    * /chathistory around <selector> [limit]
    */
   record ChatHistoryAround(String selector, int limit) implements ParsedInput {}
+
+  /**
+   * /monitor <+|-|list|status|clear> [nicks]
+   *
+   * <p>Alias: {@code /mon}
+   */
+  record Monitor(String args) implements ParsedInput {}
 
   /**
    * /help [topic]

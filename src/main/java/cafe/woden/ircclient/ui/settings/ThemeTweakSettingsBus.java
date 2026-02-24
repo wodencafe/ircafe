@@ -18,11 +18,16 @@ public class ThemeTweakSettingsBus {
   public ThemeTweakSettingsBus(UiProperties props) {
     String density = props != null ? props.density() : null;
     Integer radius = props != null ? props.cornerRadius() : null;
+    boolean uiFontOverrideEnabled =
+        props != null && props.uiFontOverrideEnabled() != null && props.uiFontOverrideEnabled();
+    String uiFontFamily = props != null ? props.uiFontFamily() : null;
+    Integer uiFontSize = props != null ? props.uiFontSize() : null;
 
     ThemeTweakSettings.ThemeDensity d = ThemeTweakSettings.ThemeDensity.from(density);
     int r = radius != null ? radius : 10;
+    int fs = uiFontSize != null ? uiFontSize : ThemeTweakSettings.DEFAULT_UI_FONT_SIZE;
 
-    this.current = new ThemeTweakSettings(d, r);
+    this.current = new ThemeTweakSettings(d, r, uiFontOverrideEnabled, uiFontFamily, fs);
   }
 
   public ThemeTweakSettings get() {
@@ -31,7 +36,9 @@ public class ThemeTweakSettingsBus {
 
   public void set(ThemeTweakSettings next) {
     ThemeTweakSettings prev = this.current;
-    this.current = next != null ? next : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
+    this.current = next != null
+        ? next
+        : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
     pcs.firePropertyChange(PROP_THEME_TWEAK_SETTINGS, prev, this.current);
   }
 

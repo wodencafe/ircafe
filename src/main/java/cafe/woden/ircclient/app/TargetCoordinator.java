@@ -425,6 +425,10 @@ public class TargetCoordinator {
       statusBarChannel = "Channel List";
     } else if (target.isDccTransfers()) {
       statusBarChannel = "DCC Transfers";
+    } else if (target.isMonitorGroup()) {
+      statusBarChannel = "Monitor";
+    } else if (target.isInterceptorsGroup()) {
+      statusBarChannel = "Interceptors";
     } else if (target.isApplicationUnhandledErrors()) {
       statusBarChannel = "Unhandled Errors";
     } else if (target.isApplicationAssertjSwing()) {

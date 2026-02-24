@@ -99,6 +99,17 @@ final class BatchedEnableCapHandler implements CapHandler {
     String normalized = cap.trim();
     if (normalized.isEmpty()) return null;
     if (normalized.startsWith(":")) normalized = normalized.substring(1).trim();
+    boolean negated = false;
+    if (normalized.startsWith("-")) {
+      negated = true;
+      normalized = normalized.substring(1).trim();
+    }
+    int eq = normalized.indexOf('=');
+    if (eq >= 0) {
+      normalized = normalized.substring(0, eq).trim();
+    }
+    if (normalized.isEmpty()) return null;
+    if (negated) normalized = "-" + normalized;
     return normalized.isEmpty() ? null : normalized;
   }
 

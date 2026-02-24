@@ -16,6 +16,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundMonitorCommandService outboundMonitorCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
   private final LocalFilterCommandService localFilterCommandService;
   private final TargetCoordinator targetCoordinator;
@@ -27,6 +28,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
+      OutboundMonitorCommandService outboundMonitorCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandService localFilterCommandService,
       TargetCoordinator targetCoordinator,
@@ -36,6 +38,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundMonitorCommandService = outboundMonitorCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.localFilterCommandService = localFilterCommandService;
     this.targetCoordinator = targetCoordinator;
@@ -74,6 +77,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.Names cmd -> outboundChatCommandService.handleNames(disposables, cmd.channel());
       case ParsedInput.Who cmd -> outboundChatCommandService.handleWho(disposables, cmd.args());
       case ParsedInput.ListCmd cmd -> outboundChatCommandService.handleList(disposables, cmd.args());
+      case ParsedInput.Monitor cmd -> outboundMonitorCommandService.handleMonitor(disposables, cmd.args());
       case ParsedInput.Mode cmd -> outboundModeCommandService.handleMode(disposables, cmd.first(), cmd.rest());
       case ParsedInput.Op cmd -> outboundModeCommandService.handleOp(disposables, cmd.channel(), cmd.nicks());
       case ParsedInput.Deop cmd -> outboundModeCommandService.handleDeop(disposables, cmd.channel(), cmd.nicks());

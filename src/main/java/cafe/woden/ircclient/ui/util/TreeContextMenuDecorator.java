@@ -68,6 +68,7 @@ public final class TreeContextMenuDecorator implements AutoCloseable {
         }
 
         if (menu == null || menu.getComponentCount() == 0) return;
+        PopupMenuThemeSupport.prepareForDisplay(menu);
         menu.show(tree, x, y);
       }
     };

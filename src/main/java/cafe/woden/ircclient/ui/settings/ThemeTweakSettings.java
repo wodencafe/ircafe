@@ -5,12 +5,18 @@ import java.util.Locale;
 /**
  * Small global Look & Feel tweaks that can be applied on top of a FlatLaf theme.
  *
- * <p>These are intentionally "cheap wins": density (padding/row height) and rounded corner radius.
+ * <p>These include FlatLaf spacing tweaks and an optional global Swing UI font override.
  */
 public record ThemeTweakSettings(
     ThemeDensity density,
-    int cornerRadius
+    int cornerRadius,
+    boolean uiFontOverrideEnabled,
+    String uiFontFamily,
+    int uiFontSize
 ) {
+
+  public static final String DEFAULT_UI_FONT_FAMILY = "Dialog";
+  public static final int DEFAULT_UI_FONT_SIZE = 13;
 
   public enum ThemeDensity {
     AUTO,
@@ -40,6 +46,19 @@ public record ThemeTweakSettings(
 
     if (cornerRadius < 0) cornerRadius = 0;
     if (cornerRadius > 20) cornerRadius = 20;
+
+    if (uiFontFamily == null || uiFontFamily.isBlank()) uiFontFamily = DEFAULT_UI_FONT_FAMILY;
+    uiFontFamily = uiFontFamily.trim();
+
+    if (uiFontSize < 8) uiFontSize = 8;
+    if (uiFontSize > 48) uiFontSize = 48;
+  }
+
+  /**
+   * Back-compat constructor used by existing call sites that only care about density + corner radius.
+   */
+  public ThemeTweakSettings(ThemeDensity density, int cornerRadius) {
+    this(density, cornerRadius, false, DEFAULT_UI_FONT_FAMILY, DEFAULT_UI_FONT_SIZE);
   }
 
   public String densityId() {

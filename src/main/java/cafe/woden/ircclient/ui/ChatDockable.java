@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.DccTransferStore;
+import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
@@ -19,6 +20,7 @@ import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
+import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -39,8 +41,8 @@ import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import java.awt.*;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -83,6 +85,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
+  private final MonitorListService monitorListService;
   private final UserListStore userListStore;
 
   private final FlowableProcessor<UserActionRequest> userActions =
@@ -103,6 +106,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final Map<TargetRef, String> topicByTarget = new HashMap<>();
   private final Map<TargetRef, String> draftByTarget = new HashMap<>();
   private final Map<TargetRef, Long> lastReadMarkerSentAtByTarget = new HashMap<>();
+  private final Map<String, Map<String, Boolean>> privateMessageOnlineByServer = new HashMap<>();
 
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
@@ -112,12 +116,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private static final String CARD_NOTIFICATIONS = "notifications";
   private static final String CARD_CHANNEL_LIST = "channel-list";
   private static final String CARD_DCC_TRANSFERS = "dcc-transfers";
+  private static final String CARD_MONITOR = "monitor";
   private static final String CARD_LOG_VIEWER = "log-viewer";
   private static final String CARD_INTERCEPTOR = "interceptor";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel = new ChannelListPanel();
   private final DccTransfersPanel dccTransfersPanel;
+  private final MonitorPanel monitorPanel = new MonitorPanel();
   private final LogViewerPanel logViewerPanel;
   private final InterceptorStore interceptorStore;
   private final InterceptorPanel interceptorPanel;
@@ -140,6 +146,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                      ActiveInputRouter activeInputRouter,
                      IgnoreListService ignoreListService,
                      IgnoreStatusService ignoreStatusService,
+                     MonitorListService monitorListService,
                      UserListStore userListStore,
                      NickContextMenuFactory nickContextMenuFactory,
                      ServerProxyResolver proxyResolver,
@@ -159,6 +166,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.activeInputRouter = activeInputRouter;
     this.ignoreListService = ignoreListService;
     this.ignoreStatusService = ignoreStatusService;
+    this.monitorListService = java.util.Objects.requireNonNull(monitorListService, "monitorListService");
     this.userListStore = userListStore;
     this.proxyResolver = proxyResolver;
     this.chatHistoryService = chatHistoryService;
@@ -239,6 +247,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       armTailPinOnNextAppendIfAtBottom();
       outboundBus.emit(cmd);
     });
+    this.monitorPanel.setOnEmitCommand(line -> {
+      String cmd = Objects.toString(line, "").trim();
+      TargetRef t = activeTarget;
+      if (cmd.isEmpty() || t == null || !t.isMonitorGroup()) return;
+      activationBus.activate(t);
+      // Ensure activation has a chance to propagate before command handling.
+      SwingUtilities.invokeLater(() -> outboundBus.emit(cmd));
+    });
     this.logViewerPanel = new LogViewerPanel(
         java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"),
         sid -> (this.serverTree == null) ? java.util.List.of() : this.serverTree.openChannelsForServer(sid));
@@ -256,6 +272,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(notificationsPanel, CARD_NOTIFICATIONS);
     centerCards.add(channelListPanel, CARD_CHANNEL_LIST);
     centerCards.add(dccTransfersPanel, CARD_DCC_TRANSFERS);
+    centerCards.add(monitorPanel, CARD_MONITOR);
     centerCards.add(logViewerPanel, CARD_LOG_VIEWER);
     centerCards.add(interceptorPanel, CARD_INTERCEPTOR);
     add(centerCards, BorderLayout.CENTER);
@@ -321,6 +338,16 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }, err -> {
       // Keep chat UI usable even if interceptor updates fail.
     }));
+
+    disposables.add(this.monitorListService.changes().subscribe(ch -> {
+      if (ch == null) return;
+      TargetRef at = activeTarget;
+      if (at == null || !at.isMonitorGroup()) return;
+      if (!Objects.equals(at.serverId(), ch.serverId())) return;
+      SwingUtilities.invokeLater(() -> refreshMonitorRows(ch.serverId()));
+    }, err -> {
+      // Keep chat UI usable even if monitor updates fail.
+    }));
   }
 
   @Override
@@ -380,6 +407,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.isDccTransfers()) {
       showDccTransfersCard(target.serverId());
       // DCC transfers view doesn't accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isMonitorGroup()) {
+      showMonitorCard(target.serverId());
+      // Monitor view does not accept input; clear any draft to avoid confusion.
       inputPanel.setDraftText("");
       updateTopicPanelForActiveTarget();
       return;
@@ -454,6 +488,17 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       dccTransfersPanel.setServerId(serverId);
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_DCC_TRANSFERS);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showMonitorCard(String serverId) {
+    try {
+      String sid = Objects.toString(serverId, "").trim();
+      monitorPanel.setServerId(sid);
+      refreshMonitorRows(sid);
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_MONITOR);
     } catch (Exception ignored) {
     }
   }
@@ -562,6 +607,57 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public void endChannelList(String serverId, String summary) {
     channelListPanel.endList(serverId, summary);
+  }
+
+  public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = normalizeNickKey(nick);
+    if (sid.isEmpty() || key.isEmpty()) return;
+
+    Map<String, Boolean> byNick = privateMessageOnlineByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    byNick.put(key, online);
+
+    TargetRef at = activeTarget;
+    if (at != null && at.isMonitorGroup() && Objects.equals(at.serverId(), sid)) {
+      refreshMonitorRows(sid);
+    }
+  }
+
+  public void clearPrivateMessageOnlineStates(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    privateMessageOnlineByServer.remove(sid);
+
+    TargetRef at = activeTarget;
+    if (at != null && at.isMonitorGroup() && Objects.equals(at.serverId(), sid)) {
+      refreshMonitorRows(sid);
+    }
+  }
+
+  private void refreshMonitorRows(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) {
+      monitorPanel.setRows(java.util.List.of());
+      return;
+    }
+
+    java.util.List<String> nicks = monitorListService.listNicks(sid);
+    Map<String, Boolean> onlineByNick = privateMessageOnlineByServer.get(sid);
+
+    ArrayList<MonitorPanel.Row> rows = new ArrayList<>(nicks.size());
+    for (String nick : nicks) {
+      String n = Objects.toString(nick, "").trim();
+      if (n.isEmpty()) continue;
+      Boolean online = (onlineByNick == null) ? null : onlineByNick.get(normalizeNickKey(n));
+      rows.add(new MonitorPanel.Row(n, online));
+    }
+    monitorPanel.setRows(rows);
+  }
+
+  private static String normalizeNickKey(String nick) {
+    String n = Objects.toString(nick, "").trim();
+    if (n.isEmpty()) return "";
+    return n.toLowerCase(Locale.ROOT);
   }
 
   public Flowable<PrivateMessageRequest> privateMessageRequests() {
@@ -1128,6 +1224,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isNotifications()) return "Notifications";
     if (t.isChannelList()) return "Channel List";
     if (t.isDccTransfers()) return "DCC Transfers";
+    if (t.isMonitorGroup()) return "Monitor";
     if (t.isInterceptorsGroup()) return "Interceptors";
     if (t.isApplicationUnhandledErrors()) return "Unhandled Errors";
     if (t.isApplicationAssertjSwing()) return "AssertJ Swing";

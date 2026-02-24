@@ -9,6 +9,7 @@ import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -596,11 +597,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     boolean hasSelection = controlsEnabled && selectedRuleModelRow() >= 0;
     rulesPopupEdit.setEnabled(hasSelection);
     rulesPopupRemove.setEnabled(hasSelection);
-    // Popup menus may be created before theme changes; refresh delegates before showing.
-    try {
-      SwingUtilities.updateComponentTreeUI(rulesPopupMenu);
-    } catch (Exception ignored) {
-    }
+    PopupMenuThemeSupport.prepareForDisplay(rulesPopupMenu);
     rulesPopupMenu.show(e.getComponent(), e.getX(), e.getY());
   }
 

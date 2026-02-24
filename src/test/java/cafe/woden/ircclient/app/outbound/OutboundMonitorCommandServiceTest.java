@@ -1,0 +1,71 @@
+package cafe.woden.ircclient.app.outbound;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import cafe.woden.ircclient.app.ConnectionCoordinator;
+import cafe.woden.ircclient.app.TargetCoordinator;
+import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.monitor.MonitorListService;
+import cafe.woden.ircclient.irc.IrcClientService;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+class OutboundMonitorCommandServiceTest {
+
+  private final IrcClientService irc = Mockito.mock(IrcClientService.class);
+  private final UiPort ui = Mockito.mock(UiPort.class);
+  private final TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
+  private final ConnectionCoordinator connectionCoordinator = Mockito.mock(ConnectionCoordinator.class);
+  private final MonitorListService monitorListService = Mockito.mock(MonitorListService.class);
+  private final CompositeDisposable disposables = new CompositeDisposable();
+
+  private final OutboundMonitorCommandService service =
+      new OutboundMonitorCommandService(
+          irc,
+          ui,
+          targetCoordinator,
+          connectionCoordinator,
+          monitorListService);
+
+  @AfterEach
+  void tearDown() {
+    disposables.dispose();
+  }
+
+  @Test
+  void addPersistsAndSendsMonitorPlusWhenConnected() {
+    TargetRef active = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(monitorListService.addNicks(eq("libera"), eq(java.util.List.of("alice", "bob")))).thenReturn(2);
+    when(irc.negotiatedMonitorLimit("libera")).thenReturn(100);
+    when(irc.sendRaw("libera", "MONITOR +alice,bob")).thenReturn(Completable.complete());
+
+    service.handleMonitor(disposables, "+alice,bob");
+
+    verify(monitorListService).addNicks("libera", java.util.List.of("alice", "bob"));
+    verify(irc).sendRaw("libera", "MONITOR +alice,bob");
+  }
+
+  @Test
+  void listShowsLocalNicksAndDoesNotSendWhenDisconnected() {
+    TargetRef active = new TargetRef("libera", "status");
+    TargetRef monitor = TargetRef.monitorGroup("libera");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(false);
+    when(monitorListService.listNicks("libera")).thenReturn(java.util.List.of("alice"));
+
+    service.handleMonitor(disposables, "list");
+
+    verify(ui).appendStatus(monitor, "(monitor)", "Monitored nicks (1): alice");
+    verify(irc, never()).sendRaw(any(), any());
+  }
+}
