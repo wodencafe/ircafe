@@ -501,42 +501,42 @@ public class AppMenuBar extends JMenuBar {
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     resetLayout.addActionListener(e -> resetDockLayout());
 
-    JCheckBoxMenuItem showChannelListNodes = new JCheckBoxMenuItem("Show Channel List Nodes");
+    JCheckBoxMenuItem showChannelListNodes = new JCheckBoxMenuItem("Show Channel List Node");
     showChannelListNodes.setSelected(serverTree.isChannelListNodesVisible());
     showChannelListNodes.addActionListener(e ->
         serverTree.setChannelListNodesVisible(showChannelListNodes.isSelected()));
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_CHANNEL_LIST_NODES_VISIBLE, evt ->
         showChannelListNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
-    JCheckBoxMenuItem showDccNodes = new JCheckBoxMenuItem("Show DCC Transfers Nodes");
+    JCheckBoxMenuItem showDccNodes = new JCheckBoxMenuItem("Show DCC Transfers Node");
     showDccNodes.setSelected(serverTree.isDccTransfersNodesVisible());
     showDccNodes.addActionListener(e ->
         serverTree.setDccTransfersNodesVisible(showDccNodes.isSelected()));
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
         showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
-    JCheckBoxMenuItem showLogViewerNodes = new JCheckBoxMenuItem("Show Log Viewer Nodes");
+    JCheckBoxMenuItem showLogViewerNodes = new JCheckBoxMenuItem("Show Log Viewer Node");
     showLogViewerNodes.setSelected(serverTree.isLogViewerNodesVisible());
     showLogViewerNodes.addActionListener(e ->
         serverTree.setLogViewerNodesVisible(showLogViewerNodes.isSelected()));
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_LOG_VIEWER_NODES_VISIBLE, evt ->
         showLogViewerNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
-    JCheckBoxMenuItem showNotificationsNodes = new JCheckBoxMenuItem("Show Notifications Nodes");
+    JCheckBoxMenuItem showNotificationsNodes = new JCheckBoxMenuItem("Show Notifications Node");
     showNotificationsNodes.setSelected(serverTree.isNotificationsNodesVisible());
     showNotificationsNodes.addActionListener(e ->
         serverTree.setNotificationsNodesVisible(showNotificationsNodes.isSelected()));
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_NOTIFICATIONS_NODES_VISIBLE, evt ->
         showNotificationsNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
-    JCheckBoxMenuItem showMonitorNodes = new JCheckBoxMenuItem("Show Monitor Nodes");
+    JCheckBoxMenuItem showMonitorNodes = new JCheckBoxMenuItem("Show Monitor Node");
     showMonitorNodes.setSelected(serverTree.isMonitorNodesVisible());
     showMonitorNodes.addActionListener(e ->
         serverTree.setMonitorNodesVisible(showMonitorNodes.isSelected()));
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_MONITOR_NODES_VISIBLE, evt ->
         showMonitorNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
-    JCheckBoxMenuItem showInterceptorsNodes = new JCheckBoxMenuItem("Show Interceptors Nodes");
+    JCheckBoxMenuItem showInterceptorsNodes = new JCheckBoxMenuItem("Show Interceptors Node");
     showInterceptorsNodes.setSelected(serverTree.isInterceptorsNodesVisible());
     showInterceptorsNodes.addActionListener(e ->
         serverTree.setInterceptorsNodesVisible(showInterceptorsNodes.isSelected()));

@@ -4518,32 +4518,33 @@ panel.setOpaque(false);
     table.setFillsViewportHeight(true);
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     table.setRowHeight(Math.max(22, table.getRowHeight()));
-
-    // Editors
-    JComboBox<NotificationRule.Type> typeCombo = new JComboBox<>(NotificationRule.Type.values());
-    table.getColumnModel().getColumn(NotificationRulesTableModel.COL_TYPE).setCellEditor(new DefaultCellEditor(typeCombo));
+    table.setShowHorizontalLines(false);
+    table.setShowVerticalLines(false);
+    table.getTableHeader().setReorderingAllowed(false);
+    // Force dialog-only editing flow (no inline cell editor).
+    table.setDefaultEditor(Object.class, null);
+    table.setDefaultEditor(Boolean.class, null);
+    table.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
 
     // Column sizing
     TableColumn enabledCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_ENABLED);
     enabledCol.setMaxWidth(80);
     enabledCol.setPreferredWidth(70);
 
-    TableColumn typeCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_TYPE);
-    typeCol.setMaxWidth(110);
-    typeCol.setPreferredWidth(90);
+    TableColumn labelCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_LABEL);
+    labelCol.setPreferredWidth(190);
+
+    TableColumn matchCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_MATCH);
+    matchCol.setPreferredWidth(380);
+
+    TableColumn optionsCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_OPTIONS);
+    optionsCol.setMaxWidth(220);
+    optionsCol.setPreferredWidth(190);
 
     TableColumn colorCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_COLOR);
     colorCol.setMaxWidth(130);
     colorCol.setPreferredWidth(110);
     colorCol.setCellRenderer(new RuleColorCellRenderer());
-
-    TableColumn caseCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_CASE);
-    caseCol.setMaxWidth(90);
-    caseCol.setPreferredWidth(80);
-
-    TableColumn wholeCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_WHOLE);
-    wholeCol.setMaxWidth(110);
-    wholeCol.setPreferredWidth(90);
 
     JLabel validationLabel = new JLabel();
     validationLabel.setVisible(false);
@@ -4572,517 +4573,42 @@ panel.setOpaque(false);
     table.setFillsViewportHeight(true);
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     table.setRowHeight(Math.max(22, table.getRowHeight()));
-
-    JComboBox<IrcEventNotificationRule.EventType> eventCombo = new JComboBox<>(IrcEventNotificationRule.EventType.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT).setCellEditor(new DefaultCellEditor(eventCombo));
-
-    JComboBox<IrcEventNotificationRule.SourceMode> sourceCombo = new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE).setCellEditor(new DefaultCellEditor(sourceCombo));
-
-    JComboBox<IrcEventNotificationRule.ChannelScope> channelScopeCombo =
-        new JComboBox<>(IrcEventNotificationRule.ChannelScope.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_SCOPE).setCellEditor(new DefaultCellEditor(channelScopeCombo));
-
-    JComboBox<IrcEventNotificationRule.FocusScope> focusScopeCombo =
-        new JComboBox<>(IrcEventNotificationRule.FocusScope.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_FOCUS_SCOPE).setCellEditor(new DefaultCellEditor(focusScopeCombo));
+    table.setShowHorizontalLines(false);
+    table.setShowVerticalLines(false);
+    table.getTableHeader().setReorderingAllowed(false);
+    // Force dialog-only editing flow (no inline cell editor).
+    table.setDefaultEditor(Object.class, null);
+    table.setDefaultEditor(Boolean.class, null);
+    table.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
 
     TableColumn enabledCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_ENABLED);
     enabledCol.setMaxWidth(80);
     enabledCol.setPreferredWidth(70);
 
     TableColumn eventCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT);
-    eventCol.setPreferredWidth(140);
+    eventCol.setPreferredWidth(220);
 
-    TableColumn sourceCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE);
-    sourceCol.setPreferredWidth(120);
+    TableColumn sourceCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE_SUMMARY);
+    sourceCol.setPreferredWidth(300);
 
-    TableColumn sourcePatternCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE_PATTERN);
-    sourcePatternCol.setPreferredWidth(160);
-    sourcePatternCol.setCellRenderer(new DefaultTableCellRenderer() {
-      @Override
-      public java.awt.Component getTableCellRendererComponent(
-          JTable table,
-          Object value,
-          boolean isSelected,
-          boolean hasFocus,
-          int row,
-          int column
-      ) {
-        JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-        int modelRow = row;
-        int modelCol = column;
-        try {
-          modelRow = table.convertRowIndexToModel(row);
-          modelCol = table.convertColumnIndexToModel(column);
-        } catch (Exception ignored) {
-        }
-        boolean applicable = true;
-        if (table.getModel() instanceof IrcEventNotificationTableModel tm) {
-          applicable = IrcEventNotificationTableModel.sourcePatternAllowed(tm.sourceModeAt(modelRow));
-        }
-        Font base = table != null ? table.getFont() : c.getFont();
-        if (base != null) {
-          c.setFont(applicable ? base : base.deriveFont(Font.ITALIC));
-        }
-        c.setEnabled(applicable);
+    TableColumn channelCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_SUMMARY);
+    channelCol.setPreferredWidth(240);
 
-        if (!applicable) {
-          String text = Objects.toString(value, "").trim();
-          c.setText(text.isEmpty() ? "N/A" : text);
+    TableColumn actionsCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_ACTIONS_SUMMARY);
+    actionsCol.setPreferredWidth(300);
 
-          Color disabled = UIManager.getColor("Label.disabledForeground");
-          if (disabled == null) disabled = UIManager.getColor("Component.disabledText");
-          if (disabled != null) c.setForeground(disabled);
-
-          if (!isSelected) {
-            Color mutedBg = UIManager.getColor("Panel.background");
-            if (mutedBg != null) c.setBackground(mutedBg);
-            c.setOpaque(true);
-          }
-          c.setToolTipText("Only used for Specific nicks, Nick glob, or Nick regex");
-        } else {
-          c.setToolTipText(null);
-        }
-        return c;
-      }
-    });
-
-    TableColumn toastCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_TOAST);
-    toastCol.setMaxWidth(80);
-    toastCol.setPreferredWidth(70);
-
-    TableColumn statusBarCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_STATUS_BAR);
-    statusBarCol.setMaxWidth(95);
-    statusBarCol.setPreferredWidth(85);
-
-    TableColumn focusCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_FOCUS_SCOPE);
-    focusCol.setPreferredWidth(130);
-
-    TableColumn nodeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
-    nodeCol.setMaxWidth(90);
-    nodeCol.setPreferredWidth(80);
-
-    TableColumn soundCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOUND);
-    soundCol.setMaxWidth(80);
-    soundCol.setPreferredWidth(70);
-
-    TableColumn channelScopeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_SCOPE);
-    channelScopeCol.setPreferredWidth(155);
-    TableColumn channelPatternsCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_PATTERNS);
-    channelPatternsCol.setPreferredWidth(170);
-    channelPatternsCol.setCellRenderer(new DefaultTableCellRenderer() {
-      @Override
-      public java.awt.Component getTableCellRendererComponent(
-          JTable table,
-          Object value,
-          boolean isSelected,
-          boolean hasFocus,
-          int row,
-          int column
-      ) {
-        JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-        int modelRow = row;
-        int modelCol = column;
-        try {
-          modelRow = table.convertRowIndexToModel(row);
-          modelCol = table.convertColumnIndexToModel(column);
-        } catch (Exception ignored) {
-        }
-        boolean applicable = true;
-        if (table.getModel() instanceof IrcEventNotificationTableModel tm) {
-          applicable = IrcEventNotificationTableModel.channelPatternAllowed(tm.channelScopeAt(modelRow));
-        }
-        Font base = table != null ? table.getFont() : c.getFont();
-        if (base != null) {
-          c.setFont(applicable ? base : base.deriveFont(Font.ITALIC));
-        }
-        c.setEnabled(applicable);
-
-        if (!applicable) {
-          String text = Objects.toString(value, "").trim();
-          c.setText(text.isEmpty() ? "N/A" : text);
-
-          Color disabled = UIManager.getColor("Label.disabledForeground");
-          if (disabled == null) disabled = UIManager.getColor("Component.disabledText");
-          if (disabled != null) c.setForeground(disabled);
-
-          if (!isSelected) {
-            Color mutedBg = UIManager.getColor("Panel.background");
-            if (mutedBg != null) c.setBackground(mutedBg);
-            c.setOpaque(true);
-          }
-          c.setToolTipText("Only used for Only matching / All except matching scopes");
-        } else {
-          c.setToolTipText(null);
-        }
-        return c;
-      }
-    });
-
-    JComboBox<BuiltInSound> sound = new JComboBox<>(BuiltInSound.valuesForUi());
-    configureBuiltInSoundCombo(sound);
-    JCheckBox useCustom = new JCheckBox("Use custom file");
-    JTextField customPath = new JTextField();
-    customPath.setEditable(false);
-    JButton browseCustom = new JButton("Browse...");
-    JButton clearCustom = new JButton("Clear");
-    JButton testSound = new JButton("Test sound");
-    JCheckBox runScript = new JCheckBox("Run external script");
-    JTextField scriptPath = new JTextField();
-    scriptPath.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "/path/to/script.sh");
-    JTextField scriptArgs = new JTextField();
-    scriptArgs.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "--arg \"value with spaces\"");
-    JTextField scriptWorkingDirectory = new JTextField();
-    scriptWorkingDirectory.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "/path/to/working/dir");
-    JButton browseScript = new JButton("Browse...");
-    JButton clearScript = new JButton("Clear");
-    JButton browseScriptWorkingDirectory = new JButton("Browse...");
-    JButton clearScriptWorkingDirectory = new JButton("Clear");
-    configureIconOnlyButton(browseCustom, "plus", "Choose custom notification sound file");
-    configureIconOnlyButton(clearCustom, "close", "Clear custom sound file");
-    configureIconOnlyButton(testSound, "play", "Test selected sound");
-    configureIconOnlyButton(browseScript, "terminal", "Choose external script");
-    configureIconOnlyButton(clearScript, "close", "Clear script path");
-    configureIconOnlyButton(
-        browseScriptWorkingDirectory, "settings", "Choose script working directory");
-    configureIconOnlyButton(clearScriptWorkingDirectory, "close", "Clear script working directory");
-    JCheckBox detailEnabled = new JCheckBox("Rule enabled");
-    JComboBox<IrcEventNotificationRule.EventType> detailEvent = new JComboBox<>(IrcEventNotificationRule.EventType.values());
-    JComboBox<IrcEventNotificationRule.SourceMode> detailSource = new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
-    JTextField detailSourcePattern = new JTextField();
-    detailSourcePattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "nicks, glob, or regex");
-    JComboBox<IrcEventNotificationRule.ChannelScope> detailChannelScope = new JComboBox<>(IrcEventNotificationRule.ChannelScope.values());
-    JTextField detailChannelPatterns = new JTextField();
-    detailChannelPatterns.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#ops* #staff*");
-    JComboBox<IrcEventNotificationRule.FocusScope> detailFocus = new JComboBox<>(IrcEventNotificationRule.FocusScope.values());
-    JCheckBox detailToast = new JCheckBox("Toast");
-    JCheckBox detailStatusBar = new JCheckBox("Status Bar");
-    JCheckBox detailNode = new JCheckBox("Notifications Node");
-    JCheckBox detailSound = new JCheckBox("Sound");
-    JLabel selectionHint = new JLabel("Select a rule row to edit details.");
-
-    final boolean[] syncing = new boolean[] { false };
-
-    Runnable loadSelectedRuleActions = () -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-
-      syncing[0] = true;
-      if (row < 0) {
-        detailEnabled.setSelected(false);
-        detailEvent.setSelectedItem(IrcEventNotificationRule.EventType.INVITE_RECEIVED);
-        detailSource.setSelectedItem(IrcEventNotificationRule.SourceMode.ANY);
-        detailSourcePattern.setText("");
-        detailChannelScope.setSelectedItem(IrcEventNotificationRule.ChannelScope.ALL);
-        detailChannelPatterns.setText("");
-        detailFocus.setSelectedItem(IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
-        detailToast.setSelected(false);
-        detailStatusBar.setSelected(false);
-        detailNode.setSelected(false);
-        detailSound.setSelected(false);
-        sound.setSelectedItem(BuiltInSound.NOTIF_1);
-        useCustom.setSelected(false);
-        customPath.setText("");
-        runScript.setSelected(false);
-        scriptPath.setText("");
-        scriptArgs.setText("");
-        scriptWorkingDirectory.setText("");
-      } else {
-        detailEnabled.setSelected(model.enabledAt(row));
-        detailEvent.setSelectedItem(model.eventTypeAt(row));
-        detailSource.setSelectedItem(model.sourceModeAt(row));
-        detailSourcePattern.setText(Objects.toString(model.sourcePatternAt(row), ""));
-        detailChannelScope.setSelectedItem(model.channelScopeAt(row));
-        detailChannelPatterns.setText(Objects.toString(model.channelPatternsAt(row), ""));
-        detailFocus.setSelectedItem(model.focusScopeAt(row));
-        detailToast.setSelected(model.toastEnabledAt(row));
-        detailStatusBar.setSelected(model.statusBarEnabledAt(row));
-        detailNode.setSelected(model.notificationsNodeEnabledAt(row));
-        detailSound.setSelected(model.soundEnabledAt(row));
-        sound.setSelectedItem(BuiltInSound.fromId(model.soundIdAt(row)));
-        useCustom.setSelected(model.soundUseCustomAt(row));
-        customPath.setText(Objects.toString(model.soundCustomPathAt(row), ""));
-        runScript.setSelected(model.scriptEnabledAt(row));
-        scriptPath.setText(Objects.toString(model.scriptPathAt(row), ""));
-        scriptArgs.setText(Objects.toString(model.scriptArgsAt(row), ""));
-        scriptWorkingDirectory.setText(Objects.toString(model.scriptWorkingDirectoryAt(row), ""));
-      }
-      syncing[0] = false;
-
-      boolean selected = row >= 0;
-      detailEnabled.setEnabled(selected);
-      detailEvent.setEnabled(selected);
-      detailSource.setEnabled(selected);
-      detailSourcePattern.setEnabled(
-          selected && IrcEventNotificationTableModel.sourcePatternAllowed((IrcEventNotificationRule.SourceMode) detailSource.getSelectedItem()));
-      detailChannelScope.setEnabled(selected);
-      detailChannelPatterns.setEnabled(
-          selected && IrcEventNotificationTableModel.channelPatternAllowed((IrcEventNotificationRule.ChannelScope) detailChannelScope.getSelectedItem()));
-      detailFocus.setEnabled(selected);
-      detailToast.setEnabled(selected);
-      detailStatusBar.setEnabled(selected);
-      detailNode.setEnabled(selected);
-      detailSound.setEnabled(selected);
-
-      boolean soundEnabledForRule = selected && model.soundEnabledAt(row);
-      boolean customSoundSelectedForRule = soundEnabledForRule && useCustom.isSelected();
-      browseCustom.setEnabled(soundEnabledForRule);
-      sound.setEnabled(soundEnabledForRule && !customSoundSelectedForRule);
-      useCustom.setEnabled(soundEnabledForRule);
-      customPath.setEnabled(soundEnabledForRule);
-      testSound.setEnabled(soundEnabledForRule);
-      runScript.setEnabled(selected);
-      scriptPath.setEnabled(selected);
-      scriptArgs.setEnabled(selected);
-      scriptWorkingDirectory.setEnabled(selected);
-      browseScript.setEnabled(selected);
-      browseScriptWorkingDirectory.setEnabled(selected);
-
-      String rel = customPath.getText() != null ? customPath.getText().trim() : "";
-      clearCustom.setEnabled(soundEnabledForRule && !rel.isBlank());
-      String script = scriptPath.getText() != null ? scriptPath.getText().trim() : "";
-      clearScript.setEnabled(selected && !script.isBlank());
-      String scriptCwd = scriptWorkingDirectory.getText() != null ? scriptWorkingDirectory.getText().trim() : "";
-      clearScriptWorkingDirectory.setEnabled(selected && !scriptCwd.isBlank());
-
-      if (!selected) {
-        selectionHint.setText("Select a rule row to edit details.");
-      } else if (!soundEnabledForRule) {
-        selectionHint.setText("Sound controls are disabled for this rule until Sound is enabled.");
-      } else {
-        selectionHint.setText("Selected rule details are editable below.");
-      }
-    };
-
-    Runnable persistSelectedRuleActions = () -> {
-      if (syncing[0]) return;
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      syncing[0] = true;
-      try {
-        BuiltInSound selectedSound = (BuiltInSound) sound.getSelectedItem();
-        String soundId = selectedSound != null ? selectedSound.name() : BuiltInSound.NOTIF_1.name();
-        boolean custom = useCustom.isSelected();
-        String rel = customPath.getText() != null ? customPath.getText().trim() : "";
-        if (rel.isBlank()) rel = null;
-        model.setSoundConfig(row, soundId, custom, rel);
-
-        clearCustom.setEnabled(rel != null);
-
-        String script = scriptPath.getText() != null ? scriptPath.getText().trim() : "";
-        if (script.isBlank()) script = null;
-        String args = scriptArgs.getText() != null ? scriptArgs.getText().trim() : "";
-        if (args.isBlank()) args = null;
-        String cwd = scriptWorkingDirectory.getText() != null ? scriptWorkingDirectory.getText().trim() : "";
-        if (cwd.isBlank()) cwd = null;
-        model.setScriptConfig(row, runScript.isSelected(), script, args, cwd);
-        clearScript.setEnabled(script != null);
-        clearScriptWorkingDirectory.setEnabled(cwd != null);
-      } finally {
-        syncing[0] = false;
-      }
-      loadSelectedRuleActions.run();
-    };
-
-    Runnable persistSelectedRuleCore = () -> {
-      if (syncing[0]) return;
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      syncing[0] = true;
-      try {
-        model.setValueAt(detailEnabled.isSelected(), row, IrcEventNotificationTableModel.COL_ENABLED);
-        model.setValueAt(detailEvent.getSelectedItem(), row, IrcEventNotificationTableModel.COL_EVENT);
-        model.setValueAt(detailSource.getSelectedItem(), row, IrcEventNotificationTableModel.COL_SOURCE);
-        model.setValueAt(detailSourcePattern.getText(), row, IrcEventNotificationTableModel.COL_SOURCE_PATTERN);
-        model.setValueAt(detailChannelScope.getSelectedItem(), row, IrcEventNotificationTableModel.COL_CHANNEL_SCOPE);
-        model.setValueAt(detailChannelPatterns.getText(), row, IrcEventNotificationTableModel.COL_CHANNEL_PATTERNS);
-        model.setValueAt(detailFocus.getSelectedItem(), row, IrcEventNotificationTableModel.COL_FOCUS_SCOPE);
-        model.setValueAt(detailToast.isSelected(), row, IrcEventNotificationTableModel.COL_TOAST);
-        model.setValueAt(detailStatusBar.isSelected(), row, IrcEventNotificationTableModel.COL_STATUS_BAR);
-        model.setValueAt(detailNode.isSelected(), row, IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
-        model.setValueAt(detailSound.isSelected(), row, IrcEventNotificationTableModel.COL_SOUND);
-      } finally {
-        syncing[0] = false;
-      }
-      loadSelectedRuleActions.run();
-    };
-
-    table.getSelectionModel().addListSelectionListener(e -> {
-      if (e != null && e.getValueIsAdjusting()) return;
-      loadSelectedRuleActions.run();
-    });
-
-    model.addTableModelListener(e -> {
-      if (syncing[0]) return;
-      loadSelectedRuleActions.run();
-    });
-
-    sound.addActionListener(e -> persistSelectedRuleActions.run());
-    useCustom.addActionListener(e -> persistSelectedRuleActions.run());
-    runScript.addActionListener(e -> persistSelectedRuleActions.run());
-    scriptPath.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleActions));
-    scriptArgs.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleActions));
-    scriptWorkingDirectory.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleActions));
-    detailEnabled.addActionListener(e -> persistSelectedRuleCore.run());
-    detailEvent.addActionListener(e -> persistSelectedRuleCore.run());
-    detailSource.addActionListener(e -> persistSelectedRuleCore.run());
-    detailChannelScope.addActionListener(e -> persistSelectedRuleCore.run());
-    detailFocus.addActionListener(e -> persistSelectedRuleCore.run());
-    detailToast.addActionListener(e -> persistSelectedRuleCore.run());
-    detailStatusBar.addActionListener(e -> persistSelectedRuleCore.run());
-    detailNode.addActionListener(e -> persistSelectedRuleCore.run());
-    detailSound.addActionListener(e -> persistSelectedRuleCore.run());
-    detailSourcePattern.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleCore));
-    detailChannelPatterns.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleCore));
-
-    browseCustom.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-      try {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
-        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-        chooser.setAcceptAllFileFilterUsed(true);
-        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
-        int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustom));
-        if (result != JFileChooser.APPROVE_OPTION) return;
-
-        File f = chooser.getSelectedFile();
-        if (f == null) return;
-        String rel = importNotificationSoundFileToRuntimeDir(f);
-        if (rel == null || rel.isBlank()) return;
-
-        customPath.setText(rel);
-        useCustom.setSelected(true);
-        persistSelectedRuleActions.run();
-        loadSelectedRuleActions.run();
-      } catch (Exception ex) {
-        JOptionPane.showMessageDialog(
-            SwingUtilities.getWindowAncestor(browseCustom),
-            "Could not import sound file.\n\n" + ex.getMessage(),
-            "Import failed",
-            JOptionPane.ERROR_MESSAGE
-        );
-      }
-    });
-
-    clearCustom.addActionListener(e -> {
-      customPath.setText("");
-      useCustom.setSelected(false);
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    browseScript.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      JFileChooser chooser = new JFileChooser();
-      chooser.setDialogTitle("Choose external script");
-      chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-      chooser.setAcceptAllFileFilterUsed(true);
-      int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseScript));
-      if (result != JFileChooser.APPROVE_OPTION) return;
-
-      File f = chooser.getSelectedFile();
-      if (f == null) return;
-      scriptPath.setText(f.getAbsolutePath());
-      runScript.setSelected(true);
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    clearScript.addActionListener(e -> {
-      scriptPath.setText("");
-      runScript.setSelected(false);
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    browseScriptWorkingDirectory.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      JFileChooser chooser = new JFileChooser();
-      chooser.setDialogTitle("Choose script working directory");
-      chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-      chooser.setAcceptAllFileFilterUsed(false);
-      int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseScriptWorkingDirectory));
-      if (result != JFileChooser.APPROVE_OPTION) return;
-
-      File f = chooser.getSelectedFile();
-      if (f == null) return;
-      scriptWorkingDirectory.setText(f.getAbsolutePath());
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    clearScriptWorkingDirectory.addActionListener(e -> {
-      scriptWorkingDirectory.setText("");
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    testSound.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0 || notificationSoundService == null) return;
-      try {
-        String rel = model.soundCustomPathAt(row);
-        if (model.soundUseCustomAt(row) && rel != null && !rel.isBlank()) {
-          notificationSoundService.previewCustom(rel);
-          return;
-        }
-        notificationSoundService.preview(BuiltInSound.fromId(model.soundIdAt(row)));
-      } catch (Exception ignored) {
-      }
-    });
-
-    loadSelectedRuleActions.run();
-    return new IrcEventNotificationControls(
-        table,
-        model,
-        detailEnabled,
-        detailEvent,
-        detailSource,
-        detailSourcePattern,
-        detailChannelScope,
-        detailChannelPatterns,
-        detailFocus,
-        detailToast,
-        detailStatusBar,
-        detailNode,
-        detailSound,
-        sound,
-        useCustom,
-        customPath,
-        browseCustom,
-        clearCustom,
-        testSound,
-        runScript,
-        scriptPath,
-        scriptArgs,
-        scriptWorkingDirectory,
-        browseScript,
-        clearScript,
-        browseScriptWorkingDirectory,
-        clearScriptWorkingDirectory,
-        selectionHint);
+    return new IrcEventNotificationControls(table, model);
   }
 
   private JPanel buildIrcEventNotificationsTab(IrcEventNotificationControls controls) {
-    JPanel tab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]6[]6[grow,fill]"));
+    JPanel tab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]"));
     tab.setOpaque(false);
 
-    JComboBox<IrcEventNotificationPreset> defaultsPreset = new JComboBox<>(IrcEventNotificationPreset.values());
+    JComboBox<IrcEventNotificationPreset> defaultsPreset =
+        new JComboBox<>(IrcEventNotificationPreset.values());
     JButton applyDefaults = new JButton("Apply defaults");
     JButton resetToIrcafeDefaults = new JButton("Reset to IRCafe defaults");
     configureIconOnlyButton(
@@ -5090,53 +4616,8 @@ panel.setOpaque(false);
     configureIconOnlyButton(
         resetToIrcafeDefaults, "refresh", "Replace all IRC event rules with IRCafe defaults");
 
-    applyDefaults.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      IrcEventNotificationPreset preset = (IrcEventNotificationPreset) defaultsPreset.getSelectedItem();
-      if (preset == null) return;
-      List<IrcEventNotificationRule> rules = buildIrcEventDefaultPreset(preset);
-      if (rules.isEmpty()) return;
-
-      controls.model.applyPreset(rules);
-      if (controls.table.getRowCount() > 0) {
-        int row = controls.model.firstRowForEvent(rules.get(0).eventType());
-        if (row < 0) row = 0;
-        controls.table.getSelectionModel().setSelectionInterval(row, row);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(row, 0, true));
-      }
-    });
-
-    resetToIrcafeDefaults.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int confirm = JOptionPane.showConfirmDialog(
-          dialog,
-          "Replace all IRC event rules with IRCafe defaults?",
-          "Reset IRC event rules",
-          JOptionPane.OK_CANCEL_OPTION);
-      if (confirm != JOptionPane.OK_OPTION) return;
-
-      List<IrcEventNotificationRule> defaults = IrcEventNotificationRule.defaults();
-      if (defaults.isEmpty()) return;
-      controls.model.replaceAll(defaults);
-      if (controls.table.getRowCount() > 0) {
-        controls.table.getSelectionModel().setSelectionInterval(0, 0);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(0, 0, true));
-      }
-    });
-
-    JPanel defaultsRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]8[]8[]", "[]"));
+    JPanel defaultsRow =
+        new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]8[]8[]", "[]"));
     defaultsRow.setOpaque(false);
     defaultsRow.add(new JLabel("Defaults"));
     defaultsRow.add(defaultsPreset, "w 240!");
@@ -5144,11 +4625,17 @@ panel.setOpaque(false);
     defaultsRow.add(resetToIrcafeDefaults, "w 36!, h 28!");
 
     JButton add = new JButton("Add");
+    JButton edit = new JButton("Edit");
+    JButton enableRule = new JButton("Enable");
+    JButton disableRule = new JButton("Disable");
     JButton duplicate = new JButton("Duplicate");
     JButton remove = new JButton("Remove");
     JButton up = new JButton("Up");
     JButton down = new JButton("Down");
     configureIconOnlyButton(add, "plus", "Add IRC event rule");
+    configureIconOnlyButton(edit, "edit", "Edit selected IRC event rule");
+    configureIconOnlyButton(enableRule, "check", "Enable selected IRC event rule");
+    configureIconOnlyButton(disableRule, "pause", "Disable selected IRC event rule");
     configureIconOnlyButton(duplicate, "copy", "Duplicate selected IRC event rule");
     configureIconOnlyButton(remove, "trash", "Remove selected IRC event rule");
     configureIconOnlyButton(up, "arrow-up", "Move selected IRC event rule up");
@@ -5156,195 +4643,240 @@ panel.setOpaque(false);
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
+    buttons.add(edit);
+    buttons.add(enableRule);
+    buttons.add(disableRule);
     buttons.add(duplicate);
     buttons.add(remove);
     buttons.add(up);
     buttons.add(down);
 
-    add.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+    Runnable refreshRuleButtons =
+        () -> {
+          int viewRow = controls.table.getSelectedRow();
+          boolean hasSelection = viewRow >= 0;
+          int modelRow = hasSelection ? controls.table.convertRowIndexToModel(viewRow) : -1;
+          IrcEventNotificationRule selectedRule =
+              modelRow >= 0 ? controls.model.ruleAt(modelRow) : null;
+          boolean selectedEnabled = selectedRule != null && selectedRule.enabled();
+          edit.setEnabled(hasSelection);
+          enableRule.setEnabled(hasSelection && !selectedEnabled);
+          disableRule.setEnabled(hasSelection && selectedEnabled);
+          duplicate.setEnabled(hasSelection);
+          remove.setEnabled(hasSelection);
+          up.setEnabled(hasSelection && modelRow > 0);
+          down.setEnabled(
+              hasSelection && modelRow >= 0 && modelRow < (controls.model.getRowCount() - 1));
+        };
 
-      int row = controls.model.addRule(new IrcEventNotificationRule(
-          false,
-          IrcEventNotificationRule.EventType.INVITE_RECEIVED,
-          IrcEventNotificationRule.SourceMode.ANY,
-          null,
-          IrcEventNotificationRule.ChannelScope.ALL,
-          null,
-          true,
-          IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
-          true,
-          true,
-          false,
-          BuiltInSound.NOTIF_1.name(),
-          false,
-          null,
-          false,
-          null,
-          null,
-          null));
-      if (row < 0) return;
-      controls.table.getSelectionModel().setSelectionInterval(row, row);
-      controls.table.scrollRectToVisible(controls.table.getCellRect(row, 0, true));
-      controls.table.requestFocusInWindow();
-    });
+    Runnable openEditRuleDialog =
+        () -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          IrcEventNotificationRule seed = controls.model.ruleAt(modelRow);
+          if (seed == null) return;
+          IrcEventNotificationRule edited =
+              promptIrcEventNotificationRuleDialog("Edit IRC Event Rule", seed);
+          if (edited == null) return;
+          controls.model.setRule(modelRow, edited);
+          int nextView = controls.table.convertRowIndexToView(modelRow);
+          if (nextView >= 0) {
+            controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+            controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+          }
+          refreshRuleButtons.run();
+        };
 
-    duplicate.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+    add.addActionListener(
+        e -> {
+          IrcEventNotificationRule created =
+              promptIrcEventNotificationRuleDialog("Add IRC Event Rule", null);
+          if (created == null) return;
+          int row = controls.model.addRule(created);
+          if (row >= 0) {
+            int viewRow = controls.table.convertRowIndexToView(row);
+            if (viewRow >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(viewRow, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
 
-      int row = controls.table.getSelectedRow();
-      if (row < 0) return;
-      int dup = controls.model.duplicateRow(row);
-      if (dup >= 0) {
-        controls.table.getSelectionModel().setSelectionInterval(dup, dup);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(dup, 0, true));
-      }
-    });
+    edit.addActionListener(e -> openEditRuleDialog.run());
 
-    remove.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+    enableRule.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          controls.model.setEnabledAt(modelRow, true);
+          refreshRuleButtons.run();
+        });
 
-      int row = controls.table.getSelectedRow();
-      if (row < 0) return;
-      int res = JOptionPane.showConfirmDialog(dialog, "Remove selected IRC event rule?", "Remove rule", JOptionPane.OK_CANCEL_OPTION);
-      if (res != JOptionPane.OK_OPTION) return;
-      controls.model.removeRow(row);
-    });
+    disableRule.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          controls.model.setEnabledAt(modelRow, false);
+          refreshRuleButtons.run();
+        });
 
-    up.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      int row = controls.table.getSelectedRow();
-      if (row <= 0) return;
-      int next = controls.model.moveRow(row, row - 1);
-      if (next >= 0) {
-        controls.table.getSelectionModel().setSelectionInterval(next, next);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(next, 0, true));
-      }
-    });
+    duplicate.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          int dup = controls.model.duplicateRow(modelRow);
+          if (dup >= 0) {
+            int dupView = controls.table.convertRowIndexToView(dup);
+            if (dupView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(dupView, dupView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(dupView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
 
-    down.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      int row = controls.table.getSelectedRow();
-      if (row < 0) return;
-      int next = controls.model.moveRow(row, row + 1);
-      if (next >= 0) {
-        controls.table.getSelectionModel().setSelectionInterval(next, next);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(next, 0, true));
-      }
-    });
+    remove.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          IrcEventNotificationRule rule = controls.model.ruleAt(modelRow);
+          String label = IrcEventNotificationTableModel.effectiveRuleLabel(rule);
+          int res =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove IRC event rule \"" + label + "\"?",
+                  "Remove IRC Event Rule",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (res != JOptionPane.OK_OPTION) return;
+          controls.model.removeRow(modelRow);
+          int nextModelRow = Math.min(modelRow, controls.model.getRowCount() - 1);
+          if (nextModelRow >= 0) {
+            int nextView = controls.table.convertRowIndexToView(nextModelRow);
+            if (nextView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+            }
+          } else {
+            controls.table.clearSelection();
+          }
+          refreshRuleButtons.run();
+        });
+
+    up.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          int next = controls.model.moveRow(modelRow, modelRow - 1);
+          if (next >= 0) {
+            int nextView = controls.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    down.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          int next = controls.model.moveRow(modelRow, modelRow + 1);
+          if (next >= 0) {
+            int nextView = controls.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    applyDefaults.addActionListener(
+        e -> {
+          IrcEventNotificationPreset preset =
+              (IrcEventNotificationPreset) defaultsPreset.getSelectedItem();
+          if (preset == null) return;
+          List<IrcEventNotificationRule> rules = buildIrcEventDefaultPreset(preset);
+          if (rules.isEmpty()) return;
+          controls.model.applyPreset(rules);
+          int row = controls.model.firstRowForEvent(rules.get(0).eventType());
+          if (row < 0) row = 0;
+          int viewRow = controls.table.convertRowIndexToView(row);
+          if (viewRow >= 0) {
+            controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+            controls.table.scrollRectToVisible(controls.table.getCellRect(viewRow, 0, true));
+          }
+          refreshRuleButtons.run();
+        });
+
+    resetToIrcafeDefaults.addActionListener(
+        e -> {
+          int confirm =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Replace all IRC event rules with IRCafe defaults?",
+                  "Reset IRC event rules",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (confirm != JOptionPane.OK_OPTION) return;
+
+          List<IrcEventNotificationRule> defaults = IrcEventNotificationRule.defaults();
+          if (defaults.isEmpty()) return;
+          controls.model.replaceAll(defaults);
+          if (controls.table.getRowCount() > 0) {
+            controls.table.getSelectionModel().setSelectionInterval(0, 0);
+            controls.table.scrollRectToVisible(controls.table.getCellRect(0, 0, true));
+          } else {
+            controls.table.clearSelection();
+          }
+          refreshRuleButtons.run();
+        });
+
+    controls.table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (e != null && e.getValueIsAdjusting()) return;
+              refreshRuleButtons.run();
+            });
+
+    controls.table.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e == null) return;
+            if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
+            if (e.getClickCount() != 2) return;
+            int viewRow = controls.table.rowAtPoint(e.getPoint());
+            if (viewRow < 0) return;
+            controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+            openEditRuleDialog.run();
+          }
+        });
+    refreshRuleButtons.run();
 
     JScrollPane scroll = new JScrollPane(controls.table);
     scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-
-    JPanel selectedRuleFilters = captionPanelWithPadding(
-        "Selected rule filters",
-        "insets 0, fillx, wrap 4",
-        "[right]8[grow,fill]8[right]8[grow,fill]",
-        "[]6[]6[]6[]",
-        10, 10, 10, 10);
-    selectedRuleFilters.add(new JLabel("Rule"));
-    selectedRuleFilters.add(controls.detailEnabled, "span 3, growx, wrap");
-    selectedRuleFilters.add(new JLabel("Event"));
-    selectedRuleFilters.add(controls.detailEvent, "growx, wmin 180");
-    selectedRuleFilters.add(new JLabel("Focus"));
-    selectedRuleFilters.add(controls.detailFocus, "growx, wmin 160, wrap");
-    selectedRuleFilters.add(new JLabel("Source"));
-    selectedRuleFilters.add(controls.detailSource, "growx");
-    selectedRuleFilters.add(new JLabel("Source match"));
-    selectedRuleFilters.add(controls.detailSourcePattern, "growx, wrap");
-    selectedRuleFilters.add(new JLabel("Channel scope"));
-    selectedRuleFilters.add(controls.detailChannelScope, "growx");
-    selectedRuleFilters.add(new JLabel("Channels"));
-    selectedRuleFilters.add(controls.detailChannelPatterns, "growx, wrap");
-    selectedRuleFilters.add(
-        helpText("Active channel only means the event target must match the currently selected channel on the same server."),
-        "span 4, growx, wmin 0, wrap");
-
-    JPanel selectedRuleActions = captionPanelWithPadding(
-        "Selected rule actions",
-        "insets 0, fillx, wrap 4",
-        "[grow,fill]8[grow,fill]8[grow,fill]8[grow,fill]",
-        "[]4[]",
-        10, 10, 10, 10);
-    selectedRuleActions.add(controls.detailToast, "growx");
-    selectedRuleActions.add(controls.detailStatusBar, "growx");
-    selectedRuleActions.add(controls.detailNode, "growx");
-    selectedRuleActions.add(controls.detailSound, "growx, wrap");
-    selectedRuleActions.add(
-        helpText("Tip: combine multiple rules for the same event to split foreground/background behavior."),
-        "span 4, growx, wmin 0, wrap");
-
-    JPanel soundPanel = captionPanelWithPadding(
-        "Selected rule sound",
-        "insets 0, fillx, wrap 4",
-        "[right]8[grow,fill]8[]8[]",
-        "[]6[]6[]4[]",
-        10, 10, 10, 10);
-    soundPanel.add(new JLabel("Built-in"));
-    soundPanel.add(controls.sound, "growx, wmin 160");
-    soundPanel.add(controls.testSound, "w 36!, h 28!");
-    soundPanel.add(controls.useCustom, "wrap");
-    soundPanel.add(new JLabel("Custom file"));
-    soundPanel.add(controls.customPath, "growx, pushx, wmin 0");
-    soundPanel.add(controls.browseCustom, "w 36!, h 28!");
-    soundPanel.add(controls.clearCustom, "w 36!, h 28!");
-    soundPanel.add(controls.selectionHint, "span 4, growx, wmin 0, wrap");
-    soundPanel.add(helpText("When Sound is disabled on a rule, no sound is played for that event."),
-        "span 4, growx, wmin 0, wrap");
-
-    JPanel scriptPanel = captionPanelWithPadding(
-        "Selected rule script",
-        "insets 0, fillx, wrap 4",
-        "[right]8[grow,fill]8[]8[]",
-        "[]6[]4[]",
-        10, 10, 10, 10);
-    scriptPanel.add(new JLabel("Action"));
-    scriptPanel.add(controls.runScript, "span 3, growx, wrap");
-    scriptPanel.add(new JLabel("Script path"));
-    scriptPanel.add(controls.scriptPath, "growx, pushx, wmin 0");
-    scriptPanel.add(controls.browseScript, "w 36!, h 28!");
-    scriptPanel.add(controls.clearScript, "w 36!, h 28!");
-    scriptPanel.add(new JLabel("Arguments"));
-    scriptPanel.add(controls.scriptArgs, "span 3, growx, wmin 0, wrap");
-    scriptPanel.add(new JLabel("Working dir"));
-    scriptPanel.add(controls.scriptWorkingDirectory, "growx, pushx, wmin 0");
-    scriptPanel.add(controls.browseScriptWorkingDirectory, "w 36!, h 28!");
-    scriptPanel.add(controls.clearScriptWorkingDirectory, "w 36!, h 28!");
-    scriptPanel.add(helpText(
-            "If enabled, IRCafe executes the script and sets env vars:\n"
-                + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
-                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY, IRCAFE_TIMESTAMP_MS.\n"
-                + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
-        "span 4, growx, wmin 0, wrap");
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
     JPanel presetsPanel =
-        captionPanelWithPadding("Presets", "insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]", 10, 10, 10, 10);
+        captionPanelWithPadding(
+            "Presets",
+            "insets 0, fillx, wrap 1",
+            "[grow,fill]",
+            "[]4[]",
+            10,
+            10,
+            10,
+            10);
     presetsPanel.add(defaultsRow, "growx, wmin 0, wrap");
     presetsPanel.add(
         helpText(
@@ -5355,26 +4887,540 @@ panel.setOpaque(false);
     tab.add(presetsPanel, "growx, wmin 0, wrap");
 
     JPanel rulesPanel =
-        captionPanelWithPadding("Rules", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]", 10, 10, 10, 10);
+        captionPanelWithPadding(
+            "Rules",
+            "insets 0, fill, wrap 1",
+            "[grow,fill]",
+            "[]6[grow,fill]4[]",
+            10,
+            10,
+            10,
+            10);
     rulesPanel.add(buttons, "growx, wmin 0, wrap");
-    scroll.setPreferredSize(new Dimension(400, 210));
+    scroll.setPreferredSize(new Dimension(400, 260));
     rulesPanel.add(scroll, "grow, push, wmin 0, wrap");
+    rulesPanel.add(helpText("Tip: Double-click a rule to edit it."), "growx, wmin 0, wrap");
     tab.add(rulesPanel, "grow, push, wmin 0, wrap");
 
-    JTabbedPane detailTabs = new JTabbedPane();
-    detailTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-    detailTabs.addTab("Filters", selectedRuleFilters);
-    detailTabs.addTab("Actions", selectedRuleActions);
-    detailTabs.addTab("Sound", soundPanel);
-    detailTabs.addTab("Script", scriptPanel);
-    detailTabs.setPreferredSize(new Dimension(400, 255));
-
-    JPanel selectedRulePanel =
-        captionPanelWithPadding("Selected rule", "insets 0, fill, wrap 1", "[grow,fill]", "[grow,fill]", 10, 10, 10, 10);
-    selectedRulePanel.add(detailTabs, "grow, push, wmin 0");
-    tab.add(selectedRulePanel, "growx, wmin 0, wrap");
-
     return tab;
+  }
+
+  private IrcEventNotificationRule promptIrcEventNotificationRuleDialog(
+      String title, IrcEventNotificationRule seed) {
+    IrcEventNotificationRule base =
+        seed != null
+            ? seed
+            : new IrcEventNotificationRule(
+                false,
+                IrcEventNotificationRule.EventType.INVITE_RECEIVED,
+                IrcEventNotificationRule.SourceMode.ANY,
+                null,
+                IrcEventNotificationRule.ChannelScope.ALL,
+                null,
+                true,
+                IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+                true,
+                true,
+                false,
+                defaultBuiltInSoundForIrcEventRule(IrcEventNotificationRule.EventType.INVITE_RECEIVED)
+                    .name(),
+                false,
+                null,
+                false,
+                null,
+                null,
+                null);
+
+    Window owner = dialog != null ? dialog : null;
+
+    JCheckBox enabled = new JCheckBox("Enabled", base.enabled());
+
+    JComboBox<IrcEventNotificationRule.EventType> eventType =
+        new JComboBox<>(IrcEventNotificationRule.EventType.values());
+    eventType.setSelectedItem(
+        base.eventType() != null
+            ? base.eventType()
+            : IrcEventNotificationRule.EventType.INVITE_RECEIVED);
+
+    JComboBox<IrcEventNotificationRule.SourceMode> sourceMode =
+        new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
+    sourceMode.setSelectedItem(
+        base.sourceMode() != null ? base.sourceMode() : IrcEventNotificationRule.SourceMode.ANY);
+
+    JTextField sourcePattern = new JTextField(Objects.toString(base.sourcePattern(), ""));
+    sourcePattern.setToolTipText(
+        "For Specific nicks: comma-separated list.\n"
+            + "For Nick glob: wildcard patterns (* and ?).\n"
+            + "For Nick regex: Java regular expression.");
+
+    JComboBox<IrcEventNotificationRule.ChannelScope> channelScope =
+        new JComboBox<>(IrcEventNotificationRule.ChannelScope.values());
+    channelScope.setSelectedItem(
+        base.channelScope() != null ? base.channelScope() : IrcEventNotificationRule.ChannelScope.ALL);
+
+    JTextField channelPatterns = new JTextField(Objects.toString(base.channelPatterns(), ""));
+    channelPatterns.setToolTipText(
+        "Comma-separated channel masks (for example: #staff*, #ops).");
+
+    JCheckBox toastEnabled = new JCheckBox("Desktop toast", base.toastEnabled());
+
+    JComboBox<IrcEventNotificationRule.FocusScope> focusScope =
+        new JComboBox<>(IrcEventNotificationRule.FocusScope.values());
+    focusScope.setSelectedItem(
+        base.focusScope() != null
+            ? base.focusScope()
+            : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
+
+    JCheckBox statusBarEnabled = new JCheckBox("Status bar message", base.statusBarEnabled());
+    JCheckBox notificationsNodeEnabled =
+        new JCheckBox("Notifications node entry", base.notificationsNodeEnabled());
+
+    JCheckBox soundEnabled = new JCheckBox("Play sound", base.soundEnabled());
+    JComboBox<BuiltInSound> builtInSound = new JComboBox<>(BuiltInSound.valuesForUi());
+    configureBuiltInSoundCombo(builtInSound);
+    builtInSound.setSelectedItem(BuiltInSound.fromId(base.soundId()));
+
+    JCheckBox soundUseCustom = new JCheckBox("Use custom file", base.soundUseCustom());
+    JTextField soundCustomPath = new JTextField(Objects.toString(base.soundCustomPath(), ""));
+    JButton browseCustomSound = new JButton("Browse...");
+    JButton clearCustomSound = new JButton("Clear");
+    JButton testSound = new JButton("Test");
+    configureIconOnlyButton(browseCustomSound, "folder-open", "Browse/import custom sound file");
+    configureIconOnlyButton(clearCustomSound, "close", "Clear custom sound path");
+    configureIconOnlyButton(testSound, "play", "Test selected sound");
+
+    JCheckBox scriptEnabled = new JCheckBox("Run script/program", base.scriptEnabled());
+    JTextField scriptPath = new JTextField(Objects.toString(base.scriptPath(), ""));
+    JButton browseScript = new JButton("Browse...");
+    JButton clearScript = new JButton("Clear");
+    configureIconOnlyButton(browseScript, "terminal", "Browse for script/program");
+    configureIconOnlyButton(clearScript, "close", "Clear script path");
+
+    JTextField scriptArgs = new JTextField(Objects.toString(base.scriptArgs(), ""));
+    JTextField scriptWorkingDirectory =
+        new JTextField(Objects.toString(base.scriptWorkingDirectory(), ""));
+    JButton browseScriptWorkingDirectory = new JButton("Browse...");
+    JButton clearScriptWorkingDirectory = new JButton("Clear");
+    configureIconOnlyButton(
+        browseScriptWorkingDirectory, "settings", "Browse for script working directory");
+    configureIconOnlyButton(
+        clearScriptWorkingDirectory, "close", "Clear script working directory");
+
+    Runnable refreshSourceFieldState =
+        () -> {
+          IrcEventNotificationRule.SourceMode mode =
+              sourceMode.getSelectedItem() instanceof IrcEventNotificationRule.SourceMode s
+                  ? s
+                  : IrcEventNotificationRule.SourceMode.ANY;
+          boolean needsPattern =
+              mode == IrcEventNotificationRule.SourceMode.NICK_LIST
+                  || mode == IrcEventNotificationRule.SourceMode.GLOB
+                  || mode == IrcEventNotificationRule.SourceMode.REGEX;
+          sourcePattern.setEnabled(needsPattern);
+          sourcePattern.setEditable(needsPattern);
+          String placeholder =
+              switch (mode) {
+                case NICK_LIST -> "alice, bob";
+                case GLOB -> "op*, admin?";
+                case REGEX -> "^op[0-9]+$";
+                default -> "";
+              };
+          sourcePattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, placeholder);
+        };
+
+    Runnable refreshChannelFieldState =
+        () -> {
+          IrcEventNotificationRule.ChannelScope scope =
+              channelScope.getSelectedItem() instanceof IrcEventNotificationRule.ChannelScope s
+                  ? s
+                  : IrcEventNotificationRule.ChannelScope.ALL;
+          boolean needsPattern =
+              scope == IrcEventNotificationRule.ChannelScope.ONLY
+                  || scope == IrcEventNotificationRule.ChannelScope.ALL_EXCEPT;
+          channelPatterns.setEnabled(needsPattern);
+          channelPatterns.setEditable(needsPattern);
+          channelPatterns.putClientProperty(
+              FlatClientProperties.PLACEHOLDER_TEXT, needsPattern ? "#staff*, #ops" : "");
+        };
+
+    Runnable refreshSoundState =
+        () -> {
+          boolean soundOn = soundEnabled.isSelected();
+          soundUseCustom.setEnabled(soundOn);
+          boolean useCustom = soundOn && soundUseCustom.isSelected();
+          builtInSound.setEnabled(soundOn && !useCustom);
+          soundCustomPath.setEnabled(soundOn && useCustom);
+          soundCustomPath.setEditable(soundOn && useCustom);
+          browseCustomSound.setEnabled(soundOn && useCustom);
+          String custom = Objects.toString(soundCustomPath.getText(), "").trim();
+          clearCustomSound.setEnabled(soundOn && useCustom && !custom.isBlank());
+          testSound.setEnabled(soundOn);
+        };
+
+    Runnable refreshScriptState =
+        () -> {
+          boolean run = scriptEnabled.isSelected();
+          scriptPath.setEnabled(run);
+          scriptPath.setEditable(run);
+          browseScript.setEnabled(run);
+          clearScript.setEnabled(run && !Objects.toString(scriptPath.getText(), "").trim().isBlank());
+          scriptArgs.setEnabled(run);
+          scriptArgs.setEditable(run);
+          scriptWorkingDirectory.setEnabled(run);
+          scriptWorkingDirectory.setEditable(run);
+          browseScriptWorkingDirectory.setEnabled(run);
+          clearScriptWorkingDirectory.setEnabled(
+              run && !Objects.toString(scriptWorkingDirectory.getText(), "").trim().isBlank());
+        };
+
+    final IrcEventNotificationRule.EventType[] priorEvent =
+        new IrcEventNotificationRule.EventType[] {
+            eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType e
+                ? e
+                : IrcEventNotificationRule.EventType.INVITE_RECEIVED
+        };
+
+    eventType.addActionListener(
+        e -> {
+          IrcEventNotificationRule.EventType selectedEvent =
+              eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType et
+                  ? et
+                  : IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          IrcEventNotificationRule.EventType previous = priorEvent[0];
+          if (previous == null) previous = IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          if (!soundUseCustom.isSelected()) {
+            Object selectedSound = builtInSound.getSelectedItem();
+            if (selectedSound instanceof BuiltInSound currentSound) {
+              BuiltInSound previousDefault = defaultBuiltInSoundForIrcEventRule(previous);
+              if (currentSound == previousDefault) {
+                builtInSound.setSelectedItem(defaultBuiltInSoundForIrcEventRule(selectedEvent));
+              }
+            }
+          }
+          priorEvent[0] = selectedEvent;
+        });
+
+    sourceMode.addActionListener(e -> refreshSourceFieldState.run());
+    channelScope.addActionListener(e -> refreshChannelFieldState.run());
+    soundEnabled.addActionListener(e -> refreshSoundState.run());
+    soundUseCustom.addActionListener(e -> refreshSoundState.run());
+    soundCustomPath.getDocument().addDocumentListener(new SimpleDocListener(refreshSoundState));
+    scriptEnabled.addActionListener(e -> refreshScriptState.run());
+    scriptPath.getDocument().addDocumentListener(new SimpleDocListener(refreshScriptState));
+    scriptWorkingDirectory.getDocument().addDocumentListener(new SimpleDocListener(refreshScriptState));
+
+    browseCustomSound.addActionListener(
+        e -> {
+          try {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            chooser.setAcceptAllFileFilterUsed(true);
+            chooser.addChoosableFileFilter(
+                new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+            int result = chooser.showOpenDialog(owner);
+            if (result != JFileChooser.APPROVE_OPTION) return;
+            File f = chooser.getSelectedFile();
+            if (f == null) return;
+            String rel = importNotificationSoundFileToRuntimeDir(f);
+            if (rel != null && !rel.isBlank()) {
+              soundCustomPath.setText(rel);
+              soundUseCustom.setSelected(true);
+              refreshSoundState.run();
+            }
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                owner,
+                "Could not import sound file.\n\n" + ex.getMessage(),
+                "Import failed",
+                JOptionPane.ERROR_MESSAGE);
+          }
+        });
+
+    clearCustomSound.addActionListener(
+        e -> {
+          soundUseCustom.setSelected(false);
+          soundCustomPath.setText("");
+          refreshSoundState.run();
+        });
+
+    testSound.addActionListener(
+        e -> {
+          try {
+            if (notificationSoundService == null) return;
+            if (soundUseCustom.isSelected()) {
+              String rel = Objects.toString(soundCustomPath.getText(), "").trim();
+              if (!rel.isBlank()) notificationSoundService.previewCustom(rel);
+            } else {
+              BuiltInSound sound =
+                  builtInSound.getSelectedItem() instanceof BuiltInSound s ? s : null;
+              notificationSoundService.preview(sound);
+            }
+          } catch (Throwable ignored) {
+          }
+        });
+
+    browseScript.addActionListener(
+        e -> {
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Select script/program");
+          chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+          chooser.setAcceptAllFileFilterUsed(true);
+          int result = chooser.showOpenDialog(owner);
+          if (result != JFileChooser.APPROVE_OPTION) return;
+          File selected = chooser.getSelectedFile();
+          if (selected == null) return;
+          scriptPath.setText(selected.getAbsolutePath());
+          refreshScriptState.run();
+        });
+
+    clearScript.addActionListener(
+        e -> {
+          scriptPath.setText("");
+          refreshScriptState.run();
+        });
+
+    browseScriptWorkingDirectory.addActionListener(
+        e -> {
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Select script working directory");
+          chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+          chooser.setAcceptAllFileFilterUsed(true);
+          int result = chooser.showOpenDialog(owner);
+          if (result != JFileChooser.APPROVE_OPTION) return;
+          File selected = chooser.getSelectedFile();
+          if (selected == null) return;
+          scriptWorkingDirectory.setText(selected.getAbsolutePath());
+          refreshScriptState.run();
+        });
+
+    clearScriptWorkingDirectory.addActionListener(
+        e -> {
+          scriptWorkingDirectory.setText("");
+          refreshScriptState.run();
+        });
+
+    refreshSourceFieldState.run();
+    refreshChannelFieldState.run();
+    refreshSoundState.run();
+    refreshScriptState.run();
+
+    JPanel filtersPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 2,hidemode 3",
+                "[right]8[grow,fill]",
+                "[]6[]6[]6[]6[]6[]"));
+    filtersPanel.add(enabled, "span 2,wrap");
+    filtersPanel.add(new JLabel("Event"));
+    filtersPanel.add(eventType, "growx, wmin 220, wrap");
+    filtersPanel.add(new JLabel("Source"));
+    filtersPanel.add(sourceMode, "growx, wrap");
+    filtersPanel.add(new JLabel("Source match"));
+    filtersPanel.add(sourcePattern, "growx, wrap");
+    filtersPanel.add(new JLabel("Channel scope"));
+    filtersPanel.add(channelScope, "growx, wrap");
+    filtersPanel.add(new JLabel("Channels"));
+    filtersPanel.add(channelPatterns, "growx, wrap");
+    filtersPanel.add(new JLabel(""));
+    filtersPanel.add(
+        helpText(
+            "Active channel only means the event target must match the currently selected channel on the same server."),
+        "growx, wmin 0, wrap");
+
+    JPanel actionsPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 2,hidemode 3",
+                "[right]8[grow,fill]",
+                "[]6[]6[]"));
+    actionsPanel.add(toastEnabled, "span 2, growx, wrap");
+    actionsPanel.add(new JLabel("Toast focus"));
+    actionsPanel.add(focusScope, "growx, wrap");
+    actionsPanel.add(statusBarEnabled, "span 2, growx, wrap");
+    actionsPanel.add(notificationsNodeEnabled, "span 2, growx, wrap");
+    actionsPanel.add(new JLabel(""));
+    actionsPanel.add(
+        helpText("Tip: combine multiple rules for the same event to split foreground/background behavior."),
+        "growx, wmin 0, wrap");
+
+    JPanel soundPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 4,hidemode 3",
+                "[right]8[grow,fill]8[]8[]",
+                "[]6[]4[]"));
+    soundPanel.add(soundEnabled, "span 4, growx, wrap");
+    soundPanel.add(new JLabel("Built-in"));
+    soundPanel.add(builtInSound, "growx, wmin 180");
+    soundPanel.add(testSound, "w 36!, h 28!");
+    soundPanel.add(soundUseCustom, "wrap");
+    soundPanel.add(new JLabel("Custom file"));
+    soundPanel.add(soundCustomPath, "growx, pushx, wmin 0");
+    soundPanel.add(browseCustomSound, "w 36!, h 28!");
+    soundPanel.add(clearCustomSound, "w 36!, h 28!, wrap");
+    soundPanel.add(new JLabel(""));
+    soundPanel.add(
+        helpText("When Sound is disabled on a rule, no sound is played for that event."),
+        "span 3, growx, wmin 0, wrap");
+
+    JPanel scriptPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 4,hidemode 3",
+                "[right]8[grow,fill]8[]8[]",
+                "[]6[]4[]"));
+    scriptPanel.add(scriptEnabled, "span 4, growx, wrap");
+    scriptPanel.add(new JLabel("Script path"));
+    scriptPanel.add(scriptPath, "growx, pushx, wmin 0");
+    scriptPanel.add(browseScript, "w 36!, h 28!");
+    scriptPanel.add(clearScript, "w 36!, h 28!, wrap");
+    scriptPanel.add(new JLabel("Arguments"));
+    scriptPanel.add(scriptArgs, "span 3, growx, wmin 0, wrap");
+    scriptPanel.add(new JLabel("Working dir"));
+    scriptPanel.add(scriptWorkingDirectory, "growx, pushx, wmin 0");
+    scriptPanel.add(browseScriptWorkingDirectory, "w 36!, h 28!");
+    scriptPanel.add(clearScriptWorkingDirectory, "w 36!, h 28!, wrap");
+    scriptPanel.add(new JLabel(""));
+    scriptPanel.add(
+        helpText(
+            "If enabled, IRCafe executes the script and sets env vars:\n"
+                + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
+                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY, IRCAFE_TIMESTAMP_MS.\n"
+                + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
+        "span 3, growx, wmin 0, wrap");
+
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+    tabs.addTab("Filters", filtersPanel);
+    tabs.addTab("Actions", actionsPanel);
+    tabs.addTab("Sound", soundPanel);
+    tabs.addTab("Script", scriptPanel);
+    tabs.setPreferredSize(new Dimension(640, 420));
+
+    JPanel form = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[grow,fill]"));
+    form.add(tabs, "grow, push, wmin 0");
+
+    String dialogTitle = Objects.toString(title, "IRC Event Rule");
+    while (true) {
+      int choice =
+          JOptionPane.showConfirmDialog(
+              owner,
+              form,
+              dialogTitle,
+              JOptionPane.OK_CANCEL_OPTION,
+              JOptionPane.PLAIN_MESSAGE);
+      if (choice != JOptionPane.OK_OPTION) return null;
+
+      IrcEventNotificationRule.EventType selectedEvent =
+          eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType ev
+              ? ev
+              : IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+      IrcEventNotificationRule.SourceMode selectedSourceMode =
+          sourceMode.getSelectedItem() instanceof IrcEventNotificationRule.SourceMode mode
+              ? mode
+              : IrcEventNotificationRule.SourceMode.ANY;
+      IrcEventNotificationRule.ChannelScope selectedChannelScope =
+          channelScope.getSelectedItem() instanceof IrcEventNotificationRule.ChannelScope scope
+              ? scope
+              : IrcEventNotificationRule.ChannelScope.ALL;
+      IrcEventNotificationRule.FocusScope selectedFocusScope =
+          focusScope.getSelectedItem() instanceof IrcEventNotificationRule.FocusScope focus
+              ? focus
+              : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+
+      String sourcePatternValue = Objects.toString(sourcePattern.getText(), "").trim();
+      if (sourcePatternValue.isEmpty()) sourcePatternValue = null;
+      boolean sourceNeedsPattern =
+          selectedSourceMode == IrcEventNotificationRule.SourceMode.NICK_LIST
+              || selectedSourceMode == IrcEventNotificationRule.SourceMode.GLOB
+              || selectedSourceMode == IrcEventNotificationRule.SourceMode.REGEX;
+      if (sourceNeedsPattern && sourcePatternValue == null) {
+        JOptionPane.showMessageDialog(
+            owner,
+            "Source mode \"" + selectedSourceMode + "\" requires a source pattern.",
+            "Invalid IRC Event Rule",
+            JOptionPane.ERROR_MESSAGE);
+        tabs.setSelectedIndex(0);
+        continue;
+      }
+      if (selectedSourceMode == IrcEventNotificationRule.SourceMode.REGEX
+          && sourcePatternValue != null) {
+        try {
+          Pattern.compile(sourcePatternValue);
+        } catch (Exception ex) {
+          JOptionPane.showMessageDialog(
+              owner,
+              "Invalid source regex pattern:\n" + Objects.toString(ex.getMessage(), "Invalid regex"),
+              "Invalid IRC Event Rule",
+              JOptionPane.ERROR_MESSAGE);
+          tabs.setSelectedIndex(0);
+          continue;
+        }
+      }
+      if (!sourceNeedsPattern) sourcePatternValue = null;
+
+      String channelPatternsValue = Objects.toString(channelPatterns.getText(), "").trim();
+      if (channelPatternsValue.isEmpty()) channelPatternsValue = null;
+      boolean channelNeedsPattern =
+          selectedChannelScope == IrcEventNotificationRule.ChannelScope.ONLY
+              || selectedChannelScope == IrcEventNotificationRule.ChannelScope.ALL_EXCEPT;
+      if (channelNeedsPattern && channelPatternsValue == null) {
+        JOptionPane.showMessageDialog(
+            owner,
+            "Channel scope \"" + selectedChannelScope + "\" requires channel patterns.",
+            "Invalid IRC Event Rule",
+            JOptionPane.ERROR_MESSAGE);
+        tabs.setSelectedIndex(0);
+        continue;
+      }
+      if (!channelNeedsPattern) channelPatternsValue = null;
+
+      BuiltInSound selectedSound =
+          builtInSound.getSelectedItem() instanceof BuiltInSound sound
+              ? sound
+              : defaultBuiltInSoundForIrcEventRule(selectedEvent);
+      String soundCustomPathValue = Objects.toString(soundCustomPath.getText(), "").trim();
+      if (soundCustomPathValue.isEmpty()) soundCustomPathValue = null;
+      boolean useCustomSound = soundUseCustom.isSelected() && soundCustomPathValue != null;
+
+      String scriptPathValue = Objects.toString(scriptPath.getText(), "").trim();
+      if (scriptPathValue.isEmpty()) scriptPathValue = null;
+      String scriptArgsValue = Objects.toString(scriptArgs.getText(), "").trim();
+      if (scriptArgsValue.isEmpty()) scriptArgsValue = null;
+      String scriptWorkingDirectoryValue = Objects.toString(scriptWorkingDirectory.getText(), "").trim();
+      if (scriptWorkingDirectoryValue.isEmpty()) scriptWorkingDirectoryValue = null;
+      boolean runScript = scriptEnabled.isSelected();
+      if (runScript && scriptPathValue == null) {
+        JOptionPane.showMessageDialog(
+            owner,
+            "Script path is required when Run script/program is enabled.",
+            "Invalid IRC Event Rule",
+            JOptionPane.ERROR_MESSAGE);
+        tabs.setSelectedIndex(3);
+        continue;
+      }
+
+      return new IrcEventNotificationRule(
+          enabled.isSelected(),
+          selectedEvent,
+          selectedSourceMode,
+          sourcePatternValue,
+          selectedChannelScope,
+          channelPatternsValue,
+          toastEnabled.isSelected(),
+          selectedFocusScope,
+          statusBarEnabled.isSelected(),
+          notificationsNodeEnabled.isSelected(),
+          soundEnabled.isSelected(),
+          selectedSound.name(),
+          useCustomSound,
+          soundCustomPathValue,
+          runScript,
+          scriptPathValue,
+          scriptArgsValue,
+          scriptWorkingDirectoryValue);
+    }
   }
 
   private List<IrcEventNotificationRule> buildIrcEventDefaultPreset(IrcEventNotificationPreset preset) {
@@ -5453,16 +5499,12 @@ panel.setOpaque(false);
     JButton remove = new JButton("Remove");
     JButton up = new JButton("Up");
     JButton down = new JButton("Down");
-    JButton pickColor = new JButton("Color…");
-    JButton clearColor = new JButton("Clear color");
     configureIconOnlyButton(add, "plus", "Add notification rule");
     configureIconOnlyButton(edit, "edit", "Edit selected notification rule");
     configureIconOnlyButton(duplicate, "copy", "Duplicate selected notification rule");
     configureIconOnlyButton(remove, "trash", "Remove selected notification rule");
     configureIconOnlyButton(up, "arrow-up", "Move selected notification rule up");
     configureIconOnlyButton(down, "arrow-down", "Move selected notification rule down");
-    configureIconOnlyButton(pickColor, "palette", "Choose highlight color for selected rule");
-    configureIconOnlyButton(clearColor, "close", "Clear highlight color for selected rule");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
@@ -5471,161 +5513,151 @@ panel.setOpaque(false);
     buttons.add(remove);
     buttons.add(up);
     buttons.add(down);
-    buttons.add(pickColor);
-    buttons.add(clearColor);
+    Runnable refreshRuleButtons =
+        () -> {
+          int viewRow = notifications.table.getSelectedRow();
+          boolean hasSelection = viewRow >= 0;
+          int modelRow = hasSelection ? notifications.table.convertRowIndexToModel(viewRow) : -1;
+          edit.setEnabled(hasSelection);
+          duplicate.setEnabled(hasSelection);
+          remove.setEnabled(hasSelection);
+          up.setEnabled(hasSelection && modelRow > 0);
+          down.setEnabled(hasSelection && modelRow >= 0 && modelRow < (notifications.model.getRowCount() - 1));
+        };
 
-    add.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.model.addRule(new NotificationRule(
-          "",
-          NotificationRule.Type.WORD,
-          "",
-          true,
-          false,
-          true,
-          null
-      ));
-      if (row >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(row, row);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(row, 0, true));
-        notifications.table.editCellAt(row, NotificationRulesTableModel.COL_PATTERN);
-        notifications.table.requestFocusInWindow();
-      }
-    });
-
-    edit.addActionListener(e -> {
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      notifications.table.editCellAt(row, NotificationRulesTableModel.COL_PATTERN);
-      notifications.table.requestFocusInWindow();
-    });
-
-    duplicate.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      int dup = notifications.model.duplicateRow(row);
-      if (dup >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(dup, dup);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(dup, 0, true));
-      }
-    });
-
-    remove.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      int res = JOptionPane.showConfirmDialog(dialog, "Remove selected rule?", "Remove rule", JOptionPane.OK_CANCEL_OPTION);
-      if (res != JOptionPane.OK_OPTION) return;
-      notifications.model.removeRow(row);
-    });
-
-    up.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row <= 0) return;
-      int next = notifications.model.moveRow(row, row - 1);
-      if (next >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(next, next);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(next, 0, true));
-      }
-    });
-
-    down.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      int next = notifications.model.moveRow(row, row + 1);
-      if (next >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(next, next);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(next, 0, true));
-      }
-    });
-
-    pickColor.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      pickNotificationRuleColor(notifications, row);
-    });
-
-    clearColor.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      notifications.model.setHighlightFg(row, null);
-    });
-
-
-    // Double-click on a Color cell to pick a color (faster than using the button bar).
-    notifications.table.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (e == null) return;
-        if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
-        if (e.getClickCount() != 2) return;
-
-        int viewRow = notifications.table.rowAtPoint(e.getPoint());
-        int viewCol = notifications.table.columnAtPoint(e.getPoint());
-        if (viewRow < 0 || viewCol < 0) return;
-
-        int modelCol = notifications.table.convertColumnIndexToModel(viewCol);
-        if (modelCol != NotificationRulesTableModel.COL_COLOR) return;
-
-        if (notifications.table.isEditing()) {
-          try {
-            notifications.table.getCellEditor().stopCellEditing();
-          } catch (Exception ignored) {
+    Runnable openEditRuleDialog =
+        () -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          NotificationRule seed = notifications.model.ruleAt(modelRow);
+          if (seed == null) return;
+          NotificationRule edited = promptNotificationRuleDialog("Edit Notification Rule", seed);
+          if (edited == null) return;
+          notifications.model.setRule(modelRow, edited);
+          int nextView = notifications.table.convertRowIndexToView(modelRow);
+          if (nextView >= 0) {
+            notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+            notifications.table.scrollRectToVisible(notifications.table.getCellRect(nextView, 0, true));
           }
-        }
+          refreshRuleButtons.run();
+        };
 
-        int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-        notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-        pickNotificationRuleColor(notifications, modelRow);
-      }
-    });
+    add.addActionListener(
+        e -> {
+          NotificationRule created = promptNotificationRuleDialog("Add Notification Rule", null);
+          if (created == null) return;
+          int row = notifications.model.addRule(created);
+          if (row >= 0) {
+            int viewRow = notifications.table.convertRowIndexToView(row);
+            if (viewRow >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+              notifications.table.scrollRectToVisible(notifications.table.getCellRect(viewRow, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    edit.addActionListener(e -> openEditRuleDialog.run());
+
+    duplicate.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          int dup = notifications.model.duplicateRow(modelRow);
+          if (dup >= 0) {
+            int dupView = notifications.table.convertRowIndexToView(dup);
+            if (dupView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(dupView, dupView);
+              notifications.table.scrollRectToVisible(notifications.table.getCellRect(dupView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    remove.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          NotificationRule rule = notifications.model.ruleAt(modelRow);
+          String label = NotificationRulesTableModel.effectiveRuleLabel(rule);
+          int res =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove notification rule \"" + label + "\"?",
+                  "Remove Notification Rule",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (res != JOptionPane.OK_OPTION) return;
+          notifications.model.removeRow(modelRow);
+          int nextModelRow = Math.min(modelRow, notifications.model.getRowCount() - 1);
+          if (nextModelRow >= 0) {
+            int nextView = notifications.table.convertRowIndexToView(nextModelRow);
+            if (nextView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              notifications.table.scrollRectToVisible(notifications.table.getCellRect(nextView, 0, true));
+            }
+          } else {
+            notifications.table.clearSelection();
+          }
+          refreshRuleButtons.run();
+        });
+
+    up.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          int next = notifications.model.moveRow(modelRow, modelRow - 1);
+          if (next >= 0) {
+            int nextView = notifications.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              notifications.table.scrollRectToVisible(notifications.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    down.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          int next = notifications.model.moveRow(modelRow, modelRow + 1);
+          if (next >= 0) {
+            int nextView = notifications.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              notifications.table.scrollRectToVisible(notifications.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    notifications.table
+        .getSelectionModel()
+        .addListSelectionListener(e -> {
+          if (e != null && e.getValueIsAdjusting()) return;
+          refreshRuleButtons.run();
+        });
+
+    notifications.table.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e == null) return;
+            if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
+            if (e.getClickCount() != 2) return;
+            int viewRow = notifications.table.rowAtPoint(e.getPoint());
+            if (viewRow < 0) return;
+            notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+            openEditRuleDialog.run();
+          }
+        });
+    refreshRuleButtons.run();
+
     JScrollPane scroll = new JScrollPane(notifications.table);
     scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -5680,7 +5712,7 @@ panel.setOpaque(false);
     rulesTablePanel.add(scroll, "grow, push, h 260!, wmin 0, wrap");
     rulesTablePanel.add(notifications.validationLabel, "growx, wmin 0, wrap");
     rulesTablePanel.add(
-        helpText("Tip: Double-click a rule's Color cell to quickly choose a color."),
+        helpText("Tip: Double-click a rule to edit it."),
         "growx, wmin 0, wrap");
     rulesTab.add(rulesTablePanel, "grow, push, wmin 0");
 
@@ -6649,21 +6681,168 @@ panel.setOpaque(false);
     return new ColorSwatch(color, w, h);
   }
 
-  private void pickNotificationRuleColor(NotificationRulesControls notifications, int row) {
-    if (notifications == null) return;
-    if (row < 0 || row >= notifications.model.getRowCount()) return;
+  private NotificationRule promptNotificationRuleDialog(String title, NotificationRule seed) {
+    NotificationRule base =
+        seed != null
+            ? seed
+            : new NotificationRule(
+                "",
+                NotificationRule.Type.WORD,
+                "",
+                true,
+                false,
+                true,
+                null);
 
-    String raw = notifications.model.highlightFgAt(row);
-    Color currentColor = parseHexColorLenient(raw);
-    if (currentColor == null) {
-      Color def = UIManager.getColor("TextPane.foreground");
-      if (def == null) def = UIManager.getColor("Label.foreground");
-      currentColor = def != null ? def : Color.WHITE;
-    }
+    JCheckBox enabled = new JCheckBox("Enabled", base.enabled());
+    JTextField label = new JTextField(Objects.toString(base.label(), ""));
+    JComboBox<NotificationRule.Type> type = new JComboBox<>(NotificationRule.Type.values());
+    type.setSelectedItem(base.type() != null ? base.type() : NotificationRule.Type.WORD);
 
-    Color chosen = showColorPickerDialog(dialog, "Choose Rule Highlight Color", currentColor, preferredPreviewBackground());
-    if (chosen != null) {
-      notifications.model.setHighlightFg(row, toHex(chosen));
+    JTextField pattern = new JTextField(Objects.toString(base.pattern(), ""));
+    pattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Keyword or regular expression");
+    JCheckBox caseSensitive = new JCheckBox("Case sensitive", base.caseSensitive());
+    JCheckBox wholeWord = new JCheckBox("Whole word", base.wholeWord());
+    wholeWord.setToolTipText("Only applies to WORD rules.");
+
+    Color seedColor = parseHexColorLenient(base.highlightFg());
+    final String[] colorHex = new String[] {seedColor != null ? toHex(seedColor) : null};
+    JLabel colorPreview = new JLabel();
+    JButton pickColor = new JButton("Choose…");
+    JButton clearColor = new JButton("Clear");
+    pickColor.setIcon(SvgIcons.action("palette", 14));
+    pickColor.setDisabledIcon(SvgIcons.actionDisabled("palette", 14));
+    clearColor.setIcon(SvgIcons.action("close", 14));
+    clearColor.setDisabledIcon(SvgIcons.actionDisabled("close", 14));
+
+    Runnable refreshWholeWordState =
+        () -> {
+          boolean wordRule = NotificationRule.Type.WORD.equals(type.getSelectedItem());
+          wholeWord.setEnabled(wordRule);
+          if (!wordRule) {
+            wholeWord.setSelected(false);
+          }
+        };
+    type.addActionListener(e -> refreshWholeWordState.run());
+    refreshWholeWordState.run();
+
+    Runnable refreshColorPreview =
+        () -> {
+          Color c = parseHexColorLenient(colorHex[0]);
+          if (c == null) {
+            colorPreview.setIcon(null);
+            colorPreview.setText("Default");
+            Color fg = UIManager.getColor("Label.foreground");
+            if (fg != null) colorPreview.setForeground(fg);
+            return;
+          }
+          colorPreview.setIcon(new ColorSwatch(c, 14, 14));
+          colorPreview.setText(toHex(c));
+          Color fg = UIManager.getColor("Label.foreground");
+          if (fg != null) colorPreview.setForeground(fg);
+        };
+    refreshColorPreview.run();
+
+    pickColor.addActionListener(
+        e -> {
+          Color current = parseHexColorLenient(colorHex[0]);
+          if (current == null) {
+            Color fallback = UIManager.getColor("TextPane.foreground");
+            if (fallback == null) fallback = UIManager.getColor("Label.foreground");
+            current = fallback != null ? fallback : Color.WHITE;
+          }
+          Color chosen =
+              showColorPickerDialog(
+                  dialog,
+                  "Choose Rule Highlight Color",
+                  current,
+                  preferredPreviewBackground());
+          if (chosen == null) return;
+          colorHex[0] = toHex(chosen);
+          refreshColorPreview.run();
+        });
+
+    clearColor.addActionListener(
+        e -> {
+          colorHex[0] = null;
+          refreshColorPreview.run();
+        });
+
+    JPanel colorRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    colorRow.setOpaque(false);
+    colorRow.add(colorPreview);
+    colorRow.add(pickColor);
+    colorRow.add(clearColor);
+
+    JTextArea hint = helpText("WORD supports whole-word matching; REGEX supports Java regular expressions.");
+
+    JPanel form =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 2,hidemode 3",
+                "[right][grow,fill]",
+                "[]6[]6[]6[]6[]6[]6[]"));
+    form.add(enabled, "span 2,wrap");
+    form.add(new JLabel("Label:"));
+    form.add(label, "growx,pushx,wmin 0,wrap");
+    form.add(new JLabel("Type:"));
+    form.add(type, "w 140!,wrap");
+    form.add(new JLabel("Pattern:"));
+    form.add(pattern, "growx,pushx,wmin 0,wrap");
+    form.add(new JLabel("Options:"));
+    JPanel options = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    options.setOpaque(false);
+    options.add(caseSensitive);
+    options.add(wholeWord);
+    form.add(options, "growx,wrap");
+    form.add(new JLabel("Color:"));
+    form.add(colorRow, "growx,wrap");
+    form.add(new JLabel(""));
+    form.add(hint, "growx,wmin 0,wrap");
+
+    Window owner = dialog != null ? dialog : null;
+    String dialogTitle = Objects.toString(title, "Notification Rule");
+
+    while (true) {
+      int choice =
+          JOptionPane.showConfirmDialog(
+              owner,
+              form,
+              dialogTitle,
+              JOptionPane.OK_CANCEL_OPTION,
+              JOptionPane.PLAIN_MESSAGE);
+      if (choice != JOptionPane.OK_OPTION) return null;
+
+      NotificationRule.Type selectedType =
+          type.getSelectedItem() instanceof NotificationRule.Type t
+              ? t
+              : NotificationRule.Type.WORD;
+
+      String patternText = Objects.toString(pattern.getText(), "").trim();
+      if (selectedType == NotificationRule.Type.REGEX && !patternText.isEmpty()) {
+        try {
+          int flags = Pattern.UNICODE_CASE;
+          if (!caseSensitive.isSelected()) flags |= Pattern.CASE_INSENSITIVE;
+          Pattern.compile(patternText, flags);
+        } catch (Exception ex) {
+          String msg = Objects.toString(ex.getMessage(), "Invalid regular expression");
+          JOptionPane.showMessageDialog(
+              owner,
+              "Invalid REGEX pattern:\n" + msg,
+              "Invalid Notification Rule",
+              JOptionPane.ERROR_MESSAGE);
+          continue;
+        }
+      }
+
+      return new NotificationRule(
+          label.getText(),
+          selectedType,
+          patternText,
+          enabled.isSelected(),
+          caseSensitive.isSelected(),
+          selectedType == NotificationRule.Type.WORD && wholeWord.isSelected(),
+          colorHex[0]);
     }
   }
 
@@ -6999,33 +7178,7 @@ panel.setOpaque(false);
 
   private record IrcEventNotificationControls(
       JTable table,
-      IrcEventNotificationTableModel model,
-      JCheckBox detailEnabled,
-      JComboBox<IrcEventNotificationRule.EventType> detailEvent,
-      JComboBox<IrcEventNotificationRule.SourceMode> detailSource,
-      JTextField detailSourcePattern,
-      JComboBox<IrcEventNotificationRule.ChannelScope> detailChannelScope,
-      JTextField detailChannelPatterns,
-      JComboBox<IrcEventNotificationRule.FocusScope> detailFocus,
-      JCheckBox detailToast,
-      JCheckBox detailStatusBar,
-      JCheckBox detailNode,
-      JCheckBox detailSound,
-      JComboBox<BuiltInSound> sound,
-      JCheckBox useCustom,
-      JTextField customPath,
-      JButton browseCustom,
-      JButton clearCustom,
-      JButton testSound,
-      JCheckBox runScript,
-      JTextField scriptPath,
-      JTextField scriptArgs,
-      JTextField scriptWorkingDirectory,
-      JButton browseScript,
-      JButton clearScript,
-      JButton browseScriptWorkingDirectory,
-      JButton clearScriptWorkingDirectory,
-      JLabel selectionHint
+      IrcEventNotificationTableModel model
   ) {
   }
 
@@ -7057,28 +7210,16 @@ panel.setOpaque(false);
   private static final class IrcEventNotificationTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
     static final int COL_EVENT = 1;
-    static final int COL_SOURCE = 2;
-    static final int COL_SOURCE_PATTERN = 3;
-    static final int COL_TOAST = 4;
-    static final int COL_STATUS_BAR = 5;
-    static final int COL_FOCUS_SCOPE = 6;
-    static final int COL_NOTIFICATIONS_NODE = 7;
-    static final int COL_SOUND = 8;
-    static final int COL_CHANNEL_SCOPE = 9;
-    static final int COL_CHANNEL_PATTERNS = 10;
+    static final int COL_SOURCE_SUMMARY = 2;
+    static final int COL_CHANNEL_SUMMARY = 3;
+    static final int COL_ACTIONS_SUMMARY = 4;
 
     private static final String[] COLS = new String[] {
         "Enabled",
         "Event",
         "Source",
-        "Source Match",
-        "Toast",
-        "Status Bar",
-        "Focus",
-        "Node",
-        "Sound",
-        "Channel Scope",
-        "Channels"
+        "Channel",
+        "Actions"
     };
 
     private final List<MutableRule> rows = new ArrayList<>();
@@ -7096,123 +7237,35 @@ panel.setOpaque(false);
       return rows.stream().map(MutableRule::toRule).toList();
     }
 
-    boolean enabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).enabled;
-    }
-
-    IrcEventNotificationRule.EventType eventTypeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
-      return rows.get(row).eventType;
-    }
-
-    IrcEventNotificationRule.SourceMode sourceModeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.SourceMode.ANY;
-      return rows.get(row).sourceMode;
-    }
-
-    String sourcePatternAt(int row) {
+    IrcEventNotificationRule ruleAt(int row) {
       if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).sourcePattern;
+      MutableRule m = rows.get(row);
+      return m != null ? m.toRule() : null;
     }
 
-    IrcEventNotificationRule.ChannelScope channelScopeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.ChannelScope.ALL;
-      return rows.get(row).channelScope;
-    }
-
-    String channelPatternsAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).channelPatterns;
-    }
-
-    IrcEventNotificationRule.FocusScope focusScopeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
-      return rows.get(row).focusScope;
-    }
-
-    boolean toastEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).toastEnabled;
-    }
-
-    boolean statusBarEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).statusBarEnabled;
-    }
-
-    boolean notificationsNodeEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).notificationsNodeEnabled;
-    }
-
-    String soundIdAt(int row) {
-      if (row < 0 || row >= rows.size()) return BuiltInSound.NOTIF_1.name();
-      return rows.get(row).soundId;
-    }
-
-    boolean soundEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).soundEnabled;
-    }
-
-    boolean soundUseCustomAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).soundUseCustom;
-    }
-
-    String soundCustomPathAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).soundCustomPath;
-    }
-
-    boolean scriptEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).scriptEnabled;
-    }
-
-    String scriptPathAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).scriptPath;
-    }
-
-    String scriptArgsAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).scriptArgs;
-    }
-
-    String scriptWorkingDirectoryAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).scriptWorkingDirectory;
-    }
-
-    void setSoundConfig(int row, String soundId, boolean soundUseCustom, String soundCustomPath) {
+    void setRule(int row, IrcEventNotificationRule rule) {
       if (row < 0 || row >= rows.size()) return;
-      MutableRule r = rows.get(row);
-      r.soundId = BuiltInSound.fromId(soundId).name();
-      String path = Objects.toString(soundCustomPath, "").trim();
-      if (path.isBlank()) path = null;
-      r.soundCustomPath = path;
-      // Keep the checkbox state in the editor model even if a file has not been chosen yet.
-      // The immutable rule constructor still normalizes invalid persisted combinations.
-      r.soundUseCustom = soundUseCustom;
+      rows.set(row, MutableRule.from(rule));
       fireTableRowsUpdated(row, row);
     }
 
-    void setScriptConfig(int row, boolean scriptEnabled, String scriptPath, String scriptArgs, String scriptWorkingDirectory) {
+    void setEnabledAt(int row, boolean enabled) {
       if (row < 0 || row >= rows.size()) return;
-      MutableRule r = rows.get(row);
-      String path = Objects.toString(scriptPath, "").trim();
-      if (path.isBlank()) path = null;
-      r.scriptPath = path;
-      String args = Objects.toString(scriptArgs, "").trim();
-      if (args.isBlank()) args = null;
-      r.scriptArgs = args;
-      String cwd = Objects.toString(scriptWorkingDirectory, "").trim();
-      if (cwd.isBlank()) cwd = null;
-      r.scriptWorkingDirectory = cwd;
-      r.scriptEnabled = scriptEnabled && path != null;
+      MutableRule current = rows.get(row);
+      if (current == null || current.enabled == enabled) return;
+      current.enabled = enabled;
       fireTableRowsUpdated(row, row);
+    }
+
+    static String effectiveRuleLabel(IrcEventNotificationRule rule) {
+      if (rule == null) return "(rule)";
+      String event =
+          rule.eventType() != null ? Objects.toString(rule.eventType(), "").trim() : "";
+      String source =
+          rule.sourceMode() != null ? Objects.toString(rule.sourceMode(), "").trim() : "";
+      if (event.isEmpty()) event = "Event";
+      if (source.isEmpty()) return event;
+      return event + " (" + source + ")";
     }
 
     int addRule(IrcEventNotificationRule rule) {
@@ -7301,15 +7354,7 @@ panel.setOpaque(false);
 
     @Override
     public Class<?> getColumnClass(int columnIndex) {
-      return switch (columnIndex) {
-        case COL_ENABLED, COL_TOAST, COL_STATUS_BAR, COL_NOTIFICATIONS_NODE, COL_SOUND ->
-            Boolean.class;
-        case COL_EVENT -> IrcEventNotificationRule.EventType.class;
-        case COL_SOURCE -> IrcEventNotificationRule.SourceMode.class;
-        case COL_FOCUS_SCOPE -> IrcEventNotificationRule.FocusScope.class;
-        case COL_CHANNEL_SCOPE -> IrcEventNotificationRule.ChannelScope.class;
-        default -> String.class;
-      };
+      return columnIndex == COL_ENABLED ? Boolean.class : String.class;
     }
 
     @Override
@@ -7323,77 +7368,22 @@ panel.setOpaque(false);
       MutableRule r = rows.get(rowIndex);
       return switch (columnIndex) {
         case COL_ENABLED -> r.enabled;
-        case COL_EVENT -> r.eventType;
-        case COL_SOURCE -> r.sourceMode;
-        case COL_SOURCE_PATTERN -> r.sourcePattern;
-        case COL_TOAST -> r.toastEnabled;
-        case COL_STATUS_BAR -> r.statusBarEnabled;
-        case COL_FOCUS_SCOPE -> r.focusScope;
-        case COL_NOTIFICATIONS_NODE -> r.notificationsNodeEnabled;
-        case COL_SOUND -> r.soundEnabled;
-        case COL_CHANNEL_SCOPE -> r.channelScope;
-        case COL_CHANNEL_PATTERNS -> r.channelPatterns;
+        case COL_EVENT -> Objects.toString(r.eventType, "");
+        case COL_SOURCE_SUMMARY -> summarizeSource(r);
+        case COL_CHANNEL_SUMMARY -> summarizeChannel(r);
+        case COL_ACTIONS_SUMMARY -> summarizeActions(r);
         default -> null;
       };
     }
 
-    @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return;
-      MutableRule r = rows.get(rowIndex);
-
-      switch (columnIndex) {
-        case COL_ENABLED -> r.enabled = asBool(aValue);
-        case COL_EVENT -> {
-          r.eventType = asEventType(aValue);
-          applyDefaultSoundForEventIfGeneric(r);
-        }
-        case COL_SOURCE -> {
-          r.sourceMode = asSourceMode(aValue);
-          if (!sourcePatternAllowed(r.sourceMode)) {
-            r.sourcePattern = null;
-          }
-          applyDefaultSoundForEventIfGeneric(r);
-        }
-        case COL_SOURCE_PATTERN -> {
-          if (sourcePatternAllowed(r.sourceMode)) {
-            r.sourcePattern = trimToNull(aValue);
-          } else {
-            r.sourcePattern = null;
-          }
-        }
-        case COL_TOAST -> r.toastEnabled = asBool(aValue);
-        case COL_STATUS_BAR -> r.statusBarEnabled = asBool(aValue);
-        case COL_FOCUS_SCOPE -> r.focusScope = asFocusScope(aValue);
-        case COL_NOTIFICATIONS_NODE -> r.notificationsNodeEnabled = asBool(aValue);
-        case COL_SOUND -> r.soundEnabled = asBool(aValue);
-        case COL_CHANNEL_SCOPE -> {
-          r.channelScope = asChannelScope(aValue);
-          if (!channelPatternAllowed(r.channelScope)) {
-            r.channelPatterns = null;
-          }
-        }
-        case COL_CHANNEL_PATTERNS -> {
-          if (channelPatternAllowed(r.channelScope)) {
-            r.channelPatterns = trimToNull(aValue);
-          } else {
-            r.channelPatterns = null;
-          }
-        }
-        default -> {
-        }
-      }
-
-      fireTableRowsUpdated(rowIndex, rowIndex);
-    }
-
-    private static void applyDefaultSoundForEventIfGeneric(MutableRule r) {
-      if (r == null || r.soundUseCustom) return;
-
-      String current = BuiltInSound.fromId(r.soundId).name();
-      if (!BuiltInSound.NOTIF_1.name().equals(current)) return;
-
-      r.soundId = defaultBuiltInSoundForIrcEventRule(r.eventType).name();
+    private static String summarizeSource(MutableRule r) {
+      if (r == null) return "";
+      IrcEventNotificationRule.SourceMode mode =
+          r.sourceMode != null ? r.sourceMode : IrcEventNotificationRule.SourceMode.ANY;
+      String label = Objects.toString(mode, "");
+      if (!sourcePatternAllowed(mode)) return label;
+      String pattern = trimToNull(r.sourcePattern);
+      return pattern == null ? label + ": (empty)" : label + ": " + truncate(pattern, 56);
     }
 
     private static boolean sourcePatternAllowed(IrcEventNotificationRule.SourceMode mode) {
@@ -7407,58 +7397,60 @@ panel.setOpaque(false);
           || scope == IrcEventNotificationRule.ChannelScope.ALL_EXCEPT;
     }
 
-    private static boolean asBool(Object v) {
-      if (v instanceof Boolean b) return b;
-      return Boolean.parseBoolean(Objects.toString(v, "false"));
+    private static String summarizeChannel(MutableRule r) {
+      if (r == null) return "";
+      IrcEventNotificationRule.ChannelScope scope =
+          r.channelScope != null ? r.channelScope : IrcEventNotificationRule.ChannelScope.ALL;
+      String label = Objects.toString(scope, "");
+      if (!channelPatternAllowed(scope)) return label;
+      String patterns = trimToNull(r.channelPatterns);
+      return patterns == null ? label + ": (empty)" : label + ": " + truncate(patterns, 56);
     }
 
-    private static IrcEventNotificationRule.EventType asEventType(Object v) {
-      if (v instanceof IrcEventNotificationRule.EventType t) return t;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
-      try {
-        return IrcEventNotificationRule.EventType.valueOf(s);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+    private static String summarizeActions(MutableRule r) {
+      if (r == null) return "";
+      List<String> parts = new ArrayList<>();
+      if (r.toastEnabled) {
+        IrcEventNotificationRule.FocusScope focus =
+            r.focusScope != null
+                ? r.focusScope
+                : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+        parts.add("Toast(" + focus + ")");
       }
-    }
-
-    private static IrcEventNotificationRule.SourceMode asSourceMode(Object v) {
-      if (v instanceof IrcEventNotificationRule.SourceMode f) return f;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return IrcEventNotificationRule.SourceMode.ANY;
-      try {
-        return IrcEventNotificationRule.SourceMode.valueOf(s);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.SourceMode.ANY;
+      if (r.statusBarEnabled) parts.add("Status bar");
+      if (r.notificationsNodeEnabled) parts.add("Node");
+      if (r.soundEnabled) {
+        if (r.soundUseCustom && trimToNull(r.soundCustomPath) != null) {
+          parts.add("Sound(custom)");
+        } else {
+          BuiltInSound sound = BuiltInSound.fromId(r.soundId);
+          parts.add("Sound(" + sound.displayNameForUi() + ")");
+        }
       }
-    }
-
-    private static IrcEventNotificationRule.FocusScope asFocusScope(Object v) {
-      if (v instanceof IrcEventNotificationRule.FocusScope f) return f;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
-      try {
-        return IrcEventNotificationRule.FocusScope.valueOf(s);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+      if (r.scriptEnabled) {
+        String script = trimToNull(r.scriptPath);
+        if (script == null) {
+          parts.add("Script");
+        } else {
+          int slash = Math.max(script.lastIndexOf('/'), script.lastIndexOf('\\'));
+          String leaf = (slash >= 0 && slash < (script.length() - 1)) ? script.substring(slash + 1) : script;
+          parts.add("Script(" + truncate(leaf, 26) + ")");
+        }
       }
+      if (parts.isEmpty()) return "(none)";
+      return String.join(", ", parts);
     }
 
-    private static IrcEventNotificationRule.ChannelScope asChannelScope(Object v) {
-      if (v instanceof IrcEventNotificationRule.ChannelScope s) return s;
-      String raw = Objects.toString(v, "").trim();
-      if (raw.isEmpty()) return IrcEventNotificationRule.ChannelScope.ALL;
-      try {
-        return IrcEventNotificationRule.ChannelScope.valueOf(raw);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.ChannelScope.ALL;
-      }
+    private static String trimToNull(String raw) {
+      String value = Objects.toString(raw, "").trim();
+      return value.isEmpty() ? null : value;
     }
 
-    private static String trimToNull(Object v) {
-      String s = Objects.toString(v, "").trim();
-      return s.isEmpty() ? null : s;
+    private static String truncate(String value, int maxLen) {
+      if (value == null) return "";
+      String v = value.trim();
+      if (v.length() <= maxLen) return v;
+      return v.substring(0, Math.max(0, maxLen - 1)) + "…";
     }
 
     private static final class MutableRule {
@@ -7540,7 +7532,7 @@ panel.setOpaque(false);
           m.focusScope = IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
           m.notificationsNodeEnabled = true;
           m.soundEnabled = false;
-          m.soundId = BuiltInSound.NOTIF_1.name();
+          m.soundId = defaultBuiltInSoundForIrcEventRule(m.eventType).name();
           m.soundUseCustom = false;
           m.soundCustomPath = null;
           m.scriptEnabled = false;
@@ -7767,21 +7759,17 @@ panel.setOpaque(false);
 
   private static final class NotificationRulesTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
-    static final int COL_TYPE = 1;
-    static final int COL_LABEL = 2;
-    static final int COL_PATTERN = 3;
+    static final int COL_LABEL = 1;
+    static final int COL_MATCH = 2;
+    static final int COL_OPTIONS = 3;
     static final int COL_COLOR = 4;
-    static final int COL_CASE = 5;
-    static final int COL_WHOLE = 6;
 
     private static final String[] COLS = new String[] {
         "Enabled",
-        "Type",
         "Label",
-        "Pattern",
+        "Match",
+        "Options",
         "Color",
-        "Case",
-        "Whole"
     };
 
     private final List<MutableRule> rows = new ArrayList<>();
@@ -7797,6 +7785,26 @@ panel.setOpaque(false);
 
     List<NotificationRule> snapshot() {
       return rows.stream().map(MutableRule::toRule).toList();
+    }
+
+    NotificationRule ruleAt(int row) {
+      if (row < 0 || row >= rows.size()) return null;
+      MutableRule m = rows.get(row);
+      return m != null ? m.toRule() : null;
+    }
+
+    void setRule(int row, NotificationRule rule) {
+      if (row < 0 || row >= rows.size()) return;
+      rows.set(row, MutableRule.from(rule));
+      fireTableRowsUpdated(row, row);
+    }
+
+    static String effectiveRuleLabel(NotificationRule rule) {
+      if (rule == null) return "(unnamed)";
+      String label = Objects.toString(rule.label(), "").trim();
+      if (!label.isEmpty()) return label;
+      String pattern = Objects.toString(rule.pattern(), "").trim();
+      return pattern.isEmpty() ? "(unnamed)" : pattern;
     }
 
     String highlightFgAt(int row) {
@@ -7892,20 +7900,13 @@ panel.setOpaque(false);
 
     @Override
     public Class<?> getColumnClass(int columnIndex) {
-      return switch (columnIndex) {
-        case COL_ENABLED, COL_CASE, COL_WHOLE -> Boolean.class;
-        case COL_TYPE -> NotificationRule.Type.class;
-        default -> String.class;
-      };
+      if (columnIndex == COL_ENABLED) return Boolean.class;
+      return String.class;
     }
 
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return false;
-      if (columnIndex == COL_WHOLE) {
-        return rows.get(rowIndex).type == NotificationRule.Type.WORD;
-      }
-      return true;
+      return false;
     }
 
     @Override
@@ -7914,71 +7915,29 @@ panel.setOpaque(false);
       MutableRule r = rows.get(rowIndex);
       return switch (columnIndex) {
         case COL_ENABLED -> r.enabled;
-        case COL_TYPE -> r.type;
-        case COL_LABEL -> r.label;
-        case COL_PATTERN -> r.pattern;
-        case COL_COLOR -> r.highlightFg;
-        case COL_CASE -> r.caseSensitive;
-        case COL_WHOLE -> r.wholeWord;
+        case COL_LABEL -> effectiveRuleLabel(r.toRule());
+        case COL_MATCH -> summarizeMatch(r);
+        case COL_OPTIONS -> summarizeOptions(r);
+        case COL_COLOR -> Objects.toString(r.highlightFg, "");
         default -> null;
       };
     }
 
-    @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return;
-      MutableRule r = rows.get(rowIndex);
+    private static String summarizeMatch(MutableRule r) {
+      if (r == null) return "";
+      String pattern = Objects.toString(r.pattern, "").trim();
+      if (pattern.isEmpty()) pattern = "(empty)";
+      String type = r.type == NotificationRule.Type.REGEX ? "REGEX" : "WORD";
+      return type + ": " + pattern;
+    }
 
-      switch (columnIndex) {
-        case COL_ENABLED -> r.enabled = asBool(aValue);
-        case COL_TYPE -> {
-          NotificationRule.Type t = asType(aValue);
-          if (t == null) t = NotificationRule.Type.WORD;
-          r.type = t;
-          if (t == NotificationRule.Type.REGEX) {
-            r.wholeWord = false;
-          }
-        }
-        case COL_LABEL -> r.label = asStr(aValue);
-        case COL_PATTERN -> {
-          r.pattern = asStr(aValue);
-          if (r.pattern.isBlank()) {
-            r.enabled = false;
-          }
-        }
-        case COL_COLOR -> r.highlightFg = normalizeHexColor(asStr(aValue));
-        case COL_CASE -> r.caseSensitive = asBool(aValue);
-        case COL_WHOLE -> {
-          if (r.type == NotificationRule.Type.WORD) {
-            r.wholeWord = asBool(aValue);
-          }
-        }
-        default -> {
-        }
+    private static String summarizeOptions(MutableRule r) {
+      if (r == null) return "";
+      String caseLabel = r.caseSensitive ? "Case" : "No case";
+      if (r.type == NotificationRule.Type.WORD) {
+        return caseLabel + ", " + (r.wholeWord ? "Whole word" : "Substring");
       }
-
-      fireTableRowsUpdated(rowIndex, rowIndex);
-    }
-
-    private static String asStr(Object v) {
-      String s = Objects.toString(v, "");
-      return s.trim();
-    }
-
-    private static boolean asBool(Object v) {
-      if (v instanceof Boolean b) return b;
-      return Boolean.parseBoolean(Objects.toString(v, "false"));
-    }
-
-    private static NotificationRule.Type asType(Object v) {
-      if (v instanceof NotificationRule.Type t) return t;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return null;
-      try {
-        return NotificationRule.Type.valueOf(s);
-      } catch (Exception ignored) {
-        return null;
-      }
+      return caseLabel;
     }
 
     private static String normalizeHexColor(String raw) {
