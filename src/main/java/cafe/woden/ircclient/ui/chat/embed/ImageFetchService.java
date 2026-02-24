@@ -8,15 +8,15 @@ import io.reactivex.rxjava3.core.Single;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
+import java.lang.ref.SoftReference;
 import java.net.Proxy;
+import java.net.URI;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.lang.ref.SoftReference;
-import java.util.HashMap;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -58,15 +58,20 @@ public class ImageFetchService {
     }
 
     // Deduplicate concurrent requests.
-    return inflight.computeIfAbsent(key, k ->
-        Single.fromCallable(() -> download(sid, base))
-            .subscribeOn(RxVirtualSchedulers.io())
-            .doOnSuccess(bytes -> cache.put(k, new SoftReference<>(bytes)))
-            .doOnError(err -> log.warn("Image fetch failed for {}: {}", safeForLog(base), summarizeErr(err)))
-            .doFinally(() -> inflight.remove(k))
-            // cache() turns this into a replaying Single so late subscribers get the same outcome.
-            .cache()
-    );
+    return inflight.computeIfAbsent(
+        key,
+        k ->
+            Single.fromCallable(() -> download(sid, base))
+                .subscribeOn(RxVirtualSchedulers.io())
+                .doOnSuccess(bytes -> cache.put(k, new SoftReference<>(bytes)))
+                .doOnError(
+                    err ->
+                        log.warn(
+                            "Image fetch failed for {}: {}", safeForLog(base), summarizeErr(err)))
+                .doFinally(() -> inflight.remove(k))
+                // cache() turns this into a replaying Single so late subscribers get the same
+                // outcome.
+                .cache());
   }
 
   private byte[] getCached(String key) {
@@ -88,7 +93,8 @@ public class ImageFetchService {
     return download(serverId, url, 0);
   }
 
-  private byte[] download(String serverId, String url, int attempt) throws IOException, InterruptedException {
+  private byte[] download(String serverId, String url, int attempt)
+      throws IOException, InterruptedException {
     URI uri = URI.create(url);
     String scheme = uri.getScheme();
     if (scheme == null) throw new IOException("URL has no scheme: " + url);
@@ -100,7 +106,9 @@ public class ImageFetchService {
     // Use HttpURLConnection (via HttpLite) so SOCKS proxies work.
     // java.net.http.HttpClient does not support SOCKS proxies.
     Map<String, String> headers = new HashMap<>();
-    headers.put("User-Agent", needsInstagramReferer(uri) ? PreviewHttp.BROWSER_USER_AGENT : PreviewHttp.USER_AGENT);
+    headers.put(
+        "User-Agent",
+        needsInstagramReferer(uri) ? PreviewHttp.BROWSER_USER_AGENT : PreviewHttp.USER_AGENT);
     headers.put("Accept-Language", PreviewHttp.ACCEPT_LANGUAGE);
     headers.put("Accept-Encoding", "gzip");
     // IMPORTANT: Do NOT advertise AVIF by default.
@@ -122,21 +130,21 @@ public class ImageFetchService {
       headers.put("Referer", "https://www.instagram.com/");
     }
 
-    ProxyPlan plan = (proxyResolver != null) ? proxyResolver.planForServer(serverId) : ProxyPlan.direct();
+    ProxyPlan plan =
+        (proxyResolver != null) ? proxyResolver.planForServer(serverId) : ProxyPlan.direct();
     Proxy proxy = (plan.proxy() != null) ? plan.proxy() : Proxy.NO_PROXY;
-    HttpLite.Response<InputStream> res = HttpLite.getStream(
-        uri,
-        headers,
-        proxy,
-        plan.connectTimeoutMs(),
-        plan.readTimeoutMs()
-    );
+    HttpLite.Response<InputStream> res =
+        HttpLite.getStream(uri, headers, proxy, plan.connectTimeoutMs(), plan.readTimeoutMs());
     int code = res.statusCode();
     String contentType = res.headers().firstValue("content-type").orElse("");
     long contentLength = res.headers().firstValueAsLong("content-length").orElse(-1L);
     if (code < 200 || code >= 300) {
-      log.warn("Image fetch HTTP {} for {} (content-type={}, content-length={})",
-          code, safeForLog(url), safeForLog(contentType), contentLength);
+      log.warn(
+          "Image fetch HTTP {} for {} (content-type={}, content-length={})",
+          code,
+          safeForLog(url),
+          safeForLog(contentType),
+          contentLength);
 
       // Ensure we don't leak the connection.
       try (InputStream ignored = res.body()) {
@@ -148,7 +156,10 @@ public class ImageFetchService {
       if (attempt == 0) {
         String fallback = maybeUnsizedAmazonUrl(url);
         if (!fallback.equals(url)) {
-          log.warn("Retrying Amazon image without size token after HTTP {}: {}", code, safeForLog(fallback));
+          log.warn(
+              "Retrying Amazon image without size token after HTTP {}: {}",
+              code,
+              safeForLog(fallback));
           return download(serverId, fallback, attempt + 1);
         }
       }
@@ -165,15 +176,19 @@ public class ImageFetchService {
       if (attempt == 0) {
         String sized = maybeSizedAmazonUrl(url, 512);
         if (!sized.equals(url)) {
-          log.warn("Image too large by content-length ({} bytes > {}), retrying sized Amazon URL: {}",
-              contentLength, MAX_BYTES, safeForLog(sized));
+          log.warn(
+              "Image too large by content-length ({} bytes > {}), retrying sized Amazon URL: {}",
+              contentLength,
+              MAX_BYTES,
+              safeForLog(sized));
           return download(serverId, sized, attempt + 1);
         }
       }
       throw new IOException("Image too large (" + contentLength + " bytes > " + MAX_BYTES + ")");
     }
 
-    try (InputStream in = res.body(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+    try (InputStream in = res.body();
+        ByteArrayOutputStream out = new ByteArrayOutputStream()) {
       byte[] buf = new byte[8192];
       int n;
       int total = 0;
@@ -187,8 +202,10 @@ public class ImageFetchService {
           if (attempt == 0) {
             String sized = maybeSizedAmazonUrl(url, 512);
             if (!sized.equals(url)) {
-              log.warn("Image too large while streaming (> {} bytes), retrying sized Amazon URL: {}",
-                  MAX_BYTES, safeForLog(sized));
+              log.warn(
+                  "Image too large while streaming (> {} bytes), retrying sized Amazon URL: {}",
+                  MAX_BYTES,
+                  safeForLog(sized));
               return download(serverId, sized, attempt + 1);
             }
           }
@@ -211,8 +228,12 @@ public class ImageFetchService {
       // Detect that early and log a useful warning.
       if (looksLikeHtmlResponse(contentType, sample, sampleN)) {
         String sampleText = safeSampleText(sample, sampleN);
-        log.warn("Image fetch got HTML instead of an image for {} (content-type={}, bytes={}) sample={}",
-            safeForLog(url), safeForLog(contentType), bytes.length, safeForLog(sampleText));
+        log.warn(
+            "Image fetch got HTML instead of an image for {} (content-type={}, bytes={}) sample={}",
+            safeForLog(url),
+            safeForLog(contentType),
+            bytes.length,
+            safeForLog(sampleText));
         throw new IOException("Image endpoint returned HTML (likely blocked)");
       }
 
@@ -232,7 +253,10 @@ public class ImageFetchService {
     if (idx < 0) return url;
 
     String after = url.substring(idx + marker.length());
-    if (after.startsWith("UX") || after.startsWith("UY") || after.startsWith("SX") || after.startsWith("SY")) {
+    if (after.startsWith("UX")
+        || after.startsWith("UY")
+        || after.startsWith("SX")
+        || after.startsWith("SY")) {
       return url;
     }
 
@@ -289,18 +313,23 @@ public class ImageFetchService {
       if (contentType != null && !contentType.isBlank()) {
         // If the server explicitly says it's HTML/XML, treat it as a block page.
         String ct = contentType.toLowerCase(Locale.ROOT);
-        if (ct.contains("text/html") || ct.contains("application/xhtml") || ct.contains("xml")) return true;
+        if (ct.contains("text/html") || ct.contains("application/xhtml") || ct.contains("xml"))
+          return true;
         if (ct.startsWith("image/")) return false;
       }
       if (sample == null || sampleN <= 0) return false;
 
       // Heuristic sniff: HTML typically starts with '<' or contains known bot-check text.
       int i = 0;
-      while (i < sampleN && (sample[i] == '\n' || sample[i] == '\r' || sample[i] == '\t' || sample[i] == ' ')) i++;
+      while (i < sampleN
+          && (sample[i] == '\n' || sample[i] == '\r' || sample[i] == '\t' || sample[i] == ' ')) i++;
       if (i < sampleN && sample[i] == '<') return true;
       String s = safeSampleText(sample, sampleN).toLowerCase(Locale.ROOT);
-      return s.contains("not a robot") || s.contains("verify") || s.contains("javascript is disabled")
-          || s.contains("access denied") || s.contains("captcha");
+      return s.contains("not a robot")
+          || s.contains("verify")
+          || s.contains("javascript is disabled")
+          || s.contains("access denied")
+          || s.contains("captcha");
     } catch (Exception ignored) {
       return false;
     }

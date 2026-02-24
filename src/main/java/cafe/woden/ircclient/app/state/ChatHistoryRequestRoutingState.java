@@ -8,9 +8,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks explicit user-triggered CHATHISTORY requests so arriving batches can be rendered live.
- */
+/** Tracks explicit user-triggered CHATHISTORY requests so arriving batches can be rendered live. */
 @Component
 public class ChatHistoryRequestRoutingState {
 
@@ -26,8 +24,7 @@ public class ChatHistoryRequestRoutingState {
       Instant requestedAt,
       int limit,
       String selector,
-      QueryMode queryMode
-  ) {
+      QueryMode queryMode) {
     public PendingRequest {
       requestedAt = (requestedAt == null) ? Instant.now() : requestedAt;
       selector = Objects.toString(selector, "").trim();
@@ -36,7 +33,8 @@ public class ChatHistoryRequestRoutingState {
     }
   }
 
-  private final ConcurrentHashMap<RequestKey, PendingRequest> pendingByTarget = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<RequestKey, PendingRequest> pendingByTarget =
+      new ConcurrentHashMap<>();
 
   public void remember(
       String serverId,
@@ -44,8 +42,7 @@ public class ChatHistoryRequestRoutingState {
       TargetRef originTarget,
       int limit,
       String selector,
-      Instant requestedAt
-  ) {
+      Instant requestedAt) {
     remember(serverId, target, originTarget, limit, selector, requestedAt, QueryMode.BEFORE);
   }
 
@@ -56,8 +53,7 @@ public class ChatHistoryRequestRoutingState {
       int limit,
       String selector,
       Instant requestedAt,
-      QueryMode queryMode
-  ) {
+      QueryMode queryMode) {
     String sid = normalizeServer(serverId);
     String tgt = normalizeTarget(target);
     if (sid.isEmpty() || tgt.isEmpty() || originTarget == null) return;

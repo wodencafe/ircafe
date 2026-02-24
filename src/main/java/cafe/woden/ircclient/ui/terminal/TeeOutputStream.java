@@ -7,8 +7,8 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * OutputStream that writes to a delegate OutputStream and also forwards the bytes
- * (decoded as text) to a consumer.
+ * OutputStream that writes to a delegate OutputStream and also forwards the bytes (decoded as text)
+ * to a consumer.
  */
 final class TeeOutputStream extends OutputStream {
 

@@ -3,18 +3,18 @@ package cafe.woden.ircclient.app.notifications;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import org.springframework.context.annotation.Lazy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 
 /**
  * Evaluates configured IRC-event notification rules and dispatches matching notification actions.
@@ -37,8 +37,7 @@ public class IrcEventNotificationService {
       TrayNotificationService trayNotificationService,
       NotificationStore notificationStore,
       PushyNotificationService pushyNotificationService,
-      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService scriptExecutor
-  ) {
+      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService scriptExecutor) {
     this.rulesBus = rulesBus;
     this.trayNotificationService = trayNotificationService;
     this.notificationStore = notificationStore;
@@ -46,9 +45,7 @@ public class IrcEventNotificationService {
     this.scriptExecutor = scriptExecutor;
   }
 
-  /**
-   * Returns true if at least one rule matched and actions were evaluated.
-   */
+  /** Returns true if at least one rule matched and actions were evaluated. */
   public boolean notifyConfigured(
       IrcEventNotificationRule.EventType eventType,
       String serverId,
@@ -58,8 +55,7 @@ public class IrcEventNotificationService {
       String title,
       String body,
       String activeServerId,
-      String activeTarget
-  ) {
+      String activeTarget) {
     if (eventType == null) return false;
 
     List<IrcEventNotificationRule> rules = rulesBus != null ? rulesBus.get() : List.of();
@@ -85,7 +81,8 @@ public class IrcEventNotificationService {
 
     for (IrcEventNotificationRule matched : rules) {
       if (matched == null) continue;
-      if (!matched.matches(eventType, sourceNick, sourceIsSelf, channel, activeSameServer, activeTgt)) continue;
+      if (!matched.matches(
+          eventType, sourceNick, sourceIsSelf, channel, activeSameServer, activeTgt)) continue;
       anyMatched = true;
       dispatchMatchedRule(matched, eventType, sid, target, source, sourceIsSelf, t, b);
     }
@@ -101,8 +98,7 @@ public class IrcEventNotificationService {
       String source,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
     if (matched == null) return;
 
     if (matched.notificationsNodeEnabled() && notificationStore != null) {
@@ -133,7 +129,8 @@ public class IrcEventNotificationService {
 
     if (pushyNotificationService != null) {
       try {
-        pushyNotificationService.notifyEvent(eventType, sid, target, source, sourceIsSelf, title, body);
+        pushyNotificationService.notifyEvent(
+            eventType, sid, target, source, sourceIsSelf, title, body);
       } catch (Exception ignored) {
       }
     }
@@ -159,19 +156,31 @@ public class IrcEventNotificationService {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
     String script = Objects.toString(rule != null ? rule.scriptPath() : "", "").trim();
     if (script.isEmpty()) return;
 
     String scriptArgs = Objects.toString(rule != null ? rule.scriptArgs() : "", "").trim();
     if (scriptArgs.isEmpty()) scriptArgs = null;
-    String scriptWorkingDirectory = Objects.toString(rule != null ? rule.scriptWorkingDirectory() : "", "").trim();
+    String scriptWorkingDirectory =
+        Objects.toString(rule != null ? rule.scriptWorkingDirectory() : "", "").trim();
     if (scriptWorkingDirectory.isEmpty()) scriptWorkingDirectory = null;
 
     String args = scriptArgs;
     String cwd = scriptWorkingDirectory;
-    scriptExecutor.execute(() -> runScript(script, args, cwd, eventType, serverId, channel, sourceNick, sourceIsSelf, title, body));
+    scriptExecutor.execute(
+        () ->
+            runScript(
+                script,
+                args,
+                cwd,
+                eventType,
+                serverId,
+                channel,
+                sourceNick,
+                sourceIsSelf,
+                title,
+                body));
   }
 
   private void runScript(
@@ -184,8 +193,7 @@ public class IrcEventNotificationService {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
     try {
       List<String> command = new ArrayList<>();
       command.add(scriptPath);
@@ -199,7 +207,9 @@ public class IrcEventNotificationService {
       if (scriptWorkingDirectory != null && !scriptWorkingDirectory.isBlank()) {
         File cwd = new File(scriptWorkingDirectory);
         if (!cwd.isDirectory()) {
-          log.warn("[ircafe] Event notification script working directory does not exist: {}", scriptWorkingDirectory);
+          log.warn(
+              "[ircafe] Event notification script working directory does not exist: {}",
+              scriptWorkingDirectory);
           return;
         }
         pb.directory(cwd);
@@ -210,7 +220,10 @@ public class IrcEventNotificationService {
       putEnv(env, "IRCAFE_SERVER_ID", serverId);
       putEnv(env, "IRCAFE_CHANNEL", channel);
       putEnv(env, "IRCAFE_SOURCE_NICK", sourceNick);
-      putEnv(env, "IRCAFE_SOURCE_IS_SELF", sourceIsSelf == null ? "unknown" : Boolean.toString(sourceIsSelf));
+      putEnv(
+          env,
+          "IRCAFE_SOURCE_IS_SELF",
+          sourceIsSelf == null ? "unknown" : Boolean.toString(sourceIsSelf));
       putEnv(env, "IRCAFE_TITLE", title);
       putEnv(env, "IRCAFE_BODY", body);
       putEnv(env, "IRCAFE_TIMESTAMP_MS", Long.toString(System.currentTimeMillis()));
@@ -219,7 +232,10 @@ public class IrcEventNotificationService {
       boolean exited = p.waitFor(SCRIPT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       if (!exited) {
         p.destroyForcibly();
-        log.warn("[ircafe] Event notification script timed out after {}s: {}", SCRIPT_TIMEOUT_SECONDS, scriptPath);
+        log.warn(
+            "[ircafe] Event notification script timed out after {}s: {}",
+            SCRIPT_TIMEOUT_SECONDS,
+            scriptPath);
       }
     } catch (Exception ex) {
       log.warn("[ircafe] Could not run event notification script: {}", scriptPath, ex);

@@ -6,17 +6,14 @@ import cafe.woden.ircclient.logging.model.LogKind;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * Line context passed to filter evaluation.
- */
+/** Line context passed to filter evaluation. */
 public record FilterContext(
     TargetRef targetRef,
     LogKind kind,
     LogDirection direction,
     String fromNick,
     String text,
-    Set<String> tags
-) {
+    Set<String> tags) {
 
   public FilterContext {
     Objects.requireNonNull(targetRef, "targetRef");

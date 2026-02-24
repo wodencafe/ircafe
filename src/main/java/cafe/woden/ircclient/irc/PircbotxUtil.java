@@ -13,8 +13,7 @@ final class PircbotxUtil {
     if (n.isEmpty()) throw new IllegalArgumentException("nick is blank");
     if (n.contains("\r") || n.contains("\n"))
       throw new IllegalArgumentException("nick contains CR/LF");
-    if (n.contains(" "))
-      throw new IllegalArgumentException("nick contains spaces");
+    if (n.contains(" ")) throw new IllegalArgumentException("nick contains spaces");
     return n;
   }
 
@@ -23,8 +22,7 @@ final class PircbotxUtil {
     if (c.isEmpty()) throw new IllegalArgumentException("channel is blank");
     if (c.contains("\r") || c.contains("\n"))
       throw new IllegalArgumentException("channel contains CR/LF");
-    if (c.contains(" "))
-      throw new IllegalArgumentException("channel contains spaces");
+    if (c.contains(" ")) throw new IllegalArgumentException("channel contains spaces");
     if (!(c.startsWith("#") || c.startsWith("&")))
       throw new IllegalArgumentException("channel must start with # or & (got: " + c + ")");
     return c;
@@ -87,8 +85,8 @@ final class PircbotxUtil {
   }
 
   /**
-   * Best-effort hostmask derived from PircBotX's {@link User}.
-   * Returns empty string if no useful information exists.
+   * Best-effort hostmask derived from PircBotX's {@link User}. Returns empty string if no useful
+   * information exists.
    */
   static String hostmaskFromUser(User user) {
     if (user == null) return "";
@@ -117,9 +115,7 @@ final class PircbotxUtil {
     return "";
   }
 
-  /**
-   * True if hostmask contains something other than "*!*@*" placeholders.
-   */
+  /** True if hostmask contains something other than "*!*@*" placeholders. */
   static boolean isUsefulHostmask(String hostmask) {
     if (hostmask == null) return false;
     String hm = hostmask.trim();
@@ -132,7 +128,8 @@ final class PircbotxUtil {
     String ident = hm.substring(bang + 1, at).trim();
     String host = hm.substring(at + 1).trim();
 
-    // If both are unknown wildcards, this is just a placeholder derived from NAMES and isn't useful.
+    // If both are unknown wildcards, this is just a placeholder derived from NAMES and isn't
+    // useful.
     boolean identUnknown = ident.isEmpty() || "*".equals(ident);
     boolean hostUnknown = host.isEmpty() || "*".equals(host);
     return !(identUnknown && hostUnknown);

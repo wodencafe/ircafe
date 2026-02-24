@@ -29,7 +29,9 @@ import org.springframework.stereotype.Component;
  * GNOME/Linux notification backend using D-Bus (org.freedesktop.Notifications).
  *
  * <p>G1: Probe reachability + capabilities.
+ *
  * <p>G2: Send notifications via Notify().
+ *
  * <p>G3: Listen for ActionInvoked/NotificationClosed and dispatch our click handler.
  */
 @Component
@@ -50,18 +52,18 @@ public class GnomeDbusNotificationBackend {
   private volatile Boolean liveActionsSupported;
 
   public GnomeDbusNotificationBackend(
-      @Qualifier(ExecutorConfig.GNOME_DBUS_CLEANUP_SCHEDULER)
-      ScheduledExecutorService cleanup) {
+      @Qualifier(ExecutorConfig.GNOME_DBUS_CLEANUP_SCHEDULER) ScheduledExecutorService cleanup) {
     this.cleanup = cleanup;
   }
 
   /**
    * Sends a notification via D-Bus and registers a click handler.
    *
-   * <p>We use the "default" action key so a body click triggers ActionInvoked("default") on
-   * servers that support actions.
+   * <p>We use the "default" action key so a body click triggers ActionInvoked("default") on servers
+   * that support actions.
    */
-  public NotifyResult notifyWithDefaultAction(String summary, String body, int expireMs, Runnable onDefaultClick) {
+  public NotifyResult notifyWithDefaultAction(
+      String summary, String body, int expireMs, Runnable onDefaultClick) {
     if (!ensureLiveConnection()) {
       return NotifyResult.failed("DBus session bus not reachable");
     }
@@ -81,16 +83,16 @@ public class GnomeDbusNotificationBackend {
     hints.put("desktop-entry", new Variant<>("ircafe"));
 
     try {
-      UInt32 id = liveSvc.Notify(
-          "IRCafe",
-          new UInt32(0),
-          "",
-          Objects.toString(summary, ""),
-          Objects.toString(body, ""),
-          actions,
-          hints,
-          expireMs
-      );
+      UInt32 id =
+          liveSvc.Notify(
+              "IRCafe",
+              new UInt32(0),
+              "",
+              Objects.toString(summary, ""),
+              Objects.toString(body, ""),
+              actions,
+              hints,
+              expireMs);
       long longId = id == null ? 0L : id.longValue();
       if (longId > 0 && onDefaultClick != null) {
         long deadlineMs = System.currentTimeMillis() + Math.max(10_000L, expireMs + 30_000L);
@@ -130,11 +132,11 @@ public class GnomeDbusNotificationBackend {
 
     // Best-effort. If anything fails, we just mark it unavailable and fall back.
     try (DBusConnection conn = DBusConnectionBuilder.forSessionBus().build()) {
-      FreedesktopNotifications svc = conn.getRemoteObject(
-          "org.freedesktop.Notifications",
-          "/org/freedesktop/Notifications",
-          FreedesktopNotifications.class
-      );
+      FreedesktopNotifications svc =
+          conn.getRemoteObject(
+              "org.freedesktop.Notifications",
+              "/org/freedesktop/Notifications",
+              FreedesktopNotifications.class);
 
       List<String> caps;
       try {
@@ -145,14 +147,17 @@ public class GnomeDbusNotificationBackend {
         caps = Collections.emptyList();
       }
 
-      boolean actions = caps.stream().filter(Objects::nonNull)
-          .map(s -> s.toLowerCase(Locale.ROOT))
-          .anyMatch("actions"::equals);
+      boolean actions =
+          caps.stream()
+              .filter(Objects::nonNull)
+              .map(s -> s.toLowerCase(Locale.ROOT))
+              .anyMatch("actions"::equals);
 
       return new ProbeResult(true, true, actions, caps, Instant.now(), null);
     } catch (Throwable t) {
       // No session bus / not in a graphical session / service missing, etc.
-      return new ProbeResult(true, false, false, Collections.emptyList(), Instant.now(), t.toString());
+      return new ProbeResult(
+          true, false, false, Collections.emptyList(), Instant.now(), t.toString());
     }
   }
 
@@ -169,16 +174,19 @@ public class GnomeDbusNotificationBackend {
         synchronized (this) {
           if (liveConn == null || liveSvc == null) {
             liveConn = DBusConnectionBuilder.forSessionBus().build();
-            liveSvc = liveConn.getRemoteObject(
-                "org.freedesktop.Notifications",
-                "/org/freedesktop/Notifications",
-                FreedesktopNotifications.class
-            );
+            liveSvc =
+                liveConn.getRemoteObject(
+                    "org.freedesktop.Notifications",
+                    "/org/freedesktop/Notifications",
+                    FreedesktopNotifications.class);
             try {
               List<String> caps = liveSvc.GetCapabilities();
-              boolean actions = caps != null && caps.stream().filter(Objects::nonNull)
-                  .map(s -> s.toLowerCase(Locale.ROOT))
-                  .anyMatch("actions"::equals);
+              boolean actions =
+                  caps != null
+                      && caps.stream()
+                          .filter(Objects::nonNull)
+                          .map(s -> s.toLowerCase(Locale.ROOT))
+                          .anyMatch("actions"::equals);
               liveActionsSupported = actions;
             } catch (Throwable ignored) {
               // If capabilities can't be queried, assume no actions (safe default).
@@ -201,9 +209,11 @@ public class GnomeDbusNotificationBackend {
     if (!handlersInstalled.compareAndSet(false, true)) return;
 
     try {
-      liveConn.addSigHandler(FreedesktopNotifications.ActionInvoked.class,
+      liveConn.addSigHandler(
+          FreedesktopNotifications.ActionInvoked.class,
           (DBusSigHandler<FreedesktopNotifications.ActionInvoked>) this::onActionInvoked);
-      liveConn.addSigHandler(FreedesktopNotifications.NotificationClosed.class,
+      liveConn.addSigHandler(
+          FreedesktopNotifications.NotificationClosed.class,
           (DBusSigHandler<FreedesktopNotifications.NotificationClosed>) this::onNotificationClosed);
     } catch (Throwable t) {
       // If we can't install handlers, we still allow Notify() (non-clickable).
@@ -259,20 +269,16 @@ public class GnomeDbusNotificationBackend {
     }
   }
 
-  private record ClickEntry(Runnable onClick, long deadlineMs) {
-  }
+  private record ClickEntry(Runnable onClick, long deadlineMs) {}
 
-  /**
-   * Captures a single probe run.
-   */
+  /** Captures a single probe run. */
   public record ProbeResult(
       boolean linux,
       boolean sessionBusReachable,
       boolean actionsSupported,
       List<String> capabilities,
       Instant probedAt,
-      String error
-  ) {
+      String error) {
     static ProbeResult unsupportedOs() {
       return new ProbeResult(false, false, false, Collections.emptyList(), Instant.now(), null);
     }
@@ -283,9 +289,7 @@ public class GnomeDbusNotificationBackend {
     }
   }
 
-  /**
-   * Captures the outcome of a single Notify() attempt.
-   */
+  /** Captures the outcome of a single Notify() attempt. */
   public record NotifyResult(boolean sent, long id, String error) {
     static NotifyResult sent(long id) {
       return new NotifyResult(true, id, null);

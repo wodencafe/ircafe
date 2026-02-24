@@ -15,8 +15,8 @@ import java.util.Optional;
 /**
  * HTTP helper used by link preview resolvers.
  *
- * <p>Uses {@link java.net.HttpURLConnection} via {@link HttpLite} so that SOCKS proxies
- * can be applied (the JDK {@code java.net.http.HttpClient} does not support SOCKS).
+ * <p>Uses {@link java.net.HttpURLConnection} via {@link HttpLite} so that SOCKS proxies can be
+ * applied (the JDK {@code java.net.http.HttpClient} does not support SOCKS).
  */
 final class PreviewHttp {
 
@@ -27,11 +27,11 @@ final class PreviewHttp {
   static final String BROWSER_USER_AGENT =
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
   static final String ACCEPT_LANGUAGE = "en-US,en;q=0.9";
-  private static final Map<String, String> BASE_HEADERS = Map.of(
-      "User-Agent", USER_AGENT,
-      "Accept-Language", ACCEPT_LANGUAGE,
-      "Accept-Encoding", "gzip"
-  );
+  private static final Map<String, String> BASE_HEADERS =
+      Map.of(
+          "User-Agent", USER_AGENT,
+          "Accept-Language", ACCEPT_LANGUAGE,
+          "Accept-Encoding", "gzip");
 
   private final Proxy proxy;
   private final int connectTimeoutMs;
@@ -48,7 +48,8 @@ final class PreviewHttp {
     return getStream(uri, accept, Map.of());
   }
 
-  public HttpLite.Response<InputStream> getStream(URI uri, String accept, Map<String, String> extraHeaders) throws IOException {
+  public HttpLite.Response<InputStream> getStream(
+      URI uri, String accept, Map<String, String> extraHeaders) throws IOException {
     Map<String, String> headers = new HashMap<>(BASE_HEADERS);
     headers.put("Accept", accept);
     if (extraHeaders != null) headers.putAll(extraHeaders);
@@ -60,11 +61,10 @@ final class PreviewHttp {
     return getString(uri, Map.of());
   }
 
-  public HttpLite.Response<String> getString(URI uri, Map<String, String> extraHeaders) throws IOException {
+  public HttpLite.Response<String> getString(URI uri, Map<String, String> extraHeaders)
+      throws IOException {
     return getString(
-        uri,
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        extraHeaders);
+        uri, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", extraHeaders);
   }
 
   /**
@@ -74,7 +74,8 @@ final class PreviewHttp {
    * @param accept explicit Accept header (e.g. application/json)
    * @param extraHeaders optional extra headers (may be null)
    */
-  public HttpLite.Response<String> getString(URI uri, String accept, Map<String, String> extraHeaders) throws IOException {
+  public HttpLite.Response<String> getString(
+      URI uri, String accept, Map<String, String> extraHeaders) throws IOException {
     Map<String, String> headers = new HashMap<>(BASE_HEADERS);
     if (accept != null && !accept.isBlank()) {
       headers.put("Accept", accept);
@@ -123,35 +124,33 @@ final class PreviewHttp {
     }
   }
 
-/**
- * Read up to {@code maxBytes} bytes from a stream, returning raw bytes.
- * <p>
- * This is used by HTML-based resolvers that want to hand a byte-limited body to jsoup.
- * We intentionally swallow IO failures and return an empty array to keep resolvers robust.
- */
-public static byte[] readUpToBytes(InputStream in, int maxBytes) {
-  if (in == null || maxBytes <= 0) return new byte[0];
-  try (in) {
-    ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 16 * 1024));
-    byte[] buf = new byte[8 * 1024];
-    int remaining = maxBytes;
-    while (remaining > 0) {
-      int n = in.read(buf, 0, Math.min(buf.length, remaining));
-      if (n < 0) break;
-      out.write(buf, 0, n);
-      remaining -= n;
+  /**
+   * Read up to {@code maxBytes} bytes from a stream, returning raw bytes.
+   *
+   * <p>This is used by HTML-based resolvers that want to hand a byte-limited body to jsoup. We
+   * intentionally swallow IO failures and return an empty array to keep resolvers robust.
+   */
+  public static byte[] readUpToBytes(InputStream in, int maxBytes) {
+    if (in == null || maxBytes <= 0) return new byte[0];
+    try (in) {
+      ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 16 * 1024));
+      byte[] buf = new byte[8 * 1024];
+      int remaining = maxBytes;
+      while (remaining > 0) {
+        int n = in.read(buf, 0, Math.min(buf.length, remaining));
+        if (n < 0) break;
+        out.write(buf, 0, n);
+        remaining -= n;
+      }
+      return out.toByteArray();
+    } catch (IOException e) {
+      return new byte[0];
     }
-    return out.toByteArray();
-  } catch (IOException e) {
-    return new byte[0];
   }
-}
-
-
 
   /**
-   * Read up to {@code maxBytes} bytes from a previously fetched String body.
-   * This keeps older resolvers that expect a byte-limited body working.
+   * Read up to {@code maxBytes} bytes from a previously fetched String body. This keeps older
+   * resolvers that expect a byte-limited body working.
    */
   public static byte[] readUpToBytes(String body, int maxBytes) {
     if (body == null || maxBytes <= 0) return new byte[0];

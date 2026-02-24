@@ -11,10 +11,7 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 
-/**
- * "Infinite scroll" helper for chat transcripts.
- *
- */
+/** "Infinite scroll" helper for chat transcripts. */
 public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
 
   private static final long DEFAULT_COOLDOWN_MS = 650;
@@ -32,7 +29,8 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
     this.scroll.addMouseWheelListener(listener);
   }
 
-  public static ChatAutoLoadOlderScrollDecorator decorate(JScrollPane scroll, Component transcriptRoot) {
+  public static ChatAutoLoadOlderScrollDecorator decorate(
+      JScrollPane scroll, Component transcriptRoot) {
     if (scroll == null || transcriptRoot == null) return null;
     return new ChatAutoLoadOlderScrollDecorator(scroll, transcriptRoot);
   }

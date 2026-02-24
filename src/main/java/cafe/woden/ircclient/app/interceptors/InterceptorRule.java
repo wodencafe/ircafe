@@ -12,8 +12,7 @@ public record InterceptorRule(
     InterceptorRuleMode nickMode,
     String nickPattern,
     InterceptorRuleMode hostmaskMode,
-    String hostmaskPattern
-) {
+    String hostmaskPattern) {
   public InterceptorRule {
     label = norm(label);
     eventTypesCsv = norm(eventTypesCsv);

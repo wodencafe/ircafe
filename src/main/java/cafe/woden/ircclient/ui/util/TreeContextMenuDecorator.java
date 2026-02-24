@@ -12,8 +12,8 @@ import javax.swing.tree.TreePath;
 /**
  * Decorates a {@link JTree} with a right-click context menu.
  *
- * <p>Cross-platform note: popup triggers may fire on mouse-pressed or mouse-released,
- * so this decorator checks both.
+ * <p>Cross-platform note: popup triggers may fire on mouse-pressed or mouse-released, so this
+ * decorator checks both.
  */
 public final class TreeContextMenuDecorator implements AutoCloseable {
 
@@ -26,57 +26,58 @@ public final class TreeContextMenuDecorator implements AutoCloseable {
   private TreeContextMenuDecorator(
       JTree tree,
       BiFunction<TreePath, MouseEvent, JPopupMenu> menuFactory,
-      boolean selectPathOnPopup
-  ) {
+      boolean selectPathOnPopup) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.selectPathOnPopup = selectPathOnPopup;
 
     Objects.requireNonNull(menuFactory, "menuFactory");
 
-    this.mouseListener = new MouseAdapter() {
-      @Override
-      public void mousePressed(MouseEvent e) {
-        maybeShowPopup(e);
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        maybeShowPopup(e);
-      }
-
-      private void maybeShowPopup(MouseEvent e) {
-        if (closed) return;
-        if (e == null || !e.isPopupTrigger()) return;
-        if (!tree.isShowing() || !tree.isEnabled()) return;
-
-        int x = e.getX();
-        int y = e.getY();
-        TreePath path = tree.getPathForLocation(x, y);
-        if (path == null) return;
-
-        if (TreeContextMenuDecorator.this.selectPathOnPopup) {
-          try {
-            tree.setSelectionPath(path);
-          } catch (Exception ignored) {
+    this.mouseListener =
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowPopup(e);
           }
-        }
 
-        JPopupMenu menu = null;
-        try {
-          menu = menuFactory.apply(path, e);
-        } catch (Exception ignored) {
-        }
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowPopup(e);
+          }
 
-        if (menu == null || menu.getComponentCount() == 0) return;
-        PopupMenuThemeSupport.prepareForDisplay(menu);
-        menu.show(tree, x, y);
-      }
-    };
+          private void maybeShowPopup(MouseEvent e) {
+            if (closed) return;
+            if (e == null || !e.isPopupTrigger()) return;
+            if (!tree.isShowing() || !tree.isEnabled()) return;
+
+            int x = e.getX();
+            int y = e.getY();
+            TreePath path = tree.getPathForLocation(x, y);
+            if (path == null) return;
+
+            if (TreeContextMenuDecorator.this.selectPathOnPopup) {
+              try {
+                tree.setSelectionPath(path);
+              } catch (Exception ignored) {
+              }
+            }
+
+            JPopupMenu menu = null;
+            try {
+              menu = menuFactory.apply(path, e);
+            } catch (Exception ignored) {
+            }
+
+            if (menu == null || menu.getComponentCount() == 0) return;
+            PopupMenuThemeSupport.prepareForDisplay(menu);
+            menu.show(tree, x, y);
+          }
+        };
 
     tree.addMouseListener(this.mouseListener);
   }
 
-  public static TreeContextMenuDecorator decorate(JTree tree, Function<TreePath, JPopupMenu> menuFactory) {
+  public static TreeContextMenuDecorator decorate(
+      JTree tree, Function<TreePath, JPopupMenu> menuFactory) {
     Objects.requireNonNull(menuFactory, "menuFactory");
     return new TreeContextMenuDecorator(tree, (path, e) -> menuFactory.apply(path), false);
   }
@@ -87,12 +88,10 @@ public final class TreeContextMenuDecorator implements AutoCloseable {
    * @param selectPathOnPopup if true, right-clicking will select the row before showing the menu.
    */
   public static TreeContextMenuDecorator decorate(
-      JTree tree,
-      Function<TreePath, JPopupMenu> menuFactory,
-      boolean selectPathOnPopup
-  ) {
+      JTree tree, Function<TreePath, JPopupMenu> menuFactory, boolean selectPathOnPopup) {
     Objects.requireNonNull(menuFactory, "menuFactory");
-    return new TreeContextMenuDecorator(tree, (path, e) -> menuFactory.apply(path), selectPathOnPopup);
+    return new TreeContextMenuDecorator(
+        tree, (path, e) -> menuFactory.apply(path), selectPathOnPopup);
   }
 
   /**
@@ -101,8 +100,7 @@ public final class TreeContextMenuDecorator implements AutoCloseable {
   public static TreeContextMenuDecorator decorate(
       JTree tree,
       BiFunction<TreePath, MouseEvent, JPopupMenu> menuFactory,
-      boolean selectPathOnPopup
-  ) {
+      boolean selectPathOnPopup) {
     return new TreeContextMenuDecorator(tree, menuFactory, selectPathOnPopup);
   }
 

@@ -6,15 +6,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
 
-/**
- * Small helper for building IRCv3 CHATHISTORY commands.
- *
- */
+/** Small helper for building IRCv3 CHATHISTORY commands. */
 final class Ircv3ChatHistoryCommandBuilder {
 
   private static final DateTimeFormatter TS_FMT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-          .withZone(ZoneOffset.UTC);
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private Ircv3ChatHistoryCommandBuilder() {}
 
@@ -74,8 +70,7 @@ final class Ircv3ChatHistoryCommandBuilder {
     if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
     if (t.contains("\r") || t.contains("\n"))
       throw new IllegalArgumentException("target contains CR/LF");
-    if (t.contains(" "))
-      throw new IllegalArgumentException("target contains spaces");
+    if (t.contains(" ")) throw new IllegalArgumentException("target contains spaces");
     return t;
   }
 
@@ -84,8 +79,7 @@ final class Ircv3ChatHistoryCommandBuilder {
     if (s.isEmpty()) throw new IllegalArgumentException("selector is blank");
     if (s.contains("\r") || s.contains("\n"))
       throw new IllegalArgumentException("selector contains CR/LF");
-    if (s.contains(" "))
-      throw new IllegalArgumentException("selector contains spaces");
+    if (s.contains(" ")) throw new IllegalArgumentException("selector contains spaces");
 
     int eq = s.indexOf('=');
     if (eq <= 0 || eq == s.length() - 1) {
@@ -109,8 +103,7 @@ final class Ircv3ChatHistoryCommandBuilder {
     if (v.isEmpty()) throw new IllegalArgumentException("selector value is blank");
     if (v.contains("\r") || v.contains("\n"))
       throw new IllegalArgumentException("selector value contains CR/LF");
-    if (v.contains(" "))
-      throw new IllegalArgumentException("selector value contains spaces");
+    if (v.contains(" ")) throw new IllegalArgumentException("selector value contains spaces");
     return v;
   }
 }

@@ -90,9 +90,10 @@ public final class MessageReactionsComponent extends JPanel {
     applyChipFont(l);
     l.setForeground(resolveChipForeground());
     l.setBackground(resolveChipBackground());
-    l.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(resolveChipBorderColor()),
-        BorderFactory.createEmptyBorder(1, 6, 1, 6)));
+    l.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(resolveChipBorderColor()),
+            BorderFactory.createEmptyBorder(1, 6, 1, 6)));
     l.setToolTipText(tooltip(st));
     return l;
   }

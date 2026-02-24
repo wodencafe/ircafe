@@ -7,10 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Decorator base for {@link UiPort}.
- *
- */
+/** Decorator base for {@link UiPort}. */
 public abstract class UiPortDecorator implements UiPort {
 
   protected final UiPort delegate;
@@ -46,11 +43,7 @@ public abstract class UiPortDecorator implements UiPort {
 
   @Override
   public boolean confirmMultilineSplitFallback(
-      TargetRef target,
-      int lineCount,
-      long payloadUtf8Bytes,
-      String reason
-  ) {
+      TargetRef target, int lineCount, long payloadUtf8Bytes, String reason) {
     return delegate.confirmMultilineSplitFallback(target, lineCount, payloadUtf8Bytes, reason);
   }
 
@@ -195,7 +188,8 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public void setServerConnectionDiagnostics(String serverId, String lastError, Long nextRetryEpochMs) {
+  public void setServerConnectionDiagnostics(
+      String serverId, String lastError, Long nextRetryEpochMs) {
     delegate.setServerConnectionDiagnostics(serverId, lastError, nextRetryEpochMs);
   }
 
@@ -210,12 +204,14 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
+  public void setServerConnectedIdentity(
+      String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
     delegate.setServerConnectedIdentity(serverId, connectedHost, connectedPort, nick, at);
   }
 
   @Override
-  public void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {
+  public void setServerIrcv3Capability(
+      String serverId, String capability, String subcommand, boolean enabled) {
     delegate.setServerIrcv3Capability(serverId, capability, subcommand, enabled);
   }
 
@@ -230,8 +226,7 @@ public abstract class UiPortDecorator implements UiPort {
       String serverName,
       String serverVersion,
       String userModes,
-      String channelModes
-  ) {
+      String channelModes) {
     delegate.setServerVersionDetails(serverId, serverName, serverVersion, userModes, channelModes);
   }
 
@@ -246,7 +241,8 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
+  public void appendChatAt(
+      TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
     delegate.appendChatAt(target, at, from, text, outgoingLocalEcho);
   }
 
@@ -258,8 +254,7 @@ public abstract class UiPortDecorator implements UiPort {
       String text,
       boolean outgoingLocalEcho,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     delegate.appendChatAt(target, at, from, text, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -272,8 +267,7 @@ public abstract class UiPortDecorator implements UiPort {
       boolean outgoingLocalEcho,
       String messageId,
       Map<String, String> ircv3Tags,
-      String notificationRuleHighlightColor
-  ) {
+      String notificationRuleHighlightColor) {
     delegate.appendChatAt(
         target,
         at,
@@ -287,12 +281,7 @@ public abstract class UiPortDecorator implements UiPort {
 
   @Override
   public void appendPendingOutgoingChat(
-      TargetRef target,
-      String pendingId,
-      Instant at,
-      String from,
-      String text
-  ) {
+      TargetRef target, String pendingId, Instant at, String from, String text) {
     delegate.appendPendingOutgoingChat(target, pendingId, at, from, text);
   }
 
@@ -304,20 +293,14 @@ public abstract class UiPortDecorator implements UiPort {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
-    return delegate.resolvePendingOutgoingChat(target, pendingId, at, from, text, messageId, ircv3Tags);
+      Map<String, String> ircv3Tags) {
+    return delegate.resolvePendingOutgoingChat(
+        target, pendingId, at, from, text, messageId, ircv3Tags);
   }
 
   @Override
   public void failPendingOutgoingChat(
-      TargetRef target,
-      String pendingId,
-      Instant at,
-      String from,
-      String text,
-      String reason
-  ) {
+      TargetRef target, String pendingId, Instant at, String from, String text, String reason) {
     delegate.failPendingOutgoingChat(target, pendingId, at, from, text, reason);
   }
 
@@ -338,18 +321,19 @@ public abstract class UiPortDecorator implements UiPort {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     delegate.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
   }
 
   @Override
-  public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
+  public void appendAction(
+      TargetRef target, String from, String action, boolean outgoingLocalEcho) {
     delegate.appendAction(target, from, action, outgoingLocalEcho);
   }
 
   @Override
-  public void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
+  public void appendActionAt(
+      TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
     delegate.appendActionAt(target, at, from, action, outgoingLocalEcho);
   }
 
@@ -361,8 +345,7 @@ public abstract class UiPortDecorator implements UiPort {
       String action,
       boolean outgoingLocalEcho,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     delegate.appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -375,8 +358,7 @@ public abstract class UiPortDecorator implements UiPort {
       boolean outgoingLocalEcho,
       String messageId,
       Map<String, String> ircv3Tags,
-      String notificationRuleHighlightColor
-  ) {
+      String notificationRuleHighlightColor) {
     delegate.appendActionAt(
         target,
         at,
@@ -410,8 +392,7 @@ public abstract class UiPortDecorator implements UiPort {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     delegate.appendNoticeAt(target, at, from, text, messageId, ircv3Tags);
   }
 
@@ -432,8 +413,7 @@ public abstract class UiPortDecorator implements UiPort {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     delegate.appendStatusAt(target, at, from, text, messageId, ircv3Tags);
   }
 
@@ -469,12 +449,7 @@ public abstract class UiPortDecorator implements UiPort {
 
   @Override
   public void applyMessageReaction(
-      TargetRef target,
-      Instant at,
-      String fromNick,
-      String targetMessageId,
-      String reaction
-  ) {
+      TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {
     delegate.applyMessageReaction(target, at, fromNick, targetMessageId, reaction);
   }
 
@@ -491,10 +466,15 @@ public abstract class UiPortDecorator implements UiPort {
       String targetMessageId,
       String editedText,
       String replacementMessageId,
-      Map<String, String> replacementIrcv3Tags
-  ) {
+      Map<String, String> replacementIrcv3Tags) {
     return delegate.applyMessageEdit(
-        target, at, fromNick, targetMessageId, editedText, replacementMessageId, replacementIrcv3Tags);
+        target,
+        at,
+        fromNick,
+        targetMessageId,
+        editedText,
+        replacementMessageId,
+        replacementIrcv3Tags);
   }
 
   @Override
@@ -504,8 +484,7 @@ public abstract class UiPortDecorator implements UiPort {
       String fromNick,
       String targetMessageId,
       String replacementMessageId,
-      Map<String, String> replacementIrcv3Tags
-  ) {
+      Map<String, String> replacementIrcv3Tags) {
     return delegate.applyMessageRedaction(
         target, at, fromNick, targetMessageId, replacementMessageId, replacementIrcv3Tags);
   }

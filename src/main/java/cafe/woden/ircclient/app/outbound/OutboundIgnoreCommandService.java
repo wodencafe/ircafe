@@ -22,10 +22,7 @@ public class OutboundIgnoreCommandService {
   private final IgnoreListService ignoreListService;
 
   public OutboundIgnoreCommandService(
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      IgnoreListService ignoreListService
-  ) {
+      UiPort ui, TargetCoordinator targetCoordinator, IgnoreListService ignoreListService) {
     this.ui = ui;
     this.targetCoordinator = targetCoordinator;
     this.ignoreListService = ignoreListService;
@@ -49,7 +46,8 @@ public class OutboundIgnoreCommandService {
     if (added) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Ignoring: " + stored);
     } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
     }
   }
 
@@ -69,9 +67,11 @@ public class OutboundIgnoreCommandService {
     boolean removed = ignoreListService.removeMask(at.serverId(), arg);
     String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
     if (removed) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
     } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
     }
   }
 
@@ -95,11 +95,11 @@ public class OutboundIgnoreCommandService {
     }
   }
 
-
   public void handleSoftIgnore(String maskOrNick) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(soft-ignore)", "Select a server first.");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(soft-ignore)", "Select a server first.");
       return;
     }
 
@@ -112,16 +112,21 @@ public class OutboundIgnoreCommandService {
     boolean added = ignoreListService.addSoftMask(at.serverId(), arg);
     String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
     if (added) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(soft-ignore)", "Soft-ignoring: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(soft-ignore)", "Soft-ignoring: " + stored);
     } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(soft-ignore)", "Already soft-ignored: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(soft-ignore)",
+          "Already soft-ignored: " + stored);
     }
   }
 
   public void handleUnsoftIgnore(String maskOrNick) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(unsoftignore)", "Select a server first.");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(unsoftignore)", "Select a server first.");
       return;
     }
 
@@ -134,16 +139,23 @@ public class OutboundIgnoreCommandService {
     boolean removed = ignoreListService.removeSoftMask(at.serverId(), arg);
     String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
     if (removed) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unsoftignore)", "Removed soft-ignore: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(unsoftignore)",
+          "Removed soft-ignore: " + stored);
     } else {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(unsoftignore)", "Not in soft-ignore list: " + stored);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(unsoftignore)",
+          "Not in soft-ignore list: " + stored);
     }
   }
 
   public void handleSoftIgnoreList() {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(soft-ignore)", "Select a server first.");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(soft-ignore)", "Select a server first.");
       return;
     }
 
@@ -159,5 +171,4 @@ public class OutboundIgnoreCommandService {
       ui.appendStatus(status, "(soft-ignore)", "  - " + m);
     }
   }
-
 }

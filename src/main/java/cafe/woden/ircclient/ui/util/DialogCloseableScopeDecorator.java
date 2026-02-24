@@ -12,17 +12,18 @@ public final class DialogCloseableScopeDecorator {
     CloseableScope scope = new CloseableScope();
     if (dialog == null) return scope;
 
-    WindowAdapter adapter = new WindowAdapter() {
-      @Override
-      public void windowClosing(WindowEvent e) {
-        scope.closeQuietly();
-      }
+    WindowAdapter adapter =
+        new WindowAdapter() {
+          @Override
+          public void windowClosing(WindowEvent e) {
+            scope.closeQuietly();
+          }
 
-      @Override
-      public void windowClosed(WindowEvent e) {
-        scope.closeQuietly();
-      }
-    };
+          @Override
+          public void windowClosed(WindowEvent e) {
+            scope.closeQuietly();
+          }
+        };
 
     dialog.addWindowListener(adapter);
 

@@ -3,23 +3,26 @@ package cafe.woden.ircclient.ignore;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
-/** Centralized decision point for how inbound messages should be handled with respect to ignore lists. */
+/**
+ * Centralized decision point for how inbound messages should be handled with respect to ignore
+ * lists.
+ */
 @Component
 public class InboundIgnorePolicy {
 
   public enum Decision {
-    
     ALLOW,
-    
+
     SOFT_SPOILER,
-    
+
     HARD_DROP
   }
 
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
 
-  public InboundIgnorePolicy(IgnoreListService ignoreListService, IgnoreStatusService ignoreStatusService) {
+  public InboundIgnorePolicy(
+      IgnoreListService ignoreListService, IgnoreStatusService ignoreStatusService) {
     this.ignoreListService = ignoreListService;
     this.ignoreStatusService = ignoreStatusService;
   }
@@ -42,9 +45,10 @@ public class InboundIgnorePolicy {
     if (nick.isEmpty()) return Decision.ALLOW;
 
     // Delegate the matching rules to IgnoreStatusService so UI + inbound agree.
-    IgnoreStatusService.Status st = (ignoreStatusService == null)
-        ? new IgnoreStatusService.Status(false, false, false, "")
-        : ignoreStatusService.status(sid, nick, hostmask);
+    IgnoreStatusService.Status st =
+        (ignoreStatusService == null)
+            ? new IgnoreStatusService.Status(false, false, false, "")
+            : ignoreStatusService.status(sid, nick, hostmask);
 
     if (st.hard()) {
       if (!isCtcp || ignoreListService.hardIgnoreIncludesCtcp()) {

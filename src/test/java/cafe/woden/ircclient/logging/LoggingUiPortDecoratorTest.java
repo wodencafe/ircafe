@@ -28,8 +28,10 @@ import org.junit.jupiter.api.Test;
 class LoggingUiPortDecoratorTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
-  private static final LogProperties LOGGING_ON = new LogProperties(true, true, true, true, true, 0, null);
-  private static final LogProperties LOGGING_PM_OFF = new LogProperties(true, true, false, true, true, 0, null);
+  private static final LogProperties LOGGING_ON =
+      new LogProperties(true, true, true, true, true, 0, null);
+  private static final LogProperties LOGGING_PM_OFF =
+      new LogProperties(true, true, false, true, true, 0, null);
 
   @Test
   void appendChatAtWithMetadataPersistsMessageIdentity() throws Exception {
@@ -123,10 +125,12 @@ class LoggingUiPortDecoratorTest {
     TargetRef target = new TargetRef("srv", "#chan");
     Instant at = Instant.ofEpochMilli(1_732_000_001_222L);
     Map<String, String> tags = Map.of("msgid", "srv-echo-1");
-    when(delegate.resolvePendingOutgoingChat(target, "p-123", at, "me", "hello", "srv-echo-1", tags))
+    when(delegate.resolvePendingOutgoingChat(
+            target, "p-123", at, "me", "hello", "srv-echo-1", tags))
         .thenReturn(true);
 
-    boolean resolved = d.resolvePendingOutgoingChat(target, "p-123", at, "me", "hello", "srv-echo-1", tags);
+    boolean resolved =
+        d.resolvePendingOutgoingChat(target, "p-123", at, "me", "hello", "srv-echo-1", tags);
 
     assertTrue(resolved);
     LogLine line = captured.get();
@@ -146,10 +150,12 @@ class LoggingUiPortDecoratorTest {
     TargetRef target = new TargetRef("srv", "#chan");
     Instant at = Instant.ofEpochMilli(1_732_000_001_333L);
     Map<String, String> tags = Map.of("msgid", "srv-echo-2");
-    when(delegate.resolvePendingOutgoingChat(target, "p-404", at, "me", "hello", "srv-echo-2", tags))
+    when(delegate.resolvePendingOutgoingChat(
+            target, "p-404", at, "me", "hello", "srv-echo-2", tags))
         .thenReturn(false);
 
-    boolean resolved = d.resolvePendingOutgoingChat(target, "p-404", at, "me", "hello", "srv-echo-2", tags);
+    boolean resolved =
+        d.resolvePendingOutgoingChat(target, "p-404", at, "me", "hello", "srv-echo-2", tags);
 
     assertFalse(resolved);
     assertNull(captured.get());
@@ -199,7 +205,8 @@ class LoggingUiPortDecoratorTest {
           writes.incrementAndGet();
           captured.set(line);
         };
-    LoggingUiPortDecorator d = new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+    LoggingUiPortDecorator d =
+        new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
 
     TargetRef target = new TargetRef("srv", "#chan");
     Instant at = Instant.ofEpochMilli(1_732_000_100_000L);
@@ -211,7 +218,8 @@ class LoggingUiPortDecoratorTest {
     assertEquals(1, writes.get());
     assertNotNull(captured.get());
     verify(delegate).appendChatAt(target, at, "alice", "hello", false, "dup-1", tags);
-    verify(delegate).appendChatAt(target, at.plusMillis(50), "alice", "hello", false, "dup-1", tags);
+    verify(delegate)
+        .appendChatAt(target, at.plusMillis(50), "alice", "hello", false, "dup-1", tags);
   }
 
   @Test
@@ -219,7 +227,8 @@ class LoggingUiPortDecoratorTest {
     UiPort delegate = mock(UiPort.class);
     AtomicInteger writes = new AtomicInteger();
     ChatLogWriter writer = line -> writes.incrementAndGet();
-    LoggingUiPortDecorator d = new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+    LoggingUiPortDecorator d =
+        new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
 
     TargetRef target = new TargetRef("srv", "#chan");
     Instant at = Instant.ofEpochMilli(1_732_000_200_000L);
@@ -231,11 +240,13 @@ class LoggingUiPortDecoratorTest {
     verify(delegate, times(2)).appendNoticeAt(target, at, "server", "maintenance");
   }
 
-  private static LoggingUiPortDecorator newDecorator(UiPort delegate, AtomicReference<LogLine> captured) {
+  private static LoggingUiPortDecorator newDecorator(
+      UiPort delegate, AtomicReference<LogLine> captured) {
     return newDecorator(delegate, captured, LOGGING_ON);
   }
 
-  private static LoggingUiPortDecorator newDecorator(UiPort delegate, AtomicReference<LogLine> captured, LogProperties props) {
+  private static LoggingUiPortDecorator newDecorator(
+      UiPort delegate, AtomicReference<LogLine> captured, LogProperties props) {
     ChatLogWriter writer = captured::set;
     return new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), props);
   }

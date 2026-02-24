@@ -7,9 +7,9 @@ import org.jmolecules.ddd.annotation.ValueObject;
 /**
  * Identifies a chat "target" within a server.
  *
- * <p>IRC targets (channels + nicks) are case-insensitive for identity purposes.
- * To avoid accidental duplicates (e.g. "##Llamas" vs "##llamas"), equality and
- * hashing are performed using a folded (lowercased) key.
+ * <p>IRC targets (channels + nicks) are case-insensitive for identity purposes. To avoid accidental
+ * duplicates (e.g. "##Llamas" vs "##llamas"), equality and hashing are performed using a folded
+ * (lowercased) key.
  *
  * <p>The original {@link #target()} is preserved for display/persistence.
  */
@@ -89,8 +89,8 @@ public final class TargetRef {
   /**
    * Display/persistence target string.
    *
-   * <p>Do not use this for identity comparisons. Use {@link #matches(String)} or
-   * rely on {@link #equals(Object)}.
+   * <p>Do not use this for identity comparisons. Use {@link #matches(String)} or rely on {@link
+   * #equals(Object)}.
    */
   public String target() {
     return target;

@@ -3,8 +3,8 @@ package cafe.woden.ircclient.irc;
 /**
  * Parsers for IRC away-related lines.
  *
- * <p>This class intentionally contains only pure parsing helpers extracted from
- * {@link PircbotxIrcClientService} during refactor step B2.2.
+ * <p>This class intentionally contains only pure parsing helpers extracted from {@link
+ * PircbotxIrcClientService} during refactor step B2.2.
  */
 final class PircbotxAwayParsers {
   private PircbotxAwayParsers() {}
@@ -14,13 +14,14 @@ final class PircbotxAwayParsers {
   static record ParsedAwayConfirmation(boolean away, String server, String message) {}
 
   /**
-   * Parse an IRCv3 away-notify line, which is delivered as a raw {@code AWAY} command
-   * from another user.
+   * Parse an IRCv3 away-notify line, which is delivered as a raw {@code AWAY} command from another
+   * user.
    *
    * <p>Examples:
+   *
    * <ul>
-   *   <li>{@code :nick!user@host AWAY :Gone away for now} (sets away)</li>
-   *   <li>{@code :nick!user@host AWAY} (clears away)</li>
+   *   <li>{@code :nick!user@host AWAY :Gone away for now} (sets away)
+   *   <li>{@code :nick!user@host AWAY} (clears away)
    * </ul>
    */
   static ParsedAwayNotify parseAwayNotify(String line) {
@@ -34,7 +35,8 @@ final class PircbotxAwayParsers {
     String prefix = s.substring(1, sp);
     String rest = s.substring(sp + 1).trim();
 
-    if (!(rest.startsWith("AWAY") && (rest.length() == 4 || Character.isWhitespace(rest.charAt(4))))) {
+    if (!(rest.startsWith("AWAY")
+        && (rest.length() == 4 || Character.isWhitespace(rest.charAt(4))))) {
       return null;
     }
 
@@ -60,7 +62,7 @@ final class PircbotxAwayParsers {
   }
 
   /** Parse RPL_UNAWAY (305) / RPL_NOWAWAY (306) lines and extract the trailing message. */
-static ParsedAwayConfirmation parseRpl305or306Away(String line) {
+  static ParsedAwayConfirmation parseRpl305or306Away(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;

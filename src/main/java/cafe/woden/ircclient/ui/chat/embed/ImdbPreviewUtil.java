@@ -10,8 +10,8 @@ final class ImdbPreviewUtil {
 
   private ImdbPreviewUtil() {}
 
-  
-  private static final Pattern TITLE_ID = Pattern.compile("\\b(tt\\d{5,12})\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern TITLE_ID =
+      Pattern.compile("\\b(tt\\d{5,12})\\b", Pattern.CASE_INSENSITIVE);
 
   static boolean isImdbTitleUrl(String url) {
     if (url == null || url.isBlank()) return false;
@@ -90,6 +90,7 @@ final class ImdbPreviewUtil {
    * Amazon's CDN supports "sized" variants by inserting a token after "@._V1_".
    *
    * <p>Example:
+   *
    * <pre>
    * ...@._V1_.jpg  ->  ...@._V1_UX256_.jpg
    * </pre>
@@ -111,7 +112,10 @@ final class ImdbPreviewUtil {
 
     String after = url.substring(idx + marker.length());
     // If already sized, leave it alone.
-    if (after.startsWith("UX") || after.startsWith("UY") || after.startsWith("SX") || after.startsWith("SY")) {
+    if (after.startsWith("UX")
+        || after.startsWith("UY")
+        || after.startsWith("SX")
+        || after.startsWith("SY")) {
       return url;
     }
 

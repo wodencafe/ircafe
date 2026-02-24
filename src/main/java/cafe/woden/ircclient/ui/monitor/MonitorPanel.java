@@ -83,27 +83,31 @@ public final class MonitorPanel extends JPanel {
     table.getTableHeader().setReorderingAllowed(false);
     table.getColumnModel().getColumn(COL_STATUS).setPreferredWidth(140);
     table.getColumnModel().getColumn(COL_NICK).setPreferredWidth(460);
-    table.getSelectionModel().addListSelectionListener(e -> {
-      if (!e.getValueIsAdjusting()) updateButtonState();
-    });
-    table.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() >= 2) {
-          openQueryRequested();
-        }
-      }
+    table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (!e.getValueIsAdjusting()) updateButtonState();
+            });
+    table.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() >= 2) {
+              openQueryRequested();
+            }
+          }
 
-      @Override
-      public void mousePressed(MouseEvent e) {
-        maybeShowRowMenu(e);
-      }
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowRowMenu(e);
+          }
 
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        maybeShowRowMenu(e);
-      }
-    });
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowRowMenu(e);
+          }
+        });
     buildRowMenu();
 
     JScrollPane scroll = new JScrollPane(table);
@@ -137,29 +141,15 @@ public final class MonitorPanel extends JPanel {
   }
 
   private void configureActionButtons() {
+    configureActionButton(addButton, "plus", "Add user to monitor list", "Add...");
     configureActionButton(
-        addButton,
-        "plus",
-        "Add user to monitor list",
-        "Add...");
-    configureActionButton(
-        removeButton,
-        "trash",
-        "Remove selected users from monitor list",
-        "Remove selected");
-    configureActionButton(
-        clearButton,
-        "close",
-        "Clear monitor list",
-        "Clear");
-    configureActionButton(
-        refreshButton,
-        "refresh",
-        "Refresh monitor list",
-        "Refresh");
+        removeButton, "trash", "Remove selected users from monitor list", "Remove selected");
+    configureActionButton(clearButton, "close", "Clear monitor list", "Clear");
+    configureActionButton(refreshButton, "refresh", "Refresh monitor list", "Refresh");
   }
 
-  private void configureActionButton(JButton button, String iconName, String tooltip, String accessibleName) {
+  private void configureActionButton(
+      JButton button, String iconName, String tooltip, String accessibleName) {
     if (button == null) return;
     button.setText("");
     button.setIcon(SvgIcons.action(iconName, ACTION_ICON_SIZE));
@@ -305,7 +295,8 @@ public final class MonitorPanel extends JPanel {
     removeButton.setEnabled(hasEmitter && hasServer && hasSelection);
     clearButton.setEnabled(hasEmitter && hasServer && hasRows);
     refreshButton.setEnabled(hasEmitter && hasServer);
-    openQueryMenuItem.setEnabled(hasEmitter && hasServer && hasSingleSelection && !primarySelectedNick().isEmpty());
+    openQueryMenuItem.setEnabled(
+        hasEmitter && hasServer && hasSingleSelection && !primarySelectedNick().isEmpty());
     copyNickMenuItem.setEnabled(hasSingleSelection && !primarySelectedNick().isEmpty());
     removeMenuItem.setEnabled(hasEmitter && hasServer && hasSelection);
   }

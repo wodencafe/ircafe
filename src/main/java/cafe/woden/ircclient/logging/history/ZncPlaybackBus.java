@@ -23,8 +23,7 @@ public final class ZncPlaybackBus extends AbstractTargetWaiterBus<ZncPlaybackBus
       Instant toInclusive,
       List<ChatHistoryEntry> entries,
       long earliestTsEpochMs,
-      long latestTsEpochMs
-  ) {
+      long latestTsEpochMs) {
     public PlaybackEvent {
       entries = entries == null ? List.of() : List.copyOf(entries);
       fromInclusive = fromInclusive == null ? Instant.EPOCH : fromInclusive;
@@ -33,14 +32,8 @@ public final class ZncPlaybackBus extends AbstractTargetWaiterBus<ZncPlaybackBus
   }
 
   public ZncPlaybackBus(
-      @Qualifier(ExecutorConfig.ZNC_PLAYBACK_BUS_SCHEDULER) ScheduledExecutorService scheduler
-  ) {
-    super(
-        scheduler,
-        "ZNC playback",
-        "ZNC playback bus completion failed",
-        log
-    );
+      @Qualifier(ExecutorConfig.ZNC_PLAYBACK_BUS_SCHEDULER) ScheduledExecutorService scheduler) {
+    super(scheduler, "ZNC playback", "ZNC playback bus completion failed", log);
   }
 
   @Override

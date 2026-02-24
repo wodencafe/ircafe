@@ -22,8 +22,8 @@ import org.springframework.stereotype.Component;
 /**
  * Matches inbound messages against user-configured notification rules.
  *
- * <p>This is intentionally a pure matcher: it does not decide whether a match should
- * generate a notification (that logic lives in the mediator).
+ * <p>This is intentionally a pure matcher: it does not decide whether a match should generate a
+ * notification (that logic lives in the mediator).
  */
 @Component
 @Lazy
@@ -51,9 +51,7 @@ public class NotificationRuleMatcher {
     uiSettingsBus.removeListener(settingsListener);
   }
 
-  /**
-   * Returns all rule matches for the given message. At most one match is returned per rule.
-   */
+  /** Returns all rule matches for the given message. At most one match is returned per rule. */
   public List<NotificationRuleMatch> matchAll(String message) {
     if (message == null || message.isBlank()) return List.of();
 
@@ -79,7 +77,9 @@ public class NotificationRuleMatcher {
         if (p == null) continue; // invalid regex skipped during compile
         Matcher m = p.matcher(message);
         if (m.find()) {
-          out.add(new NotificationRuleMatch(rule.label(), m.group(), m.start(), m.end(), rule.highlightFg()));
+          out.add(
+              new NotificationRuleMatch(
+                  rule.label(), m.group(), m.start(), m.end(), rule.highlightFg()));
         }
         continue;
       }
@@ -94,17 +94,19 @@ public class NotificationRuleMatcher {
           int tlen = tok.end - tok.start;
           if (tlen != plen) continue;
 
-          boolean ok = rule.caseSensitive()
-              ? message.regionMatches(false, tok.start, pat, 0, plen)
-              : message.regionMatches(true, tok.start, pat, 0, plen);
+          boolean ok =
+              rule.caseSensitive()
+                  ? message.regionMatches(false, tok.start, pat, 0, plen)
+                  : message.regionMatches(true, tok.start, pat, 0, plen);
 
           if (ok) {
-            out.add(new NotificationRuleMatch(
-                rule.label(),
-                message.substring(tok.start, tok.end),
-                tok.start,
-                tok.end,
-                rule.highlightFg()));
+            out.add(
+                new NotificationRuleMatch(
+                    rule.label(),
+                    message.substring(tok.start, tok.end),
+                    tok.start,
+                    tok.end,
+                    rule.highlightFg()));
             break;
           }
         }
@@ -115,16 +117,19 @@ public class NotificationRuleMatcher {
         } else {
           String patLower = r.wordLower;
           if (patLower == null) patLower = pat.toLowerCase(Locale.ROOT);
-          idx = (messageLower != null ? messageLower : message.toLowerCase(Locale.ROOT)).indexOf(patLower);
+          idx =
+              (messageLower != null ? messageLower : message.toLowerCase(Locale.ROOT))
+                  .indexOf(patLower);
         }
 
         if (idx >= 0) {
-          out.add(new NotificationRuleMatch(
-              rule.label(),
-              message.substring(idx, idx + pat.length()),
-              idx,
-              idx + pat.length(),
-              rule.highlightFg()));
+          out.add(
+              new NotificationRuleMatch(
+                  rule.label(),
+                  message.substring(idx, idx + pat.length()),
+                  idx,
+                  idx + pat.length(),
+                  rule.highlightFg()));
         }
       }
     }
@@ -168,9 +173,8 @@ public class NotificationRuleMatcher {
       } else {
         if (!r.caseSensitive() && !r.wholeWord()) needsLower = true;
         if (r.wholeWord()) hasWholeWord = true;
-        String lower = (!r.caseSensitive() && !r.wholeWord())
-            ? r.pattern().toLowerCase(Locale.ROOT)
-            : null;
+        String lower =
+            (!r.caseSensitive() && !r.wholeWord()) ? r.pattern().toLowerCase(Locale.ROOT) : null;
         compiled.add(CompiledRule.forWord(r, lower));
       }
     }
@@ -200,8 +204,8 @@ public class NotificationRuleMatcher {
   /**
    * "Word" tokenization for notification rules.
    *
-   * <p>We intentionally keep this tighter than IRC nick chars; for more complex matching,
-   * users can switch to REGEX rules.
+   * <p>We intentionally keep this tighter than IRC nick chars; for more complex matching, users can
+   * switch to REGEX rules.
    */
   private static boolean isWordChar(char ch) {
     if (ch >= '0' && ch <= '9') return true;
@@ -212,7 +216,8 @@ public class NotificationRuleMatcher {
 
   private record Token(int start, int end) {}
 
-  private record Compiled(List<CompiledRule> rules, boolean needsMessageLower, boolean hasWholeWordRules) {}
+  private record Compiled(
+      List<CompiledRule> rules, boolean needsMessageLower, boolean hasWholeWordRules) {}
 
   private static final class CompiledRule {
     private final NotificationRule rule;

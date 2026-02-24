@@ -25,8 +25,8 @@ import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
-import javax.swing.text.StyledDocument;
 import javax.swing.text.JTextComponent;
+import javax.swing.text.StyledDocument;
 
 /**
  * Simple line inspector for chat transcripts.
@@ -35,13 +35,13 @@ import javax.swing.text.JTextComponent;
  */
 public final class ChatLineInspectorDialog {
 
-  private ChatLineInspectorDialog() {
-  }
+  private ChatLineInspectorDialog() {}
 
   public static void showAtPoint(Component owner, JTextComponent transcript, Point viewPoint) {
     if (transcript == null || viewPoint == null) return;
 
-    // Convert the popup point to the transcript's coordinate system (defensive when invoked from nested components).
+    // Convert the popup point to the transcript's coordinate system (defensive when invoked from
+    // nested components).
     Point p = new Point(viewPoint);
     SwingUtilities.convertPointToScreen(p, transcript);
     SwingUtilities.convertPointFromScreen(p, transcript);
@@ -106,14 +106,12 @@ public final class ChatLineInspectorDialog {
     Dimension preferred = preferredDialogSize(dialogAnchor);
     scroll.setPreferredSize(preferred);
 
-    JOptionPane pane = new JOptionPane(
-        scroll,
-        JOptionPane.INFORMATION_MESSAGE,
-        JOptionPane.DEFAULT_OPTION
-    );
+    JOptionPane pane =
+        new JOptionPane(scroll, JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION);
     JDialog dialog = pane.createDialog(dialogAnchor, "Line Inspector");
     dialog.setResizable(true);
-    dialog.setMinimumSize(new Dimension(Math.min(520, preferred.width), Math.min(300, preferred.height)));
+    dialog.setMinimumSize(
+        new Dimension(Math.min(520, preferred.width), Math.min(300, preferred.height)));
     dialog.pack();
     dialog.setLocationRelativeTo(dialogAnchor);
     dialog.setVisible(true);
@@ -134,10 +132,10 @@ public final class ChatLineInspectorDialog {
     GraphicsConfiguration gc = anchor != null ? anchor.getGraphicsConfiguration() : null;
     if (gc == null) {
       try {
-        gc = GraphicsEnvironment
-            .getLocalGraphicsEnvironment()
-            .getDefaultScreenDevice()
-            .getDefaultConfiguration();
+        gc =
+            GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getDefaultScreenDevice()
+                .getDefaultConfiguration();
       } catch (Exception ignored) {
         gc = null;
       }
@@ -227,8 +225,14 @@ public final class ChatLineInspectorDialog {
       try {
         var z = ZoneId.systemDefault();
         var dt = Instant.ofEpochMilli(epochMs).atZone(z);
-        String pretty = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS", Locale.ROOT).format(dt);
-        sb.append("Time: ").append(pretty).append(" (epochMs=").append(epochMs).append(')').append('\n');
+        String pretty =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS", Locale.ROOT).format(dt);
+        sb.append("Time: ")
+            .append(pretty)
+            .append(" (epochMs=")
+            .append(epochMs)
+            .append(')')
+            .append('\n');
       } catch (Exception e) {
         sb.append("Time: epochMs=").append(epochMs).append('\n');
       }

@@ -26,217 +26,243 @@ final class NewsPreviewUtil {
   private NewsPreviewUtil() {}
 
   private static final HostProfile[] HOST_PROFILES = {
-      new HostProfile("abcnews.com", "abc"),
-      new HostProfile("reuters.com", "reuters"),
-      new HostProfile("apnews.com", "ap"),
-      new HostProfile("nytimes.com", "nyt"),
-      new HostProfile("bbc.com", "bbc"),
-      new HostProfile("bbc.co.uk", "bbc"),
-      new HostProfile("cnn.com", "cnn"),
-      new HostProfile("washingtonpost.com", "wapo"),
-      new HostProfile("theguardian.com", "guardian"),
-      new HostProfile("guardian.co.uk", "guardian"),
-      new HostProfile("npr.org", "npr"),
-      new HostProfile("wsj.com", "wsj")
+    new HostProfile("abcnews.com", "abc"),
+    new HostProfile("reuters.com", "reuters"),
+    new HostProfile("apnews.com", "ap"),
+    new HostProfile("nytimes.com", "nyt"),
+    new HostProfile("bbc.com", "bbc"),
+    new HostProfile("bbc.co.uk", "bbc"),
+    new HostProfile("cnn.com", "cnn"),
+    new HostProfile("washingtonpost.com", "wapo"),
+    new HostProfile("theguardian.com", "guardian"),
+    new HostProfile("guardian.co.uk", "guardian"),
+    new HostProfile("npr.org", "npr"),
+    new HostProfile("wsj.com", "wsj")
   };
 
   private static final String[] GENERIC_PARAGRAPH_SELECTORS = {
-      "article p",
-      "main article p",
-      "main p",
-      "[itemprop='articleBody'] p",
-      "section[name='articleBody'] p",
-      "div[class*='article-body'] p",
-      "div[class*='articleBody'] p",
-      "div[data-component='text-block'] p",
-      "div[data-testid*='article'] p"
+    "article p",
+    "main article p",
+    "main p",
+    "[itemprop='articleBody'] p",
+    "section[name='articleBody'] p",
+    "div[class*='article-body'] p",
+    "div[class*='articleBody'] p",
+    "div[data-component='text-block'] p",
+    "div[data-testid*='article'] p"
   };
 
   private static final String[] GENERIC_BYLINE_SELECTORS = {
-      "[rel='author']",
-      "[itemprop='author']",
-      "[class*='byline']",
-      "[data-testid*='byline']",
-      "meta[name='author']"
+    "[rel='author']",
+    "[itemprop='author']",
+    "[class*='byline']",
+    "[data-testid*='byline']",
+    "meta[name='author']"
   };
 
   private static final String[] GENERIC_IMAGE_SELECTORS = {
-      "meta[property='og:image']",
-      "meta[property='og:image:secure_url']",
-      "meta[name='twitter:image']",
-      "meta[name='twitter:image:src']",
-      "article img[src]",
-      "main img[src]"
+    "meta[property='og:image']",
+    "meta[property='og:image:secure_url']",
+    "meta[name='twitter:image']",
+    "meta[name='twitter:image:src']",
+    "article img[src]",
+    "main img[src]"
   };
 
   private static final String[] GENERIC_AUTHOR_META_KEYS = {
-      "author",
-      "article:author",
-      "parsely-author",
-      "dc.creator",
-      "dcterms.creator",
-      "byl"
+    "author", "article:author", "parsely-author", "dc.creator", "dcterms.creator", "byl"
   };
 
   private static final String[] GENERIC_DATE_META_KEYS = {
-      "article:published_time",
-      "article:modified_time",
-      "og:published_time",
-      "og:updated_time",
-      "parsely-pub-date",
-      "pubdate",
-      "publish-date",
-      "date",
-      "dc.date",
-      "dcterms.created",
-      "dcterms.modified"
+    "article:published_time",
+    "article:modified_time",
+    "og:published_time",
+    "og:updated_time",
+    "parsely-pub-date",
+    "pubdate",
+    "publish-date",
+    "date",
+    "dc.date",
+    "dcterms.created",
+    "dcterms.modified"
   };
 
-  private static final Set<String> NEWS_SITE_HINTS = Set.of(
-      "abc news",
-      "associated press",
-      "ap news",
-      "bbc",
-      "cnn",
-      "guardian",
-      "new york times",
-      "npr",
-      "reuters",
-      "wall street journal",
-      "washington post"
-  );
-
-  private static final Set<String> TITLE_SUFFIXES = Set.of(
-      "abc news",
-      "associated press",
-      "ap news",
-      "bbc",
-      "bbc news",
-      "cnn",
-      "the guardian",
-      "guardian",
-      "new york times",
-      "nytimes",
-      "npr",
-      "reuters",
-      "the wall street journal",
-      "wall street journal",
-      "washington post"
-  );
-
-  private static final PublisherProfile DEFAULT_PROFILE = new PublisherProfile(
-      "generic",
-      "News",
-      GENERIC_PARAGRAPH_SELECTORS,
-      GENERIC_BYLINE_SELECTORS,
-      GENERIC_IMAGE_SELECTORS,
-      GENERIC_AUTHOR_META_KEYS,
-      GENERIC_DATE_META_KEYS
-  );
-
-  private static final List<PublisherProfile> PUBLISHER_PROFILES = List.of(
-      new PublisherProfile(
-          "abc",
-          "ABC News",
-          new String[] {"article p", "main article p", "section article p"},
-          new String[] {"[data-testid='byline']", "[class*='Byline']", "[class*='byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
-          "reuters",
-          "Reuters",
-          new String[] {
-              "div[data-testid='Body'] p",
-              "article[data-testid='Body'] p",
-              "article[data-testid='ArticleBody'] p",
-              "article p",
-              "main article p"
-          },
-          new String[] {
-              "[data-testid='AuthorName']",
-              "a[data-testid='AuthorName']",
-              "[class*='author-name']",
-              "[class*='Byline']"
-          },
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
-          "ap",
-          "AP News",
-          new String[] {"div.RichTextStoryBody p", "article p", "main article p", "div[data-key='article'] p"},
-          new String[] {"[class*='byline']", "[class*='Author']", "[data-key='byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
-          "nyt",
-          "New York Times",
-          new String[] {"section[name='articleBody'] p", "article section p", "article p"},
-          new String[] {"[data-testid='byline']", "span[itemprop='name']", "[class*='byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"byl", "author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "ptime", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
+  private static final Set<String> NEWS_SITE_HINTS =
+      Set.of(
+          "abc news",
+          "associated press",
+          "ap news",
           "bbc",
-          "BBC",
-          new String[] {"article [data-component='text-block'] p", "article p", "main p"},
-          new String[] {"[data-component='byline-block'] a", "[data-component='byline-block'] span", "[class*='byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"byl", "author", "article:author"},
-          new String[] {"article:published_time", "article:modified_time", "date"}
-      ),
-      new PublisherProfile(
           "cnn",
-          "CNN",
-          new String[] {"div.article__content p", "div.article__main p", "article p", "[data-component-name='paragraph']"},
-          new String[] {"[class*='byline']", "[data-editable='byline']", "[class*='metadata__byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "og:updated_time", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
-          "wapo",
-          "Washington Post",
-          new String[] {"div[data-qa='article-body'] p", "article div[data-qa='article-body'] p", "article p"},
-          new String[] {"[data-qa='author-name']", "[data-qa='byline']", "[class*='byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
           "guardian",
-          "The Guardian",
-          new String[] {"div[data-gu-name='body'] p", "article div[data-gu-name='body'] p", "article div[class*='article-body'] p", "article p"},
-          new String[] {"a[rel='author']", "[class*='byline']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "parsely-pub-date", "date"}
-      ),
-      new PublisherProfile(
+          "new york times",
           "npr",
-          "NPR",
-          new String[] {"div.storytext p", "article div.storytext p", "article [id*='storytext'] p", "article p", "main p"},
-          new String[] {"[class*='byline']", "[itemprop='author']", "a[rel='author']"},
-          GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "dc.creator", "parsely-author"},
-          new String[] {"article:published_time", "parsely-pub-date", "date", "dc.date"}
-      ),
+          "reuters",
+          "wall street journal",
+          "washington post");
+
+  private static final Set<String> TITLE_SUFFIXES =
+      Set.of(
+          "abc news",
+          "associated press",
+          "ap news",
+          "bbc",
+          "bbc news",
+          "cnn",
+          "the guardian",
+          "guardian",
+          "new york times",
+          "nytimes",
+          "npr",
+          "reuters",
+          "the wall street journal",
+          "wall street journal",
+          "washington post");
+
+  private static final PublisherProfile DEFAULT_PROFILE =
       new PublisherProfile(
-          "wsj",
-          "Wall Street Journal",
-          new String[] {"div[data-module='ArticleBody'] p", "article [data-module='ArticleBody'] p", "article [class*='article-content'] p", "article p", "[itemprop='articleBody'] p"},
-          new String[] {"[class*='author-name']", "a[rel='author']", "[class*='byline']"},
+          "generic",
+          "News",
+          GENERIC_PARAGRAPH_SELECTORS,
+          GENERIC_BYLINE_SELECTORS,
           GENERIC_IMAGE_SELECTORS,
-          new String[] {"author", "article:author", "parsely-author"},
-          new String[] {"article:published_time", "article:modified_time", "parsely-pub-date", "date"}
-      )
-  );
+          GENERIC_AUTHOR_META_KEYS,
+          GENERIC_DATE_META_KEYS);
+
+  private static final List<PublisherProfile> PUBLISHER_PROFILES =
+      List.of(
+          new PublisherProfile(
+              "abc",
+              "ABC News",
+              new String[] {"article p", "main article p", "section article p"},
+              new String[] {"[data-testid='byline']", "[class*='Byline']", "[class*='byline']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {"article:published_time", "parsely-pub-date", "date"}),
+          new PublisherProfile(
+              "reuters",
+              "Reuters",
+              new String[] {
+                "div[data-testid='Body'] p",
+                "article[data-testid='Body'] p",
+                "article[data-testid='ArticleBody'] p",
+                "article p",
+                "main article p"
+              },
+              new String[] {
+                "[data-testid='AuthorName']",
+                "a[data-testid='AuthorName']",
+                "[class*='author-name']",
+                "[class*='Byline']"
+              },
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {"article:published_time", "parsely-pub-date", "date"}),
+          new PublisherProfile(
+              "ap",
+              "AP News",
+              new String[] {
+                "div.RichTextStoryBody p",
+                "article p",
+                "main article p",
+                "div[data-key='article'] p"
+              },
+              new String[] {"[class*='byline']", "[class*='Author']", "[data-key='byline']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {"article:published_time", "parsely-pub-date", "date"}),
+          new PublisherProfile(
+              "nyt",
+              "New York Times",
+              new String[] {"section[name='articleBody'] p", "article section p", "article p"},
+              new String[] {"[data-testid='byline']", "span[itemprop='name']", "[class*='byline']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"byl", "author", "article:author", "parsely-author"},
+              new String[] {"article:published_time", "ptime", "parsely-pub-date", "date"}),
+          new PublisherProfile(
+              "bbc",
+              "BBC",
+              new String[] {"article [data-component='text-block'] p", "article p", "main p"},
+              new String[] {
+                "[data-component='byline-block'] a",
+                "[data-component='byline-block'] span",
+                "[class*='byline']"
+              },
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"byl", "author", "article:author"},
+              new String[] {"article:published_time", "article:modified_time", "date"}),
+          new PublisherProfile(
+              "cnn",
+              "CNN",
+              new String[] {
+                "div.article__content p",
+                "div.article__main p",
+                "article p",
+                "[data-component-name='paragraph']"
+              },
+              new String[] {
+                "[class*='byline']", "[data-editable='byline']", "[class*='metadata__byline']"
+              },
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {
+                "article:published_time", "og:updated_time", "parsely-pub-date", "date"
+              }),
+          new PublisherProfile(
+              "wapo",
+              "Washington Post",
+              new String[] {
+                "div[data-qa='article-body'] p",
+                "article div[data-qa='article-body'] p",
+                "article p"
+              },
+              new String[] {"[data-qa='author-name']", "[data-qa='byline']", "[class*='byline']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {"article:published_time", "parsely-pub-date", "date"}),
+          new PublisherProfile(
+              "guardian",
+              "The Guardian",
+              new String[] {
+                "div[data-gu-name='body'] p",
+                "article div[data-gu-name='body'] p",
+                "article div[class*='article-body'] p",
+                "article p"
+              },
+              new String[] {"a[rel='author']", "[class*='byline']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {"article:published_time", "parsely-pub-date", "date"}),
+          new PublisherProfile(
+              "npr",
+              "NPR",
+              new String[] {
+                "div.storytext p",
+                "article div.storytext p",
+                "article [id*='storytext'] p",
+                "article p",
+                "main p"
+              },
+              new String[] {"[class*='byline']", "[itemprop='author']", "a[rel='author']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "dc.creator", "parsely-author"},
+              new String[] {"article:published_time", "parsely-pub-date", "date", "dc.date"}),
+          new PublisherProfile(
+              "wsj",
+              "Wall Street Journal",
+              new String[] {
+                "div[data-module='ArticleBody'] p",
+                "article [data-module='ArticleBody'] p",
+                "article [class*='article-content'] p",
+                "article p",
+                "[itemprop='articleBody'] p"
+              },
+              new String[] {"[class*='author-name']", "a[rel='author']", "[class*='byline']"},
+              GENERIC_IMAGE_SELECTORS,
+              new String[] {"author", "article:author", "parsely-author"},
+              new String[] {
+                "article:published_time", "article:modified_time", "parsely-pub-date", "date"
+              }));
 
   static boolean isLikelyNewsArticleUrl(String url) {
     if (url == null || url.isBlank()) return false;
@@ -277,7 +303,8 @@ final class NewsPreviewUtil {
     if (description == null || description.isBlank()) return false;
     String lower = description.toLowerCase(Locale.ROOT);
     boolean hasSummary = lower.contains("\nsummary:\n") || lower.startsWith("summary:\n");
-    boolean hasMeta = lower.contains("author:") || lower.contains("date:") || lower.contains("publisher:");
+    boolean hasMeta =
+        lower.contains("author:") || lower.contains("date:") || lower.contains("publisher:");
     return hasSummary && hasMeta;
   }
 
@@ -287,44 +314,45 @@ final class NewsPreviewUtil {
     LinkPreview base = LinkPreviewParser.parse(doc, originalUrl);
     String canonical = firstNonBlank(base.url(), originalUrl);
     URI canonicalUri = safeUri(canonical);
-    String host = canonicalUri != null ? normalizeHost(canonicalUri.getHost()) : hostOf(originalUrl);
+    String host =
+        canonicalUri != null ? normalizeHost(canonicalUri.getHost()) : hostOf(originalUrl);
     PublisherProfile profile = profileForHost(host);
 
-    boolean likelyByUrl = isLikelyNewsArticleUri(canonicalUri) || isLikelyNewsArticleUrl(originalUrl);
+    boolean likelyByUrl =
+        isLikelyNewsArticleUri(canonicalUri) || isLikelyNewsArticleUrl(originalUrl);
     boolean likelyBySite = isLikelyNewsSiteName(base.siteName());
     boolean likelyByDoc = isLikelyNewsDocument(doc, profile);
     if (!likelyByUrl && !likelyBySite && !likelyByDoc) return null;
 
     List<String> ldJsonBlocks = extractLdJsonBlocks(doc);
 
-    String publisher = firstNonBlank(
-        normalizePublisherName(base.siteName()),
-        profile.displayName(),
-        publisherFromHost(host)
-    );
+    String publisher =
+        firstNonBlank(
+            normalizePublisherName(base.siteName()),
+            profile.displayName(),
+            publisherFromHost(host));
 
     String title = cleanTitle(firstNonBlank(base.title(), doc.title()), publisher);
     if (title == null) {
       title = "News article";
     }
 
-    String author = cleanAuthor(firstNonBlank(
-        authorFromMeta(doc, profile),
-        authorFromLdJson(ldJsonBlocks),
-        authorFromBylineSelectors(doc, profile)
-    ));
+    String author =
+        cleanAuthor(
+            firstNonBlank(
+                authorFromMeta(doc, profile),
+                authorFromLdJson(ldJsonBlocks),
+                authorFromBylineSelectors(doc, profile)));
 
-    LocalDate date = firstNonNull(
-        dateFromMeta(doc, profile),
-        dateFromLdJson(ldJsonBlocks),
-        dateFromTimeElement(doc)
-    );
+    LocalDate date =
+        firstNonNull(
+            dateFromMeta(doc, profile), dateFromLdJson(ldJsonBlocks), dateFromTimeElement(doc));
 
-    String image = resolveAgainst(canonical, firstNonBlank(
-        base.imageUrl(),
-        imageFromLdJson(ldJsonBlocks),
-        imageFromSelectors(doc, profile)
-    ));
+    String image =
+        resolveAgainst(
+            canonical,
+            firstNonBlank(
+                base.imageUrl(), imageFromLdJson(ldJsonBlocks), imageFromSelectors(doc, profile)));
 
     String summary = summaryFromDocument(doc, profile, title, base.description());
     String description = buildDescription(author, date, publisher, summary);
@@ -344,7 +372,8 @@ final class NewsPreviewUtil {
     if (p.contains("/article/") || p.contains("/story/") || p.contains("/stories/")) return true;
     if (p.contains("/news/") && segmentCount(p) >= 3) return true;
     if (p.matches(".*\\d{6,}.*")) return true;
-    if (query != null && query.toLowerCase(Locale.ROOT).contains("id=") && segmentCount(p) >= 2) return true;
+    if (query != null && query.toLowerCase(Locale.ROOT).contains("id=") && segmentCount(p) >= 2)
+      return true;
     if (p.contains("-") && segmentCount(p) >= 3) return true;
     return segmentCount(p) >= 4;
   }
@@ -363,7 +392,8 @@ final class NewsPreviewUtil {
     String ogType = safe(meta(doc, "og:type"));
     if (ogType != null && ogType.toLowerCase(Locale.ROOT).contains("article")) return true;
 
-    if (firstNonBlank(meta(doc, "article:published_time"), meta(doc, "parsely-pub-date")) != null) return true;
+    if (firstNonBlank(meta(doc, "article:published_time"), meta(doc, "parsely-pub-date")) != null)
+      return true;
 
     if (authorFromBylineSelectors(doc, profile) != null) return true;
 
@@ -381,7 +411,9 @@ final class NewsPreviewUtil {
     if (doc == null) return false;
     for (String json : extractLdJsonBlocks(doc)) {
       String low = json.toLowerCase(Locale.ROOT);
-      if (low.contains("newsarticle") || low.contains("reportage") || low.contains("datepublished")) {
+      if (low.contains("newsarticle")
+          || low.contains("reportage")
+          || low.contains("datepublished")) {
         return true;
       }
     }
@@ -418,13 +450,13 @@ final class NewsPreviewUtil {
       String authorObj = TinyJson.findObject(json, "author");
       String authorArr = TinyJson.findArray(json, "author");
       String firstAuthorObj = TinyJson.firstObjectInArray(authorArr);
-      String val = firstNonBlank(
-          TinyJson.findString(authorObj, "name"),
-          TinyJson.findString(authorObj, "alternateName"),
-          TinyJson.findString(firstAuthorObj, "name"),
-          TinyJson.findString(firstAuthorObj, "alternateName"),
-          TinyJson.findString(json, "author")
-      );
+      String val =
+          firstNonBlank(
+              TinyJson.findString(authorObj, "name"),
+              TinyJson.findString(authorObj, "alternateName"),
+              TinyJson.findString(firstAuthorObj, "name"),
+              TinyJson.findString(firstAuthorObj, "alternateName"),
+              TinyJson.findString(json, "author"));
       val = cleanAuthor(val);
       if (val != null) return val;
     }
@@ -441,12 +473,12 @@ final class NewsPreviewUtil {
   private static LocalDate dateFromLdJson(List<String> ldJsonBlocks) {
     if (ldJsonBlocks == null || ldJsonBlocks.isEmpty()) return null;
     for (String json : ldJsonBlocks) {
-      String val = firstNonBlank(
-          TinyJson.findString(json, "datePublished"),
-          TinyJson.findString(json, "dateCreated"),
-          TinyJson.findString(json, "uploadDate"),
-          TinyJson.findString(json, "dateModified")
-      );
+      String val =
+          firstNonBlank(
+              TinyJson.findString(json, "datePublished"),
+              TinyJson.findString(json, "dateCreated"),
+              TinyJson.findString(json, "uploadDate"),
+              TinyJson.findString(json, "dateModified"));
       LocalDate d = parseLocalDate(val);
       if (d != null) return d;
     }
@@ -465,22 +497,22 @@ final class NewsPreviewUtil {
   private static String imageFromLdJson(List<String> ldJsonBlocks) {
     if (ldJsonBlocks == null || ldJsonBlocks.isEmpty()) return null;
     for (String json : ldJsonBlocks) {
-      String direct = firstNonBlank(
-          TinyJson.findString(json, "image"),
-          TinyJson.findString(json, "thumbnailUrl"),
-          TinyJson.findString(json, "contentUrl")
-      );
+      String direct =
+          firstNonBlank(
+              TinyJson.findString(json, "image"),
+              TinyJson.findString(json, "thumbnailUrl"),
+              TinyJson.findString(json, "contentUrl"));
       if (direct != null) return direct;
 
       String imageObj = TinyJson.findObject(json, "image");
       String imageArr = TinyJson.findArray(json, "image");
       String firstObj = TinyJson.firstObjectInArray(imageArr);
-      String fromObj = firstNonBlank(
-          TinyJson.findString(imageObj, "url"),
-          TinyJson.findString(firstObj, "url"),
-          TinyJson.findString(imageObj, "contentUrl"),
-          TinyJson.findString(firstObj, "contentUrl")
-      );
+      String fromObj =
+          firstNonBlank(
+              TinyJson.findString(imageObj, "url"),
+              TinyJson.findString(firstObj, "url"),
+              TinyJson.findString(imageObj, "contentUrl"),
+              TinyJson.findString(firstObj, "contentUrl"));
       if (fromObj != null) return fromObj;
     }
     return null;
@@ -492,7 +524,8 @@ final class NewsPreviewUtil {
     return firstImageBySelectors(doc, GENERIC_IMAGE_SELECTORS);
   }
 
-  private static String summaryFromDocument(Document doc, PublisherProfile profile, String title, String fallbackDescription) {
+  private static String summaryFromDocument(
+      Document doc, PublisherProfile profile, String title, String fallbackDescription) {
     LinkedHashSet<String> paragraphs = new LinkedHashSet<>();
     collectParagraphs(doc, paragraphs, profile.paragraphSelectors(), title, 8, 3600);
     if (paragraphs.size() < 2) {
@@ -504,7 +537,10 @@ final class NewsPreviewUtil {
     String summary = cleanSummary(joined, title);
 
     if (summary == null) summary = fallback;
-    if (summary != null && fallback != null && summary.length() < 180 && fallback.length() > summary.length() + 40) {
+    if (summary != null
+        && fallback != null
+        && summary.length() < 180
+        && fallback.length() > summary.length() + 40) {
       summary = fallback;
     }
 
@@ -519,8 +555,7 @@ final class NewsPreviewUtil {
       String[] selectors,
       String title,
       int maxParagraphs,
-      int maxChars
-  ) {
+      int maxChars) {
     if (doc == null || selectors == null || selectors.length == 0) return;
     int chars = totalChars(out);
     for (String selector : selectors) {
@@ -637,7 +672,8 @@ final class NewsPreviewUtil {
     return out;
   }
 
-  private static String buildDescription(String author, LocalDate date, String publisher, String summary) {
+  private static String buildDescription(
+      String author, LocalDate date, String publisher, String summary) {
     StringBuilder sb = new StringBuilder();
     if (author != null) {
       sb.append("Author: ").append(author);
@@ -677,7 +713,8 @@ final class NewsPreviewUtil {
     if (t == null) return null;
     String low = t.toLowerCase(Locale.ROOT);
     if (low.contains("reuters")) return "Reuters";
-    if (low.contains("associated press") || low.equals("ap") || low.contains("ap news")) return "AP News";
+    if (low.contains("associated press") || low.equals("ap") || low.contains("ap news"))
+      return "AP News";
     if (low.contains("new york times") || low.contains("nytimes")) return "New York Times";
     if (low.contains("bbc")) return "BBC";
     if (low.contains("cnn")) return "CNN";
@@ -858,11 +895,11 @@ final class NewsPreviewUtil {
 
   private static String meta(Document doc, String key) {
     if (doc == null || key == null || key.isBlank()) return null;
-    String value = firstNonBlank(
-        contentOf(doc.selectFirst("meta[property='" + key + "']")),
-        contentOf(doc.selectFirst("meta[name='" + key + "']")),
-        contentOf(doc.selectFirst("meta[itemprop='" + key + "']"))
-    );
+    String value =
+        firstNonBlank(
+            contentOf(doc.selectFirst("meta[property='" + key + "']")),
+            contentOf(doc.selectFirst("meta[name='" + key + "']")),
+            contentOf(doc.selectFirst("meta[itemprop='" + key + "']")));
     return safe(value);
   }
 
@@ -967,6 +1004,5 @@ final class NewsPreviewUtil {
       String[] bylineSelectors,
       String[] imageSelectors,
       String[] authorMetaKeys,
-      String[] dateMetaKeys
-  ) {}
+      String[] dateMetaKeys) {}
 }

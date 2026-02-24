@@ -32,16 +32,17 @@ public class DccTransferStore {
       String localPath,
       Integer progressPercent,
       ActionHint actionHint,
-      Instant updatedAt
-  ) {}
+      Instant updatedAt) {}
 
   public record Change(String serverId) {}
 
   public static final int DEFAULT_MAX_ENTRIES_PER_SERVER = 400;
 
   private final int maxEntriesPerServer;
-  private final ConcurrentHashMap<String, ConcurrentHashMap<String, Entry>> entriesByServer = new ConcurrentHashMap<>();
-  private final FlowableProcessor<Change> changes = PublishProcessor.<Change>create().toSerialized();
+  private final ConcurrentHashMap<String, ConcurrentHashMap<String, Entry>> entriesByServer =
+      new ConcurrentHashMap<>();
+  private final FlowableProcessor<Change> changes =
+      PublishProcessor.<Change>create().toSerialized();
 
   public DccTransferStore() {
     this(DEFAULT_MAX_ENTRIES_PER_SERVER);
@@ -62,10 +63,11 @@ public class DccTransferStore {
     if (map == null || map.isEmpty()) return List.of();
 
     ArrayList<Entry> out = new ArrayList<>(map.values());
-    out.sort(Comparator
-        .comparing(DccTransferStore.Entry::updatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
-        .thenComparing(e -> Objects.toString(e.kind(), ""))
-        .thenComparing(e -> Objects.toString(e.nick(), ""), String.CASE_INSENSITIVE_ORDER));
+    out.sort(
+        Comparator.comparing(
+                DccTransferStore.Entry::updatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+            .thenComparing(e -> Objects.toString(e.kind(), ""))
+            .thenComparing(e -> Objects.toString(e.nick(), ""), String.CASE_INSENSITIVE_ORDER));
     return List.copyOf(out);
   }
 
@@ -77,8 +79,7 @@ public class DccTransferStore {
       String status,
       String detail,
       Integer progressPercent,
-      ActionHint actionHint
-  ) {
+      ActionHint actionHint) {
     upsert(serverId, entryId, nick, kind, status, detail, "", progressPercent, actionHint);
   }
 
@@ -91,8 +92,7 @@ public class DccTransferStore {
       String detail,
       String localPath,
       Integer progressPercent,
-      ActionHint actionHint
-  ) {
+      ActionHint actionHint) {
     String sid = normalizeServerId(serverId);
     String id = normalizeEntryId(entryId);
     if (sid.isEmpty() || id.isEmpty()) return;
@@ -106,7 +106,8 @@ public class DccTransferStore {
     ActionHint hint = (actionHint == null) ? ActionHint.NONE : actionHint;
 
     Entry next = new Entry(id, sid, n, k, st, d, path, pct, hint, Instant.now());
-    ConcurrentHashMap<String, Entry> map = entriesByServer.computeIfAbsent(sid, __ -> new ConcurrentHashMap<>());
+    ConcurrentHashMap<String, Entry> map =
+        entriesByServer.computeIfAbsent(sid, __ -> new ConcurrentHashMap<>());
     map.put(id, next);
     trimIfNeeded(map);
     changes.onNext(new Change(sid));

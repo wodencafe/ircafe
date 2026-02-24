@@ -3,8 +3,8 @@ package cafe.woden.ircclient.app;
 import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
-import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.logging.history.ChatHistoryBatchBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
@@ -23,9 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
-/**
- * Orchestrates history batch persistence side effects extracted from {@link IrcMediator}.
- */
+/** Orchestrates history batch persistence side effects extracted from {@link IrcMediator}. */
 @Component
 public class MediatorHistoryIngestOrchestrator {
   private static final Duration LIVE_REQUEST_MAX_AGE = Duration.ofMinutes(2);
@@ -53,8 +51,7 @@ public class MediatorHistoryIngestOrchestrator {
       ZncPlaybackBus zncPlaybackBus,
       ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
       ChatTranscriptStore transcripts,
-      IrcClientService irc
-  ) {
+      IrcClientService irc) {
     this.ui = ui;
     this.chatHistoryIngestor = chatHistoryIngestor;
     this.chatHistoryIngestBus = chatHistoryIngestBus;
@@ -74,14 +71,9 @@ public class MediatorHistoryIngestOrchestrator {
       long earliest = earliestEpochMs(ev.entries());
       long latest = latestEpochMs(ev.entries());
       if (chatHistoryBatchBus != null) {
-        chatHistoryBatchBus.publish(new ChatHistoryBatchBus.BatchEvent(
-            sid,
-            target,
-            ev.batchId(),
-            ev.entries(),
-            earliest,
-            latest
-        ));
+        chatHistoryBatchBus.publish(
+            new ChatHistoryBatchBus.BatchEvent(
+                sid, target, ev.batchId(), ev.entries(), earliest, latest));
       }
     } catch (Exception ignored) {
     }
@@ -92,47 +84,60 @@ public class MediatorHistoryIngestOrchestrator {
       ui.appendStatus(
           live.target(),
           HISTORY_STATUS_TAG,
-          "Received " + n + " history lines (batch " + ev.batchId() + "). Displayed "
+          "Received "
+              + n
+              + " history lines (batch "
+              + ev.batchId()
+              + "). Displayed "
               + live.displayedCount()
               + " now; persisting in background.");
     } else {
       ui.appendStatus(
           dest,
           HISTORY_STATUS_TAG,
-          "Received " + n + " history lines (batch " + ev.batchId() + "). Persisting for scrollback.");
+          "Received "
+              + n
+              + " history lines (batch "
+              + ev.batchId()
+              + "). Persisting for scrollback.");
     }
 
-    chatHistoryIngestor.ingestAsync(sid, target, ev.batchId(), ev.entries(), result -> {
-      if (result == null) {
-        appendStatus(dest, HISTORY_STATUS_TAG, "Persist finished (no details).");
-        return;
-      }
+    chatHistoryIngestor.ingestAsync(
+        sid,
+        target,
+        ev.batchId(),
+        ev.entries(),
+        result -> {
+          if (result == null) {
+            appendStatus(dest, HISTORY_STATUS_TAG, "Persist finished (no details).");
+            return;
+          }
 
-      String msg;
-      if (!result.enabled()) {
-        msg = "History batch not persisted: chat logging is disabled.";
-      } else if (result.message() != null) {
-        msg = result.message();
-      } else {
-        msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
-      }
-      appendStatus(dest, HISTORY_STATUS_TAG, msg);
+          String msg;
+          if (!result.enabled()) {
+            msg = "History batch not persisted: chat logging is disabled.";
+          } else if (result.message() != null) {
+            msg = result.message();
+          } else {
+            msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
+          }
+          appendStatus(dest, HISTORY_STATUS_TAG, msg);
 
-      try {
-        if (chatHistoryIngestBus != null) {
-          chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
-              sid,
-              target,
-              ev.batchId(),
-              result.total(),
-              result.inserted(),
-              result.earliestInsertedEpochMs(),
-              result.latestInsertedEpochMs()
-          ));
-        }
-      } catch (Exception ignored) {
-      }
-    });
+          try {
+            if (chatHistoryIngestBus != null) {
+              chatHistoryIngestBus.publish(
+                  new ChatHistoryIngestBus.IngestEvent(
+                      sid,
+                      target,
+                      ev.batchId(),
+                      result.total(),
+                      result.inserted(),
+                      result.earliestInsertedEpochMs(),
+                      result.latestInsertedEpochMs()));
+            }
+          } catch (Exception ignored) {
+          }
+        });
   }
 
   public void onZncPlaybackBatchReceived(String sid, IrcEvent.ZncPlaybackBatchReceived ev) {
@@ -141,24 +146,19 @@ public class MediatorHistoryIngestOrchestrator {
     ensureTargetExists(dest);
 
     // Deterministic batch id so the DB-backed history service can wait for ingest.
-    final String batchId = "znc-playback:"
-        + (ev.fromInclusive() == null ? 0L : ev.fromInclusive().toEpochMilli())
-        + "-"
-        + (ev.toInclusive() == null ? 0L : ev.toInclusive().toEpochMilli());
+    final String batchId =
+        "znc-playback:"
+            + (ev.fromInclusive() == null ? 0L : ev.fromInclusive().toEpochMilli())
+            + "-"
+            + (ev.toInclusive() == null ? 0L : ev.toInclusive().toEpochMilli());
 
     try {
       long earliest = earliestEpochMs(ev.entries());
       long latest = latestEpochMs(ev.entries());
       if (zncPlaybackBus != null) {
-        zncPlaybackBus.publish(new ZncPlaybackBus.PlaybackEvent(
-            sid,
-            target,
-            ev.fromInclusive(),
-            ev.toInclusive(),
-            ev.entries(),
-            earliest,
-            latest
-        ));
+        zncPlaybackBus.publish(
+            new ZncPlaybackBus.PlaybackEvent(
+                sid, target, ev.fromInclusive(), ev.toInclusive(), ev.entries(), earliest, latest));
       }
     } catch (Exception ignored) {
     }
@@ -169,7 +169,11 @@ public class MediatorHistoryIngestOrchestrator {
       ui.appendStatus(
           live.target(),
           HISTORY_STATUS_TAG,
-          "Received " + n + " playback history lines for " + target + ". Displayed "
+          "Received "
+              + n
+              + " playback history lines for "
+              + target
+              + ". Displayed "
               + live.displayedCount()
               + " now; persisting in background.");
     } else if (n > 0) {
@@ -179,37 +183,42 @@ public class MediatorHistoryIngestOrchestrator {
           "Received " + n + " playback history lines. Persisting for scrollback.");
     }
 
-    chatHistoryIngestor.ingestAsync(sid, target, batchId, ev.entries(), result -> {
-      if (result == null) {
-        appendStatus(dest, HISTORY_STATUS_TAG, "Persist finished (no details).");
-        return;
-      }
+    chatHistoryIngestor.ingestAsync(
+        sid,
+        target,
+        batchId,
+        ev.entries(),
+        result -> {
+          if (result == null) {
+            appendStatus(dest, HISTORY_STATUS_TAG, "Persist finished (no details).");
+            return;
+          }
 
-      String msg;
-      if (!result.enabled()) {
-        msg = "History batch not persisted: chat logging is disabled.";
-      } else if (result.message() != null) {
-        msg = result.message();
-      } else {
-        msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
-      }
-      appendStatus(dest, HISTORY_STATUS_TAG, msg);
+          String msg;
+          if (!result.enabled()) {
+            msg = "History batch not persisted: chat logging is disabled.";
+          } else if (result.message() != null) {
+            msg = result.message();
+          } else {
+            msg = "Persisted " + result.inserted() + "/" + result.total() + " history lines.";
+          }
+          appendStatus(dest, HISTORY_STATUS_TAG, msg);
 
-      try {
-        if (chatHistoryIngestBus != null) {
-          chatHistoryIngestBus.publish(new ChatHistoryIngestBus.IngestEvent(
-              sid,
-              target,
-              batchId,
-              result.total(),
-              result.inserted(),
-              result.earliestInsertedEpochMs(),
-              result.latestInsertedEpochMs()
-          ));
-        }
-      } catch (Exception ignored) {
-      }
-    });
+          try {
+            if (chatHistoryIngestBus != null) {
+              chatHistoryIngestBus.publish(
+                  new ChatHistoryIngestBus.IngestEvent(
+                      sid,
+                      target,
+                      batchId,
+                      result.total(),
+                      result.inserted(),
+                      result.earliestInsertedEpochMs(),
+                      result.latestInsertedEpochMs()));
+            }
+          } catch (Exception ignored) {
+          }
+        });
   }
 
   private static String normalizeTarget(String target) {
@@ -221,15 +230,15 @@ public class MediatorHistoryIngestOrchestrator {
       String sid,
       String normalizedTarget,
       TargetRef fallbackTarget,
-      List<ChatHistoryEntry> entries
-  ) {
+      List<ChatHistoryEntry> entries) {
     ChatHistoryRequestRoutingState.PendingRequest pending =
         chatHistoryRequestRoutingState.consumeIfFresh(sid, normalizedTarget, LIVE_REQUEST_MAX_AGE);
     if (pending == null || pending.originTarget() == null) {
       return new LiveRenderResult(fallbackTarget, 0);
     }
 
-    TargetRef renderTarget = normalizeRenderTarget(sid, normalizedTarget, pending.originTarget(), fallbackTarget);
+    TargetRef renderTarget =
+        normalizeRenderTarget(sid, normalizedTarget, pending.originTarget(), fallbackTarget);
     ensureTargetExists(renderTarget);
     List<ChatHistoryEntry> ordered = orderedEntries(entries);
     if (ordered.isEmpty()) {
@@ -247,7 +256,8 @@ public class MediatorHistoryIngestOrchestrator {
     int displayed = 0;
     transcripts.beginHistoryInsertBatch(renderTarget);
     try {
-      int insertAt = (mode == QueryMode.BEFORE) ? transcripts.loadOlderInsertOffset(renderTarget) : 0;
+      int insertAt =
+          (mode == QueryMode.BEFORE) ? transcripts.loadOlderInsertOffset(renderTarget) : 0;
       for (ChatHistoryEntry entry : ordered) {
         HistoryFingerprint fp = HistoryFingerprint.from(entry);
         if (!seen.add(fp)) {
@@ -259,52 +269,32 @@ public class MediatorHistoryIngestOrchestrator {
 
         String from = Objects.toString(entry.from(), "");
         String text = Objects.toString(entry.text(), "");
-        long tsEpochMs = entry.at() == null ? System.currentTimeMillis() : entry.at().toEpochMilli();
+        long tsEpochMs =
+            entry.at() == null ? System.currentTimeMillis() : entry.at().toEpochMilli();
         boolean outgoing = !myNick.isBlank() && !from.isBlank() && from.equalsIgnoreCase(myNick);
 
-        ChatHistoryEntry.Kind kind = (entry.kind() == null) ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
+        ChatHistoryEntry.Kind kind =
+            (entry.kind() == null) ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
         if (mode == QueryMode.BEFORE) {
-          insertAt = switch (kind) {
-            case ACTION -> transcripts.insertActionFromHistoryAt(
-                renderTarget,
-                insertAt,
-                from,
-                text,
-                outgoing,
-                tsEpochMs);
-            case NOTICE -> transcripts.insertNoticeFromHistoryAt(
-                renderTarget,
-                insertAt,
-                from,
-                text,
-                tsEpochMs);
-            case PRIVMSG -> transcripts.insertChatFromHistoryAt(
-                renderTarget,
-                insertAt,
-                from,
-                text,
-                outgoing,
-                tsEpochMs);
-          };
+          insertAt =
+              switch (kind) {
+                case ACTION ->
+                    transcripts.insertActionFromHistoryAt(
+                        renderTarget, insertAt, from, text, outgoing, tsEpochMs);
+                case NOTICE ->
+                    transcripts.insertNoticeFromHistoryAt(
+                        renderTarget, insertAt, from, text, tsEpochMs);
+                case PRIVMSG ->
+                    transcripts.insertChatFromHistoryAt(
+                        renderTarget, insertAt, from, text, outgoing, tsEpochMs);
+              };
         } else {
           switch (kind) {
-            case ACTION -> transcripts.appendActionFromHistory(
-                renderTarget,
-                from,
-                text,
-                outgoing,
-                tsEpochMs);
-            case NOTICE -> transcripts.appendNoticeFromHistory(
-                renderTarget,
-                from,
-                text,
-                tsEpochMs);
-            case PRIVMSG -> transcripts.appendChatFromHistory(
-                renderTarget,
-                from,
-                text,
-                outgoing,
-                tsEpochMs);
+            case ACTION ->
+                transcripts.appendActionFromHistory(renderTarget, from, text, outgoing, tsEpochMs);
+            case NOTICE -> transcripts.appendNoticeFromHistory(renderTarget, from, text, tsEpochMs);
+            case PRIVMSG ->
+                transcripts.appendChatFromHistory(renderTarget, from, text, outgoing, tsEpochMs);
           }
         }
         displayed++;
@@ -328,11 +318,7 @@ public class MediatorHistoryIngestOrchestrator {
   }
 
   private static TargetRef normalizeRenderTarget(
-      String sid,
-      String normalizedTarget,
-      TargetRef origin,
-      TargetRef fallbackTarget
-  ) {
+      String sid, String normalizedTarget, TargetRef origin, TargetRef fallbackTarget) {
     if (origin == null) return fallbackTarget;
     if (!Objects.equals(origin.serverId(), sid)) {
       return new TargetRef(sid, normalizedTarget);
@@ -340,7 +326,8 @@ public class MediatorHistoryIngestOrchestrator {
     if (origin.isStatus() || origin.isUiOnly()) {
       return new TargetRef(sid, normalizedTarget);
     }
-    if (!Objects.equals(origin.target().toLowerCase(Locale.ROOT), normalizedTarget.toLowerCase(Locale.ROOT))) {
+    if (!Objects.equals(
+        origin.target().toLowerCase(Locale.ROOT), normalizedTarget.toLowerCase(Locale.ROOT))) {
       return new TargetRef(sid, normalizedTarget);
     }
     return origin;
@@ -401,9 +388,11 @@ public class MediatorHistoryIngestOrchestrator {
   }
 
   private record LiveRenderResult(TargetRef target, int displayedCount) {}
+
   private record HistoryRenderKey(TargetRef target, HistoryFingerprint fingerprint) {}
 
-  private record HistoryFingerprint(long tsEpochMs, ChatHistoryEntry.Kind kind, String from, String text) {
+  private record HistoryFingerprint(
+      long tsEpochMs, ChatHistoryEntry.Kind kind, String from, String text) {
     static HistoryFingerprint from(ChatHistoryEntry entry) {
       if (entry == null) {
         return new HistoryFingerprint(0L, ChatHistoryEntry.Kind.PRIVMSG, "", "");
@@ -411,10 +400,7 @@ public class MediatorHistoryIngestOrchestrator {
       long ts = entry.at() == null ? 0L : entry.at().toEpochMilli();
       ChatHistoryEntry.Kind k = entry.kind() == null ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
       return new HistoryFingerprint(
-          ts,
-          k,
-          Objects.toString(entry.from(), ""),
-          Objects.toString(entry.text(), ""));
+          ts, k, Objects.toString(entry.from(), ""), Objects.toString(entry.text(), ""));
     }
   }
 }

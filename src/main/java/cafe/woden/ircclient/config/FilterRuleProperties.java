@@ -24,8 +24,7 @@ public record FilterRuleProperties(
     List<LogKind> kinds,
     List<String> from,
     String tags,
-    TextRegex text
-) {
+    TextRegex text) {
 
   public FilterRuleProperties {
     name = Objects.toString(name, "").trim();

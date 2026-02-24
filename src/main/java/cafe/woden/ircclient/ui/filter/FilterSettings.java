@@ -2,9 +2,7 @@ package cafe.woden.ircclient.ui.filter;
 
 import java.util.List;
 
-/**
- * Current filter settings snapshot.
- */
+/** Current filter settings snapshot. */
 public record FilterSettings(
     boolean filtersEnabledByDefault,
     boolean placeholdersEnabledByDefault,
@@ -15,8 +13,7 @@ public record FilterSettings(
     int historyPlaceholderMaxRunsPerBatch,
     boolean historyPlaceholdersEnabledByDefault,
     List<FilterRule> rules,
-    List<FilterScopeOverride> overrides
-) {
+    List<FilterScopeOverride> overrides) {
 
   public FilterSettings {
     if (placeholderMaxPreviewLines < 0) placeholderMaxPreviewLines = 0;

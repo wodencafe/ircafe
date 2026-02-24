@@ -18,7 +18,8 @@ final class PircbotxZncParsers {
   }
 
   /**
-   * Heuristic detection: RPL_MYINFO (004) on ZNC typically includes a version token containing "ZNC".
+   * Heuristic detection: RPL_MYINFO (004) on ZNC typically includes a version token containing
+   * "ZNC".
    */
   static boolean seemsRpl004Znc(String rawLine) {
     if (rawLine == null) return false;
@@ -59,9 +60,9 @@ final class PircbotxZncParsers {
   /**
    * Best-effort parse of a single line of {@code *status ListNetworks} output.
    *
-   * <p>ZNC outputs a table-like format in most clients, but the exact columns can vary.
-   * We keep this parser intentionally tolerant: extract the first column as the network name,
-   * and (optionally) infer the second column as a yes/no "On IRC" flag.
+   * <p>ZNC outputs a table-like format in most clients, but the exact columns can vary. We keep
+   * this parser intentionally tolerant: extract the first column as the network name, and
+   * (optionally) infer the second column as a yes/no "On IRC" flag.
    */
   static ParsedListNetworksRow parseListNetworksRow(String messageText) {
     if (messageText == null) return null;
@@ -131,8 +132,10 @@ final class PircbotxZncParsers {
     if (v == null) return null;
     String s = v.trim().toLowerCase(Locale.ROOT);
     if (s.isEmpty()) return null;
-    if (s.equals("yes") || s.equals("y") || s.equals("on") || s.equals("true") || s.equals("1")) return Boolean.TRUE;
-    if (s.equals("no") || s.equals("n") || s.equals("off") || s.equals("false") || s.equals("0")) return Boolean.FALSE;
+    if (s.equals("yes") || s.equals("y") || s.equals("on") || s.equals("true") || s.equals("1"))
+      return Boolean.TRUE;
+    if (s.equals("no") || s.equals("n") || s.equals("off") || s.equals("false") || s.equals("0"))
+      return Boolean.FALSE;
     // Sometimes columns are "connected" / "disconnected".
     if (s.contains("connect") && !s.contains("dis")) return Boolean.TRUE;
     if (s.contains("disconnect")) return Boolean.FALSE;

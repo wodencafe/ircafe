@@ -47,7 +47,8 @@ public class EphemeralServerRegistry {
   }
 
   public synchronized IrcProperties.Server require(String serverId) {
-    return find(serverId).orElseThrow(() -> new IllegalArgumentException("Unknown server id: " + serverId));
+    return find(serverId)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown server id: " + serverId));
   }
 
   public synchronized boolean containsId(String serverId) {

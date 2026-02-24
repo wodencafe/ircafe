@@ -38,8 +38,7 @@ public final class ChatFindBarDecorator implements AutoCloseable {
   private static final String ACTION_FIND_CLOSE = "cafe.woden.find.close";
   private static final KeyStroke KS_CTRL_F =
       KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK);
-  private static final KeyStroke KS_ESC =
-      KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
+  private static final KeyStroke KS_ESC = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
 
   private final JComponent host;
   private final JTextPane transcript;
@@ -47,10 +46,7 @@ public final class ChatFindBarDecorator implements AutoCloseable {
   private final FindBar bar;
 
   private ChatFindBarDecorator(
-      JComponent host,
-      JTextPane transcript,
-      Supplier<StyledDocument> documentSupplier
-  ) {
+      JComponent host, JTextPane transcript, Supplier<StyledDocument> documentSupplier) {
     this.host = Objects.requireNonNull(host, "host");
     this.transcript = Objects.requireNonNull(transcript, "transcript");
     this.documentSupplier = Objects.requireNonNull(documentSupplier, "documentSupplier");
@@ -69,10 +65,7 @@ public final class ChatFindBarDecorator implements AutoCloseable {
   }
 
   public static ChatFindBarDecorator install(
-      JComponent host,
-      JTextPane transcript,
-      Supplier<StyledDocument> documentSupplier
-  ) {
+      JComponent host, JTextPane transcript, Supplier<StyledDocument> documentSupplier) {
     return new ChatFindBarDecorator(host, transcript, documentSupplier);
   }
 
@@ -110,26 +103,36 @@ public final class ChatFindBarDecorator implements AutoCloseable {
   private void installKeybindings() {
     JComponent bindingTarget = host;
 
-    bindingTarget.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+    bindingTarget
+        .getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
         .put(KS_CTRL_F, ACTION_FIND_TOGGLE);
-    bindingTarget.getActionMap().put(ACTION_FIND_TOGGLE, new AbstractAction() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        toggle();
-      }
-    });
+    bindingTarget
+        .getActionMap()
+        .put(
+            ACTION_FIND_TOGGLE,
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                toggle();
+              }
+            });
 
     // Esc closes find bar if visible (even if transcript has focus).
-    bindingTarget.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+    bindingTarget
+        .getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
         .put(KS_ESC, ACTION_FIND_CLOSE);
-    bindingTarget.getActionMap().put(ACTION_FIND_CLOSE, new AbstractAction() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        if (bar.isVisible()) {
-          bar.close();
-        }
-      }
-    });
+    bindingTarget
+        .getActionMap()
+        .put(
+            ACTION_FIND_CLOSE,
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                if (bar.isVisible()) {
+                  bar.close();
+                }
+              }
+            });
   }
 
   private void uninstallKeybindings() {
@@ -216,36 +219,68 @@ public final class ChatFindBarDecorator implements AutoCloseable {
       close.addActionListener(e -> close());
 
       // Enter = next, Shift+Enter = prev, Esc = close (field-focused)
-      field.getInputMap(JComponent.WHEN_FOCUSED)
+      field
+          .getInputMap(JComponent.WHEN_FOCUSED)
           .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "findNext");
-      field.getActionMap().put("findNext", new AbstractAction() {
-        @Override public void actionPerformed(ActionEvent e) {
-          find(true);
-        }
-      });
+      field
+          .getActionMap()
+          .put(
+              "findNext",
+              new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                  find(true);
+                }
+              });
 
-      field.getInputMap(JComponent.WHEN_FOCUSED)
+      field
+          .getInputMap(JComponent.WHEN_FOCUSED)
           .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK), "findPrev");
-      field.getActionMap().put("findPrev", new AbstractAction() {
-        @Override public void actionPerformed(ActionEvent e) {
-          find(false);
-        }
-      });
+      field
+          .getActionMap()
+          .put(
+              "findPrev",
+              new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                  find(false);
+                }
+              });
 
-      field.getInputMap(JComponent.WHEN_FOCUSED)
+      field
+          .getInputMap(JComponent.WHEN_FOCUSED)
           .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "findClose");
-      field.getActionMap().put("findClose", new AbstractAction() {
-        @Override public void actionPerformed(ActionEvent e) {
-          close();
-        }
-      });
+      field
+          .getActionMap()
+          .put(
+              "findClose",
+              new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                  close();
+                }
+              });
 
       // Changing query/options invalidates cache; we only scan on user action (Next/Prev/Enter).
-      field.getDocument().addDocumentListener(new DocumentListener() {
-        @Override public void insertUpdate(DocumentEvent e) { invalidateCache(); }
-        @Override public void removeUpdate(DocumentEvent e) { invalidateCache(); }
-        @Override public void changedUpdate(DocumentEvent e) { invalidateCache(); }
-      });
+      field
+          .getDocument()
+          .addDocumentListener(
+              new DocumentListener() {
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                  invalidateCache();
+                }
+
+                @Override
+                public void removeUpdate(DocumentEvent e) {
+                  invalidateCache();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                  invalidateCache();
+                }
+              });
       matchCase.addActionListener(e -> invalidateCache());
 
       // Subtle status styling if a theme provides one
@@ -275,10 +310,11 @@ public final class ChatFindBarDecorator implements AutoCloseable {
         }
       }
 
-      SwingUtilities.invokeLater(() -> {
-        field.requestFocusInWindow();
-        field.selectAll();
-      });
+      SwingUtilities.invokeLater(
+          () -> {
+            field.requestFocusInWindow();
+            field.selectAll();
+          });
     }
 
     void onDocumentSwapped() {

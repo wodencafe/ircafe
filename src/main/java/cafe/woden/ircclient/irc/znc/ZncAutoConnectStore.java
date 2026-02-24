@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
  * Persisted auto-connect preferences for ZNC-discovered networks.
  *
  * <p>This store keeps a mapping of:
+ *
  * <pre>
  *   bouncerServerId -> networkName -> enabled
  * </pre>
@@ -27,9 +28,11 @@ public class ZncAutoConnectStore {
   private final RuntimeConfigStore runtimeConfig;
 
   // bouncerId -> (networkKey -> true)
-  private final LinkedHashMap<String, LinkedHashMap<String, Boolean>> enabled = new LinkedHashMap<>();
+  private final LinkedHashMap<String, LinkedHashMap<String, Boolean>> enabled =
+      new LinkedHashMap<>();
 
-  private final BehaviorProcessor<Map<String, Map<String, Boolean>>> updates = BehaviorProcessor.create();
+  private final BehaviorProcessor<Map<String, Map<String, Boolean>>> updates =
+      BehaviorProcessor.create();
 
   public ZncAutoConnectStore(ZncProperties props, RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
@@ -89,7 +92,8 @@ public class ZncAutoConnectStore {
     return m != null && Boolean.TRUE.equals(m.get(netKey));
   }
 
-  public synchronized void setAutoConnectEnabled(String bouncerServerId, String networkName, boolean enable) {
+  public synchronized void setAutoConnectEnabled(
+      String bouncerServerId, String networkName, boolean enable) {
     String bouncer = norm(bouncerServerId);
     String netKey = normNetKey(networkName);
     if (bouncer == null || netKey == null) return;

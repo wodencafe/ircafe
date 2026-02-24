@@ -65,16 +65,14 @@ public interface FreedesktopNotifications extends DBusInterface {
     }
   }
 
-  /**
-   * Returns a list of optional server capabilities (e.g. "actions").
-   */
+  /** Returns a list of optional server capabilities (e.g. "actions"). */
   List<String> GetCapabilities();
 
   /**
    * Sends a desktop notification.
    *
-   * <p>Signature per Desktop Notifications spec: Notify(app_name, replaces_id, app_icon,
-   * summary, body, actions, hints, expire_timeout) -> id.
+   * <p>Signature per Desktop Notifications spec: Notify(app_name, replaces_id, app_icon, summary,
+   * body, actions, hints, expire_timeout) -> id.
    */
   UInt32 Notify(
       String appName,
@@ -84,6 +82,5 @@ public interface FreedesktopNotifications extends DBusInterface {
       String body,
       String[] actions,
       Map<String, Variant<?>> hints,
-      int expireTimeout
-  );
+      int expireTimeout);
 }

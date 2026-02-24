@@ -14,10 +14,10 @@ import org.pircbotx.exception.CAPException;
 /**
  * Requests multiple optional IRCv3 capabilities in one CAP REQ line.
  *
- * <p>PircBotX's {@link org.pircbotx.cap.EnableCapHandler} sends one CAP REQ per capability.
- * On networks that ACK each request with a small delay, that can noticeably increase connect
- * latency. This handler batches all desired capabilities into a single request while preserving
- * optional semantics (missing caps are ignored).
+ * <p>PircBotX's {@link org.pircbotx.cap.EnableCapHandler} sends one CAP REQ per capability. On
+ * networks that ACK each request with a small delay, that can noticeably increase connect latency.
+ * This handler batches all desired capabilities into a single request while preserving optional
+ * semantics (missing caps are ignored).
  */
 final class BatchedEnableCapHandler implements CapHandler {
 

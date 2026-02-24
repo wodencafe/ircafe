@@ -4,13 +4,8 @@ import cafe.woden.ircclient.logging.model.LogLine;
 import java.util.List;
 
 public record LoadOlderResult(
-    
-    List<LogLine> linesOldestFirst,
+    List<LogLine> linesOldestFirst, LogCursor newOldestCursor, boolean hasMore) {
 
-    LogCursor newOldestCursor,
-
-    boolean hasMore
-) {
   public LoadOlderResult {
     if (linesOldestFirst == null) linesOldestFirst = List.of();
   }

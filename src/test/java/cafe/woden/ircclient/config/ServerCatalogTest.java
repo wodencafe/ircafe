@@ -82,8 +82,7 @@ class ServerCatalogTest {
     persistedRows.add(null);
     persistedRows.add(persistedB);
     when(serverRegistry.servers()).thenReturn(persistedRows);
-    when(ephemeralServers.entries())
-        .thenReturn(List.of(ServerEntry.ephemeral(ephemeral, "soju")));
+    when(ephemeralServers.entries()).thenReturn(List.of(ServerEntry.ephemeral(ephemeral, "soju")));
 
     ServerCatalog catalog = new ServerCatalog(serverRegistry, ephemeralServers);
     List<ServerEntry> entries = catalog.entries();
@@ -125,8 +124,7 @@ class ServerCatalogTest {
         v ->
             v.equals(
                 List.of(
-                    ServerEntry.persistent(persistedA),
-                    ServerEntry.ephemeral(ephemeral, "soju"))));
+                    ServerEntry.persistent(persistedA), ServerEntry.ephemeral(ephemeral, "soju"))));
     observer.assertValueAt(
         2,
         v ->

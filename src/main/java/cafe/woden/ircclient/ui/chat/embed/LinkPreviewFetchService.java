@@ -5,8 +5,8 @@ import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Single;
 import java.net.URI;
-import java.util.Locale;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -24,10 +24,12 @@ public class LinkPreviewFetchService {
   private final ServerProxyResolver proxyResolver;
   private final List<LinkPreviewResolver> resolvers;
 
-  private final ConcurrentMap<String, java.lang.ref.SoftReference<LinkPreview>> cache = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, java.lang.ref.SoftReference<LinkPreview>> cache =
+      new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Single<LinkPreview>> inflight = new ConcurrentHashMap<>();
 
-  public LinkPreviewFetchService(ServerProxyResolver proxyResolver, List<LinkPreviewResolver> resolvers) {
+  public LinkPreviewFetchService(
+      ServerProxyResolver proxyResolver, List<LinkPreviewResolver> resolvers) {
     this.proxyResolver = proxyResolver;
     this.resolvers = (resolvers == null) ? List.of() : List.copyOf(resolvers);
   }
@@ -53,13 +55,14 @@ public class LinkPreviewFetchService {
     }
 
     // Inflight de-dupe: computeIfAbsent + cache() so multiple subscribers share the same work.
-    return inflight.computeIfAbsent(key, k ->
-        Single.fromCallable(() -> load(sid, normalized))
-            .subscribeOn(RxVirtualSchedulers.io())
-            .doOnSuccess(p -> cache.put(k, new java.lang.ref.SoftReference<>(p)))
-            .doFinally(() -> inflight.remove(k))
-            .cache()
-    );
+    return inflight.computeIfAbsent(
+        key,
+        k ->
+            Single.fromCallable(() -> load(sid, normalized))
+                .subscribeOn(RxVirtualSchedulers.io())
+                .doOnSuccess(p -> cache.put(k, new java.lang.ref.SoftReference<>(p)))
+                .doFinally(() -> inflight.remove(k))
+                .cache());
   }
 
   // Back-compat for any callers not yet server-aware.
@@ -77,7 +80,8 @@ public class LinkPreviewFetchService {
       throw new IllegalArgumentException("refusing to fetch local/private host: " + uri.getHost());
     }
 
-    PreviewHttp http = new PreviewHttp(proxyResolver != null ? proxyResolver.planForServer(serverId) : null);
+    PreviewHttp http =
+        new PreviewHttp(proxyResolver != null ? proxyResolver.planForServer(serverId) : null);
 
     for (LinkPreviewResolver r : resolvers) {
       try {
@@ -86,7 +90,11 @@ public class LinkPreviewFetchService {
       } catch (Exception e) {
         // Resolvers may throw when they apply but fail (e.g., HTTP errors).
         // Don't fail the whole preview chain: keep trying fallbacks.
-        log.debug("Link preview resolver {} failed for {}: {}", r.getClass().getSimpleName(), url, e.toString());
+        log.debug(
+            "Link preview resolver {} failed for {}: {}",
+            r.getClass().getSimpleName(),
+            url,
+            e.toString());
         // Continue to the next resolver.
       }
     }
@@ -98,7 +106,10 @@ public class LinkPreviewFetchService {
     if (host == null || host.isBlank()) return false;
     String h = host.toLowerCase(Locale.ROOT).trim();
 
-    if (h.equals("localhost") || h.equals("localhost.localdomain") || h.equals("0.0.0.0") || h.equals("::1")) {
+    if (h.equals("localhost")
+        || h.equals("localhost.localdomain")
+        || h.equals("0.0.0.0")
+        || h.equals("::1")) {
       return true;
     }
     // If it's an IPv4 literal, block common private ranges.

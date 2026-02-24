@@ -10,10 +10,11 @@ import java.util.Properties;
  * Lightweight build/version helper.
  *
  * <p>We try (in order):
+ *
  * <ol>
- *   <li>Spring Boot build info: META-INF/build-info.properties (build.version)</li>
- *   <li>Jar manifest: Implementation-Version</li>
- *   <li>System property: ircafe.version</li>
+ *   <li>Spring Boot build info: META-INF/build-info.properties (build.version)
+ *   <li>Jar manifest: Implementation-Version
+ *   <li>System property: ircafe.version
  * </ol>
  */
 public final class AppVersion {
@@ -23,8 +24,7 @@ public final class AppVersion {
   private static volatile String cachedVersion;
   private static volatile Instant cachedBuildTime;
 
-  private AppVersion() {
-  }
+  private AppVersion() {}
 
   /** Returns the build/version string, or null if unknown. */
   public static String version() {
@@ -65,21 +65,20 @@ public final class AppVersion {
     if (t == null) return base;
 
     try {
-      String date = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-          .withZone(ZoneId.systemDefault())
-          .format(t);
+      String date =
+          DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault()).format(t);
       return base + " • built " + date;
     } catch (Exception ignored) {
       return base;
     }
   }
 
-    /**
+  /**
    * Decorate {@code irc.client.version} when it looks like the default app name.
    *
-   * <p>If the configured value is blank, equals {@link #APP_NAME}, or equals {@code APP_NAME + version()},
-   * we return a best-effort build string that matches the main window title (includes build date when
-   * available). Otherwise the configured value is returned unchanged.
+   * <p>If the configured value is blank, equals {@link #APP_NAME}, or equals {@code APP_NAME +
+   * version()}, we return a best-effort build string that matches the main window title (includes
+   * build date when available). Otherwise the configured value is returned unchanged.
    */
   public static String decorateIfDefaultName(String configured) {
     String v = version();
@@ -97,9 +96,9 @@ public final class AppVersion {
     return t;
   }
 
- private static String readBuildInfoVersion() {
-    try (InputStream in = AppVersion.class.getClassLoader()
-        .getResourceAsStream("META-INF/build-info.properties")) {
+  private static String readBuildInfoVersion() {
+    try (InputStream in =
+        AppVersion.class.getClassLoader().getResourceAsStream("META-INF/build-info.properties")) {
       if (in == null) return null;
 
       Properties p = new Properties();
@@ -112,8 +111,8 @@ public final class AppVersion {
   }
 
   private static Instant readBuildInfoTime() {
-    try (InputStream in = AppVersion.class.getClassLoader()
-        .getResourceAsStream("META-INF/build-info.properties")) {
+    try (InputStream in =
+        AppVersion.class.getClassLoader().getResourceAsStream("META-INF/build-info.properties")) {
       if (in == null) return null;
 
       Properties p = new Properties();

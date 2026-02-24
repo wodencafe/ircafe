@@ -12,8 +12,8 @@ import java.util.function.Consumer;
 /**
  * A small helper that mimics {@code javax.swing.Timer} restart/stop semantics using RxJava.
  *
- * <p>This is intended for low-frequency debounce and one-shot timers in the application layer.
- * UI animation should generally remain a Swing Timer.
+ * <p>This is intended for low-frequency debounce and one-shot timers in the application layer. UI
+ * animation should generally remain a Swing Timer.
  */
 public final class RestartableRxTimer implements AutoCloseable {
   private final Scheduler scheduler;
@@ -38,9 +38,8 @@ public final class RestartableRxTimer implements AutoCloseable {
     if (action == null) return;
 
     try {
-      Disposable next = Completable
-          .timer(delay, unit, scheduler)
-          .subscribe(action::run, onError::accept);
+      Disposable next =
+          Completable.timer(delay, unit, scheduler).subscribe(action::run, onError::accept);
       current.set(next);
     } catch (Throwable t) {
       onError.accept(t);

@@ -20,28 +20,27 @@ final class ImgurPreviewUtil {
 
   private static final Pattern GALLERY_PATH =
       Pattern.compile("^/(gallery|a|t/[^/]+)/[^/]+(?:/.*)?$", Pattern.CASE_INSENSITIVE);
-  private static final Pattern DIRECT_POST_PATH =
-      Pattern.compile("^/[A-Za-z0-9]{5,}(?:/.*)?$");
+  private static final Pattern DIRECT_POST_PATH = Pattern.compile("^/[A-Za-z0-9]{5,}(?:/.*)?$");
   private static final Pattern LONG_FIELD =
       Pattern.compile("\"([A-Za-z0-9_]+)\"\\s*:\\s*([0-9]{6,})");
 
   private static final String[] NON_POST_PREFIXES = {
-      "/about",
-      "/account",
-      "/apps",
-      "/blog",
-      "/community",
-      "/download",
-      "/help",
-      "/privacy",
-      "/random",
-      "/register",
-      "/rules",
-      "/settings",
-      "/signin",
-      "/tos",
-      "/upload",
-      "/user"
+    "/about",
+    "/account",
+    "/apps",
+    "/blog",
+    "/community",
+    "/download",
+    "/help",
+    "/privacy",
+    "/random",
+    "/register",
+    "/rules",
+    "/settings",
+    "/signin",
+    "/tos",
+    "/upload",
+    "/user"
   };
 
   static boolean isImgurUrl(String url) {
@@ -93,52 +92,58 @@ final class ImgurPreviewUtil {
     List<String> ldJsonBlocks = extractLdJsonBlocks(doc);
     String postJson = extractBestPostJson(doc);
 
-    String title = cleanTitle(firstNonBlank(
-        TinyJson.findString(postJson, "title"),
-        titleFromLdJson(ldJsonBlocks),
-        base.title(),
-        doc.title()
-    ));
+    String title =
+        cleanTitle(
+            firstNonBlank(
+                TinyJson.findString(postJson, "title"),
+                titleFromLdJson(ldJsonBlocks),
+                base.title(),
+                doc.title()));
     if (title == null) {
       title = "Imgur post";
     }
 
-    String submitter = cleanSubmitter(firstNonBlank(
-        submitterFromLdJson(ldJsonBlocks),
-        TinyJson.findString(postJson, "account_url"),
-        TinyJson.findString(postJson, "username"),
-        TinyJson.findString(postJson, "author"),
-        meta(doc, "author"),
-        meta(doc, "article:author")
-    ));
+    String submitter =
+        cleanSubmitter(
+            firstNonBlank(
+                submitterFromLdJson(ldJsonBlocks),
+                TinyJson.findString(postJson, "account_url"),
+                TinyJson.findString(postJson, "username"),
+                TinyJson.findString(postJson, "author"),
+                meta(doc, "author"),
+                meta(doc, "article:author")));
 
-    LocalDate date = firstNonNullDate(
-        dateFromLdJson(ldJsonBlocks),
-        parseLocalDate(firstNonBlank(
-            meta(doc, "article:published_time"),
-            meta(doc, "article:modified_time"),
-            meta(doc, "og:updated_time"),
-            meta(doc, "parsely-pub-date"),
-            meta(doc, "pubdate"),
-            meta(doc, "date"),
-            firstTimeDateTime(doc)
-        )),
-        dateFromEpoch(findLongField(postJson, "datetime")),
-        dateFromEpoch(findLongField(postJson, "created"))
-    );
+    LocalDate date =
+        firstNonNullDate(
+            dateFromLdJson(ldJsonBlocks),
+            parseLocalDate(
+                firstNonBlank(
+                    meta(doc, "article:published_time"),
+                    meta(doc, "article:modified_time"),
+                    meta(doc, "og:updated_time"),
+                    meta(doc, "parsely-pub-date"),
+                    meta(doc, "pubdate"),
+                    meta(doc, "date"),
+                    firstTimeDateTime(doc))),
+            dateFromEpoch(findLongField(postJson, "datetime")),
+            dateFromEpoch(findLongField(postJson, "created")));
 
-    String caption = cleanCaption(firstNonBlank(
-        captionFromLdJson(ldJsonBlocks),
-        TinyJson.findString(postJson, "description"),
-        base.description()
-    ), title);
+    String caption =
+        cleanCaption(
+            firstNonBlank(
+                captionFromLdJson(ldJsonBlocks),
+                TinyJson.findString(postJson, "description"),
+                base.description()),
+            title);
 
-    String image = resolveAgainst(canonical, firstNonBlank(
-        imageFromLdJson(ldJsonBlocks),
-        imageFromPostJson(postJson),
-        base.imageUrl(),
-        bestImageFromDoc(doc)
-    ));
+    String image =
+        resolveAgainst(
+            canonical,
+            firstNonBlank(
+                imageFromLdJson(ldJsonBlocks),
+                imageFromPostJson(postJson),
+                base.imageUrl(),
+                bestImageFromDoc(doc)));
 
     if (image == null && caption == null && submitter == null && date == null) {
       return null;
@@ -260,10 +265,8 @@ final class ImgurPreviewUtil {
   private static String titleFromLdJson(List<String> ldJsonBlocks) {
     if (ldJsonBlocks == null || ldJsonBlocks.isEmpty()) return null;
     for (String json : ldJsonBlocks) {
-      String t = firstNonBlank(
-          TinyJson.findString(json, "headline"),
-          TinyJson.findString(json, "title")
-      );
+      String t =
+          firstNonBlank(TinyJson.findString(json, "headline"), TinyJson.findString(json, "title"));
       if (t != null) return t;
     }
     return null;
@@ -275,13 +278,13 @@ final class ImgurPreviewUtil {
       String authorObj = TinyJson.findObject(json, "author");
       String authorArr = TinyJson.findArray(json, "author");
       String firstAuthorObj = TinyJson.firstObjectInArray(authorArr);
-      String author = firstNonBlank(
-          TinyJson.findString(authorObj, "alternateName"),
-          TinyJson.findString(authorObj, "name"),
-          TinyJson.findString(firstAuthorObj, "alternateName"),
-          TinyJson.findString(firstAuthorObj, "name"),
-          TinyJson.findString(json, "author")
-      );
+      String author =
+          firstNonBlank(
+              TinyJson.findString(authorObj, "alternateName"),
+              TinyJson.findString(authorObj, "name"),
+              TinyJson.findString(firstAuthorObj, "alternateName"),
+              TinyJson.findString(firstAuthorObj, "name"),
+              TinyJson.findString(json, "author"));
       if (author != null) return author;
     }
     return null;
@@ -290,11 +293,12 @@ final class ImgurPreviewUtil {
   private static LocalDate dateFromLdJson(List<String> ldJsonBlocks) {
     if (ldJsonBlocks == null || ldJsonBlocks.isEmpty()) return null;
     for (String json : ldJsonBlocks) {
-      LocalDate d = parseLocalDate(firstNonBlank(
-          TinyJson.findString(json, "datePublished"),
-          TinyJson.findString(json, "uploadDate"),
-          TinyJson.findString(json, "dateCreated")
-      ));
+      LocalDate d =
+          parseLocalDate(
+              firstNonBlank(
+                  TinyJson.findString(json, "datePublished"),
+                  TinyJson.findString(json, "uploadDate"),
+                  TinyJson.findString(json, "dateCreated")));
       if (d != null) return d;
     }
     return null;
@@ -303,12 +307,12 @@ final class ImgurPreviewUtil {
   private static String captionFromLdJson(List<String> ldJsonBlocks) {
     if (ldJsonBlocks == null || ldJsonBlocks.isEmpty()) return null;
     for (String json : ldJsonBlocks) {
-      String text = firstNonBlank(
-          TinyJson.findString(json, "description"),
-          TinyJson.findString(json, "articleBody"),
-          TinyJson.findString(json, "text"),
-          TinyJson.findString(json, "caption")
-      );
+      String text =
+          firstNonBlank(
+              TinyJson.findString(json, "description"),
+              TinyJson.findString(json, "articleBody"),
+              TinyJson.findString(json, "text"),
+              TinyJson.findString(json, "caption"));
       if (text != null) return text;
     }
     return null;
@@ -321,14 +325,14 @@ final class ImgurPreviewUtil {
       String imageArr = TinyJson.findArray(json, "image");
       String firstImageObj = TinyJson.firstObjectInArray(imageArr);
 
-      String image = firstNonBlank(
-          TinyJson.findString(json, "image"),
-          TinyJson.findString(json, "thumbnailUrl"),
-          TinyJson.findString(imageObj, "url"),
-          TinyJson.findString(imageObj, "contentUrl"),
-          TinyJson.findString(firstImageObj, "url"),
-          TinyJson.findString(firstImageObj, "contentUrl")
-      );
+      String image =
+          firstNonBlank(
+              TinyJson.findString(json, "image"),
+              TinyJson.findString(json, "thumbnailUrl"),
+              TinyJson.findString(imageObj, "url"),
+              TinyJson.findString(imageObj, "contentUrl"),
+              TinyJson.findString(firstImageObj, "url"),
+              TinyJson.findString(firstImageObj, "contentUrl"));
       if (image != null) return image;
     }
     return null;
@@ -336,19 +340,19 @@ final class ImgurPreviewUtil {
 
   private static String imageFromPostJson(String postJson) {
     if (postJson == null || postJson.isBlank()) return null;
-    String link = firstNonBlank(
-        TinyJson.findString(postJson, "link"),
-        TinyJson.findString(postJson, "image_url"),
-        TinyJson.findString(postJson, "image"),
-        TinyJson.findString(postJson, "url")
-    );
+    String link =
+        firstNonBlank(
+            TinyJson.findString(postJson, "link"),
+            TinyJson.findString(postJson, "image_url"),
+            TinyJson.findString(postJson, "image"),
+            TinyJson.findString(postJson, "url"));
     if (link != null) return link;
 
     String coverHash = TinyJson.findString(postJson, "cover");
-    String coverExt = firstNonBlank(
-        TinyJson.findString(postJson, "cover_ext"),
-        TinyJson.findString(postJson, "cover_extension")
-    );
+    String coverExt =
+        firstNonBlank(
+            TinyJson.findString(postJson, "cover_ext"),
+            TinyJson.findString(postJson, "cover_extension"));
     String cover = imgurImageFromHash(coverHash, coverExt);
     if (cover != null) return cover;
 
@@ -389,12 +393,12 @@ final class ImgurPreviewUtil {
 
   private static String bestImageFromDoc(Document doc) {
     if (doc == null) return null;
-    String meta = firstNonBlank(
-        meta(doc, "og:image"),
-        meta(doc, "og:image:secure_url"),
-        meta(doc, "twitter:image"),
-        meta(doc, "twitter:image:src")
-    );
+    String meta =
+        firstNonBlank(
+            meta(doc, "og:image"),
+            meta(doc, "og:image:secure_url"),
+            meta(doc, "twitter:image"),
+            meta(doc, "twitter:image:src"));
     if (meta != null) return meta;
 
     Element best = null;
@@ -531,9 +535,8 @@ final class ImgurPreviewUtil {
   private static LocalDate dateFromEpoch(Long epoch) {
     if (epoch == null || epoch <= 0) return null;
     try {
-      Instant inst = (epoch > 10_000_000_000L)
-          ? Instant.ofEpochMilli(epoch)
-          : Instant.ofEpochSecond(epoch);
+      Instant inst =
+          (epoch > 10_000_000_000L) ? Instant.ofEpochMilli(epoch) : Instant.ofEpochSecond(epoch);
       return inst.atZone(ZoneId.systemDefault()).toLocalDate();
     } catch (Exception ignored) {
       return null;

@@ -3,18 +3,18 @@ package cafe.woden.ircclient;
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
-import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.SojuProperties;
-import cafe.woden.ircclient.config.IgnoreProperties;
+import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.ui.MainFrame;
-import cafe.woden.ircclient.ui.tray.TrayService;
-import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
+import cafe.woden.ircclient.ui.tray.TrayService;
 import java.awt.Desktop;
 import java.awt.Frame;
 import java.net.URI;
@@ -32,13 +32,13 @@ import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
 @EnableConfigurationProperties({
-    IrcProperties.class,
-    UiProperties.class,
-    PushyProperties.class,
-    IgnoreProperties.class,
-    LogProperties.class,
-    SojuProperties.class,
-    ZncProperties.class
+  IrcProperties.class,
+  UiProperties.class,
+  PushyProperties.class,
+  IgnoreProperties.class,
+  LogProperties.class,
+  SojuProperties.class,
+  ZncProperties.class
 })
 public class IrcSwingApp {
   private static final Logger log = LoggerFactory.getLogger(IrcSwingApp.class);
@@ -46,41 +46,45 @@ public class IrcSwingApp {
   public static void main(String[] args) {
     ConsoleTeeHub.install();
 
-    new SpringApplicationBuilder(IrcSwingApp.class)
-        .headless(false)
-        .run(args);
+    new SpringApplicationBuilder(IrcSwingApp.class).headless(false).run(args);
   }
 
   @Bean
-  public ApplicationRunner run(ObjectProvider<MainFrame> frames,
-                               ObjectProvider<IrcMediator> mediatorProvider,
-                               ThemeManager themeManager,
-                               UiSettingsBus settingsBus,
-                               TrayService trayService,
-                               UiPort ui) {
-    return args -> SwingUtilities.invokeLater(() -> {
-      // Install theme before showing UI.
-      String theme = settingsBus.get().theme();
-      themeManager.installLookAndFeel(theme);
+  public ApplicationRunner run(
+      ObjectProvider<MainFrame> frames,
+      ObjectProvider<IrcMediator> mediatorProvider,
+      ThemeManager themeManager,
+      UiSettingsBus settingsBus,
+      TrayService trayService,
+      UiPort ui) {
+    return args ->
+        SwingUtilities.invokeLater(
+            () -> {
+              // Install theme before showing UI.
+              String theme = settingsBus.get().theme();
+              themeManager.installLookAndFeel(theme);
 
-      MainFrame frame = frames.getObject();
-      SwingUtilities.updateComponentTreeUI(frame);
-      frame.invalidate();
-      frame.validate();
-      frame.repaint();
+              MainFrame frame = frames.getObject();
+              SwingUtilities.updateComponentTreeUI(frame);
+              frame.invalidate();
+              frame.validate();
+              frame.repaint();
 
-      trayService.installIfEnabled();
-      installDesktopHandlers(frame, ui);
+              trayService.installIfEnabled();
+              installDesktopHandlers(frame, ui);
 
-      // If we start minimized, don't show the window (tray icon becomes the entry point).
-      boolean startMinimized = trayService.isTrayActive() && trayService.isEnabled() && trayService.startMinimized();
-      frame.setVisible(!startMinimized);
+              // If we start minimized, don't show the window (tray icon becomes the entry point).
+              boolean startMinimized =
+                  trayService.isTrayActive()
+                      && trayService.isEnabled()
+                      && trayService.startMinimized();
+              frame.setVisible(!startMinimized);
 
-      IrcMediator mediator = mediatorProvider.getObject();
-      if (settingsBus.get().autoConnectOnStart()) {
-        mediator.connectAll();
-      }
-    });
+              IrcMediator mediator = mediatorProvider.getObject();
+              if (settingsBus.get().autoConnectOnStart()) {
+                mediator.connectAll();
+              }
+            });
   }
 
   private static void installDesktopHandlers(MainFrame frame, UiPort ui) {
@@ -88,14 +92,16 @@ public class IrcSwingApp {
     Desktop desktop = Desktop.getDesktop();
 
     try {
-      desktop.addAppEventListener((java.awt.desktop.AppReopenedListener) e ->
-          SwingUtilities.invokeLater(() -> focusMainWindow(frame)));
+      desktop.addAppEventListener(
+          (java.awt.desktop.AppReopenedListener)
+              e -> SwingUtilities.invokeLater(() -> focusMainWindow(frame)));
     } catch (Exception e) {
       log.debug("[ircafe] app reopen listener unavailable", e);
     }
 
     try {
-      desktop.setOpenURIHandler(e -> SwingUtilities.invokeLater(() -> routeOpenUri(frame, ui, e.getURI())));
+      desktop.setOpenURIHandler(
+          e -> SwingUtilities.invokeLater(() -> routeOpenUri(frame, ui, e.getURI())));
     } catch (Exception e) {
       log.debug("[ircafe] open-uri handler unavailable", e);
     }

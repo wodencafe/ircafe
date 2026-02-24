@@ -9,8 +9,8 @@ import org.springframework.stereotype.Component;
 /**
  * Tracks arg-less channel flag modes (e.g. +nt, +s, +C) per server/channel.
  *
- * <p>Used to suppress "no-op" MODE echoes where the server repeats the already-known
- * channel flags (common after status-mode changes like +v/+o).
+ * <p>Used to suppress "no-op" MODE echoes where the server repeats the already-known channel flags
+ * (common after status-mode changes like +v/+o).
  */
 @Component
 public class ChannelFlagModeState {

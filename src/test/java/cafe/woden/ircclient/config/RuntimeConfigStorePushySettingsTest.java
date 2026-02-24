@@ -11,25 +11,24 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RuntimeConfigStorePushySettingsTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void pushySettingsArePersistedUnderIrcafePushySection() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        cfg.toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
-    store.rememberPushySettings(new PushyProperties(
-        true,
-        "https://api.pushy.me/push",
-        "api-key-123",
-        "device-token-1",
-        null,
-        "IRCafe",
-        5,
-        8));
+    store.rememberPushySettings(
+        new PushyProperties(
+            true,
+            "https://api.pushy.me/push",
+            "api-key-123",
+            "device-token-1",
+            null,
+            "IRCafe",
+            5,
+            8));
 
     String yaml = Files.readString(cfg);
     assertTrue(yaml.contains("pushy"));
@@ -49,28 +48,13 @@ class RuntimeConfigStorePushySettingsTest {
   @Test
   void blankOptionalPushyFieldsAreRemovedWhenDisabled() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        cfg.toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
-    store.rememberPushySettings(new PushyProperties(
-        true,
-        null,
-        "api-key-123",
-        null,
-        "alerts",
-        "Office",
-        4,
-        9));
-    store.rememberPushySettings(new PushyProperties(
-        false,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null));
+    store.rememberPushySettings(
+        new PushyProperties(true, null, "api-key-123", null, "alerts", "Office", 4, 9));
+    store.rememberPushySettings(
+        new PushyProperties(false, null, null, null, null, null, null, null));
 
     String yaml = Files.readString(cfg);
     assertTrue(yaml.contains("enabled: false"));

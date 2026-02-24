@@ -14,6 +14,7 @@ public final class PircbotxIsonParsers {
    * Parse online nick list from RPL_ISON (303).
    *
    * <p>Typical shape:
+   *
    * <pre>
    * :server 303 me :nick1 nick2
    * </pre>

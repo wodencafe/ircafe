@@ -18,15 +18,14 @@ class PircbotxIsonParsersTest {
 
   @Test
   void returnsEmptyListWhenNoNicksOnline() {
-    List<String> nicks =
-        PircbotxIsonParsers.parseRpl303IsonOnlineNicks(":server 303 me :");
+    List<String> nicks = PircbotxIsonParsers.parseRpl303IsonOnlineNicks(":server 303 me :");
 
     assertEquals(List.of(), nicks);
   }
 
   @Test
   void returnsNullForNon303Lines() {
-    assertNull(PircbotxIsonParsers.parseRpl303IsonOnlineNicks(":server 005 me MONITOR=100 :supported"));
+    assertNull(
+        PircbotxIsonParsers.parseRpl303IsonOnlineNicks(":server 005 me MONITOR=100 :supported"));
   }
 }
-

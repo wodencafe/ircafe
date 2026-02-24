@@ -45,8 +45,10 @@ public class MonitorIsonFallbackService {
   private final ConcurrentHashMap<String, Boolean> readyByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Long> nextPollAtMsByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, PollCycle> pollByServer = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Map<String, Boolean>> knownOnlineByServer = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Boolean> fallbackNoticeShownByServer = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Map<String, Boolean>> knownOnlineByServer =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> fallbackNoticeShownByServer =
+      new ConcurrentHashMap<>();
 
   public MonitorIsonFallbackService(
       IrcClientService irc,
@@ -59,8 +61,10 @@ public class MonitorIsonFallbackService {
     this.uiSettingsBus = Objects.requireNonNull(uiSettingsBus, "uiSettingsBus");
 
     disposables.add(irc.events().subscribe(this::onEvent, this::onEventError));
-    disposables.add(monitorListService.changes().subscribe(this::onListChanged, this::onListChangeError));
-    disposables.add(Flowable.interval(1, TimeUnit.SECONDS).subscribe(this::onTick, this::onTickError));
+    disposables.add(
+        monitorListService.changes().subscribe(this::onListChanged, this::onListChangeError));
+    disposables.add(
+        Flowable.interval(1, TimeUnit.SECONDS).subscribe(this::onTick, this::onTickError));
   }
 
   @jakarta.annotation.PreDestroy
@@ -151,7 +155,8 @@ public class MonitorIsonFallbackService {
       if (!isFallbackEligible(sid)) {
         // MONITOR is available (or server not ready): stop any in-flight fallback cycle.
         pollByServer.remove(sid);
-        if (Boolean.TRUE.equals(connectedByServer.get(sid)) && Boolean.TRUE.equals(readyByServer.get(sid))) {
+        if (Boolean.TRUE.equals(connectedByServer.get(sid))
+            && Boolean.TRUE.equals(readyByServer.get(sid))) {
           fallbackNoticeShownByServer.remove(sid);
         }
         continue;
@@ -187,7 +192,8 @@ public class MonitorIsonFallbackService {
       return;
     }
 
-    List<List<String>> chunks = chunkNicks(new ArrayList<>(expectedByLower.values()), MAX_NICKS_PER_ISON);
+    List<List<String>> chunks =
+        chunkNicks(new ArrayList<>(expectedByLower.values()), MAX_NICKS_PER_ISON);
     if (chunks.isEmpty()) {
       knownOnlineByServer.remove(sid);
       scheduleNextPoll(sid);
@@ -264,7 +270,8 @@ public class MonitorIsonFallbackService {
     TargetRef monitorTarget = TargetRef.monitorGroup(sid);
     List<String> wentOnline = new ArrayList<>();
     List<String> wentOffline = new ArrayList<>();
-    Map<String, Boolean> known = knownOnlineByServer.computeIfAbsent(sid, __ -> new LinkedHashMap<>());
+    Map<String, Boolean> known =
+        knownOnlineByServer.computeIfAbsent(sid, __ -> new LinkedHashMap<>());
 
     synchronized (cycle.lock) {
       known.keySet().removeIf(k -> !cycle.expectedByLower.containsKey(k));

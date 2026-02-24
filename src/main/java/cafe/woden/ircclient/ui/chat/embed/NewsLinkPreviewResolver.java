@@ -18,14 +18,13 @@ final class NewsLinkPreviewResolver implements LinkPreviewResolver {
       return null;
     }
 
-    var resp = http.getStream(
-        uri,
-        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        PreviewHttp.headers(
-            "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
-            "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE
-        )
-    );
+    var resp =
+        http.getStream(
+            uri,
+            "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            PreviewHttp.headers(
+                "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
+                "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE));
 
     int status = resp.statusCode();
     if (status < 200 || status >= 300) {

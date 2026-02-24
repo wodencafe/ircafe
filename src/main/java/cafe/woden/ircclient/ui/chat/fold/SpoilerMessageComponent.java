@@ -38,7 +38,8 @@ public class SpoilerMessageComponent extends JPanel {
 
     // Keep it looking like a "chip" / covered pill.
     pill.setOpaque(true);
-    // No vertical padding: it causes the whole line height to grow and makes the prefix look misaligned.
+    // No vertical padding: it causes the whole line height to grow and makes the prefix look
+    // misaligned.
     pill.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
     pill.setText("soft ignored - click to reveal");
     applyPillColors();
@@ -53,24 +54,25 @@ public class SpoilerMessageComponent extends JPanel {
     if (!from.getText().isBlank()) header.add(from);
     header.add(pill);
 
-    java.awt.event.MouseAdapter reveal = new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
-          revealOnce();
-        }
-      }
+    java.awt.event.MouseAdapter reveal =
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+              revealOnce();
+            }
+          }
 
-      @Override
-      public void mouseEntered(java.awt.event.MouseEvent e) {
-        header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-      }
+          @Override
+          public void mouseEntered(java.awt.event.MouseEvent e) {
+            header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+          }
 
-      @Override
-      public void mouseExited(java.awt.event.MouseEvent e) {
-        header.setCursor(Cursor.getDefaultCursor());
-      }
-    };
+          @Override
+          public void mouseExited(java.awt.event.MouseEvent e) {
+            header.setCursor(Cursor.getDefaultCursor());
+          }
+        };
 
     header.addMouseListener(reveal);
     pill.addMouseListener(reveal);
@@ -90,7 +92,10 @@ public class SpoilerMessageComponent extends JPanel {
     pill.setFont(base);
   }
 
-  /** JTextPane embeds Swing components using a baseline-aware view. JPanel has no baseline by default, which can create a subtle "north" padding above the component. */
+  /**
+   * JTextPane embeds Swing components using a baseline-aware view. JPanel has no baseline by
+   * default, which can create a subtle "north" padding above the component.
+   */
   @Override
   public int getBaseline(int width, int height) {
     Insets in = getInsets();
@@ -98,8 +103,10 @@ public class SpoilerMessageComponent extends JPanel {
 
     try {
       if (ts.getFont() != null) ascent = Math.max(ascent, getFontMetrics(ts.getFont()).getAscent());
-      if (from.getFont() != null) ascent = Math.max(ascent, getFontMetrics(from.getFont()).getAscent());
-      if (pill.getFont() != null) ascent = Math.max(ascent, getFontMetrics(pill.getFont()).getAscent());
+      if (from.getFont() != null)
+        ascent = Math.max(ascent, getFontMetrics(from.getFont()).getAscent());
+      if (pill.getFont() != null)
+        ascent = Math.max(ascent, getFontMetrics(pill.getFont()).getAscent());
     } catch (Exception ignored) {
     }
 

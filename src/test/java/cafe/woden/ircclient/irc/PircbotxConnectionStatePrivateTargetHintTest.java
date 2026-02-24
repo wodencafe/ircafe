@@ -13,7 +13,8 @@ class PircbotxConnectionStatePrivateTargetHintTest {
 
     state.rememberPrivateTargetHint("WodenCafe", "alice", "PRIVMSG", "hello there", "msg-1", now);
 
-    String target = state.findPrivateTargetHint("wodencafe", "PRIVMSG", "different text", "msg-1", now + 1_000);
+    String target =
+        state.findPrivateTargetHint("wodencafe", "PRIVMSG", "different text", "msg-1", now + 1_000);
     assertEquals("alice", target);
   }
 
@@ -33,7 +34,8 @@ class PircbotxConnectionStatePrivateTargetHintTest {
     PircbotxConnectionState state = new PircbotxConnectionState("znc");
     long now = 3_000_000L;
 
-    state.rememberPrivateTargetHint("wodencafe", "carol", "PRIVMSG", "old", "msg-old", now - 200_000L);
+    state.rememberPrivateTargetHint(
+        "wodencafe", "carol", "PRIVMSG", "old", "msg-old", now - 200_000L);
 
     String target = state.findPrivateTargetHint("wodencafe", "PRIVMSG", "old", "msg-old", now);
     assertEquals("", target);
@@ -51,4 +53,3 @@ class PircbotxConnectionStatePrivateTargetHintTest {
     assertEquals("", target);
   }
 }
-

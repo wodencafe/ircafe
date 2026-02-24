@@ -2,25 +2,24 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
-import javax.swing.*;
-import javax.swing.border.BevelBorder;
-import javax.swing.border.EmptyBorder;
-import javax.swing.table.AbstractTableModel;
-import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import javax.swing.*;
+import javax.swing.border.BevelBorder;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.JTableHeader;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
@@ -36,10 +35,10 @@ public class StatusBar extends JPanel {
 
   // TODO: Make these their own individual Spring components.
   private final JLabel channelLabel = new JLabel("Channel: -");
-  private final JLabel usersLabel   = new JLabel("Users: 0");
-  private final JLabel opsLabel     = new JLabel("Ops: 0");
-  private final JLabel serverLabel  = new JLabel("Server: (disconnected)");
-  private final JLabel noticeLabel  = new JLabel();
+  private final JLabel usersLabel = new JLabel("Users: 0");
+  private final JLabel opsLabel = new JLabel("Ops: 0");
+  private final JLabel serverLabel = new JLabel("Server: (disconnected)");
+  private final JLabel noticeLabel = new JLabel();
   private final JButton historyButton = new JButton("Notices");
   private final Icon historyIcon = SvgIcons.action("info", 14);
   private final Color historyFlashBg = new Color(255, 223, 128, 170);
@@ -63,7 +62,8 @@ public class StatusBar extends JPanel {
   private JMenuItem historyPopupOpenItem;
   private JMenuItem historyPopupClearItem;
 
-  private record StatusNotice(String displayText, String fullText, Runnable onClick, long atEpochMs) {}
+  private record StatusNotice(
+      String displayText, String fullText, Runnable onClick, long atEpochMs) {}
 
   public StatusBar() {
     super(new BorderLayout(12, 0));
@@ -99,26 +99,27 @@ public class StatusBar extends JPanel {
     center.add(historyButton, BorderLayout.EAST);
     noticeBaseForeground = noticeLabel.getForeground();
 
-    noticeLabel.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        if (SwingUtilities.isRightMouseButton(e)) {
-          openHistoryDialog();
-          return;
-        }
-        if (!SwingUtilities.isLeftMouseButton(e)) return;
-        StatusNotice current = activeNotice;
-        if (current == null) return;
-        Runnable click = current.onClick();
-        if (click != null) {
-          try {
-            click.run();
-          } catch (Exception ignored) {
+    noticeLabel.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (SwingUtilities.isRightMouseButton(e)) {
+              openHistoryDialog();
+              return;
+            }
+            if (!SwingUtilities.isLeftMouseButton(e)) return;
+            StatusNotice current = activeNotice;
+            if (current == null) return;
+            Runnable click = current.onClick();
+            if (click != null) {
+              try {
+                click.run();
+              } catch (Exception ignored) {
+              }
+            }
+            dismissCurrentNotice();
           }
-        }
-        dismissCurrentNotice();
-      }
-    });
+        });
 
     noticeTimer = new Timer(NOTICE_ROTATE_MS, e -> onNoticeTimer());
     noticeTimer.setRepeats(false);
@@ -131,7 +132,8 @@ public class StatusBar extends JPanel {
     add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
 
-    addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::applyUiFontsFromDefaults));
+    addPropertyChangeListener(
+        "UI", e -> SwingUtilities.invokeLater(this::applyUiFontsFromDefaults));
     applyUiFontsFromDefaults();
   }
 
@@ -148,9 +150,7 @@ public class StatusBar extends JPanel {
     serverLabel.setText("Server: " + (serverText == null ? "(disconnected)" : serverText));
   }
 
-  /**
-   * Enqueue a status-bar notice and cycle through notices one at a time.
-   */
+  /** Enqueue a status-bar notice and cycle through notices one at a time. */
   public void enqueueNotification(String text, Runnable onClick) {
     if (SwingUtilities.isEventDispatchThread()) {
       enqueueNotificationOnEdt(text, onClick);
@@ -175,7 +175,8 @@ public class StatusBar extends JPanel {
     if (displayText.length() > 220) {
       displayText = displayText.substring(0, 220) + "...";
     }
-    StatusNotice notice = new StatusNotice(displayText, fullText, onClick, System.currentTimeMillis());
+    StatusNotice notice =
+        new StatusNotice(displayText, fullText, onClick, System.currentTimeMillis());
     noticeQueue.offerLast(notice);
     appendHistory(notice);
     triggerHistoryFlash();
@@ -258,9 +259,10 @@ public class StatusBar extends JPanel {
     noticeLabel.setToolTipText(tooltip);
     noticeLabel.setVisible(true);
     noticeLabel.setForeground(noticeBaseForeground);
-    noticeLabel.setCursor(activeNotice.onClick() != null
-        ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-        : Cursor.getDefaultCursor());
+    noticeLabel.setCursor(
+        activeNotice.onClick() != null
+            ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            : Cursor.getDefaultCursor());
   }
 
   private void startNoticeFadeOut() {
@@ -401,28 +403,32 @@ public class StatusBar extends JPanel {
     noticeHistoryTable.getColumnModel().getColumn(0).setMaxWidth(190);
     noticeHistoryTable.getColumnModel().getColumn(2).setPreferredWidth(70);
     noticeHistoryTable.getColumnModel().getColumn(2).setMaxWidth(90);
-    noticeHistoryTable.getSelectionModel().addListSelectionListener(e -> {
-      if (e != null && e.getValueIsAdjusting()) return;
-      updateHistoryDialogButtons();
-    });
-    noticeHistoryTable.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() >= 2) {
-          runSelectedHistoryAction();
-        }
-      }
+    noticeHistoryTable
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (e != null && e.getValueIsAdjusting()) return;
+              updateHistoryDialogButtons();
+            });
+    noticeHistoryTable.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() >= 2) {
+              runSelectedHistoryAction();
+            }
+          }
 
-      @Override
-      public void mousePressed(MouseEvent e) {
-        maybeShowHistoryPopup(e);
-      }
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowHistoryPopup(e);
+          }
 
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        maybeShowHistoryPopup(e);
-      }
-    });
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowHistoryPopup(e);
+          }
+        });
 
     historyOpenButton = new JButton("Open Selected");
     historyOpenButton.addActionListener(e -> runSelectedHistoryAction());
@@ -560,8 +566,7 @@ public class StatusBar extends JPanel {
   private void applyUiFontsFromDefaults() {
     Font base = UIManager.getFont("Label.font");
     Font defaultFont = UIManager.getFont("defaultFont");
-    if (defaultFont != null
-        && (base == null || defaultFont.getSize2D() > base.getSize2D())) {
+    if (defaultFont != null && (base == null || defaultFont.getSize2D() > base.getSize2D())) {
       base = defaultFont;
     }
     if (base == null) return;

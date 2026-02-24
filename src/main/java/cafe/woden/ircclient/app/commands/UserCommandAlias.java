@@ -2,9 +2,7 @@ package cafe.woden.ircclient.app.commands;
 
 import java.util.Objects;
 
-/**
- * User-defined slash-command alias.
- */
+/** User-defined slash-command alias. */
 public record UserCommandAlias(boolean enabled, String name, String template) {
 
   public UserCommandAlias {

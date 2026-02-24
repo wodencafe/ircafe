@@ -18,8 +18,7 @@ public record ChatLogViewerRow(
     String text,
     String messageId,
     Map<String, String> ircv3Tags,
-    String metaJson
-) {
+    String metaJson) {
   public ChatLogViewerRow {
     serverId = Objects.toString(serverId, "").trim();
     target = Objects.toString(target, "").trim();

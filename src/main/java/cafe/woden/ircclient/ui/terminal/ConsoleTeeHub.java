@@ -9,22 +9,22 @@ import java.util.function.Consumer;
 /**
  * Global (static) console mirroring used by the in-app Terminal dock.
  *
- * <p>We install the tee as early as possible (from main) so that Spring Boot
- * startup logs and any other early writes are captured.
+ * <p>We install the tee as early as possible (from main) so that Spring Boot startup logs and any
+ * other early writes are captured.
  */
 public final class ConsoleTeeHub {
 
   private static final int DEFAULT_MAX_CHARS = 1_000_000; // ~1MB
 
   private static final TerminalBuffer BUFFER = new TerminalBuffer(DEFAULT_MAX_CHARS);
-  private static final CopyOnWriteArrayList<Consumer<String>> LISTENERS = new CopyOnWriteArrayList<>();
+  private static final CopyOnWriteArrayList<Consumer<String>> LISTENERS =
+      new CopyOnWriteArrayList<>();
 
   private static volatile boolean installed;
   private static volatile PrintStream originalOut;
   private static volatile PrintStream originalErr;
 
-  private ConsoleTeeHub() {
-  }
+  private ConsoleTeeHub() {}
 
   /** Install the tee streams (idempotent). Safe to call multiple times. */
   public static synchronized void install() {
@@ -34,8 +34,10 @@ public final class ConsoleTeeHub {
     originalErr = System.err;
 
     Charset cs = Charset.defaultCharset();
-    PrintStream teeOut = new PrintStream(new TeeOutputStream(originalOut, ConsoleTeeHub::publish, cs), true, cs);
-    PrintStream teeErr = new PrintStream(new TeeOutputStream(originalErr, ConsoleTeeHub::publish, cs), true, cs);
+    PrintStream teeOut =
+        new PrintStream(new TeeOutputStream(originalOut, ConsoleTeeHub::publish, cs), true, cs);
+    PrintStream teeErr =
+        new PrintStream(new TeeOutputStream(originalErr, ConsoleTeeHub::publish, cs), true, cs);
 
     System.setOut(teeOut);
     System.setErr(teeErr);

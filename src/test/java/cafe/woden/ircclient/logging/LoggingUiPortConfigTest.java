@@ -16,12 +16,12 @@ class LoggingUiPortConfigTest {
       new ApplicationContextRunner()
           .withUserConfiguration(LoggingUiPortConfig.class)
           .withBean(
-              SwingUiPort.class, () -> Mockito.mock(SwingUiPort.class, Mockito.withSettings().stubOnly()))
+              SwingUiPort.class,
+              () -> Mockito.mock(SwingUiPort.class, Mockito.withSettings().stubOnly()))
           .withBean(ChatLogWriter.class, () -> line -> {})
           .withBean(LogLineFactory.class, LogLineFactory::new)
           .withBean(
-              LogProperties.class,
-              () -> new LogProperties(true, true, true, true, true, 0, null));
+              LogProperties.class, () -> new LogProperties(true, true, true, true, true, 0, null));
 
   @Test
   void loggingUiPortBeanCreatedWhenLoggingEnabled() {

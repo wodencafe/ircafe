@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.model.LogDirection;
 import cafe.woden.ircclient.logging.model.LogKind;
@@ -22,10 +22,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/**
- * DB-backed {@link ChatHistoryIngestor}.
- *
- */
+/** DB-backed {@link ChatHistoryIngestor}. */
 @Component
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")
 public class DbChatHistoryIngestor implements ChatHistoryIngestor {
@@ -37,10 +34,11 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
   private final LogProperties props;
   private final ExecutorService exec;
 
-  public DbChatHistoryIngestor(ChatLogRepository repo,
-                               @Qualifier("chatLogTx") TransactionTemplate tx,
-                               LogProperties props,
-                               @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_INGEST_EXECUTOR) ExecutorService exec) {
+  public DbChatHistoryIngestor(
+      ChatLogRepository repo,
+      @Qualifier("chatLogTx") TransactionTemplate tx,
+      LogProperties props,
+      @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_INGEST_EXECUTOR) ExecutorService exec) {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
@@ -48,40 +46,49 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
   }
 
   @Override
-  public void ingestAsync(String serverId,
-                          String targetHint,
-                          String batchId,
-                          List<ChatHistoryEntry> entries,
-                          Consumer<ChatHistoryIngestResult> callback) {
+  public void ingestAsync(
+      String serverId,
+      String targetHint,
+      String batchId,
+      List<ChatHistoryEntry> entries,
+      Consumer<ChatHistoryIngestResult> callback) {
     if (callback == null) return;
     final List<ChatHistoryEntry> safeEntries = entries == null ? List.of() : List.copyOf(entries);
     final String sid = safe(serverId);
     final String hint = safe(targetHint);
     final String bid = safe(batchId);
 
-    exec.execute(() -> {
-      try {
-        ChatHistoryIngestResult res = tx.execute(status -> ingestNow(sid, hint, bid, safeEntries));
-        if (res == null) {
-          res = new ChatHistoryIngestResult(true, safeEntries.size(), 0, safeEntries.size(), 0L, 0L, "No result");
-        }
-        callback.accept(res);
-      } catch (Exception e) {
-        log.warn("[ircafe] chathistory ingest failed", e);
-        callback.accept(new ChatHistoryIngestResult(
-            true,
-            safeEntries.size(),
-            0,
-            safeEntries.size(),
-            0L,
-            0L,
-            "Persist failed: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())
-        ));
-      }
-    });
+    exec.execute(
+        () -> {
+          try {
+            ChatHistoryIngestResult res =
+                tx.execute(status -> ingestNow(sid, hint, bid, safeEntries));
+            if (res == null) {
+              res =
+                  new ChatHistoryIngestResult(
+                      true, safeEntries.size(), 0, safeEntries.size(), 0L, 0L, "No result");
+            }
+            callback.accept(res);
+          } catch (Exception e) {
+            log.warn("[ircafe] chathistory ingest failed", e);
+            callback.accept(
+                new ChatHistoryIngestResult(
+                    true,
+                    safeEntries.size(),
+                    0,
+                    safeEntries.size(),
+                    0L,
+                    0L,
+                    "Persist failed: "
+                        + (e.getMessage() == null
+                            ? e.getClass().getSimpleName()
+                            : e.getMessage())));
+          }
+        });
   }
 
-  private ChatHistoryIngestResult ingestNow(String serverId, String targetHint, String batchId, List<ChatHistoryEntry> entries) {
+  private ChatHistoryIngestResult ingestNow(
+      String serverId, String targetHint, String batchId, List<ChatHistoryEntry> entries) {
     int total = entries == null ? 0 : entries.size();
     if (total == 0) {
       return new ChatHistoryIngestResult(true, 0, 0, 0, 0L, 0L, "No history entries");
@@ -100,38 +107,55 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
       String from = safe(e.from());
       String text = safe(e.text());
 
-      LogKind kind = switch (e.kind()) {
-        case ACTION -> LogKind.ACTION;
-        case NOTICE -> LogKind.NOTICE;
-        case PRIVMSG -> LogKind.CHAT;
-      };
-      candidates.add(new LogLine(
-          serverId,
-          tgt,
-          ts,
-          LogDirection.IN,
-          kind,
-          from,
-          text,
-          false,
-          false,
-          metaJson(source, batchId)
-      ));
+      LogKind kind =
+          switch (e.kind()) {
+            case ACTION -> LogKind.ACTION;
+            case NOTICE -> LogKind.NOTICE;
+            case PRIVMSG -> LogKind.CHAT;
+          };
+      candidates.add(
+          new LogLine(
+              serverId,
+              tgt,
+              ts,
+              LogDirection.IN,
+              kind,
+              from,
+              text,
+              false,
+              false,
+              metaJson(source, batchId)));
     }
 
     if (candidates.isEmpty()) {
-      return new ChatHistoryIngestResult(true, total, 0, total, 0L, 0L, "No parseable history entries");
+      return new ChatHistoryIngestResult(
+          true, total, 0, total, 0L, 0L, "No parseable history entries");
     }
-    candidates.sort(Comparator
-        .comparingLong(LogLine::tsEpochMs)
-        .thenComparing(LogLine::target)
-        .thenComparing(l -> safe(l.fromNick()))
-        .thenComparing(LogLine::text));
-    record Key(String serverId, String target, long ts, LogDirection dir, LogKind kind, String from, String text) {}
+    candidates.sort(
+        Comparator.comparingLong(LogLine::tsEpochMs)
+            .thenComparing(LogLine::target)
+            .thenComparing(l -> safe(l.fromNick()))
+            .thenComparing(LogLine::text));
+    record Key(
+        String serverId,
+        String target,
+        long ts,
+        LogDirection dir,
+        LogKind kind,
+        String from,
+        String text) {}
     LinkedHashMap<Key, LogLine> uniq = new LinkedHashMap<>();
     for (LogLine l : candidates) {
       if (l == null) continue;
-      Key k = new Key(l.serverId(), l.target(), l.tsEpochMs(), l.direction(), l.kind(), safe(l.fromNick()), l.text());
+      Key k =
+          new Key(
+              l.serverId(),
+              l.target(),
+              l.tsEpochMs(),
+              l.direction(),
+              l.kind(),
+              safe(l.fromNick()),
+              l.text());
       uniq.putIfAbsent(k, l);
     }
     int dupInBatch = Math.max(0, candidates.size() - uniq.size());
@@ -228,7 +252,9 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     String key = t.toLowerCase(Locale.ROOT);
     if ("status".equals(key)) return false;
     if (t.startsWith("#") || t.startsWith("&")) return false;
-    if ("__notifications__".equals(key) || "__channel_list__".equals(key) || "__dcc_transfers__".equals(key)) {
+    if ("__notifications__".equals(key)
+        || "__channel_list__".equals(key)
+        || "__dcc_transfers__".equals(key)) {
       return false;
     }
     return true;

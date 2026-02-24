@@ -16,45 +16,45 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RuntimeConfigStoreInterceptorDefinitionsTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void interceptorDefinitionsRoundTripRuntimeConfig() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        cfg.toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
-    InterceptorDefinition def = new InterceptorDefinition(
-        "id-1",
-        "Bad words",
-        true,
-        "",
-        InterceptorRuleMode.GLOB,
-        "#general,#help",
-        InterceptorRuleMode.GLOB,
-        "#staff",
-        true,
-        true,
-        true,
-        "NOTIF_3",
-        true,
-        "sounds/custom.mp3",
-        true,
-        "/tmp/ircafe-hook.sh",
-        "--arg value",
-        "/tmp",
-        List.of(new InterceptorRule(
+    InterceptorDefinition def =
+        new InterceptorDefinition(
+            "id-1",
+            "Bad words",
             true,
-            "Swear",
-            "message,action",
-            InterceptorRuleMode.REGEX,
-            "(damn|heck)",
+            "",
             InterceptorRuleMode.GLOB,
-            "bad*",
+            "#general,#help",
             InterceptorRuleMode.GLOB,
-            "*!*@*")));
+            "#staff",
+            true,
+            true,
+            true,
+            "NOTIF_3",
+            true,
+            "sounds/custom.mp3",
+            true,
+            "/tmp/ircafe-hook.sh",
+            "--arg value",
+            "/tmp",
+            List.of(
+                new InterceptorRule(
+                    true,
+                    "Swear",
+                    "message,action",
+                    InterceptorRuleMode.REGEX,
+                    "(damn|heck)",
+                    InterceptorRuleMode.GLOB,
+                    "bad*",
+                    InterceptorRuleMode.GLOB,
+                    "*!*@*")));
 
     store.rememberInterceptorDefinitions(Map.of("libera", List.of(def)));
 
@@ -63,9 +63,10 @@ class RuntimeConfigStoreInterceptorDefinitionsTest {
     assertTrue(yaml.contains("channelIncludeMode: GLOB"));
     assertTrue(yaml.contains("actionStatusBarEnabled: true"));
     assertTrue(yaml.contains("actionToastEnabled: true"));
-    assertTrue(yaml.contains("actionScriptPath: /tmp/ircafe-hook.sh")
-        || yaml.contains("actionScriptPath: '/tmp/ircafe-hook.sh'")
-        || yaml.contains("actionScriptPath: \"/tmp/ircafe-hook.sh\""));
+    assertTrue(
+        yaml.contains("actionScriptPath: /tmp/ircafe-hook.sh")
+            || yaml.contains("actionScriptPath: '/tmp/ircafe-hook.sh'")
+            || yaml.contains("actionScriptPath: \"/tmp/ircafe-hook.sh\""));
     assertTrue(yaml.contains("hostmaskPattern"));
 
     Map<String, List<InterceptorDefinition>> roundTrip = store.readInterceptorDefinitions();

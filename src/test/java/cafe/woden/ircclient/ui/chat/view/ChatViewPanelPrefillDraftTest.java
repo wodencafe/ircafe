@@ -9,17 +9,13 @@ class ChatViewPanelPrefillDraftTest {
   @Test
   void buildReplyPrefillDraftEscapesMessageIdForIrcv3Tags() {
     String draft = Exposed.reply("#ircafe", "abc 123;xyz\\tail");
-    assertEquals(
-        "/quote @+draft/reply=abc\\s123\\:xyz\\\\tail PRIVMSG #ircafe :",
-        draft);
+    assertEquals("/quote @+draft/reply=abc\\s123\\:xyz\\\\tail PRIVMSG #ircafe :", draft);
   }
 
   @Test
   void buildReactPrefillDraftUsesDefaultReactionAndReplyTag() {
     String draft = Exposed.react("#ircafe", "msgid-42");
-    assertEquals(
-        "/quote @+draft/react=:+1:;+draft/reply=msgid-42 TAGMSG #ircafe",
-        draft);
+    assertEquals("/quote @+draft/react=:+1:;+draft/reply=msgid-42 TAGMSG #ircafe", draft);
   }
 
   @Test
@@ -37,9 +33,7 @@ class ChatViewPanelPrefillDraftTest {
 
   @Test
   void buildChatHistoryAroundByMsgIdCommandBuildsSelectorToken() {
-    assertEquals(
-        "/chathistory around msgid=abc123",
-        Exposed.aroundHistory("abc123"));
+    assertEquals("/chathistory around msgid=abc123", Exposed.aroundHistory("abc123"));
   }
 
   @Test

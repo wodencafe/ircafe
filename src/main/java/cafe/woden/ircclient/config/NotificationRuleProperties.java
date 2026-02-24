@@ -16,8 +16,7 @@ public record NotificationRuleProperties(
     Boolean caseSensitive,
     Boolean wholeWord,
     /** Optional per-rule highlight color as a hex string (e.g. "#FF00FF"). */
-    String highlightFg
-) {
+    String highlightFg) {
 
   public enum Type {
     WORD,
@@ -64,9 +63,7 @@ public record NotificationRuleProperties(
 
     for (int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
-      boolean ok = (c >= '0' && c <= '9')
-          || (c >= 'a' && c <= 'f')
-          || (c >= 'A' && c <= 'F');
+      boolean ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
       if (!ok) return null;
     }
 

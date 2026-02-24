@@ -1,19 +1,19 @@
 package cafe.woden.ircclient.ui.chat.fold;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 /**
  * Embedded Swing component that represents a contiguous run of filtered lines.
  *
- * <p>By default it shows a single summary line (e.g. {@code "▶ Filtered (7)"}).
- * Clicking toggles an optional preview list of up to {@code maxPreviewLines} samples.
+ * <p>By default it shows a single summary line (e.g. {@code "▶ Filtered (7)"}). Clicking toggles an
+ * optional preview list of up to {@code maxPreviewLines} samples.
  */
 public class FilteredFoldComponent extends JPanel {
 
@@ -53,12 +53,13 @@ public class FilteredFoldComponent extends JPanel {
     details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
     details.setBorder(new EmptyBorder(2, 18, 2, 0));
 
-    summary.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        toggle();
-      }
-    });
+    summary.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            toggle();
+          }
+        });
 
     updateSummaryText();
     rebuildDetails();
@@ -69,8 +70,8 @@ public class FilteredFoldComponent extends JPanel {
   }
 
   /**
-   * Allows the transcript owner to provide a consistent base font for embedded components.
-   * We keep a dim + italic styling, but derive from the supplied base font.
+   * Allows the transcript owner to provide a consistent base font for embedded components. We keep
+   * a dim + italic styling, but derive from the supplied base font.
    */
   public void setTranscriptFont(Font base) {
     this.transcriptBaseFont = base;
@@ -79,7 +80,6 @@ public class FilteredFoldComponent extends JPanel {
     revalidate();
     repaint();
   }
-
 
   /**
    * Limits how many tags are listed in the tooltip tag summary.
@@ -136,9 +136,8 @@ public class FilteredFoldComponent extends JPanel {
     int w = p.getWidth();
     if (w <= 0) return -1;
 
-    Insets insets = (p instanceof JComponent)
-        ? ((JComponent) p).getInsets()
-        : new Insets(0, 0, 0, 0);
+    Insets insets =
+        (p instanceof JComponent) ? ((JComponent) p).getInsets() : new Insets(0, 0, 0, 0);
 
     w = w - insets.left - insets.right;
     return Math.max(0, w);
@@ -148,10 +147,15 @@ public class FilteredFoldComponent extends JPanel {
     return count;
   }
 
-  /** Adds one more filtered line to this contiguous run (and optionally records a preview sample). */
+  /**
+   * Adds one more filtered line to this contiguous run (and optionally records a preview sample).
+   */
   public void addFilteredLine(String preview) {
     count++;
-    if (maxPreviewLines > 0 && preview != null && !preview.isBlank() && previews.size() < maxPreviewLines) {
+    if (maxPreviewLines > 0
+        && preview != null
+        && !preview.isBlank()
+        && previews.size() < maxPreviewLines) {
       previews.add(preview);
     }
 
@@ -207,7 +211,9 @@ public class FilteredFoldComponent extends JPanel {
   }
 
   private void refreshTooltip() {
-    setToolTipText(buildTooltipHtml(count, previews, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
+    setToolTipText(
+        buildTooltipHtml(
+            count, previews, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
   }
 
   private void applyDimItalic(JLabel l) {
@@ -221,12 +227,13 @@ public class FilteredFoldComponent extends JPanel {
     }
   }
 
-  private static String buildTooltipHtml(int count,
-                                        List<String> previews,
-                                        String ruleLabel,
-                                        boolean multiple,
-                                        List<String> tags,
-                                        int maxTags) {
+  private static String buildTooltipHtml(
+      int count,
+      List<String> previews,
+      String ruleLabel,
+      boolean multiple,
+      List<String> tags,
+      int maxTags) {
     if (count <= 0) return null;
 
     StringBuilder sb = new StringBuilder();
@@ -290,8 +297,7 @@ public class FilteredFoldComponent extends JPanel {
 
   private static String escapeHtml(String s) {
     if (s == null) return "";
-    return s
-        .replace("&", "&amp;")
+    return s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;");

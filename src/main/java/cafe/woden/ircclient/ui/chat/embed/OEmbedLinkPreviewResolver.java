@@ -19,16 +19,17 @@ import java.util.regex.Pattern;
  */
 final class OEmbedLinkPreviewResolver implements LinkPreviewResolver {
 
-  
-  record OEmbedFields(String title, String authorName, String providerName, String thumbnailUrl, String html) {}
+  record OEmbedFields(
+      String title, String authorName, String providerName, String thumbnailUrl, String html) {}
 
   /**
    * Provider definition:
+   *
    * <ul>
-   *   <li>{@code matches}: whether the provider applies to the target URL</li>
-   *   <li>{@code endpointBuilder}: builds the oEmbed endpoint for the target URL</li>
-   *   <li>{@code defaultSiteName}: fallback site name when provider_name is absent</li>
-   *   <li>{@code titleFallback}: builds a fallback title when oEmbed title is absent</li>
+   *   <li>{@code matches}: whether the provider applies to the target URL
+   *   <li>{@code endpointBuilder}: builds the oEmbed endpoint for the target URL
+   *   <li>{@code defaultSiteName}: fallback site name when provider_name is absent
+   *   <li>{@code titleFallback}: builds a fallback title when oEmbed title is absent
    * </ul>
    */
   record Provider(
@@ -36,8 +37,7 @@ final class OEmbedLinkPreviewResolver implements LinkPreviewResolver {
       Predicate<URI> matches,
       BiFunction<URI, String, URI> endpointBuilder,
       String defaultSiteName,
-      Function<OEmbedFields, String> titleFallback
-  ) {
+      Function<OEmbedFields, String> titleFallback) {
     Provider {
       Objects.requireNonNull(id, "id");
       Objects.requireNonNull(matches, "matches");
@@ -76,16 +76,17 @@ final class OEmbedLinkPreviewResolver implements LinkPreviewResolver {
       String json = resp.body();
       if (json == null || json.isBlank()) return null;
 
-      OEmbedFields fields = new OEmbedFields(
-          stripToNull(TinyJson.findString(json, "title")),
-          stripToNull(TinyJson.findString(json, "author_name")),
-          stripToNull(TinyJson.findString(json, "provider_name")),
-          stripToNull(TinyJson.findString(json, "thumbnail_url")),
-          stripToNull(TinyJson.findString(json, "html"))
-      );
+      OEmbedFields fields =
+          new OEmbedFields(
+              stripToNull(TinyJson.findString(json, "title")),
+              stripToNull(TinyJson.findString(json, "author_name")),
+              stripToNull(TinyJson.findString(json, "provider_name")),
+              stripToNull(TinyJson.findString(json, "thumbnail_url")),
+              stripToNull(TinyJson.findString(json, "html")));
 
       String siteName = firstNonBlank(fields.providerName(), stripToNull(p.defaultSiteName));
-      String title = firstNonBlank(fields.title(), stripToNull(p.titleFallback.apply(fields)), siteName);
+      String title =
+          firstNonBlank(fields.title(), stripToNull(p.titleFallback.apply(fields)), siteName);
 
       // Keep descriptions short and stable.
       String description = null;
@@ -102,7 +103,8 @@ final class OEmbedLinkPreviewResolver implements LinkPreviewResolver {
 
       if (title == null) return null;
       int mediaCount = (fields.thumbnailUrl() != null && !fields.thumbnailUrl().isBlank()) ? 1 : 0;
-      return new LinkPreview(originalUrl, title, description, siteName, fields.thumbnailUrl(), mediaCount);
+      return new LinkPreview(
+          originalUrl, title, description, siteName, fields.thumbnailUrl(), mediaCount);
     } catch (Exception ignored) {
       return null;
     }
@@ -121,48 +123,56 @@ final class OEmbedLinkPreviewResolver implements LinkPreviewResolver {
   // ---- Providers ----
 
   private static Provider spotifyProvider() {
-    Predicate<URI> match = u -> {
-      String host = u.getHost();
-      if (host == null || host.isBlank()) return false;
-      String h = host.toLowerCase(Locale.ROOT);
-      return h.equals("open.spotify.com") || h.equals("spotify.link") || h.endsWith(".spotify.com");
-    };
+    Predicate<URI> match =
+        u -> {
+          String host = u.getHost();
+          if (host == null || host.isBlank()) return false;
+          String h = host.toLowerCase(Locale.ROOT);
+          return h.equals("open.spotify.com")
+              || h.equals("spotify.link")
+              || h.endsWith(".spotify.com");
+        };
 
-    BiFunction<URI, String, URI> endpoint = (u, originalUrl) -> {
-      String enc = URLEncoder.encode(originalUrl, StandardCharsets.UTF_8);
-      // Spotify's public oEmbed endpoint lives on open.spotify.com.
-      return URI.create("https://open.spotify.com/oembed?url=" + enc);
-    };
+    BiFunction<URI, String, URI> endpoint =
+        (u, originalUrl) -> {
+          String enc = URLEncoder.encode(originalUrl, StandardCharsets.UTF_8);
+          // Spotify's public oEmbed endpoint lives on open.spotify.com.
+          return URI.create("https://open.spotify.com/oembed?url=" + enc);
+        };
 
     Function<OEmbedFields, String> titleFallback = f -> "Spotify";
     return new Provider("spotify", match, endpoint, "Spotify", titleFallback);
   }
 
   private static final Pattern MASTODON_AT_STYLE = Pattern.compile("^/@[^/]+/\\d+(/.*)?$");
-  private static final Pattern MASTODON_USERS_STYLE = Pattern.compile("^/users/[^/]+/statuses/\\d+(/.*)?$");
+  private static final Pattern MASTODON_USERS_STYLE =
+      Pattern.compile("^/users/[^/]+/statuses/\\d+(/.*)?$");
   private static final Pattern MASTODON_WEB_STYLE = Pattern.compile("^/web/statuses/\\d+(/.*)?$");
 
   private static Provider mastodonProvider() {
-    Predicate<URI> match = u -> {
-      String host = u.getHost();
-      if (host == null || host.isBlank()) return false;
-      String path = u.getPath() == null ? "" : u.getPath();
-      return looksLikeMastodonStatusPath(path);
-    };
+    Predicate<URI> match =
+        u -> {
+          String host = u.getHost();
+          if (host == null || host.isBlank()) return false;
+          String path = u.getPath() == null ? "" : u.getPath();
+          return looksLikeMastodonStatusPath(path);
+        };
 
-    BiFunction<URI, String, URI> endpoint = (u, originalUrl) -> {
-      // Use the instance that served the URL (scheme + authority).
-      if (u.getScheme() == null || u.getAuthority() == null) return null;
-      String base = u.getScheme() + "://" + u.getAuthority();
-      String enc = URLEncoder.encode(originalUrl, StandardCharsets.UTF_8);
-      // Some deployments expect an explicit format.
-      return URI.create(base + "/api/oembed?format=json&url=" + enc);
-    };
+    BiFunction<URI, String, URI> endpoint =
+        (u, originalUrl) -> {
+          // Use the instance that served the URL (scheme + authority).
+          if (u.getScheme() == null || u.getAuthority() == null) return null;
+          String base = u.getScheme() + "://" + u.getAuthority();
+          String enc = URLEncoder.encode(originalUrl, StandardCharsets.UTF_8);
+          // Some deployments expect an explicit format.
+          return URI.create(base + "/api/oembed?format=json&url=" + enc);
+        };
 
-    Function<OEmbedFields, String> titleFallback = f -> {
-      if (f.authorName() != null) return "Post by " + f.authorName();
-      return "Mastodon post";
-    };
+    Function<OEmbedFields, String> titleFallback =
+        f -> {
+          if (f.authorName() != null) return "Post by " + f.authorName();
+          return "Mastodon post";
+        };
 
     // provider_name may be the instance name; we keep it when present.
     return new Provider("mastodon", match, endpoint, "Mastodon", titleFallback);

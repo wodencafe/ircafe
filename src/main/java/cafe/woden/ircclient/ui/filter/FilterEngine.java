@@ -41,9 +41,7 @@ public class FilterEngine implements PropertyChangeListener {
       int placeholderMaxLinesPerRun,
       int placeholderTooltipMaxTags,
       int historyPlaceholderMaxRunsPerBatch,
-      boolean historyPlaceholdersEnabled
-  ) {
-  }
+      boolean historyPlaceholdersEnabled) {}
 
   /** Details about the first rule that matched a given line. */
   public record Match(UUID ruleId, String ruleName, FilterAction action) {
@@ -72,9 +70,7 @@ public class FilterEngine implements PropertyChangeListener {
       int placeholderMaxLinesPerRun,
       int placeholderTooltipMaxTags,
       int historyPlaceholderMaxRunsPerBatch,
-      boolean historyPlaceholdersEnabled
-  ) {
-  }
+      boolean historyPlaceholdersEnabled) {}
 
   public FilterEngine(FilterSettingsBus bus) {
     this.bus = bus;
@@ -109,7 +105,9 @@ public class FilterEngine implements PropertyChangeListener {
     return false;
   }
 
-  /** Returns the first matching rule for a line, or null if none match (or filtering is disabled). */
+  /**
+   * Returns the first matching rule for a line, or null if none match (or filtering is disabled).
+   */
   public Match firstMatch(FilterContext ctx) {
     if (ctx == null) return null;
     try {
@@ -159,14 +157,15 @@ public class FilterEngine implements PropertyChangeListener {
           c.placeholderMaxLinesPerRun(),
           c.placeholderTooltipMaxTags(),
           c.historyPlaceholderMaxRunsPerBatch(),
-          c.historyPlaceholdersEnabled()
-      );
+          c.historyPlaceholdersEnabled());
     } catch (Exception ignored) {
       return new Effective(true, true, true, 0, 250, 12, 10, true);
     }
   }
 
-  /** Compute the effective settings for a specific target and include where each value came from. */
+  /**
+   * Compute the effective settings for a specific target and include where each value came from.
+   */
   public EffectiveResolved effectiveResolvedFor(TargetRef target) {
     String key;
     try {
@@ -194,8 +193,7 @@ public class FilterEngine implements PropertyChangeListener {
           c.placeholderMaxLinesPerRun(),
           c.placeholderTooltipMaxTags(),
           c.historyPlaceholderMaxRunsPerBatch(),
-          c.historyPlaceholdersEnabled()
-      );
+          c.historyPlaceholdersEnabled());
     } catch (Exception ignored) {
       return new EffectiveResolved(
           new ResolvedBool(true, null),
@@ -205,8 +203,7 @@ public class FilterEngine implements PropertyChangeListener {
           250,
           12,
           10,
-          true
-      );
+          true);
     }
   }
 
@@ -311,8 +308,7 @@ public class FilterEngine implements PropertyChangeListener {
         cur.historyPlaceholderMaxRunsPerBatch(),
         cur.historyPlaceholdersEnabledByDefault(),
         overrides,
-        rules
-    );
+        rules);
   }
 
   private static CompiledRule compileRule(FilterRule r) {
@@ -331,7 +327,8 @@ public class FilterEngine implements PropertyChangeListener {
       text = compileRegexSafe(r.textRegex());
     }
 
-    EnumSet<LogKind> kinds = (r.kinds() == null) ? EnumSet.noneOf(LogKind.class) : EnumSet.copyOf(r.kinds());
+    EnumSet<LogKind> kinds =
+        (r.kinds() == null) ? EnumSet.noneOf(LogKind.class) : EnumSet.copyOf(r.kinds());
 
     TagSpec tags = (r.tags() == null) ? TagSpec.empty() : r.tags();
 
@@ -346,9 +343,8 @@ public class FilterEngine implements PropertyChangeListener {
         kinds,
         from,
         tags,
-        text
-    );
-}
+        text);
+  }
 
   private static Pattern compileRegexSafe(RegexSpec spec) {
     if (spec == null || spec.isEmpty()) return null;
@@ -403,10 +399,11 @@ public class FilterEngine implements PropertyChangeListener {
    * Normalizes scope patterns so users can type shorthand.
    *
    * <p>Examples:
+   *
    * <ul>
-   *   <li>{@code libera} => {@code libera/*}</li>
-   *   <li>{@code #llamas} => {@code *}{@code /#llamas}</li>
-   *   <li>{@code status} => {@code *}{@code /status}</li>
+   *   <li>{@code libera} => {@code libera/*}
+   *   <li>{@code #llamas} => {@code *}{@code /#llamas}
+   *   <li>{@code status} => {@code *}{@code /status}
    * </ul>
    */
   public static String normalizeScopePattern(String raw) {
@@ -443,16 +440,17 @@ public class FilterEngine implements PropertyChangeListener {
     return score;
   }
 
-  private record Compiled(boolean enabledByDefault,
-                          boolean placeholdersEnabledByDefault,
-                          boolean placeholdersCollapsedByDefault,
-                          int placeholderMaxPreviewLines,
-                          int placeholderMaxLinesPerRun,
-                          int placeholderTooltipMaxTags,
-                          int historyPlaceholderMaxRunsPerBatch,
-                          boolean historyPlaceholdersEnabled,
-                          List<CompiledOverride> overrides,
-                          List<CompiledRule> rules) {
+  private record Compiled(
+      boolean enabledByDefault,
+      boolean placeholdersEnabledByDefault,
+      boolean placeholdersCollapsedByDefault,
+      int placeholderMaxPreviewLines,
+      int placeholderMaxLinesPerRun,
+      int placeholderTooltipMaxTags,
+      int historyPlaceholderMaxRunsPerBatch,
+      boolean historyPlaceholdersEnabled,
+      List<CompiledOverride> overrides,
+      List<CompiledRule> rules) {
     boolean filtersEnabledFor(String bufferKey) {
       boolean base = enabledByDefault;
       if (overrides == null || overrides.isEmpty()) return base;
@@ -526,12 +524,8 @@ public class FilterEngine implements PropertyChangeListener {
     }
   }
 
-  private record CompiledOverride(FilterScopeOverride override,
-                                  String scopePattern,
-                                  Pattern pattern,
-                                  int specificity) {
-  }
-
+  private record CompiledOverride(
+      FilterScopeOverride override, String scopePattern, Pattern pattern, int specificity) {}
 
   private static final class CompiledRule {
     private final UUID id;
@@ -557,8 +551,7 @@ public class FilterEngine implements PropertyChangeListener {
         EnumSet<LogKind> kinds,
         List<Pattern> from,
         TagSpec tags,
-        Pattern text
-    ) {
+        Pattern text) {
       this.id = id;
       this.name = Objects.toString(name, "");
       this.nameKey = Objects.toString(nameKey, "");

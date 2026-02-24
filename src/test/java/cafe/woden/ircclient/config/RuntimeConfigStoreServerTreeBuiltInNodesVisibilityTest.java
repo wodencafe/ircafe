@@ -13,16 +13,14 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RuntimeConfigStoreServerTreeBuiltInNodesVisibilityTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void builtInNodeVisibilityRoundTripsAndDefaultEntriesAreRemoved() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
     RuntimeConfigStore store =
         new RuntimeConfigStore(
-            cfg.toString(),
-            new IrcProperties(null, List.of(server("libera"), server("oftc"))));
+            cfg.toString(), new IrcProperties(null, List.of(server("libera"), server("oftc"))));
 
     assertEquals(Map.of(), store.readServerTreeBuiltInNodesVisibility());
 
@@ -36,8 +34,7 @@ class RuntimeConfigStoreServerTreeBuiltInNodesVisibilityTest {
     assertEquals(hidden, persisted.get("libera"));
 
     store.rememberServerTreeBuiltInNodesVisibility(
-        "libera",
-        RuntimeConfigStore.ServerTreeBuiltInNodesVisibility.defaults());
+        "libera", RuntimeConfigStore.ServerTreeBuiltInNodesVisibility.defaults());
 
     assertEquals(Map.of(), store.readServerTreeBuiltInNodesVisibility());
     String yaml = Files.readString(cfg);
@@ -56,7 +53,8 @@ class RuntimeConfigStoreServerTreeBuiltInNodesVisibilityTest {
             + "        libera:\n"
             + "          notifications: false\n");
 
-    RuntimeConfigStore store = new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
     Map<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> persisted =
         store.readServerTreeBuiltInNodesVisibility();

@@ -18,8 +18,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 class ChatLogRepositoryTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void duplicateMessageIdIsSuppressedAcrossRepositoryReopen() {
@@ -29,7 +28,15 @@ class ChatLogRepositoryTest {
       TargetRef target = new TargetRef("srv", "#chan");
       LogLineFactory factory = new LogLineFactory(fixedClock(1_700_000_000_000L));
 
-      first.repo.insert(factory.chatAt(target, "alice", "first", false, 1_700_000_000_000L, "dup-1", Map.of("msgid", "dup-1")));
+      first.repo.insert(
+          factory.chatAt(
+              target,
+              "alice",
+              "first",
+              false,
+              1_700_000_000_000L,
+              "dup-1",
+              Map.of("msgid", "dup-1")));
       assertEquals(1, first.repo.fetchRecent("srv", "#chan", 10).size());
     }
 
@@ -37,7 +44,15 @@ class ChatLogRepositoryTest {
       TargetRef target = new TargetRef("srv", "#chan");
       LogLineFactory factory = new LogLineFactory(fixedClock(1_700_000_100_000L));
 
-      second.repo.insert(factory.chatAt(target, "alice", "second", false, 1_700_000_100_000L, "dup-1", Map.of("msgid", "dup-1")));
+      second.repo.insert(
+          factory.chatAt(
+              target,
+              "alice",
+              "second",
+              false,
+              1_700_000_100_000L,
+              "dup-1",
+              Map.of("msgid", "dup-1")));
       List<LogLine> rows = second.repo.fetchRecent("srv", "#chan", 10);
       assertEquals(1, rows.size());
       assertEquals("first", rows.getFirst().text());
@@ -50,9 +65,21 @@ class ChatLogRepositoryTest {
       TargetRef target = new TargetRef("srv", "#chan");
       LogLineFactory factory = new LogLineFactory(fixedClock(1_700_001_000_000L));
 
-      LogLine a = factory.chatAt(target, "alice", "a", false, 1_700_001_000_000L, "dup-2", Map.of("msgid", "dup-2"));
-      LogLine b = factory.chatAt(target, "alice", "b", false, 1_700_001_001_000L, "dup-2", Map.of("msgid", "dup-2"));
-      LogLine c = factory.chatAt(target, "alice", "c", false, 1_700_001_002_000L, "unique-2", Map.of("msgid", "unique-2"));
+      LogLine a =
+          factory.chatAt(
+              target, "alice", "a", false, 1_700_001_000_000L, "dup-2", Map.of("msgid", "dup-2"));
+      LogLine b =
+          factory.chatAt(
+              target, "alice", "b", false, 1_700_001_001_000L, "dup-2", Map.of("msgid", "dup-2"));
+      LogLine c =
+          factory.chatAt(
+              target,
+              "alice",
+              "c",
+              false,
+              1_700_001_002_000L,
+              "unique-2",
+              Map.of("msgid", "unique-2"));
 
       fixture.repo.insertBatch(List.of(a, b, c));
 
@@ -88,11 +115,7 @@ class ChatLogRepositoryTest {
     ds.setUsername("SA");
     ds.setPassword("");
 
-    Flyway.configure()
-        .dataSource(ds)
-        .locations("classpath:db/migration/chatlog")
-        .load()
-        .migrate();
+    Flyway.configure().dataSource(ds).locations("classpath:db/migration/chatlog").load().migrate();
 
     JdbcTemplate jdbc = new JdbcTemplate(ds);
     return new Fixture(jdbc, new ChatLogRepository(jdbc));

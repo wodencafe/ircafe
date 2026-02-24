@@ -1,31 +1,28 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.ui.ChatDockable;
-import cafe.woden.ircclient.ui.ServerTreeDockable;
-import cafe.woden.ircclient.ui.TargetActivationBus;
-import cafe.woden.ircclient.ui.SwingEdt;
-import cafe.woden.ircclient.ui.OutboundLineBus;
-import cafe.woden.ircclient.ui.ActiveInputRouter;
-import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.ui.ActiveInputRouter;
+import cafe.woden.ircclient.ui.ChatDockable;
+import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.OutboundLineBus;
+import cafe.woden.ircclient.ui.ServerTreeDockable;
+import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.TargetActivationBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.DockingRegion;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import io.github.andrewauclair.moderndocking.app.Docking;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import java.util.Map;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import javax.swing.SwingUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
@@ -47,30 +44,34 @@ public class ChatDockManager {
   /**
    * Registered pinned dockables.
    *
-   * <p>ModernDocking does not support unregistering dockables, and it throws if you try to re-register a
-   * different dockable instance with the same persistent ID. Closing a dock via the UI typically undocks
-   * it but keeps it registered, so we keep the instance around and re-dock/re-display it on demand.
+   * <p>ModernDocking does not support unregistering dockables, and it throws if you try to
+   * re-register a different dockable instance with the same persistent ID. Closing a dock via the
+   * UI typically undocks it but keeps it registered, so we keep the instance around and
+   * re-dock/re-display it on demand.
    */
   private final Map<TargetRef, PinnedChatDockable> openPinned = new ConcurrentHashMap<>();
+
   /**
-   * Draft text for pinned dock inputs, persisted in-memory even after the dock is closed.
-   * Keyed by TargetRef so reopening the same pinned target restores the draft.
+   * Draft text for pinned dock inputs, persisted in-memory even after the dock is closed. Keyed by
+   * TargetRef so reopening the same pinned target restores the draft.
    */
   private final Map<TargetRef, String> pinnedDrafts = new ConcurrentHashMap<>();
+
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private volatile boolean pinnedInputsEnabled = true;
 
-  public ChatDockManager(ServerTreeDockable serverTree,
-                         ChatDockable mainChat,
-                         ChatTranscriptStore transcripts,
-                         TargetActivationBus activationBus,
-                         UiSettingsBus settingsBus,
-                         OutboundLineBus outboundBus,
-                         IrcClientService irc,
-                         ActiveInputRouter activeInputRouter,
-                         ChatHistoryService chatHistoryService,
-                         CommandHistoryStore commandHistoryStore) {
+  public ChatDockManager(
+      ServerTreeDockable serverTree,
+      ChatDockable mainChat,
+      ChatTranscriptStore transcripts,
+      TargetActivationBus activationBus,
+      UiSettingsBus settingsBus,
+      OutboundLineBus outboundBus,
+      IrcClientService irc,
+      ActiveInputRouter activeInputRouter,
+      ChatHistoryService chatHistoryService,
+      CommandHistoryStore commandHistoryStore) {
     this.serverTree = serverTree;
     this.mainChat = mainChat;
     this.transcripts = transcripts;
@@ -86,17 +87,17 @@ public class ChatDockManager {
   @PostConstruct
   void wire() {
     disposables.add(
-        serverTree.openPinnedChatRequests()
+        serverTree
+            .openPinnedChatRequests()
             .observeOn(SwingEdt.scheduler())
-            .subscribe(this::openPinned,
-                err -> log.error("[ircafe] pinned chat stream error", err))
-    );
+            .subscribe(
+                this::openPinned, err -> log.error("[ircafe] pinned chat stream error", err)));
     disposables.add(
-        mainChat.topicUpdates()
+        mainChat
+            .topicUpdates()
             .observeOn(SwingEdt.scheduler())
-            .subscribe(this::onTopicUpdated,
-                err -> log.error("[ircafe] topic update stream error", err))
-    );
+            .subscribe(
+                this::onTopicUpdated, err -> log.error("[ircafe] topic update stream error", err)));
   }
 
   @PreDestroy
@@ -113,8 +114,8 @@ public class ChatDockManager {
   }
 
   /**
-   * Enable/disable input bars for all currently-open pinned chat docks.
-   * Newly opened pinned docks will inherit the latest value.
+   * Enable/disable input bars for all currently-open pinned chat docks. Newly opened pinned docks
+   * will inherit the latest value.
    */
   public void setPinnedInputsEnabled(boolean enabled) {
     this.pinnedInputsEnabled = enabled;
@@ -138,7 +139,8 @@ public class ChatDockManager {
 
   public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
     String sid = java.util.Objects.toString(serverId, "").trim();
-    String cap = java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    String cap =
+        java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
     if ("typing".equals(cap) || "message-tags".equals(cap)) {
@@ -169,16 +171,17 @@ public class ChatDockManager {
     }
   }
 
-  private void normalizePinnedDraftsForServer(String serverId, boolean replySupported, boolean reactSupported) {
+  private void normalizePinnedDraftsForServer(
+      String serverId, boolean replySupported, boolean reactSupported) {
     // Persisted drafts for currently hidden/closed pinned docks.
-    java.util.ArrayList<TargetRef> persistedTargets = new java.util.ArrayList<>(pinnedDrafts.keySet());
+    java.util.ArrayList<TargetRef> persistedTargets =
+        new java.util.ArrayList<>(pinnedDrafts.keySet());
     for (TargetRef target : persistedTargets) {
       if (target == null || !java.util.Objects.equals(target.serverId(), serverId)) continue;
       String before = pinnedDrafts.getOrDefault(target, "");
-      String after = cafe.woden.ircclient.ui.MessageInputPanel.normalizeIrcv3DraftForCapabilities(
-          before,
-          replySupported,
-          reactSupported);
+      String after =
+          cafe.woden.ircclient.ui.MessageInputPanel.normalizeIrcv3DraftForCapabilities(
+              before, replySupported, reactSupported);
       if (!java.util.Objects.equals(before, after)) {
         pinnedDrafts.put(target, after);
       }
@@ -229,27 +232,28 @@ public class ChatDockManager {
 
       // Clicking inside a pinned dock should switch the *input*/status/users context,
       // but should NOT force the main Chat dock to change its displayed transcript.
-      dock = new PinnedChatDockable(
-          target,
-          transcripts,
-          settingsBus,
-          chatHistoryService,
-          commandHistoryStore,
-          activationBus::activate,
-          outboundBus,
-          irc,
-          activeInputRouter,
-          (t, draft) -> {
-            if (t == null) return;
-            pinnedDrafts.put(t, draft == null ? "" : draft);
-          },
-          (t, draft) -> {
-            // Only used for explicit cleanup (e.g., app shutdown). Closing a dock via the UI should
-            // not destroy it because ModernDocking does not support re-registering the same ID.
-            if (t == null) return;
-            pinnedDrafts.put(t, draft == null ? "" : draft);
-          }
-      );
+      dock =
+          new PinnedChatDockable(
+              target,
+              transcripts,
+              settingsBus,
+              chatHistoryService,
+              commandHistoryStore,
+              activationBus::activate,
+              outboundBus,
+              irc,
+              activeInputRouter,
+              (t, draft) -> {
+                if (t == null) return;
+                pinnedDrafts.put(t, draft == null ? "" : draft);
+              },
+              (t, draft) -> {
+                // Only used for explicit cleanup (e.g., app shutdown). Closing a dock via the UI
+                // should
+                // not destroy it because ModernDocking does not support re-registering the same ID.
+                if (t == null) return;
+                pinnedDrafts.put(t, draft == null ? "" : draft);
+              });
       dock.setDraftText(initialDraft);
       dock.setInputEnabled(pinnedInputsEnabled);
       openPinned.put(target, dock);
@@ -267,7 +271,8 @@ public class ChatDockManager {
       dock.setDraftText(desiredDraft);
     }
 
-    // If the user previously closed the dock via the UI, it is likely undocked but still registered.
+    // If the user previously closed the dock via the UI, it is likely undocked but still
+    // registered.
     // Re-dock it (default: tab with main chat), then display it.
     try {
       if (!Docking.isDocked(dock)) {

@@ -41,10 +41,13 @@ class OutboundChatCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
   private final AwayRoutingState awayRoutingState = mock(AwayRoutingState.class);
-  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState = mock(ChatHistoryRequestRoutingState.class);
+  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState =
+      mock(ChatHistoryRequestRoutingState.class);
   private final JoinRoutingState joinRoutingState = mock(JoinRoutingState.class);
-  private final LabeledResponseRoutingState labeledResponseRoutingState = mock(LabeledResponseRoutingState.class);
-  private final PendingEchoMessageState pendingEchoMessageState = mock(PendingEchoMessageState.class);
+  private final LabeledResponseRoutingState labeledResponseRoutingState =
+      mock(LabeledResponseRoutingState.class);
+  private final PendingEchoMessageState pendingEchoMessageState =
+      mock(PendingEchoMessageState.class);
   private final PendingInviteState pendingInviteState = mock(PendingInviteState.class);
   private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
   private final IgnoreListService ignoreListService = mock(IgnoreListService.class);
@@ -155,13 +158,15 @@ class OutboundChatCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     Instant createdAt = Instant.parse("2026-02-16T00:00:00Z");
     PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat("pending-1", chan, "me", "hello", createdAt);
+        new PendingEchoMessageState.PendingOutboundChat(
+            "pending-1", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.sendMessage("libera", "#ircafe", "hello")).thenReturn(Completable.complete());
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
-    when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class))).thenReturn(pending);
+    when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class)))
+        .thenReturn(pending);
 
     service.handleSay(disposables, "hello");
 
@@ -177,7 +182,8 @@ class OutboundChatCommandServiceTest {
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.isMultilineAvailable("libera")).thenReturn(false);
-    when(ui.confirmMultilineSplitFallback(chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
+    when(ui.confirmMultilineSplitFallback(
+            chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
         .thenReturn(true);
     when(irc.sendMessage("libera", "#ircafe", "line one")).thenReturn(Completable.complete());
     when(irc.sendMessage("libera", "#ircafe", "line two")).thenReturn(Completable.complete());
@@ -196,7 +202,8 @@ class OutboundChatCommandServiceTest {
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isMultilineAvailable("libera")).thenReturn(false);
-    when(ui.confirmMultilineSplitFallback(chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
+    when(ui.confirmMultilineSplitFallback(
+            chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
         .thenReturn(false);
 
     service.handleSay(disposables, "line one\nline two");
@@ -214,11 +221,7 @@ class OutboundChatCommandServiceTest {
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.isMultilineAvailable("libera")).thenReturn(true);
     when(irc.negotiatedMultilineMaxLines("libera")).thenReturn(1);
-    when(ui.confirmMultilineSplitFallback(
-        eq(chan),
-        eq(2),
-        eq(17L),
-        contains("max-lines is 1")))
+    when(ui.confirmMultilineSplitFallback(eq(chan), eq(2), eq(17L), contains("max-lines is 1")))
         .thenReturn(true);
     when(irc.sendMessage("libera", "#ircafe", "line one")).thenReturn(Completable.complete());
     when(irc.sendMessage("libera", "#ircafe", "line two")).thenReturn(Completable.complete());
@@ -240,7 +243,8 @@ class OutboundChatCommandServiceTest {
     when(irc.isMultilineAvailable("libera")).thenReturn(true);
     when(irc.negotiatedMultilineMaxLines("libera")).thenReturn(5);
     when(irc.negotiatedMultilineMaxBytes("libera")).thenReturn(4096L);
-    when(irc.sendMessage("libera", "#ircafe", "line one\nline two")).thenReturn(Completable.complete());
+    when(irc.sendMessage("libera", "#ircafe", "line one\nline two"))
+        .thenReturn(Completable.complete());
 
     service.handleSay(disposables, "line one\nline two");
 
@@ -253,25 +257,23 @@ class OutboundChatCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     Instant createdAt = Instant.parse("2026-02-16T00:00:00Z");
     PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat("pending-2", chan, "me", "hello", createdAt);
+        new PendingEchoMessageState.PendingOutboundChat(
+            "pending-2", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.sendMessage("libera", "#ircafe", "hello"))
         .thenReturn(Completable.error(new RuntimeException("boom")));
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
-    when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class))).thenReturn(pending);
+    when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class)))
+        .thenReturn(pending);
 
     service.handleSay(disposables, "hello");
 
     verify(pendingEchoMessageState).removeById("pending-2");
-    verify(ui).failPendingOutgoingChat(
-        eq(chan),
-        eq("pending-2"),
-        any(Instant.class),
-        eq("me"),
-        eq("hello"),
-        contains("boom"));
+    verify(ui)
+        .failPendingOutgoingChat(
+            eq(chan), eq("pending-2"), any(Instant.class), eq("me"), eq("hello"), contains("boom"));
   }
 
   @Test
@@ -285,14 +287,15 @@ class OutboundChatCommandServiceTest {
     service.handleChatHistoryBefore(disposables, 40, "msgid=abc123");
 
     verify(irc).requestChatHistoryBefore("libera", "#ircafe", "msgid=abc123", 40);
-    verify(chatHistoryRequestRoutingState).remember(
-        eq("libera"),
-        eq("#ircafe"),
-        eq(chan),
-        eq(40),
-        eq("msgid=abc123"),
-        any(Instant.class),
-        eq(QueryMode.BEFORE));
+    verify(chatHistoryRequestRoutingState)
+        .remember(
+            eq("libera"),
+            eq("#ircafe"),
+            eq(chan),
+            eq(40),
+            eq("msgid=abc123"),
+            any(Instant.class),
+            eq(QueryMode.BEFORE));
   }
 
   @Test
@@ -306,14 +309,15 @@ class OutboundChatCommandServiceTest {
     service.handleChatHistoryLatest(disposables, 55, "*");
 
     verify(irc).requestChatHistoryLatest("libera", "#ircafe", "*", 55);
-    verify(chatHistoryRequestRoutingState).remember(
-        eq("libera"),
-        eq("#ircafe"),
-        eq(chan),
-        eq(55),
-        eq("*"),
-        any(Instant.class),
-        eq(QueryMode.LATEST));
+    verify(chatHistoryRequestRoutingState)
+        .remember(
+            eq("libera"),
+            eq("#ircafe"),
+            eq(chan),
+            eq(55),
+            eq("*"),
+            any(Instant.class),
+            eq(QueryMode.LATEST));
   }
 
   @Test
@@ -327,14 +331,15 @@ class OutboundChatCommandServiceTest {
     service.handleChatHistoryBetween(disposables, "msgid=a", "msgid=b", 30);
 
     verify(irc).requestChatHistoryBetween("libera", "#ircafe", "msgid=a", "msgid=b", 30);
-    verify(chatHistoryRequestRoutingState).remember(
-        eq("libera"),
-        eq("#ircafe"),
-        eq(chan),
-        eq(30),
-        eq("msgid=a .. msgid=b"),
-        any(Instant.class),
-        eq(QueryMode.BETWEEN));
+    verify(chatHistoryRequestRoutingState)
+        .remember(
+            eq("libera"),
+            eq("#ircafe"),
+            eq(chan),
+            eq(30),
+            eq("msgid=a .. msgid=b"),
+            any(Instant.class),
+            eq(QueryMode.BETWEEN));
   }
 
   @Test
@@ -348,14 +353,15 @@ class OutboundChatCommandServiceTest {
     service.handleChatHistoryAround(disposables, "msgid=anchor", 45);
 
     verify(irc).requestChatHistoryAround("libera", "#ircafe", "msgid=anchor", 45);
-    verify(chatHistoryRequestRoutingState).remember(
-        eq("libera"),
-        eq("#ircafe"),
-        eq(chan),
-        eq(45),
-        eq("msgid=anchor"),
-        any(Instant.class),
-        eq(QueryMode.AROUND));
+    verify(chatHistoryRequestRoutingState)
+        .remember(
+            eq("libera"),
+            eq("#ircafe"),
+            eq(chan),
+            eq(45),
+            eq("msgid=anchor"),
+            any(Instant.class),
+            eq(QueryMode.AROUND));
   }
 
   @Test
@@ -382,22 +388,19 @@ class OutboundChatCommandServiceTest {
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "MONITOR +nick"))
-        .thenReturn(new LabeledResponseRoutingState.PreparedRawLine("@label=req-1 MONITOR +nick", "req-1", true));
+        .thenReturn(
+            new LabeledResponseRoutingState.PreparedRawLine(
+                "@label=req-1 MONITOR +nick", "req-1", true));
     when(irc.sendRaw("libera", "@label=req-1 MONITOR +nick")).thenReturn(Completable.complete());
 
     service.handleQuote(disposables, "MONITOR +nick");
 
     verify(irc).sendRaw("libera", "@label=req-1 MONITOR +nick");
-    verify(labeledResponseRoutingState).remember(
-        eq("libera"),
-        eq("req-1"),
-        eq(chan),
-        eq("MONITOR +nick"),
-        any(Instant.class));
-    verify(ui).appendStatus(
-        eq(status),
-        eq("(quote)"),
-        argThat(s -> s != null && s.contains("{label=req-1}")));
+    verify(labeledResponseRoutingState)
+        .remember(eq("libera"), eq("req-1"), eq(chan), eq("MONITOR +nick"), any(Instant.class));
+    verify(ui)
+        .appendStatus(
+            eq(status), eq("(quote)"), argThat(s -> s != null && s.contains("{label=req-1}")));
   }
 
   @Test
@@ -422,22 +425,19 @@ class OutboundChatCommandServiceTest {
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "WHO #ircafe"))
-        .thenReturn(new LabeledResponseRoutingState.PreparedRawLine("@label=req-2 WHO #ircafe", "req-2", true));
+        .thenReturn(
+            new LabeledResponseRoutingState.PreparedRawLine(
+                "@label=req-2 WHO #ircafe", "req-2", true));
     when(irc.sendRaw("libera", "@label=req-2 WHO #ircafe")).thenReturn(Completable.complete());
 
     service.handleSay(disposables, "WHO #ircafe");
 
     verify(irc).sendRaw("libera", "@label=req-2 WHO #ircafe");
-    verify(labeledResponseRoutingState).remember(
-        eq("libera"),
-        eq("req-2"),
-        eq(status),
-        eq("WHO #ircafe"),
-        any(Instant.class));
-    verify(ui).appendStatus(
-        eq(status),
-        eq("(raw)"),
-        argThat(s -> s != null && s.contains("{label=req-2}")));
+    verify(labeledResponseRoutingState)
+        .remember(eq("libera"), eq("req-2"), eq(status), eq("WHO #ircafe"), any(Instant.class));
+    verify(ui)
+        .appendStatus(
+            eq(status), eq("(raw)"), argThat(s -> s != null && s.contains("{label=req-2}")));
   }
 
   @Test
@@ -462,13 +462,15 @@ class OutboundChatCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     Instant createdAt = Instant.parse("2026-02-16T00:00:00Z");
     PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat("pending-reply", chan, "me", "hello", createdAt);
+        new PendingEchoMessageState.PendingOutboundChat(
+            "pending-reply", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class))).thenReturn(pending);
+    when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class)))
+        .thenReturn(pending);
     when(irc.sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello"))
         .thenReturn(Completable.complete());
 
@@ -493,7 +495,8 @@ class OutboundChatCommandServiceTest {
     service.handleReactMessage(disposables, "abc123", ":+1:");
 
     verify(irc).sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
-    verify(ui).applyMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
+    verify(ui)
+        .applyMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
   }
 
   @Test
@@ -511,14 +514,15 @@ class OutboundChatCommandServiceTest {
     service.handleEditMessage(disposables, "abc123", "fixed text");
 
     verify(irc).sendRaw("libera", "@+draft/edit=abc123 PRIVMSG #ircafe :fixed text");
-    verify(ui).applyMessageEdit(
-        eq(chan),
-        any(Instant.class),
-        eq("me"),
-        eq("abc123"),
-        eq("fixed text"),
-        eq(""),
-        eq(java.util.Map.of("draft/edit", "abc123")));
+    verify(ui)
+        .applyMessageEdit(
+            eq(chan),
+            any(Instant.class),
+            eq("me"),
+            eq("abc123"),
+            eq("fixed text"),
+            eq(""),
+            eq(java.util.Map.of("draft/edit", "abc123")));
   }
 
   @Test
@@ -532,14 +536,7 @@ class OutboundChatCommandServiceTest {
 
     verify(ui).appendStatus(chan, "(edit)", "Can only edit your own messages in this buffer.");
     verify(irc, never()).sendRaw(eq("libera"), any());
-    verify(ui, never()).applyMessageEdit(
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any());
+    verify(ui, never()).applyMessageEdit(any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -551,19 +548,19 @@ class OutboundChatCommandServiceTest {
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "REDACT #ircafe abc123"))
-        .thenReturn(Completable.complete());
+    when(irc.sendRaw("libera", "REDACT #ircafe abc123")).thenReturn(Completable.complete());
 
     service.handleRedactMessage(disposables, "abc123", "");
 
     verify(irc).sendRaw("libera", "REDACT #ircafe abc123");
-    verify(ui).applyMessageRedaction(
-        eq(chan),
-        any(Instant.class),
-        eq("me"),
-        eq("abc123"),
-        eq(""),
-        eq(java.util.Map.of("draft/delete", "abc123")));
+    verify(ui)
+        .applyMessageRedaction(
+            eq(chan),
+            any(Instant.class),
+            eq("me"),
+            eq("abc123"),
+            eq(""),
+            eq(java.util.Map.of("draft/delete", "abc123")));
   }
 
   @Test
@@ -592,13 +589,7 @@ class OutboundChatCommandServiceTest {
 
     verify(ui).appendStatus(chan, "(redact)", "Can only redact your own messages in this buffer.");
     verify(irc, never()).sendRaw(eq("libera"), any());
-    verify(ui, never()).applyMessageRedaction(
-        any(),
-        any(),
-        any(),
-        any(),
-        any(),
-        any());
+    verify(ui, never()).applyMessageRedaction(any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -610,14 +601,13 @@ class OutboundChatCommandServiceTest {
 
     service.handleHelp("");
 
-    verify(ui).appendStatus(
-        eq(chan),
-        eq("(help)"),
-        contains("/edit <msgid> <message> (unavailable:"));
-    verify(ui).appendStatus(
-        eq(chan),
-        eq("(help)"),
-        contains("/redact <msgid> [reason] (alias: /delete) (unavailable:"));
+    verify(ui)
+        .appendStatus(eq(chan), eq("(help)"), contains("/edit <msgid> <message> (unavailable:"));
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains("/redact <msgid> [reason] (alias: /delete) (unavailable:"));
   }
 
   @Test
@@ -645,7 +635,8 @@ class OutboundChatCommandServiceTest {
     verify(ui).appendStatus(chan, "(help)", "/dcc send <nick> <file-path>");
     verify(ui).appendStatus(chan, "(help)", "/dcc accept <nick>");
     verify(ui).appendStatus(chan, "(help)", "/dcc get <nick> [save-path]");
-    verify(ui).appendStatus(chan, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
+    verify(ui)
+        .appendStatus(chan, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     verify(ui).appendStatus(chan, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
     verify(ui).appendStatus(chan, "(help)", "UI: right-click a nick and use the DCC submenu.");
   }
@@ -671,9 +662,10 @@ class OutboundChatCommandServiceTest {
 
     service.handleInviteAutoJoin("status");
 
-    verify(ui).appendStatus(
-        status,
-        "(invite)",
-        "Invite auto-join is enabled. Use /inviteautojoin on|off or /ajinvite.");
+    verify(ui)
+        .appendStatus(
+            status,
+            "(invite)",
+            "Invite auto-join is enabled. Use /inviteautojoin on|off or /ajinvite.");
   }
 }

@@ -36,9 +36,8 @@ public class ThemeTweakSettingsBus {
 
   public void set(ThemeTweakSettings next) {
     ThemeTweakSettings prev = this.current;
-    this.current = next != null
-        ? next
-        : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
+    this.current =
+        next != null ? next : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
     pcs.firePropertyChange(PROP_THEME_TWEAK_SETTINGS, prev, this.current);
   }
 

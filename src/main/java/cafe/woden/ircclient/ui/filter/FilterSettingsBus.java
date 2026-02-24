@@ -13,9 +13,7 @@ import java.util.Objects;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Publishes the current filter settings snapshot.
- */
+/** Publishes the current filter settings snapshot. */
 @Component
 @Lazy
 public class FilterSettingsBus {
@@ -28,62 +26,69 @@ public class FilterSettingsBus {
   public FilterSettingsBus(UiProperties props) {
     UiProperties.Filters f = (props != null) ? props.filters() : null;
 
-    boolean filtersEnabledByDefault = f == null || f.enabledByDefault() == null || Boolean.TRUE.equals(f.enabledByDefault());
-    boolean placeholdersEnabledByDefault = f == null || f.placeholdersEnabledByDefault() == null || Boolean.TRUE.equals(f.placeholdersEnabledByDefault());
-    boolean placeholdersCollapsedByDefault = f == null || f.placeholdersCollapsedByDefault() == null || Boolean.TRUE.equals(f.placeholdersCollapsedByDefault());
+    boolean filtersEnabledByDefault =
+        f == null || f.enabledByDefault() == null || Boolean.TRUE.equals(f.enabledByDefault());
+    boolean placeholdersEnabledByDefault =
+        f == null
+            || f.placeholdersEnabledByDefault() == null
+            || Boolean.TRUE.equals(f.placeholdersEnabledByDefault());
+    boolean placeholdersCollapsedByDefault =
+        f == null
+            || f.placeholdersCollapsedByDefault() == null
+            || Boolean.TRUE.equals(f.placeholdersCollapsedByDefault());
 
     int placeholderMaxPreviewLines = 3;
     if (f != null && f.placeholderMaxPreviewLines() != null) {
       placeholderMaxPreviewLines = f.placeholderMaxPreviewLines();
     }
 
-int placeholderMaxLinesPerRun = 250;
-if (f != null && f.placeholderMaxLinesPerRun() != null) {
-  placeholderMaxLinesPerRun = f.placeholderMaxLinesPerRun();
-}
+    int placeholderMaxLinesPerRun = 250;
+    if (f != null && f.placeholderMaxLinesPerRun() != null) {
+      placeholderMaxLinesPerRun = f.placeholderMaxLinesPerRun();
+    }
 
-int placeholderTooltipMaxTags = 12;
-if (f != null && f.placeholderTooltipMaxTags() != null) {
-  placeholderTooltipMaxTags = f.placeholderTooltipMaxTags();
-}
+    int placeholderTooltipMaxTags = 12;
+    if (f != null && f.placeholderTooltipMaxTags() != null) {
+      placeholderTooltipMaxTags = f.placeholderTooltipMaxTags();
+    }
 
-int historyPlaceholderMaxRunsPerBatch = 10;
-if (f != null && f.historyPlaceholderMaxRunsPerBatch() != null) {
-  historyPlaceholderMaxRunsPerBatch = f.historyPlaceholderMaxRunsPerBatch();
-}
+    int historyPlaceholderMaxRunsPerBatch = 10;
+    if (f != null && f.historyPlaceholderMaxRunsPerBatch() != null) {
+      historyPlaceholderMaxRunsPerBatch = f.historyPlaceholderMaxRunsPerBatch();
+    }
 
-boolean historyPlaceholdersEnabledByDefault = true;
-if (f != null && f.historyPlaceholdersEnabledByDefault() != null) {
-  historyPlaceholdersEnabledByDefault = Boolean.TRUE.equals(f.historyPlaceholdersEnabledByDefault());
-}
+    boolean historyPlaceholdersEnabledByDefault = true;
+    if (f != null && f.historyPlaceholdersEnabledByDefault() != null) {
+      historyPlaceholdersEnabledByDefault =
+          Boolean.TRUE.equals(f.historyPlaceholdersEnabledByDefault());
+    }
 
     List<FilterRule> rules = List.of();
     if (f != null && f.rules() != null) {
-      rules = f.rules().stream()
-          .filter(Objects::nonNull)
-          .map(FilterSettingsBus::toRule)
-          .toList();
+      rules = f.rules().stream().filter(Objects::nonNull).map(FilterSettingsBus::toRule).toList();
     }
 
     List<FilterScopeOverride> overrides = List.of();
     if (f != null && f.overrides() != null) {
-      overrides = f.overrides().stream()
-          .filter(Objects::nonNull)
-          .map(FilterSettingsBus::toOverride)
-          .toList();
+      overrides =
+          f.overrides().stream()
+              .filter(Objects::nonNull)
+              .map(FilterSettingsBus::toOverride)
+              .toList();
     }
 
-    this.current = new FilterSettings(
-        filtersEnabledByDefault,
-        placeholdersEnabledByDefault,
-        placeholdersCollapsedByDefault,
-        placeholderMaxPreviewLines,
-        placeholderMaxLinesPerRun,
-        placeholderTooltipMaxTags,
-        historyPlaceholderMaxRunsPerBatch,
-        historyPlaceholdersEnabledByDefault,
-        rules,
-        overrides);
+    this.current =
+        new FilterSettings(
+            filtersEnabledByDefault,
+            placeholdersEnabledByDefault,
+            placeholdersCollapsedByDefault,
+            placeholderMaxPreviewLines,
+            placeholderMaxLinesPerRun,
+            placeholderTooltipMaxTags,
+            historyPlaceholderMaxRunsPerBatch,
+            historyPlaceholdersEnabledByDefault,
+            rules,
+            overrides);
   }
 
   private static FilterRule toRule(FilterRuleProperties p) {
@@ -111,7 +116,17 @@ if (f != null && f.historyPlaceholdersEnabledByDefault() != null) {
       }
     }
 
-    return new FilterRule(null, name, enabled, scope, action, dir, kinds, from, regex, TagSpec.parse(Objects.toString(p.tags(), "")));
+    return new FilterRule(
+        null,
+        name,
+        enabled,
+        scope,
+        action,
+        dir,
+        kinds,
+        from,
+        regex,
+        TagSpec.parse(Objects.toString(p.tags(), "")));
   }
 
   private static FilterScopeOverride toOverride(FilterScopeOverrideProperties p) {

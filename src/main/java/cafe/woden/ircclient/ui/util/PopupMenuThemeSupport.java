@@ -51,8 +51,10 @@ public final class PopupMenuThemeSupport {
     Color borderColor = firstColor("PopupMenu.borderColor", "nimbusBorder", "Separator.foreground");
     Font menuFont = firstFont("Menu.font", "MenuBar.font", "MenuItem.font", "Label.font");
     Font menuItemFont = firstFont("MenuItem.font", "Menu.font", "Label.font");
-    Font checkItemFont = firstFont("CheckBoxMenuItem.font", "MenuItem.font", "Menu.font", "Label.font");
-    Font radioItemFont = firstFont("RadioButtonMenuItem.font", "MenuItem.font", "Menu.font", "Label.font");
+    Font checkItemFont =
+        firstFont("CheckBoxMenuItem.font", "MenuItem.font", "Menu.font", "Label.font");
+    Font radioItemFont =
+        firstFont("RadioButtonMenuItem.font", "MenuItem.font", "Menu.font", "Label.font");
 
     applyPopupPalette(
         menu,

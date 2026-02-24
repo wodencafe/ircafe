@@ -5,14 +5,9 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/**
- * ZNC bouncer integration settings.
- */
+/** ZNC bouncer integration settings. */
 @ConfigurationProperties(prefix = "ircafe.znc")
-public record ZncProperties(
-    Map<String, Map<String, Boolean>> autoConnect,
-    Discovery discovery
-) {
+public record ZncProperties(Map<String, Map<String, Boolean>> autoConnect, Discovery discovery) {
 
   public ZncProperties {
     if (autoConnect == null) autoConnect = Map.of();

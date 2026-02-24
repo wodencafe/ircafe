@@ -22,8 +22,7 @@ public record FilterRule(
     EnumSet<LogKind> kinds,
     List<String> fromNickGlobs,
     RegexSpec textRegex,
-    TagSpec tags
-) {
+    TagSpec tags) {
 
   public FilterRule {
     id = (id != null) ? id : UUID.randomUUID();

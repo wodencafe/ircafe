@@ -6,10 +6,10 @@ import io.github.andrewauclair.moderndocking.Dockable;
 /**
  * Legacy wrapper to keep the input bar available as a Dockable.
  *
- * <p><strong>Retired:</strong> IRCafe now embeds {@link MessageInputPanel} directly inside chat docks
- * (main chat and pinned chats). This wrapper remains only for anyone who wants to manually re-add an
- * input dock (or for transitional experiments). It is no longer wired as a Spring bean or registered
- * by default.</p>
+ * <p><strong>Retired:</strong> IRCafe now embeds {@link MessageInputPanel} directly inside chat
+ * docks (main chat and pinned chats). This wrapper remains only for anyone who wants to manually
+ * re-add an input dock (or for transitional experiments). It is no longer wired as a Spring bean or
+ * registered by default.
  */
 @Deprecated
 public class MessageInputDockable extends MessageInputPanel implements Dockable {

@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Holds the current <em>default</em> SOCKS proxy settings in a globally accessible place.
  *
  * <p><b>Per-server overrides:</b> IRCafe supports configuring different SOCKS proxies per server.
- * Because JVM-wide SOCKS system properties ({@code socksProxyHost/socksProxyPort}) are global,
- * this class intentionally does <b>not</b> set them. All networking that should be proxied must
- * use an explicit {@link java.net.Proxy} (see {@link ProxyPlan} / {@link ServerProxyResolver}).
+ * Because JVM-wide SOCKS system properties ({@code socksProxyHost/socksProxyPort}) are global, this
+ * class intentionally does <b>not</b> set them. All networking that should be proxied must use an
+ * explicit {@link java.net.Proxy} (see {@link ProxyPlan} / {@link ServerProxyResolver}).
  */
 public final class NetProxyContext {
 
@@ -33,8 +33,7 @@ public final class NetProxyContext {
   /** Ensures we install our Authenticator once. */
   private static final AtomicBoolean AUTH_INSTALLED = new AtomicBoolean(false);
 
-  private NetProxyContext() {
-  }
+  private NetProxyContext() {}
 
   public static void configure(IrcProperties.Proxy cfg) {
     cfg = normalize(cfg);
@@ -67,8 +66,8 @@ public final class NetProxyContext {
   /**
    * Registers SOCKS proxy credentials for later use by the JVM's default {@link Authenticator}.
    *
-   * <p>This is intentionally tolerant: it accepts repeated registrations and simply overwrites
-   * the stored credentials for the same host/port.
+   * <p>This is intentionally tolerant: it accepts repeated registrations and simply overwrites the
+   * stored credentials for the same host/port.
    */
   public static void registerSocksAuth(IrcProperties.Proxy cfg) {
     if (cfg == null) return;
@@ -80,7 +79,8 @@ public final class NetProxyContext {
     if (host.isEmpty() || port <= 0) return;
 
     installAuthenticatorIfNeeded();
-    SOCKS_AUTH.put(new SocksKey(host, port),
+    SOCKS_AUTH.put(
+        new SocksKey(host, port),
         new PasswordAuthentication(cfg.username(), cfg.password().toCharArray()));
   }
 
@@ -88,42 +88,45 @@ public final class NetProxyContext {
   public static Map<String, Integer> registeredSocksAuthKeys() {
     // Avoid exposing usernames/passwords.
     // Key format: "host:port" -> port (value is redundant but convenient for quick inspection).
-    return SOCKS_AUTH.keySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
-        k -> k.host + ":" + k.port, k -> k.port, (a, b) -> a));
+    return SOCKS_AUTH.keySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                k -> k.host + ":" + k.port, k -> k.port, (a, b) -> a));
   }
 
   private static void installAuthenticatorIfNeeded() {
     if (!AUTH_INSTALLED.compareAndSet(false, true)) return;
 
-    Authenticator.setDefault(new Authenticator() {
-      @Override
-      protected PasswordAuthentication getPasswordAuthentication() {
-        if (getRequestorType() != RequestorType.PROXY) return null;
+    Authenticator.setDefault(
+        new Authenticator() {
+          @Override
+          protected PasswordAuthentication getPasswordAuthentication() {
+            if (getRequestorType() != RequestorType.PROXY) return null;
 
-        String reqHost = getRequestingHost();
-        int reqPort = getRequestingPort();
+            String reqHost = getRequestingHost();
+            int reqPort = getRequestingPort();
 
-        // Prefer exact host+port match.
-        if (reqHost != null && !reqHost.isBlank() && reqPort > 0) {
-          PasswordAuthentication pa = SOCKS_AUTH.get(new SocksKey(reqHost, reqPort));
-          if (pa != null) return pa;
-        }
+            // Prefer exact host+port match.
+            if (reqHost != null && !reqHost.isBlank() && reqPort > 0) {
+              PasswordAuthentication pa = SOCKS_AUTH.get(new SocksKey(reqHost, reqPort));
+              if (pa != null) return pa;
+            }
 
-        // Some JDK paths may provide only the port. If the port uniquely identifies a
-        // registered proxy, use it. If ambiguous, return null.
-        if (reqPort > 0) {
-          PasswordAuthentication match = null;
-          for (Map.Entry<SocksKey, PasswordAuthentication> e : SOCKS_AUTH.entrySet()) {
-            if (e.getKey().port != reqPort) continue;
-            if (match != null) return null; // ambiguous
-            match = e.getValue();
+            // Some JDK paths may provide only the port. If the port uniquely identifies a
+            // registered proxy, use it. If ambiguous, return null.
+            if (reqPort > 0) {
+              PasswordAuthentication match = null;
+              for (Map.Entry<SocksKey, PasswordAuthentication> e : SOCKS_AUTH.entrySet()) {
+                if (e.getKey().port != reqPort) continue;
+                if (match != null) return null; // ambiguous
+                match = e.getValue();
+              }
+              if (match != null) return match;
+            }
+
+            return null;
           }
-          if (match != null) return match;
-        }
-
-        return null;
-      }
-    });
+        });
   }
 
   private record SocksKey(String host, int port) {

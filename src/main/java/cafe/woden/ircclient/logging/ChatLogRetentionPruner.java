@@ -17,16 +17,18 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Periodically prunes old chat log rows based on {@code ircafe.logging.retentionDays}.
  *
  * <p>Retention is disabled when:
+ *
  * <ul>
- *   <li>logging is disabled</li>
- *   <li>{@code keepForever} is true</li>
- *   <li>{@code retentionDays <= 0}</li>
+ *   <li>logging is disabled
+ *   <li>{@code keepForever} is true
+ *   <li>{@code retentionDays <= 0}
  * </ul>
  *
  * <p>This is intentionally conservative:
+ *
  * <ul>
- *   <li>runs once shortly after startup</li>
- *   <li>then runs on a fixed schedule (every 12 hours)</li>
+ *   <li>runs once shortly after startup
+ *   <li>then runs on a fixed schedule (every 12 hours)
  * </ul>
  */
 public final class ChatLogRetentionPruner implements AutoCloseable {
@@ -34,9 +36,8 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
 
   private static final long RUN_EVERY_HOURS = 12;
 
-  private static final DateTimeFormatter TS_FMT = DateTimeFormatter
-      .ofPattern("yyyy-MM-dd HH:mm")
-      .withZone(ZoneId.systemDefault());
+  private static final DateTimeFormatter TS_FMT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
   private final ChatLogRepository repo;
   private final TransactionTemplate tx;
@@ -47,11 +48,12 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
   private final ScheduledFuture<?> startupTask;
   private final ScheduledFuture<?> recurringTask;
 
-  public ChatLogRetentionPruner(ChatLogRepository repo,
-                               TransactionTemplate tx,
-                               LogProperties props,
-                               Flyway flyway,
-                               ScheduledExecutorService exec) {
+  public ChatLogRetentionPruner(
+      ChatLogRepository repo,
+      TransactionTemplate tx,
+      LogProperties props,
+      Flyway flyway,
+      ScheduledExecutorService exec) {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
@@ -60,12 +62,9 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
 
     // Run once shortly after startup, then periodically.
     this.startupTask = exec.schedule(this::pruneSafely, 10, TimeUnit.SECONDS);
-    this.recurringTask = exec.scheduleWithFixedDelay(
-        this::pruneSafely,
-        RUN_EVERY_HOURS,
-        RUN_EVERY_HOURS,
-        TimeUnit.HOURS
-    );
+    this.recurringTask =
+        exec.scheduleWithFixedDelay(
+            this::pruneSafely, RUN_EVERY_HOURS, RUN_EVERY_HOURS, TimeUnit.HOURS);
   }
 
   private boolean retentionEnabled() {
@@ -96,12 +95,14 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
     int n = deleted == null ? 0 : deleted;
 
     if (n > 0) {
-      log.info("[ircafe] Pruned {} chat log rows older than {} (retentionDays={})",
+      log.info(
+          "[ircafe] Pruned {} chat log rows older than {} (retentionDays={})",
           n,
           TS_FMT.format(Instant.ofEpochMilli(cutoff)),
           days);
     } else {
-      log.debug("[ircafe] Chat log retention prune: nothing to delete (retentionDays={}, cutoff={})",
+      log.debug(
+          "[ircafe] Chat log retention prune: nothing to delete (retentionDays={}, cutoff={})",
           days,
           TS_FMT.format(Instant.ofEpochMilli(cutoff)));
     }

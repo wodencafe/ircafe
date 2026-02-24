@@ -14,8 +14,7 @@ public record InterceptorHit(
     String fromHostmask,
     String eventType,
     String reason,
-    String message
-) {
+    String message) {
   public InterceptorHit {
     serverId = norm(serverId);
     interceptorId = norm(interceptorId);

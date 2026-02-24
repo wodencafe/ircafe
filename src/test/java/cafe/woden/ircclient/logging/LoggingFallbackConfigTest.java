@@ -143,7 +143,8 @@ class LoggingFallbackConfigTest {
           }
 
           @Override
-          public ChatLogViewerResult search(cafe.woden.ircclient.logging.viewer.ChatLogViewerQuery query) {
+          public ChatLogViewerResult search(
+              cafe.woden.ircclient.logging.viewer.ChatLogViewerQuery query) {
             return new ChatLogViewerResult(List.of(), 0, false, false);
           }
 

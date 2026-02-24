@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -13,15 +13,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 class Ircv3StsPolicyServiceTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void secureStsPolicyUpgradesFutureConnectionsToTlsAndPolicyPort() {
     Ircv3StsPolicyService svc = new Ircv3StsPolicyService();
     IrcProperties.Server configured = server("irc.example.net", 6667, false);
 
-    svc.observeFromCapList("libera", configured.host(), true, "sts=duration=86400,port=6697,preload");
+    svc.observeFromCapList(
+        "libera", configured.host(), true, "sts=duration=86400,port=6697,preload");
     IrcProperties.Server effective = svc.applyPolicy(configured);
 
     assertTrue(effective.tls());
@@ -59,13 +59,14 @@ class Ircv3StsPolicyServiceTest {
 
   @Test
   void learnedPolicyPersistsToRuntimeConfigAndReloads() {
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        tempDir.resolve("ircafe.yml").toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            tempDir.resolve("ircafe.yml").toString(), new IrcProperties(null, List.of()));
     IrcProperties.Server configured = server("irc.example.net", 6667, false);
 
     Ircv3StsPolicyService writer = new Ircv3StsPolicyService(store);
-    writer.observeFromCapList("libera", configured.host(), true, "sts=duration=86400,port=6697,preload");
+    writer.observeFromCapList(
+        "libera", configured.host(), true, "sts=duration=86400,port=6697,preload");
     assertTrue(store.readIrcv3StsPolicies().containsKey("irc.example.net"));
 
     Ircv3StsPolicyService reader = new Ircv3StsPolicyService(store);
@@ -76,9 +77,9 @@ class Ircv3StsPolicyServiceTest {
 
   @Test
   void durationZeroAlsoRemovesPersistedPolicy() {
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        tempDir.resolve("ircafe.yml").toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            tempDir.resolve("ircafe.yml").toString(), new IrcProperties(null, List.of()));
     IrcProperties.Server configured = server("irc.example.net", 6667, false);
     Ircv3StsPolicyService svc = new Ircv3StsPolicyService(store);
 

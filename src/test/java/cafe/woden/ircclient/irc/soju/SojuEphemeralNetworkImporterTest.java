@@ -1,5 +1,9 @@
 package cafe.woden.ircclient.irc.soju;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -11,43 +15,40 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 class SojuEphemeralNetworkImporterTest {
 
   @Test
   void upsertsEphemeralServerForDiscoveredNetwork() {
-    IrcProperties.Server.Sasl sasl = new IrcProperties.Server.Sasl(true, "zimmerdon", "pw", "PLAIN", null);
-    IrcProperties.Server bouncer = new IrcProperties.Server(
-        "soju",
-        "bouncer.example",
-        6697,
-        true,
-        "",
-        "zimmedon",
-        "zimmerdon",
-        "Real",
-        sasl,
-        List.of(),
-        List.of(),
-        null);
+    IrcProperties.Server.Sasl sasl =
+        new IrcProperties.Server.Sasl(true, "zimmerdon", "pw", "PLAIN", null);
+    IrcProperties.Server bouncer =
+        new IrcProperties.Server(
+            "soju",
+            "bouncer.example",
+            6697,
+            true,
+            "",
+            "zimmedon",
+            "zimmerdon",
+            "Real",
+            sasl,
+            List.of(),
+            List.of(),
+            null);
 
     IrcProperties props = new IrcProperties(null, List.of(bouncer));
     RuntimeConfigStore runtime = new RuntimeConfigStore(" ", props);
     ServerRegistry configured = new ServerRegistry(props, runtime);
     EphemeralServerRegistry ephemeral = new EphemeralServerRegistry();
 
-    SojuAutoConnectStore autoConnect = new SojuAutoConnectStore(
-        new SojuProperties(Map.of(), new SojuProperties.Discovery(true)),
-        runtime
-    );
+    SojuAutoConnectStore autoConnect =
+        new SojuAutoConnectStore(
+            new SojuProperties(Map.of(), new SojuProperties.Discovery(true)), runtime);
     IrcClientService irc = mock(IrcClientService.class);
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
-    SojuEphemeralNetworkImporter importer = new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+    SojuEphemeralNetworkImporter importer =
+        new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
 
     SojuNetwork net = new SojuNetwork("soju", "123", "libera", Map.of("name", "libera"));
     importer.onNetworkDiscovered(net);
@@ -61,34 +62,36 @@ class SojuEphemeralNetworkImporterTest {
 
   @Test
   void callingTwiceDoesNotCreateDuplicate() {
-    IrcProperties.Server.Sasl sasl = new IrcProperties.Server.Sasl(true, "user", "pw", "PLAIN", null);
-    IrcProperties.Server bouncer = new IrcProperties.Server(
-        "soju",
-        "bouncer.example",
-        6697,
-        true,
-        "",
-        "nick",
-        "user",
-        "Real",
-        sasl,
-        List.of(),
-        List.of(),
-        null);
+    IrcProperties.Server.Sasl sasl =
+        new IrcProperties.Server.Sasl(true, "user", "pw", "PLAIN", null);
+    IrcProperties.Server bouncer =
+        new IrcProperties.Server(
+            "soju",
+            "bouncer.example",
+            6697,
+            true,
+            "",
+            "nick",
+            "user",
+            "Real",
+            sasl,
+            List.of(),
+            List.of(),
+            null);
 
     IrcProperties props = new IrcProperties(null, List.of(bouncer));
     RuntimeConfigStore runtime = new RuntimeConfigStore(" ", props);
     ServerRegistry configured = new ServerRegistry(props, runtime);
     EphemeralServerRegistry ephemeral = new EphemeralServerRegistry();
 
-    SojuAutoConnectStore autoConnect = new SojuAutoConnectStore(
-        new SojuProperties(Map.of(), new SojuProperties.Discovery(true)),
-        runtime
-    );
+    SojuAutoConnectStore autoConnect =
+        new SojuAutoConnectStore(
+            new SojuProperties(Map.of(), new SojuProperties.Discovery(true)), runtime);
     IrcClientService irc = mock(IrcClientService.class);
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
-    SojuEphemeralNetworkImporter importer = new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+    SojuEphemeralNetworkImporter importer =
+        new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
     SojuNetwork net = new SojuNetwork("soju", "9", "oftc", Map.of("name", "oftc"));
 
     importer.onNetworkDiscovered(net);
@@ -100,20 +103,22 @@ class SojuEphemeralNetworkImporterTest {
 
   @Test
   void enabledRuleTriggersAutoConnectOnce() {
-    IrcProperties.Server.Sasl sasl = new IrcProperties.Server.Sasl(true, "user", "pw", "PLAIN", null);
-    IrcProperties.Server bouncer = new IrcProperties.Server(
-        "soju",
-        "bouncer.example",
-        6697,
-        true,
-        "",
-        "nick",
-        "user",
-        "Real",
-        sasl,
-        List.of(),
-        List.of(),
-        null);
+    IrcProperties.Server.Sasl sasl =
+        new IrcProperties.Server.Sasl(true, "user", "pw", "PLAIN", null);
+    IrcProperties.Server bouncer =
+        new IrcProperties.Server(
+            "soju",
+            "bouncer.example",
+            6697,
+            true,
+            "",
+            "nick",
+            "user",
+            "Real",
+            sasl,
+            List.of(),
+            List.of(),
+            null);
 
     IrcProperties props = new IrcProperties(null, List.of(bouncer));
     RuntimeConfigStore runtime = new RuntimeConfigStore(" ", props);
@@ -121,18 +126,17 @@ class SojuEphemeralNetworkImporterTest {
     EphemeralServerRegistry ephemeral = new EphemeralServerRegistry();
 
     // Persisted rule: auto-connect the 'libera' network on bouncer server id 'soju'.
-    SojuAutoConnectStore autoConnect = new SojuAutoConnectStore(
-        new SojuProperties(
-            Map.of("soju", Map.of("libera", true)),
-            new SojuProperties.Discovery(true)
-        ),
-        runtime
-    );
+    SojuAutoConnectStore autoConnect =
+        new SojuAutoConnectStore(
+            new SojuProperties(
+                Map.of("soju", Map.of("libera", true)), new SojuProperties.Discovery(true)),
+            runtime);
 
     IrcClientService irc = mock(IrcClientService.class);
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
-    SojuEphemeralNetworkImporter importer = new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+    SojuEphemeralNetworkImporter importer =
+        new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
     SojuNetwork net = new SojuNetwork("soju", "123", "libera", Map.of("name", "libera"));
 
     importer.onNetworkDiscovered(net);
@@ -141,37 +145,38 @@ class SojuEphemeralNetworkImporterTest {
     verify(irc, times(1)).connect("soju:soju:123");
   }
 
-
   @Test
   void originDisconnectRemovesEphemerals() {
-    IrcProperties.Server.Sasl sasl = new IrcProperties.Server.Sasl(true, "user", "pw", "PLAIN", null);
-    IrcProperties.Server bouncer = new IrcProperties.Server(
-        "soju",
-        "bouncer.example",
-        6697,
-        true,
-        "",
-        "nick",
-        "user",
-        "Real",
-        sasl,
-        List.of(),
-        List.of(),
-        null);
+    IrcProperties.Server.Sasl sasl =
+        new IrcProperties.Server.Sasl(true, "user", "pw", "PLAIN", null);
+    IrcProperties.Server bouncer =
+        new IrcProperties.Server(
+            "soju",
+            "bouncer.example",
+            6697,
+            true,
+            "",
+            "nick",
+            "user",
+            "Real",
+            sasl,
+            List.of(),
+            List.of(),
+            null);
 
     IrcProperties props = new IrcProperties(null, List.of(bouncer));
     RuntimeConfigStore runtime = new RuntimeConfigStore(" ", props);
     ServerRegistry configured = new ServerRegistry(props, runtime);
     EphemeralServerRegistry ephemeral = new EphemeralServerRegistry();
 
-    SojuAutoConnectStore autoConnect = new SojuAutoConnectStore(
-        new SojuProperties(Map.of(), new SojuProperties.Discovery(true)),
-        runtime
-    );
+    SojuAutoConnectStore autoConnect =
+        new SojuAutoConnectStore(
+            new SojuProperties(Map.of(), new SojuProperties.Discovery(true)), runtime);
     IrcClientService irc = mock(IrcClientService.class);
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
-    SojuEphemeralNetworkImporter importer = new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+    SojuEphemeralNetworkImporter importer =
+        new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
 
     importer.onNetworkDiscovered(new SojuNetwork("soju", "1", "libera", Map.of("name", "libera")));
     importer.onNetworkDiscovered(new SojuNetwork("soju", "2", "oftc", Map.of("name", "oftc")));

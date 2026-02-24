@@ -1,17 +1,15 @@
 package cafe.woden.ircclient.ui;
 
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 /**
  * Tracks which {@link MessageInputPanel} is currently the active typing surface.
  *
- * <p>This is a small helper so future multi-chat layouts can route nick
- * completions (and similar "input-only" updates) to the input the user is
- * actually focused on.</p>
+ * <p>This is a small helper so future multi-chat layouts can route nick completions (and similar
+ * "input-only" updates) to the input the user is actually focused on.
  */
 @Component
 @Lazy

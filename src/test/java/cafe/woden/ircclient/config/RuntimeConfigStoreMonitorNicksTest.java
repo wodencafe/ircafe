@@ -9,8 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RuntimeConfigStoreMonitorNicksTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void monitorNickListCanBePersistedUpdatedAndCleared() {

@@ -16,7 +16,6 @@ import javax.swing.SwingUtilities;
 
 public final class JoinPartFoldComponent extends JPanel {
 
-  
   public record Item(boolean isJoin, String nick, String reason) {}
 
   private static final int FALLBACK_MAX_W = 420;
@@ -34,12 +33,13 @@ public final class JoinPartFoldComponent extends JPanel {
   private volatile int lastMaxW = -1;
 
   private java.awt.Component resizeListeningOn;
-  private final java.awt.event.ComponentListener resizeListener = new java.awt.event.ComponentAdapter() {
-    @Override
-    public void componentResized(java.awt.event.ComponentEvent e) {
-      SwingUtilities.invokeLater(JoinPartFoldComponent.this::renderForCurrentWidth);
-    }
-  };
+  private final java.awt.event.ComponentListener resizeListener =
+      new java.awt.event.ComponentAdapter() {
+        @Override
+        public void componentResized(java.awt.event.ComponentEvent e) {
+          SwingUtilities.invokeLater(JoinPartFoldComponent.this::renderForCurrentWidth);
+        }
+      };
 
   public JoinPartFoldComponent(List<Item> items) {
     super(new BorderLayout());
@@ -58,12 +58,13 @@ public final class JoinPartFoldComponent extends JPanel {
     header.add(arrow);
     header.add(summary);
 
-    header.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        toggle();
-      }
-    });
+    header.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            toggle();
+          }
+        });
 
     add(header, BorderLayout.NORTH);
 
@@ -204,7 +205,8 @@ public final class JoinPartFoldComponent extends JPanel {
   }
 
   private void hookResizeListener() {
-    java.awt.Component target = (java.awt.Component) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
+    java.awt.Component target =
+        (java.awt.Component) SwingUtilities.getAncestorOfClass(JTextPane.class, this);
     if (target == null) {
       target = (java.awt.Component) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
     }

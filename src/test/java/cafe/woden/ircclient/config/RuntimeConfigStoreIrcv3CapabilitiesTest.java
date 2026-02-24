@@ -10,14 +10,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RuntimeConfigStoreIrcv3CapabilitiesTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void capabilityOverridesDefaultToEnabledWhenUnset() {
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        tempDir.resolve("ircafe.yml").toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            tempDir.resolve("ircafe.yml").toString(), new IrcProperties(null, List.of()));
 
     assertTrue(store.isIrcv3CapabilityEnabled("typing", true));
     assertTrue(store.readIrcv3Capabilities().isEmpty());
@@ -25,9 +24,9 @@ class RuntimeConfigStoreIrcv3CapabilitiesTest {
 
   @Test
   void capabilityOverrideCanBeDisabledAndThenResetToDefault() {
-    RuntimeConfigStore store = new RuntimeConfigStore(
-        tempDir.resolve("ircafe.yml").toString(),
-        new IrcProperties(null, List.of()));
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            tempDir.resolve("ircafe.yml").toString(), new IrcProperties(null, List.of()));
 
     store.rememberIrcv3CapabilityEnabled("typing", false);
     assertFalse(store.isIrcv3CapabilityEnabled("typing", true));

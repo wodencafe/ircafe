@@ -24,7 +24,8 @@ class FilterCommandParserTest {
 
   @Test
   void stillParsesKeyValueAddForm() {
-    FilterCommand cmd = parser.parse("/filter add named scope=libera/#chan tags=irc_privmsg text=foo");
+    FilterCommand cmd =
+        parser.parse("/filter add named scope=libera/#chan tags=irc_privmsg text=foo");
     FilterCommand.Add add = assertInstanceOf(FilterCommand.Add.class, cmd);
 
     assertEquals("named", add.name());

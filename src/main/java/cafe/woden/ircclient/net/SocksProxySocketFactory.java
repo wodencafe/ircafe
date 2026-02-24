@@ -44,7 +44,8 @@ public final class SocksProxySocketFactory extends SocketFactory {
   }
 
   @Override
-  public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+  public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+      throws IOException {
     Socket s = proxiedSocket();
     s.bind(new InetSocketAddress(localHost, localPort));
     s.connect(target(host, port), (int) cfg.connectTimeoutMs());
@@ -61,7 +62,8 @@ public final class SocksProxySocketFactory extends SocketFactory {
   }
 
   @Override
-  public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+  public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
+      throws IOException {
     Socket s = proxiedSocket();
     s.bind(new InetSocketAddress(localAddress, localPort));
     s.connect(new InetSocketAddress(address, port), (int) cfg.connectTimeoutMs());

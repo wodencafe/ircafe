@@ -24,9 +24,11 @@ class OutboundMonitorCommandServiceTest {
   private final IrcClientService irc = Mockito.mock(IrcClientService.class);
   private final UiPort ui = Mockito.mock(UiPort.class);
   private final TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
-  private final ConnectionCoordinator connectionCoordinator = Mockito.mock(ConnectionCoordinator.class);
+  private final ConnectionCoordinator connectionCoordinator =
+      Mockito.mock(ConnectionCoordinator.class);
   private final MonitorListService monitorListService = Mockito.mock(MonitorListService.class);
-  private final MonitorIsonFallbackService monitorIsonFallbackService = Mockito.mock(MonitorIsonFallbackService.class);
+  private final MonitorIsonFallbackService monitorIsonFallbackService =
+      Mockito.mock(MonitorIsonFallbackService.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundMonitorCommandService service =
@@ -48,7 +50,8 @@ class OutboundMonitorCommandServiceTest {
     TargetRef active = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(monitorListService.addNicks(eq("libera"), eq(java.util.List.of("alice", "bob")))).thenReturn(2);
+    when(monitorListService.addNicks(eq("libera"), eq(java.util.List.of("alice", "bob"))))
+        .thenReturn(2);
     when(irc.negotiatedMonitorLimit("libera")).thenReturn(100);
     when(irc.sendRaw("libera", "MONITOR +alice,bob")).thenReturn(Completable.complete());
 

@@ -3,8 +3,8 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
-import java.awt.Color;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Window;
@@ -39,11 +39,17 @@ import org.springframework.stereotype.Component;
 public class ThemeSelectionDialog {
 
   private record ToneChoice(String label, ThemeManager.ThemeTone tone) {
-    @Override public String toString() { return label; }
+    @Override
+    public String toString() {
+      return label;
+    }
   }
 
   private record PackChoice(String label, ThemeManager.ThemePack pack) {
-    @Override public String toString() { return label; }
+    @Override
+    public String toString() {
+      return label;
+    }
   }
 
   private final ThemeManager themeManager;
@@ -59,7 +65,8 @@ public class ThemeSelectionDialog {
   private Timer previewTimer;
   private String pendingPreviewThemeId;
 
-  public ThemeSelectionDialog(ThemeManager themeManager, UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+  public ThemeSelectionDialog(
+      ThemeManager themeManager, UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
     this.themeManager = themeManager;
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;
@@ -84,85 +91,124 @@ public class ThemeSelectionDialog {
     // Use curated themes by default, but allow the selector to expand to all IntelliJ themes.
     // This keeps menus/dropdowns compact while still letting power users browse everything.
     JCheckBox allIntelliJ = new JCheckBox("All IntelliJ themes");
-    allIntelliJ.setToolTipText("Loads the full IntelliJ Themes Pack list (large). Use search to find themes quickly.");
+    allIntelliJ.setToolTipText(
+        "Loads the full IntelliJ Themes Pack list (large). Use search to find themes quickly.");
 
     ThemeManager.ThemeOption[] allThemes = themeManager.themesForPicker(false);
 
     DefaultListModel<ThemeManager.ThemeOption> model = new DefaultListModel<>();
 
-    JComboBox<ToneChoice> toneFilter = new JComboBox<>(new ToneChoice[] {
-        new ToneChoice("All", null),
-        new ToneChoice("Dark", ThemeManager.ThemeTone.DARK),
-        new ToneChoice("Light", ThemeManager.ThemeTone.LIGHT),
-        new ToneChoice("System", ThemeManager.ThemeTone.SYSTEM)
-    });
+    JComboBox<ToneChoice> toneFilter =
+        new JComboBox<>(
+            new ToneChoice[] {
+              new ToneChoice("All", null),
+              new ToneChoice("Dark", ThemeManager.ThemeTone.DARK),
+              new ToneChoice("Light", ThemeManager.ThemeTone.LIGHT),
+              new ToneChoice("System", ThemeManager.ThemeTone.SYSTEM)
+            });
 
-    JComboBox<PackChoice> packFilter = new JComboBox<>(new PackChoice[] {
-        new PackChoice("All packs", null),
-        new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
-        new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
-        new PackChoice("DarkLaf", ThemeManager.ThemePack.DARKLAF),
-        new PackChoice("Retro", ThemeManager.ThemePack.RETRO),
-        new PackChoice("Modern", ThemeManager.ThemePack.MODERN),
-        new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE),
-        new PackChoice("IntelliJ", ThemeManager.ThemePack.INTELLIJ)
-    });
+    JComboBox<PackChoice> packFilter =
+        new JComboBox<>(
+            new PackChoice[] {
+              new PackChoice("All packs", null),
+              new PackChoice("System", ThemeManager.ThemePack.SYSTEM),
+              new PackChoice("FlatLaf", ThemeManager.ThemePack.FLATLAF),
+              new PackChoice("DarkLaf", ThemeManager.ThemePack.DARKLAF),
+              new PackChoice("Retro", ThemeManager.ThemePack.RETRO),
+              new PackChoice("Modern", ThemeManager.ThemePack.MODERN),
+              new PackChoice("IRCafe", ThemeManager.ThemePack.IRCAFE),
+              new PackChoice("IntelliJ", ThemeManager.ThemePack.INTELLIJ)
+            });
 
     JTextField search = new JTextField(14);
     search.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Search themes");
 
     JLabel count = new JLabel();
-    count.putClientProperty(FlatClientProperties.STYLE, "font: -1; foreground: $Label.disabledForeground");
+    count.putClientProperty(
+        FlatClientProperties.STYLE, "font: -1; foreground: $Label.disabledForeground");
 
-    Runnable refresh = () -> {
-      String keepId = ThemeIdUtils.normalizeThemeId(selectedThemeId());
-      ThemeManager.ThemeOption[] pool = themeManager.themesForPicker(allIntelliJ.isSelected());
-      rebuildModel(model, pool, (ToneChoice) toneFilter.getSelectedItem(),
-          (PackChoice) packFilter.getSelectedItem(), search.getText());
-      count.setText("Showing " + model.getSize() + " of " + pool.length);
-      selectThemeInList(keepId);
-    };
+    Runnable refresh =
+        () -> {
+          String keepId = ThemeIdUtils.normalizeThemeId(selectedThemeId());
+          ThemeManager.ThemeOption[] pool = themeManager.themesForPicker(allIntelliJ.isSelected());
+          rebuildModel(
+              model,
+              pool,
+              (ToneChoice) toneFilter.getSelectedItem(),
+              (PackChoice) packFilter.getSelectedItem(),
+              search.getText());
+          count.setText("Showing " + model.getSize() + " of " + pool.length);
+          selectThemeInList(keepId);
+        };
 
     ActionListener filterListener = e -> refresh.run();
     toneFilter.addActionListener(filterListener);
     packFilter.addActionListener(filterListener);
     allIntelliJ.addActionListener(filterListener);
-    search.getDocument().addDocumentListener(new DocumentListener() {
-      @Override public void insertUpdate(DocumentEvent e) { refresh.run(); }
-      @Override public void removeUpdate(DocumentEvent e) { refresh.run(); }
-      @Override public void changedUpdate(DocumentEvent e) { refresh.run(); }
-    });
+    search
+        .getDocument()
+        .addDocumentListener(
+            new DocumentListener() {
+              @Override
+              public void insertUpdate(DocumentEvent e) {
+                refresh.run();
+              }
+
+              @Override
+              public void removeUpdate(DocumentEvent e) {
+                refresh.run();
+              }
+
+              @Override
+              public void changedUpdate(DocumentEvent e) {
+                refresh.run();
+              }
+            });
 
     // initial fill
-    rebuildModel(model, allThemes, (ToneChoice) toneFilter.getSelectedItem(),
-        (PackChoice) packFilter.getSelectedItem(), search.getText());
+    rebuildModel(
+        model,
+        allThemes,
+        (ToneChoice) toneFilter.getSelectedItem(),
+        (PackChoice) packFilter.getSelectedItem(),
+        search.getText());
     count.setText("Showing " + model.getSize() + " of " + allThemes.length);
 
     themeList = new JList<>(model);
     themeList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    themeList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> {
-      JLabel l = (JLabel) new DefaultListCellRenderer()
-          .getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-      if (value != null) {
-        String pack = switch (value.pack()) {
-          case SYSTEM -> "System";
-          case FLATLAF -> "FlatLaf";
-          case DARKLAF -> "DarkLaf";
-          case RETRO -> "Retro";
-          case MODERN -> "Modern";
-          case IRCAFE -> "IRCafe";
-          case INTELLIJ -> "IntelliJ";
-        };
-        String tone = switch (value.tone()) {
-          case SYSTEM -> "System";
-          case DARK -> "Dark";
-          case LIGHT -> "Light";
-        };
-        l.setText("<html>" + esc(value.label()) + " <span style='color:gray'>&mdash; " + pack + "</span></html>");
-        l.setToolTipText(tone + " theme \u00B7 " + pack + " pack");
-      }
-      return l;
-    });
+    themeList.setCellRenderer(
+        (list, value, index, isSelected, cellHasFocus) -> {
+          JLabel l =
+              (JLabel)
+                  new DefaultListCellRenderer()
+                      .getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+          if (value != null) {
+            String pack =
+                switch (value.pack()) {
+                  case SYSTEM -> "System";
+                  case FLATLAF -> "FlatLaf";
+                  case DARKLAF -> "DarkLaf";
+                  case RETRO -> "Retro";
+                  case MODERN -> "Modern";
+                  case IRCAFE -> "IRCafe";
+                  case INTELLIJ -> "IntelliJ";
+                };
+            String tone =
+                switch (value.tone()) {
+                  case SYSTEM -> "System";
+                  case DARK -> "Dark";
+                  case LIGHT -> "Light";
+                };
+            l.setText(
+                "<html>"
+                    + esc(value.label())
+                    + " <span style='color:gray'>&mdash; "
+                    + pack
+                    + "</span></html>");
+            l.setToolTipText(tone + " theme \u00B7 " + pack + " pack");
+          }
+          return l;
+        });
 
     selectThemeInList(committedThemeId);
 
@@ -172,10 +218,11 @@ public class ThemeSelectionDialog {
     //
     // Fix: debounce + defer the live preview until after the current event finishes.
     ensurePreviewTimer();
-    themeList.addListSelectionListener(e -> {
-      if (e.getValueIsAdjusting()) return;
-      schedulePreview(ThemeIdUtils.normalizeThemeId(selectedThemeId()));
-    });
+    themeList.addListSelectionListener(
+        e -> {
+          if (e.getValueIsAdjusting()) return;
+          schedulePreview(ThemeIdUtils.normalizeThemeId(selectedThemeId()));
+        });
 
     JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     filterBar.add(new JLabel("Tone"));
@@ -224,10 +271,11 @@ public class ThemeSelectionDialog {
     apply.putClientProperty(FlatClientProperties.BUTTON_TYPE, "primary");
 
     apply.addActionListener(e -> commitSelectedTheme());
-    ok.addActionListener(e -> {
-      commitSelectedTheme();
-      closeDialog();
-    });
+    ok.addActionListener(
+        e -> {
+          commitSelectedTheme();
+          closeDialog();
+        });
     cancel.addActionListener(e -> closeDialog());
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -235,7 +283,8 @@ public class ThemeSelectionDialog {
     buttons.add(ok);
     buttons.add(cancel);
 
-    JLabel help = new JLabel("Select a theme to preview it live. Click Apply/OK to save your selection.");
+    JLabel help =
+        new JLabel("Select a theme to preview it live. Click Apply/OK to save your selection.");
     help.putClientProperty(FlatClientProperties.STYLE, "font: -1");
 
     JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listPanel, previewPanel);
@@ -256,11 +305,13 @@ public class ThemeSelectionDialog {
 
     dialog = new JDialog(owner, "More Themes", JDialog.ModalityType.APPLICATION_MODAL);
     dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
-    dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-      @Override public void windowClosing(java.awt.event.WindowEvent e) {
-        closeDialog();
-      }
-    });
+    dialog.addWindowListener(
+        new java.awt.event.WindowAdapter() {
+          @Override
+          public void windowClosing(java.awt.event.WindowEvent e) {
+            closeDialog();
+          }
+        });
     dialog.setContentPane(root);
     dialog.pack();
     dialog.setMinimumSize(new Dimension(760, 430));
@@ -269,11 +320,12 @@ public class ThemeSelectionDialog {
     dialog.setVisible(true);
   }
 
-  private static void rebuildModel(DefaultListModel<ThemeManager.ThemeOption> model,
-                                  ThemeManager.ThemeOption[] all,
-                                  ToneChoice toneChoice,
-                                  PackChoice packChoice,
-                                  String queryRaw) {
+  private static void rebuildModel(
+      DefaultListModel<ThemeManager.ThemeOption> model,
+      ThemeManager.ThemeOption[] all,
+      ToneChoice toneChoice,
+      PackChoice packChoice,
+      String queryRaw) {
     ThemeManager.ThemeTone tone = toneChoice != null ? toneChoice.tone() : null;
     ThemeManager.ThemePack pack = packChoice != null ? packChoice.pack() : null;
     String q = Objects.toString(queryRaw, "").trim().toLowerCase();
@@ -283,7 +335,11 @@ public class ThemeSelectionDialog {
         .filter(o -> o != null)
         .filter(o -> tone == null || o.tone() == tone)
         .filter(o -> pack == null || o.pack() == pack)
-        .filter(o -> q.isEmpty() || o.label().toLowerCase().contains(q) || o.id().toLowerCase().contains(q))
+        .filter(
+            o ->
+                q.isEmpty()
+                    || o.label().toLowerCase().contains(q)
+                    || o.id().toLowerCase().contains(q))
         .forEach(model::addElement);
   }
 
@@ -302,7 +358,8 @@ public class ThemeSelectionDialog {
     if (!ThemeIdUtils.sameTheme(cur.theme(), next)) {
       UiSettings updated = cur.withTheme(next);
       settingsBus.set(updated);
-      runtimeConfig.rememberUiSettings(updated.theme(), updated.chatFontFamily(), updated.chatFontSize());
+      runtimeConfig.rememberUiSettings(
+          updated.theme(), updated.chatFontFamily(), updated.chatFontSize());
     }
 
     if (!ThemeIdUtils.sameTheme(committedThemeId, next)) {
@@ -397,48 +454,90 @@ public class ThemeSelectionDialog {
     if (ThemeIdUtils.sameTheme(previewThemeId, pending)) return;
 
     // Defer one more turn just to ensure we never apply LAF while Swing is mid-dispatch.
-    SwingUtilities.invokeLater(() -> {
-      if (dialog == null || !dialog.isShowing() || themeList == null) return;
-      String stillSelected = ThemeIdUtils.normalizeThemeId(selectedThemeId());
-      if (!ThemeIdUtils.sameTheme(stillSelected, pending)) return;
-      if (ThemeIdUtils.sameTheme(previewThemeId, pending)) return;
+    SwingUtilities.invokeLater(
+        () -> {
+          if (dialog == null || !dialog.isShowing() || themeList == null) return;
+          String stillSelected = ThemeIdUtils.normalizeThemeId(selectedThemeId());
+          if (!ThemeIdUtils.sameTheme(stillSelected, pending)) return;
+          if (ThemeIdUtils.sameTheme(previewThemeId, pending)) return;
 
-      themeManager.applyTheme(pending);
-      previewThemeId = pending;
-      refreshTranscriptPreview();
-    });
+          themeManager.applyTheme(pending);
+          previewThemeId = pending;
+          refreshTranscriptPreview();
+        });
   }
 
   private void refreshTranscriptPreview() {
     if (transcriptPreview == null) return;
 
     Color panelBg = firstUiColor(Color.WHITE, "Panel.background", "control", "nimbusBase");
-    Color textBg = firstUiColor(panelBg, "TextArea.background", "TextComponent.background", "Panel.background");
-    Color textFg = firstUiColor(Color.BLACK, "TextArea.foreground", "TextComponent.foreground", "Label.foreground", "textText");
-    Color accent = firstUiColor(new Color(0x2D, 0x6B, 0xFF), "@accentColor", "Component.linkColor", "Component.focusColor", "textHighlight");
+    Color textBg =
+        firstUiColor(
+            panelBg, "TextArea.background", "TextComponent.background", "Panel.background");
+    Color textFg =
+        firstUiColor(
+            Color.BLACK,
+            "TextArea.foreground",
+            "TextComponent.foreground",
+            "Label.foreground",
+            "textText");
+    Color accent =
+        firstUiColor(
+            new Color(0x2D, 0x6B, 0xFF),
+            "@accentColor",
+            "Component.linkColor",
+            "Component.focusColor",
+            "textHighlight");
     Color muted = ThemeColorUtils.mix(textFg, textBg, 0.45);
     Color system = ThemeColorUtils.mix(textFg, textBg, 0.30);
     Color nick = ThemeColorUtils.mix(accent, textFg, 0.20);
     Color self = ThemeColorUtils.mix(accent, textFg, 0.35);
-    Color highlightBg = firstUiColor(null, "List.selectionBackground", "TextComponent.selectionBackground");
+    Color highlightBg =
+        firstUiColor(null, "List.selectionBackground", "TextComponent.selectionBackground");
     if (highlightBg == null) highlightBg = ThemeColorUtils.mix(textBg, accent, 0.33);
-    Color highlightFg = firstUiColor(null, "List.selectionForeground", "TextComponent.selectionForeground");
+    Color highlightFg =
+        firstUiColor(null, "List.selectionForeground", "TextComponent.selectionForeground");
     if (highlightFg == null) highlightFg = ThemeColorUtils.bestTextColor(highlightBg);
 
     String html =
-        "<html><body style='margin:0;padding:10px;background:" + toHex(textBg) + ";color:" + toHex(textFg) + ";'>"
-            + "<div style='color:" + toHex(system) + ";'>[12:41] *** Connected to Libera.Chat as bob</div>"
-            + "<div><span style='color:" + toHex(muted) + ";'>[12:42]</span> "
-            + "<span style='color:" + toHex(nick) + ";'>&lt;alice&gt;</span> anyone up for #java?</div>"
-            + "<div><span style='color:" + toHex(muted) + ";'>[12:42]</span> "
-            + "<span style='color:" + toHex(self) + ";'>&lt;bob&gt;</span> sure, joining now.</div>"
-            + "<div style='margin-top:4px;padding:2px 4px;background:" + toHex(highlightBg)
-            + ";color:" + toHex(highlightFg) + ";'>"
-            + "<span style='color:" + toHex(muted) + ";'>[12:43]</span> "
-            + "<span style='color:" + toHex(nick) + ";'>&lt;dave&gt;</span> this is a highlight message for bob."
+        "<html><body style='margin:0;padding:10px;background:"
+            + toHex(textBg)
+            + ";color:"
+            + toHex(textFg)
+            + ";'>"
+            + "<div style='color:"
+            + toHex(system)
+            + ";'>[12:41] *** Connected to Libera.Chat as bob</div>"
+            + "<div><span style='color:"
+            + toHex(muted)
+            + ";'>[12:42]</span> "
+            + "<span style='color:"
+            + toHex(nick)
+            + ";'>&lt;alice&gt;</span> anyone up for #java?</div>"
+            + "<div><span style='color:"
+            + toHex(muted)
+            + ";'>[12:42]</span> "
+            + "<span style='color:"
+            + toHex(self)
+            + ";'>&lt;bob&gt;</span> sure, joining now.</div>"
+            + "<div style='margin-top:4px;padding:2px 4px;background:"
+            + toHex(highlightBg)
+            + ";color:"
+            + toHex(highlightFg)
+            + ";'>"
+            + "<span style='color:"
+            + toHex(muted)
+            + ";'>[12:43]</span> "
+            + "<span style='color:"
+            + toHex(nick)
+            + ";'>&lt;dave&gt;</span> this is a highlight message for bob."
             + "</div>"
-            + "<div style='color:" + toHex(system) + ";'>[12:44] * carol waves</div>"
-            + "<div style='color:" + toHex(accent) + ";'>[12:45] -- Invite: dave invited you to #retro "
+            + "<div style='color:"
+            + toHex(system)
+            + ";'>[12:44] * carol waves</div>"
+            + "<div style='color:"
+            + toHex(accent)
+            + ";'>[12:45] -- Invite: dave invited you to #retro "
             + "(reason: old-school night)</div>"
             + "</body></html>";
 
@@ -467,5 +566,4 @@ public class ThemeSelectionDialog {
     }
     pendingPreviewThemeId = null;
   }
-
 }

@@ -11,8 +11,7 @@ public record FilterScopeOverride(
     String scopePattern,
     Boolean filtersEnabled,
     Boolean placeholdersEnabled,
-    Boolean placeholdersCollapsed
-) {
+    Boolean placeholdersCollapsed) {
 
   public FilterScopeOverride {
     scopePattern = Objects.toString(scopePattern, "*").trim();

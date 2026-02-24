@@ -132,7 +132,8 @@ class IrcPropertiesBindingTest {
               assertNotNull(startupFailure);
               Throwable root = rootCause(startupFailure);
               assertNotNull(root.getMessage());
-              assertTrue(root.getMessage().contains("irc.client.proxy.enabled=true but host is blank"));
+              assertTrue(
+                  root.getMessage().contains("irc.client.proxy.enabled=true but host is blank"));
             });
   }
 

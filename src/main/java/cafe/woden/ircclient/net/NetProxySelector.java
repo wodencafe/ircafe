@@ -19,8 +19,7 @@ public final class NetProxySelector extends ProxySelector {
   /** Reusable singleton selector. */
   public static final NetProxySelector INSTANCE = new NetProxySelector();
 
-  private NetProxySelector() {
-  }
+  private NetProxySelector() {}
 
   @Override
   public List<Proxy> select(URI uri) {

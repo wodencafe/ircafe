@@ -11,10 +11,14 @@ public class CtcpRoutingState {
 
   private final ConcurrentHashMap<CtcpKey, PendingCtcp> pending = new ConcurrentHashMap<>();
 
-  /** Record a pending CTCP for {@code nick}/{@code command}, routing the reply to {@code target}. */
+  /**
+   * Record a pending CTCP for {@code nick}/{@code command}, routing the reply to {@code target}.
+   */
   public void put(String serverId, String nick, String command, String token, TargetRef target) {
     if (target == null) return;
-    pending.put(new CtcpKey(serverId, nick, command, token), new PendingCtcp(target, System.currentTimeMillis()));
+    pending.put(
+        new CtcpKey(serverId, nick, command, token),
+        new PendingCtcp(target, System.currentTimeMillis()));
   }
 
   /** Remove and return the pending CTCP routing state, or {@code null} if none. */

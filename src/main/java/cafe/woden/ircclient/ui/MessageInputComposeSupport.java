@@ -1,25 +1,18 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
+import java.awt.*;
+import java.util.Objects;
+import javax.swing.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import java.awt.*;
-import java.util.Objects;
-
-/**
- * Owns reply-compose state + banner UI, and quick-reaction emission.
- */
+/** Owns reply-compose state + banner UI, and quick-reaction emission. */
 public final class MessageInputComposeSupport {
   private static final Logger log = LoggerFactory.getLogger(MessageInputComposeSupport.class);
 
   private static final String[] QUICK_REACTION_TOKENS = {
-      ":+1:",
-      ":heart:",
-      ":laughing:",
-      ":thinking:",
-      ":eyes:"
+    ":+1:", ":heart:", ":laughing:", ":thinking:", ":eyes:"
   };
 
   private final JComponent layoutTarget;
@@ -40,8 +33,7 @@ public final class MessageInputComposeSupport {
       Component dialogOwner,
       JTextField input,
       JButton sendButton,
-      MessageInputUiHooks hooks
-  ) {
+      MessageInputUiHooks hooks) {
     this.layoutTarget = Objects.requireNonNull(layoutTarget, "layoutTarget");
     this.dialogOwner = Objects.requireNonNull(dialogOwner, "dialogOwner");
     this.input = Objects.requireNonNull(input, "input");
@@ -113,7 +105,8 @@ public final class MessageInputComposeSupport {
     if (!hasReplyCompose()) return false;
     String m = Objects.toString(message, "").trim();
     if (m.isEmpty()) return false;
-    // Slash commands should remain explicit user commands; reply mode only applies to plain chat text.
+    // Slash commands should remain explicit user commands; reply mode only applies to plain chat
+    // text.
     return !m.startsWith("/");
   }
 
@@ -131,16 +124,18 @@ public final class MessageInputComposeSupport {
     }
     menu.addSeparator();
     JMenuItem custom = new JMenuItem("Custom...");
-    custom.addActionListener(e -> {
-      String entered = JOptionPane.showInputDialog(
-          SwingUtilities.getWindowAncestor(dialogOwner),
-          "Reaction token (for example :sparkles:)",
-          "React to Message",
-          JOptionPane.PLAIN_MESSAGE);
-      String token = normalizeReactionToken(entered);
-      if (token.isEmpty()) return;
-      emitQuickReaction(target, msgId, token);
-    });
+    custom.addActionListener(
+        e -> {
+          String entered =
+              JOptionPane.showInputDialog(
+                  SwingUtilities.getWindowAncestor(dialogOwner),
+                  "Reaction token (for example :sparkles:)",
+                  "React to Message",
+                  JOptionPane.PLAIN_MESSAGE);
+          String token = normalizeReactionToken(entered);
+          if (token.isEmpty()) return;
+          emitQuickReaction(target, msgId, token);
+        });
     menu.add(custom);
 
     try {
@@ -184,7 +179,8 @@ public final class MessageInputComposeSupport {
 
   private void updateComposeBanner() {
     if (hasReplyCompose()) {
-      composeBannerLabel.setText("Replying to message " + abbreviateMessageId(replyComposeMessageId));
+      composeBannerLabel.setText(
+          "Replying to message " + abbreviateMessageId(replyComposeMessageId));
       composeBanner.setVisible(true);
       sendButton.setText("Reply");
     } else {
@@ -210,7 +206,8 @@ public final class MessageInputComposeSupport {
   private static String normalizeComposeTarget(String raw) {
     String target = Objects.toString(raw, "").trim();
     if (target.isEmpty()) return "";
-    if (target.indexOf(' ') >= 0 || target.indexOf('\n') >= 0 || target.indexOf('\r') >= 0) return "";
+    if (target.indexOf(' ') >= 0 || target.indexOf('\n') >= 0 || target.indexOf('\r') >= 0)
+      return "";
     return target;
   }
 

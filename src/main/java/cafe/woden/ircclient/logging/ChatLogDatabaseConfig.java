@@ -1,17 +1,25 @@
 package cafe.woden.ircclient.logging;
 
+import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
+import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.logging.history.DbChatHistoryService;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
+import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.sql.DataSource;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,21 +31,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import cafe.woden.ircclient.logging.history.ChatHistoryService;
-import cafe.woden.ircclient.logging.history.DbChatHistoryService;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
-import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
-import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
-import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 
 /**
  * Embedded chat log DB wiring.
  *
- * <p>Only activates when {@code ircafe.logging.enabled=true}.
- * Uses a file-based HSQLDB stored next to the runtime config YAML by default.
- * Flyway migrations are run on startup.
+ * <p>Only activates when {@code ircafe.logging.enabled=true}. Uses a file-based HSQLDB stored next
+ * to the runtime config YAML by default. Flyway migrations are run on startup.
  */
 @Configuration
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")
@@ -45,9 +44,9 @@ public class ChatLogDatabaseConfig {
 
   private static final Logger log = LoggerFactory.getLogger(ChatLogDatabaseConfig.class);
 
-  
   @Bean(name = "chatLogDataSource", destroyMethod = "close")
-  public DataSource chatLogDataSource(LogProperties logProps, RuntimeConfigStore runtimeConfigStore) {
+  public DataSource chatLogDataSource(
+      LogProperties logProps, RuntimeConfigStore runtimeConfigStore) {
     Path basePath = resolveDbBasePath(logProps, runtimeConfigStore);
 
     // Keep the DB open for the life of the app by reusing pooled connections.
@@ -86,12 +85,14 @@ public class ChatLogDatabaseConfig {
   }
 
   @Bean(name = "chatLogTxManager")
-  public PlatformTransactionManager chatLogTxManager(@Qualifier("chatLogDataSource") DataSource ds) {
+  public PlatformTransactionManager chatLogTxManager(
+      @Qualifier("chatLogDataSource") DataSource ds) {
     return new DataSourceTransactionManager(ds);
   }
 
   @Bean(name = "chatLogTx")
-  public TransactionTemplate chatLogTx(@Qualifier("chatLogTxManager") PlatformTransactionManager tm) {
+  public TransactionTemplate chatLogTx(
+      @Qualifier("chatLogTxManager") PlatformTransactionManager tm) {
     return new TransactionTemplate(tm);
   }
 
@@ -110,26 +111,28 @@ public class ChatLogDatabaseConfig {
       ChatLogRepository repo,
       @Qualifier("chatLogTx") TransactionTemplate tx,
       LogProperties props,
-      @Qualifier("chatLogFlyway") Flyway flyway
-  ) {
+      @Qualifier("chatLogFlyway") Flyway flyway) {
     // touch flyway to ensure init/migrate ran
     if (flyway == null) {
-      throw new IllegalStateException("chatLogFlyway bean missing (migrations must run before logging)");
+      throw new IllegalStateException(
+          "chatLogFlyway bean missing (migrations must run before logging)");
     }
     return new ChatLogService(repo, tx, props);
   }
 
   @Bean(destroyMethod = "close")
-  public ChatLogRetentionPruner chatLogRetentionPruner(ChatLogRepository repo,
-                                                       @Qualifier("chatLogTx") TransactionTemplate tx,
-                                                       LogProperties props,
-                                                       @Qualifier("chatLogFlyway") Flyway flyway,
-                                                       @Qualifier(ExecutorConfig.CHAT_LOG_RETENTION_SCHEDULER)
-                                                       ScheduledExecutorService retentionScheduler) {
+  public ChatLogRetentionPruner chatLogRetentionPruner(
+      ChatLogRepository repo,
+      @Qualifier("chatLogTx") TransactionTemplate tx,
+      LogProperties props,
+      @Qualifier("chatLogFlyway") Flyway flyway,
+      @Qualifier(ExecutorConfig.CHAT_LOG_RETENTION_SCHEDULER)
+          ScheduledExecutorService retentionScheduler) {
     return new ChatLogRetentionPruner(repo, tx, props, flyway, retentionScheduler);
   }
 
-  private static Path resolveDbBasePath(LogProperties props, RuntimeConfigStore runtimeConfigStore) {
+  private static Path resolveDbBasePath(
+      LogProperties props, RuntimeConfigStore runtimeConfigStore) {
     String baseName = props.hsqldb() != null ? props.hsqldb().fileBaseName() : "ircafe-chatlog";
 
     Path dir;
@@ -144,7 +147,10 @@ public class ChatLogDatabaseConfig {
     try {
       Files.createDirectories(dir);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not create chat log DB dir '{}' (falling back to current directory)", dir, e);
+      log.warn(
+          "[ircafe] Could not create chat log DB dir '{}' (falling back to current directory)",
+          dir,
+          e);
       dir = Paths.get(".").toAbsolutePath();
     }
 
@@ -155,23 +161,24 @@ public class ChatLogDatabaseConfig {
     return Paths.get(System.getProperty("user.home"), ".config", "ircafe");
   }
 
-
   @Bean
-  public ChatHistoryService chatHistoryService(ChatLogRepository repo,
-                                              LogProperties props,
-                                              ChatTranscriptStore transcripts,
-                                              UiSettingsBus settingsBus,
-                                              IrcClientService irc,
-                                              ChatHistoryIngestBus ingestBus,
-                                              @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_EXECUTOR)
-                                              ExecutorService chatHistoryExecutor) {
-    return new DbChatHistoryService(repo, props, transcripts, settingsBus, irc, ingestBus, chatHistoryExecutor);
+  public ChatHistoryService chatHistoryService(
+      ChatLogRepository repo,
+      LogProperties props,
+      ChatTranscriptStore transcripts,
+      UiSettingsBus settingsBus,
+      IrcClientService irc,
+      ChatHistoryIngestBus ingestBus,
+      @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_EXECUTOR) ExecutorService chatHistoryExecutor) {
+    return new DbChatHistoryService(
+        repo, props, transcripts, settingsBus, irc, ingestBus, chatHistoryExecutor);
   }
 
   @Bean
-  public ChatLogMaintenance chatLogMaintenance(ChatLogRepository repo,
-                                               @Qualifier("chatLogTx") TransactionTemplate tx,
-                                               ChatLogService writer) {
+  public ChatLogMaintenance chatLogMaintenance(
+      ChatLogRepository repo,
+      @Qualifier("chatLogTx") TransactionTemplate tx,
+      ChatLogService writer) {
     return new ChatLogMaintenance() {
       @Override
       public boolean enabled() {
@@ -187,11 +194,11 @@ public class ChatLogDatabaseConfig {
         } catch (Exception ignored) {
         }
 
-        tx.executeWithoutResult(status -> {
-          repo.deleteTarget(target.serverId(), target.target());
-        });
+        tx.executeWithoutResult(
+            status -> {
+              repo.deleteTarget(target.serverId(), target.target());
+            });
       }
     };
   }
-
 }

@@ -13,10 +13,7 @@ final class OpenGraphLinkPreviewResolver implements LinkPreviewResolver {
 
   @Override
   public LinkPreview tryResolve(URI uri, String originalUrl, PreviewHttp http) throws Exception {
-    var resp = http.getStream(
-        uri,
-        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        null);
+    var resp = http.getStream(uri, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8", null);
 
     int status = resp.statusCode();
     if (status < 200 || status >= 300) {

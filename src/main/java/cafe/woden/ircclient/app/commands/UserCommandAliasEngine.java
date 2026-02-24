@@ -18,9 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
-/**
- * Expands user-defined slash-command aliases before regular command parsing.
- */
+/** Expands user-defined slash-command aliases before regular command parsing. */
 @Component
 public class UserCommandAliasEngine {
 

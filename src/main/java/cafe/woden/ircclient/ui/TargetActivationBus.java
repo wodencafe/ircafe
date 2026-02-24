@@ -7,7 +7,10 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/** UI-local event bus for activating a target (for input/status/users) without changing which transcript the main Chat dockable is currently… */
+/**
+ * UI-local event bus for activating a target (for input/status/users) without changing which
+ * transcript the main Chat dockable is currently…
+ */
 @Component
 @Lazy
 public class TargetActivationBus {

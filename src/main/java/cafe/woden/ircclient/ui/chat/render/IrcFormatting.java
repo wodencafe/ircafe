@@ -8,32 +8,31 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
-/**
- * Minimal mIRC formatting parser (bold/italic/underline/reverse/color/reset).
- */
+/** Minimal mIRC formatting parser (bold/italic/underline/reverse/color/reset). */
 public final class IrcFormatting {
 
   private IrcFormatting() {}
 
   /** mIRC 16-color palette (0-15). */
-  private static final Color[] MIRCCOLORS = new Color[] {
-      new Color(0xFFFFFF), // 0 white
-      new Color(0x000000), // 1 black
-      new Color(0x00007F), // 2 navy
-      new Color(0x009300), // 3 green
-      new Color(0xFF0000), // 4 red
-      new Color(0x7F0000), // 5 maroon
-      new Color(0x9C009C), // 6 purple
-      new Color(0xFC7F00), // 7 orange
-      new Color(0xFFFF00), // 8 yellow
-      new Color(0x00FC00), // 9 light green
-      new Color(0x009393), // 10 teal
-      new Color(0x00FFFF), // 11 light cyan
-      new Color(0x0000FC), // 12 light blue
-      new Color(0xFF00FF), // 13 pink
-      new Color(0x7F7F7F), // 14 gray
-      new Color(0xD2D2D2)  // 15 light gray
-  };
+  private static final Color[] MIRCCOLORS =
+      new Color[] {
+        new Color(0xFFFFFF), // 0 white
+        new Color(0x000000), // 1 black
+        new Color(0x00007F), // 2 navy
+        new Color(0x009300), // 3 green
+        new Color(0xFF0000), // 4 red
+        new Color(0x7F0000), // 5 maroon
+        new Color(0x9C009C), // 6 purple
+        new Color(0xFC7F00), // 7 orange
+        new Color(0xFFFF00), // 8 yellow
+        new Color(0x00FC00), // 9 light green
+        new Color(0x009393), // 10 teal
+        new Color(0x00FFFF), // 11 light cyan
+        new Color(0x0000FC), // 12 light blue
+        new Color(0xFF00FF), // 13 pink
+        new Color(0x7F7F7F), // 14 gray
+        new Color(0xD2D2D2) // 15 light gray
+      };
 
   /** A parsed span of plain text with derived attributes (base style + mIRC styling). */
   public record Span(String text, AttributeSet style) {}
@@ -127,8 +126,6 @@ public final class IrcFormatting {
     flush(out, buf, base, bold, italic, underline, reverse, fg, bg);
     return List.copyOf(out);
   }
-
-
 
   private static void flush(
       List<Span> out,

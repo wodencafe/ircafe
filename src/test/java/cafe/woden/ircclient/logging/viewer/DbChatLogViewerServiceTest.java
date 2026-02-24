@@ -24,28 +24,29 @@ class DbChatLogViewerServiceTest {
     ChatLogRepository repo = mock(ChatLogRepository.class);
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
-    String meta = """
+    String meta =
+        """
         {"messageId":"m-1","ircv3Tags":{"ircafe/hostmask":"alice!u@example.com","aaa":"bbb"}}
         """;
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
         .thenReturn(List.of(row(11L, "Alice", meta)));
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "ali",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "example.com",
-        ChatLogViewerMatchMode.CONTAINS,
-        "#chan",
-        ChatLogViewerMatchMode.CONTAINS,
-        false,
-        false,
-        null,
-        null,
-        200
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "ali",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "example.com",
+            ChatLogViewerMatchMode.CONTAINS,
+            "#chan",
+            ChatLogViewerMatchMode.CONTAINS,
+            false,
+            false,
+            null,
+            null,
+            200);
 
     ChatLogViewerResult res = svc.search(q);
     assertEquals(1, res.rows().size());
@@ -60,28 +61,29 @@ class DbChatLogViewerServiceTest {
     ChatLogRepository repo = mock(ChatLogRepository.class);
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
-    String meta = """
+    String meta =
+        """
         {"ircv3Tags":{"ircafe/hostmask":"alice!u@example.net"}}
         """;
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
         .thenReturn(List.of(row(12L, "Alice", meta)));
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "A*",
-        ChatLogViewerMatchMode.GLOB,
-        "he*o",
-        ChatLogViewerMatchMode.GLOB,
-        "example\\.net$",
-        ChatLogViewerMatchMode.REGEX,
-        "#ch?n",
-        ChatLogViewerMatchMode.GLOB,
-        false,
-        false,
-        null,
-        null,
-        100
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "A*",
+            ChatLogViewerMatchMode.GLOB,
+            "he*o",
+            ChatLogViewerMatchMode.GLOB,
+            "example\\.net$",
+            ChatLogViewerMatchMode.REGEX,
+            "#ch?n",
+            ChatLogViewerMatchMode.GLOB,
+            false,
+            false,
+            null,
+            null,
+            100);
 
     ChatLogViewerResult res = svc.search(q);
     assertEquals(1, res.rows().size());
@@ -94,27 +96,27 @@ class DbChatLogViewerServiceTest {
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
-        .thenReturn(List.of(
-            row(21L, LogKind.CHAT, "Alice", "hello world", "{}", LogDirection.IN),
-            row(20L, LogKind.CHAT, "Bob", "goodbye", "{}", LogDirection.IN)
-        ));
+        .thenReturn(
+            List.of(
+                row(21L, LogKind.CHAT, "Alice", "hello world", "{}", LogDirection.IN),
+                row(20L, LogKind.CHAT, "Bob", "goodbye", "{}", LogDirection.IN)));
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "hello",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        false,
-        false,
-        null,
-        null,
-        100
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "hello",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            false,
+            false,
+            null,
+            null,
+            100);
 
     ChatLogViewerResult res = svc.search(q);
     assertEquals(1, res.rows().size());
@@ -126,22 +128,22 @@ class DbChatLogViewerServiceTest {
     ChatLogRepository repo = mock(ChatLogRepository.class);
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "[",
-        ChatLogViewerMatchMode.REGEX,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        false,
-        false,
-        null,
-        null,
-        100
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "[",
+            ChatLogViewerMatchMode.REGEX,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            false,
+            false,
+            null,
+            null,
+            100);
 
     assertThrows(IllegalArgumentException.class, () -> svc.search(q));
   }
@@ -152,31 +154,63 @@ class DbChatLogViewerServiceTest {
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
-        .thenReturn(List.of(
-            row(103L, "status", LogKind.CHAT, "Alice", "hello from status", "{}", LogDirection.IN),
-            row(102L, "status", LogKind.STATUS, "(notice) server", "maintenance in 10 min", "{}", LogDirection.SYSTEM),
-            row(101L, LogKind.STATUS, "(server)", "[315] End of WHO list. (#chan)", "{}", LogDirection.SYSTEM),
-            row(100L, LogKind.STATUS, "(mode)", "Channel modes: +nt", "{}", LogDirection.SYSTEM),
-            row(99L, LogKind.ERROR, "(conn)", "Disconnected: timeout", "{}", LogDirection.SYSTEM),
-            row(98L, LogKind.CHAT, "Alice", "hello", "{}", LogDirection.IN)
-        ));
+        .thenReturn(
+            List.of(
+                row(
+                    103L,
+                    "status",
+                    LogKind.CHAT,
+                    "Alice",
+                    "hello from status",
+                    "{}",
+                    LogDirection.IN),
+                row(
+                    102L,
+                    "status",
+                    LogKind.STATUS,
+                    "(notice) server",
+                    "maintenance in 10 min",
+                    "{}",
+                    LogDirection.SYSTEM),
+                row(
+                    101L,
+                    LogKind.STATUS,
+                    "(server)",
+                    "[315] End of WHO list. (#chan)",
+                    "{}",
+                    LogDirection.SYSTEM),
+                row(
+                    100L,
+                    LogKind.STATUS,
+                    "(mode)",
+                    "Channel modes: +nt",
+                    "{}",
+                    LogDirection.SYSTEM),
+                row(
+                    99L,
+                    LogKind.ERROR,
+                    "(conn)",
+                    "Disconnected: timeout",
+                    "{}",
+                    LogDirection.SYSTEM),
+                row(98L, LogKind.CHAT, "Alice", "hello", "{}", LogDirection.IN)));
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        false,
-        false,
-        null,
-        null,
-        200
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            false,
+            false,
+            null,
+            null,
+            200);
 
     ChatLogViewerResult res = svc.search(q);
     assertEquals(2, res.rows().size());
@@ -190,48 +224,60 @@ class DbChatLogViewerServiceTest {
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
-        .thenReturn(List.of(
-            row(201L, LogKind.STATUS, "(server)", "[315] End of WHO list. (#chan)", "{}", LogDirection.SYSTEM),
-            row(200L, LogKind.STATUS, "(server)", "Connected to irc.libera.chat", "{}", LogDirection.SYSTEM)
-        ));
+        .thenReturn(
+            List.of(
+                row(
+                    201L,
+                    LogKind.STATUS,
+                    "(server)",
+                    "[315] End of WHO list. (#chan)",
+                    "{}",
+                    LogDirection.SYSTEM),
+                row(
+                    200L,
+                    LogKind.STATUS,
+                    "(server)",
+                    "Connected to irc.libera.chat",
+                    "{}",
+                    LogDirection.SYSTEM)));
 
-    ChatLogViewerQuery hideProtocol = new ChatLogViewerQuery(
-        "srv",
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        true,
-        false,
-        null,
-        null,
-        200
-    );
+    ChatLogViewerQuery hideProtocol =
+        new ChatLogViewerQuery(
+            "srv",
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            true,
+            false,
+            null,
+            null,
+            200);
 
     ChatLogViewerResult withoutProtocol = svc.search(hideProtocol);
     assertEquals(1, withoutProtocol.rows().size());
     assertEquals(200L, withoutProtocol.rows().getFirst().id());
 
-    ChatLogViewerQuery showProtocol = new ChatLogViewerQuery(
-        "srv",
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        true,
-        true,
-        null,
-        null,
-        200
-    );
+    ChatLogViewerQuery showProtocol =
+        new ChatLogViewerQuery(
+            "srv",
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            true,
+            true,
+            null,
+            null,
+            200);
 
     ChatLogViewerResult withProtocol = svc.search(showProtocol);
     assertEquals(2, withProtocol.rows().size());
@@ -243,27 +289,27 @@ class DbChatLogViewerServiceTest {
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
-        .thenReturn(List.of(
-            row(301L, "#alpha", LogKind.CHAT, "Alice", "hello", "{}", LogDirection.IN),
-            row(300L, "&local", LogKind.CHAT, "Bob", "hey", "{}", LogDirection.IN)
-        ));
+        .thenReturn(
+            List.of(
+                row(301L, "#alpha", LogKind.CHAT, "Alice", "hello", "{}", LogDirection.IN),
+                row(300L, "&local", LogKind.CHAT, "Bob", "hey", "{}", LogDirection.IN)));
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "#does-not-matter",
-        ChatLogViewerMatchMode.ANY,
-        true,
-        true,
-        null,
-        null,
-        100
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "#does-not-matter",
+            ChatLogViewerMatchMode.ANY,
+            true,
+            true,
+            null,
+            null,
+            100);
 
     ChatLogViewerResult res = svc.search(q);
     assertEquals(2, res.rows().size());
@@ -277,28 +323,28 @@ class DbChatLogViewerServiceTest {
     DbChatLogViewerService svc = new DbChatLogViewerService(repo);
 
     when(repo.searchRows(eq("srv"), isNull(), isNull(), anyInt()))
-        .thenReturn(List.of(
-            row(401L, "#chan", LogKind.CHAT, "Alice", "one", "{}", LogDirection.IN),
-            row(400L, "#ops", LogKind.CHAT, "Bob", "two", "{}", LogDirection.IN),
-            row(399L, "#other", LogKind.CHAT, "Carol", "three", "{}", LogDirection.IN)
-        ));
+        .thenReturn(
+            List.of(
+                row(401L, "#chan", LogKind.CHAT, "Alice", "one", "{}", LogDirection.IN),
+                row(400L, "#ops", LogKind.CHAT, "Bob", "two", "{}", LogDirection.IN),
+                row(399L, "#other", LogKind.CHAT, "Carol", "three", "{}", LogDirection.IN)));
 
-    ChatLogViewerQuery q = new ChatLogViewerQuery(
-        "srv",
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "",
-        ChatLogViewerMatchMode.CONTAINS,
-        "#chan, #OPS #missing ; #chan",
-        ChatLogViewerMatchMode.LIST,
-        true,
-        true,
-        null,
-        null,
-        100
-    );
+    ChatLogViewerQuery q =
+        new ChatLogViewerQuery(
+            "srv",
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "",
+            ChatLogViewerMatchMode.CONTAINS,
+            "#chan, #OPS #missing ; #chan",
+            ChatLogViewerMatchMode.LIST,
+            true,
+            true,
+            null,
+            null,
+            100);
 
     ChatLogViewerResult res = svc.search(q);
     assertEquals(2, res.rows().size());
@@ -323,22 +369,36 @@ class DbChatLogViewerServiceTest {
     return row(id, LogKind.CHAT, fromNick, "hello", metaJson, LogDirection.IN);
   }
 
-  private static LogRow row(long id, LogKind kind, String fromNick, String text, String metaJson, LogDirection direction) {
+  private static LogRow row(
+      long id,
+      LogKind kind,
+      String fromNick,
+      String text,
+      String metaJson,
+      LogDirection direction) {
     return row(id, "#chan", kind, fromNick, text, metaJson, direction);
   }
 
-  private static LogRow row(long id, String target, LogKind kind, String fromNick, String text, String metaJson, LogDirection direction) {
-    return new LogRow(id, new LogLine(
-        "srv",
-        target,
-        1_700_000_000_000L,
-        direction,
-        kind,
-        fromNick,
-        text,
-        false,
-        false,
-        metaJson
-    ));
+  private static LogRow row(
+      long id,
+      String target,
+      LogKind kind,
+      String fromNick,
+      String text,
+      String metaJson,
+      LogDirection direction) {
+    return new LogRow(
+        id,
+        new LogLine(
+            "srv",
+            target,
+            1_700_000_000_000L,
+            direction,
+            kind,
+            fromNick,
+            text,
+            false,
+            false,
+            metaJson));
   }
 }

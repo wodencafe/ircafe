@@ -5,8 +5,8 @@ import cafe.woden.ircclient.config.IrcProperties;
 /**
  * Holds the current heartbeat (idle timeout) settings in a globally accessible place.
  *
- * <p>This is used by connection timers to detect silent disconnects (no inbound traffic for
- * a configured duration).
+ * <p>This is used by connection timers to detect silent disconnects (no inbound traffic for a
+ * configured duration).
  */
 public final class NetHeartbeatContext {
 
@@ -15,8 +15,7 @@ public final class NetHeartbeatContext {
 
   private static volatile IrcProperties.Heartbeat settings = DEFAULT;
 
-  private NetHeartbeatContext() {
-  }
+  private NetHeartbeatContext() {}
 
   public static void configure(IrcProperties.Heartbeat cfg) {
     settings = normalize(cfg);

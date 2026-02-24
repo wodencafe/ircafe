@@ -46,9 +46,7 @@ class UserCommandAliasEngineTest {
   @Test
   void expandsContextPlaceholders() {
     when(aliasesBus.get())
-        .thenReturn(
-            List.of(
-                new UserCommandAlias(true, "where", "/msg %1 ctx=%c|%t|%s|%n")));
+        .thenReturn(List.of(new UserCommandAlias(true, "where", "/msg %1 ctx=%c|%t|%s|%n")));
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
 
     UserCommandAliasEngine.ExpansionResult out =
@@ -60,8 +58,7 @@ class UserCommandAliasEngineTest {
   @Test
   void expandsHexChatNetworkAndFromEndPlaceholders() {
     when(aliasesBus.get())
-        .thenReturn(
-            List.of(new UserCommandAlias(true, "where", "/msg %1 ctx=%e|&1|&2")));
+        .thenReturn(List.of(new UserCommandAlias(true, "where", "/msg %1 ctx=%e|&1|&2")));
 
     UserCommandAliasEngine.ExpansionResult out =
         engine.expand("/where bob alpha omega", new TargetRef("libera", "#ircafe"));
@@ -75,7 +72,9 @@ class UserCommandAliasEngineTest {
         .thenReturn(
             List.of(
                 new UserCommandAlias(
-                    true, "meta", "/msg %1 t=%hexchat_time v=%hexchat_version m=%hexchat_machine")));
+                    true,
+                    "meta",
+                    "/msg %1 t=%hexchat_time v=%hexchat_version m=%hexchat_machine")));
 
     UserCommandAliasEngine.ExpansionResult out =
         engine.expand("/meta bob", new TargetRef("libera", "#ircafe"));
@@ -113,7 +112,8 @@ class UserCommandAliasEngineTest {
 
   @Test
   void splitExpandedCommandsSupportsEscapedSemicolon() {
-    List<String> out = UserCommandAliasEngine.splitExpandedCommands("/msg a one\\;two; /msg b three");
+    List<String> out =
+        UserCommandAliasEngine.splitExpandedCommands("/msg a one\\;two; /msg b three");
     assertEquals(List.of("/msg a one;two", "/msg b three"), out);
   }
 }

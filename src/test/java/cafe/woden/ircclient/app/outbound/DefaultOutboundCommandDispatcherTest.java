@@ -42,8 +42,7 @@ class DefaultOutboundCommandDispatcherTest {
           filter,
           targetCoordinator,
           ui,
-          userCommandAliasesBus
-      );
+          userCommandAliasesBus);
 
   @AfterEach
   void tearDown() {
@@ -173,9 +172,7 @@ class DefaultOutboundCommandDispatcherTest {
 
   @Test
   void dispatchChatHistoryBetweenRoutesToChatService() {
-    dispatcher.dispatch(
-        disposables,
-        new ParsedInput.ChatHistoryBetween("msgid=a", "msgid=b", 60));
+    dispatcher.dispatch(disposables, new ParsedInput.ChatHistoryBetween("msgid=a", "msgid=b", 60));
     verify(chat).handleChatHistoryBetween(disposables, "msgid=a", "msgid=b", 60);
   }
 

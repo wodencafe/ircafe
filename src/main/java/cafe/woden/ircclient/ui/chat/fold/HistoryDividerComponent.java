@@ -10,7 +10,8 @@ import javax.swing.JPanel;
 import javax.swing.UIManager;
 
 /**
- * A purely-visual divider inserted into the transcript to separate loaded history from live messages.
+ * A purely-visual divider inserted into the transcript to separate loaded history from live
+ * messages.
  *
  * <p>This is rendered as an embedded Swing component inside the chat transcript document.
  */
@@ -23,10 +24,11 @@ public final class HistoryDividerComponent extends JPanel {
    * LookAndFeel is previewed/reverted (e.g., Preferences Cancel). Keep the divider's color synced
    * with UI defaults.
    */
-  private final PropertyChangeListener uiDefaultsListener = evt -> {
-    // Cheap enough to reapply for any UI defaults change.
-    applyTheme();
-  };
+  private final PropertyChangeListener uiDefaultsListener =
+      evt -> {
+        // Cheap enough to reapply for any UI defaults change.
+        applyTheme();
+      };
 
   public HistoryDividerComponent(String text) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -89,15 +91,16 @@ public final class HistoryDividerComponent extends JPanel {
   }
 
   /**
-   * JTextPane embeds Swing components using a baseline-aware view. Provide a stable baseline derived
-   * from our label so the divider aligns with normal text.
+   * JTextPane embeds Swing components using a baseline-aware view. Provide a stable baseline
+   * derived from our label so the divider aligns with normal text.
    */
   @Override
   public int getBaseline(int width, int height) {
     Insets in = getInsets();
     int ascent = 0;
     try {
-      if (label.getFont() != null) ascent = Math.max(ascent, getFontMetrics(label.getFont()).getAscent());
+      if (label.getFont() != null)
+        ascent = Math.max(ascent, getFontMetrics(label.getFont()).getAscent());
     } catch (Exception ignored) {
     }
     if (ascent <= 0) return -1;

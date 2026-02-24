@@ -10,9 +10,4 @@ package cafe.woden.ircclient.app.notifications;
  * @param highlightColor optional per-rule highlight color (hex, e.g. "#FFCC66")
  */
 public record NotificationRuleMatch(
-    String ruleLabel,
-    String matchedText,
-    int start,
-    int end,
-    String highlightColor
-) {}
+    String ruleLabel, String matchedText, int start, int end, String highlightColor) {}

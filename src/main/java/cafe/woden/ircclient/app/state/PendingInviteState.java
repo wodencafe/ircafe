@@ -12,9 +12,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks pending channel invitations and collapses short repeated bursts.
- */
+/** Tracks pending channel invitations and collapses short repeated bursts. */
 @Component
 public class PendingInviteState {
 
@@ -31,8 +29,7 @@ public class PendingInviteState {
       String inviteeNick,
       String reason,
       boolean inviteNotify,
-      int repeatCount
-  ) {
+      int repeatCount) {
     public PendingInvite {
       firstSeenAt = firstSeenAt == null ? Instant.now() : firstSeenAt;
       lastSeenAt = lastSeenAt == null ? firstSeenAt : lastSeenAt;
@@ -47,7 +44,8 @@ public class PendingInviteState {
 
   public record RecordResult(PendingInvite invite, boolean collapsed) {}
 
-  private record InviteKey(String serverId, String channelLower, String inviterLower, String inviteeLower) {}
+  private record InviteKey(
+      String serverId, String channelLower, String inviterLower, String inviteeLower) {}
 
   private final AtomicLong nextId = new AtomicLong(0);
   private final LinkedHashMap<Long, PendingInvite> pendingById = new LinkedHashMap<>();
@@ -74,8 +72,7 @@ public class PendingInviteState {
       String inviterNick,
       String inviteeNick,
       String reason,
-      boolean inviteNotify
-  ) {
+      boolean inviteNotify) {
     Instant now = at == null ? Instant.now() : at;
     String sid = normalizeToken(serverId);
     String ch = normalizeToken(channel);
@@ -83,7 +80,8 @@ public class PendingInviteState {
     String invitee = normalizeToken(inviteeNick);
     String rsn = Objects.toString(reason, "").trim();
     if (sid.isEmpty() || ch.isEmpty()) {
-      PendingInvite p = new PendingInvite(0, now, now, sid, ch, from, invitee, rsn, inviteNotify, 1);
+      PendingInvite p =
+          new PendingInvite(0, now, now, sid, ch, from, invitee, rsn, inviteNotify, 1);
       return new RecordResult(p, false);
     }
 
@@ -93,17 +91,18 @@ public class PendingInviteState {
       PendingInvite prev = pendingById.get(existingId);
       if (prev != null && isInsideCollapseWindow(prev.lastSeenAt(), now)) {
         String mergedReason = !rsn.isBlank() ? rsn : prev.reason();
-        PendingInvite merged = new PendingInvite(
-            prev.id(),
-            prev.firstSeenAt(),
-            now,
-            prev.serverId(),
-            prev.channel(),
-            prev.inviterNick(),
-            prev.inviteeNick(),
-            mergedReason,
-            prev.inviteNotify() || inviteNotify,
-            prev.repeatCount() + 1);
+        PendingInvite merged =
+            new PendingInvite(
+                prev.id(),
+                prev.firstSeenAt(),
+                now,
+                prev.serverId(),
+                prev.channel(),
+                prev.inviterNick(),
+                prev.inviteeNick(),
+                mergedReason,
+                prev.inviteNotify() || inviteNotify,
+                prev.repeatCount() + 1);
         pendingById.put(merged.id(), merged);
         latestIdByKey.put(key, merged.id());
         return new RecordResult(merged, true);
@@ -111,7 +110,8 @@ public class PendingInviteState {
     }
 
     long id = nextId.incrementAndGet();
-    PendingInvite created = new PendingInvite(id, now, now, sid, ch, from, invitee, rsn, inviteNotify, 1);
+    PendingInvite created =
+        new PendingInvite(id, now, now, sid, ch, from, invitee, rsn, inviteNotify, 1);
     pendingById.put(id, created);
     latestIdByKey.put(key, id);
     trimServerToLimit(sid);
@@ -167,7 +167,8 @@ public class PendingInviteState {
     PendingInvite removed = pendingById.remove(inviteId);
     if (removed == null) return null;
 
-    InviteKey key = keyOf(removed.serverId(), removed.channel(), removed.inviterNick(), removed.inviteeNick());
+    InviteKey key =
+        keyOf(removed.serverId(), removed.channel(), removed.inviterNick(), removed.inviteeNick());
     Long latest = latestIdByKey.get(key);
     if (latest != null && latest == inviteId) {
       latestIdByKey.remove(key);
@@ -242,7 +243,8 @@ public class PendingInviteState {
     return Objects.toString(value, "").trim();
   }
 
-  private static InviteKey keyOf(String serverId, String channel, String inviterNick, String inviteeNick) {
+  private static InviteKey keyOf(
+      String serverId, String channel, String inviterNick, String inviteeNick) {
     return new InviteKey(
         normalizeToken(serverId).toLowerCase(Locale.ROOT),
         normalizeToken(channel).toLowerCase(Locale.ROOT),

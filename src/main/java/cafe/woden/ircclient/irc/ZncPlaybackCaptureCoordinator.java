@@ -47,8 +47,7 @@ public final class ZncPlaybackCaptureCoordinator {
       String target,
       Instant fromInclusive,
       Instant toInclusive,
-      Consumer<ServerIrcEvent> emit
-  ) {
+      Consumer<ServerIrcEvent> emit) {
     Objects.requireNonNull(serverId, "serverId");
     Objects.requireNonNull(target, "target");
     Objects.requireNonNull(emit, "emit");
@@ -66,12 +65,19 @@ public final class ZncPlaybackCaptureCoordinator {
     session.emit = emit;
 
     session.maxTimeout =
-        scheduler.schedule(() -> timeoutIfStillActive(session, "max-time"), MAX_CAPTURE_TIME.toMillis(), TimeUnit.MILLISECONDS);
+        scheduler.schedule(
+            () -> timeoutIfStillActive(session, "max-time"),
+            MAX_CAPTURE_TIME.toMillis(),
+            TimeUnit.MILLISECONDS);
 
     scheduleQuietTimeout(session);
 
-    log.debug("[{}] ZNC playback capture started target={} from={} to={}",
-        serverId, target, fromInclusive, toInclusive);
+    log.debug(
+        "[{}] ZNC playback capture started target={} from={} to={}",
+        serverId,
+        target,
+        fromInclusive,
+        toInclusive);
   }
 
   /** True if a capture is currently active. */
@@ -90,8 +96,8 @@ public final class ZncPlaybackCaptureCoordinator {
    *
    * <p>This is intentionally conservative: we only capture when the target matches the active
    * capture target (case-insensitive) and the timestamp falls within the requested window. When the
-   * requested window ended "now" (omitted 'to'), we trim a small tail to avoid swallowing truly-live
-   * messages that arrive during playback.
+   * requested window ended "now" (omitted 'to'), we trim a small tail to avoid swallowing
+   * truly-live messages that arrive during playback.
    */
   public boolean shouldCapture(String target, Instant at) {
     CaptureSession s = active.get();
@@ -137,7 +143,9 @@ public final class ZncPlaybackCaptureCoordinator {
     touch(s);
 
     String l = line == null ? "" : line.toLowerCase(Locale.ROOT);
-    if (l.contains("playback complete") || l.contains("playback finished") || l.contains("playback done")) {
+    if (l.contains("playback complete")
+        || l.contains("playback finished")
+        || l.contains("playback done")) {
       completeActive("control-complete");
     }
   }
@@ -159,7 +167,9 @@ public final class ZncPlaybackCaptureCoordinator {
     }
   }
 
-  /** Complete the active capture (if present) and emit a {@link IrcEvent.ZncPlaybackBatchReceived}. */
+  /**
+   * Complete the active capture (if present) and emit a {@link IrcEvent.ZncPlaybackBatchReceived}.
+   */
   public void completeActive(String reason) {
     CaptureSession s = active.get();
     if (s == null) return;
@@ -172,7 +182,6 @@ public final class ZncPlaybackCaptureCoordinator {
     if (s == null) return;
     cancelInternal(s, reason);
   }
-
 
   private void timeoutIfStillActive(CaptureSession s, String reason) {
     CaptureSession cur = active.get();
@@ -190,20 +199,23 @@ public final class ZncPlaybackCaptureCoordinator {
     if (prev != null) prev.cancel(false);
 
     s.quietTimeout =
-        scheduler.schedule(() -> timeoutIfStillActive(s, "quiet-time"), QUIET_TIME.toMillis(), TimeUnit.MILLISECONDS);
+        scheduler.schedule(
+            () -> timeoutIfStillActive(s, "quiet-time"),
+            QUIET_TIME.toMillis(),
+            TimeUnit.MILLISECONDS);
   }
 
-  
   private void cancelInternal(CaptureSession s, String reason) {
     if (!active.compareAndSet(s, null)) return;
 
     if (s.quietTimeout != null) s.quietTimeout.cancel(false);
     if (s.maxTimeout != null) s.maxTimeout.cancel(false);
 
-    log.debug("[{}] ZNC playback capture cancelled target={} reason={}", s.serverId, s.target, reason);
+    log.debug(
+        "[{}] ZNC playback capture cancelled target={} reason={}", s.serverId, s.target, reason);
   }
 
-private void completeActiveInternal(CaptureSession s, String reason) {
+  private void completeActiveInternal(CaptureSession s, String reason) {
     // Ensure we're still active and clear first to avoid re-entrancy issues.
     if (!active.compareAndSet(s, null)) return;
 
@@ -221,20 +233,24 @@ private void completeActiveInternal(CaptureSession s, String reason) {
     try {
       IrcEvent.ZncPlaybackBatchReceived ev =
           new IrcEvent.ZncPlaybackBatchReceived(
-              Instant.now(),
-              s.target,
-              s.fromInclusive,
-              s.toInclusive,
-              entries
-          );
+              Instant.now(), s.target, s.fromInclusive, s.toInclusive, entries);
 
       // Emit through the normal event pipeline; mediator will publish to ZncPlaybackBus.
       s.emit.accept(new ServerIrcEvent(s.serverId, ev));
 
-      log.debug("[{}] ZNC playback capture completed target={} entries={} reason={}",
-          s.serverId, s.target, entries.size(), reason);
+      log.debug(
+          "[{}] ZNC playback capture completed target={} entries={} reason={}",
+          s.serverId,
+          s.target,
+          entries.size(),
+          reason);
     } catch (Exception ex) {
-      log.warn("[{}] failed to emit ZNC playback batch target={} reason={}", s.serverId, s.target, reason, ex);
+      log.warn(
+          "[{}] failed to emit ZNC playback batch target={} reason={}",
+          s.serverId,
+          s.target,
+          reason,
+          ex);
     }
   }
 

@@ -12,7 +12,6 @@ public final class MouseWheelDecorator {
 
   private MouseWheelDecorator() {}
 
-  
   public static AutoCloseable decorateNumberSpinner(JSpinner spinner) {
     MouseWheelListener listener = new NumericSpinnerWheelListener(spinner);
 

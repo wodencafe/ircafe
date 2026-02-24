@@ -31,8 +31,7 @@ abstract class AbstractTargetWaiterBus<E> {
       ScheduledExecutorService scheduler,
       String timeoutLabel,
       String completionFailureMessage,
-      Logger log
-  ) {
+      Logger log) {
     this.timeoutLabel = Objects.toString(timeoutLabel, "").trim();
     this.completionFailureMessage = Objects.toString(completionFailureMessage, "").trim();
     this.log = Objects.requireNonNull(log, "log");
@@ -48,30 +47,34 @@ abstract class AbstractTargetWaiterBus<E> {
     CompletableFuture<E> f = new CompletableFuture<>();
     waiters.computeIfAbsent(key, ignored -> new CopyOnWriteArrayList<>()).add(f);
 
-    final ScheduledFuture<?> timer = scheduler.schedule(
-        () -> f.completeExceptionally(new TimeoutException("Timed out waiting for " + timeoutLabel + ": " + sid + "/" + tgt)),
-        to.toMillis(),
-        TimeUnit.MILLISECONDS
-    );
+    final ScheduledFuture<?> timer =
+        scheduler.schedule(
+            () ->
+                f.completeExceptionally(
+                    new TimeoutException(
+                        "Timed out waiting for " + timeoutLabel + ": " + sid + "/" + tgt)),
+            to.toMillis(),
+            TimeUnit.MILLISECONDS);
 
-    f.whenComplete((ok, err) -> {
-      timer.cancel(false);
-      CopyOnWriteArrayList<CompletableFuture<E>> list = waiters.get(key);
-      if (list != null) {
-        list.remove(f);
-        if (list.isEmpty()) waiters.remove(key, list);
-      }
-    });
+    f.whenComplete(
+        (ok, err) -> {
+          timer.cancel(false);
+          CopyOnWriteArrayList<CompletableFuture<E>> list = waiters.get(key);
+          if (list != null) {
+            list.remove(f);
+            if (list.isEmpty()) waiters.remove(key, list);
+          }
+        });
 
     return f;
   }
 
   public final void publish(E event) {
     if (event == null) return;
-    Key key = new Key(
-        Objects.toString(serverIdOf(event), ""),
-        foldTarget(Objects.toString(targetOf(event), ""))
-    );
+    Key key =
+        new Key(
+            Objects.toString(serverIdOf(event), ""),
+            foldTarget(Objects.toString(targetOf(event), "")));
     CopyOnWriteArrayList<CompletableFuture<E>> list = waiters.remove(key);
     if (list == null || list.isEmpty()) return;
 

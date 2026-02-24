@@ -102,7 +102,8 @@ final class MastodonStatusApiPreviewResolver implements LinkPreviewResolver {
     }
 
     // If we still have no details, bail so oEmbed/OG can try.
-    if ((description == null || description.isBlank()) && (imageUrl == null || imageUrl.isBlank())) {
+    if ((description == null || description.isBlank())
+        && (imageUrl == null || imageUrl.isBlank())) {
       return null;
     }
 

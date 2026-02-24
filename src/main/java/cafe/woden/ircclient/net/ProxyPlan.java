@@ -8,19 +8,16 @@ import java.util.Objects;
 /**
  * Immutable resolved proxy plan for a single network operation.
  *
- * <p>This intentionally includes the resolved {@link Proxy} plus the timeout values that
- * callers should use for connect/read operations.
+ * <p>This intentionally includes the resolved {@link Proxy} plus the timeout values that callers
+ * should use for connect/read operations.
  */
 public record ProxyPlan(
-    IrcProperties.Proxy cfg,
-    Proxy proxy,
-    int connectTimeoutMs,
-    int readTimeoutMs
-) {
+    IrcProperties.Proxy cfg, Proxy proxy, int connectTimeoutMs, int readTimeoutMs) {
 
   public static ProxyPlan direct() {
     IrcProperties.Proxy cfg = NetProxyContext.normalize(null);
-    return new ProxyPlan(cfg, Proxy.NO_PROXY, (int) cfg.connectTimeoutMs(), (int) cfg.readTimeoutMs());
+    return new ProxyPlan(
+        cfg, Proxy.NO_PROXY, (int) cfg.connectTimeoutMs(), (int) cfg.readTimeoutMs());
   }
 
   public boolean enabled() {
@@ -40,6 +37,7 @@ public record ProxyPlan(
       }
     }
 
-    return new ProxyPlan(cfg, Proxy.NO_PROXY, (int) cfg.connectTimeoutMs(), (int) cfg.readTimeoutMs());
+    return new ProxyPlan(
+        cfg, Proxy.NO_PROXY, (int) cfg.connectTimeoutMs(), (int) cfg.readTimeoutMs());
   }
 }

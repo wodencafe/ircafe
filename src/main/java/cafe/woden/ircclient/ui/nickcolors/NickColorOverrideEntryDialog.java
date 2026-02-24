@@ -25,12 +25,11 @@ import javax.swing.event.DocumentListener;
 
 final class NickColorOverrideEntryDialog {
 
-  record Entry(String nickLower, String hex) {
-  }
+  record Entry(String nickLower, String hex) {}
 
   static Optional<Entry> open(Window owner, String title, Entry seed) {
     if (!SwingUtilities.isEventDispatchThread()) {
-      final Optional<Entry>[] box = new Optional[]{Optional.empty()};
+      final Optional<Entry>[] box = new Optional[] {Optional.empty()};
       try {
         SwingUtilities.invokeAndWait(() -> box[0] = open(owner, title, seed));
       } catch (Exception ignored) {
@@ -64,14 +63,15 @@ final class NickColorOverrideEntryDialog {
     preview.setPreferredSize(new Dimension(120, 28));
 
     JButton pick = new JButton("Pick...");
-    pick.addActionListener(e -> {
-      Color current = parseHexColor(hex.getText());
-      if (current == null) current = seedColor != null ? seedColor : Color.WHITE;
-      Color chosen = JColorChooser.showDialog(dlg, "Choose Color", current);
-      if (chosen != null) {
-        hex.setText(toHex(chosen));
-      }
-    });
+    pick.addActionListener(
+        e -> {
+          Color current = parseHexColor(hex.getText());
+          if (current == null) current = seedColor != null ? seedColor : Color.WHITE;
+          Color chosen = JColorChooser.showDialog(dlg, "Choose Color", current);
+          if (chosen != null) {
+            hex.setText(toHex(chosen));
+          }
+        });
 
     // Layout
     JPanel form = new JPanel(new GridBagLayout());
@@ -110,42 +110,45 @@ final class NickColorOverrideEntryDialog {
     buttons.add(ok);
     dlg.add(buttons, BorderLayout.SOUTH);
 
-    final Optional<Entry>[] result = new Optional[]{Optional.empty()};
+    final Optional<Entry>[] result = new Optional[] {Optional.empty()};
 
-    Runnable validate = () -> {
-      String n = normalizeNickKey(nick.getText());
-      Color c = parseHexColor(hex.getText());
+    Runnable validate =
+        () -> {
+          String n = normalizeNickKey(nick.getText());
+          Color c = parseHexColor(hex.getText());
 
-      boolean valid = !n.isEmpty() && c != null;
-      ok.setEnabled(valid);
+          boolean valid = !n.isEmpty() && c != null;
+          ok.setEnabled(valid);
 
-      if (c != null) {
-        preview.setBackground(c);
-        preview.setText(normalizeHex(hex.getText()));
-      } else {
-        preview.setBackground(new Color(0, 0, 0, 0));
-        preview.setText("Invalid color");
-      }
-    };
+          if (c != null) {
+            preview.setBackground(c);
+            preview.setText(normalizeHex(hex.getText()));
+          } else {
+            preview.setBackground(new Color(0, 0, 0, 0));
+            preview.setText("Invalid color");
+          }
+        };
 
     nick.getDocument().addDocumentListener(new SimpleDocListener(validate));
     hex.getDocument().addDocumentListener(new SimpleDocListener(validate));
 
-    cancel.addActionListener(e -> {
-      result[0] = Optional.empty();
-      dlg.dispose();
-    });
+    cancel.addActionListener(
+        e -> {
+          result[0] = Optional.empty();
+          dlg.dispose();
+        });
 
-    ok.addActionListener(e -> {
-      String n = normalizeNickKey(nick.getText());
-      Color c = parseHexColor(hex.getText());
-      if (n.isEmpty() || c == null) {
-        validate.run();
-        return;
-      }
-      result[0] = Optional.of(new Entry(n, toHex(c)));
-      dlg.dispose();
-    });
+    ok.addActionListener(
+        e -> {
+          String n = normalizeNickKey(nick.getText());
+          Color c = parseHexColor(hex.getText());
+          if (n.isEmpty() || c == null) {
+            validate.run();
+            return;
+          }
+          result[0] = Optional.of(new Entry(n, toHex(c)));
+          dlg.dispose();
+        });
 
     validate.run();
 
@@ -195,8 +198,19 @@ final class NickColorOverrideEntryDialog {
       this.onChange = onChange;
     }
 
-    @Override public void insertUpdate(DocumentEvent e) { onChange.run(); }
-    @Override public void removeUpdate(DocumentEvent e) { onChange.run(); }
-    @Override public void changedUpdate(DocumentEvent e) { onChange.run(); }
+    @Override
+    public void insertUpdate(DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void removeUpdate(DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void changedUpdate(DocumentEvent e) {
+      onChange.run();
+    }
   }
 }

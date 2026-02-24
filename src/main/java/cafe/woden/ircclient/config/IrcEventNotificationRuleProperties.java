@@ -1,14 +1,12 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Config-backed rule definition for IRC event notifications.
- */
+/** Config-backed rule definition for IRC event notifications. */
 public record IrcEventNotificationRuleProperties(
     Boolean enabled,
     EventType eventType,
@@ -31,8 +29,7 @@ public record IrcEventNotificationRuleProperties(
     String scriptWorkingDirectory,
     @Deprecated SourceFilter sourceFilter,
     @Deprecated String channelWhitelist,
-    @Deprecated String channelBlacklist
-) {
+    @Deprecated String channelBlacklist) {
 
   public enum EventType {
     KICKED,
@@ -88,9 +85,7 @@ public record IrcEventNotificationRuleProperties(
     BACKGROUND_ONLY
   }
 
-  /**
-   * Legacy source mode field kept for runtime-config backward compatibility.
-   */
+  /** Legacy source mode field kept for runtime-config backward compatibility. */
   @Deprecated
   public enum SourceFilter {
     ANY,
@@ -112,7 +107,9 @@ public record IrcEventNotificationRuleProperties(
       }
     }
     sourcePattern = trimToNull(sourcePattern);
-    if (sourceMode == SourceMode.ANY || sourceMode == SourceMode.SELF || sourceMode == SourceMode.OTHERS) {
+    if (sourceMode == SourceMode.ANY
+        || sourceMode == SourceMode.SELF
+        || sourceMode == SourceMode.OTHERS) {
       sourcePattern = null;
     }
 
@@ -143,9 +140,8 @@ public record IrcEventNotificationRuleProperties(
 
     if (toastEnabled == null) toastEnabled = true;
     if (focusScope == null) {
-      focusScope = Boolean.TRUE.equals(toastWhenFocused)
-          ? FocusScope.ANY
-          : FocusScope.BACKGROUND_ONLY;
+      focusScope =
+          Boolean.TRUE.equals(toastWhenFocused) ? FocusScope.ANY : FocusScope.BACKGROUND_ONLY;
     }
     if (toastWhenFocused == null) {
       toastWhenFocused = focusScope != FocusScope.BACKGROUND_ONLY;
@@ -158,7 +154,8 @@ public record IrcEventNotificationRuleProperties(
     }
     if (notificationsNodeEnabled == null) notificationsNodeEnabled = true;
 
-    if (soundId == null || soundId.isBlank()) soundId = defaultBuiltInSoundForEvent(eventType).name();
+    if (soundId == null || soundId.isBlank())
+      soundId = defaultBuiltInSoundForEvent(eventType).name();
     if (soundUseCustom == null) soundUseCustom = false;
 
     soundCustomPath = trimToNull(soundCustomPath);
@@ -182,54 +179,56 @@ public record IrcEventNotificationRuleProperties(
   public static List<IrcEventNotificationRuleProperties> defaultRules() {
     List<IrcEventNotificationRuleProperties> out = new ArrayList<>();
     for (EventType t : EventType.values()) {
-      out.add(new IrcEventNotificationRuleProperties(
-          defaultEnabledForEvent(t),
-          t,
-          defaultSourceModeForEvent(t),
-          null,
-          ChannelScope.ALL,
-          null,
-          true,
-          false,
-          FocusScope.BACKGROUND_ONLY,
-          true,
-          true,
-          false,
-          defaultBuiltInSoundForEvent(t).name(),
-          false,
-          null,
-          false,
-          null,
-          null,
-          null,
-          SourceFilter.ANY,
-          null,
-          null));
+      out.add(
+          new IrcEventNotificationRuleProperties(
+              defaultEnabledForEvent(t),
+              t,
+              defaultSourceModeForEvent(t),
+              null,
+              ChannelScope.ALL,
+              null,
+              true,
+              false,
+              FocusScope.BACKGROUND_ONLY,
+              true,
+              true,
+              false,
+              defaultBuiltInSoundForEvent(t).name(),
+              false,
+              null,
+              false,
+              null,
+              null,
+              null,
+              SourceFilter.ANY,
+              null,
+              null));
     }
     for (EventType t : defaultStatusBarAnyCompanionEvents()) {
-      out.add(new IrcEventNotificationRuleProperties(
-          true,
-          t,
-          defaultSourceModeForEvent(t),
-          null,
-          ChannelScope.ALL,
-          null,
-          false,
-          true,
-          FocusScope.ANY,
-          true,
-          true,
-          false,
-          defaultBuiltInSoundForEvent(t).name(),
-          false,
-          null,
-          false,
-          null,
-          null,
-          null,
-          SourceFilter.ANY,
-          null,
-          null));
+      out.add(
+          new IrcEventNotificationRuleProperties(
+              true,
+              t,
+              defaultSourceModeForEvent(t),
+              null,
+              ChannelScope.ALL,
+              null,
+              false,
+              true,
+              FocusScope.ANY,
+              true,
+              true,
+              false,
+              defaultBuiltInSoundForEvent(t).name(),
+              false,
+              null,
+              false,
+              null,
+              null,
+              null,
+              SourceFilter.ANY,
+              null,
+              null));
     }
     return List.copyOf(out);
   }
@@ -237,11 +236,7 @@ public record IrcEventNotificationRuleProperties(
   private static boolean defaultEnabledForEvent(EventType eventType) {
     if (eventType == null) return false;
     return switch (eventType) {
-      case PRIVATE_MESSAGE_RECEIVED,
-           INVITE_RECEIVED,
-           YOU_KICKED,
-           YOU_BANNED,
-           YOU_KLINED -> true;
+      case PRIVATE_MESSAGE_RECEIVED, INVITE_RECEIVED, YOU_KICKED, YOU_BANNED, YOU_KLINED -> true;
       default -> false;
     };
   }
@@ -250,33 +245,31 @@ public record IrcEventNotificationRuleProperties(
     if (eventType == null) return SourceMode.ANY;
     return switch (eventType) {
       case KICKED,
-           BANNED,
-           VOICED,
-           DEVOICED,
-           OPPED,
-           DEOPPED,
-           HALF_OPPED,
-           DEHALF_OPPED,
-           PRIVATE_MESSAGE_RECEIVED,
-           CTCP_RECEIVED,
-           NOTICE_RECEIVED,
-           WALLOPS_RECEIVED,
-           INVITE_RECEIVED,
-           USER_JOINED,
-           USER_PARTED,
-           USER_QUIT,
-           USER_NICK_CHANGED,
-           NETSPLIT_DETECTED,
-           KLINED -> SourceMode.OTHERS;
+          BANNED,
+          VOICED,
+          DEVOICED,
+          OPPED,
+          DEOPPED,
+          HALF_OPPED,
+          DEHALF_OPPED,
+          PRIVATE_MESSAGE_RECEIVED,
+          CTCP_RECEIVED,
+          NOTICE_RECEIVED,
+          WALLOPS_RECEIVED,
+          INVITE_RECEIVED,
+          USER_JOINED,
+          USER_PARTED,
+          USER_QUIT,
+          USER_NICK_CHANGED,
+          NETSPLIT_DETECTED,
+          KLINED ->
+          SourceMode.OTHERS;
       default -> SourceMode.ANY;
     };
   }
 
   private static List<EventType> defaultStatusBarAnyCompanionEvents() {
-    return List.of(
-        EventType.KICKED,
-        EventType.BANNED,
-        EventType.KLINED);
+    return List.of(EventType.KICKED, EventType.BANNED, EventType.KLINED);
   }
 
   private static BuiltInSound defaultBuiltInSoundForEvent(EventType eventType) {

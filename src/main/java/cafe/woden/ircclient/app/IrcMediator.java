@@ -5,32 +5,32 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
-import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
-import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationService;
+import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
+import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
-import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
-import cafe.woden.ircclient.app.state.JoinRoutingState;
+import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState;
 import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
+import cafe.woden.ircclient.app.state.JoinRoutingState;
 import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.UserListStore;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -42,9 +42,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,7 +99,8 @@ public class IrcMediator {
 
   private final NotificationRuleMatcher notificationRuleMatcher;
 
-  private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+  private final java.util.concurrent.atomic.AtomicBoolean started =
+      new java.util.concurrent.atomic.AtomicBoolean(false);
 
   // Dedup cache
   private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
@@ -151,8 +152,7 @@ public class IrcMediator {
       IrcEventNotificationService ircEventNotificationService,
       InterceptorStore interceptorStore,
       InboundIgnorePolicy inboundIgnorePolicy,
-      MonitorIsonFallbackService monitorIsonFallbackService
-  ) {
+      MonitorIsonFallbackService monitorIsonFallbackService) {
 
     this.irc = irc;
     this.ui = ui;
@@ -198,26 +198,22 @@ public class IrcMediator {
         targetCoordinator,
         disposables,
         this::handleUserActionRequest,
-        this::handleOutgoingLine
-    );
+        this::handleOutgoingLine);
     bindIrcEventSubscriptions();
     bindLabeledResponseTimeoutTicker();
     mediatorConnectionSubscriptionBinder.bind(
-        ui,
-        connectionCoordinator,
-        targetCoordinator,
-        serverRegistry,
-        disposables
-    );
+        ui, connectionCoordinator, targetCoordinator, serverRegistry, disposables);
   }
 
   private void bindIrcEventSubscriptions() {
     disposables.add(
         irc.events()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(this::onServerIrcEvent,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(irc-error)", err.toString()))
-    );
+            .subscribe(
+                this::onServerIrcEvent,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(irc-error)", err.toString())));
   }
 
   private void bindLabeledResponseTimeoutTicker() {
@@ -229,12 +225,17 @@ public class IrcMediator {
                   handleLabeledRequestTimeouts();
                   handlePendingEchoTimeouts();
                 },
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(label-timeout)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(label-timeout)",
+                        String.valueOf(err))));
   }
 
   private void handleUserActionRequest(UserActionRequest req) {
     if (req == null) return;
-    TargetRef ctx = req.contextTarget() != null ? req.contextTarget() : targetCoordinator.getActiveTarget();
+    TargetRef ctx =
+        req.contextTarget() != null ? req.contextTarget() : targetCoordinator.getActiveTarget();
     if (ctx == null) ctx = targetCoordinator.safeStatusTarget();
     final var fCtx = ctx;
     String sid = ctx.serverId();
@@ -242,39 +243,41 @@ public class IrcMediator {
     if (sid == null || sid.isBlank() || nick.isBlank()) return;
 
     switch (req.action()) {
-      case OPEN_QUERY -> targetCoordinator.openPrivateConversation(new PrivateMessageRequest(sid, nick));
+      case OPEN_QUERY ->
+          targetCoordinator.openPrivateConversation(new PrivateMessageRequest(sid, nick));
 
       case WHOIS -> {
         whoisRoutingState.put(sid, nick, ctx);
         ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + nick + "...");
-        Disposable d = irc.whois(sid, nick)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(fCtx, "(whois)", err.toString())
-            );
+        Disposable d =
+            irc.whois(sid, nick)
+                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(whois)", err.toString()));
         disposables.add(d);
       }
 
       case CTCP_VERSION -> {
         ctcpRoutingState.put(sid, nick, "VERSION", null, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " VERSION");
-        disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001VERSION\u0001")
-            .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
+        disposables.add(
+            irc.sendPrivateMessage(sid, nick, "\u0001VERSION\u0001")
+                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
 
       case CTCP_PING -> {
         String token = Long.toString(System.currentTimeMillis());
         ctcpRoutingState.put(sid, nick, "PING", token, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " PING");
-        disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
-            .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
+        disposables.add(
+            irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
+                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
 
       case CTCP_TIME -> {
         ctcpRoutingState.put(sid, nick, "TIME", null, ctx);
         ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " TIME");
-        disposables.add(irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
-            .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
+        disposables.add(
+            irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
+                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
       }
 
       case OP -> handleNickModeUserAction(ctx, nick, "+o");
@@ -330,9 +333,7 @@ public class IrcMediator {
     ui.appendStatus(out, statusTag, "\u2192 " + sendLine);
     disposables.add(
         irc.sendRaw(sid, sendLine)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, errorTag, String.valueOf(err))));
+            .subscribe(() -> {}, err -> ui.appendError(status, errorTag, String.valueOf(err))));
   }
 
   private static boolean containsCrlf(String s) {
@@ -359,7 +360,7 @@ public class IrcMediator {
     return new ParsedCtcp(cmd, arg);
   }
 
-private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
+  private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
     if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
     String f = Objects.toString(from, "").trim();
     if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
@@ -376,8 +377,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       boolean spoiler,
       boolean suppressOutput,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     ParsedCtcp ctcp = parseCtcp(text);
     if (ctcp != null) {
       String cmd = ctcp.commandUpper();
@@ -447,6 +447,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
       ui.appendNoticeAt(status, at, "(notice) " + from, text, messageId, ircv3Tags);
     }
   }
+
   public void stop() {
     if (!started.compareAndSet(true, false)) {
       return;
@@ -470,7 +471,10 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
     for (String warning : expanded.warnings()) {
       if (warning == null || warning.isBlank()) continue;
-      TargetRef out = (ctx != null) ? new TargetRef(ctx.serverId(), "status") : targetCoordinator.safeStatusTarget();
+      TargetRef out =
+          (ctx != null)
+              ? new TargetRef(ctx.serverId(), "status")
+              : targetCoordinator.safeStatusTarget();
       ui.appendStatus(out, "(alias)", warning);
     }
 
@@ -487,7 +491,6 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
     }
     return status;
   }
-
 
   private void onServerIrcEvent(ServerIrcEvent se) {
     if (se == null) return;
@@ -525,14 +528,18 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
 
     switch (e) {
       case IrcEvent.NickChanged ev -> {
-        irc.currentNick(sid).ifPresent(currentNick -> {
-          if (!Objects.equals(currentNick, ev.oldNick()) && !Objects.equals(currentNick, ev.newNick())) {
-            ui.appendNotice(status, "(nick)", ev.oldNick() + " is now known as " + ev.newNick());
-          } else {
-            ui.appendStatus(status, "(nick)", "Now known as " + ev.newNick());
-            ui.setChatCurrentNick(sid, ev.newNick());
-          }
-        });
+        irc.currentNick(sid)
+            .ifPresent(
+                currentNick -> {
+                  if (!Objects.equals(currentNick, ev.oldNick())
+                      && !Objects.equals(currentNick, ev.newNick())) {
+                    ui.appendNotice(
+                        status, "(nick)", ev.oldNick() + " is now known as " + ev.newNick());
+                  } else {
+                    ui.appendStatus(status, "(nick)", "Now known as " + ev.newNick());
+                    ui.setChatCurrentNick(sid, ev.newNick());
+                  }
+                });
       }
       case IrcEvent.ChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
@@ -550,13 +557,7 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
         }
 
         if (maybeApplyMessageEditFromTaggedLine(
-            sid,
-            chan,
-            ev.at(),
-            ev.from(),
-            ev.text(),
-            ev.messageId(),
-            ev.ircv3Tags())) {
+            sid, chan, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
           return;
         }
 
@@ -565,7 +566,9 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
               chan,
               active,
               true,
-              d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
+              d ->
+                  ui.appendSpoilerChatAt(
+                      d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
         } else {
           postTo(
               chan,
@@ -672,7 +675,8 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
           }
 
           try {
-            trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), "* " + ev.action());
+            trayNotificationService.notifyHighlight(
+                sid, ev.channel(), ev.from(), "* " + ev.action());
           } catch (Exception ignored) {
           }
         }
@@ -721,182 +725,213 @@ private InboundIgnorePolicy.Decision decideInbound(String sid, String from, bool
             topic.isEmpty() ? "(topic cleared)" : topic,
             InterceptorEventType.TOPIC);
       }
-      
-case IrcEvent.PrivateMessage ev -> {
-  boolean fromSelf = isFromSelf(sid, ev.from());
-  String peer = ev.from();
-  if (fromSelf) {
-    String dest = ev.ircv3Tags().get("ircafe/pm-target");
-    if (dest != null && !dest.isBlank()) {
-      peer = dest;
-    }
-  }
-  TargetRef pm = new TargetRef(sid, peer);
-  boolean allowAutoOpen = targetCoordinator.allowPrivateAutoOpenFromInbound(pm, fromSelf);
 
-  // Suppress our own internal ZNC playback control lines if they get echoed back.
-  if (fromSelf && "*playback".equalsIgnoreCase(peer)
-      && ev.text() != null
-      && ev.text().toLowerCase(java.util.Locale.ROOT).startsWith("play ")) {
-    return;
-  }
+      case IrcEvent.PrivateMessage ev -> {
+        boolean fromSelf = isFromSelf(sid, ev.from());
+        String peer = ev.from();
+        if (fromSelf) {
+          String dest = ev.ircv3Tags().get("ircafe/pm-target");
+          if (dest != null && !dest.isBlank()) {
+            peer = dest;
+          }
+        }
+        TargetRef pm = new TargetRef(sid, peer);
+        boolean allowAutoOpen = targetCoordinator.allowPrivateAutoOpenFromInbound(pm, fromSelf);
 
-  if (!fromSelf) {
-    userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
-    markPrivateMessagePeerOnline(sid, ev.from());
-  }
+        // Suppress our own internal ZNC playback control lines if they get echoed back.
+        if (fromSelf
+            && "*playback".equalsIgnoreCase(peer)
+            && ev.text() != null
+            && ev.text().toLowerCase(java.util.Locale.ROOT).startsWith("play ")) {
+          return;
+        }
 
-  ParsedCtcp ctcp = parseCtcp(ev.text());
-  if (!fromSelf && ctcp != null && "DCC".equals(ctcp.commandUpper())) {
-    InboundIgnorePolicy.Decision dccDecision = decideInbound(sid, ev.from(), true);
-    if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        if (!fromSelf) {
+          userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+          markPrivateMessagePeerOnline(sid, ev.from());
+        }
 
-    boolean dccHandled = outboundDccCommandService.handleInboundDccOffer(
-        ev.at(),
-        sid,
-        ev.from(),
-        ctcp.arg(),
-        dccDecision == InboundIgnorePolicy.Decision.SOFT_SPOILER);
-    if (dccHandled) return;
-  }
+        ParsedCtcp ctcp = parseCtcp(ev.text());
+        if (!fromSelf && ctcp != null && "DCC".equals(ctcp.commandUpper())) {
+          InboundIgnorePolicy.Decision dccDecision = decideInbound(sid, ev.from(), true);
+          if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-  InboundIgnorePolicy.Decision decision = fromSelf
-      ? InboundIgnorePolicy.Decision.ALLOW
-      : decideInbound(sid, ev.from(), false);
-  if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+          boolean dccHandled =
+              outboundDccCommandService.handleInboundDccOffer(
+                  ev.at(),
+                  sid,
+                  ev.from(),
+                  ctcp.arg(),
+                  dccDecision == InboundIgnorePolicy.Decision.SOFT_SPOILER);
+          if (dccHandled) return;
+        }
 
-  if (tryResolvePendingEchoPrivateMessage(sid, pm, ev, allowAutoOpen)) {
-    return;
-  }
+        InboundIgnorePolicy.Decision decision =
+            fromSelf ? InboundIgnorePolicy.Decision.ALLOW : decideInbound(sid, ev.from(), false);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-  if (maybeApplyMessageEditFromTaggedLine(
-      sid,
-      pm,
-      ev.at(),
-      ev.from(),
-      ev.text(),
-      ev.messageId(),
-      ev.ircv3Tags())) {
-    return;
-  }
+        if (tryResolvePendingEchoPrivateMessage(sid, pm, ev, allowAutoOpen)) {
+          return;
+        }
 
-  if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-    if (allowAutoOpen) {
-      postTo(pm, true, d -> ui.appendSpoilerChatAt(d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
-    } else {
-      ui.appendSpoilerChatAt(pm, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags());
-    }
-  } else {
-    if (allowAutoOpen) {
-      postTo(pm, true,
-          d -> ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), fromSelf, ev.messageId(), ev.ircv3Tags()));
-    } else {
-      ui.appendChatAt(pm, ev.at(), ev.from(), ev.text(), fromSelf, ev.messageId(), ev.ircv3Tags());
-    }
-  }
+        if (maybeApplyMessageEditFromTaggedLine(
+            sid, pm, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
-  recordInterceptorEvent(
-      sid,
-      "pm:" + Objects.toString(peer, "").trim(),
-      ev.from(),
-      learnedHostmaskForNick(sid, ev.from()),
-      ev.text(),
-      InterceptorEventType.PRIVATE_MESSAGE);
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          if (allowAutoOpen) {
+            postTo(
+                pm,
+                true,
+                d ->
+                    ui.appendSpoilerChatAt(
+                        d, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags()));
+          } else {
+            ui.appendSpoilerChatAt(
+                pm, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags());
+          }
+        } else {
+          if (allowAutoOpen) {
+            postTo(
+                pm,
+                true,
+                d ->
+                    ui.appendChatAt(
+                        d,
+                        ev.at(),
+                        ev.from(),
+                        ev.text(),
+                        fromSelf,
+                        ev.messageId(),
+                        ev.ircv3Tags()));
+          } else {
+            ui.appendChatAt(
+                pm, ev.at(), ev.from(), ev.text(), fromSelf, ev.messageId(), ev.ircv3Tags());
+          }
+        }
 
-  if (!fromSelf) {
-    String fromNick = Objects.toString(ev.from(), "").trim();
-    String title = fromNick.isEmpty() ? "Private message" : ("Private message from " + fromNick);
-    String body = Objects.toString(ev.text(), "").trim();
-    boolean customPmNotified = notifyIrcEvent(
-        IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
-        sid,
-        null,
-        fromNick,
-        title,
-        body);
-    boolean pmRulesEnabled = ircEventNotificationService != null
-        && ircEventNotificationService.hasEnabledRuleFor(IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED);
-    if (!customPmNotified && !pmRulesEnabled) {
-      try {
-        trayNotificationService.notifyPrivateMessage(sid, ev.from(), ev.text());
-      } catch (Exception ignored) {
+        recordInterceptorEvent(
+            sid,
+            "pm:" + Objects.toString(peer, "").trim(),
+            ev.from(),
+            learnedHostmaskForNick(sid, ev.from()),
+            ev.text(),
+            InterceptorEventType.PRIVATE_MESSAGE);
+
+        if (!fromSelf) {
+          String fromNick = Objects.toString(ev.from(), "").trim();
+          String title =
+              fromNick.isEmpty() ? "Private message" : ("Private message from " + fromNick);
+          String body = Objects.toString(ev.text(), "").trim();
+          boolean customPmNotified =
+              notifyIrcEvent(
+                  IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
+                  sid,
+                  null,
+                  fromNick,
+                  title,
+                  body);
+          boolean pmRulesEnabled =
+              ircEventNotificationService != null
+                  && ircEventNotificationService.hasEnabledRuleFor(
+                      IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED);
+          if (!customPmNotified && !pmRulesEnabled) {
+            try {
+              trayNotificationService.notifyPrivateMessage(sid, ev.from(), ev.text());
+            } catch (Exception ignored) {
+            }
+          }
+        }
       }
-    }
-  }
-}
 
-case IrcEvent.PrivateAction ev -> {
-  boolean fromSelf = isFromSelf(sid, ev.from());
-  String peer = ev.from();
-  if (fromSelf) {
-    String dest = ev.ircv3Tags().get("ircafe/pm-target");
-    if (dest != null && !dest.isBlank()) {
-      peer = dest;
-    }
-  }
-  TargetRef pm = new TargetRef(sid, peer);
-  boolean allowAutoOpen = targetCoordinator.allowPrivateAutoOpenFromInbound(pm, fromSelf);
+      case IrcEvent.PrivateAction ev -> {
+        boolean fromSelf = isFromSelf(sid, ev.from());
+        String peer = ev.from();
+        if (fromSelf) {
+          String dest = ev.ircv3Tags().get("ircafe/pm-target");
+          if (dest != null && !dest.isBlank()) {
+            peer = dest;
+          }
+        }
+        TargetRef pm = new TargetRef(sid, peer);
+        boolean allowAutoOpen = targetCoordinator.allowPrivateAutoOpenFromInbound(pm, fromSelf);
 
-  if (!fromSelf) {
-    userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
-    markPrivateMessagePeerOnline(sid, ev.from());
-  }
+        if (!fromSelf) {
+          userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
+          markPrivateMessagePeerOnline(sid, ev.from());
+        }
 
-  InboundIgnorePolicy.Decision decision = fromSelf
-      ? InboundIgnorePolicy.Decision.ALLOW
-      : decideInbound(sid, ev.from(), true);
-  if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        InboundIgnorePolicy.Decision decision =
+            fromSelf ? InboundIgnorePolicy.Decision.ALLOW : decideInbound(sid, ev.from(), true);
+        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
-  if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
-    if (allowAutoOpen) {
-      postTo(
-          pm,
-          true,
-          d ->
-              ui.appendSpoilerChatAt(
-                  d, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags()));
-    } else {
-      ui.appendSpoilerChatAt(pm, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags());
-    }
-  } else {
-    if (allowAutoOpen) {
-      postTo(pm, true,
-          d -> ui.appendActionAt(d, ev.at(), ev.from(), ev.action(), fromSelf, ev.messageId(), ev.ircv3Tags()));
-    } else {
-      ui.appendActionAt(pm, ev.at(), ev.from(), ev.action(), fromSelf, ev.messageId(), ev.ircv3Tags());
-    }
-  }
+        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+          if (allowAutoOpen) {
+            postTo(
+                pm,
+                true,
+                d ->
+                    ui.appendSpoilerChatAt(
+                        d, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags()));
+          } else {
+            ui.appendSpoilerChatAt(
+                pm, ev.at(), ev.from(), "* " + ev.action(), ev.messageId(), ev.ircv3Tags());
+          }
+        } else {
+          if (allowAutoOpen) {
+            postTo(
+                pm,
+                true,
+                d ->
+                    ui.appendActionAt(
+                        d,
+                        ev.at(),
+                        ev.from(),
+                        ev.action(),
+                        fromSelf,
+                        ev.messageId(),
+                        ev.ircv3Tags()));
+          } else {
+            ui.appendActionAt(
+                pm, ev.at(), ev.from(), ev.action(), fromSelf, ev.messageId(), ev.ircv3Tags());
+          }
+        }
 
-  recordInterceptorEvent(
-      sid,
-      "pm:" + Objects.toString(peer, "").trim(),
-      ev.from(),
-      learnedHostmaskForNick(sid, ev.from()),
-      ev.action(),
-      InterceptorEventType.PRIVATE_ACTION);
+        recordInterceptorEvent(
+            sid,
+            "pm:" + Objects.toString(peer, "").trim(),
+            ev.from(),
+            learnedHostmaskForNick(sid, ev.from()),
+            ev.action(),
+            InterceptorEventType.PRIVATE_ACTION);
 
-  if (!fromSelf) {
-    String fromNick = Objects.toString(ev.from(), "").trim();
-    String title = fromNick.isEmpty() ? "Private action" : ("Private action from " + fromNick);
-    String body = "* " + Objects.toString(ev.action(), "").trim();
-    boolean customPmNotified = notifyIrcEvent(
-        IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
-        sid,
-        null,
-        fromNick,
-        title,
-        body);
-    boolean pmRulesEnabled = ircEventNotificationService != null
-        && ircEventNotificationService.hasEnabledRuleFor(IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED);
-    if (!customPmNotified && !pmRulesEnabled) {
-      try {
-        trayNotificationService.notifyPrivateMessage(sid, ev.from(), "* " + ev.action());
-      } catch (Exception ignored) {
+        if (!fromSelf) {
+          String fromNick = Objects.toString(ev.from(), "").trim();
+          String title =
+              fromNick.isEmpty() ? "Private action" : ("Private action from " + fromNick);
+          String body = "* " + Objects.toString(ev.action(), "").trim();
+          boolean customPmNotified =
+              notifyIrcEvent(
+                  IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
+                  sid,
+                  null,
+                  fromNick,
+                  title,
+                  body);
+          boolean pmRulesEnabled =
+              ircEventNotificationService != null
+                  && ircEventNotificationService.hasEnabledRuleFor(
+                      IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED);
+          if (!customPmNotified && !pmRulesEnabled) {
+            try {
+              trayNotificationService.notifyPrivateMessage(sid, ev.from(), "* " + ev.action());
+            } catch (Exception ignored) {
+            }
+          }
+        }
       }
-    }
-  }
-}
-case IrcEvent.Notice ev -> {
+      case IrcEvent.Notice ev -> {
         boolean fromSelf = isFromSelf(sid, ev.from());
         markPrivateMessagePeerOnline(sid, ev.from());
         boolean isCtcp = parseCtcp(ev.text()) != null;
@@ -917,13 +952,7 @@ case IrcEvent.Notice ev -> {
         }
 
         if (maybeApplyMessageEditFromTaggedLine(
-            sid,
-            dest,
-            ev.at(),
-            ev.from(),
-            ev.text(),
-            ev.messageId(),
-            ev.ircv3Tags())) {
+            sid, dest, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
           return;
         }
 
@@ -1001,15 +1030,10 @@ case IrcEvent.Notice ev -> {
             fromFinal.equalsIgnoreCase("server") ? "WALLOPS" : ("WALLOPS from " + fromFinal),
             body);
       }
-case IrcEvent.ServerTimeNotNegotiated ev -> {
+      case IrcEvent.ServerTimeNotNegotiated ev -> {
         ui.appendStatus(status, "(ircv3)", ev.message());
         recordInterceptorEvent(
-            sid,
-            "status",
-            "server",
-            "",
-            ev.message(),
-            InterceptorEventType.SERVER);
+            sid, "status", "server", "", ev.message(), InterceptorEventType.SERVER);
       }
       case IrcEvent.StandardReply ev -> {
         handleStandardReply(sid, status, ev);
@@ -1034,13 +1058,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         handleServerResponseLine(sid, status, ev);
         String rawLine = Objects.toString(ev.rawLine(), "").trim();
         if (rawLine.isEmpty()) rawLine = Objects.toString(ev.message(), "").trim();
-        recordInterceptorEvent(
-            sid,
-            "status",
-            "server",
-            "",
-            rawLine,
-            InterceptorEventType.SERVER);
+        recordInterceptorEvent(sid, "status", "server", "", rawLine, InterceptorEventType.SERVER);
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
         mediatorHistoryIngestOrchestrator.onChatHistoryBatchReceived(sid, ev);
@@ -1067,11 +1085,12 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           }
         }
 
-        StringBuilder sb = new StringBuilder()
-            .append("\u2190 ")
-            .append(ev.from())
-            .append(" CTCP ")
-            .append(ev.command());
+        StringBuilder sb =
+            new StringBuilder()
+                .append("\u2190 ")
+                .append(ev.from())
+                .append(" CTCP ")
+                .append(ev.command());
         if (ev.argument() != null && !ev.argument().isBlank()) sb.append(' ').append(ev.argument());
         if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
         final String rendered = sb.toString();
@@ -1094,19 +1113,15 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         if (channel.isBlank()) channel = null;
         String command = Objects.toString(ev.command(), "").trim();
         String argument = Objects.toString(ev.argument(), "").trim();
-        String title = fromNick.isEmpty()
-            ? "CTCP request received"
-            : ("CTCP from " + fromNick + (channel == null ? "" : (" in " + channel)));
+        String title =
+            fromNick.isEmpty()
+                ? "CTCP request received"
+                : ("CTCP from " + fromNick + (channel == null ? "" : (" in " + channel)));
         String body = command.isEmpty() ? "CTCP request" : command;
         if (!argument.isEmpty()) body = body + " " + argument;
 
         notifyIrcEvent(
-            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
-            sid,
-            channel,
-            fromNick,
-            title,
-            body);
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED, sid, channel, fromNick, title, body);
       }
       case IrcEvent.AwayStatusChanged ev -> {
         awayRoutingState.setAway(sid, ev.away());
@@ -1139,10 +1154,13 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       case IrcEvent.WhoisResult ev -> {
         TargetRef dest = whoisRoutingState.remove(sid, ev.nick());
         if (dest == null) dest = status;
-        postTo(dest, true, d -> {
-          ui.appendStatus(d, "(whois)", "WHOIS for " + ev.nick());
-          for (String line : ev.lines()) ui.appendStatus(d, "(whois)", line);
-        });
+        postTo(
+            dest,
+            true,
+            d -> {
+              ui.appendStatus(d, "(whois)", "WHOIS for " + ev.nick());
+              for (String line : ev.lines()) ui.appendStatus(d, "(whois)", line);
+            });
       }
 
       case IrcEvent.InvitedToChannel ev -> {
@@ -1163,7 +1181,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         } else {
           String invitee = Objects.toString(ev.invitee(), "").trim();
           String selfNick = irc.currentNick(sid).orElse("");
-          boolean isSelfInvite = invitee.isBlank() || (!selfNick.isBlank() && invitee.equalsIgnoreCase(selfNick));
+          boolean isSelfInvite =
+              invitee.isBlank() || (!selfNick.isBlank() && invitee.equalsIgnoreCase(selfNick));
 
           if (!isSelfInvite) {
             String rendered = inviter + " invited " + invitee + " to " + channel;
@@ -1176,30 +1195,45 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
                 rendered,
                 InterceptorEventType.INVITE);
           } else {
-            PendingInviteState.RecordResult recorded = pendingInviteState.record(
-                ev.at(), sid, channel, inviter, invitee, ev.reason(), ev.inviteNotify());
+            PendingInviteState.RecordResult recorded =
+                pendingInviteState.record(
+                    ev.at(), sid, channel, inviter, invitee, ev.reason(), ev.inviteNotify());
             PendingInviteState.PendingInvite invite = recorded.invite();
             TargetRef inviteStatus = new TargetRef(sid, "status");
 
             if (recorded.collapsed()) {
-              String rendered = inviter + " invited you to " + channel + " (repeated x" + invite.repeatCount() + ")";
+              String rendered =
+                  inviter
+                      + " invited you to "
+                      + channel
+                      + " (repeated x"
+                      + invite.repeatCount()
+                      + ")";
               postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(invite)", rendered));
             } else {
               String reason = Objects.toString(invite.reason(), "").trim();
               String rendered = inviter + " invited you to " + channel + " on " + sid;
               if (!reason.isEmpty()) rendered = rendered + " (" + reason + ")";
               String finalRendered = rendered;
-              String actions = "Actions: /invjoin " + invite.id()
-                  + " | /join -i"
-                  + " | /invignore " + invite.id()
-                  + " | /invwhois " + invite.id()
-                  + " | /invblock " + invite.id()
-                  + " | /invites";
+              String actions =
+                  "Actions: /invjoin "
+                      + invite.id()
+                      + " | /join -i"
+                      + " | /invignore "
+                      + invite.id()
+                      + " | /invwhois "
+                      + invite.id()
+                      + " | /invblock "
+                      + invite.id()
+                      + " | /invites";
 
-              postTo(dest, true, d -> {
-                ui.appendStatusAt(d, ev.at(), "(invite)", finalRendered);
-                ui.appendStatus(d, "(invite)", actions);
-              });
+              postTo(
+                  dest,
+                  true,
+                  d -> {
+                    ui.appendStatusAt(d, ev.at(), "(invite)", finalRendered);
+                    ui.appendStatus(d, "(invite)", actions);
+                  });
               recordInterceptorEvent(
                   sid,
                   channel,
@@ -1208,15 +1242,18 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
                   finalRendered,
                   InterceptorEventType.INVITE);
 
-              boolean customInviteNotified = notifyIrcEvent(
-                  IrcEventNotificationRule.EventType.INVITE_RECEIVED,
-                  sid,
-                  channel,
-                  inviter,
-                  "Invite" + (channel.isBlank() ? "" : " to " + channel),
-                  finalRendered);
-              boolean inviteRulesEnabled = ircEventNotificationService != null
-                  && ircEventNotificationService.hasEnabledRuleFor(IrcEventNotificationRule.EventType.INVITE_RECEIVED);
+              boolean customInviteNotified =
+                  notifyIrcEvent(
+                      IrcEventNotificationRule.EventType.INVITE_RECEIVED,
+                      sid,
+                      channel,
+                      inviter,
+                      "Invite" + (channel.isBlank() ? "" : " to " + channel),
+                      finalRendered);
+              boolean inviteRulesEnabled =
+                  ircEventNotificationService != null
+                      && ircEventNotificationService.hasEnabledRuleFor(
+                          IrcEventNotificationRule.EventType.INVITE_RECEIVED);
               if (!customInviteNotified && !inviteRulesEnabled) {
                 try {
                   trayNotificationService.notifyInvite(sid, channel, inviter, reason);
@@ -1226,16 +1263,21 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
               if (pendingInviteState.inviteAutoJoinEnabled()) {
                 if (!connectionCoordinator.isConnected(sid)) {
-                  ui.appendStatus(inviteStatus, "(invite)", "Auto-join is enabled, but you are not connected.");
+                  ui.appendStatus(
+                      inviteStatus, "(invite)", "Auto-join is enabled, but you are not connected.");
                 } else if (containsCrlf(channel)) {
-                  ui.appendStatus(inviteStatus, "(invite)", "Refusing to auto-join malformed invite channel.");
+                  ui.appendStatus(
+                      inviteStatus, "(invite)", "Refusing to auto-join malformed invite channel.");
                 } else {
-                  ui.appendStatus(inviteStatus, "(invite)", "Auto-join enabled, joining " + channel + "...");
+                  ui.appendStatus(
+                      inviteStatus, "(invite)", "Auto-join enabled, joining " + channel + "...");
                   disposables.add(
                       irc.joinChannel(sid, channel)
                           .subscribe(
                               () -> pendingInviteState.remove(invite.id()),
-                              err -> ui.appendError(inviteStatus, "(invite-error)", String.valueOf(err))));
+                              err ->
+                                  ui.appendError(
+                                      inviteStatus, "(invite-error)", String.valueOf(err))));
                 }
               }
             }
@@ -1282,12 +1324,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             "Part in " + channel,
             body);
         recordInterceptorEvent(
-            sid,
-            channel,
-            nick,
-            learnedHostmaskForNick(sid, nick),
-            body,
-            InterceptorEventType.PART);
+            sid, channel, nick, learnedHostmaskForNick(sid, nick), body, InterceptorEventType.PART);
       }
 
       case IrcEvent.LeftChannel ev -> {
@@ -1370,12 +1407,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
             "Quit" + (channel.isEmpty() ? "" : " in " + channel),
             body);
         recordInterceptorEvent(
-            sid,
-            channel,
-            nick,
-            learnedHostmaskForNick(sid, nick),
-            body,
-            InterceptorEventType.QUIT);
+            sid, channel, nick, learnedHostmaskForNick(sid, nick), body, InterceptorEventType.QUIT);
         maybeNotifyUserKlineFromQuit(sid, ev);
         maybeNotifyNetsplitDetected(sid, ev);
       }
@@ -1387,9 +1419,11 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         String channel = Objects.toString(ev.channel(), "").trim();
         String oldNick = Objects.toString(ev.oldNick(), "").trim();
         String newNick = Objects.toString(ev.newNick(), "").trim();
-        String body = (oldNick.isEmpty() ? "(unknown)" : oldNick) + " is now known as "
-            + (newNick.isEmpty() ? "(unknown)" : newNick)
-            + (channel.isEmpty() ? "" : " in " + channel);
+        String body =
+            (oldNick.isEmpty() ? "(unknown)" : oldNick)
+                + " is now known as "
+                + (newNick.isEmpty() ? "(unknown)" : newNick)
+                + (channel.isEmpty() ? "" : " in " + channel);
         notifyIrcEvent(
             IrcEventNotificationRule.EventType.USER_NICK_CHANGED,
             sid,
@@ -1408,7 +1442,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
       case IrcEvent.JoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
-        TargetRef joinOrigin = joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
+        TargetRef joinOrigin =
+            joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         runtimeConfig.rememberJoinedChannel(sid, ev.channel());
         joinRoutingState.clear(sid, ev.channel());
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
@@ -1416,14 +1451,16 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
         ensureTargetExists(chan);
         ui.appendStatus(chan, "(join)", "Joined " + ev.channel());
-        // Auto-joins should not steal focus; only switch when this join came from an explicit user /join.
+        // Auto-joins should not steal focus; only switch when this join came from an explicit user
+        // /join.
         if (joinOrigin != null) {
           ui.selectTarget(chan);
         }
       }
 
       case IrcEvent.JoinFailed ev -> {
-        TargetRef origin = joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
+        TargetRef origin =
+            joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         joinRoutingState.clear(sid, ev.channel());
 
         TargetRef dest = origin;
@@ -1486,14 +1523,16 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.UserAwayStateObserved ev -> {
-        if (ev.awayState() == IrcEvent.AwayState.AWAY || ev.awayState() == IrcEvent.AwayState.HERE) {
+        if (ev.awayState() == IrcEvent.AwayState.AWAY
+            || ev.awayState() == IrcEvent.AwayState.HERE) {
           markPrivateMessagePeerOnline(sid, ev.nick());
         }
         targetCoordinator.onUserAwayStateObserved(sid, ev);
       }
 
       case IrcEvent.UserAccountStateObserved ev -> {
-        if (ev.accountState() == IrcEvent.AccountState.LOGGED_IN || ev.accountState() == IrcEvent.AccountState.LOGGED_OUT) {
+        if (ev.accountState() == IrcEvent.AccountState.LOGGED_IN
+            || ev.accountState() == IrcEvent.AccountState.LOGGED_OUT) {
           markPrivateMessagePeerOnline(sid, ev.nick());
         }
         targetCoordinator.onUserAccountStateObserved(sid, ev);
@@ -1527,7 +1566,10 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         TargetRef monitor = TargetRef.monitorGroup(sid);
         ensureTargetExists(monitor);
         List<String> nicks = ev.nicks();
-        String rendered = nicks.isEmpty() ? "Monitor list: (empty)" : ("Monitor list: " + String.join(", ", nicks));
+        String rendered =
+            nicks.isEmpty()
+                ? "Monitor list: (empty)"
+                : ("Monitor list: " + String.join(", ", nicks));
         ui.appendStatusAt(monitor, ev.at(), "(monitor)", rendered);
       }
 
@@ -1589,7 +1631,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           typingAvailable = irc != null && irc.isTypingAvailable(sid);
         } catch (Exception ignored) {
         }
-        maybeLogTypingObserved(sid, Objects.toString(ev.target(), ""), from, state, prefEnabled, typingAvailable);
+        maybeLogTypingObserved(
+            sid, Objects.toString(ev.target(), ""), from, state, prefEnabled, typingAvailable);
 
         ui.showTypingIndicator(dest, from, state);
         if (prefEnabled) {
@@ -1627,7 +1670,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         String from = Objects.toString(ev.from(), "").trim();
         String targetMsgId = Objects.toString(ev.messageId(), "").trim();
         if (targetMsgId.isEmpty()) return;
-        ui.applyMessageRedaction(dest, ev.at(), from, targetMsgId, "", Map.of("draft/delete", targetMsgId));
+        ui.applyMessageRedaction(
+            dest, ev.at(), from, targetMsgId, "", Map.of("draft/delete", targetMsgId));
       }
 
       case IrcEvent.Ircv3CapabilityChanged ev -> {
@@ -1653,30 +1697,19 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       }
 
       case IrcEvent.Error ev -> {
-          connectionCoordinator.noteConnectionError(sid, ev.message());
-          ui.appendError(status, "(error)", ev.message());
-          recordInterceptorEvent(
-              sid,
-              "status",
-              "server",
-              "",
-              ev.message(),
-              InterceptorEventType.ERROR);
-          maybeNotifyKline(sid, ev.message(), "Server restriction");
+        connectionCoordinator.noteConnectionError(sid, ev.message());
+        ui.appendError(status, "(error)", ev.message());
+        recordInterceptorEvent(
+            sid, "status", "server", "", ev.message(), InterceptorEventType.ERROR);
+        maybeNotifyKline(sid, ev.message(), "Server restriction");
       }
 
-      default -> {
-      }
+      default -> {}
     }
   }
 
   private NotificationRuleMatch firstRuleMatchForUnreadChannel(
-      String serverId,
-      TargetRef chan,
-      TargetRef active,
-      String from,
-      String text
-  ) {
+      String serverId, TargetRef chan, TargetRef active, String from, String text) {
     if (chan == null || text == null || text.isBlank()) return null;
     if (active != null && chan.equals(active)) return null;
     if (isFromSelf(serverId, from)) return null;
@@ -1698,8 +1731,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       String channel,
       String sourceNick,
       String title,
-      String body
-  ) {
+      String body) {
     if (eventType == null || ircEventNotificationService == null) return false;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
@@ -1711,15 +1743,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     String activeTgt = active != null ? active.target() : null;
     try {
       return ircEventNotificationService.notifyConfigured(
-          eventType,
-          sid,
-          channel,
-          src,
-          sourceIsSelf,
-          title,
-          body,
-          activeSid,
-          activeTgt);
+          eventType, sid, channel, src, sourceIsSelf, title, body, activeSid, activeTgt);
     } catch (Exception ignored) {
       return false;
     }
@@ -1729,13 +1753,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     String msg = Objects.toString(message, "").trim();
     if (msg.isEmpty()) return;
     if (!looksLikeKlineMessage(msg)) return;
-    notifyIrcEvent(
-        IrcEventNotificationRule.EventType.YOU_KLINED,
-        serverId,
-        null,
-        null,
-        title,
-        msg);
+    notifyIrcEvent(IrcEventNotificationRule.EventType.YOU_KLINED, serverId, null, null, title, msg);
   }
 
   private void maybeNotifyUserKlineFromQuit(String serverId, IrcEvent.UserQuitChannel ev) {
@@ -1781,7 +1799,9 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
     if (lastNetsplitNotifyAtMs.size() > NETSPLIT_NOTIFY_MAX_KEYS) {
       long cutoff = now - (NETSPLIT_NOTIFY_DEBOUNCE_MS * 3L);
-      lastNetsplitNotifyAtMs.entrySet().removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
+      lastNetsplitNotifyAtMs
+          .entrySet()
+          .removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
     }
 
     String channel = Objects.toString(ev.channel(), "").trim();
@@ -1823,11 +1843,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     if (!s.contains(".")) return false;
     for (int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
-      boolean ok = Character.isLetterOrDigit(c)
-          || c == '.'
-          || c == '-'
-          || c == '_'
-          || c == ':';
+      boolean ok = Character.isLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == ':';
       if (!ok) return false;
     }
     return true;
@@ -1864,28 +1880,59 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
       IrcEventNotificationRule.EventType type = null;
       switch (ch.mode()) {
-        case 'o' -> type = ch.add() ? IrcEventNotificationRule.EventType.OPPED : IrcEventNotificationRule.EventType.DEOPPED;
-        case 'v' -> type = ch.add() ? IrcEventNotificationRule.EventType.VOICED : IrcEventNotificationRule.EventType.DEVOICED;
-        case 'h' -> type = ch.add() ? IrcEventNotificationRule.EventType.HALF_OPPED : IrcEventNotificationRule.EventType.DEHALF_OPPED;
+        case 'o' ->
+            type =
+                ch.add()
+                    ? IrcEventNotificationRule.EventType.OPPED
+                    : IrcEventNotificationRule.EventType.DEOPPED;
+        case 'v' ->
+            type =
+                ch.add()
+                    ? IrcEventNotificationRule.EventType.VOICED
+                    : IrcEventNotificationRule.EventType.DEVOICED;
+        case 'h' ->
+            type =
+                ch.add()
+                    ? IrcEventNotificationRule.EventType.HALF_OPPED
+                    : IrcEventNotificationRule.EventType.DEHALF_OPPED;
         case 'b' -> {
           if (ch.add()) type = IrcEventNotificationRule.EventType.BANNED;
         }
-        default -> {
-        }
+        default -> {}
       }
       if (type == null) continue;
 
       String arg = Objects.toString(ch.arg(), "").trim();
-      String body = switch (type) {
-        case OPPED -> by + " gave operator to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        case DEOPPED -> by + " removed operator from " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        case VOICED -> by + " gave voice to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        case DEVOICED -> by + " removed voice from " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        case HALF_OPPED -> by + " gave half-op to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        case DEHALF_OPPED -> by + " removed half-op from " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        case BANNED -> by + " set ban " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-        default -> by + " changed mode in " + channel;
-      };
+      String body =
+          switch (type) {
+            case OPPED ->
+                by + " gave operator to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
+            case DEOPPED ->
+                by
+                    + " removed operator from "
+                    + (arg.isEmpty() ? "(unknown)" : arg)
+                    + " in "
+                    + channel;
+            case VOICED ->
+                by + " gave voice to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
+            case DEVOICED ->
+                by
+                    + " removed voice from "
+                    + (arg.isEmpty() ? "(unknown)" : arg)
+                    + " in "
+                    + channel;
+            case HALF_OPPED ->
+                by + " gave half-op to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
+            case DEHALF_OPPED ->
+                by
+                    + " removed half-op from "
+                    + (arg.isEmpty() ? "(unknown)" : arg)
+                    + " in "
+                    + channel;
+            case BANNED ->
+                by + " set ban " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
+            default -> by + " changed mode in " + channel;
+          };
 
       notifyIrcEvent(type, serverId, channel, actor, "Mode change in " + channel, body);
 
@@ -1899,10 +1946,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   }
 
   private boolean isSelfModeTargetForEvent(
-      String serverId,
-      IrcEventNotificationRule.EventType baseType,
-      String rawTarget
-  ) {
+      String serverId, IrcEventNotificationRule.EventType baseType, String rawTarget) {
     if (baseType == IrcEventNotificationRule.EventType.BANNED) {
       return isSelfBanTarget(serverId, rawTarget);
     }
@@ -1942,9 +1986,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   }
 
   private static String selfTargetedModeTitle(
-      IrcEventNotificationRule.EventType selfType,
-      String channel
-  ) {
+      IrcEventNotificationRule.EventType selfType, String channel) {
     if (selfType == null) return "Mode change in " + channel;
     return switch (selfType) {
       case YOU_OPPED -> "You were opped in " + channel;
@@ -1959,10 +2001,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   }
 
   private static String selfTargetedModeBody(
-      IrcEventNotificationRule.EventType selfType,
-      String by,
-      String channel
-  ) {
+      IrcEventNotificationRule.EventType selfType, String by, String channel) {
     if (selfType == null) return by + " changed your mode in " + channel;
     return switch (selfType) {
       case YOU_OPPED -> by + " gave you operator in " + channel;
@@ -2030,18 +2069,14 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     };
   }
 
-  private record ModeChangeToken(boolean add, char mode, String arg) {
-  }
+  private record ModeChangeToken(boolean add, char mode, String arg) {}
 
   private void recordRuleMatchIfPresent(
-      TargetRef chan,
-      String from,
-      String text,
-      NotificationRuleMatch match
-  ) {
+      TargetRef chan, String from, String text, NotificationRuleMatch match) {
     if (chan == null || match == null) return;
     ui.markHighlight(chan);
-    ui.recordRuleMatch(chan, from, match.ruleLabel(), snippetAround(text, match.start(), match.end()));
+    ui.recordRuleMatch(
+        chan, from, match.ruleLabel(), snippetAround(text, match.start(), match.end()));
   }
 
   private void recordInterceptorEvent(
@@ -2050,8 +2085,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       String fromNick,
       String fromHostmask,
       String text,
-      InterceptorEventType eventType
-  ) {
+      InterceptorEventType eventType) {
     if (interceptorStore == null) return;
     String sid = Objects.toString(serverId, "").trim();
     String from = Objects.toString(fromNick, "").trim();
@@ -2076,11 +2110,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   }
 
   private boolean tryResolvePendingEchoChannelMessage(
-      String sid,
-      TargetRef chan,
-      TargetRef active,
-      IrcEvent.ChannelMessage ev
-  ) {
+      String sid, TargetRef chan, TargetRef active, IrcEvent.ChannelMessage ev) {
     if (!isFromSelf(sid, ev.from())) return false;
     var pending = pendingEchoMessageState.consumeByTargetAndText(chan, ev.from(), ev.text());
     if (pending.isEmpty()) return false;
@@ -2091,14 +2121,15 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         active,
         true,
         d -> {
-          boolean replaced = ui.resolvePendingOutgoingChat(
-              d,
-              entry.pendingId(),
-              ev.at(),
-              ev.from(),
-              ev.text(),
-              ev.messageId(),
-              ev.ircv3Tags());
+          boolean replaced =
+              ui.resolvePendingOutgoingChat(
+                  d,
+                  entry.pendingId(),
+                  ev.at(),
+                  ev.from(),
+                  ev.text(),
+                  ev.messageId(),
+                  ev.ircv3Tags());
           if (!replaced) {
             ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), true, ev.messageId(), ev.ircv3Tags());
           }
@@ -2107,11 +2138,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   }
 
   private boolean tryResolvePendingEchoPrivateMessage(
-      String sid,
-      TargetRef fallbackPm,
-      IrcEvent.PrivateMessage ev,
-      boolean allowAutoOpen
-  ) {
+      String sid, TargetRef fallbackPm, IrcEvent.PrivateMessage ev, boolean allowAutoOpen) {
     if (!isFromSelf(sid, ev.from())) return false;
 
     var pending = pendingEchoMessageState.consumeByTargetAndText(fallbackPm, ev.from(), ev.text());
@@ -2127,27 +2154,30 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
           dest,
           true,
           d -> {
-            boolean replaced = ui.resolvePendingOutgoingChat(
-                d,
-                entry.pendingId(),
-                ev.at(),
-                ev.from(),
-                ev.text(),
-                ev.messageId(),
-                ev.ircv3Tags());
+            boolean replaced =
+                ui.resolvePendingOutgoingChat(
+                    d,
+                    entry.pendingId(),
+                    ev.at(),
+                    ev.from(),
+                    ev.text(),
+                    ev.messageId(),
+                    ev.ircv3Tags());
             if (!replaced) {
-              ui.appendChatAt(d, ev.at(), ev.from(), ev.text(), true, ev.messageId(), ev.ircv3Tags());
+              ui.appendChatAt(
+                  d, ev.at(), ev.from(), ev.text(), true, ev.messageId(), ev.ircv3Tags());
             }
           });
     } else {
-      boolean replaced = ui.resolvePendingOutgoingChat(
-          dest,
-          entry.pendingId(),
-          ev.at(),
-          ev.from(),
-          ev.text(),
-          ev.messageId(),
-          ev.ircv3Tags());
+      boolean replaced =
+          ui.resolvePendingOutgoingChat(
+              dest,
+              entry.pendingId(),
+              ev.at(),
+              ev.from(),
+              ev.text(),
+              ev.messageId(),
+              ev.ircv3Tags());
       if (!replaced) {
         ui.appendChatAt(dest, ev.at(), ev.from(), ev.text(), true, ev.messageId(), ev.ircv3Tags());
       }
@@ -2162,8 +2192,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     if (sid == null || sid.isBlank()) return false;
     if (target == null || target.isUiOnly()) return false;
     if (!irc.isMessageEditAvailable(sid)) return false;
@@ -2184,20 +2213,17 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   private void failPendingEchoesForServer(String sid, String reason) {
     if (sid == null || sid.isBlank()) return;
     Instant now = Instant.now();
-    for (PendingEchoMessageState.PendingOutboundChat pending : pendingEchoMessageState.drainServer(sid)) {
+    for (PendingEchoMessageState.PendingOutboundChat pending :
+        pendingEchoMessageState.drainServer(sid)) {
       TargetRef target = pending.target();
       if (target == null) continue;
       ui.failPendingOutgoingChat(
-          target,
-          pending.pendingId(),
-          now,
-          pending.fromNick(),
-          pending.text(),
-          reason);
+          target, pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
     }
   }
 
-  private void updateServerMetadataFromServerResponseLine(String serverId, IrcEvent.ServerResponseLine ev) {
+  private void updateServerMetadataFromServerResponseLine(
+      String serverId, IrcEvent.ServerResponseLine ev) {
     if (ev == null) return;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
@@ -2254,7 +2280,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     }
   }
 
-  private record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
+  private record ParsedIrcLine(
+      String prefix, String command, List<String> params, String trailing) {}
 
   private static ParsedIrcLine parseIrcLineForMetadata(String rawLine) {
     String s = Objects.toString(rawLine, "").trim();
@@ -2298,17 +2325,23 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     return new ParsedIrcLine(prefix, command, List.copyOf(params), trailing);
   }
 
-  private void handleServerResponseLine(String sid, TargetRef status, IrcEvent.ServerResponseLine ev) {
+  private void handleServerResponseLine(
+      String sid, TargetRef status, IrcEvent.ServerResponseLine ev) {
     ensureTargetExists(status);
     String msg = Objects.toString(ev.message(), "");
     String rendered = "[" + ev.code() + "] " + msg;
     updateServerMetadataFromServerResponseLine(sid, ev);
-    boolean suppressStatusLine = (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
+    boolean suppressStatusLine =
+        (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
     if (ev.code() == 303 && monitorIsonFallbackService.shouldSuppressIsonServerResponse(sid)) {
       suppressStatusLine = true;
     }
     if (ev.code() == 321) {
-      rendered = "[321] " + (msg.isBlank() ? "Channel list follows (see Channel List)." : (msg + " (see Channel List)."));
+      rendered =
+          "[321] "
+              + (msg.isBlank()
+                  ? "Channel list follows (see Channel List)."
+                  : (msg + " (see Channel List)."));
     } else if (ev.code() == 323 && !msg.isBlank()) {
       rendered = "[323] " + msg + " (see Channel List).";
     }
@@ -2320,10 +2353,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
         LabeledResponseRoutingState.PendingLabeledRequest transitioned =
             labeledResponseRoutingState.markOutcomeIfPending(
-                sid,
-                label,
-                LabeledResponseRoutingState.Outcome.SUCCESS,
-                ev.at());
+                sid, label, LabeledResponseRoutingState.Outcome.SUCCESS, ev.at());
         if (transitioned != null) {
           appendLabeledOutcome(
               dest,
@@ -2337,13 +2367,12 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
         String preview = Objects.toString(pending.requestPreview(), "").trim();
         String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
         if (!suppressStatusLine) {
-          postTo(dest, true, d -> ui.appendStatusAt(
-              d,
-              ev.at(),
-              "(server)",
-              correlated,
-              ev.messageId(),
-              ev.ircv3Tags()));
+          postTo(
+              dest,
+              true,
+              d ->
+                  ui.appendStatusAt(
+                      d, ev.at(), "(server)", correlated, ev.messageId(), ev.ircv3Tags()));
         }
         return;
       }
@@ -2355,8 +2384,17 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
     if (ev.code() == 465 || ev.code() == 466 || ev.code() == 463 || ev.code() == 464) {
       String msgTrim = Objects.toString(ev.message(), "").trim();
-      String body = msgTrim.isBlank() ? ("Server response [" + ev.code() + "]") : ("[" + ev.code() + "] " + msgTrim);
-      notifyIrcEvent(IrcEventNotificationRule.EventType.YOU_KLINED, sid, null, null, "Server restriction", body);
+      String body =
+          msgTrim.isBlank()
+              ? ("Server response [" + ev.code() + "]")
+              : ("[" + ev.code() + "] " + msgTrim);
+      notifyIrcEvent(
+          IrcEventNotificationRule.EventType.YOU_KLINED,
+          sid,
+          null,
+          null,
+          "Server restriction",
+          body);
     } else {
       maybeNotifyKline(sid, ev.message(), "Server restriction");
     }
@@ -2389,18 +2427,18 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
 
         String preview = Objects.toString(pending.requestPreview(), "").trim();
         String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
-        postTo(dest, true, d -> ui.appendStatusAt(
-            d,
-            ev.at(),
-            "(standard-reply)",
-            correlated,
-            ev.messageId(),
-            ev.ircv3Tags()));
+        postTo(
+            dest,
+            true,
+            d ->
+                ui.appendStatusAt(
+                    d, ev.at(), "(standard-reply)", correlated, ev.messageId(), ev.ircv3Tags()));
         return;
       }
       rendered = rendered + " {label=" + label + "}";
     }
-    ui.appendStatusAt(status, ev.at(), "(standard-reply)", rendered, ev.messageId(), ev.ircv3Tags());
+    ui.appendStatusAt(
+        status, ev.at(), "(standard-reply)", rendered, ev.messageId(), ev.ircv3Tags());
     maybeNotifyKline(sid, ev.description(), "Server restriction");
   }
 
@@ -2411,7 +2449,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     for (LabeledResponseRoutingState.TimedOutLabeledRequest timeout : timedOut) {
       if (timeout == null || timeout.request() == null) continue;
       TargetRef status = new TargetRef(timeout.serverId(), "status");
-      TargetRef dest = normalizeLabeledDestination(timeout.serverId(), status, timeout.request().originTarget());
+      TargetRef dest =
+          normalizeLabeledDestination(timeout.serverId(), status, timeout.request().originTarget());
       appendLabeledOutcome(
           dest,
           timeout.timedOutAt(),
@@ -2425,19 +2464,16 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
   private void handlePendingEchoTimeouts() {
     Instant now = Instant.now();
     List<PendingEchoMessageState.PendingOutboundChat> timedOut =
-        pendingEchoMessageState.collectTimedOut(PENDING_ECHO_TIMEOUT, PENDING_ECHO_TIMEOUT_BATCH_MAX, now);
+        pendingEchoMessageState.collectTimedOut(
+            PENDING_ECHO_TIMEOUT, PENDING_ECHO_TIMEOUT_BATCH_MAX, now);
     if (timedOut == null || timedOut.isEmpty()) return;
 
-    String reason = "Timed out waiting for server echo after " + PENDING_ECHO_TIMEOUT.toSeconds() + "s";
+    String reason =
+        "Timed out waiting for server echo after " + PENDING_ECHO_TIMEOUT.toSeconds() + "s";
     for (PendingEchoMessageState.PendingOutboundChat pending : timedOut) {
       if (pending == null || pending.target() == null) continue;
       ui.failPendingOutgoingChat(
-          pending.target(),
-          pending.pendingId(),
-          now,
-          pending.fromNick(),
-          pending.text(),
-          reason);
+          pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
     }
   }
 
@@ -2462,28 +2498,30 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       String label,
       String requestPreview,
       LabeledResponseRoutingState.Outcome outcome,
-      String detail
-  ) {
+      String detail) {
     String lbl = Objects.toString(label, "").trim();
     if (lbl.isEmpty()) return;
     String preview = Objects.toString(requestPreview, "").trim();
     String d = Objects.toString(detail, "").trim();
-    String state = switch (outcome) {
-      case FAILURE -> "failed";
-      case TIMEOUT -> "timed out";
-      case SUCCESS -> "completed";
-      case PENDING -> "pending";
-    };
+    String state =
+        switch (outcome) {
+          case FAILURE -> "failed";
+          case TIMEOUT -> "timed out";
+          case SUCCESS -> "completed";
+          case PENDING -> "pending";
+        };
 
-    StringBuilder text = new StringBuilder("Request ").append(state).append(" {label=").append(lbl).append('}');
+    StringBuilder text =
+        new StringBuilder("Request ").append(state).append(" {label=").append(lbl).append('}');
     if (!preview.isBlank()) text.append(": ").append(preview);
     if (!d.isBlank()) text.append(" (").append(d).append(')');
-    String from = switch (outcome) {
-      case FAILURE -> "(label-fail)";
-      case TIMEOUT -> "(label-timeout)";
-      case SUCCESS -> "(label-ok)";
-      case PENDING -> "(label)";
-    };
+    String from =
+        switch (outcome) {
+          case FAILURE -> "(label-fail)";
+          case TIMEOUT -> "(label-timeout)";
+          case SUCCESS -> "(label-ok)";
+          case PENDING -> "(label)";
+        };
     ui.appendStatusAt(dest, at == null ? Instant.now() : at, from, text.toString());
   }
 
@@ -2691,7 +2729,16 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     if (ch >= '0' && ch <= '9') return true;
     if (ch >= 'A' && ch <= 'Z') return true;
     if (ch >= 'a' && ch <= 'z') return true;
-    return ch == '[' || ch == ']' || ch == '\\' || ch == '`' || ch == '_' || ch == '^' || ch == '{' || ch == '|' || ch == '}' || ch == '-';
+    return ch == '['
+        || ch == ']'
+        || ch == '\\'
+        || ch == '`'
+        || ch == '_'
+        || ch == '^'
+        || ch == '{'
+        || ch == '|'
+        || ch == '}'
+        || ch == '-';
   }
 
   private static String renderOtherKick(String nick, String by, String reason) {
@@ -2731,8 +2778,7 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
       String from,
       String state,
       boolean prefEnabled,
-      boolean typingAvailable
-  ) {
+      boolean typingAvailable) {
     if (!log.isInfoEnabled()) return;
 
     String sid = Objects.toString(serverId, "").trim();
@@ -2772,7 +2818,8 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     }
   }
 
-  private void postTo(TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
+  private void postTo(
+      TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     if (dest == null) dest = safeStatusTarget();
     ensureTargetExists(dest);
 

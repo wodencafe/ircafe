@@ -1,10 +1,6 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.settings.UiSettings;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.swing.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,18 +9,22 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import javax.swing.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handles IRCv3 typing indicators (local state emissions and remote hint banner).
  *
  * <p>Responsibilities:
+ *
  * <ul>
- *   <li>Emit local typing state changes (active/paused/done), including throttling and pause timer.</li>
- *   <li>Gate emissions based on user preferences (typing indicators enabled).</li>
- *   <li>Show/hide a small remote "is typing…" banner with auto-expire.</li>
+ *   <li>Emit local typing state changes (active/paused/done), including throttling and pause timer.
+ *   <li>Gate emissions based on user preferences (typing indicators enabled).
+ *   <li>Show/hide a small remote "is typing…" banner with auto-expire.
  * </ul>
  *
- * <p>This class is Swing/EDT oriented and uses {@link javax.swing.Timer}.</p>
+ * <p>This class is Swing/EDT oriented and uses {@link javax.swing.Timer}.
  */
 final class MessageInputTypingSupport {
 
@@ -73,13 +73,13 @@ final class MessageInputTypingSupport {
       TypingDotsIndicator typingDotsIndicator,
       TypingSignalIndicator typingSignalIndicator,
       Supplier<UiSettings> settingsSupplier,
-      MessageInputUiHooks hooks
-  ) {
+      MessageInputUiHooks hooks) {
     this.input = Objects.requireNonNull(input, "input");
     this.typingBanner = Objects.requireNonNull(typingBanner, "typingBanner");
     this.typingBannerLabel = Objects.requireNonNull(typingBannerLabel, "typingBannerLabel");
     this.typingDotsIndicator = Objects.requireNonNull(typingDotsIndicator, "typingDotsIndicator");
-    this.typingSignalIndicator = Objects.requireNonNull(typingSignalIndicator, "typingSignalIndicator");
+    this.typingSignalIndicator =
+        Objects.requireNonNull(typingSignalIndicator, "typingSignalIndicator");
     this.settingsSupplier = settingsSupplier != null ? settingsSupplier : () -> null;
     this.hooks = hooks;
 
@@ -112,18 +112,16 @@ final class MessageInputTypingSupport {
     typingSignalIndicator.pulse(s);
   }
 
-  /**
-   * Call from the input document listener (only when the edit was user-driven).
-   */
+  /** Call from the input document listener (only when the edit was user-driven). */
   void onUserEdit(boolean programmaticEdit) {
     if (programmaticEdit) return;
     fireTypingStateFromUserEdit();
   }
 
   /**
-   * Called when the draft text is swapped programmatically (e.g., switching buffers).
-   * This should not emit anything; it just resets the local timers so we don't keep
-   * sending PAUSED for an old buffer.
+   * Called when the draft text is swapped programmatically (e.g., switching buffers). This should
+   * not emit anything; it just resets the local timers so we don't keep sending PAUSED for an old
+   * buffer.
    */
   void onDraftTextSetProgrammatically() {
     typingPauseTimer.stop();
@@ -134,8 +132,8 @@ final class MessageInputTypingSupport {
   /**
    * Called when the user switches away from the current chat buffer.
    *
-   * <p>If there is still draft text, emit PAUSED instead of DONE so peers can
-   * distinguish "still composing, temporarily away" from "finished typing".</p>
+   * <p>If there is still draft text, emit PAUSED instead of DONE so peers can distinguish "still
+   * composing, temporarily away" from "finished typing".
    */
   void flushTypingForBufferSwitch() {
     typingPauseTimer.stop();
@@ -432,7 +430,8 @@ final class MessageInputTypingSupport {
         + formatTypingClause(paused, "paused typing", "paused typing");
   }
 
-  private static String formatTypingClause(List<String> nicks, String singularSuffix, String pluralSuffix) {
+  private static String formatTypingClause(
+      List<String> nicks, String singularSuffix, String pluralSuffix) {
     if (nicks == null || nicks.isEmpty()) return "";
     String names = formatNickList(nicks);
     if (names.isEmpty()) return "";

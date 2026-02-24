@@ -35,8 +35,9 @@ public class PushyNotificationService {
   private final PushySettingsBus settingsBus;
   private final ExecutorService executor;
 
-  public PushyNotificationService(PushySettingsBus settingsBus,
-                                  @Qualifier(ExecutorConfig.PUSHY_NOTIFICATION_EXECUTOR) ExecutorService executor) {
+  public PushyNotificationService(
+      PushySettingsBus settingsBus,
+      @Qualifier(ExecutorConfig.PUSHY_NOTIFICATION_EXECUTOR) ExecutorService executor) {
     this.settingsBus = settingsBus;
     this.executor = executor;
   }
@@ -48,8 +49,7 @@ public class PushyNotificationService {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
     PushyProperties properties = currentProperties();
     if (!properties.configured()) return false;
 
@@ -61,15 +61,16 @@ public class PushyNotificationService {
     String finalBody = Objects.toString(body, "").trim();
     if (finalBody.isEmpty()) finalBody = Objects.toString(eventType, "Event");
 
-    String payload = buildPayload(
-        properties,
-        eventType,
-        serverId,
-        channel,
-        sourceNick,
-        sourceIsSelf,
-        finalTitle,
-        finalBody);
+    String payload =
+        buildPayload(
+            properties,
+            eventType,
+            serverId,
+            channel,
+            sourceNick,
+            sourceIsSelf,
+            finalTitle,
+            finalBody);
     if (payload == null || payload.isBlank()) return false;
 
     String url = endpoint + "?api_key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
@@ -113,16 +114,19 @@ public class PushyNotificationService {
 
   private PushResult sendPush(PushyProperties properties, String url, String payload) {
     try {
-      HttpClient client = HttpClient.newBuilder()
-          .connectTimeout(Duration.ofSeconds(properties.connectTimeoutSeconds()))
-          .build();
-      HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-          .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()))
-          .header("Content-Type", "application/json")
-          .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-          .build();
+      HttpClient client =
+          HttpClient.newBuilder()
+              .connectTimeout(Duration.ofSeconds(properties.connectTimeoutSeconds()))
+              .build();
+      HttpRequest request =
+          HttpRequest.newBuilder(URI.create(url))
+              .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()))
+              .header("Content-Type", "application/json")
+              .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+              .build();
 
-      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      HttpResponse<String> response =
+          client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
       int status = response.statusCode();
       if (status < 200 || status >= 300) {
         String body = Objects.toString(response.body(), "").trim();
@@ -147,8 +151,7 @@ public class PushyNotificationService {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
     String to = Objects.toString(properties.deviceToken(), "").trim();
     String topic = Objects.toString(properties.topic(), "").trim();
     if (to.isEmpty() && topic.isEmpty()) return null;
@@ -175,7 +178,8 @@ public class PushyNotificationService {
     json.append(',');
     appendJsonField(json, "sourceNick", Objects.toString(sourceNick, ""), false);
     json.append(',');
-    appendJsonField(json, "sourceIsSelf", sourceIsSelf == null ? "unknown" : sourceIsSelf.toString(), false);
+    appendJsonField(
+        json, "sourceIsSelf", sourceIsSelf == null ? "unknown" : sourceIsSelf.toString(), false);
     json.append(',');
     appendJsonField(json, "timestampMs", Long.toString(System.currentTimeMillis()), false);
     json.append('}');
@@ -207,7 +211,8 @@ public class PushyNotificationService {
     }
   }
 
-  private static void appendJsonField(StringBuilder out, String key, String value, boolean includeComma) {
+  private static void appendJsonField(
+      StringBuilder out, String key, String value, boolean includeComma) {
     if (includeComma) out.append(',');
     out.append('"').append(escapeJson(key)).append('"').append(':');
     out.append('"').append(escapeJson(Objects.toString(value, ""))).append('"');

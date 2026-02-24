@@ -18,9 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Optional external jHiccup process integration.
- */
+/** Optional external jHiccup process integration. */
 @Component
 public class JhiccupDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(JhiccupDiagnosticsService.class);
@@ -134,8 +132,7 @@ public class JhiccupDiagnosticsService {
 
   private void streamOutput(Process p) {
     try (BufferedReader br =
-        new BufferedReader(
-            new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+        new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
       String line;
       while ((line = br.readLine()) != null) {
         String msg = sanitizeLine(line);

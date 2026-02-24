@@ -14,7 +14,8 @@ final class PircbotxClientTagParsers {
   private PircbotxClientTagParsers() {}
 
   /**
-   * Parse a single RPL_ISUPPORT (005) line and return the raw CLIENTTAGDENY value (without the key).
+   * Parse a single RPL_ISUPPORT (005) line and return the raw CLIENTTAGDENY value (without the
+   * key).
    *
    * <p>Returns {@code null} if the token is not present on this line. Returns empty string if
    * {@code CLIENTTAGDENY=} is present (meaning "allow all client-only tags").

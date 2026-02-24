@@ -6,10 +6,6 @@ import cafe.woden.ircclient.app.NotificationStore.IrcEventRuleEvent;
 import cafe.woden.ircclient.app.NotificationStore.RuleMatchEvent;
 import cafe.woden.ircclient.app.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-
-import javax.swing.*;
-import javax.swing.table.AbstractTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -20,11 +16,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javax.swing.*;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 
-/**
- * Swing panel that displays per-server highlight notifications.
- *
- */
+/** Swing panel that displays per-server highlight notifications. */
 public class NotificationsPanel extends JPanel implements AutoCloseable {
 
   private static final int COL_TIME = 0;
@@ -47,7 +43,8 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     this(store, null, null);
   }
 
-  public NotificationsPanel(NotificationStore store, String serverId, Consumer<TargetRef> onSelectTarget) {
+  public NotificationsPanel(
+      NotificationStore store, String serverId, Consumer<TargetRef> onSelectTarget) {
     super(new BorderLayout());
     this.store = Objects.requireNonNull(store, "store");
     this.serverId = serverId;
@@ -73,53 +70,62 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     // Render channel names as "link-like" text.
     table.getColumnModel().getColumn(COL_CHANNEL).setCellRenderer(new LinkCellRenderer());
 
-    table.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        if (e.getButton() != MouseEvent.BUTTON1) return;
-        int viewRow = table.rowAtPoint(e.getPoint());
-        int viewCol = table.columnAtPoint(e.getPoint());
-        if (viewRow < 0 || viewCol < 0) return;
-        int modelCol = table.convertColumnIndexToModel(viewCol);
-        if (modelCol != COL_CHANNEL) return;
+    table.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (e.getButton() != MouseEvent.BUTTON1) return;
+            int viewRow = table.rowAtPoint(e.getPoint());
+            int viewCol = table.columnAtPoint(e.getPoint());
+            if (viewRow < 0 || viewCol < 0) return;
+            int modelCol = table.convertColumnIndexToModel(viewCol);
+            if (modelCol != COL_CHANNEL) return;
 
-        int modelRow = table.convertRowIndexToModel(viewRow);
-        String sid = NotificationsPanel.this.serverId;
-        if (sid == null || sid.isBlank()) return;
-        String channel = model.channelAt(modelRow);
-        if (channel == null || channel.isBlank()) return;
-        Consumer<TargetRef> cb = NotificationsPanel.this.onSelectTarget;
-        if (cb != null) {
-          cb.accept(new TargetRef(sid, channel));
-        }
-      }
-    });
+            int modelRow = table.convertRowIndexToModel(viewRow);
+            String sid = NotificationsPanel.this.serverId;
+            if (sid == null || sid.isBlank()) return;
+            String channel = model.channelAt(modelRow);
+            if (channel == null || channel.isBlank()) return;
+            Consumer<TargetRef> cb = NotificationsPanel.this.onSelectTarget;
+            if (cb != null) {
+              cb.accept(new TargetRef(sid, channel));
+            }
+          }
+        });
 
-    table.addMouseMotionListener(new MouseAdapter() {
-      @Override
-      public void mouseMoved(MouseEvent e) {
-        int viewRow = table.rowAtPoint(e.getPoint());
-        int viewCol = table.columnAtPoint(e.getPoint());
-        int modelCol = viewCol < 0 ? -1 : table.convertColumnIndexToModel(viewCol);
-        boolean overLink = viewRow >= 0 && modelCol == COL_CHANNEL;
-        table.setCursor(overLink ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            : Cursor.getDefaultCursor());
-      }
-    });
+    table.addMouseMotionListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseMoved(MouseEvent e) {
+            int viewRow = table.rowAtPoint(e.getPoint());
+            int viewCol = table.columnAtPoint(e.getPoint());
+            int modelCol = viewCol < 0 ? -1 : table.convertColumnIndexToModel(viewCol);
+            boolean overLink = viewRow >= 0 && modelCol == COL_CHANNEL;
+            table.setCursor(
+                overLink
+                    ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    : Cursor.getDefaultCursor());
+          }
+        });
 
     JScrollPane scroll = new JScrollPane(table);
     scroll.setBorder(null);
     add(scroll, BorderLayout.CENTER);
 
     // Refresh the view whenever the store changes for the active server.
-    disposables.add(store.changes().subscribe(ch -> {
-      String sid = NotificationsPanel.this.serverId;
-      if (sid == null || sid.isBlank()) return;
-      if (!sid.equals(ch.serverId())) return;
-      SwingUtilities.invokeLater(NotificationsPanel.this::refresh);
-    }, err -> {
-      // Never crash the UI on store update failures.
-    }));
+    disposables.add(
+        store
+            .changes()
+            .subscribe(
+                ch -> {
+                  String sid = NotificationsPanel.this.serverId;
+                  if (sid == null || sid.isBlank()) return;
+                  if (!sid.equals(ch.serverId())) return;
+                  SwingUtilities.invokeLater(NotificationsPanel.this::refresh);
+                },
+                err -> {
+                  // Never crash the UI on store update failures.
+                }));
 
     refresh();
   }
@@ -163,14 +169,15 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     }
 
     if (!rows.isEmpty()) {
-      rows.sort((a, b) -> {
-        Instant aa = a.at();
-        Instant bb = b.at();
-        if (aa == null && bb == null) return 0;
-        if (aa == null) return 1;
-        if (bb == null) return -1;
-        return bb.compareTo(aa);
-      });
+      rows.sort(
+          (a, b) -> {
+            Instant aa = a.at();
+            Instant bb = b.at();
+            if (aa == null && bb == null) return 0;
+            if (aa == null) return 1;
+            if (bb == null) return -1;
+            return bb.compareTo(aa);
+          });
       model.setRows(rows);
     } else {
       model.setRows(List.of());
@@ -187,8 +194,7 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     private static final String[] COLS = {"Time", "Channel", "From", "Match", "Snippet"};
 
     private static final DateTimeFormatter TIME_FMT =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            .withZone(ZoneId.systemDefault());
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private List<Row> rows = List.of();
 
@@ -248,13 +254,11 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
   /** Renderer that draws the channel column as underlined text to suggest it's clickable. */
   private static final class LinkCellRenderer extends DefaultTableCellRenderer {
     @Override
-    public Component getTableCellRendererComponent(JTable table,
-                                                  Object value,
-                                                  boolean isSelected,
-                                                  boolean hasFocus,
-                                                  int row,
-                                                  int column) {
-      JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+    public Component getTableCellRendererComponent(
+        JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+      JLabel c =
+          (JLabel)
+              super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
       String s = Objects.toString(value, "");
       // Underline via HTML keeps it simple and cross-LAF.
       c.setText("<html><u>" + escapeHtml(s) + "</u></html>");

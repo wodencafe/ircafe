@@ -1,19 +1,16 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.ui.MessageInputPanel;
-import cafe.woden.ircclient.ui.CommandHistoryStore;
-import cafe.woden.ircclient.ui.ActiveInputRouter;
-import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.ui.ActiveInputRouter;
+import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.MessageInputPanel;
+import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -31,15 +28,16 @@ import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * A pinned chat view which shares the transcript document with the main chat,
- * but can be split/undocked into its own window.
+ * A pinned chat view which shares the transcript document with the main chat, but can be
+ * split/undocked into its own window.
  *
- *
- * <p>We are intentionally NOT doing the "context-aware outbound" refactor yet.
- * For now, sending from a pinned dock activates the target first, then emits
- * the raw line into the shared outbound bus.
+ * <p>We are intentionally NOT doing the "context-aware outbound" refactor yet. For now, sending
+ * from a pinned dock activates the target first, then emits the raw line into the shared outbound
+ * bus.
  */
 public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoCloseable {
 
@@ -75,17 +73,18 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private int lastTopicHeightPx = 58;
   private boolean topicVisible = false;
 
-  public PinnedChatDockable(TargetRef target,
-                           ChatTranscriptStore transcripts,
-                           UiSettingsBus settingsBus,
-                           ChatHistoryService chatHistoryService,
-                           CommandHistoryStore historyStore,
-                           Consumer<TargetRef> activate,
-                           OutboundLineBus outboundBus,
-                           IrcClientService irc,
-                           ActiveInputRouter activeInputRouter,
-                           BiConsumer<TargetRef, String> onDraftChanged,
-                           BiConsumer<TargetRef, String> onClosed) {
+  public PinnedChatDockable(
+      TargetRef target,
+      ChatTranscriptStore transcripts,
+      UiSettingsBus settingsBus,
+      ChatHistoryService chatHistoryService,
+      CommandHistoryStore historyStore,
+      Consumer<TargetRef> activate,
+      OutboundLineBus outboundBus,
+      IrcClientService irc,
+      ActiveInputRouter activeInputRouter,
+      BiConsumer<TargetRef, String> onDraftChanged,
+      BiConsumer<TargetRef, String> onClosed) {
     super(settingsBus);
     this.target = target;
     this.transcripts = transcripts;
@@ -108,13 +107,15 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     topicSplit.setOneTouchExpandable(true);
     topicPanel.setMinimumSize(new Dimension(0, 0));
     topicPanel.setPreferredSize(new Dimension(10, lastTopicHeightPx));
-    topicSplit.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-      if (!topicVisible) return;
-      Object v = evt.getNewValue();
-      if (v instanceof Integer i) {
-        lastTopicHeightPx = Math.max(0, i);
-      }
-    });
+    topicSplit.addPropertyChangeListener(
+        JSplitPane.DIVIDER_LOCATION_PROPERTY,
+        evt -> {
+          if (!topicVisible) return;
+          Object v = evt.getNewValue();
+          if (v instanceof Integer i) {
+            lastTopicHeightPx = Math.max(0, i);
+          }
+        });
     add(topicSplit, BorderLayout.CENTER);
     hideTopicPanel();
 
@@ -135,59 +136,61 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
             }
           } catch (Exception ignored) {
           }
-        }
-    );
+        });
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore);
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.
-    inputPanel.setOnDraftChanged(draft -> {
-      try {
-        if (this.onDraftChanged != null) {
-          this.onDraftChanged.accept(this.target, draft == null ? "" : draft);
-        }
-      } catch (Exception ignored) {
-      }
-    });
+    inputPanel.setOnDraftChanged(
+        draft -> {
+          try {
+            if (this.onDraftChanged != null) {
+              this.onDraftChanged.accept(this.target, draft == null ? "" : draft);
+            }
+          } catch (Exception ignored) {
+          }
+        });
     inputPanel.setOnTypingStateChanged(this::onLocalTypingStateChanged);
 
     if (this.activeInputRouter != null) {
-      inputPanel.setOnActivated(() -> {
-        this.activeInputRouter.activate(inputPanel);
-        if (activate != null) {
-          activate.accept(target);
-        }
-      });
+      inputPanel.setOnActivated(
+          () -> {
+            this.activeInputRouter.activate(inputPanel);
+            if (activate != null) {
+              activate.accept(target);
+            }
+          });
     }
 
     // Forward outbound lines into the shared bus, but first activate this target so
     // existing "active target" based app logic continues to work.
     disposables.add(
-        inputPanel.outboundMessages().subscribe(line -> {
-          armTailPinOnNextAppendIfAtBottom();
-          if (activeInputRouter != null) {
-            activeInputRouter.activate(inputPanel);
-          }
-          if (activate != null) {
-            activate.accept(target);
-          }
-          if (outboundBus != null) {
-            outboundBus.emit(line);
-          }
-        }, err -> {
-          // Never crash UI because outbound stream had an error.
-        })
-    );
+        inputPanel
+            .outboundMessages()
+            .subscribe(
+                line -> {
+                  armTailPinOnNextAppendIfAtBottom();
+                  if (activeInputRouter != null) {
+                    activeInputRouter.activate(inputPanel);
+                  }
+                  if (activate != null) {
+                    activate.accept(target);
+                  }
+                  if (outboundBus != null) {
+                    outboundBus.emit(line);
+                  }
+                },
+                err -> {
+                  // Never crash UI because outbound stream had an error.
+                }));
 
     refreshTypingSignalAvailability();
     SwingUtilities.invokeLater(this::applyReadMarkerViewState);
   }
 
-  /**
-   * Enable/disable the embedded input bar.
-   */
+  /** Enable/disable the embedded input bar. */
   public void setInputEnabled(boolean enabled) {
     inputPanel.setInputEnabled(enabled);
     if (!enabled) {
@@ -197,23 +200,17 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     }
   }
 
-  /**
-   * Update the nick completion list for the embedded input bar.
-   */
+  /** Update the nick completion list for the embedded input bar. */
   public void setNickCompletions(List<String> nicks) {
     inputPanel.setNickCompletions(nicks);
   }
 
-  /**
-   * Restore draft text for this pinned dock (e.g., when reopening).
-   */
+  /** Restore draft text for this pinned dock (e.g., when reopening). */
   public void setDraftText(String text) {
     inputPanel.setDraftText(text);
   }
 
-  /**
-   * Read current draft text for persistence.
-   */
+  /** Read current draft text for persistence. */
   public String getDraftText() {
     return inputPanel.getDraftText();
   }
@@ -266,7 +263,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     repinAfterInputAreaGeometryChange(atBottomBefore, typingBannerVisibilityChanged);
   }
 
-  private void repinAfterInputAreaGeometryChange(boolean atBottomBefore, boolean inputAreaChangedHeight) {
+  private void repinAfterInputAreaGeometryChange(
+      boolean atBottomBefore, boolean inputAreaChangedHeight) {
     if (!inputAreaChangedHeight) return;
     if (!atBottomBefore && !isFollowTail()) return;
     SwingUtilities.invokeLater(this::scrollToBottom);
@@ -283,7 +281,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     inputPanel.setTypingSignalAvailable(available);
   }
 
-  public boolean normalizeIrcv3DraftForCapabilities(boolean replySupported, boolean reactSupported) {
+  public boolean normalizeIrcv3DraftForCapabilities(
+      boolean replySupported, boolean reactSupported) {
     return inputPanel.normalizeIrcv3DraftForCapabilities(replySupported, reactSupported);
   }
 
@@ -518,7 +517,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private static String b64(String s) {
     if (s == null) s = "";
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(s.getBytes(StandardCharsets.UTF_8));
+    return Base64.getUrlEncoder()
+        .withoutPadding()
+        .encodeToString(s.getBytes(StandardCharsets.UTF_8));
   }
 
   private void showTopicPanel() {
@@ -591,27 +592,32 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     if (!typingAvailable) {
       String s = normalizeTypingState(state);
       if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
-        String reason = Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
+        String reason =
+            Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
         if (reason.isEmpty()) reason = "not negotiated / not allowed";
-        log.info("[{}] typing indicators are enabled, but unavailable on this server ({})", target.serverId(), reason);
+        log.info(
+            "[{}] typing indicators are enabled, but unavailable on this server ({})",
+            target.serverId(),
+            reason);
       }
       return;
     }
     typingUnavailableWarned.set(false);
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
-    irc.sendTyping(target.serverId(), target.target(), s).subscribe(
-        () -> inputPanel.onLocalTypingIndicatorSent(s),
-        err -> {
-          if (log.isDebugEnabled()) {
-            log.debug(
-                "[{}] typing send failed (target={} state={}): {}",
-                target.serverId(),
-                target.target(),
-                s,
-                err.toString());
-          }
-        });
+    irc.sendTyping(target.serverId(), target.target(), s)
+        .subscribe(
+            () -> inputPanel.onLocalTypingIndicatorSent(s),
+            err -> {
+              if (log.isDebugEnabled()) {
+                log.debug(
+                    "[{}] typing send failed (target={} state={}): {}",
+                    target.serverId(),
+                    target.target(),
+                    s,
+                    err.toString());
+              }
+            });
   }
 
   private static String normalizeTypingState(String state) {
@@ -688,6 +694,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     lastReadMarkerSentAtMs = now;
 
     transcripts.updateReadMarker(target, now);
-    irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now)).subscribe(() -> {}, err -> {});
+    irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+        .subscribe(() -> {}, err -> {});
   }
 }

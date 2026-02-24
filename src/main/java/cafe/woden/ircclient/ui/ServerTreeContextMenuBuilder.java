@@ -13,8 +13,8 @@ import javax.swing.tree.TreePath;
 /**
  * Builds the context menu for entries in {@link ServerTreeDockable}.
  *
- * <p>This is intentionally decoupled from the Dockable so the Dockable can focus on
- * tree/model wiring, while this class focuses on menu construction/policy.
+ * <p>This is intentionally decoupled from the Dockable so the Dockable can focus on tree/model
+ * wiring, while this class focuses on menu construction/policy.
  */
 final class ServerTreeContextMenuBuilder {
 
@@ -32,8 +32,7 @@ final class ServerTreeContextMenuBuilder {
       Consumer<String> connectServer,
       Consumer<String> disconnectServer,
       Consumer<TargetRef> closeTarget,
-      Consumer<TargetRef> openPinnedChat
-  ) {
+      Consumer<TargetRef> openPinnedChat) {
     this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
     this.isServerConnected = Objects.requireNonNull(isServerConnected, "isServerConnected");
     this.connectServer = Objects.requireNonNull(connectServer, "connectServer");

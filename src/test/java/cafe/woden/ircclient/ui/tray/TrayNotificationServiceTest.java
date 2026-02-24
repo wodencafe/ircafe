@@ -42,10 +42,7 @@ class TrayNotificationServiceTest {
   }
 
   private static TrayNotificationService newService(
-      UiSettings settings,
-      boolean frameActive,
-      TargetRef activeTarget
-  ) {
+      UiSettings settings, boolean frameActive, TargetRef activeTarget) {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(settings);
 
@@ -63,16 +60,19 @@ class TrayNotificationServiceTest {
     ObjectProvider<MainFrame> mainFrameProvider = mock(ObjectProvider.class);
     when(mainFrameProvider.getIfAvailable()).thenReturn(frame);
     @SuppressWarnings("unchecked")
-    ObjectProvider<cafe.woden.ircclient.ui.StatusBar> statusBarProvider = mock(ObjectProvider.class);
+    ObjectProvider<cafe.woden.ircclient.ui.StatusBar> statusBarProvider =
+        mock(ObjectProvider.class);
     when(statusBarProvider.getIfAvailable()).thenReturn(null);
     @SuppressWarnings("unchecked")
     ObjectProvider<TargetCoordinator> targetCoordinatorProvider = mock(ObjectProvider.class);
     when(targetCoordinatorProvider.getIfAvailable()).thenReturn(targetCoordinator);
     @SuppressWarnings("unchecked")
-    ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider = mock(ObjectProvider.class);
+    ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider =
+        mock(ObjectProvider.class);
     when(serverTreeProvider.getIfAvailable()).thenReturn(null);
     @SuppressWarnings("unchecked")
-    ObjectProvider<cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend> gnomeDbusProvider = mock(ObjectProvider.class);
+    ObjectProvider<cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend>
+        gnomeDbusProvider = mock(ObjectProvider.class);
     when(gnomeDbusProvider.getIfAvailable()).thenReturn(null);
 
     NotificationSoundService soundService = mock(NotificationSoundService.class);
@@ -89,16 +89,17 @@ class TrayNotificationServiceTest {
   }
 
   private static boolean invokePassesNotifyConditions(
-      TrayNotificationService service,
-      TargetRef target,
-      boolean allowWhenFocused
-  ) throws Exception {
-    Method m = TrayNotificationService.class.getDeclaredMethod("passesNotifyConditions", TargetRef.class, boolean.class);
+      TrayNotificationService service, TargetRef target, boolean allowWhenFocused)
+      throws Exception {
+    Method m =
+        TrayNotificationService.class.getDeclaredMethod(
+            "passesNotifyConditions", TargetRef.class, boolean.class);
     m.setAccessible(true);
     return (boolean) m.invoke(service, target, allowWhenFocused);
   }
 
-  private static UiSettings baseSettings(boolean onlyWhenUnfocused, boolean suppressWhenTargetActive) {
+  private static UiSettings baseSettings(
+      boolean onlyWhenUnfocused, boolean suppressWhenTargetActive) {
     return new UiSettings(
         "darcula",
         "Monospaced",

@@ -16,7 +16,8 @@ public class IgnoreStatusService {
    * @param hard whether sender is hard-ignored
    * @param soft whether sender is soft-ignored
    * @param usedHostmask whether matching was done against a useful hostmask
-   * @param hostmaskUsed the useful hostmask used for matching (may be blank when usedHostmask=false)
+   * @param hostmaskUsed the useful hostmask used for matching (may be blank when
+   *     usedHostmask=false)
    */
   public record Status(boolean hard, boolean soft, boolean usedHostmask, String hostmaskUsed) {}
 
@@ -35,17 +36,16 @@ public class IgnoreStatusService {
     // Invalidate caches whenever a server's ignore list changes.
     if (ignoreListService != null) {
       disposables.add(
-          ignoreListService.changes().subscribe(
-              ch -> {
-                if (ch == null) return;
-                String sid = Objects.toString(ch.serverId(), "").trim();
-                if (sid.isEmpty()) return;
-                cacheByServer.remove(sid);
-              },
-              err -> {
-              }
-          )
-      );
+          ignoreListService
+              .changes()
+              .subscribe(
+                  ch -> {
+                    if (ch == null) return;
+                    String sid = Objects.toString(ch.serverId(), "").trim();
+                    if (sid.isEmpty()) return;
+                    cacheByServer.remove(sid);
+                  },
+                  err -> {}));
     }
   }
 
@@ -60,14 +60,12 @@ public class IgnoreStatusService {
       return new Masks(List.of(), List.of());
     }
 
-    return cacheByServer.computeIfAbsent(sid, s -> new Masks(
-        ignoreListService.listMasks(s),
-        ignoreListService.listSoftMasks(s)
-    ));
+    return cacheByServer.computeIfAbsent(
+        sid, s -> new Masks(ignoreListService.listMasks(s), ignoreListService.listSoftMasks(s)));
   }
 
   /** Compute ignore status for a sender. */
-public Status status(String serverId, String nick, String hostmask) {
+  public Status status(String serverId, String nick, String hostmask) {
     if (ignoreListService == null) return new Status(false, false, false, "");
 
     String sid = Objects.toString(serverId, "").trim();

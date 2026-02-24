@@ -15,11 +15,11 @@ import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.RowFilter;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -80,46 +80,52 @@ public final class ChannelListPanel extends JPanel {
     table.getColumnModel().getColumn(COL_TOPIC).setPreferredWidth(900);
     table.setToolTipText("Double-click a row to join that channel.");
     filterField.setToolTipText("Type to filter by channel, topic, or user count.");
-    filterField.getDocument().addDocumentListener(new DocumentListener() {
-      @Override
-      public void insertUpdate(DocumentEvent e) {
-        applyFilter();
-      }
+    filterField
+        .getDocument()
+        .addDocumentListener(
+            new DocumentListener() {
+              @Override
+              public void insertUpdate(DocumentEvent e) {
+                applyFilter();
+              }
 
-      @Override
-      public void removeUpdate(DocumentEvent e) {
-        applyFilter();
-      }
+              @Override
+              public void removeUpdate(DocumentEvent e) {
+                applyFilter();
+              }
 
-      @Override
-      public void changedUpdate(DocumentEvent e) {
-        applyFilter();
-      }
-    });
+              @Override
+              public void changedUpdate(DocumentEvent e) {
+                applyFilter();
+              }
+            });
 
-    table.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2) return;
-        int viewRow = table.rowAtPoint(e.getPoint());
-        if (viewRow < 0) return;
-        int modelRow = table.convertRowIndexToModel(viewRow);
-        String channel = model.channelAt(modelRow);
-        if (channel == null || channel.isBlank()) return;
-        Consumer<String> cb = onJoinChannel;
-        if (cb != null) cb.accept(channel);
-      }
-    });
+    table.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2) return;
+            int viewRow = table.rowAtPoint(e.getPoint());
+            if (viewRow < 0) return;
+            int modelRow = table.convertRowIndexToModel(viewRow);
+            String channel = model.channelAt(modelRow);
+            if (channel == null || channel.isBlank()) return;
+            Consumer<String> cb = onJoinChannel;
+            if (cb != null) cb.accept(channel);
+          }
+        });
 
-    table.addMouseMotionListener(new MouseAdapter() {
-      @Override
-      public void mouseMoved(MouseEvent e) {
-        int viewRow = table.rowAtPoint(e.getPoint());
-        table.setCursor(viewRow >= 0
-            ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            : Cursor.getDefaultCursor());
-      }
-    });
+    table.addMouseMotionListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseMoved(MouseEvent e) {
+            int viewRow = table.rowAtPoint(e.getPoint());
+            table.setCursor(
+                viewRow >= 0
+                    ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    : Cursor.getDefaultCursor());
+          }
+        });
 
     JScrollPane scroll = new JScrollPane(table);
     scroll.setBorder(null);
@@ -175,9 +181,10 @@ public final class ChannelListPanel extends JPanel {
 
   private void refresh() {
     String sid = this.serverId;
-    List<Row> rows = (sid.isEmpty())
-        ? List.of()
-        : List.copyOf(rowsByServer.getOrDefault(sid, new ArrayList<>()));
+    List<Row> rows =
+        (sid.isEmpty())
+            ? List.of()
+            : List.copyOf(rowsByServer.getOrDefault(sid, new ArrayList<>()));
     model.setRows(rows);
     updateHeader();
   }
@@ -226,20 +233,24 @@ public final class ChannelListPanel extends JPanel {
     }
 
     String[] terms = filter.toLowerCase(Locale.ROOT).split("\\s+");
-    sorter.setRowFilter(new RowFilter<>() {
-      @Override
-      public boolean include(Entry<? extends ChannelListTableModel, ? extends Integer> entry) {
-        String channel = Objects.toString(entry.getStringValue(COL_CHANNEL), "").toLowerCase(Locale.ROOT);
-        String users = Objects.toString(entry.getStringValue(COL_USERS), "").toLowerCase(Locale.ROOT);
-        String topic = Objects.toString(entry.getStringValue(COL_TOPIC), "").toLowerCase(Locale.ROOT);
-        for (String term : terms) {
-          if (term == null || term.isBlank()) continue;
-          if (channel.contains(term) || users.contains(term) || topic.contains(term)) continue;
-          return false;
-        }
-        return true;
-      }
-    });
+    sorter.setRowFilter(
+        new RowFilter<>() {
+          @Override
+          public boolean include(Entry<? extends ChannelListTableModel, ? extends Integer> entry) {
+            String channel =
+                Objects.toString(entry.getStringValue(COL_CHANNEL), "").toLowerCase(Locale.ROOT);
+            String users =
+                Objects.toString(entry.getStringValue(COL_USERS), "").toLowerCase(Locale.ROOT);
+            String topic =
+                Objects.toString(entry.getStringValue(COL_TOPIC), "").toLowerCase(Locale.ROOT);
+            for (String term : terms) {
+              if (term == null || term.isBlank()) continue;
+              if (channel.contains(term) || users.contains(term) || topic.contains(term)) continue;
+              return false;
+            }
+            return true;
+          }
+        });
     updateHeader();
   }
 

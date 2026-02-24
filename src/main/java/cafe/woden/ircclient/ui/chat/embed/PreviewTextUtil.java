@@ -7,7 +7,6 @@ final class PreviewTextUtil {
 
   private PreviewTextUtil() {}
 
-  
   static String trimToSentence(String text, int maxChars) {
     if (text == null) return null;
     String t = text.strip();
@@ -21,7 +20,6 @@ final class PreviewTextUtil {
     return snapped + " …";
   }
 
-  
   static String clampToLines(String fullText, JTextArea template, int widthPx, int maxLines) {
     if (template == null) return fullText;
     if (fullText == null) return null;

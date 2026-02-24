@@ -8,8 +8,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
@@ -19,8 +19,9 @@ import javax.net.ssl.X509TrustManager;
  * <p>This is used to provide an "insecure / trust all certificates" mode for both IRC-over-TLS and
  * HTTPS fetching (link previews, embedded images, etc).
  *
- * <p><b>WARNING:</b> Enabling trust-all disables certificate validation and (for HTTPS) hostname checks.
- * This makes man-in-the-middle attacks trivial. Only enable if you fully understand the risks.
+ * <p><b>WARNING:</b> Enabling trust-all disables certificate validation and (for HTTPS) hostname
+ * checks. This makes man-in-the-middle attacks trivial. Only enable if you fully understand the
+ * risks.
  */
 public final class NetTlsContext {
 
@@ -34,17 +35,17 @@ public final class NetTlsContext {
   private static final HostnameVerifier DEFAULT_HOSTNAME_VERIFIER =
       HttpsURLConnection.getDefaultHostnameVerifier();
 
-  private static final HostnameVerifier TRUST_ALL_HOSTNAME_VERIFIER = new HostnameVerifier() {
-    @Override
-    public boolean verify(String hostname, SSLSession session) {
-      return true;
-    }
-  };
+  private static final HostnameVerifier TRUST_ALL_HOSTNAME_VERIFIER =
+      new HostnameVerifier() {
+        @Override
+        public boolean verify(String hostname, SSLSession session) {
+          return true;
+        }
+      };
 
   private static final AtomicReference<SSLSocketFactory> TRUST_ALL_SSL = new AtomicReference<>();
 
-  private NetTlsContext() {
-  }
+  private NetTlsContext() {}
 
   public static void configure(IrcProperties.Client.Tls cfg) {
     cfg = normalize(cfg);
@@ -70,8 +71,8 @@ public final class NetTlsContext {
   }
 
   /**
-   * Returns the {@link SSLSocketFactory} to use for outbound TLS sockets.
-   * When trust-all is enabled, this factory does not validate certificates.
+   * Returns the {@link SSLSocketFactory} to use for outbound TLS sockets. When trust-all is
+   * enabled, this factory does not validate certificates.
    */
   public static SSLSocketFactory sslSocketFactory() {
     if (!trustAllCertificates()) return DEFAULT_SSL;
@@ -88,8 +89,8 @@ public final class NetTlsContext {
   }
 
   /**
-   * Returns the {@link HostnameVerifier} to use for HTTPS connections.
-   * When trust-all is enabled, this verifier accepts any hostname.
+   * Returns the {@link HostnameVerifier} to use for HTTPS connections. When trust-all is enabled,
+   * this verifier accepts any hostname.
    */
   public static HostnameVerifier hostnameVerifier() {
     return trustAllCertificates() ? TRUST_ALL_HOSTNAME_VERIFIER : DEFAULT_HOSTNAME_VERIFIER;
@@ -97,22 +98,25 @@ public final class NetTlsContext {
 
   private static SSLSocketFactory buildTrustAllSslFactory() {
     try {
-      TrustManager[] trustAll = new TrustManager[] { new X509TrustManager() {
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType) {
-          // trust all
-        }
+      TrustManager[] trustAll =
+          new TrustManager[] {
+            new X509TrustManager() {
+              @Override
+              public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                // trust all
+              }
 
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) {
-          // trust all
-        }
+              @Override
+              public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                // trust all
+              }
 
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-          return new X509Certificate[0];
-        }
-      } };
+              @Override
+              public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+              }
+            }
+          };
 
       SSLContext ctx = SSLContext.getInstance("TLS");
       ctx.init(null, trustAll, new SecureRandom());

@@ -3,8 +3,8 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
-import javax.swing.JMenu;
 import java.util.Objects;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import org.springframework.stereotype.Component;
@@ -109,26 +109,83 @@ public final class NickContextMenuFactory {
     private void wireActions() {
       openQuery.addActionListener(e -> safe(() -> callbacks.openQuery(popupCtx, popupNick)));
 
-      whois.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.WHOIS)));
-      version.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.CTCP_VERSION)));
-      ping.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.CTCP_PING)));
-      time.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.CTCP_TIME)));
-      dccChat.addActionListener(e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.CHAT)));
-      dccSend.addActionListener(e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.SEND_FILE)));
-      dccAccept.addActionListener(e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.ACCEPT_CHAT)));
-      dccGet.addActionListener(e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.GET_FILE)));
-      dccClose.addActionListener(e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.CLOSE_CHAT)));
-      op.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.OP)));
-      deop.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.DEOP)));
-      voice.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.VOICE)));
-      devoice.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.DEVOICE)));
-      kick.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.KICK)));
-      ban.addActionListener(e -> safe(() -> callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.BAN)));
+      whois.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.WHOIS)));
+      version.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.CTCP_VERSION)));
+      ping.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.CTCP_PING)));
+      time.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.CTCP_TIME)));
+      dccChat.addActionListener(
+          e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.CHAT)));
+      dccSend.addActionListener(
+          e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.SEND_FILE)));
+      dccAccept.addActionListener(
+          e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.ACCEPT_CHAT)));
+      dccGet.addActionListener(
+          e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.GET_FILE)));
+      dccClose.addActionListener(
+          e -> safe(() -> callbacks.requestDccAction(popupCtx, popupNick, DccAction.CLOSE_CHAT)));
+      op.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.OP)));
+      deop.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.DEOP)));
+      voice.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.VOICE)));
+      devoice.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.DEVOICE)));
+      kick.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(
+                          popupCtx, popupNick, UserActionRequest.Action.KICK)));
+      ban.addActionListener(
+          e ->
+              safe(
+                  () ->
+                      callbacks.emitUserAction(popupCtx, popupNick, UserActionRequest.Action.BAN)));
 
-      ignore.addActionListener(e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, false, false)));
-      unignore.addActionListener(e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, true, false)));
-      softIgnore.addActionListener(e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, false, true)));
-      softUnignore.addActionListener(e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, true, true)));
+      ignore.addActionListener(
+          e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, false, false)));
+      unignore.addActionListener(
+          e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, true, false)));
+      softIgnore.addActionListener(
+          e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, false, true)));
+      softUnignore.addActionListener(
+          e -> safe(() -> callbacks.promptIgnore(popupCtx, popupNick, true, true)));
     }
 
     private static void safe(Runnable r) {

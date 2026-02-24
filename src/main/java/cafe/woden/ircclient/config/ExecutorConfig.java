@@ -9,8 +9,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Centralized app-owned executors.
  *
- * <p>These remain workload-specific to preserve ordering and avoid cross-feature contention,
- * while giving Spring ownership of creation/shutdown.
+ * <p>These remain workload-specific to preserve ordering and avoid cross-feature contention, while
+ * giving Spring ownership of creation/shutdown.
  */
 @Configuration
 public class ExecutorConfig {

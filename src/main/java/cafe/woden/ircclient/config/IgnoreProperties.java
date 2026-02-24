@@ -7,23 +7,22 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Ignore configuration.
  *
- * <p>Stored under {@code ircafe.ignore}. Runtime changes are persisted to the runtime YAML
- * via {@link cafe.woden.ircclient.config.RuntimeConfigStore}.
+ * <p>Stored under {@code ircafe.ignore}. Runtime changes are persisted to the runtime YAML via
+ * {@link cafe.woden.ircclient.config.RuntimeConfigStore}.
  */
 @ConfigurationProperties(prefix = "ircafe.ignore")
 public record IgnoreProperties(
     Boolean hardIgnoreIncludesCtcp,
     Boolean softIgnoreIncludesCtcp,
-    Map<String, ServerIgnore> servers
-) {
+    Map<String, ServerIgnore> servers) {
 
   /**
    * Per-server ignore configuration.
    *
    * <p>{@code masks} are traditional (hard) ignore masks.
    *
-   * <p>{@code softMasks} are soft-ignore masks. Soft-ignored users have inbound messages
-   * rendered as spoilers rather than fully dropped.
+   * <p>{@code softMasks} are soft-ignore masks. Soft-ignored users have inbound messages rendered
+   * as spoilers rather than fully dropped.
    *
    * <p>CTCP handling for soft-ignored users is configurable via {@code softIgnoreIncludesCtcp}.
    */

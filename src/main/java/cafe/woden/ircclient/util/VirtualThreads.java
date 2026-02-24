@@ -6,12 +6,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 
-/**
- * Shared helpers for creating app-owned executors/threads on virtual threads.
- */
+/** Shared helpers for creating app-owned executors/threads on virtual threads. */
 public final class VirtualThreads {
-  private VirtualThreads() {
-  }
+  private VirtualThreads() {}
 
   public static ThreadFactory namedFactory(String baseName) {
     String base = normalize(baseName);

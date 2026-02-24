@@ -10,8 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class DisconnectButton extends JButton {
-  private final FlowableProcessor<Object> clicks =
-      PublishProcessor.create().toSerialized();
+  private final FlowableProcessor<Object> clicks = PublishProcessor.create().toSerialized();
 
   public DisconnectButton() {
     super("Disconnect");

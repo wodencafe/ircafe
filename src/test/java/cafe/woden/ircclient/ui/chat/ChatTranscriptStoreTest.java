@@ -50,7 +50,8 @@ class ChatTranscriptStoreTest {
     ChatTranscriptStore store = newStore();
     TargetRef ref = new TargetRef("srv", "status");
 
-    store.appendNoticeAt(ref, "(notice) server", "maintenance", 3_000L, "n-1", Map.of("msgid", "n-1"));
+    store.appendNoticeAt(
+        ref, "(notice) server", "maintenance", 3_000L, "n-1", Map.of("msgid", "n-1"));
     StyledDocument doc = store.document(ref);
     int lenAfterFirst = doc.getLength();
 
@@ -66,11 +67,13 @@ class ChatTranscriptStoreTest {
     ChatTranscriptStore store = newStore();
     TargetRef ref = new TargetRef("srv", "status");
 
-    store.appendStatusAt(ref, "(server)", "421 NO_SUCH_COMMAND", 4_000L, "s-1", Map.of("msgid", "s-1"));
+    store.appendStatusAt(
+        ref, "(server)", "421 NO_SUCH_COMMAND", 4_000L, "s-1", Map.of("msgid", "s-1"));
     StyledDocument doc = store.document(ref);
     int lenAfterFirst = doc.getLength();
 
-    store.appendStatusAt(ref, "(server)", "different status", 4_100L, "s-1", Map.of("msgid", "s-1"));
+    store.appendStatusAt(
+        ref, "(server)", "different status", 4_100L, "s-1", Map.of("msgid", "s-1"));
 
     assertEquals(lenAfterFirst, doc.getLength());
     assertTrue(transcriptText(doc).contains("421 NO_SUCH_COMMAND"));

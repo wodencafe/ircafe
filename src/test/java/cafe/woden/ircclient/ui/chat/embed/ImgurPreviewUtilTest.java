@@ -10,7 +10,8 @@ class ImgurPreviewUtilTest {
 
   @Test
   void parsePostDocumentExtractsMetadataFromPostJson() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://imgur.com/gallery/AbCdE">
           <meta property="og:title" content="Desk setup - Imgur">
@@ -30,7 +31,8 @@ class ImgurPreviewUtilTest {
         """;
 
     var doc = Jsoup.parse(html, "https://imgur.com/gallery/AbCdE");
-    LinkPreview preview = ImgurPreviewUtil.parsePostDocument(doc, "https://imgur.com/gallery/AbCdE");
+    LinkPreview preview =
+        ImgurPreviewUtil.parsePostDocument(doc, "https://imgur.com/gallery/AbCdE");
 
     assertNotNull(preview);
     assertEquals("Imgur", preview.siteName());
@@ -46,7 +48,8 @@ class ImgurPreviewUtilTest {
 
   @Test
   void parsePostDocumentUsesLdJsonAndFiltersBoilerplateCaption() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://imgur.com/a/QwErT">
           <meta property="og:title" content="Imgur: The magic of the Internet">
@@ -75,7 +78,9 @@ class ImgurPreviewUtilTest {
     assertTrue(preview.description().contains("Submitter: Bob"), preview.description());
     assertTrue(preview.description().contains("Date: 2026-02-16"), preview.description());
     assertTrue(preview.description().contains("Launch night gallery"), preview.description());
-    assertFalse(preview.description().toLowerCase().contains("discover the magic of the internet"), preview.description());
+    assertFalse(
+        preview.description().toLowerCase().contains("discover the magic of the internet"),
+        preview.description());
   }
 
   @Test

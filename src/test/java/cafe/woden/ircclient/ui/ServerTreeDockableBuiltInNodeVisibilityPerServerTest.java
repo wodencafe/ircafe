@@ -101,7 +101,8 @@ class ServerTreeDockableBuiltInNodeVisibilityPerServerTest {
   private static boolean hasLeaf(ServerTreeDockable dockable, TargetRef ref) throws Exception {
     Field f = ServerTreeDockable.class.getDeclaredField("leaves");
     f.setAccessible(true);
-    Map<TargetRef, DefaultMutableTreeNode> leaves = (Map<TargetRef, DefaultMutableTreeNode>) f.get(dockable);
+    Map<TargetRef, DefaultMutableTreeNode> leaves =
+        (Map<TargetRef, DefaultMutableTreeNode>) f.get(dockable);
     return leaves.containsKey(ref);
   }
 

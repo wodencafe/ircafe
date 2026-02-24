@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.ui.settings.UiSettings;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -21,17 +23,15 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 
 /**
  * Low-traffic hostmask resolution using the IRC USERHOST command.
  *
- * <p>Batches and rate-limits requests (with per-nick cooldown) to avoid flooding.
- * Responses are parsed by the IRC event layer (RPL 302) and used to enrich cached user info.
+ * <p>Batches and rate-limits requests (with per-nick cooldown) to avoid flooding. Responses are
+ * parsed by the IRC event layer (RPL 302) and used to enrich cached user info.
  */
 @Component
 public class UserhostQueryService {
@@ -56,10 +56,10 @@ public class UserhostQueryService {
 
   private final ConcurrentHashMap<String, ServerState> stateByServer = new ConcurrentHashMap<>();
 
-  public UserhostQueryService(IrcClientService irc,
-                              ObjectProvider<UiSettingsBus> settingsBusProvider,
-                              @Qualifier(ExecutorConfig.USERHOST_QUERY_SCHEDULER)
-                              ScheduledExecutorService exec) {
+  public UserhostQueryService(
+      IrcClientService irc,
+      ObjectProvider<UiSettingsBus> settingsBusProvider,
+      @Qualifier(ExecutorConfig.USERHOST_QUERY_SCHEDULER) ScheduledExecutorService exec) {
     this.irc = irc;
     this.settingsBusProvider = settingsBusProvider;
     this.exec = exec;
@@ -170,10 +170,10 @@ public class UserhostQueryService {
     // (We log per-batch to avoid excessive spam while still being traceable.)
     log.info("[{}] USERHOST lookup: {}", serverId, String.join(", ", batch));
 
-    Disposable d = irc.sendRaw(serverId, line).subscribe(
-        () -> {},
-        err -> log.debug("USERHOST failed for {}: {}", serverId, err.toString())
-    );
+    Disposable d =
+        irc.sendRaw(serverId, line)
+            .subscribe(
+                () -> {}, err -> log.debug("USERHOST failed for {}: {}", serverId, err.toString()));
     // Disposable is intentionally not retained; the Completable completes quickly.
     if (d.isDisposed()) {
       // no-op
@@ -183,14 +183,16 @@ public class UserhostQueryService {
   }
 
   private void cleanupCommandHistory(ServerState st, Instant now) {
-    while (!st.cmdTimes.isEmpty() && Duration.between(st.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
+    while (!st.cmdTimes.isEmpty()
+        && Duration.between(st.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
       st.cmdTimes.removeFirst();
     }
   }
 
   private boolean canSendNow(ServerState st, Instant now, UserhostConfig cfg) {
     if (st.cmdTimes.size() >= cfg.maxCommandsPerMinute) return false;
-    return st.lastCmdAt == null || Duration.between(st.lastCmdAt, now).compareTo(cfg.minCmdInterval) >= 0;
+    return st.lastCmdAt == null
+        || Duration.between(st.lastCmdAt, now).compareTo(cfg.minCmdInterval) >= 0;
   }
 
   private long computeNextDelayMs(ServerState st, Instant now, UserhostConfig cfg) {
@@ -233,7 +235,8 @@ public class UserhostQueryService {
       return NO_WAKE_NEEDED_MS;
     }
 
-    Instant wakeAt = nextRateAllowedAt.isAfter(earliestNickReadyAt) ? nextRateAllowedAt : earliestNickReadyAt;
+    Instant wakeAt =
+        nextRateAllowedAt.isAfter(earliestNickReadyAt) ? nextRateAllowedAt : earliestNickReadyAt;
     long delayMs = Duration.between(now, wakeAt).toMillis();
     return Math.max(0L, delayMs);
   }
@@ -294,8 +297,7 @@ public class UserhostQueryService {
       Duration minCmdInterval,
       int maxCommandsPerMinute,
       Duration nickCooldown,
-      int maxNicksPerCommand
-  ) {}
+      int maxNicksPerCommand) {}
 
   private static final class ServerState {
     final Set<String> queue = new LinkedHashSet<>();

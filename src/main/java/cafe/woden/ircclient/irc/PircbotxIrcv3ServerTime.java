@@ -6,9 +6,8 @@ import java.util.Optional;
 
 final class PircbotxIrcv3ServerTime {
 
-  private PircbotxIrcv3ServerTime() {
-  }
-  
+  private PircbotxIrcv3ServerTime() {}
+
   static Optional<Instant> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();
 

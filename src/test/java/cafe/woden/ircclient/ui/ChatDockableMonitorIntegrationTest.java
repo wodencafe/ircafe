@@ -36,8 +36,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ChatDockableMonitorIntegrationTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void monitorCardActivatesAndRefreshesFromServiceAndOnlineState() throws Exception {
@@ -235,5 +234,8 @@ class ChatDockableMonitorIntegrationTest {
   }
 
   private record Fixture(
-      ChatDockable chat, MonitorListService monitorListService, JLabel monitorTitle, JTable monitorTable) {}
+      ChatDockable chat,
+      MonitorListService monitorListService,
+      JLabel monitorTitle,
+      JTable monitorTable) {}
 }

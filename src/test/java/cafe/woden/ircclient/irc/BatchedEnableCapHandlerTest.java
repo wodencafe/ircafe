@@ -23,7 +23,8 @@ class BatchedEnableCapHandlerTest {
     OutputCAP outputCap = mock(OutputCAP.class);
     when(bot.sendCAP()).thenReturn(outputCap);
 
-    boolean finished = handler.handleLS(bot, ImmutableList.of("multi-prefix", "server-time", "sasl"));
+    boolean finished =
+        handler.handleLS(bot, ImmutableList.of("multi-prefix", "server-time", "sasl"));
 
     assertFalse(finished);
     verify(outputCap).request("multi-prefix", "server-time");
@@ -34,7 +35,8 @@ class BatchedEnableCapHandlerTest {
 
   @Test
   void finishesImmediatelyWhenNoDesiredCapabilitiesAreOffered() throws Exception {
-    BatchedEnableCapHandler handler = new BatchedEnableCapHandler(List.of("away-notify", "server-time"));
+    BatchedEnableCapHandler handler =
+        new BatchedEnableCapHandler(List.of("away-notify", "server-time"));
     PircBotX bot = mock(PircBotX.class);
     OutputCAP outputCap = mock(OutputCAP.class);
     when(bot.sendCAP()).thenReturn(outputCap);
@@ -69,9 +71,10 @@ class BatchedEnableCapHandlerTest {
     OutputCAP outputCap = mock(OutputCAP.class);
     when(bot.sendCAP()).thenReturn(outputCap);
 
-    boolean finished = handler.handleLS(
-        bot,
-        ImmutableList.of("sts=duration=86400,port=6697,preload", "multiline=max-bytes=4096"));
+    boolean finished =
+        handler.handleLS(
+            bot,
+            ImmutableList.of("sts=duration=86400,port=6697,preload", "multiline=max-bytes=4096"));
 
     assertFalse(finished);
     verify(outputCap).request("sts", "multiline");

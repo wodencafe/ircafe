@@ -8,8 +8,7 @@ public record ChatHistoryIngestResult(
     int skipped,
     long earliestInsertedEpochMs,
     long latestInsertedEpochMs,
-    String message
-) {
+    String message) {
   public ChatHistoryIngestResult {
     if (total < 0) total = 0;
     if (inserted < 0) inserted = 0;

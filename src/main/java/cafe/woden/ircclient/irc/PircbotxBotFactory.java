@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
-import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
@@ -32,53 +32,54 @@ import org.pircbotx.hooks.events.TimeEvent;
 import org.pircbotx.hooks.events.VersionEvent;
 import org.springframework.stereotype.Component;
 
-/**
- * Factory for building a configured {@link PircBotX} instance for a given server.
- */
+/** Factory for building a configured {@link PircBotX} instance for a given server. */
 @Component
 public class PircbotxBotFactory {
 
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
-  private static final List<String> BASE_CAPABILITIES = List.of(
-      "multi-prefix",
-      "cap-notify",
-      "invite-notify",
-      "away-notify",
-      "account-notify",
-      "monitor",
-      "extended-monitor",
-      "extended-join",
-      "setname",
-      "chghost",
-      "message-tags",
-      "sts",
-      "server-time",
-      "standard-replies",
-      "echo-message",
-      "labeled-response",
-      "draft/reply",
-      "draft/react",
-      "draft/message-edit",
-      "message-edit",
-      "draft/message-redaction",
-      "message-redaction",
-      "typing",
-      "read-marker",
-      "multiline",
-      "draft/multiline",
-      "batch",
-      "chathistory",
-      "draft/chathistory",
-      "znc.in/playback",
-      "account-tag",
-      "userhost-in-names"
-  );
+  private static final List<String> BASE_CAPABILITIES =
+      List.of(
+          "multi-prefix",
+          "cap-notify",
+          "invite-notify",
+          "away-notify",
+          "account-notify",
+          "monitor",
+          "extended-monitor",
+          "extended-join",
+          "setname",
+          "chghost",
+          "message-tags",
+          "sts",
+          "server-time",
+          "standard-replies",
+          "echo-message",
+          "labeled-response",
+          "draft/reply",
+          "draft/react",
+          "draft/message-edit",
+          "message-edit",
+          "draft/message-redaction",
+          "message-redaction",
+          "typing",
+          "read-marker",
+          "multiline",
+          "draft/multiline",
+          "batch",
+          "chathistory",
+          "draft/chathistory",
+          "znc.in/playback",
+          "account-tag",
+          "userhost-in-names");
 
   private final ServerProxyResolver proxyResolver;
   private final SojuProperties sojuProps;
   private final RuntimeConfigStore runtimeConfig;
 
-  public PircbotxBotFactory(ServerProxyResolver proxyResolver, SojuProperties sojuProps, RuntimeConfigStore runtimeConfig) {
+  public PircbotxBotFactory(
+      ServerProxyResolver proxyResolver,
+      SojuProperties sojuProps,
+      RuntimeConfigStore runtimeConfig) {
     this.proxyResolver = proxyResolver;
     this.sojuProps = sojuProps;
     this.runtimeConfig = runtimeConfig;
@@ -91,26 +92,29 @@ public class PircbotxBotFactory {
 
     SocketFactory socketFactory;
     if (plan.enabled()) {
-      socketFactory = s.tls()
-          ? new SocksProxySslSocketFactory(plan.cfg(), ssl)
-          : new SocksProxySocketFactory(plan.cfg());
+      socketFactory =
+          s.tls()
+              ? new SocksProxySslSocketFactory(plan.cfg(), ssl)
+              : new SocksProxySocketFactory(plan.cfg());
     } else {
-      socketFactory = s.tls()
-          ? new DirectTlsSocketFactory(ssl, plan.connectTimeoutMs(), plan.readTimeoutMs())
-          : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
+      socketFactory =
+          s.tls()
+              ? new DirectTlsSocketFactory(ssl, plan.connectTimeoutMs(), plan.readTimeoutMs())
+              : new DirectSocketFactory(plan.connectTimeoutMs(), plan.readTimeoutMs());
     }
 
-    Configuration.Builder builder = new Configuration.Builder()
-        .setName(s.nick())
-        .setLogin(s.login())
-        .setRealName(s.realName())
-        .setVersion(version)
-        .addServer(s.host(), s.port())
-        .setSocketFactory(socketFactory)
-        .setCapEnabled(true)
-        .setAutoNickChange(true)
-        .setAutoReconnect(false)
-        .addListener(listener);
+    Configuration.Builder builder =
+        new Configuration.Builder()
+            .setName(s.nick())
+            .setLogin(s.login())
+            .setRealName(s.realName())
+            .setVersion(version)
+            .addServer(s.host(), s.port())
+            .setSocketFactory(socketFactory)
+            .setCapEnabled(true)
+            .setAutoNickChange(true)
+            .setAutoReconnect(false)
+            .addListener(listener);
     // Keep core behavior (PING, NickServ flows, etc.) but disable automatic CTCP replies.
     builder.replaceCoreHooksListener(new NoAutoCtcpCoreHooks());
     configureCapHandlers(builder);
@@ -130,16 +134,18 @@ public class PircbotxBotFactory {
       String secret = (s.sasl().password() == null) ? "" : s.sasl().password();
       String mechUpper = mech.toUpperCase(Locale.ROOT);
       boolean hasSecret = secret != null && !secret.isBlank();
-      boolean needsUser = switch (mechUpper) {
-        case "EXTERNAL" -> false;
-        case "AUTO" -> hasSecret;
-        default -> true;
-      };
-      boolean needsSecret = switch (mechUpper) {
-        case "EXTERNAL" -> false;
-        case "AUTO" -> false;
-        default -> true;
-      };
+      boolean needsUser =
+          switch (mechUpper) {
+            case "EXTERNAL" -> false;
+            case "AUTO" -> hasSecret;
+            default -> true;
+          };
+      boolean needsSecret =
+          switch (mechUpper) {
+            case "EXTERNAL" -> false;
+            case "AUTO" -> false;
+            default -> true;
+          };
 
       if (needsUser && user.isBlank()) {
         throw new IllegalStateException("SASL enabled but username not set");
@@ -148,12 +154,8 @@ public class PircbotxBotFactory {
         throw new IllegalStateException("SASL enabled but secret not set");
       }
       builder.setCapEnabled(true);
-      builder.addCapHandler(new MultiSaslCapHandler(
-          user,
-          secret,
-          mech,
-          s.sasl().disconnectOnFailure()
-      ));
+      builder.addCapHandler(
+          new MultiSaslCapHandler(user, secret, mech, s.sasl().disconnectOnFailure()));
     }
 
     return new PircBotX(builder.buildConfiguration());
@@ -197,11 +199,11 @@ public class PircbotxBotFactory {
       Method m = builder.getClass().getMethod("setMessageDelay", delayIface);
       Object delayObj;
       if (delayIface.isInterface()) {
-        delayObj = java.lang.reflect.Proxy.newProxyInstance(
-            delayIface.getClassLoader(),
-            new Class<?>[] { delayIface },
-            constantDelayHandler(delayMs)
-        );
+        delayObj =
+            java.lang.reflect.Proxy.newProxyInstance(
+                delayIface.getClassLoader(),
+                new Class<?>[] {delayIface},
+                constantDelayHandler(delayMs));
       } else {
         delayObj = tryConstructDelay(delayMs, delayIface);
       }
@@ -236,14 +238,16 @@ public class PircbotxBotFactory {
     } catch (ReflectiveOperationException ignored) {
     }
     try {
-      return delayType.getConstructor(int.class).newInstance((int) Math.min(Integer.MAX_VALUE, delayMs));
+      return delayType
+          .getConstructor(int.class)
+          .newInstance((int) Math.min(Integer.MAX_VALUE, delayMs));
     } catch (ReflectiveOperationException ignored) {
     }
     try {
       return delayType.getConstructor(Duration.class).newInstance(Duration.ofMillis(delayMs));
     } catch (ReflectiveOperationException ignored) {
     }
-    for (String name : new String[] { "ofMillis", "millis", "fixed", "constant" }) {
+    for (String name : new String[] {"ofMillis", "millis", "fixed", "constant"}) {
       try {
         Method m = delayType.getMethod(name, long.class);
         return m.invoke(null, delayMs);
@@ -299,7 +303,8 @@ public class PircbotxBotFactory {
     }
 
     @Override
-    public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+    public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+        throws IOException {
       Socket s = base();
       s.bind(new InetSocketAddress(localHost, localPort));
       return connect(s, new InetSocketAddress(host, port));
@@ -311,7 +316,8 @@ public class PircbotxBotFactory {
     }
 
     @Override
-    public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+    public Socket createSocket(
+        InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
       Socket s = base();
       s.bind(new InetSocketAddress(localAddress, localPort));
       return connect(s, new InetSocketAddress(address, port));
@@ -337,7 +343,8 @@ public class PircbotxBotFactory {
       return tls;
     }
 
-    private Socket connectTcp(String host, int port, InetAddress localHost, Integer localPort) throws IOException {
+    private Socket connectTcp(String host, int port, InetAddress localHost, Integer localPort)
+        throws IOException {
       Socket tcp = new Socket(Proxy.NO_PROXY);
       if (localHost != null && localPort != null) {
         tcp.bind(new InetSocketAddress(localHost, localPort));
@@ -353,7 +360,8 @@ public class PircbotxBotFactory {
     }
 
     @Override
-    public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+    public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+        throws IOException {
       return wrap(connectTcp(host, port, localHost, localPort), host, port);
     }
 
@@ -363,8 +371,12 @@ public class PircbotxBotFactory {
     }
 
     @Override
-    public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-      return wrap(connectTcp(address.getHostName(), port, localAddress, localPort), address.getHostName(), port);
+    public Socket createSocket(
+        InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+      return wrap(
+          connectTcp(address.getHostName(), port, localAddress, localPort),
+          address.getHostName(),
+          port);
     }
 
     @Override

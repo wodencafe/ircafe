@@ -9,7 +9,8 @@ final class PircbotxIrcv3BatchTag {
   static Optional<String> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();
 
-    String batch = PircbotxIrcv3Tags.firstTagValue(PircbotxIrcv3Tags.fromEvent(pircbotxEvent), "batch");
+    String batch =
+        PircbotxIrcv3Tags.firstTagValue(PircbotxIrcv3Tags.fromEvent(pircbotxEvent), "batch");
     return batch.isBlank() ? Optional.empty() : Optional.of(batch);
   }
 

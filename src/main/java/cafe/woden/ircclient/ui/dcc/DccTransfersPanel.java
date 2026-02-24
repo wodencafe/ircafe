@@ -8,10 +8,10 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
 import java.awt.Cursor;
 import java.awt.Font;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -57,7 +57,8 @@ public final class DccTransfersPanel extends JPanel implements AutoCloseable {
     this(store, null, null);
   }
 
-  public DccTransfersPanel(DccTransferStore store, String serverId, Consumer<String> onEmitCommand) {
+  public DccTransfersPanel(
+      DccTransferStore store, String serverId, Consumer<String> onEmitCommand) {
     super(new BorderLayout());
     this.store = Objects.requireNonNull(store, "store");
     this.serverId = serverId;
@@ -96,35 +97,41 @@ public final class DccTransfersPanel extends JPanel implements AutoCloseable {
     table.getColumnModel().getColumn(COL_PROGRESS).setPreferredWidth(90);
     table.getColumnModel().getColumn(COL_DETAIL).setPreferredWidth(760);
 
-    table.getSelectionModel().addListSelectionListener(e -> {
-      if (!e.getValueIsAdjusting()) {
-        updateActionButtonState();
-      }
-    });
+    table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (!e.getValueIsAdjusting()) {
+                updateActionButtonState();
+              }
+            });
 
-    table.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2) return;
-        runSelectedAction();
-      }
-    });
+    table.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (!SwingUtilities.isLeftMouseButton(e) || e.getClickCount() < 2) return;
+            runSelectedAction();
+          }
+        });
 
-    table.addMouseMotionListener(new MouseAdapter() {
-      @Override
-      public void mouseMoved(MouseEvent e) {
-        int viewRow = table.rowAtPoint(e.getPoint());
-        if (viewRow < 0) {
-          table.setCursor(Cursor.getDefaultCursor());
-          return;
-        }
-        int modelRow = table.convertRowIndexToModel(viewRow);
-        Entry row = model.entryAt(modelRow);
-        table.setCursor((row != null && row.actionHint() != ActionHint.NONE)
-            ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            : Cursor.getDefaultCursor());
-      }
-    });
+    table.addMouseMotionListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseMoved(MouseEvent e) {
+            int viewRow = table.rowAtPoint(e.getPoint());
+            if (viewRow < 0) {
+              table.setCursor(Cursor.getDefaultCursor());
+              return;
+            }
+            int modelRow = table.convertRowIndexToModel(viewRow);
+            Entry row = model.entryAt(modelRow);
+            table.setCursor(
+                (row != null && row.actionHint() != ActionHint.NONE)
+                    ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    : Cursor.getDefaultCursor());
+          }
+        });
 
     JScrollPane scroll = new JScrollPane(table);
     scroll.setBorder(null);
@@ -146,14 +153,19 @@ public final class DccTransfersPanel extends JPanel implements AutoCloseable {
     footer.add(refreshButton, BorderLayout.EAST);
     add(footer, BorderLayout.SOUTH);
 
-    disposables.add(store.changes().subscribe(ch -> {
-      String sid = Objects.toString(DccTransfersPanel.this.serverId, "").trim();
-      if (sid.isEmpty()) return;
-      if (!sid.equals(ch.serverId())) return;
-      SwingUtilities.invokeLater(DccTransfersPanel.this::refresh);
-    }, err -> {
-      // Never crash the UI due to store update failures.
-    }));
+    disposables.add(
+        store
+            .changes()
+            .subscribe(
+                ch -> {
+                  String sid = Objects.toString(DccTransfersPanel.this.serverId, "").trim();
+                  if (sid.isEmpty()) return;
+                  if (!sid.equals(ch.serverId())) return;
+                  SwingUtilities.invokeLater(DccTransfersPanel.this::refresh);
+                },
+                err -> {
+                  // Never crash the UI due to store update failures.
+                }));
 
     refresh();
   }
@@ -182,7 +194,8 @@ public final class DccTransfersPanel extends JPanel implements AutoCloseable {
     model.setRows(rows);
 
     int total = rows.size();
-    long actionable = rows.stream().filter(r -> r != null && r.actionHint() != ActionHint.NONE).count();
+    long actionable =
+        rows.stream().filter(r -> r != null && r.actionHint() != ActionHint.NONE).count();
     title.setText("DCC Transfers - " + sid);
     if (total == 0) {
       subtitle.setText("No DCC activity recorded for this server.");
@@ -284,7 +297,9 @@ public final class DccTransfersPanel extends JPanel implements AutoCloseable {
 
   private static final class DccTransfersTableModel extends AbstractTableModel {
 
-    private static final String[] COLS = {"Updated", "Nick", "Kind", "Status", "Progress", "Detail"};
+    private static final String[] COLS = {
+      "Updated", "Nick", "Kind", "Status", "Progress", "Detail"
+    };
     private static final DateTimeFormatter TIME_FMT =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 

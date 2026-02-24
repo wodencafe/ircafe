@@ -16,9 +16,10 @@ public class ChatThemeSettingsBus {
   private volatile ChatThemeSettings current;
 
   public ChatThemeSettingsBus(UiProperties props) {
-    ChatThemeSettings.Preset preset = props != null
-        ? ChatThemeSettings.Preset.from(props.chatThemePreset())
-        : ChatThemeSettings.Preset.DEFAULT;
+    ChatThemeSettings.Preset preset =
+        props != null
+            ? ChatThemeSettings.Preset.from(props.chatThemePreset())
+            : ChatThemeSettings.Preset.DEFAULT;
 
     String ts = props != null ? props.chatTimestampColor() : null;
     String sys = props != null ? props.chatSystemColor() : null;
@@ -38,9 +39,10 @@ public class ChatThemeSettingsBus {
 
   public void set(ChatThemeSettings next) {
     ChatThemeSettings prev = this.current;
-    this.current = next != null
-        ? next
-        : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+    this.current =
+        next != null
+            ? next
+            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
     pcs.firePropertyChange(PROP_CHAT_THEME_SETTINGS, prev, this.current);
   }
 

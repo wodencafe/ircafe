@@ -8,8 +8,8 @@ import javax.swing.tree.DefaultMutableTreeNode;
 /**
  * Move/close rules for {@link ServerTreeDockable}.
  *
- * <p>Protects server root nodes, the status leaf, and the "Private messages" group node.
- * Only channel leaves (under a server) and PM leaves (under the group) can be moved/closed.
+ * <p>Protects server root nodes, the status leaf, and the "Private messages" group node. Only
+ * channel leaves (under a server) and PM leaves (under the group) can be moved/closed.
  */
 public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy {
 
@@ -76,44 +76,46 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     return min;
   }
 
-private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
-  int count = parent.getChildCount();
-  if (count == 0) return -1;
+  private int maxMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
+    int count = parent.getChildCount();
+    if (count == 0) return -1;
 
-  int idx = count - 1;
-  if (parentIsServer) {
-    // Keep reserved group nodes at the bottom of the server node.
-    while (idx >= 0) {
-      DefaultMutableTreeNode tail = (DefaultMutableTreeNode) parent.getChildAt(idx);
-      if (isReservedServerTailNode(tail)) {
-        idx--;
-        continue;
+    int idx = count - 1;
+    if (parentIsServer) {
+      // Keep reserved group nodes at the bottom of the server node.
+      while (idx >= 0) {
+        DefaultMutableTreeNode tail = (DefaultMutableTreeNode) parent.getChildAt(idx);
+        if (isReservedServerTailNode(tail)) {
+          idx--;
+          continue;
+        }
+        break;
       }
-      break;
     }
+    return idx;
   }
-  return idx;
-}
 
-private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
-  return isPrivateMessagesGroupNode(node) || isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node);
-}
+  private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
+    return isPrivateMessagesGroupNode(node)
+        || isSojuNetworksGroupNode(node)
+        || isZncNetworksGroupNode(node);
+  }
 
-private boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
-  if (node == null) return false;
-  Object uo = node.getUserObject();
-  if (!(uo instanceof String s)) return false;
-  return s.trim().equalsIgnoreCase("Soju Networks");
-}
+  private boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String s)) return false;
+    return s.trim().equalsIgnoreCase("Soju Networks");
+  }
 
-private boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
-  if (node == null) return false;
-  Object uo = node.getUserObject();
-  if (!(uo instanceof String s)) return false;
-  return s.trim().equalsIgnoreCase("ZNC Networks");
-}
+  private boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String s)) return false;
+    return s.trim().equalsIgnoreCase("ZNC Networks");
+  }
 
-private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+  private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
 
     if (node == null) return false;
     Object uo = node.getUserObject();

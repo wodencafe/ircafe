@@ -29,7 +29,8 @@ class ThemeLookAndFeelInstaller {
   private static final String NIMBUS_LAF_CLASS = "javax.swing.plaf.nimbus.NimbusLookAndFeel";
   private static final String METAL_LAF_CLASS = "javax.swing.plaf.metal.MetalLookAndFeel";
   private static final String MOTIF_LAF_CLASS = "com.sun.java.swing.plaf.motif.MotifLookAndFeel";
-  private static final String WINDOWS_LAF_CLASS = "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
+  private static final String WINDOWS_LAF_CLASS =
+      "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
   private static final String GTK_LAF_CLASS = "com.sun.java.swing.plaf.gtk.GTKLookAndFeel";
 
   private interface InstallAction {
@@ -126,13 +127,15 @@ class ThemeLookAndFeelInstaller {
         () -> installDarkLafOrFallback(DarkLafSupport::installSolarizedDark, FlatDarculaLaf::new));
     out.put(
         "darklaf-high-contrast-dark",
-        () -> installDarkLafOrFallback(DarkLafSupport::installHighContrastDark, FlatDarculaLaf::new));
+        () ->
+            installDarkLafOrFallback(DarkLafSupport::installHighContrastDark, FlatDarculaLaf::new));
     out.put(
         "darklaf-light",
         () -> installDarkLafOrFallback(DarkLafSupport::installLight, FlatLightLaf::new));
     out.put(
         "darklaf-high-contrast-light",
-        () -> installDarkLafOrFallback(DarkLafSupport::installHighContrastLight, FlatLightLaf::new));
+        () ->
+            installDarkLafOrFallback(DarkLafSupport::installHighContrastLight, FlatLightLaf::new));
     out.put(
         "darklaf-intellij",
         () -> installDarkLafOrFallback(DarkLafSupport::installIntelliJ, FlatLightLaf::new));
@@ -154,7 +157,8 @@ class ThemeLookAndFeelInstaller {
   }
 
   private static void installDarkLafOrFallback(
-      BooleanSupplier darkLafInstallAction, Supplier<LookAndFeel> fallbackFactory) throws Exception {
+      BooleanSupplier darkLafInstallAction, Supplier<LookAndFeel> fallbackFactory)
+      throws Exception {
     if (!darkLafInstallAction.getAsBoolean()) {
       UIManager.setLookAndFeel(fallbackFactory.get());
       return;

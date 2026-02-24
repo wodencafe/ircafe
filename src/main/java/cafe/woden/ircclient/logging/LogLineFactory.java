@@ -12,10 +12,7 @@ import java.util.Objects;
 import java.util.TreeMap;
 import org.springframework.stereotype.Component;
 
-/**
- * Convert UI-facing transcript events into persisted {@link LogLine}s.
- *
- */
+/** Convert UI-facing transcript events into persisted {@link LogLine}s. */
 @Component
 public final class LogLineFactory {
 
@@ -40,8 +37,11 @@ public final class LogLineFactory {
         .build();
   }
 
-  /** Same as {@link #chat(TargetRef, String, String, boolean)} but with an explicit epoch timestamp. */
-  public LogLine chatAt(TargetRef target, String from, String text, boolean outgoingLocalEcho, long tsEpochMs) {
+  /**
+   * Same as {@link #chat(TargetRef, String, String, boolean)} but with an explicit epoch timestamp.
+   */
+  public LogLine chatAt(
+      TargetRef target, String from, String text, boolean outgoingLocalEcho, long tsEpochMs) {
     return baseAt(target, tsEpochMs)
         .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
         .kind(LogKind.CHAT)
@@ -53,7 +53,8 @@ public final class LogLineFactory {
   }
 
   /**
-   * Same as {@link #chatAt(TargetRef, String, String, boolean, long)} but with IRCv3 identity metadata.
+   * Same as {@link #chatAt(TargetRef, String, String, boolean, long)} but with IRCv3 identity
+   * metadata.
    */
   public LogLine chatAt(
       TargetRef target,
@@ -62,8 +63,7 @@ public final class LogLineFactory {
       boolean outgoingLocalEcho,
       long tsEpochMs,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     return baseAt(target, tsEpochMs)
         .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
         .kind(LogKind.CHAT)
@@ -87,8 +87,7 @@ public final class LogLineFactory {
       long tsEpochMs,
       String pendingId,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     return baseAt(target, tsEpochMs)
         .direction(LogDirection.OUT)
         .kind(LogKind.CHAT)
@@ -111,7 +110,10 @@ public final class LogLineFactory {
         .build();
   }
 
-  /** Same as {@link #softIgnoredSpoiler(TargetRef, String, String)} but with an explicit epoch timestamp. */
+  /**
+   * Same as {@link #softIgnoredSpoiler(TargetRef, String, String)} but with an explicit epoch
+   * timestamp.
+   */
   public LogLine softIgnoredSpoilerAt(TargetRef target, String from, String text, long tsEpochMs) {
     return baseAt(target, tsEpochMs)
         .direction(LogDirection.IN)
@@ -124,7 +126,8 @@ public final class LogLineFactory {
   }
 
   /**
-   * Same as {@link #softIgnoredSpoilerAt(TargetRef, String, String, long)} but with IRCv3 identity metadata.
+   * Same as {@link #softIgnoredSpoilerAt(TargetRef, String, String, long)} but with IRCv3 identity
+   * metadata.
    */
   public LogLine softIgnoredSpoilerAt(
       TargetRef target,
@@ -132,8 +135,7 @@ public final class LogLineFactory {
       String text,
       long tsEpochMs,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     return baseAt(target, tsEpochMs)
         .direction(LogDirection.IN)
         .kind(LogKind.SPOILER)
@@ -156,8 +158,12 @@ public final class LogLineFactory {
         .build();
   }
 
-  /** Same as {@link #action(TargetRef, String, String, boolean)} but with an explicit epoch timestamp. */
-  public LogLine actionAt(TargetRef target, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
+  /**
+   * Same as {@link #action(TargetRef, String, String, boolean)} but with an explicit epoch
+   * timestamp.
+   */
+  public LogLine actionAt(
+      TargetRef target, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
     return baseAt(target, tsEpochMs)
         .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
         .kind(LogKind.ACTION)
@@ -169,7 +175,8 @@ public final class LogLineFactory {
   }
 
   /**
-   * Same as {@link #actionAt(TargetRef, String, String, boolean, long)} but with IRCv3 identity metadata.
+   * Same as {@link #actionAt(TargetRef, String, String, boolean, long)} but with IRCv3 identity
+   * metadata.
    */
   public LogLine actionAt(
       TargetRef target,
@@ -178,8 +185,7 @@ public final class LogLineFactory {
       boolean outgoingLocalEcho,
       long tsEpochMs,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     return baseAt(target, tsEpochMs)
         .direction(outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN)
         .kind(LogKind.ACTION)
@@ -214,15 +220,16 @@ public final class LogLineFactory {
         .build();
   }
 
-  /** Same as {@link #noticeAt(TargetRef, String, String, long)} but with IRCv3 identity metadata. */
+  /**
+   * Same as {@link #noticeAt(TargetRef, String, String, long)} but with IRCv3 identity metadata.
+   */
   public LogLine noticeAt(
       TargetRef target,
       String from,
       String text,
       long tsEpochMs,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     return baseAt(target, tsEpochMs)
         .direction(LogDirection.IN)
         .kind(LogKind.NOTICE)
@@ -257,15 +264,16 @@ public final class LogLineFactory {
         .build();
   }
 
-  /** Same as {@link #statusAt(TargetRef, String, String, long)} but with IRCv3 identity metadata. */
+  /**
+   * Same as {@link #statusAt(TargetRef, String, String, long)} but with IRCv3 identity metadata.
+   */
   public LogLine statusAt(
       TargetRef target,
       String from,
       String text,
       long tsEpochMs,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     return baseAt(target, tsEpochMs)
         .direction(LogDirection.SYSTEM)
         .kind(LogKind.STATUS)
@@ -302,10 +310,11 @@ public final class LogLineFactory {
 
   public LogLine presence(TargetRef target, PresenceEvent event) {
     Objects.requireNonNull(event, "event");
-    String fromNick = switch (event.kind()) {
-      case JOIN, PART, QUIT -> normNick(event.nick());
-      case NICK -> normNick(event.oldNick());
-    };
+    String fromNick =
+        switch (event.kind()) {
+          case JOIN, PART, QUIT -> normNick(event.nick());
+          case NICK -> normNick(event.oldNick());
+        };
 
     return base(target)
         .direction(LogDirection.SYSTEM)
@@ -339,7 +348,8 @@ public final class LogLineFactory {
     return s == null ? "" : s;
   }
 
-  private static String messageMetaJson(String pendingId, String messageId, Map<String, String> ircv3Tags) {
+  private static String messageMetaJson(
+      String pendingId, String messageId, Map<String, String> ircv3Tags) {
     String pid = normToken(pendingId);
     String msgId = normToken(messageId);
     Map<String, String> tags = normalizeTagsForMeta(ircv3Tags);
@@ -494,8 +504,7 @@ public final class LogLineFactory {
           Objects.requireNonNull(text, "text"),
           outgoingLocalEcho,
           softIgnored,
-          metaJson
-      );
+          metaJson);
     }
   }
 }

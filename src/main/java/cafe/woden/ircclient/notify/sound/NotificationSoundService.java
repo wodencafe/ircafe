@@ -3,14 +3,8 @@ package cafe.woden.ircclient.notify.sound;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import jakarta.annotation.PreDestroy;
-import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-
-import javax.sound.sampled.*;
-import java.io.BufferedInputStream;
 import java.beans.PropertyChangeListener;
+import java.io.BufferedInputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +15,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.sound.sampled.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
 
 @Service
 public class NotificationSoundService {
@@ -38,8 +37,7 @@ public class NotificationSoundService {
   private final RuntimeConfigStore runtimeConfig;
   private final PropertyChangeListener settingsListener;
 
-  private final AtomicReference<Instant> lastPlayed =
-      new AtomicReference<>(Instant.EPOCH);
+  private final AtomicReference<Instant> lastPlayed = new AtomicReference<>(Instant.EPOCH);
   private final AtomicLong previewRequestSeq = new AtomicLong(0L);
 
   /** Global sound enable toggle (Phase 2: defaults to enabled, UI/persistence later). */
@@ -54,10 +52,10 @@ public class NotificationSoundService {
   /** Resolved absolute path for the custom sound file (when enabled). */
   private volatile Path customSoundPath;
 
-  public NotificationSoundService(NotificationSoundSettingsBus settingsBus,
-                                  RuntimeConfigStore runtimeConfig,
-                                  @Qualifier(ExecutorConfig.NOTIFICATION_SOUND_EXECUTOR)
-                                  ExecutorService executor) {
+  public NotificationSoundService(
+      NotificationSoundSettingsBus settingsBus,
+      RuntimeConfigStore runtimeConfig,
+      @Qualifier(ExecutorConfig.NOTIFICATION_SOUND_EXECUTOR) ExecutorService executor) {
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;
     this.executor = executor;
@@ -65,23 +63,23 @@ public class NotificationSoundService {
     NotificationSoundSettings seed = settingsBus != null ? settingsBus.get() : null;
     applySettings(seed);
 
-    this.settingsListener = evt -> {
-      if (evt == null) return;
-      if (!NotificationSoundSettingsBus.PROP_NOTIFICATION_SOUND_SETTINGS.equals(evt.getPropertyName())) return;
-      Object v = evt.getNewValue();
-      if (v instanceof NotificationSoundSettings s) {
-        applySettings(s);
-      }
-    };
+    this.settingsListener =
+        evt -> {
+          if (evt == null) return;
+          if (!NotificationSoundSettingsBus.PROP_NOTIFICATION_SOUND_SETTINGS.equals(
+              evt.getPropertyName())) return;
+          Object v = evt.getNewValue();
+          if (v instanceof NotificationSoundSettings s) {
+            applySettings(s);
+          }
+        };
 
     if (settingsBus != null) {
       settingsBus.addListener(settingsListener);
     }
   }
 
-  /**
-   * Play the currently selected built-in notification sound.
-   */
+  /** Play the currently selected built-in notification sound. */
   public void play() {
     if (!enabled) {
       return;
@@ -96,9 +94,7 @@ public class NotificationSoundService {
     playResource(selectedSound.resourcePath(), false, 0L);
   }
 
-  /**
-   * Play a one-off sound override for a specific notification event.
-   */
+  /** Play a one-off sound override for a specific notification event. */
   public void playOverride(String soundId, boolean useCustom, String customPath) {
     if (!enabled) {
       return;
@@ -116,9 +112,7 @@ public class NotificationSoundService {
     playResource(override.resourcePath(), false, 0L);
   }
 
-  /**
-   * Play the given sound for preview/testing, even if sounds are disabled.
-   */
+  /** Play the given sound for preview/testing, even if sounds are disabled. */
   public void preview(BuiltInSound sound) {
     if (sound == null) return;
     long seq = previewRequestSeq.incrementAndGet();
@@ -176,68 +170,66 @@ public class NotificationSoundService {
   }
 
   private void playResource(String resourcePath, boolean bypassLimiter, long previewSeq) {
-    executor.submit(() -> {
-      if (isStalePreview(previewSeq)) {
-        return;
-      }
-      if (!bypassLimiter && !canPlay()) {
-        return;
-      }
-
-      try {
-        URL resource = getClass()
-            .getClassLoader()
-            .getResource(resourcePath);
-
-        if (resource == null) {
-          log.debug("Sound resource not found: {}", resourcePath);
-          return;
-        }
-
-        try (AudioInputStream originalStream =
-            AudioSystem.getAudioInputStream(
-                new BufferedInputStream(resource.openStream()))) {
-
+    executor.submit(
+        () -> {
           if (isStalePreview(previewSeq)) {
             return;
           }
-          playDecoded(originalStream);
-          lastPlayed.set(Instant.now());
-        }
+          if (!bypassLimiter && !canPlay()) {
+            return;
+          }
 
-      } catch (Exception e) {
-        // Don't let audio failures crash or spam logs; debug is enough.
-        log.debug("Failed to play notification sound: {}", resourcePath, e);
-      }
-    });
+          try {
+            URL resource = getClass().getClassLoader().getResource(resourcePath);
+
+            if (resource == null) {
+              log.debug("Sound resource not found: {}", resourcePath);
+              return;
+            }
+
+            try (AudioInputStream originalStream =
+                AudioSystem.getAudioInputStream(new BufferedInputStream(resource.openStream()))) {
+
+              if (isStalePreview(previewSeq)) {
+                return;
+              }
+              playDecoded(originalStream);
+              lastPlayed.set(Instant.now());
+            }
+
+          } catch (Exception e) {
+            // Don't let audio failures crash or spam logs; debug is enough.
+            log.debug("Failed to play notification sound: {}", resourcePath, e);
+          }
+        });
   }
 
   private void playFile(Path path, boolean bypassLimiter, long previewSeq) {
-    executor.submit(() -> {
-      if (isStalePreview(previewSeq)) {
-        return;
-      }
-      if (!bypassLimiter && !canPlay()) {
-        return;
-      }
+    executor.submit(
+        () -> {
+          if (isStalePreview(previewSeq)) {
+            return;
+          }
+          if (!bypassLimiter && !canPlay()) {
+            return;
+          }
 
-      if (path == null || !Files.exists(path)) {
-        return;
-      }
+          if (path == null || !Files.exists(path)) {
+            return;
+          }
 
-      try (AudioInputStream originalStream =
-          AudioSystem.getAudioInputStream(path.toFile())) {
+          try (AudioInputStream originalStream = AudioSystem.getAudioInputStream(path.toFile())) {
 
-        if (isStalePreview(previewSeq)) {
-          return;
-        }
-        playDecoded(originalStream);
-        lastPlayed.set(Instant.now());
+            if (isStalePreview(previewSeq)) {
+              return;
+            }
+            playDecoded(originalStream);
+            lastPlayed.set(Instant.now());
 
-      } catch (Exception e) {
-        log.debug("Failed to play custom notification sound: {}", path, e);
-      }
-    });
+          } catch (Exception e) {
+            log.debug("Failed to play custom notification sound: {}", path, e);
+          }
+        });
   }
 
   private boolean isStalePreview(long previewSeq) {
@@ -247,34 +239,36 @@ public class NotificationSoundService {
   private void playDecoded(AudioInputStream originalStream) throws Exception {
     AudioFormat baseFormat = originalStream.getFormat();
 
-    boolean needsDecode = baseFormat.getEncoding() != AudioFormat.Encoding.PCM_SIGNED
-        || baseFormat.getSampleSizeInBits() != 16;
+    boolean needsDecode =
+        baseFormat.getEncoding() != AudioFormat.Encoding.PCM_SIGNED
+            || baseFormat.getSampleSizeInBits() != 16;
 
     AudioInputStream decodedStream = originalStream;
 
     if (needsDecode) {
-      AudioFormat decodedFormat = new AudioFormat(
-          AudioFormat.Encoding.PCM_SIGNED,
-          baseFormat.getSampleRate(),
-          16,
-          baseFormat.getChannels(),
-          baseFormat.getChannels() * 2,
-          baseFormat.getSampleRate(),
-          false
-      );
+      AudioFormat decodedFormat =
+          new AudioFormat(
+              AudioFormat.Encoding.PCM_SIGNED,
+              baseFormat.getSampleRate(),
+              16,
+              baseFormat.getChannels(),
+              baseFormat.getChannels() * 2,
+              baseFormat.getSampleRate(),
+              false);
       decodedStream = AudioSystem.getAudioInputStream(decodedFormat, originalStream);
     }
 
     try (AudioInputStream toPlay = decodedStream) {
       Clip clip = AudioSystem.getClip();
       CountDownLatch finished = new CountDownLatch(1);
-      LineListener listener = event -> {
-        if (event == null) return;
-        LineEvent.Type t = event.getType();
-        if (t == LineEvent.Type.STOP || t == LineEvent.Type.CLOSE) {
-          finished.countDown();
-        }
-      };
+      LineListener listener =
+          event -> {
+            if (event == null) return;
+            LineEvent.Type t = event.getType();
+            if (t == LineEvent.Type.STOP || t == LineEvent.Type.CLOSE) {
+              finished.countDown();
+            }
+          };
 
       try {
         clip.addLineListener(listener);
@@ -283,7 +277,9 @@ public class NotificationSoundService {
         clip.start();
 
         long durationMs = TimeUnit.MICROSECONDS.toMillis(Math.max(0L, clip.getMicrosecondLength()));
-        long waitMs = Math.max(CLIP_WAIT_MIN_MS, Math.min(CLIP_WAIT_MAX_MS, durationMs + CLIP_FINISH_GRACE_MS));
+        long waitMs =
+            Math.max(
+                CLIP_WAIT_MIN_MS, Math.min(CLIP_WAIT_MAX_MS, durationMs + CLIP_FINISH_GRACE_MS));
         try {
           finished.await(waitMs, TimeUnit.MILLISECONDS);
         } catch (InterruptedException ie) {
@@ -309,8 +305,7 @@ public class NotificationSoundService {
   private boolean canPlay() {
     Instant now = Instant.now();
     Instant last = lastPlayed.get();
-    return Duration.between(last, now)
-        .compareTo(MIN_INTERVAL) > 0;
+    return Duration.between(last, now).compareTo(MIN_INTERVAL) > 0;
   }
 
   @PreDestroy

@@ -11,7 +11,12 @@ final class GitHubPreviewUtil {
 
   private GitHubPreviewUtil() {}
 
-  enum Kind { REPO, ISSUE_OR_PR, COMMIT, RELEASE }
+  enum Kind {
+    REPO,
+    ISSUE_OR_PR,
+    COMMIT,
+    RELEASE
+  }
 
   record GitHubLink(Kind kind, String owner, String repo, String numberOrShaOrTag) {}
 
@@ -70,9 +75,30 @@ final class GitHubPreviewUtil {
     if (link == null) return null;
     return switch (link.kind) {
       case REPO -> URI.create("https://api.github.com/repos/" + link.owner + "/" + link.repo);
-      case ISSUE_OR_PR -> URI.create("https://api.github.com/repos/" + link.owner + "/" + link.repo + "/issues/" + link.numberOrShaOrTag);
-      case COMMIT -> URI.create("https://api.github.com/repos/" + link.owner + "/" + link.repo + "/commits/" + link.numberOrShaOrTag);
-      case RELEASE -> URI.create("https://api.github.com/repos/" + link.owner + "/" + link.repo + "/releases/tags/" + link.numberOrShaOrTag);
+      case ISSUE_OR_PR ->
+          URI.create(
+              "https://api.github.com/repos/"
+                  + link.owner
+                  + "/"
+                  + link.repo
+                  + "/issues/"
+                  + link.numberOrShaOrTag);
+      case COMMIT ->
+          URI.create(
+              "https://api.github.com/repos/"
+                  + link.owner
+                  + "/"
+                  + link.repo
+                  + "/commits/"
+                  + link.numberOrShaOrTag);
+      case RELEASE ->
+          URI.create(
+              "https://api.github.com/repos/"
+                  + link.owner
+                  + "/"
+                  + link.repo
+                  + "/releases/tags/"
+                  + link.numberOrShaOrTag);
     };
   }
 
@@ -88,7 +114,8 @@ final class GitHubPreviewUtil {
   }
 
   private static LinkPreview parseRepo(String json, GitHubLink link, URI originalUri) {
-    String fullName = firstNonBlank(MiniJson.findString(json, "full_name"), link.owner + "/" + link.repo);
+    String fullName =
+        firstNonBlank(MiniJson.findString(json, "full_name"), link.owner + "/" + link.repo);
     String desc = MiniJson.findString(json, "description");
     Long stars = MiniJson.findLong(json, "stargazers_count");
     Long forks = MiniJson.findLong(json, "forks_count");
@@ -154,18 +181,28 @@ final class GitHubPreviewUtil {
     String avatar = authorObjTop != null ? MiniJson.findString(authorObjTop, "avatar_url") : null;
     String login = authorObjTop != null ? MiniJson.findString(authorObjTop, "login") : null;
 
-    String details = buildCommitDetails(link.owner + "/" + link.repo, sha != null ? sha : link.numberOrShaOrTag, login != null ? login : authorName, date);
+    String details =
+        buildCommitDetails(
+            link.owner + "/" + link.repo,
+            sha != null ? sha : link.numberOrShaOrTag,
+            login != null ? login : authorName,
+            date);
     String desc = details;
 
     String htmlUrl = MiniJson.findString(json, "html_url");
     if (htmlUrl == null) htmlUrl = originalUri != null ? originalUri.toString() : null;
 
-    String shownTitle = firstNonBlank(firstLine, "Commit " + shortSha(sha != null ? sha : link.numberOrShaOrTag));
+    String shownTitle =
+        firstNonBlank(firstLine, "Commit " + shortSha(sha != null ? sha : link.numberOrShaOrTag));
     return new LinkPreview(htmlUrl, shownTitle, desc, "GitHub", avatar, avatar != null ? 1 : 0);
   }
 
   private static LinkPreview parseRelease(String json, GitHubLink link, URI originalUri) {
-    String name = firstNonBlank(MiniJson.findString(json, "name"), MiniJson.findString(json, "tag_name"), link.numberOrShaOrTag);
+    String name =
+        firstNonBlank(
+            MiniJson.findString(json, "name"),
+            MiniJson.findString(json, "tag_name"),
+            link.numberOrShaOrTag);
     String bodyText = MiniJson.findString(json, "body");
     String published = MiniJson.findString(json, "published_at");
 
@@ -173,7 +210,8 @@ final class GitHubPreviewUtil {
     String author = authorObj != null ? MiniJson.findString(authorObj, "login") : null;
     String avatar = authorObj != null ? MiniJson.findString(authorObj, "avatar_url") : null;
 
-    String details = buildReleaseDetails(link.owner + "/" + link.repo, link.numberOrShaOrTag, author, published);
+    String details =
+        buildReleaseDetails(link.owner + "/" + link.repo, link.numberOrShaOrTag, author, published);
     String snippet = bodyText != null ? PreviewTextUtil.trimToSentence(bodyText, 900) : null;
     String desc = joinLines(details, snippet);
 
@@ -208,7 +246,8 @@ final class GitHubPreviewUtil {
     return sb.toString();
   }
 
-  private static String buildIssueDetails(String kind, String num, String state, Long comments, String user, String updatedIso) {
+  private static String buildIssueDetails(
+      String kind, String num, String state, Long comments, String user, String updatedIso) {
     StringBuilder sb = new StringBuilder();
     sb.append(kind);
     if (num != null) sb.append(" #").append(num);
@@ -254,7 +293,9 @@ final class GitHubPreviewUtil {
     try {
       if (iso == null || iso.isBlank()) return null;
       Instant inst = Instant.parse(iso.strip());
-      return DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ROOT).withZone(ZoneId.systemDefault()).format(inst);
+      return DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ROOT)
+          .withZone(ZoneId.systemDefault())
+          .format(inst);
     } catch (Exception ignored) {
       return null;
     }
@@ -276,8 +317,10 @@ final class GitHubPreviewUtil {
 
   private static String formatCount(long n) {
     if (n < 0) return "0";
-    if (n >= 1_000_000_000L) return String.format(Locale.ROOT, "%.1fB", n / 1_000_000_000d).replace(".0", "");
-    if (n >= 1_000_000L) return String.format(Locale.ROOT, "%.1fM", n / 1_000_000d).replace(".0", "");
+    if (n >= 1_000_000_000L)
+      return String.format(Locale.ROOT, "%.1fB", n / 1_000_000_000d).replace(".0", "");
+    if (n >= 1_000_000L)
+      return String.format(Locale.ROOT, "%.1fM", n / 1_000_000d).replace(".0", "");
     if (n >= 1_000L) return String.format(Locale.ROOT, "%.1fK", n / 1_000d).replace(".0", "");
     return NumberFormat.getIntegerInstance(Locale.ROOT).format(n);
   }
@@ -338,7 +381,8 @@ final class GitHubPreviewUtil {
         if (p < 0) return null;
         p = skipWs(json, p);
         int end = p;
-        if (end < json.length() && (json.charAt(end) == '-' || Character.isDigit(json.charAt(end)))) {
+        if (end < json.length()
+            && (json.charAt(end) == '-' || Character.isDigit(json.charAt(end)))) {
           end++;
           while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
           try {

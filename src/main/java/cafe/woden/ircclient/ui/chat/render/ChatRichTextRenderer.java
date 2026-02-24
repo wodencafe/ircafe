@@ -20,9 +20,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Inserts styled chat text into a {@link StyledDocument}:
+ *
  * <ul>
- *   <li>URL highlighting (clickable via {@link ChatStyles#ATTR_URL})</li>
- *   <li>Mention highlighting using the current nick (per server)</li>
+ *   <li>URL highlighting (clickable via {@link ChatStyles#ATTR_URL})
+ *   <li>Mention highlighting using the current nick (per server)
  * </ul>
  */
 @Component
@@ -41,8 +42,7 @@ public class ChatRichTextRenderer {
       MentionPatternRegistry mentions,
       UserListStore userLists,
       ChatStyles styles,
-      NickColorService nickColors
-  ) {
+      NickColorService nickColors) {
     this.mentions = mentions;
     this.userLists = userLists;
     this.styles = styles;
@@ -58,15 +58,13 @@ public class ChatRichTextRenderer {
    * Inserts text that may contain URLs and mentions at an arbitrary offset.
    *
    * <p>This is used for transcript history insertion (prepends) so URL/mention/channel metadata is
-   * preserved when inserting above existing content.</p>
+   * preserved when inserting above existing content.
    *
    * @return the next insertion offset (i.e., {@code insertPos + insertedLength})
    */
-  public int insertRichTextAt(StyledDocument doc,
-                              TargetRef ref,
-                              String text,
-                              AttributeSet baseStyle,
-                              int insertPos) throws BadLocationException {
+  public int insertRichTextAt(
+      StyledDocument doc, TargetRef ref, String text, AttributeSet baseStyle, int insertPos)
+      throws BadLocationException {
     if (doc == null || text == null || text.isEmpty()) {
       return Math.max(0, insertPos);
     }
@@ -88,10 +86,9 @@ public class ChatRichTextRenderer {
     return cur.pos;
   }
 
-  /**
-   * Inserts text that may contain URLs and mentions (no mIRC control codes expected).
-   */
-  private void insertRichTextPlain(InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet base)
+  /** Inserts text that may contain URLs and mentions (no mIRC control codes expected). */
+  private void insertRichTextPlain(
+      InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet base)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
     Color ruleBg = notificationRuleBg(base);
@@ -116,7 +113,8 @@ public class ChatRichTextRenderer {
         StyleConstants.setBackground(linkAttr, ruleBg);
       }
 
-      // If this segment has explicit mIRC colors, keep them (don't let the theme link color override).
+      // If this segment has explicit mIRC colors, keep them (don't let the theme link color
+      // override).
       if (hasIrcColors(base)) {
         Color fg = StyleConstants.getForeground(base);
         Color bg = StyleConstants.getBackground(base);
@@ -145,7 +143,8 @@ public class ChatRichTextRenderer {
     }
   }
 
-  private void insertWithMentions(InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet baseStyle)
+  private void insertWithMentions(
+      InsertCursor cur, TargetRef ref, String serverId, String text, AttributeSet baseStyle)
       throws BadLocationException {
     if (text == null || text.isEmpty()) return;
     Color ruleBg = notificationRuleBg(baseStyle);
@@ -185,7 +184,8 @@ public class ChatRichTextRenderer {
             if (bg != null) StyleConstants.setBackground(chanAttr, bg);
           }
 
-          // Respect a whole-line foreground override (used for outgoing local-echo lines) unless this
+          // Respect a whole-line foreground override (used for outgoing local-echo lines) unless
+          // this
           // segment already has explicit mIRC colors.
           if (overrideFg != null && !hasIrcColors(baseStyle)) {
             StyleConstants.setForeground(chanAttr, overrideFg);
@@ -221,19 +221,28 @@ public class ChatRichTextRenderer {
             StyleConstants.setBackground(mention, ruleBg);
           }
 
-          if (!hasOverrideFg && !hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
+          if (!hasOverrideFg
+              && !hasIrcColors(baseStyle)
+              && inChannel
+              && nickColors != null
+              && nickColors.enabled()) {
             mention.addAttribute(NickColorService.ATTR_NICK, tokenLower);
             nickColors.applyColor(mention, tokenLower);
           }
 
-          // If the whole line has a foreground override (outgoing local-echo), keep it even when the
+          // If the whole line has a foreground override (outgoing local-echo), keep it even when
+          // the
           // mention background style is applied.
           if (overrideFg != null && !hasIrcColors(baseStyle)) {
             StyleConstants.setForeground(mention, overrideFg);
           }
 
           cur.insert(token, mention);
-        } else if (!hasOverrideFg && !hasIrcColors(baseStyle) && inChannel && nickColors != null && nickColors.enabled()) {
+        } else if (!hasOverrideFg
+            && !hasIrcColors(baseStyle)
+            && inChannel
+            && nickColors != null
+            && nickColors.enabled()) {
           // Channel nick mention: apply the deterministic nick color on top of the base style.
           SimpleAttributeSet nickStyle = nickColors.forNick(tokenLower, baseStyle);
           cur.insert(token, nickStyle);
@@ -290,15 +299,22 @@ public class ChatRichTextRenderer {
 
   private static boolean isNickChar(char c) {
     return Character.isLetterOrDigit(c)
-        || c == '[' || c == ']' || c == '\\' || c == '`'
-        || c == '_' || c == '^' || c == '{' || c == '|' || c == '}'
+        || c == '['
+        || c == ']'
+        || c == '\\'
+        || c == '`'
+        || c == '_'
+        || c == '^'
+        || c == '{'
+        || c == '|'
+        || c == '}'
         || c == '-';
   }
 
   /**
    * IRC channel names start with '#'. The RFC rule is permissive: the rest of the name can contain
-   * anything except spaces, commas, or ASCII bell (\u0007). We also trim common trailing punctuation
-   * so "#chan," links as "#chan".
+   * anything except spaces, commas, or ASCII bell (\u0007). We also trim common trailing
+   * punctuation so "#chan," links as "#chan".
    */
   private static ChannelParts tryParseChannel(String text, int at) {
     if (text == null) return null;
@@ -324,7 +340,8 @@ public class ChatRichTextRenderer {
     int end = raw.length();
     while (end > 1) {
       char c = raw.charAt(end - 1);
-      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '!' || c == '?' || c == ':' || c == ';') {
+      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '!' || c == '?'
+          || c == ':' || c == ';') {
         end--;
       } else {
         break;
@@ -342,7 +359,8 @@ public class ChatRichTextRenderer {
 
   private static boolean isChannelDelimiter(char c) {
     // Stop on whitespace, commas, ASCII bell, or NUL.
-    // Also stop on any other control char to avoid weird escape/control sequences being treated as a channel.
+    // Also stop on any other control char to avoid weird escape/control sequences being treated as
+    // a channel.
     return Character.isWhitespace(c)
         || Character.isISOControl(c)
         || c == ','
@@ -364,18 +382,8 @@ public class ChatRichTextRenderer {
     int end = raw.length();
     while (end > 0) {
       char c = raw.charAt(end - 1);
-      if (c == '.'
-          || c == ','
-          || c == ')'
-          || c == ']'
-          || c == '}'
-          || c == '>'
-          || c == '!'
-          || c == '?'
-          || c == ';'
-          || c == ':'
-          || c == '\''
-          || c == '"') {
+      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '>' || c == '!'
+          || c == '?' || c == ';' || c == ':' || c == '\'' || c == '"') {
         end--;
       } else {
         break;

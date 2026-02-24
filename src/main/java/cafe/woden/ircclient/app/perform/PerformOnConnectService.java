@@ -26,10 +26,11 @@ import org.springframework.stereotype.Component;
  * Executes a per-server "perform" list when that server connects.
  *
  * <p>HexChat-style rules:
+ *
  * <ul>
- *   <li>Each configured line is run in order.</li>
- *   <li>Lines starting with '/' are treated as IRCafe slash commands.</li>
- *   <li>Lines without '/' are treated as raw IRC lines.</li>
+ *   <li>Each configured line is run in order.
+ *   <li>Lines starting with '/' are treated as IRCafe slash commands.
+ *   <li>Lines without '/' are treated as raw IRC lines.
  * </ul>
  */
 @Component
@@ -45,21 +46,22 @@ public class PerformOnConnectService {
   private final CommandParser commandParser;
   private final UiPort ui;
 
-  private final ConcurrentHashMap<String, Disposable> activeRunsByServer = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Disposable> activeRunsByServer =
+      new ConcurrentHashMap<>();
   private final Disposable eventsSub;
 
   public PerformOnConnectService(
-      IrcClientService irc,
-      ServerCatalog serverCatalog,
-      CommandParser commandParser,
-      UiPort ui) {
+      IrcClientService irc, ServerCatalog serverCatalog, CommandParser commandParser, UiPort ui) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.commandParser = Objects.requireNonNull(commandParser, "commandParser");
     this.ui = Objects.requireNonNull(ui, "ui");
 
-    this.eventsSub = irc.events().subscribe(this::onEvent, err ->
-        log.debug("PerformOnConnectService event handler failed", err));
+    this.eventsSub =
+        irc.events()
+            .subscribe(
+                this::onEvent,
+                err -> log.debug("PerformOnConnectService event handler failed", err));
   }
 
   @jakarta.annotation.PreDestroy
@@ -126,19 +128,25 @@ public class PerformOnConnectService {
     }
     if (count == 0) return;
 
-    ui.appendStatus(status, "(perform)", "Running perform list (" + count + " line" + (count == 1 ? "" : "s") + ")");
+    ui.appendStatus(
+        status,
+        "(perform)",
+        "Running perform list (" + count + " line" + (count == 1 ? "" : "s") + ")");
 
     List<String> lines = List.copyOf(perform);
 
     Completable chain = Completable.complete();
     for (int i = 0; i < lines.size(); i++) {
       String raw = lines.get(i);
-      Completable step = executeLine(sid, status, connectedNick, raw)
-          .onErrorComplete(err -> {
-            // Keep going, but surface the error.
-            ui.appendError(status, "(perform)", "Error running: " + summarize(raw) + " — " + err);
-            return true;
-          });
+      Completable step =
+          executeLine(sid, status, connectedNick, raw)
+              .onErrorComplete(
+                  err -> {
+                    // Keep going, but surface the error.
+                    ui.appendError(
+                        status, "(perform)", "Error running: " + summarize(raw) + " — " + err);
+                    return true;
+                  });
       chain = chain.andThen(step);
       // Small spacing between lines to reduce flood risk.
       if (i < lines.size() - 1) {
@@ -146,14 +154,14 @@ public class PerformOnConnectService {
       }
     }
 
-    Disposable run = chain.subscribe(
-        () -> {},
-        err -> ui.appendError(status, "(perform)", "Perform list failed: " + err)
-    );
+    Disposable run =
+        chain.subscribe(
+            () -> {}, err -> ui.appendError(status, "(perform)", "Perform list failed: " + err));
     activeRunsByServer.put(sid, run);
   }
 
-  private Completable executeLine(String serverId, TargetRef status, String connectedNick, String rawLine) {
+  private Completable executeLine(
+      String serverId, TargetRef status, String connectedNick, String rawLine) {
     String line = Objects.toString(rawLine, "").trim();
     if (line.isEmpty() || isComment(line)) return Completable.complete();
 
@@ -179,7 +187,8 @@ public class PerformOnConnectService {
     return executeParsed(serverId, status, parsed, expanded);
   }
 
-  private Completable executeParsed(String serverId, TargetRef status, ParsedInput in, String rawSlashLine) {
+  private Completable executeParsed(
+      String serverId, TargetRef status, ParsedInput in, String rawSlashLine) {
     if (in == null) return Completable.complete();
 
     return switch (in) {
@@ -200,7 +209,8 @@ public class PerformOnConnectService {
         String chan = normTarget(cmd.channel());
         String reason = Objects.toString(cmd.reason(), "").trim();
         if (chan.isEmpty()) {
-          ui.appendStatus(status, "(perform)", "Skipping /part (provide an explicit #channel in perform)");
+          ui.appendStatus(
+              status, "(perform)", "Skipping /part (provide an explicit #channel in perform)");
           yield Completable.complete();
         }
         yield irc.partChannel(serverId, chan, reason.isEmpty() ? null : reason);
@@ -282,12 +292,14 @@ public class PerformOnConnectService {
         String first = Objects.toString(cmd.first(), "").trim();
         String rest = Objects.toString(cmd.rest(), "");
         if (first.isEmpty()) {
-          ui.appendStatus(status, "(perform)", "Skipping /topic (provide an explicit #channel in perform)");
+          ui.appendStatus(
+              status, "(perform)", "Skipping /topic (provide an explicit #channel in perform)");
           yield Completable.complete();
         }
         // In perform, we require explicit #channel.
         if (!first.startsWith("#") && !first.startsWith("&")) {
-          ui.appendStatus(status, "(perform)", "Skipping /topic (first token must be #channel in perform)");
+          ui.appendStatus(
+              status, "(perform)", "Skipping /topic (first token must be #channel in perform)");
           yield Completable.complete();
         }
         String ch = first;
@@ -303,7 +315,8 @@ public class PerformOnConnectService {
         String nick = normTarget(cmd.nick());
         String reason = Objects.toString(cmd.reason(), "").trim();
         if (ch.isEmpty() || nick.isEmpty()) {
-          ui.appendStatus(status, "(perform)", "Skipping /kick (usage: /kick #channel nick [reason])");
+          ui.appendStatus(
+              status, "(perform)", "Skipping /kick (usage: /kick #channel nick [reason])");
           yield Completable.complete();
         }
         String line = "KICK " + ch + " " + nick + (reason.isEmpty() ? "" : " :" + reason);
@@ -341,7 +354,10 @@ public class PerformOnConnectService {
       case ParsedInput.Monitor cmd -> {
         String args = Objects.toString(cmd.args(), "").trim();
         if (args.isEmpty()) {
-          ui.appendStatus(status, "(perform)", "Skipping /monitor (usage: /monitor <+|-|list|status|clear> [nicks])");
+          ui.appendStatus(
+              status,
+              "(perform)",
+              "Skipping /monitor (usage: /monitor <+|-|list|status|clear> [nicks])");
           yield Completable.complete();
         }
         String line = "MONITOR " + args;
@@ -367,11 +383,14 @@ public class PerformOnConnectService {
       case ParsedInput.Deop cmd -> multiMode(serverId, status, cmd.channel(), "-o", cmd.nicks());
       case ParsedInput.Voice cmd -> multiMode(serverId, status, cmd.channel(), "+v", cmd.nicks());
       case ParsedInput.Devoice cmd -> multiMode(serverId, status, cmd.channel(), "-v", cmd.nicks());
-      case ParsedInput.Ban cmd -> multiMode(serverId, status, cmd.channel(), "+b", cmd.masksOrNicks());
-      case ParsedInput.Unban cmd -> multiMode(serverId, status, cmd.channel(), "-b", cmd.masksOrNicks());
+      case ParsedInput.Ban cmd ->
+          multiMode(serverId, status, cmd.channel(), "+b", cmd.masksOrNicks());
+      case ParsedInput.Unban cmd ->
+          multiMode(serverId, status, cmd.channel(), "-b", cmd.masksOrNicks());
 
       case ParsedInput.CtcpVersion cmd -> ctcp(serverId, cmd.nick(), "VERSION", "");
-      case ParsedInput.CtcpPing cmd -> ctcp(serverId, cmd.nick(), "PING", String.valueOf(System.currentTimeMillis()));
+      case ParsedInput.CtcpPing cmd ->
+          ctcp(serverId, cmd.nick(), "PING", String.valueOf(System.currentTimeMillis()));
       case ParsedInput.CtcpTime cmd -> ctcp(serverId, cmd.nick(), "TIME", "");
       case ParsedInput.Ctcp cmd -> ctcp(serverId, cmd.nick(), cmd.command(), cmd.args());
 
@@ -395,18 +414,17 @@ public class PerformOnConnectService {
       default -> {
         // Many commands depend on UI/active target context, or are local-only. In perform, prefer
         // raw IRC (/quote or no '/') or commands that explicitly include their target.
-        ui.appendStatus(status, "(perform)", "Unsupported in perform: " + summarize(rawSlashLine) + " (use /quote or raw IRC)");
+        ui.appendStatus(
+            status,
+            "(perform)",
+            "Unsupported in perform: " + summarize(rawSlashLine) + " (use /quote or raw IRC)");
         yield Completable.complete();
       }
     };
   }
 
   private Completable multiMode(
-      String serverId,
-      TargetRef status,
-      String channel,
-      String op,
-      List<String> nicksOrMasks) {
+      String serverId, TargetRef status, String channel, String op, List<String> nicksOrMasks) {
     String ch = normTarget(channel);
     if (ch.isEmpty()) {
       ui.appendStatus(status, "(perform)", "Skipping (provide an explicit #channel in perform)");

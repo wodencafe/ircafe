@@ -14,8 +14,8 @@ final class PircbotxLineParseUtil {
    * Best-effort normalization for server lines we parse ourselves.
    *
    * <ul>
-   *   <li>Strips IRCv3 message tags (leading "@tag=value;... ")</li>
-   *   <li>Unwraps some toString() formats like "UnknownEvent(line=...)"</li>
+   *   <li>Strips IRCv3 message tags (leading "@tag=value;... ")
+   *   <li>Unwraps some toString() formats like "UnknownEvent(line=...)"
    * </ul>
    */
   static String normalizeIrcLineForParsing(String raw) {
@@ -36,7 +36,8 @@ final class PircbotxLineParseUtil {
       // Strip trailing wrapper chars, but keep whitespace inside the IRC line intact.
       while (!sub.isEmpty()) {
         char last = sub.charAt(sub.length() - 1);
-        if (last == ')' || last == '}' || last == ']') sub = sub.substring(0, sub.length() - 1).trim();
+        if (last == ')' || last == '}' || last == ']')
+          sub = sub.substring(0, sub.length() - 1).trim();
         else break;
       }
       if (sub.startsWith("\"") && sub.endsWith("\"") && sub.length() >= 2) {

@@ -5,8 +5,7 @@ import org.springframework.stereotype.Component;
 /**
  * Small command parser for the input line.
  *
- * Unknown commands return {@link ParsedInput.Unknown}.
- *
+ * <p>Unknown commands return {@link ParsedInput.Unknown}.
  */
 @Component
 public class CommandParser {
@@ -42,12 +41,13 @@ public class CommandParser {
     }
 
     if (matchesCommand(line, "/part") || matchesCommand(line, "/leave")) {
-      String rest = matchesCommand(line, "/part") ? argAfter(line, "/part") : argAfter(line, "/leave");
+      String rest =
+          matchesCommand(line, "/part") ? argAfter(line, "/part") : argAfter(line, "/leave");
       String r = rest == null ? "" : rest.trim();
       if (r.isEmpty()) return new ParsedInput.Part("", "");
       String first;
       String tail;
-      int sp = r.indexOf(' ' );
+      int sp = r.indexOf(' ');
       if (sp < 0) {
         first = r;
         tail = "";
@@ -123,7 +123,6 @@ public class CommandParser {
       return new ParsedInput.Msg(nick, body);
     }
 
-
     if (matchesCommand(line, "/notice")) {
       String rest = argAfter(line, "/notice");
       int sp = rest.indexOf(' ');
@@ -169,30 +168,34 @@ public class CommandParser {
     }
 
     if (matchesCommand(line, "/invjoin") || matchesCommand(line, "/invitejoin")) {
-      String token = matchesCommand(line, "/invjoin")
-          ? argAfter(line, "/invjoin")
-          : argAfter(line, "/invitejoin");
+      String token =
+          matchesCommand(line, "/invjoin")
+              ? argAfter(line, "/invjoin")
+              : argAfter(line, "/invitejoin");
       return new ParsedInput.InviteJoin(token);
     }
 
     if (matchesCommand(line, "/invignore") || matchesCommand(line, "/inviteignore")) {
-      String token = matchesCommand(line, "/invignore")
-          ? argAfter(line, "/invignore")
-          : argAfter(line, "/inviteignore");
+      String token =
+          matchesCommand(line, "/invignore")
+              ? argAfter(line, "/invignore")
+              : argAfter(line, "/inviteignore");
       return new ParsedInput.InviteIgnore(token);
     }
 
     if (matchesCommand(line, "/invwhois") || matchesCommand(line, "/invitewhois")) {
-      String token = matchesCommand(line, "/invwhois")
-          ? argAfter(line, "/invwhois")
-          : argAfter(line, "/invitewhois");
+      String token =
+          matchesCommand(line, "/invwhois")
+              ? argAfter(line, "/invwhois")
+              : argAfter(line, "/invitewhois");
       return new ParsedInput.InviteWhois(token);
     }
 
     if (matchesCommand(line, "/invblock") || matchesCommand(line, "/inviteblock")) {
-      String token = matchesCommand(line, "/invblock")
-          ? argAfter(line, "/invblock")
-          : argAfter(line, "/inviteblock");
+      String token =
+          matchesCommand(line, "/invblock")
+              ? argAfter(line, "/invblock")
+              : argAfter(line, "/inviteblock");
       return new ParsedInput.InviteBlock(token);
     }
 
@@ -227,10 +230,10 @@ public class CommandParser {
     }
 
     if (matchesCommand(line, "/monitor") || matchesCommand(line, "/mon")) {
-      String args = matchesCommand(line, "/monitor") ? argAfter(line, "/monitor") : argAfter(line, "/mon");
+      String args =
+          matchesCommand(line, "/monitor") ? argAfter(line, "/monitor") : argAfter(line, "/mon");
       return new ParsedInput.Monitor(args);
     }
-
 
     if (matchesCommand(line, "/mode")) {
       String rest = argAfter(line, "/mode");
@@ -242,7 +245,6 @@ public class CommandParser {
       return new ParsedInput.Mode(first, tail);
     }
 
-    
     if (matchesCommand(line, "/op")) {
       ParsedTargetList p = parseTargetList(argAfter(line, "/op"));
       return new ParsedInput.Op(p.channel(), p.items());
@@ -301,8 +303,6 @@ public class CommandParser {
       return new ParsedInput.SoftIgnoreList();
     }
 
-
-
     if (matchesCommand(line, "/version")) {
       String nick = argAfter(line, "/version");
       return new ParsedInput.CtcpVersion(nick);
@@ -355,16 +355,18 @@ public class CommandParser {
       return new ParsedInput.Dcc("msg", nick, text);
     }
 
-
-
     // IRCv3 CHATHISTORY
     if (matchesCommand(line, "/chathistory") || matchesCommand(line, "/history")) {
-      String rest = matchesCommand(line, "/chathistory") ? argAfter(line, "/chathistory") : argAfter(line, "/history");
+      String rest =
+          matchesCommand(line, "/chathistory")
+              ? argAfter(line, "/chathistory")
+              : argAfter(line, "/history");
       return parseChatHistoryInput(rest);
     }
 
     if (matchesCommand(line, "/help") || matchesCommand(line, "/commands")) {
-      String topic = matchesCommand(line, "/help") ? argAfter(line, "/help") : argAfter(line, "/commands");
+      String topic =
+          matchesCommand(line, "/help") ? argAfter(line, "/help") : argAfter(line, "/commands");
       return new ParsedInput.Help(topic);
     }
 
@@ -688,8 +690,8 @@ public class CommandParser {
     return normalizeChatHistorySelector(s);
   }
 
-  
   private record ParsedTargetList(String channel, java.util.List<String> items) {}
+
   private record ParsedKick(String channel, String nick, String reason) {}
 
   private static ParsedTargetList parseTargetList(String rest) {
@@ -738,7 +740,6 @@ public class CommandParser {
 
     return new ParsedKick("", first, afterFirst);
   }
-
 
   private static boolean matchesCommand(String line, String cmd) {
     if (line == null || cmd == null) return false;

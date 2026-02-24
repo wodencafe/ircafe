@@ -1,9 +1,5 @@
 package cafe.woden.ircclient.ui;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -11,15 +7,16 @@ import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
 import java.util.Objects;
 import java.util.function.Function;
+import javax.swing.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handles the small hint popup shown near the message input (e.g. "Tab -> nick").
  *
- * Responsibilities:
- *  - Determine the current token under the caret
- *  - Resolve a completion hint (via an injected matcher)
- *  - Own Popup + popup UI (panel/label)
- *  - Theme + positioning + refresh/hide lifecycle
+ * <p>Responsibilities: - Determine the current token under the caret - Resolve a completion hint
+ * (via an injected matcher) - Own Popup + popup UI (panel/label) - Theme + positioning +
+ * refresh/hide lifecycle
  */
 final class MessageInputHintPopupSupport {
 
@@ -41,33 +38,50 @@ final class MessageInputHintPopupSupport {
   private int hintPopupX = Integer.MIN_VALUE;
   private int hintPopupY = Integer.MIN_VALUE;
 
-  private final ComponentAdapter hintAnchorListener = new ComponentAdapter() {
-    @Override public void componentResized(ComponentEvent e) { refreshHintPopup(); }
-    @Override public void componentMoved(ComponentEvent e) { refreshHintPopup(); }
-    @Override public void componentShown(ComponentEvent e) { refreshHintPopup(); }
-    @Override public void componentHidden(ComponentEvent e) { hideHintPopup(); }
-  };
+  private final ComponentAdapter hintAnchorListener =
+      new ComponentAdapter() {
+        @Override
+        public void componentResized(ComponentEvent e) {
+          refreshHintPopup();
+        }
+
+        @Override
+        public void componentMoved(ComponentEvent e) {
+          refreshHintPopup();
+        }
+
+        @Override
+        public void componentShown(ComponentEvent e) {
+          refreshHintPopup();
+        }
+
+        @Override
+        public void componentHidden(ComponentEvent e) {
+          hideHintPopup();
+        }
+      };
 
   private final HierarchyListener hierarchyListener;
 
-  MessageInputHintPopupSupport(JComponent owner,
-                              JTextField input,
-                              Function<String, String> completionMatcher) {
+  MessageInputHintPopupSupport(
+      JComponent owner, JTextField input, Function<String, String> completionMatcher) {
     this.owner = owner;
     this.input = input;
     this.completionMatcher = completionMatcher;
 
     // Must be initialized after the blank-final fields above are assigned.
-    this.hierarchyListener = evt -> {
-      long flags = evt.getChangeFlags();
-      if ((flags & (HierarchyEvent.SHOWING_CHANGED | HierarchyEvent.DISPLAYABILITY_CHANGED)) != 0) {
-        if (this.owner.isShowing()) {
-          refreshHintPopup();
-        } else {
-          hideHintPopup();
-        }
-      }
-    };
+    this.hierarchyListener =
+        evt -> {
+          long flags = evt.getChangeFlags();
+          if ((flags & (HierarchyEvent.SHOWING_CHANGED | HierarchyEvent.DISPLAYABILITY_CHANGED))
+              != 0) {
+            if (this.owner.isShowing()) {
+              refreshHintPopup();
+            } else {
+              hideHintPopup();
+            }
+          }
+        };
 
     hintPopupPanel.setOpaque(true);
     // Border is (re)applied in applyHintPopupTheme() so it follows the active theme.
@@ -79,7 +93,8 @@ final class MessageInputHintPopupSupport {
   }
 
   void installListeners() {
-    // Match the previous behavior: listeners are installed once and live for the component lifetime.
+    // Match the previous behavior: listeners are installed once and live for the component
+    // lifetime.
     input.addComponentListener(hintAnchorListener);
     owner.addComponentListener(hintAnchorListener);
     owner.addHierarchyListener(hierarchyListener);
@@ -159,7 +174,8 @@ final class MessageInputHintPopupSupport {
       Point anchor = input.getLocationOnScreen();
 
       GraphicsConfiguration gc = input.getGraphicsConfiguration();
-      Rectangle screen = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+      Rectangle screen =
+          gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
 
       int x = anchor.x;
       int y = anchor.y - pref.height - HINT_POPUP_GAP_PX;
@@ -170,10 +186,11 @@ final class MessageInputHintPopupSupport {
       if (x > maxX) x = maxX;
       if (x < screen.x) x = screen.x;
 
-      boolean unchanged = hintPopup != null
-          && x == hintPopupX
-          && y == hintPopupY
-          && Objects.equals(hintPopupShownText, hintPopupText);
+      boolean unchanged =
+          hintPopup != null
+              && x == hintPopupX
+              && y == hintPopupY
+              && Objects.equals(hintPopupShownText, hintPopupText);
       if (unchanged) return;
 
       applyHintPopupTheme();
@@ -181,9 +198,11 @@ final class MessageInputHintPopupSupport {
       hintPopup = PopupFactory.getSharedInstance().getPopup(owner, hintPopupPanel, x, y);
       hintPopup.show();
       if (DEBUG_HINT_POPUP) {
-        log.info("[HintPopupDebug] show popup class={} at ({},{}) pref={} panel.bg={} label.fg={} panel.opaque={}",
+        log.info(
+            "[HintPopupDebug] show popup class={} at ({},{}) pref={} panel.bg={} label.fg={} panel.opaque={}",
             hintPopup != null ? hintPopup.getClass().getName() : "null",
-            x, y,
+            x,
+            y,
             pref,
             colorToString(hintPopupPanel.getBackground()),
             colorToString(hintPopupLabel.getForeground()),
@@ -243,21 +262,35 @@ final class MessageInputHintPopupSupport {
 
     if (DEBUG_HINT_POPUP) {
       try {
-        log.info("[HintPopupDebug] LAF={} ({})",
+        log.info(
+            "[HintPopupDebug] LAF={} ({})",
             UIManager.getLookAndFeel() != null ? UIManager.getLookAndFeel().getName() : "null",
-            UIManager.getLookAndFeel() != null ? UIManager.getLookAndFeel().getClass().getName() : "null");
-        log.info("[HintPopupDebug] input.bg={} input.fg={} input.sel={} ",
+            UIManager.getLookAndFeel() != null
+                ? UIManager.getLookAndFeel().getClass().getName()
+                : "null");
+        log.info(
+            "[HintPopupDebug] input.bg={} input.fg={} input.sel={} ",
             colorToString(input.getBackground()),
             colorToString(input.getForeground()),
             colorToString(input.getSelectionColor()));
-        for (String k : new String[]{
-            "TextField.background", "TextField.foreground", "TextField.selectionBackground",
-            "TextPane.background", "TextPane.foreground",
-            "TextComponent.background", "TextComponent.foreground", "TextComponent.selectionBackground",
-            "Panel.background", "Label.foreground",
-            "ToolTip.background", "ToolTip.foreground",
-            "TextField.borderColor", "Component.borderColor", "Separator.foreground"
-        }) {
+        for (String k :
+            new String[] {
+              "TextField.background",
+              "TextField.foreground",
+              "TextField.selectionBackground",
+              "TextPane.background",
+              "TextPane.foreground",
+              "TextComponent.background",
+              "TextComponent.foreground",
+              "TextComponent.selectionBackground",
+              "Panel.background",
+              "Label.foreground",
+              "ToolTip.background",
+              "ToolTip.foreground",
+              "TextField.borderColor",
+              "Component.borderColor",
+              "Separator.foreground"
+            }) {
           Object v = UIManager.get(k);
           if (v instanceof Color c) {
             log.info("[HintPopupDebug] UIManager[{}] = {}", k, colorToString(c));
@@ -267,20 +300,24 @@ final class MessageInputHintPopupSupport {
             log.info("[HintPopupDebug] UIManager[{}] = null", k);
           }
         }
-        log.info("[HintPopupDebug] computed hintBg={} border={}", colorToString(hintBg), colorToString(border));
+        log.info(
+            "[HintPopupDebug] computed hintBg={} border={}",
+            colorToString(hintBg),
+            colorToString(border));
       } catch (Exception e) {
         log.warn("[HintPopupDebug] failed to log UI values", e);
       }
     }
     if (border == null) border = UIManager.getColor("Component.borderColor");
     if (border == null) border = UIManager.getColor("Separator.foreground");
-    if (border == null) border = new Color(textFg.getRed(), textFg.getGreen(), textFg.getBlue(), 120);
+    if (border == null)
+      border = new Color(textFg.getRed(), textFg.getGreen(), textFg.getBlue(), 120);
 
     hintPopupPanel.setBackground(hintBg);
     hintPopupLabel.setForeground(textFg);
-    hintPopupPanel.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(border),
-        BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+    hintPopupPanel.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(border), BorderFactory.createEmptyBorder(4, 8, 4, 8)));
   }
 
   private static String currentToken(String text, int caretPos) {
@@ -311,7 +348,12 @@ final class MessageInputHintPopupSupport {
     int i = 0;
     while (i < s.length()) {
       char c = s.charAt(i);
-      if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '[' || c == ']' || c == '\\') {
+      if (Character.isLetterOrDigit(c)
+          || c == '_'
+          || c == '-'
+          || c == '['
+          || c == ']'
+          || c == '\\') {
         break;
       }
       i++;
@@ -324,7 +366,12 @@ final class MessageInputHintPopupSupport {
     int i = s.length() - 1;
     while (i >= 0) {
       char c = s.charAt(i);
-      if (Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '[' || c == ']' || c == '\\') {
+      if (Character.isLetterOrDigit(c)
+          || c == '_'
+          || c == '-'
+          || c == '['
+          || c == ']'
+          || c == '\\') {
         break;
       }
       i--;

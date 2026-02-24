@@ -2,10 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import java.util.OptionalLong;
 
-/**
- * Provides a "resume cursor" for bouncer playback.
- *
- */
+/** Provides a "resume cursor" for bouncer playback. */
 public interface PlaybackCursorProvider {
 
   /**

@@ -15,20 +15,15 @@ import org.pircbotx.PircBotX;
  * Mutable connection state for a single IRC server.
  *
  * <p>This used to be a nested type inside {@link PircbotxIrcClientService}. It is now a small
- * top-level (package-private) helper so we can continue splitting responsibilities without
- * turning PircbotxIrcClientService into a god-file.
+ * top-level (package-private) helper so we can continue splitting responsibilities without turning
+ * PircbotxIrcClientService into a god-file.
  */
 final class PircbotxConnectionState {
   private static final long PRIVATE_TARGET_HINT_TTL_MS = 120_000L;
   private static final int PRIVATE_TARGET_HINT_MAX = 1_024;
 
   private record PrivateTargetHint(
-      String fromLower,
-      String target,
-      String kind,
-      String payload,
-      long observedAtMs
-  ) {}
+      String fromLower, String target, String kind, String payload, long observedAtMs) {}
 
   final String serverId;
   final AtomicReference<PircBotX> botRef = new AtomicReference<>();
@@ -61,27 +56,24 @@ final class PircbotxConnectionState {
   final Map<String, Boolean> whoisSawAccountByNickLower = new ConcurrentHashMap<>();
 
   /**
-   * Be conservative: some networks do not expose WHOIS account info at all. We only infer LOGGED_OUT
-   * from a missing 330 after we've observed at least one 330 on this connection.
+   * Be conservative: some networks do not expose WHOIS account info at all. We only infer
+   * LOGGED_OUT from a missing 330 after we've observed at least one 330 on this connection.
    */
   final AtomicBoolean whoisAccountNumericSupported = new AtomicBoolean(false);
 
   /**
    * Tracks whether IRCafe's expected WHOX reply schema appears compatible on this connection.
    *
-   * <p>Some networks advertise WHOX but return 354 fields in a different order or omit account/flags.
-   * We use this to avoid repeatedly issuing WHOX channel scans that will never yield account state.
+   * <p>Some networks advertise WHOX but return 354 fields in a different order or omit
+   * account/flags. We use this to avoid repeatedly issuing WHOX channel scans that will never yield
+   * account state.
    */
   final AtomicBoolean whoxSchemaCompatible = new AtomicBoolean(true);
 
-  /**
-   * Ensures we only emit a single "schema incompatible" signal per connection.
-   */
+  /** Ensures we only emit a single "schema incompatible" signal per connection. */
   final AtomicBoolean whoxSchemaIncompatibleEmitted = new AtomicBoolean(false);
 
-  /**
-   * Ensures we only emit a single "schema compatible" confirmation per connection.
-   */
+  /** Ensures we only emit a single "schema compatible" confirmation per connection. */
   final AtomicBoolean whoxSchemaCompatibleEmitted = new AtomicBoolean(false);
 
   // ZNC Playback module support
@@ -133,11 +125,14 @@ final class PircbotxConnectionState {
   final AtomicBoolean messageTagsCapAcked = new AtomicBoolean(false);
 
   /**
-   * Whether the server allows the IRCv3 {@code +typing} client-only tag, per RPL_ISUPPORT CLIENTTAGDENY.
+   * Whether the server allows the IRCv3 {@code +typing} client-only tag, per RPL_ISUPPORT
+   * CLIENTTAGDENY.
    *
-   * <p>Default is {@code true} (i.e. allow), which matches the "missing or empty CLIENTTAGDENY" default.
+   * <p>Default is {@code true} (i.e. allow), which matches the "missing or empty CLIENTTAGDENY"
+   * default.
    */
   final AtomicBoolean typingClientTagAllowed = new AtomicBoolean(true);
+
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
   final AtomicBoolean monitorCapAcked = new AtomicBoolean(false);
@@ -175,8 +170,10 @@ final class PircbotxConnectionState {
   final AtomicBoolean connectedWithTls = new AtomicBoolean(false);
 
   // Best-effort bridge between InputParser command metadata and PrivateMessageEvent objects.
-  private final Map<String, PrivateTargetHint> privateTargetHintByMessageId = new ConcurrentHashMap<>();
-  private final Map<String, PrivateTargetHint> privateTargetHintByFingerprint = new ConcurrentHashMap<>();
+  private final Map<String, PrivateTargetHint> privateTargetHintByMessageId =
+      new ConcurrentHashMap<>();
+  private final Map<String, PrivateTargetHint> privateTargetHintByFingerprint =
+      new ConcurrentHashMap<>();
 
   PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
@@ -230,8 +227,7 @@ final class PircbotxConnectionState {
       String kind,
       String payload,
       String messageId,
-      long observedAtMs
-  ) {
+      long observedAtMs) {
     String from = normalizeLower(fromNick);
     String dest = normalizeTarget(target);
     String k = normalizeKind(kind);
@@ -253,12 +249,7 @@ final class PircbotxConnectionState {
   }
 
   String findPrivateTargetHint(
-      String fromNick,
-      String kind,
-      String payload,
-      String messageId,
-      long nowMs
-  ) {
+      String fromNick, String kind, String payload, String messageId, long nowMs) {
     String from = normalizeLower(fromNick);
     String k = normalizeKind(kind);
     String body = normalizePayload(payload);
@@ -276,7 +267,8 @@ final class PircbotxConnectionState {
     }
 
     if (!body.isEmpty()) {
-      PrivateTargetHint byFingerprint = privateTargetHintByFingerprint.get(fingerprint(from, k, body));
+      PrivateTargetHint byFingerprint =
+          privateTargetHintByFingerprint.get(fingerprint(from, k, body));
       if (isUsableByFingerprint(byFingerprint, from, k, body, now)) {
         return byFingerprint.target();
       }
@@ -297,20 +289,19 @@ final class PircbotxConnectionState {
   }
 
   private static boolean isUsableByFingerprint(
-      PrivateTargetHint hint,
-      String from,
-      String kind,
-      String payload,
-      long now
-  ) {
+      PrivateTargetHint hint, String from, String kind, String payload, long now) {
     if (!isUsableById(hint, from, kind, now)) return false;
     return Objects.equals(hint.payload(), payload);
   }
 
   private void cleanupPrivateTargetHints(long now) {
     long cutoff = now - PRIVATE_TARGET_HINT_TTL_MS;
-    privateTargetHintByMessageId.entrySet().removeIf(e -> e.getValue() == null || e.getValue().observedAtMs() < cutoff);
-    privateTargetHintByFingerprint.entrySet().removeIf(e -> e.getValue() == null || e.getValue().observedAtMs() < cutoff);
+    privateTargetHintByMessageId
+        .entrySet()
+        .removeIf(e -> e.getValue() == null || e.getValue().observedAtMs() < cutoff);
+    privateTargetHintByFingerprint
+        .entrySet()
+        .removeIf(e -> e.getValue() == null || e.getValue().observedAtMs() < cutoff);
 
     // Hard cap in case event volume is very high and many entries have identical timestamps.
     if (privateTargetHintByMessageId.size() > PRIVATE_TARGET_HINT_MAX * 2) {

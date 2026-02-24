@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 /**
  * Read-only view over all servers currently available at runtime.
  *
- * <p>This merges the persisted {@link ServerRegistry} and the in-memory
- * {@link EphemeralServerRegistry} so connection code can treat both as first-class.
+ * <p>This merges the persisted {@link ServerRegistry} and the in-memory {@link
+ * EphemeralServerRegistry} so connection code can treat both as first-class.
  */
 @Component
 public class ServerCatalog {
@@ -79,19 +79,20 @@ public class ServerCatalog {
 
   /** Reactive stream of all servers (persisted + ephemeral). */
   public Flowable<List<ServerEntry>> updates() {
-    Flowable<List<ServerEntry>> persisted = serverRegistry
-        .updates()
-        .map(list -> {
-          ArrayList<ServerEntry> out = new ArrayList<>(list.size());
-          for (IrcProperties.Server s : list) {
-            if (s == null) continue;
-            out.add(ServerEntry.persistent(s));
-          }
-          return List.copyOf(out);
-        });
+    Flowable<List<ServerEntry>> persisted =
+        serverRegistry
+            .updates()
+            .map(
+                list -> {
+                  ArrayList<ServerEntry> out = new ArrayList<>(list.size());
+                  for (IrcProperties.Server s : list) {
+                    if (s == null) continue;
+                    out.add(ServerEntry.persistent(s));
+                  }
+                  return List.copyOf(out);
+                });
 
-    return Flowable
-        .combineLatest(
+    return Flowable.combineLatest(
             persisted,
             ephemeralServers.updates(),
             (p, e) -> {
@@ -99,8 +100,7 @@ public class ServerCatalog {
               out.addAll(p);
               out.addAll(e);
               return List.copyOf(out);
-            }
-        )
+            })
         .distinctUntilChanged();
   }
 

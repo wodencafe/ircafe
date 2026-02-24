@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
  * Persisted auto-connect preferences for Soju-discovered networks.
  *
  * <p>This store keeps a mapping of:
+ *
  * <pre>
  *   bouncerServerId -> networkName -> enabled
  * </pre>
@@ -26,9 +27,11 @@ public class SojuAutoConnectStore {
   private final RuntimeConfigStore runtimeConfig;
 
   // bouncerId -> (networkKey -> true)
-  private final LinkedHashMap<String, LinkedHashMap<String, Boolean>> enabled = new LinkedHashMap<>();
+  private final LinkedHashMap<String, LinkedHashMap<String, Boolean>> enabled =
+      new LinkedHashMap<>();
 
-  private final BehaviorProcessor<Map<String, Map<String, Boolean>>> updates = BehaviorProcessor.create();
+  private final BehaviorProcessor<Map<String, Map<String, Boolean>>> updates =
+      BehaviorProcessor.create();
 
   public SojuAutoConnectStore(SojuProperties props, RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
@@ -94,7 +97,6 @@ public class SojuAutoConnectStore {
     setAutoConnectEnabled(bouncerServerId, networkName, enable);
   }
 
-
   public synchronized boolean isAutoConnectEnabled(String bouncerServerId, String networkName) {
     String bouncer = findBouncerKey(bouncerServerId);
     if (bouncer == null) return false;
@@ -104,7 +106,8 @@ public class SojuAutoConnectStore {
     return m != null && Boolean.TRUE.equals(m.get(netKey));
   }
 
-  public synchronized void setAutoConnectEnabled(String bouncerServerId, String networkName, boolean enable) {
+  public synchronized void setAutoConnectEnabled(
+      String bouncerServerId, String networkName, boolean enable) {
     String bouncer = norm(bouncerServerId);
     String netKey = normNetKey(networkName);
     if (bouncer == null || netKey == null) return;

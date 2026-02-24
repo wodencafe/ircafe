@@ -102,11 +102,7 @@ class ThemeAppearanceServiceTest {
 
           service.applyCommonTweaks(
               new ThemeTweakSettings(
-                  ThemeTweakSettings.ThemeDensity.AUTO,
-                  10,
-                  true,
-                  targetFamily,
-                  targetSize));
+                  ThemeTweakSettings.ThemeDensity.AUTO, 10, true, targetFamily, targetSize));
 
           Font afterApply = UIManager.getFont("defaultFont");
           assertNotEquals(baselineDefault.getSize(), afterApply.getSize());
@@ -115,11 +111,7 @@ class ThemeAppearanceServiceTest {
 
           service.applyCommonTweaks(
               new ThemeTweakSettings(
-                  ThemeTweakSettings.ThemeDensity.AUTO,
-                  10,
-                  false,
-                  targetFamily,
-                  targetSize));
+                  ThemeTweakSettings.ThemeDensity.AUTO, 10, false, targetFamily, targetSize));
 
           Font afterDisable = UIManager.getFont("defaultFont");
           assertEquals(baselineDefault.getFamily(), afterDisable.getFamily());

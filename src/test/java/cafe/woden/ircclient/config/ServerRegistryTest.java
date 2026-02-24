@@ -9,7 +9,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +24,8 @@ class ServerRegistryTest {
     IrcProperties.Server overrideLibera = server("libera", "irc.libera.chat");
 
     ServerRegistry registry =
-        new ServerRegistry(new IrcProperties(null, List.of(initialLibera, oftc, overrideLibera)), runtimeConfig);
+        new ServerRegistry(
+            new IrcProperties(null, List.of(initialLibera, oftc, overrideLibera)), runtimeConfig);
 
     var observer = registry.updates().test();
     observer.assertValue(List.of(overrideLibera, oftc));
@@ -63,7 +63,8 @@ class ServerRegistryTest {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     IrcProperties.Server libera = server("libera", "irc.libera.chat");
     IrcProperties.Server oftc = server("oftc", "irc.oftc.net");
-    ServerRegistry registry = new ServerRegistry(new IrcProperties(null, List.of(libera)), runtimeConfig);
+    ServerRegistry registry =
+        new ServerRegistry(new IrcProperties(null, List.of(libera)), runtimeConfig);
 
     List<IrcProperties.Server> replacement = new ArrayList<>();
     replacement.add(oftc);
@@ -80,7 +81,8 @@ class ServerRegistryTest {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     IrcProperties.Server libera = server("libera", "irc.libera.chat");
     IrcProperties.Server oftc = server("oftc", "irc.oftc.net");
-    ServerRegistry registry = new ServerRegistry(new IrcProperties(null, List.of(libera, oftc)), runtimeConfig);
+    ServerRegistry registry =
+        new ServerRegistry(new IrcProperties(null, List.of(libera, oftc)), runtimeConfig);
     var observer = registry.updates().test();
 
     registry.remove(" ");

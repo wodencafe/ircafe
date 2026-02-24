@@ -11,9 +11,7 @@ import com.tngtech.archunit.library.freeze.FreezingArchRule;
 
 @AnalyzeClasses(
     packages = "cafe.woden.ircclient",
-    importOptions = {
-        ImportOption.DoNotIncludeTests.class
-    })
+    importOptions = {ImportOption.DoNotIncludeTests.class})
 class ArchitectureGuardrailsTest {
 
   @ArchTest
@@ -25,7 +23,8 @@ class ArchitectureGuardrailsTest {
               .should()
               .dependOnClassesThat()
               .resideInAPackage("cafe.woden.ircclient.ui..")
-              .because("application code should use app-level ports and abstractions, not concrete Swing/UI types"));
+              .because(
+                  "application code should use app-level ports and abstractions, not concrete Swing/UI types"));
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_pircbotx_service_directly =
@@ -35,5 +34,6 @@ class ArchitectureGuardrailsTest {
           .should()
           .dependOnClassesThat()
           .areAssignableTo(PircbotxIrcClientService.class)
-          .because("application code should depend on IrcClientService, not transport-specific adapters");
+          .because(
+              "application code should depend on IrcClientService, not transport-specific adapters");
 }

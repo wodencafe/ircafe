@@ -5,7 +5,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Persists collected remote history (IRCv3 CHATHISTORY / bouncer playback) into the local chat log DB.
+ * Persists collected remote history (IRCv3 CHATHISTORY / bouncer playback) into the local chat log
+ * DB.
  *
  * <p>When chat logging is disabled, a no-op implementation is used.
  */
@@ -25,6 +26,5 @@ public interface ChatHistoryIngestor {
       String targetHint,
       String batchId,
       List<ChatHistoryEntry> entries,
-      Consumer<ChatHistoryIngestResult> callback
-  );
+      Consumer<ChatHistoryIngestResult> callback);
 }

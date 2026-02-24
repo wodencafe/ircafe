@@ -2,14 +2,8 @@ package cafe.woden.ircclient.app;
 
 import java.util.Objects;
 
-
 public record PresenceEvent(
-    PresenceKind kind,
-    String nick,
-    String oldNick,
-    String newNick,
-    String reason
-) {
+    PresenceKind kind, String nick, String oldNick, String newNick, String reason) {
 
   public static PresenceEvent join(String nick) {
     return new PresenceEvent(PresenceKind.JOIN, nick, null, null, null);
@@ -31,7 +25,6 @@ public record PresenceEvent(
     Objects.requireNonNull(kind, "kind");
   }
 
-  
   public String displayText() {
     return switch (kind) {
       case JOIN -> safe(nick) + " joined";

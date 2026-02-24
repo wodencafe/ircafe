@@ -6,8 +6,8 @@ final class PircbotxWhoUserhostParsers {
   /**
    * Parse RPL_ISUPPORT (005) and return true if WHOX token is present.
    *
-   * <p>Servers may split ISUPPORT across multiple 005 lines. Call this on each line and treat
-   * a single true result as sufficient evidence of WHOX support.
+   * <p>Servers may split ISUPPORT across multiple 005 lines. Call this on each line and treat a
+   * single true result as sufficient evidence of WHOX support.
    */
   static boolean parseRpl005IsupportHasWhox(String line) {
     if (line == null) return false;
@@ -33,7 +33,8 @@ final class PircbotxWhoUserhostParsers {
     return false;
   }
 
-  static record ParsedWhoReply(String channel, String nick, String user, String host, String flags) {}
+  static record ParsedWhoReply(
+      String channel, String nick, String user, String host, String flags) {}
 
   static record ParsedWhoxReply(String channel, String nick, String user, String host) {}
 
@@ -45,8 +46,7 @@ final class PircbotxWhoUserhostParsers {
       String host,
       String nick,
       String flags,
-      String account
-  ) {}
+      String account) {}
 
   static record UserhostEntry(String nick, String hostmask, IrcEvent.AwayState awayState) {}
 
@@ -82,9 +82,11 @@ final class PircbotxWhoUserhostParsers {
    * Strict parse for WHOX results for the IRCafe-issued field set: %tcuhnaf
    *
    * <p>Expected numeric form after stripping IRCv3 tags:
+   *
    * <pre>
    * :server 354 <me> <token> <channel> <user> <host> <nick> <flags> <account> :<optional trailing>
    * </pre>
+   *
    * We validate the token and channel-ish shape to avoid mis-parsing arbitrary WHOX formats.
    */
   static ParsedWhoxTcuhnaf parseRpl354WhoxTcuhnaf(String line, String expectedToken) {
@@ -104,7 +106,8 @@ final class PircbotxWhoUserhostParsers {
 
     String token = toks[2];
     if (token == null || token.isBlank()) return null;
-    if (expectedToken != null && !expectedToken.isBlank() && !expectedToken.equals(token)) return null;
+    if (expectedToken != null && !expectedToken.isBlank() && !expectedToken.equals(token))
+      return null;
 
     String channel = toks.length > 3 ? toks[3] : null;
     String user = toks.length > 4 ? toks[4] : null;
@@ -136,7 +139,8 @@ final class PircbotxWhoUserhostParsers {
       }
     }
 
-    if (channel == null || channel.isBlank() || !PircbotxLineParseUtil.looksLikeChannel(channel)) return null;
+    if (channel == null || channel.isBlank() || !PircbotxLineParseUtil.looksLikeChannel(channel))
+      return null;
     if (nick == null || nick.isBlank() || !PircbotxLineParseUtil.looksLikeNick(nick)) return null;
     if (user == null || user.isBlank() || !PircbotxLineParseUtil.looksLikeUser(user)) return null;
     if (host == null || host.isBlank() || !PircbotxLineParseUtil.looksLikeHost(host)) return null;
@@ -153,8 +157,8 @@ final class PircbotxWhoUserhostParsers {
   /**
    * Returns true if this line appears to be an RPL_WHOSPCRPL (354) WHOX reply for the given token.
    *
-   * <p>This is used to detect schema mismatches when strict parsing fails, so enrichment can
-   * fall back to plain WHO/USERHOST instead of silently "working" without producing account updates.
+   * <p>This is used to detect schema mismatches when strict parsing fails, so enrichment can fall
+   * back to plain WHO/USERHOST instead of silently "working" without producing account updates.
    */
   static boolean seemsRpl354WhoxWithToken(String line, String expectedToken) {
     if (line == null || expectedToken == null || expectedToken.isBlank()) return false;
@@ -195,7 +199,7 @@ final class PircbotxWhoUserhostParsers {
   }
 
   /** Parse RPL_WHOSPCRPL (354) / WHOX lines. */
-static ParsedWhoxReply parseRpl354WhoxReply(String line) {
+  static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -296,8 +300,7 @@ static ParsedWhoxReply parseRpl354WhoxReply(String line) {
       int sp = s.indexOf(' ');
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
     }
-    if (!s.startsWith("302 ") && !s.startsWith("302\t") && !s.startsWith("302\n")) {
-    }
+    if (!s.startsWith("302 ") && !s.startsWith("302\t") && !s.startsWith("302\n")) {}
 
     String[] toks = s.split("\\s+");
     if (toks.length < 4) return null;

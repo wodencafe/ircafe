@@ -17,14 +17,11 @@ import org.springframework.stereotype.Component;
 /**
  * In-memory IRCv3 STS policy cache keyed by server host.
  *
- * <p>Policy learning rules:
- * - Only learns policy from secure (TLS) connections.
- * - Invalid policy tokens are ignored.
- * - {@code duration=0} clears a cached policy.
+ * <p>Policy learning rules: - Only learns policy from secure (TLS) connections. - Invalid policy
+ * tokens are ignored. - {@code duration=0} clears a cached policy.
  *
- * <p>Policy application rules:
- * - If a valid policy exists for a host, connects to that host are upgraded to TLS.
- * - If policy includes a port, it overrides the configured port.
+ * <p>Policy application rules: - If a valid policy exists for a host, connects to that host are
+ * upgraded to TLS. - If policy includes a port, it overrides the configured port.
  */
 @Component
 public class Ircv3StsPolicyService {
@@ -37,8 +34,7 @@ public class Ircv3StsPolicyService {
       Integer port,
       boolean preload,
       long durationSeconds,
-      String rawValue
-  ) {
+      String rawValue) {
     boolean isExpired(long nowEpochMs) {
       return expiresAtEpochMs > 0 && nowEpochMs >= expiresAtEpochMs;
     }
@@ -85,7 +81,8 @@ public class Ircv3StsPolicyService {
     return copyServerWithTransport(configured, port, tls);
   }
 
-  void observeFromCapList(String serverId, String host, boolean secureConnection, String capListRaw) {
+  void observeFromCapList(
+      String serverId, String host, boolean secureConnection, String capListRaw) {
     String capList = Objects.toString(capListRaw, "").trim();
     if (capList.startsWith(":")) capList = capList.substring(1).trim();
     if (capList.isEmpty()) return;
@@ -133,7 +130,8 @@ public class Ircv3StsPolicyService {
     long now = System.currentTimeMillis();
     int loaded = 0;
     int dropped = 0;
-    for (Map.Entry<String, RuntimeConfigStore.Ircv3StsPolicySnapshot> entry : persisted.entrySet()) {
+    for (Map.Entry<String, RuntimeConfigStore.Ircv3StsPolicySnapshot> entry :
+        persisted.entrySet()) {
       String hostLower = normalizeHost(entry.getKey());
       if (hostLower.isEmpty()) continue;
 
@@ -157,13 +155,14 @@ public class Ircv3StsPolicyService {
         durationSeconds = Math.max(1L, remainingMs / 1000L);
       }
 
-      StsPolicy policy = new StsPolicy(
-          hostLower,
-          expiresAtEpochMs,
-          port,
-          snapshot.preload(),
-          durationSeconds,
-          Objects.toString(snapshot.rawValue(), ""));
+      StsPolicy policy =
+          new StsPolicy(
+              hostLower,
+              expiresAtEpochMs,
+              port,
+              snapshot.preload(),
+              durationSeconds,
+              Objects.toString(snapshot.rawValue(), ""));
       byHostLower.put(hostLower, policy);
       loaded++;
     }
@@ -173,7 +172,8 @@ public class Ircv3StsPolicyService {
     }
   }
 
-  private void observeStsValue(String serverId, String host, boolean secureConnection, String valueRaw) {
+  private void observeStsValue(
+      String serverId, String host, boolean secureConnection, String valueRaw) {
     String hostLower = normalizeHost(host);
     if (hostLower.isEmpty()) return;
 
@@ -206,13 +206,9 @@ public class Ircv3StsPolicyService {
     long ttlMs = toMillisSaturated(parsed.durationSeconds);
     long expiresAt = addSaturated(now, ttlMs);
 
-    StsPolicy next = new StsPolicy(
-        hostLower,
-        expiresAt,
-        parsed.port,
-        parsed.preload,
-        parsed.durationSeconds,
-        value);
+    StsPolicy next =
+        new StsPolicy(
+            hostLower, expiresAt, parsed.port, parsed.preload, parsed.durationSeconds, value);
     byHostLower.put(hostLower, next);
     persistPolicy(next);
 
@@ -244,7 +240,8 @@ public class Ircv3StsPolicyService {
     store.forgetIrcv3StsPolicy(hostLower);
   }
 
-  private static IrcProperties.Server copyServerWithTransport(IrcProperties.Server s, int port, boolean tls) {
+  private static IrcProperties.Server copyServerWithTransport(
+      IrcProperties.Server s, int port, boolean tls) {
     return new IrcProperties.Server(
         s.id(),
         s.host(),

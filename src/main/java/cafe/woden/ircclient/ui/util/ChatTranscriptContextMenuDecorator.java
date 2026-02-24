@@ -5,11 +5,12 @@ import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.util.VirtualThreads;
+import java.awt.Point;
 import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.datatransfer.StringSelection;
 import java.io.InputStream;
 import java.net.Proxy;
 import java.net.URI;
@@ -22,24 +23,24 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import javax.swing.JMenuItem;
-import javax.swing.JPopupMenu;
-
 import javax.swing.JFileChooser;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
+import javax.swing.text.Document;
 import javax.swing.text.Element;
 import javax.swing.text.JTextComponent;
-import java.awt.Point;
-import javax.swing.text.Document;
 import javax.swing.text.StyledDocument;
 
 /**
  * Decorates a chat transcript {@link JTextComponent} with a right-click context menu.
+ *
  * <ul>
-   *   <li>Default: Copy / Select All / Find Text / Reload Recent History / Clear</li>
- *   <li>If right-clicking on a URL token: Open Link in Browser / Copy Link Address / Save Link As...</li>
+ *   <li>Default: Copy / Select All / Find Text / Reload Recent History / Clear
+ *   <li>If right-clicking on a URL token: Open Link in Browser / Copy Link Address / Save Link
+ *       As...
  * </ul>
  */
 public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
@@ -124,8 +125,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<Boolean> editActionVisibleSupplier,
       Supplier<Boolean> redactActionVisibleSupplier,
       Consumer<String> onEditMessage,
-      Consumer<String> onRedactMessage
-  ) {
+      Consumer<String> onRedactMessage) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
     this.urlAt = urlAt;
     this.nickAt = nickAt;
@@ -133,20 +133,23 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
     this.proxyPlanSupplier = proxyPlanSupplier;
-    this.loadNewerActionVisibleSupplier = (loadNewerActionVisibleSupplier != null)
-        ? loadNewerActionVisibleSupplier
-        : () -> false;
-    this.loadAroundActionVisibleSupplier = (loadAroundActionVisibleSupplier != null)
-        ? loadAroundActionVisibleSupplier
-        : () -> false;
+    this.loadNewerActionVisibleSupplier =
+        (loadNewerActionVisibleSupplier != null) ? loadNewerActionVisibleSupplier : () -> false;
+    this.loadAroundActionVisibleSupplier =
+        (loadAroundActionVisibleSupplier != null) ? loadAroundActionVisibleSupplier : () -> false;
     this.onLoadNewerHistory = (onLoadNewerHistory != null) ? onLoadNewerHistory : () -> {};
-    this.onLoadContextAroundMessage = (onLoadContextAroundMessage != null) ? onLoadContextAroundMessage : msgId -> {};
-    this.replyActionVisibleSupplier = (replyActionVisibleSupplier != null) ? replyActionVisibleSupplier : () -> false;
-    this.reactActionVisibleSupplier = (reactActionVisibleSupplier != null) ? reactActionVisibleSupplier : () -> false;
+    this.onLoadContextAroundMessage =
+        (onLoadContextAroundMessage != null) ? onLoadContextAroundMessage : msgId -> {};
+    this.replyActionVisibleSupplier =
+        (replyActionVisibleSupplier != null) ? replyActionVisibleSupplier : () -> false;
+    this.reactActionVisibleSupplier =
+        (reactActionVisibleSupplier != null) ? reactActionVisibleSupplier : () -> false;
     this.onReplyToMessage = (onReplyToMessage != null) ? onReplyToMessage : msgId -> {};
     this.onReactToMessage = (onReactToMessage != null) ? onReactToMessage : msgId -> {};
-    this.editActionVisibleSupplier = (editActionVisibleSupplier != null) ? editActionVisibleSupplier : () -> false;
-    this.redactActionVisibleSupplier = (redactActionVisibleSupplier != null) ? redactActionVisibleSupplier : () -> false;
+    this.editActionVisibleSupplier =
+        (editActionVisibleSupplier != null) ? editActionVisibleSupplier : () -> false;
+    this.redactActionVisibleSupplier =
+        (redactActionVisibleSupplier != null) ? redactActionVisibleSupplier : () -> false;
     this.onEditMessage = (onEditMessage != null) ? onEditMessage : msgId -> {};
     this.onRedactMessage = (onRedactMessage != null) ? onRedactMessage : msgId -> {};
 
@@ -172,76 +175,114 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     // Build initial (non-link) menu.
     rebuildMenu(null);
 
-    this.mouse = new MouseAdapter() {
-      @Override
-      public void mousePressed(MouseEvent e) {
-        maybeShow(e);
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        maybeShow(e);
-      }
-
-      private void maybeShow(MouseEvent e) {
-        if (closed) return;
-        if (e == null) return;
-        try {
-          lastPopupPoint = (e != null) ? e.getPoint() : null;
-        } catch (Exception ignored) {
-          lastPopupPoint = null;
-        }
-
-        // Cross-platform: popup trigger may fire on pressed or released.
-        if (!e.isPopupTrigger() && !SwingUtilities.isRightMouseButton(e)) return;
-        if (!transcript.isShowing() || !transcript.isEnabled()) return;
-
-        // If this click is on a nick token and a nick-menu factory is provided, prefer that menu.
-        String nick = safeHit(nickAt, e.getPoint());
-        if (nick != null && !nick.isBlank() && nickMenuFor != null) {
-          JPopupMenu nickMenu = null;
-          try {
-            nickMenu = nickMenuFor.apply(nick);
-          } catch (Exception ignored) {
+    this.mouse =
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShow(e);
           }
-          if (nickMenu != null && nickMenu.getComponentCount() > 0) {
-            currentPopupUrl = null;
-            PopupMenuThemeSupport.prepareForDisplay(nickMenu);
-            nickMenu.show(transcript, e.getX(), e.getY());
-            return;
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShow(e);
           }
-        }
 
-        String url = safeHit(urlAt, e.getPoint());
-        currentPopupUrl = url;
-        LineIdentity identity = lineIdentityAtPoint(e.getPoint());
-        currentPopupMessageId = identity.messageId();
-        currentPopupIrcv3Tags = identity.ircv3Tags();
-        currentPopupOwnMessage = identity.outgoingOwnMessage();
-        rebuildMenu(url);
-        updateEnabledState(url);
+          private void maybeShow(MouseEvent e) {
+            if (closed) return;
+            if (e == null) return;
+            try {
+              lastPopupPoint = (e != null) ? e.getPoint() : null;
+            } catch (Exception ignored) {
+              lastPopupPoint = null;
+            }
 
-        PopupMenuThemeSupport.prepareForDisplay(menu);
-        menu.show(transcript, e.getX(), e.getY());
-      }
-    };
+            // Cross-platform: popup trigger may fire on pressed or released.
+            if (!e.isPopupTrigger() && !SwingUtilities.isRightMouseButton(e)) return;
+            if (!transcript.isShowing() || !transcript.isEnabled()) return;
+
+            // If this click is on a nick token and a nick-menu factory is provided, prefer that
+            // menu.
+            String nick = safeHit(nickAt, e.getPoint());
+            if (nick != null && !nick.isBlank() && nickMenuFor != null) {
+              JPopupMenu nickMenu = null;
+              try {
+                nickMenu = nickMenuFor.apply(nick);
+              } catch (Exception ignored) {
+              }
+              if (nickMenu != null && nickMenu.getComponentCount() > 0) {
+                currentPopupUrl = null;
+                PopupMenuThemeSupport.prepareForDisplay(nickMenu);
+                nickMenu.show(transcript, e.getX(), e.getY());
+                return;
+              }
+            }
+
+            String url = safeHit(urlAt, e.getPoint());
+            currentPopupUrl = url;
+            LineIdentity identity = lineIdentityAtPoint(e.getPoint());
+            currentPopupMessageId = identity.messageId();
+            currentPopupIrcv3Tags = identity.ircv3Tags();
+            currentPopupOwnMessage = identity.outgoingOwnMessage();
+            rebuildMenu(url);
+            updateEnabledState(url);
+
+            PopupMenuThemeSupport.prepareForDisplay(menu);
+            menu.show(transcript, e.getX(), e.getY());
+          }
+        };
 
     transcript.addMouseListener(this.mouse);
   }
 
-  public static ChatTranscriptContextMenuDecorator decorate(JTextComponent transcript, Runnable openFind) {
+  public static ChatTranscriptContextMenuDecorator decorate(
+      JTextComponent transcript, Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, null, null, null, null, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        transcript,
+        null,
+        null,
+        null,
+        null,
+        openFind,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
       JTextComponent transcript,
       Function<Point, String> urlAt,
       Consumer<String> openUrl,
-      Runnable openFind
-  ) {
+      Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, null, null, openUrl, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        transcript,
+        urlAt,
+        null,
+        null,
+        openUrl,
+        openFind,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -250,10 +291,27 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Function<Point, String> nickAt,
       Function<String, JPopupMenu> nickMenuFor,
       Consumer<String> openUrl,
-      Runnable openFind
-  ) {
+      Runnable openFind) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        transcript,
+        urlAt,
+        nickAt,
+        nickMenuFor,
+        openUrl,
+        openFind,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -263,10 +321,27 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Function<String, JPopupMenu> nickMenuFor,
       Consumer<String> openUrl,
       Runnable openFind,
-      Supplier<ProxyPlan> proxyPlanSupplier
-  ) {
+      Supplier<ProxyPlan> proxyPlanSupplier) {
     return new ChatTranscriptContextMenuDecorator(
-        transcript, urlAt, nickAt, nickMenuFor, openUrl, openFind, proxyPlanSupplier, null, null, null, null, null, null, null, null, null, null, null, null);
+        transcript,
+        urlAt,
+        nickAt,
+        nickMenuFor,
+        openUrl,
+        openFind,
+        proxyPlanSupplier,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
   }
 
   public static ChatTranscriptContextMenuDecorator decorate(
@@ -288,8 +363,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<Boolean> editActionVisibleSupplier,
       Supplier<Boolean> redactActionVisibleSupplier,
       Consumer<String> onEditMessage,
-      Consumer<String> onRedactMessage
-  ) {
+      Consumer<String> onRedactMessage) {
     return new ChatTranscriptContextMenuDecorator(
         transcript,
         urlAt,
@@ -342,7 +416,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
       maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
-      maybeAddMessageActionItems(showReplyAction, showReactAction, showEditAction, showRedactAction);
+      maybeAddMessageActionItems(
+          showReplyAction, showReactAction, showEditAction, showRedactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -355,7 +430,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
       maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
-      maybeAddMessageActionItems(showReplyAction, showReactAction, showEditAction, showRedactAction);
+      maybeAddMessageActionItems(
+          showReplyAction, showReactAction, showEditAction, showRedactAction);
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -364,7 +440,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     }
   }
 
-  private void maybeAddHistoryActionItems(boolean showLoadNewerAction, boolean showLoadAroundAction) {
+  private void maybeAddHistoryActionItems(
+      boolean showLoadNewerAction, boolean showLoadAroundAction) {
     if (!showLoadNewerAction && !showLoadAroundAction) return;
     menu.addSeparator();
     if (showLoadNewerAction) {
@@ -379,8 +456,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       boolean showReplyAction,
       boolean showReactAction,
       boolean showEditAction,
-      boolean showRedactAction
-  ) {
+      boolean showRedactAction) {
     if (!showReplyAction && !showReactAction && !showEditAction && !showRedactAction) return;
     menu.addSeparator();
     if (showReplyAction) {
@@ -414,7 +490,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     copyMessageIdItem.setEnabled(hasMessageId);
     copyIrcv3TagsItem.setEnabled(currentPopupIrcv3Tags != null && !currentPopupIrcv3Tags.isBlank());
     loadNewerHistoryItem.setEnabled(isActionVisible(loadNewerActionVisibleSupplier));
-    loadAroundMessageItem.setEnabled(isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId);
+    loadAroundMessageItem.setEnabled(
+        isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId);
     replyToMessageItem.setEnabled(isActionVisible(replyActionVisibleSupplier) && hasMessageId);
     reactToMessageItem.setEnabled(isActionVisible(reactActionVisibleSupplier) && hasMessageId);
     editMessageItem.setEnabled(
@@ -439,7 +516,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       if (lastPopupPoint != null) {
         ChatLineInspectorDialog.showAtPoint(transcript, transcript, lastPopupPoint);
       } else {
-        ChatLineInspectorDialog.showAtPosition(transcript, transcript, Math.max(0, transcript.getCaretPosition()));
+        ChatLineInspectorDialog.showAtPosition(
+            transcript, transcript, Math.max(0, transcript.getCaretPosition()));
       }
     } catch (Exception ignored) {
     }
@@ -456,7 +534,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     String msgId = currentPopupMessageId;
     if (msgId == null || msgId.isBlank()) return;
     try {
-      Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(msgId), null);
+      Toolkit.getDefaultToolkit()
+          .getSystemClipboard()
+          .setContents(new StringSelection(msgId), null);
     } catch (Exception ignored) {
     }
   }
@@ -563,13 +643,13 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
       Path out = chooser.getSelectedFile().toPath();
       if (Files.exists(out)) {
-        int overwrite = JOptionPane.showConfirmDialog(
-            transcript,
-            "File already exists. Overwrite?\n\n" + out,
-            "Overwrite file?",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.WARNING_MESSAGE
-        );
+        int overwrite =
+            JOptionPane.showConfirmDialog(
+                transcript,
+                "File already exists. Overwrite?\n\n" + out,
+                "Overwrite file?",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
         if (overwrite != JOptionPane.YES_OPTION) return;
       }
 
@@ -720,86 +800,93 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     }
   }
 
-private void downloadToFile(String url, Path out) {
-  try {
-    URI uri = URI.create(url);
-
-    // Use HttpURLConnection (via HttpLite) so SOCKS proxies work.
-    // java.net.http.HttpClient does not support SOCKS proxies.
-    ProxyPlan plan = null;
+  private void downloadToFile(String url, Path out) {
     try {
-      if (proxyPlanSupplier != null) {
-        plan = proxyPlanSupplier.get();
+      URI uri = URI.create(url);
+
+      // Use HttpURLConnection (via HttpLite) so SOCKS proxies work.
+      // java.net.http.HttpClient does not support SOCKS proxies.
+      ProxyPlan plan = null;
+      try {
+        if (proxyPlanSupplier != null) {
+          plan = proxyPlanSupplier.get();
+        }
+      } catch (Exception ignored) {
       }
-    } catch (Exception ignored) {
-    }
 
-    if (plan == null) {
-      plan = ProxyPlan.from(NetProxyContext.settings());
-    }
-    Proxy proxy = (plan.proxy() != null) ? plan.proxy() : Proxy.NO_PROXY;
-
-    Map<String, String> headers = new HashMap<>();
-    headers.put("User-Agent", DEFAULT_UA);
-    headers.put("Accept", "*/*");
-    headers.put("Accept-Language", "en-US,en;q=0.9");
-
-    int connectTimeoutMs = Math.max(1, plan.connectTimeoutMs());
-    int readTimeoutMs = Math.max(Math.max(1, plan.readTimeoutMs()), 120_000);
-
-    HttpLite.Response<InputStream> resp = HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
-    int code = resp.statusCode();
-
-    // Second attempt: some hosts require a plausible Referer (anti-hotlinking).
-    if (code == 403 && uri.getHost() != null) {
-      try (InputStream ignored = resp.body()) {
-        // ensure we don't leak the first connection
+      if (plan == null) {
+        plan = ProxyPlan.from(NetProxyContext.settings());
       }
-      String origin = uri.getScheme() + "://" + uri.getHost() + "/";
-      headers.put("Referer", origin);
-      resp = HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
-      code = resp.statusCode();
-    }
+      Proxy proxy = (plan.proxy() != null) ? plan.proxy() : Proxy.NO_PROXY;
 
-    if (code < 200 || code >= 300) {
-      try (InputStream ignored = resp.body()) {
-        // ensure we don't leak the connection
+      Map<String, String> headers = new HashMap<>();
+      headers.put("User-Agent", DEFAULT_UA);
+      headers.put("Accept", "*/*");
+      headers.put("Accept-Language", "en-US,en;q=0.9");
+
+      int connectTimeoutMs = Math.max(1, plan.connectTimeoutMs());
+      int readTimeoutMs = Math.max(Math.max(1, plan.readTimeoutMs()), 120_000);
+
+      HttpLite.Response<InputStream> resp =
+          HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
+      int code = resp.statusCode();
+
+      // Second attempt: some hosts require a plausible Referer (anti-hotlinking).
+      if (code == 403 && uri.getHost() != null) {
+        try (InputStream ignored = resp.body()) {
+          // ensure we don't leak the first connection
+        }
+        String origin = uri.getScheme() + "://" + uri.getHost() + "/";
+        headers.put("Referer", origin);
+        resp = HttpLite.getStream(uri, headers, proxy, connectTimeoutMs, readTimeoutMs);
+        code = resp.statusCode();
       }
-      int finalCode = code;
-      SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-          transcript,
-          "Failed to download link (HTTP " + finalCode + "):\n\n" + url
-              + "\n\nNote: Some sites block direct downloads from apps unless you\n"
-              + "are signed in (cookies) or they require special headers.\n"
-              + "If this keeps happening, use 'Open Link in Browser' then Save As there.",
-          "Save Link As...",
-          JOptionPane.ERROR_MESSAGE
-      ));
-      return;
+
+      if (code < 200 || code >= 300) {
+        try (InputStream ignored = resp.body()) {
+          // ensure we don't leak the connection
+        }
+        int finalCode = code;
+        SwingUtilities.invokeLater(
+            () ->
+                JOptionPane.showMessageDialog(
+                    transcript,
+                    "Failed to download link (HTTP "
+                        + finalCode
+                        + "):\n\n"
+                        + url
+                        + "\n\nNote: Some sites block direct downloads from apps unless you\n"
+                        + "are signed in (cookies) or they require special headers.\n"
+                        + "If this keeps happening, use 'Open Link in Browser' then Save As there.",
+                    "Save Link As...",
+                    JOptionPane.ERROR_MESSAGE));
+        return;
+      }
+
+      Path parent = out.getParent();
+      if (parent != null) Files.createDirectories(parent);
+
+      try (InputStream in = resp.body()) {
+        Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
+      }
+
+      SwingUtilities.invokeLater(
+          () ->
+              JOptionPane.showMessageDialog(
+                  transcript,
+                  "Saved to:\n\n" + out,
+                  "Save Link As...",
+                  JOptionPane.INFORMATION_MESSAGE));
+    } catch (Exception ex) {
+      SwingUtilities.invokeLater(
+          () ->
+              JOptionPane.showMessageDialog(
+                  transcript,
+                  "Failed to download link:\n\n" + url + "\n\n" + ex.getMessage(),
+                  "Save Link As...",
+                  JOptionPane.ERROR_MESSAGE));
     }
-
-    Path parent = out.getParent();
-    if (parent != null) Files.createDirectories(parent);
-
-    try (InputStream in = resp.body()) {
-      Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
-    }
-
-    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-        transcript,
-        "Saved to:\n\n" + out,
-        "Save Link As...",
-        JOptionPane.INFORMATION_MESSAGE
-    ));
-  } catch (Exception ex) {
-    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-        transcript,
-        "Failed to download link:\n\n" + url + "\n\n" + ex.getMessage(),
-        "Save Link As...",
-        JOptionPane.ERROR_MESSAGE
-    ));
   }
-}
 
   @Override
   public void close() {

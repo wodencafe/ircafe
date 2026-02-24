@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.logging.viewer;
 
 import cafe.woden.ircclient.logging.ChatLogRepository;
-import cafe.woden.ircclient.logging.model.LogLine;
 import cafe.woden.ircclient.logging.model.LogKind;
+import cafe.woden.ircclient.logging.model.LogLine;
 import cafe.woden.ircclient.logging.model.LogRow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,55 +31,36 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
   private static final Meta EMPTY_META = new Meta("", "", Map.of());
   private static final Pattern NUMERIC_REPLY_PREFIX = Pattern.compile("^\\s*\\[(\\d{3,4})]");
 
-  private static final Set<String> SERVER_EVENT_FROM_TOKENS = Set.of(
-      "server",
-      "mode",
-      "join",
-      "part",
-      "quit",
-      "nick",
-      "conn",
-      "ui",
-      "names",
-      "who",
-      "topic"
-  );
+  private static final Set<String> SERVER_EVENT_FROM_TOKENS =
+      Set.of(
+          "server", "mode", "join", "part", "quit", "nick", "conn", "ui", "names", "who", "topic");
 
-  private static final Set<String> PROTOCOL_FROM_TOKENS = Set.of(
-      "cap",
-      "sasl",
-      "raw",
-      "protocol",
-      "debug",
-      "isupport",
-      "who",
-      "names",
-      "list"
-  );
+  private static final Set<String> PROTOCOL_FROM_TOKENS =
+      Set.of("cap", "sasl", "raw", "protocol", "debug", "isupport", "who", "names", "list");
 
   private static final String[] PROTOCOL_TEXT_MARKERS = {
-      "cap ls",
-      "cap req",
-      "cap ack",
-      "cap nak",
-      "cap new",
-      "cap del",
-      "cap end",
-      " authenticate ",
-      " sasl",
-      "isupport",
-      "chathistory",
-      "batch",
-      "znc.in/",
-      "draft/",
-      "channel modes:",
-      "end of /who",
-      "end of who",
-      "end of /names",
-      "end of names",
-      "end of /list",
-      "end of list",
-      "end of motd"
+    "cap ls",
+    "cap req",
+    "cap ack",
+    "cap nak",
+    "cap new",
+    "cap del",
+    "cap end",
+    " authenticate ",
+    " sasl",
+    "isupport",
+    "chathistory",
+    "batch",
+    "znc.in/",
+    "draft/",
+    "channel modes:",
+    "end of /who",
+    "end of who",
+    "end of /names",
+    "end of names",
+    "end of /list",
+    "end of list",
+    "end of motd"
   };
 
   private final ChatLogRepository repo;
@@ -102,9 +83,12 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
 
     int wanted = clampLimit(query.limit());
     TextMatcher nickMatcher = compileMatcher(query.nickPattern(), query.nickMode(), "nick");
-    TextMatcher messageMatcher = compileMatcher(query.messagePattern(), query.messageMode(), "message");
-    TextMatcher hostmaskMatcher = compileMatcher(query.hostmaskPattern(), query.hostmaskMode(), "hostmask");
-    TextMatcher channelMatcher = compileMatcher(query.channelPattern(), query.channelMode(), "channel");
+    TextMatcher messageMatcher =
+        compileMatcher(query.messagePattern(), query.messageMode(), "message");
+    TextMatcher hostmaskMatcher =
+        compileMatcher(query.hostmaskPattern(), query.hostmaskMode(), "hostmask");
+    TextMatcher channelMatcher =
+        compileMatcher(query.channelPattern(), query.channelMode(), "channel");
     boolean includeServerEvents = query.includeServerEvents();
     boolean includeProtocolDetails = query.includeProtocolDetails();
 
@@ -121,7 +105,8 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
       scanLimit = (int) Math.max(wanted, Math.min(MAX_SCAN_LIMIT, expanded));
     }
 
-    List<LogRow> candidates = repo.searchRows(serverId, query.fromEpochMs(), query.toEpochMs(), scanLimit);
+    List<LogRow> candidates =
+        repo.searchRows(serverId, query.fromEpochMs(), query.toEpochMs(), scanLimit);
     if (candidates == null || candidates.isEmpty()) {
       return new ChatLogViewerResult(List.of(), 0, false, false);
     }
@@ -143,20 +128,20 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
       if (!includeServerEvents && isServerEventLine(line)) continue;
       if (!includeProtocolDetails && isProtocolDebugLine(line)) continue;
 
-      out.add(new ChatLogViewerRow(
-          row.id(),
-          line.serverId(),
-          target,
-          line.tsEpochMs(),
-          line.direction(),
-          line.kind(),
-          fromNick,
-          meta.hostmask(),
-          line.text(),
-          meta.messageId(),
-          meta.tags(),
-          line.metaJson()
-      ));
+      out.add(
+          new ChatLogViewerRow(
+              row.id(),
+              line.serverId(),
+              target,
+              line.tsEpochMs(),
+              line.direction(),
+              line.kind(),
+              fromNick,
+              meta.hostmask(),
+              line.text(),
+              meta.messageId(),
+              meta.tags(),
+              line.metaJson()));
       if (out.size() >= wanted) break;
     }
 
@@ -200,7 +185,8 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
     return Math.min(limit, 20_000);
   }
 
-  private static TextMatcher compileMatcher(String pattern, ChatLogViewerMatchMode mode, String fieldLabel) {
+  private static TextMatcher compileMatcher(
+      String pattern, ChatLogViewerMatchMode mode, String fieldLabel) {
     String p = Objects.toString(pattern, "").trim();
     ChatLogViewerMatchMode m = (mode == null) ? ChatLogViewerMatchMode.CONTAINS : mode;
     if (m == ChatLogViewerMatchMode.ANY) return MATCH_ALL;
@@ -248,7 +234,8 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
     try {
       return Pattern.compile(pattern, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     } catch (PatternSyntaxException ex) {
-      throw new IllegalArgumentException("Invalid " + fieldLabel + " regex: " + ex.getMessage(), ex);
+      throw new IllegalArgumentException(
+          "Invalid " + fieldLabel + " regex: " + ex.getMessage(), ex);
     }
   }
 
@@ -260,7 +247,8 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
       switch (c) {
         case '*' -> sb.append(".*");
         case '?' -> sb.append('.');
-        case '.', '\\', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|' -> sb.append('\\').append(c);
+        case '.', '\\', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|' ->
+            sb.append('\\').append(c);
         default -> sb.append(c);
       }
     }
@@ -287,11 +275,14 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
       JsonNode tagsNode = root.get("ircv3Tags");
       if (tagsNode != null && tagsNode.isObject()) {
         TreeMap<String, String> parsed = new TreeMap<>();
-        tagsNode.fields().forEachRemaining(e -> {
-          String key = Objects.toString(e.getKey(), "").trim();
-          if (key.isEmpty()) return;
-          parsed.put(key, text(e.getValue()));
-        });
+        tagsNode
+            .fields()
+            .forEachRemaining(
+                e -> {
+                  String key = Objects.toString(e.getKey(), "").trim();
+                  if (key.isEmpty()) return;
+                  parsed.put(key, text(e.getValue()));
+                });
         if (!parsed.isEmpty()) tags = Map.copyOf(parsed);
       }
 

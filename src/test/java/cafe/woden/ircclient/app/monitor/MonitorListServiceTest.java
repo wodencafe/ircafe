@@ -12,8 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class MonitorListServiceTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void addRemoveAndPersistMonitorNicks() {

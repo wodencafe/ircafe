@@ -13,42 +13,49 @@ public class MediatorConnectionSubscriptionBinder {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       ServerRegistry serverRegistry,
-      CompositeDisposable disposables
-  ) {
+      CompositeDisposable disposables) {
     disposables.add(
         ui.connectClicks()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(ignored -> connectionCoordinator.connectAll())
-    );
+            .subscribe(ignored -> connectionCoordinator.connectAll()));
 
     disposables.add(
         ui.disconnectClicks()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(ignored -> connectionCoordinator.disconnectAll())
-    );
+            .subscribe(ignored -> connectionCoordinator.disconnectAll()));
 
     disposables.add(
         ui.connectServerRequests()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(connectionCoordinator::connectOne,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
-    );
+            .subscribe(
+                connectionCoordinator::connectOne,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
         ui.disconnectServerRequests()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(connectionCoordinator::disconnectOne,
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err)))
-    );
+            .subscribe(
+                connectionCoordinator::disconnectOne,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        serverRegistry.updates()
+        serverRegistry
+            .updates()
             .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
-            .subscribe(latest -> {
-                  connectionCoordinator.onServersUpdated(latest, targetCoordinator.getActiveTarget());
+            .subscribe(
+                latest -> {
+                  connectionCoordinator.onServersUpdated(
+                      latest, targetCoordinator.getActiveTarget());
                   targetCoordinator.refreshInputEnabledForActiveTarget();
                 },
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(ui-error)", "Server list update failed: " + err))
-    );
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(ui-error)",
+                        "Server list update failed: " + err)));
   }
 }

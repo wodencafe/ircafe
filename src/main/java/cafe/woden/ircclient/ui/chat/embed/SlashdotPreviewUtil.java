@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.net.URI;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -69,7 +69,8 @@ final class SlashdotPreviewUtil {
   }
 
   /** Extract submitter/date (when available) and a cleaned summary excerpt. */
-  static StoryParts extractStoryParts(Document doc, String resolvedTitle, String fallbackDescription) {
+  static StoryParts extractStoryParts(
+      Document doc, String resolvedTitle, String fallbackDescription) {
     if (doc == null) return new StoryParts(null, null, normalizeWhitespace(fallbackDescription));
 
     String extracted = normalizeWhitespace(extractFromLikelyStoryContainer(doc));
@@ -88,7 +89,8 @@ final class SlashdotPreviewUtil {
     // Prefer a clean end-of-sentence and cap payload.
     summary = PreviewTextUtil.trimToSentence(summary, 2000);
 
-    return new StoryParts(meta != null ? meta.submitter : null, meta != null ? meta.date : null, summary);
+    return new StoryParts(
+        meta != null ? meta.submitter : null, meta != null ? meta.date : null, summary);
   }
 
   private static Meta parsePostedBy(String text) {
@@ -97,9 +99,9 @@ final class SlashdotPreviewUtil {
     // Flatten line breaks; extracted containers often include header lines.
     String t = text.replace('\n', ' ').replace('\r', ' ');
 
-    java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-        "(?i)\\bPosted by\\s+([^\\s]+)\\s+on\\s+(.+?)(?:\\s+from the\\s+|\\s*$)"
-    );
+    java.util.regex.Pattern p =
+        java.util.regex.Pattern.compile(
+            "(?i)\\bPosted by\\s+([^\\s]+)\\s+on\\s+(.+?)(?:\\s+from the\\s+|\\s*$)");
     java.util.regex.Matcher m = p.matcher(t);
     if (!m.find()) return null;
 
@@ -115,13 +117,16 @@ final class SlashdotPreviewUtil {
     // Remove "123456 story <title>" (common Slashdot header line in extracted text).
     if (resolvedTitle != null && !resolvedTitle.isBlank()) {
       String t = resolvedTitle.strip();
-      s = s.replaceFirst("(?is)^\\s*\\d+\\s+story\\s+" + java.util.regex.Pattern.quote(t) + "\\s*", "");
+      s =
+          s.replaceFirst(
+              "(?is)^\\s*\\d+\\s+story\\s+" + java.util.regex.Pattern.quote(t) + "\\s*", "");
       s = s.replaceFirst("(?is)^\\s*story\\s+" + java.util.regex.Pattern.quote(t) + "\\s*", "");
     } else {
       s = s.replaceFirst("(?is)^\\s*\\d+\\s+story\\s+", "");
     }
 
-    // If the "Posted by ... from the ... dept." preamble is present, keep only the story text after it.
+    // If the "Posted by ... from the ... dept." preamble is present, keep only the story text after
+    // it.
     String lower = s.toLowerCase(java.util.Locale.ROOT);
     int idxPosted = lower.indexOf("posted by ");
     if (idxPosted >= 0) {
@@ -160,7 +165,6 @@ final class SlashdotPreviewUtil {
     String t = s.strip();
     return t.isEmpty() ? null : t;
   }
-
 
   private static String extractFromLikelyStoryContainer(Document doc) {
     try {
@@ -233,9 +237,9 @@ final class SlashdotPreviewUtil {
   }
 
   private static Element largestTextContainer(Document doc) {
-    Elements candidates = doc.select(
-        "article, main, div[id*=story], div[class*=story], div[id*=article], div[class*=article]"
-    );
+    Elements candidates =
+        doc.select(
+            "article, main, div[id*=story], div[class*=story], div[id*=article], div[class*=article]");
     Element best = null;
     int bestLen = 0;
     for (Element el : candidates) {

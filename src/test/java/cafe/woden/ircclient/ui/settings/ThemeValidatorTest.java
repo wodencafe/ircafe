@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import java.awt.Color;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashSet;
@@ -21,7 +22,6 @@ import javax.swing.JTextField;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -108,13 +108,16 @@ class ThemeValidatorTest {
     assertNotNull(darklaf, "darklaf theme must be present");
 
     onEdt(() -> themeManager.installLookAndFeel(darklaf.id()));
-    onEdt(() -> {
-      Color bg = firstNonNullColor("Panel.background", "TextComponent.background", "control");
-      assertNotNull(bg, "darklaf: missing background color");
-      assertTrue(
-          relativeLuminance(bg) < 0.45,
-        () -> "darklaf should be dark-toned, but background luminance was " + String.format("%.3f", relativeLuminance(bg)));
-    });
+    onEdt(
+        () -> {
+          Color bg = firstNonNullColor("Panel.background", "TextComponent.background", "control");
+          assertNotNull(bg, "darklaf: missing background color");
+          assertTrue(
+              relativeLuminance(bg) < 0.45,
+              () ->
+                  "darklaf should be dark-toned, but background luminance was "
+                      + String.format("%.3f", relativeLuminance(bg)));
+        });
   }
 
   @Test
@@ -129,41 +132,41 @@ class ThemeValidatorTest {
     final Color[] nimbusFocus = new Color[1];
 
     onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
-    onEdt(() -> {
-      nimbusMenuBg[0] = UIManager.getColor("MenuBar.background");
-      nimbusSelectionBg[0] = UIManager.getColor("nimbusSelectionBackground");
-      nimbusFocus[0] = UIManager.getColor("nimbusFocus");
+    onEdt(
+        () -> {
+          nimbusMenuBg[0] = UIManager.getColor("MenuBar.background");
+          nimbusSelectionBg[0] = UIManager.getColor("nimbusSelectionBackground");
+          nimbusFocus[0] = UIManager.getColor("nimbusFocus");
 
-      assertNotNull(nimbusMenuBg[0], "nimbus-dark: expected menu background");
-      assertNotNull(nimbusSelectionBg[0], "nimbus-dark: expected selection background");
-      assertNotNull(nimbusFocus[0], "nimbus-dark: expected focus color");
-    });
+          assertNotNull(nimbusMenuBg[0], "nimbus-dark: expected menu background");
+          assertNotNull(nimbusSelectionBg[0], "nimbus-dark: expected selection background");
+          assertNotNull(nimbusFocus[0], "nimbus-dark: expected focus color");
+        });
 
     onEdt(() -> themeManager.installLookAndFeel(darcula.id()));
-    onEdt(() -> {
-      Color menuBgAfter = UIManager.getColor("MenuBar.background");
-      Color selectionAfter = UIManager.getColor("nimbusSelectionBackground");
-      Color focusAfter = UIManager.getColor("nimbusFocus");
+    onEdt(
+        () -> {
+          Color menuBgAfter = UIManager.getColor("MenuBar.background");
+          Color selectionAfter = UIManager.getColor("nimbusSelectionBackground");
+          Color focusAfter = UIManager.getColor("nimbusFocus");
 
-      if (menuBgAfter != null) {
-        assertNotEquals(
-            nimbusMenuBg[0],
-            menuBgAfter,
-            "MenuBar.background leaked from nimbus-dark into darcula");
-      }
-      if (selectionAfter != null) {
-        assertNotEquals(
-            nimbusSelectionBg[0],
-            selectionAfter,
-            "nimbusSelectionBackground leaked from nimbus-dark into darcula");
-      }
-      if (focusAfter != null) {
-        assertNotEquals(
-            nimbusFocus[0],
-            focusAfter,
-            "nimbusFocus leaked from nimbus-dark into darcula");
-      }
-    });
+          if (menuBgAfter != null) {
+            assertNotEquals(
+                nimbusMenuBg[0],
+                menuBgAfter,
+                "MenuBar.background leaked from nimbus-dark into darcula");
+          }
+          if (selectionAfter != null) {
+            assertNotEquals(
+                nimbusSelectionBg[0],
+                selectionAfter,
+                "nimbusSelectionBackground leaked from nimbus-dark into darcula");
+          }
+          if (focusAfter != null) {
+            assertNotEquals(
+                nimbusFocus[0], focusAfter, "nimbusFocus leaked from nimbus-dark into darcula");
+          }
+        });
   }
 
   @Test
@@ -172,31 +175,38 @@ class ThemeValidatorTest {
     assertNotNull(nimbusDark, "nimbus-dark theme must be present");
 
     onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
-    onEdt(() -> {
-      Color menuBg = UIManager.getColor("MenuBar.background");
-      Color menuFg = UIManager.getColor("Menu.foreground");
-      Color buttonBg = UIManager.getColor("Button.background");
-      Color comboBg = UIManager.getColor("ComboBox.background");
+    onEdt(
+        () -> {
+          Color menuBg = UIManager.getColor("MenuBar.background");
+          Color menuFg = UIManager.getColor("Menu.foreground");
+          Color buttonBg = UIManager.getColor("Button.background");
+          Color comboBg = UIManager.getColor("ComboBox.background");
 
-      assertNotNull(menuBg, "nimbus-dark: MenuBar.background should be set");
-      assertNotNull(menuFg, "nimbus-dark: Menu.foreground should be set");
-      assertNotNull(buttonBg, "nimbus-dark: Button.background should be set");
-      assertNotNull(comboBg, "nimbus-dark: ComboBox.background should be set");
+          assertNotNull(menuBg, "nimbus-dark: MenuBar.background should be set");
+          assertNotNull(menuFg, "nimbus-dark: Menu.foreground should be set");
+          assertNotNull(buttonBg, "nimbus-dark: Button.background should be set");
+          assertNotNull(comboBg, "nimbus-dark: ComboBox.background should be set");
 
-      assertContrastAtLeast(
-          "nimbus-dark",
-          "Menu foreground vs MenuBar background",
-          menuFg,
-          menuBg,
-          MIN_TEXT_CONTRAST);
+          assertContrastAtLeast(
+              "nimbus-dark",
+              "Menu foreground vs MenuBar background",
+              menuFg,
+              menuBg,
+              MIN_TEXT_CONTRAST);
 
-      assertTrue(relativeLuminance(menuBg) < 0.35, "nimbus-dark: menu background should stay dark");
-      assertTrue(relativeLuminance(buttonBg) < 0.45, "nimbus-dark: button background should stay dark");
-      assertTrue(relativeLuminance(comboBg) < 0.40, "nimbus-dark: combo background should stay dark");
+          assertTrue(
+              relativeLuminance(menuBg) < 0.35, "nimbus-dark: menu background should stay dark");
+          assertTrue(
+              relativeLuminance(buttonBg) < 0.45,
+              "nimbus-dark: button background should stay dark");
+          assertTrue(
+              relativeLuminance(comboBg) < 0.40, "nimbus-dark: combo background should stay dark");
 
-      assertNotEquals(menuBg, buttonBg, "nimbus-dark: menu and button should use different shades");
-      assertNotEquals(buttonBg, comboBg, "nimbus-dark: button and combo should use different shades");
-    });
+          assertNotEquals(
+              menuBg, buttonBg, "nimbus-dark: menu and button should use different shades");
+          assertNotEquals(
+              buttonBg, comboBg, "nimbus-dark: button and combo should use different shades");
+        });
   }
 
   @Test
@@ -219,7 +229,8 @@ class ThemeValidatorTest {
           Color menuBarBg = menuBar.getBackground();
           Color menuFg = menu.getForeground();
           Color menuItemEnabledFg =
-              firstNonNullColor("MenuItem[Enabled].textForeground", "MenuItem.foreground", "Label.foreground");
+              firstNonNullColor(
+                  "MenuItem[Enabled].textForeground", "MenuItem.foreground", "Label.foreground");
           Color buttonBg = button.getBackground();
           Color comboBg = combo.getBackground();
 
@@ -314,7 +325,8 @@ class ThemeValidatorTest {
           PopupMenuThemeSupport.prepareForDisplay(menu);
 
           Color popupBg = menu.getBackground();
-          Color popupFg = firstNonNullColor("PopupMenu.foreground", "MenuItem.foreground", "Label.foreground");
+          Color popupFg =
+              firstNonNullColor("PopupMenu.foreground", "MenuItem.foreground", "Label.foreground");
           Color itemBg = copy.getBackground();
           Color itemFg = copy.getForeground();
 
@@ -366,8 +378,10 @@ class ThemeValidatorTest {
     assertContrastAtLeast(
         themeId, "Label.foreground vs Panel.background", labelFg, panelBg, MIN_TEXT_CONTRAST);
 
-    Color textBg = firstNonNullColor("TextField.background", "TextComponent.background", "Panel.background");
-    Color textFg = firstNonNullColor("TextField.foreground", "TextComponent.foreground", "Label.foreground");
+    Color textBg =
+        firstNonNullColor("TextField.background", "TextComponent.background", "Panel.background");
+    Color textFg =
+        firstNonNullColor("TextField.foreground", "TextComponent.foreground", "Label.foreground");
     assertContrastAtLeast(
         themeId, "TextField.foreground vs TextField.background", textFg, textBg, MIN_TEXT_CONTRAST);
 

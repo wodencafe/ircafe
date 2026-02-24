@@ -22,8 +22,8 @@ import javax.swing.SwingUtilities;
 /**
  * Simple modal viewer for an embedded image.
  *
- * <p>We keep it intentionally lightweight: no JavaFX, no WebView.
- * Swing's {@link javax.swing.ImageIcon} will animate GIFs automatically.
+ * <p>We keep it intentionally lightweight: no JavaFX, no WebView. Swing's {@link
+ * javax.swing.ImageIcon} will animate GIFs automatically.
  */
 final class ImageViewerDialog {
 
@@ -48,7 +48,8 @@ final class ImageViewerDialog {
       if (ImageDecodeUtil.looksLikeGif(url, bytes)) {
         img.setIcon(new javax.swing.ImageIcon(bytes));
       } else {
-        java.awt.image.BufferedImage bi = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+        java.awt.image.BufferedImage bi =
+            javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
         if (bi != null) {
           img.setIcon(new javax.swing.ImageIcon(bi));
         } else {
@@ -70,27 +71,32 @@ final class ImageViewerDialog {
     JButton copy = new JButton("Copy URL");
     JButton close = new JButton("Close");
 
-    openExternal.addActionListener(e -> {
-      try {
-        File f = writeTempFile(url, bytes);
-        Desktop.getDesktop().open(f);
-      } catch (Exception ignored) {
-      }
-    });
+    openExternal.addActionListener(
+        e -> {
+          try {
+            File f = writeTempFile(url, bytes);
+            Desktop.getDesktop().open(f);
+          } catch (Exception ignored) {
+          }
+        });
 
-    openBrowser.addActionListener(e -> {
-      try {
-        Desktop.getDesktop().browse(new URI(url));
-      } catch (Exception ignored) {
-      }
-    });
+    openBrowser.addActionListener(
+        e -> {
+          try {
+            Desktop.getDesktop().browse(new URI(url));
+          } catch (Exception ignored) {
+          }
+        });
 
-    copy.addActionListener(e -> {
-      try {
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
-      } catch (Exception ignored) {
-      }
-    });
+    copy.addActionListener(
+        e -> {
+          try {
+            Toolkit.getDefaultToolkit()
+                .getSystemClipboard()
+                .setContents(new StringSelection(url), null);
+          } catch (Exception ignored) {
+          }
+        });
 
     close.addActionListener(e -> dlg.dispose());
 

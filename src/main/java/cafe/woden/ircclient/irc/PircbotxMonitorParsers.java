@@ -86,8 +86,7 @@ final class PircbotxMonitorParsers {
   /**
    * Parse RPL_ISUPPORT (005) MONITOR support token.
    *
-   * <p>Examples:
-   * MONITOR=100, MONITOR, -MONITOR
+   * <p>Examples: MONITOR=100, MONITOR, -MONITOR
    *
    * @return parsed support info when MONITOR token is present; otherwise null.
    */
@@ -144,7 +143,8 @@ final class PircbotxMonitorParsers {
     return parseNickList(nicksToken);
   }
 
-  private static List<ParsedMonitorStatusEntry> parseStatusEntriesForNumeric(String rawLine, String expectedCode) {
+  private static List<ParsedMonitorStatusEntry> parseStatusEntriesForNumeric(
+      String rawLine, String expectedCode) {
     ParsedLine parsed = parseLine(rawLine);
     if (parsed == null || !expectedCode.equals(parsed.command())) return List.of();
 

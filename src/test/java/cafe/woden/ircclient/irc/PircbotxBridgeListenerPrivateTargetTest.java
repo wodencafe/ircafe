@@ -9,7 +9,8 @@ class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
   void resolvesPrivateTargetFromChannelSourceWhenActionEventLacksRawLine() throws Exception {
-    Method m = PircbotxBridgeListener.class.getDeclaredMethod("privmsgTargetFromEvent", Object.class);
+    Method m =
+        PircbotxBridgeListener.class.getDeclaredMethod("privmsgTargetFromEvent", Object.class);
     m.setAccessible(true);
 
     String target = (String) m.invoke(null, new FakeActionEvent("alice"));

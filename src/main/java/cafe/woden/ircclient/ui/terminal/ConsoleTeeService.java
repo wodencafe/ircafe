@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 /**
  * Mirrors System.out/System.err to an in-memory buffer and to subscribers.
  *
- * <p>This installs a "tee" PrintStream that still writes to the original console stream,
- * but also records the output for the in-app terminal dock.
+ * <p>This installs a "tee" PrintStream that still writes to the original console stream, but also
+ * records the output for the in-app terminal dock.
  */
 @Component
 @Lazy(false)

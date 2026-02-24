@@ -5,36 +5,34 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.irc.znc.ZncLoginParts;
-import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
+import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
+import cafe.woden.ircclient.irc.znc.ZncLoginParts;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import jakarta.annotation.PreDestroy;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Objects;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.lang.reflect.Method;
-import java.util.OptionalLong;
-
-import jakarta.annotation.PreDestroy;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
+import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.pircbotx.PircBotX;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -44,8 +42,7 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
   private static final DateTimeFormatter MARKREAD_TS_FMT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-          .withZone(ZoneOffset.UTC);
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -64,18 +61,20 @@ public class PircbotxIrcClientService implements IrcClientService {
   private final Ircv3StsPolicyService stsPolicies;
   private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
-  public PircbotxIrcClientService(IrcProperties props,
-                                 ServerCatalog serverCatalog,
-                                 PircbotxInputParserHookInstaller inputParserHookInstaller,
-                                 PircbotxBotFactory botFactory,
-                                 SojuProperties sojuProps,
-                                 ZncProperties zncProps,
-                                 RuntimeConfigStore runtimeConfig,
-                                 Ircv3StsPolicyService stsPolicies,
-                                 SojuEphemeralNetworkImporter sojuImporter,
-                                 ZncEphemeralNetworkImporter zncImporter,
-                                 PircbotxConnectionTimersRx timers,
-                                 ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
+
+  public PircbotxIrcClientService(
+      IrcProperties props,
+      ServerCatalog serverCatalog,
+      PircbotxInputParserHookInstaller inputParserHookInstaller,
+      PircbotxBotFactory botFactory,
+      SojuProperties sojuProps,
+      ZncProperties zncProps,
+      RuntimeConfigStore runtimeConfig,
+      Ircv3StsPolicyService stsPolicies,
+      SojuEphemeralNetworkImporter sojuImporter,
+      ZncEphemeralNetworkImporter zncImporter,
+      PircbotxConnectionTimersRx timers,
+      ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
     this.serverCatalog = serverCatalog;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
@@ -87,16 +86,15 @@ public class PircbotxIrcClientService implements IrcClientService {
     this.sojuImporter = Objects.requireNonNull(sojuImporter, "sojuImporter");
     this.zncImporter = Objects.requireNonNull(zncImporter, "zncImporter");
     this.timers = timers;
-    this.playbackCursorProvider = playbackCursorProviderProvider.getIfAvailable(
-        () -> (String sid) -> OptionalLong.empty()
-    );
+    this.playbackCursorProvider =
+        playbackCursorProviderProvider.getIfAvailable(() -> (String sid) -> OptionalLong.empty());
   }
 
   /**
    * Reschedules heartbeat tickers for all currently-active connections.
    *
-   * <p>This is used when the user changes heartbeat settings in Preferences and clicks Apply.
-   * We rebuild the Rx interval so the new check period/timeout takes effect immediately.
+   * <p>This is used when the user changes heartbeat settings in Preferences and clicks Apply. We
+   * rebuild the Rx interval so the new check period/timeout takes effect immediately.
    */
   public void rescheduleActiveHeartbeats() {
     if (shuttingDown.get()) return;
@@ -123,98 +121,109 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   @Override
   public Completable connect(String serverId) {
-    return Completable.fromAction(() -> {
-          if (shuttingDown.get()) return;
-          PircbotxConnectionState c = conn(serverId);
-          if (c.botRef.get() != null) return;
-          c.resetNegotiatedCaps();
-          // soju discovery state is per-session; reset before starting a new connection.
-          try {
-            c.sojuNetworksByNetId.clear();
-            c.sojuListNetworksRequestedThisSession.set(false);
-            c.sojuBouncerNetId.set("");
-          } catch (Exception ignored) {}
-          cancelReconnect(c);
-          c.manualDisconnect.set(false);
-          c.reconnectAttempts.set(0);
-
-          IrcProperties.Server configured = serverCatalog.require(serverId);
-          IrcProperties.Server s = stsPolicies.applyPolicy(configured);
-          c.connectedHost.set(Objects.toString(s.host(), "").trim());
-          c.connectedWithTls.set(s.tls());
-          c.selfNickHint.set(Objects.toString(s.nick(), "").trim());
-
-          // ZNC detection uses CAP/004/*status heuristics, but we can still parse the
-          // configured login now (user[@client]/network) so logs and discovery logic have
-          // context once ZNC is detected.
-          try {
-            c.zncDetected.set(false);
-            c.zncDetectedLogged.set(false);
-            c.zncBaseUser.set("");
-            c.zncClientId.set("");
-            c.zncNetwork.set("");
-
-            // Reset per-connection ZNC playback flags (negotiated each connect).
-            c.zncPlaybackRequestedThisSession.set(false);
-            c.zncListNetworksRequestedThisSession.set(false);
-            c.zncPlaybackCapture.cancelActive("reconnect");
-
-            ZncLoginParts loginParts = ZncLoginParts.parse(s.login());
-            ZncLoginParts saslParts = (s.sasl() != null && s.sasl().enabled())
-                ? ZncLoginParts.parse(s.sasl().username())
-                : new ZncLoginParts("", "", "");
-
-            ZncLoginParts merged = loginParts.mergePreferThis(saslParts);
-            c.zncBaseUser.set(merged.baseUser());
-            c.zncClientId.set(merged.clientId());
-            c.zncNetwork.set(merged.network());
-          } catch (Exception ignored) {}
-
-          boolean disconnectOnSaslFailure = s.sasl() != null
-              && s.sasl().enabled()
-              && Boolean.TRUE.equals(s.sasl().disconnectOnFailure());
-          bus.onNext(new ServerIrcEvent(
-              serverId, new IrcEvent.Connecting(Instant.now(), s.host(), s.port(), s.nick())));
-
-          PircbotxBridgeListener listener = new PircbotxBridgeListener(
-              serverId,
-              c,
-              bus,
-              timers::stopHeartbeat,
-              this::scheduleReconnect,
-              this::handleCtcpIfPresent,
-              disconnectOnSaslFailure,
-              sojuProps.discovery().enabled(),
-              zncProps.discovery().enabled(),
-              zncImporter::onNetworkDiscovered,
-              sojuImporter::onNetworkDiscovered,
-              sojuImporter::onOriginDisconnected,
-              zncImporter::onOriginDisconnected,
-              playbackCursorProvider
-          );
-
-          PircBotX bot = botFactory.build(s, version, listener);
-          c.botRef.set(bot);
-          inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
-
-          timers.startHeartbeat(c);
-          RxVirtualSchedulers.io().scheduleDirect(() -> {
-            boolean crashed = false;
-            try {
-              bot.startBot();
-            } catch (Exception e) {
-              crashed = true;
-              bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
-            } finally {
-              if (c.botRef.compareAndSet(bot, null)) {
-                timers.stopHeartbeat(c);
+    return Completable.fromAction(
+            () -> {
+              if (shuttingDown.get()) return;
+              PircbotxConnectionState c = conn(serverId);
+              if (c.botRef.get() != null) return;
+              c.resetNegotiatedCaps();
+              // soju discovery state is per-session; reset before starting a new connection.
+              try {
+                c.sojuNetworksByNetId.clear();
+                c.sojuListNetworksRequestedThisSession.set(false);
+                c.sojuBouncerNetId.set("");
+              } catch (Exception ignored) {
               }
-              if (crashed && !c.manualDisconnect.get()) {
-                scheduleReconnect(c, "Bot crashed");
+              cancelReconnect(c);
+              c.manualDisconnect.set(false);
+              c.reconnectAttempts.set(0);
+
+              IrcProperties.Server configured = serverCatalog.require(serverId);
+              IrcProperties.Server s = stsPolicies.applyPolicy(configured);
+              c.connectedHost.set(Objects.toString(s.host(), "").trim());
+              c.connectedWithTls.set(s.tls());
+              c.selfNickHint.set(Objects.toString(s.nick(), "").trim());
+
+              // ZNC detection uses CAP/004/*status heuristics, but we can still parse the
+              // configured login now (user[@client]/network) so logs and discovery logic have
+              // context once ZNC is detected.
+              try {
+                c.zncDetected.set(false);
+                c.zncDetectedLogged.set(false);
+                c.zncBaseUser.set("");
+                c.zncClientId.set("");
+                c.zncNetwork.set("");
+
+                // Reset per-connection ZNC playback flags (negotiated each connect).
+                c.zncPlaybackRequestedThisSession.set(false);
+                c.zncListNetworksRequestedThisSession.set(false);
+                c.zncPlaybackCapture.cancelActive("reconnect");
+
+                ZncLoginParts loginParts = ZncLoginParts.parse(s.login());
+                ZncLoginParts saslParts =
+                    (s.sasl() != null && s.sasl().enabled())
+                        ? ZncLoginParts.parse(s.sasl().username())
+                        : new ZncLoginParts("", "", "");
+
+                ZncLoginParts merged = loginParts.mergePreferThis(saslParts);
+                c.zncBaseUser.set(merged.baseUser());
+                c.zncClientId.set(merged.clientId());
+                c.zncNetwork.set(merged.network());
+              } catch (Exception ignored) {
               }
-            }
-          });
-        })
+
+              boolean disconnectOnSaslFailure =
+                  s.sasl() != null
+                      && s.sasl().enabled()
+                      && Boolean.TRUE.equals(s.sasl().disconnectOnFailure());
+              bus.onNext(
+                  new ServerIrcEvent(
+                      serverId,
+                      new IrcEvent.Connecting(Instant.now(), s.host(), s.port(), s.nick())));
+
+              PircbotxBridgeListener listener =
+                  new PircbotxBridgeListener(
+                      serverId,
+                      c,
+                      bus,
+                      timers::stopHeartbeat,
+                      this::scheduleReconnect,
+                      this::handleCtcpIfPresent,
+                      disconnectOnSaslFailure,
+                      sojuProps.discovery().enabled(),
+                      zncProps.discovery().enabled(),
+                      zncImporter::onNetworkDiscovered,
+                      sojuImporter::onNetworkDiscovered,
+                      sojuImporter::onOriginDisconnected,
+                      zncImporter::onOriginDisconnected,
+                      playbackCursorProvider);
+
+              PircBotX bot = botFactory.build(s, version, listener);
+              c.botRef.set(bot);
+              inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
+
+              timers.startHeartbeat(c);
+              RxVirtualSchedulers.io()
+                  .scheduleDirect(
+                      () -> {
+                        boolean crashed = false;
+                        try {
+                          bot.startBot();
+                        } catch (Exception e) {
+                          crashed = true;
+                          bus.onNext(
+                              new ServerIrcEvent(
+                                  serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
+                        } finally {
+                          if (c.botRef.compareAndSet(bot, null)) {
+                            timers.stopHeartbeat(c);
+                          }
+                          if (crashed && !c.manualDisconnect.get()) {
+                            scheduleReconnect(c, "Bot crashed");
+                          }
+                        }
+                      });
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -225,68 +234,77 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   @Override
   public Completable disconnect(String serverId, String reason) {
-    return Completable.fromAction(() -> {
-          PircbotxConnectionState c = conn(serverId);
-          c.manualDisconnect.set(true);
-          cancelReconnect(c);
-          timers.stopHeartbeat(c);
+    return Completable.fromAction(
+            () -> {
+              PircbotxConnectionState c = conn(serverId);
+              c.manualDisconnect.set(true);
+              cancelReconnect(c);
+              timers.stopHeartbeat(c);
 
-          // If this server was acting as a bouncer origin, drop any discovered ephemeral networks.
-          try {
-            sojuImporter.onOriginDisconnected(serverId);
-          } catch (Exception ignored) {}
-          try {
-            zncImporter.onOriginDisconnected(serverId);
-          } catch (Exception ignored) {}
+              // If this server was acting as a bouncer origin, drop any discovered ephemeral
+              // networks.
+              try {
+                sojuImporter.onOriginDisconnected(serverId);
+              } catch (Exception ignored) {
+              }
+              try {
+                zncImporter.onOriginDisconnected(serverId);
+              } catch (Exception ignored) {
+              }
 
+              PircBotX bot = c.botRef.getAndSet(null);
+              if (bot == null) return;
 
-          PircBotX bot = c.botRef.getAndSet(null);
-          if (bot == null) return;
+              String quitReason = reason == null ? "" : reason.trim();
+              if (quitReason.contains("\r") || quitReason.contains("\n")) {
+                throw new IllegalArgumentException("quit reason contains CR/LF");
+              }
+              if (quitReason.isEmpty()) quitReason = "Client disconnect";
 
-          String quitReason = reason == null ? "" : reason.trim();
-          if (quitReason.contains("\r") || quitReason.contains("\n")) {
-            throw new IllegalArgumentException("quit reason contains CR/LF");
-          }
-          if (quitReason.isEmpty()) quitReason = "Client disconnect";
-
-          try {
-            bot.stopBotReconnect();
-            try {
-              bot.sendIRC().quitServer(quitReason);
-            } catch (Exception ignored) {}
-            try {
-              bot.close();
-            } catch (Exception ignored) {}
-          } finally {
-            bus.onNext(new ServerIrcEvent(serverId,
-                new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
-          }
-        })
+              try {
+                bot.stopBotReconnect();
+                try {
+                  bot.sendIRC().quitServer(quitReason);
+                } catch (Exception ignored) {
+                }
+                try {
+                  bot.close();
+                } catch (Exception ignored) {
+                }
+              } finally {
+                bus.onNext(
+                    new ServerIrcEvent(
+                        serverId,
+                        new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
+              }
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable changeNick(String serverId, String newNick) {
-    return Completable.fromAction(() -> {
-          String nick = PircbotxUtil.sanitizeNick(newNick);
-          requireBot(serverId).sendIRC().changeNick(nick);
-        })
+    return Completable.fromAction(
+            () -> {
+              String nick = PircbotxUtil.sanitizeNick(newNick);
+              requireBot(serverId).sendIRC().changeNick(nick);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable setAway(String serverId, String awayMessage) {
-    return Completable.fromAction(() -> {
-          String msg = awayMessage == null ? "" : awayMessage.trim();
-          if (msg.contains("\r") || msg.contains("\n")) {
-            throw new IllegalArgumentException("away message contains CR/LF");
-          }
-          if (msg.isEmpty()) {
-            requireBot(serverId).sendRaw().rawLine("AWAY");
-          } else {
-            requireBot(serverId).sendRaw().rawLine("AWAY :" + msg);
-          }
-        })
+    return Completable.fromAction(
+            () -> {
+              String msg = awayMessage == null ? "" : awayMessage.trim();
+              if (msg.contains("\r") || msg.contains("\n")) {
+                throw new IllegalArgumentException("away message contains CR/LF");
+              }
+              if (msg.isEmpty()) {
+                requireBot(serverId).sendRaw().rawLine("AWAY");
+              } else {
+                requireBot(serverId).sendRaw().rawLine("AWAY :" + msg);
+              }
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -296,67 +314,74 @@ public class PircbotxIrcClientService implements IrcClientService {
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
-@Override
+  @Override
   public Completable partChannel(String serverId, String channel, String reason) {
-    return Completable.fromAction(() -> {
-          String chan = PircbotxUtil.sanitizeChannel(channel);
-          String msg = reason == null ? "" : reason.trim();
-          if (msg.isEmpty()) {
-            requireBot(serverId).sendRaw().rawLine("PART " + chan);
-          } else {
-            requireBot(serverId).sendRaw().rawLine("PART " + chan + " :" + msg);
-          }
-        })
+    return Completable.fromAction(
+            () -> {
+              String chan = PircbotxUtil.sanitizeChannel(channel);
+              String msg = reason == null ? "" : reason.trim();
+              if (msg.isEmpty()) {
+                requireBot(serverId).sendRaw().rawLine("PART " + chan);
+              } else {
+                requireBot(serverId).sendRaw().rawLine("PART " + chan + " :" + msg);
+              }
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendToChannel(String serverId, String channel, String message) {
-    return Completable.fromAction(() -> {
-          String chan = PircbotxUtil.sanitizeChannel(channel);
-          sendMessageWithMultiline(serverId, chan, message, false);
-        })
+    return Completable.fromAction(
+            () -> {
+              String chan = PircbotxUtil.sanitizeChannel(channel);
+              sendMessageWithMultiline(serverId, chan, message, false);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendNoticeToChannel(String serverId, String channel, String message) {
-    return Completable.fromAction(() -> {
-          String chan = PircbotxUtil.sanitizeChannel(channel);
-          sendMessageWithMultiline(serverId, chan, message, true);
-        })
+    return Completable.fromAction(
+            () -> {
+              String chan = PircbotxUtil.sanitizeChannel(channel);
+              sendMessageWithMultiline(serverId, chan, message, true);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendPrivateMessage(String serverId, String nick, String message) {
-    return Completable.fromAction(() -> {
-          String target = PircbotxUtil.sanitizeNick(nick);
-          sendMessageWithMultiline(serverId, target, message, false);
-        })
+    return Completable.fromAction(
+            () -> {
+              String target = PircbotxUtil.sanitizeNick(nick);
+              sendMessageWithMultiline(serverId, target, message, false);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendNoticePrivate(String serverId, String nick, String message) {
-    return Completable.fromAction(() -> {
-          String target = PircbotxUtil.sanitizeNick(nick);
-          sendMessageWithMultiline(serverId, target, message, true);
-        })
+    return Completable.fromAction(
+            () -> {
+              String target = PircbotxUtil.sanitizeNick(nick);
+              sendMessageWithMultiline(serverId, target, message, true);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendRaw(String serverId, String rawLine) {
-    return Completable.fromAction(() -> {
-          String line = rawLine == null ? "" : rawLine.trim();
-          if (line.isEmpty()) return;
-          requireBot(serverId).sendRaw().rawLine(line);
-        })
+    return Completable.fromAction(
+            () -> {
+              String line = rawLine == null ? "" : rawLine.trim();
+              if (line.isEmpty()) return;
+              requireBot(serverId).sendRaw().rawLine(line);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
-  private void sendMessageWithMultiline(String serverId, String target, String message, boolean notice) {
+  private void sendMessageWithMultiline(
+      String serverId, String target, String message, boolean notice) {
     String dest = sanitizeTarget(target);
     String payload = Objects.toString(message, "");
     if (payload.isEmpty()) return;
@@ -513,117 +538,129 @@ public class PircbotxIrcClientService implements IrcClientService {
 
   @Override
   public Completable sendTyping(String serverId, String target, String state) {
-    return Completable.fromAction(() -> {
-          PircbotxConnectionState c = conn(serverId);
-          if (c == null || c.botRef.get() == null) {
-            throw new IllegalStateException("Not connected: " + serverId);
-          }
-          if (!isTypingAvailable(serverId)) {
-            String reason = typingAvailabilityReason(serverId);
-            String suffix = (reason == null || reason.isBlank()) ? "" : (" (" + reason + ")");
-            throw new IllegalStateException(
-                "Typing indicators not available (requires message-tags and server allowing +typing)" + suffix + ": " + serverId);
-          }
+    return Completable.fromAction(
+            () -> {
+              PircbotxConnectionState c = conn(serverId);
+              if (c == null || c.botRef.get() == null) {
+                throw new IllegalStateException("Not connected: " + serverId);
+              }
+              if (!isTypingAvailable(serverId)) {
+                String reason = typingAvailabilityReason(serverId);
+                String suffix = (reason == null || reason.isBlank()) ? "" : (" (" + reason + ")");
+                throw new IllegalStateException(
+                    "Typing indicators not available (requires message-tags and server allowing +typing)"
+                        + suffix
+                        + ": "
+                        + serverId);
+              }
 
-          String normalizedState = normalizeTypingState(state);
-          if (normalizedState.isEmpty()) return;
+              String normalizedState = normalizeTypingState(state);
+              if (normalizedState.isEmpty()) return;
 
-          String dest = sanitizeTarget(target);
-          String line = "@+typing=" + normalizedState + " TAGMSG " + dest;
-          if (log.isDebugEnabled()) {
-            log.debug("[{}] -> typing {} TAGMSG {}", serverId, normalizedState, dest);
-          }
-          requireBot(serverId).sendRaw().rawLine(line);
-        })
+              String dest = sanitizeTarget(target);
+              String line = "@+typing=" + normalizedState + " TAGMSG " + dest;
+              if (log.isDebugEnabled()) {
+                log.debug("[{}] -> typing {} TAGMSG {}", serverId, normalizedState, dest);
+              }
+              requireBot(serverId).sendRaw().rawLine(line);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable sendReadMarker(String serverId, String target, Instant markerAt) {
-    return Completable.fromAction(() -> {
-          PircbotxConnectionState c = conn(serverId);
-          if (c == null || !c.readMarkerCapAcked.get()) {
-            throw new IllegalStateException("read-marker capability not negotiated: " + serverId);
-          }
-          if (c.botRef.get() == null) {
-            throw new IllegalStateException("Not connected: " + serverId);
-          }
+    return Completable.fromAction(
+            () -> {
+              PircbotxConnectionState c = conn(serverId);
+              if (c == null || !c.readMarkerCapAcked.get()) {
+                throw new IllegalStateException(
+                    "read-marker capability not negotiated: " + serverId);
+              }
+              if (c.botRef.get() == null) {
+                throw new IllegalStateException("Not connected: " + serverId);
+              }
 
-          String dest = sanitizeTarget(target);
-          Instant at = (markerAt == null) ? Instant.now() : markerAt;
-          String ts = MARKREAD_TS_FMT.format(at);
-          requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " :" + ts);
-        })
+              String dest = sanitizeTarget(target);
+              Instant at = (markerAt == null) ? Instant.now() : markerAt;
+              String ts = MARKREAD_TS_FMT.format(at);
+              requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " :" + ts);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
-  public Completable requestChatHistoryBefore(String serverId, String target, java.time.Instant beforeExclusive, int limit) {
+  public Completable requestChatHistoryBefore(
+      String serverId, String target, java.time.Instant beforeExclusive, int limit) {
     java.time.Instant before = beforeExclusive == null ? java.time.Instant.now() : beforeExclusive;
     String selector = Ircv3ChatHistoryCommandBuilder.timestampSelector(before);
     return requestChatHistoryBefore(serverId, target, selector, limit);
   }
 
   @Override
-  public Completable requestChatHistoryBefore(String serverId, String target, String selector, int limit) {
-    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
-          ensureChatHistoryNegotiated(serverId);
+  public Completable requestChatHistoryBefore(
+      String serverId, String target, String selector, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(
+            () -> {
+              ensureChatHistoryNegotiated(serverId);
 
-          String line = Ircv3ChatHistoryCommandBuilder.buildBefore(target, selector, limit);
-          requireBot(serverId).sendRaw().rawLine(line);
-        })
+              String line = Ircv3ChatHistoryCommandBuilder.buildBefore(target, selector, limit);
+              requireBot(serverId).sendRaw().rawLine(line);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
-  public Completable requestChatHistoryLatest(String serverId, String target, String selector, int limit) {
-    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
-          ensureChatHistoryNegotiated(serverId);
+  public Completable requestChatHistoryLatest(
+      String serverId, String target, String selector, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(
+            () -> {
+              ensureChatHistoryNegotiated(serverId);
 
-          String line = Ircv3ChatHistoryCommandBuilder.buildLatest(target, selector, limit);
-          requireBot(serverId).sendRaw().rawLine(line);
-        })
+              String line = Ircv3ChatHistoryCommandBuilder.buildLatest(target, selector, limit);
+              requireBot(serverId).sendRaw().rawLine(line);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable requestChatHistoryBetween(
-      String serverId,
-      String target,
-      String startSelector,
-      String endSelector,
-      int limit
-  ) {
-    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
-          ensureChatHistoryNegotiated(serverId);
+      String serverId, String target, String startSelector, String endSelector, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(
+            () -> {
+              ensureChatHistoryNegotiated(serverId);
 
-          String line = Ircv3ChatHistoryCommandBuilder.buildBetween(target, startSelector, endSelector, limit);
-          requireBot(serverId).sendRaw().rawLine(line);
-        })
+              String line =
+                  Ircv3ChatHistoryCommandBuilder.buildBetween(
+                      target, startSelector, endSelector, limit);
+              requireBot(serverId).sendRaw().rawLine(line);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
-  public Completable requestChatHistoryAround(String serverId, String target, String selector, int limit) {
-    return io.reactivex.rxjava3.core.Completable.fromAction(() -> {
-          ensureChatHistoryNegotiated(serverId);
+  public Completable requestChatHistoryAround(
+      String serverId, String target, String selector, int limit) {
+    return io.reactivex.rxjava3.core.Completable.fromAction(
+            () -> {
+              ensureChatHistoryNegotiated(serverId);
 
-          String line = Ircv3ChatHistoryCommandBuilder.buildAround(target, selector, limit);
-          requireBot(serverId).sendRaw().rawLine(line);
-        })
+              String line = Ircv3ChatHistoryCommandBuilder.buildAround(target, selector, limit);
+              requireBot(serverId).sendRaw().rawLine(line);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   private void ensureChatHistoryNegotiated(String serverId) {
     PircbotxConnectionState c = conn(serverId);
     if (!c.chatHistoryCapAcked.get()) {
-      throw new IllegalStateException("CHATHISTORY not negotiated (chathistory or draft/chathistory): " + serverId);
+      throw new IllegalStateException(
+          "CHATHISTORY not negotiated (chathistory or draft/chathistory): " + serverId);
     }
     if (!c.batchCapAcked.get()) {
-      throw new IllegalStateException("CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
+      throw new IllegalStateException(
+          "CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
     }
   }
-
 
   @Override
   public boolean isChatHistoryAvailable(String serverId) {
@@ -727,7 +764,8 @@ public class PircbotxIrcClientService implements IrcClientService {
       // Typing is a client-only tag (+typing) delivered via message-tags + TAGMSG.
       // Networks may block specific client-only tags via RPL_ISUPPORT CLIENTTAGDENY.
       boolean messageTags = c.messageTagsCapAcked.get();
-      boolean typingAllowed = c.typingClientTagAllowed.get() || c.typingCapAcked.get(); // legacy fallback
+      boolean typingAllowed =
+          c.typingClientTagAllowed.get() || c.typingCapAcked.get(); // legacy fallback
       return messageTags && typingAllowed;
     } catch (Exception e) {
       return false;
@@ -826,113 +864,127 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
-  public Completable requestZncPlaybackRange(String serverId, String target, Instant fromInclusive, Instant toInclusive) {
-    return Completable.fromAction(() -> {
-          PircbotxConnectionState c = conn(serverId);
-          if (!c.zncPlaybackCapAcked.get()) {
-            throw new IllegalStateException("ZNC playback not negotiated (znc.in/playback): " + serverId);
-          }
+  public Completable requestZncPlaybackRange(
+      String serverId, String target, Instant fromInclusive, Instant toInclusive) {
+    return Completable.fromAction(
+            () -> {
+              PircbotxConnectionState c = conn(serverId);
+              if (!c.zncPlaybackCapAcked.get()) {
+                throw new IllegalStateException(
+                    "ZNC playback not negotiated (znc.in/playback): " + serverId);
+              }
 
-          String t = target == null ? "" : target.trim();
-          if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
+              String t = target == null ? "" : target.trim();
+              if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
 
-          // R5.2b: Track an in-flight playback request so we can group replayed lines into a batch.
-          Instant fromCap = (fromInclusive == null ? Instant.EPOCH : fromInclusive);
-          Instant toCap = (toInclusive == null ? Instant.now() : toInclusive);
-          c.zncPlaybackCapture.start(serverId, t, fromCap, toCap, bus::onNext);
+              // R5.2b: Track an in-flight playback request so we can group replayed lines into a
+              // batch.
+              Instant fromCap = (fromInclusive == null ? Instant.EPOCH : fromInclusive);
+              Instant toCap = (toInclusive == null ? Instant.now() : toInclusive);
+              c.zncPlaybackCapture.start(serverId, t, fromCap, toCap, bus::onNext);
 
-          try {
+              try {
 
-          String buf;
-          if (t.startsWith("#") || t.startsWith("&")) {
-            buf = PircbotxUtil.sanitizeChannel(t);
-          } else {
-            buf = PircbotxUtil.sanitizeNick(t);
-          }
+                String buf;
+                if (t.startsWith("#") || t.startsWith("&")) {
+                  buf = PircbotxUtil.sanitizeChannel(t);
+                } else {
+                  buf = PircbotxUtil.sanitizeNick(t);
+                }
 
-          long from = (fromInclusive == null ? Instant.EPOCH : fromInclusive).getEpochSecond();
-          long to = (toInclusive == null ? 0L : toInclusive.getEpochSecond());
+                long from =
+                    (fromInclusive == null ? Instant.EPOCH : fromInclusive).getEpochSecond();
+                long to = (toInclusive == null ? 0L : toInclusive.getEpochSecond());
 
-          // ZNC playback module takes epoch-seconds. If 'to' is omitted/0, it replays until now.
-          String cmd;
-          if (to > 0L) {
-            cmd = "play " + buf + " " + from + " " + to;
-          } else {
-            cmd = "play " + buf + " " + from;
-          }
-          requireBot(serverId).sendIRC().message("*playback", cmd);
-          } catch (Exception ex) {
-            c.zncPlaybackCapture.cancelActive("send-failed");
-            throw ex;
-          }
-        })
+                // ZNC playback module takes epoch-seconds. If 'to' is omitted/0, it replays until
+                // now.
+                String cmd;
+                if (to > 0L) {
+                  cmd = "play " + buf + " " + from + " " + to;
+                } else {
+                  cmd = "play " + buf + " " + from;
+                }
+                requireBot(serverId).sendIRC().message("*playback", cmd);
+              } catch (Exception ex) {
+                c.zncPlaybackCapture.cancelActive("send-failed");
+                throw ex;
+              }
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
-
   @Override
   public Completable sendAction(String serverId, String target, String action) {
-    return Completable.fromAction(() -> {
-          String t = target == null ? "" : target.trim();
-          String a = action == null ? "" : action;
-          if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
-          Object out = requireBot(serverId).sendIRC();
+    return Completable.fromAction(
+            () -> {
+              String t = target == null ? "" : target.trim();
+              String a = action == null ? "" : action;
+              if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
+              Object out = requireBot(serverId).sendIRC();
 
-          String dest;
-          if (t.startsWith("#") || t.startsWith("&")) {
-            dest = PircbotxUtil.sanitizeChannel(t);
-          } else {
-            dest = PircbotxUtil.sanitizeNick(t);
-          }
+              String dest;
+              if (t.startsWith("#") || t.startsWith("&")) {
+                dest = PircbotxUtil.sanitizeChannel(t);
+              } else {
+                dest = PircbotxUtil.sanitizeNick(t);
+              }
 
-          boolean sent = false;
-          try {
-            Method m = out.getClass().getMethod("action", String.class, String.class);
-            m.invoke(out, dest, a);
-            sent = true;
-          } catch (NoSuchMethodException ignored) {
-          } catch (Exception e) {
-            log.debug("sendAction: native action() invoke failed, falling back to CTCP wrapper", e);
-          }
+              boolean sent = false;
+              try {
+                Method m = out.getClass().getMethod("action", String.class, String.class);
+                m.invoke(out, dest, a);
+                sent = true;
+              } catch (NoSuchMethodException ignored) {
+              } catch (Exception e) {
+                log.debug(
+                    "sendAction: native action() invoke failed, falling back to CTCP wrapper", e);
+              }
 
-          if (!sent) {
-            requireBot(serverId).sendIRC().message(dest, "\u0001ACTION " + a + "\u0001");
-          }
-        })
+              if (!sent) {
+                requireBot(serverId).sendIRC().message(dest, "\u0001ACTION " + a + "\u0001");
+              }
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable requestNames(String serverId, String channel) {
-    return Completable.fromAction(() -> {
-          String chan = PircbotxUtil.sanitizeChannel(channel);
-          requireBot(serverId).sendRaw().rawLine("NAMES " + chan);
-        })
+    return Completable.fromAction(
+            () -> {
+              String chan = PircbotxUtil.sanitizeChannel(channel);
+              requireBot(serverId).sendRaw().rawLine("NAMES " + chan);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable whois(String serverId, String nick) {
-    return Completable.fromAction(() -> {
-          String n = PircbotxUtil.sanitizeNick(nick);
-          conn(serverId).whoisSawAwayByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
-          conn(serverId).whoisSawAccountByNickLower.putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
+    return Completable.fromAction(
+            () -> {
+              String n = PircbotxUtil.sanitizeNick(nick);
+              conn(serverId)
+                  .whoisSawAwayByNickLower
+                  .putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
+              conn(serverId)
+                  .whoisSawAccountByNickLower
+                  .putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
 
-          requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
-        })
+              requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable whowas(String serverId, String nick, int count) {
-    return Completable.fromAction(() -> {
-          String n = PircbotxUtil.sanitizeNick(nick);
-          if (count > 0) {
-            requireBot(serverId).sendRaw().rawLine("WHOWAS " + n + " " + count);
-          } else {
-            requireBot(serverId).sendRaw().rawLine("WHOWAS " + n);
-          }
-        })
+    return Completable.fromAction(
+            () -> {
+              String n = PircbotxUtil.sanitizeNick(nick);
+              if (count > 0) {
+                requireBot(serverId).sendRaw().rawLine("WHOWAS " + n + " " + count);
+              } else {
+                requireBot(serverId).sendRaw().rawLine("WHOWAS " + n);
+              }
+            })
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -983,9 +1035,10 @@ public class PircbotxIrcClientService implements IrcClientService {
         } catch (Exception ignored) {
         }
 
-        boolean selfEcho = (n1 != null && !n1.isBlank() && from.equalsIgnoreCase(n1.trim()))
-            || (n2 != null && !n2.isBlank() && from.equalsIgnoreCase(n2.trim()))
-            || (n3 != null && !n3.isBlank() && from.equalsIgnoreCase(n3.trim()));
+        boolean selfEcho =
+            (n1 != null && !n1.isBlank() && from.equalsIgnoreCase(n1.trim()))
+                || (n2 != null && !n2.isBlank() && from.equalsIgnoreCase(n2.trim()))
+                || (n3 != null && !n3.isBlank() && from.equalsIgnoreCase(n3.trim()));
         if (selfEcho) {
           log.debug(
               "[ircafe] CTCPDBG service-drop-self from={} n1={} n2={} n3={} message={}",
@@ -1026,7 +1079,8 @@ public class PircbotxIrcClientService implements IrcClientService {
     }
     if ("VERSION".equals(cmd)) {
       String v = (version == null) ? "IRCafe" : version;
-      log.debug("[ircafe] CTCPDBG service-send cmd=VERSION to={} payload={}",
+      log.debug(
+          "[ircafe] CTCPDBG service-send cmd=VERSION to={} payload={}",
           Objects.toString(fromNick, ""),
           ("VERSION " + v));
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "VERSION " + v + "");
@@ -1038,7 +1092,8 @@ public class PircbotxIrcClientService implements IrcClientService {
       int sp2 = inner.indexOf(' ');
       if (sp2 >= 0 && sp2 + 1 < inner.length()) payload = inner.substring(sp2 + 1).trim();
       String body = payload.isEmpty() ? "PING" : "PING " + payload + "";
-      log.debug("[ircafe] CTCPDBG service-send cmd=PING to={} payload={}",
+      log.debug(
+          "[ircafe] CTCPDBG service-send cmd=PING to={} payload={}",
           Objects.toString(fromNick, ""),
           body.replace('\u0001', '|'));
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), body);
@@ -1047,7 +1102,10 @@ public class PircbotxIrcClientService implements IrcClientService {
 
     if ("TIME".equals(cmd)) {
       String now = java.time.ZonedDateTime.now().toString();
-      log.debug("[ircafe] CTCPDBG service-send cmd=TIME to={} payload=TIME {}", Objects.toString(fromNick, ""), now);
+      log.debug(
+          "[ircafe] CTCPDBG service-send cmd=TIME to={} payload=TIME {}",
+          Objects.toString(fromNick, ""),
+          now);
       bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "TIME " + now + "");
       return true;
     }
@@ -1095,12 +1153,22 @@ public class PircbotxIrcClientService implements IrcClientService {
         if (bot != null) {
           try {
             if (bot.isConnected()) {
-              try { bot.sendIRC().quitServer("Client shutdown"); } catch (Exception ignored) {}
+              try {
+                bot.sendIRC().quitServer("Client shutdown");
+              } catch (Exception ignored) {
+              }
             }
-          } catch (Exception ignored) {}
+          } catch (Exception ignored) {
+          }
 
-          try { bot.stopBotReconnect(); } catch (Exception ignored) {}
-          try { bot.close(); } catch (Exception ignored) {}
+          try {
+            bot.stopBotReconnect();
+          } catch (Exception ignored) {
+          }
+          try {
+            bot.close();
+          } catch (Exception ignored) {
+          }
         }
       } catch (Exception e) {
         log.debug("[ircafe] Error during shutdown for {}", c.serverId, e);
@@ -1132,5 +1200,4 @@ public class PircbotxIrcClientService implements IrcClientService {
   void shutdown() {
     shutdownNow();
   }
-
 }

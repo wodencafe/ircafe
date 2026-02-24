@@ -26,12 +26,15 @@ public class ChatStyles {
   public static final String ATTR_IRC_ITALIC = "chat.irc.italic";
   public static final String ATTR_IRC_UNDERLINE = "chat.irc.underline";
   public static final String ATTR_IRC_REVERSE = "chat.irc.reverse";
+
   /** Integer foreground mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_FG = "chat.irc.fg";
+
   public static final String ATTR_OVERRIDE_FG = "chat.override.fg";
+
   /** Per-line notification-rule highlight background color (java.awt.Color). */
   public static final String ATTR_NOTIFICATION_RULE_BG = "chat.notification.rule.bg";
-  
+
   public static final String ATTR_OUTGOING = "chat.outgoing";
 
   // Line metadata (for filters / inspector UI)
@@ -49,6 +52,7 @@ public class ChatStyles {
   public static final String ATTR_META_FILTER_RULE_NAME = "chat.meta.filter.ruleName";
   public static final String ATTR_META_FILTER_ACTION = "chat.meta.filter.action";
   public static final String ATTR_META_FILTER_MULTIPLE = "chat.meta.filter.multiple";
+
   /** Integer background mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_BG = "chat.irc.bg";
 
@@ -83,7 +87,6 @@ public class ChatStyles {
     reload();
   }
 
-  
   public synchronized void reload() {
     Color fg = UIManager.getColor("TextPane.foreground");
     Color dim = UIManager.getColor("Label.disabledForeground");
@@ -107,20 +110,20 @@ public class ChatStyles {
 
     // Theme-aware warning/error colors. FlatLaf exposes various keys depending on component type
     // and whether we're using outline/border colors. Try several common ones before falling back.
-    Color warn = firstNonNull(
-        UIManager.getColor("Component.warningColor"),
-        UIManager.getColor("Component.warning.outlineColor"),
-        UIManager.getColor("Component.warning.borderColor"),
-        UIManager.getColor("Component.warning.focusedBorderColor"),
-        UIManager.getColor("Component.warning.focusColor")
-    );
-    Color err = firstNonNull(
-        UIManager.getColor("Component.errorColor"),
-        UIManager.getColor("Component.error.outlineColor"),
-        UIManager.getColor("Component.error.borderColor"),
-        UIManager.getColor("Component.error.focusedBorderColor"),
-        UIManager.getColor("Component.error.focusColor")
-    );
+    Color warn =
+        firstNonNull(
+            UIManager.getColor("Component.warningColor"),
+            UIManager.getColor("Component.warning.outlineColor"),
+            UIManager.getColor("Component.warning.borderColor"),
+            UIManager.getColor("Component.warning.focusedBorderColor"),
+            UIManager.getColor("Component.warning.focusColor"));
+    Color err =
+        firstNonNull(
+            UIManager.getColor("Component.errorColor"),
+            UIManager.getColor("Component.error.outlineColor"),
+            UIManager.getColor("Component.error.borderColor"),
+            UIManager.getColor("Component.error.focusedBorderColor"),
+            UIManager.getColor("Component.error.focusColor"));
     if (warn == null) warn = darkUi ? new Color(0xD4AE66) : new Color(0xF0B000);
     if (err == null) err = darkUi ? new Color(0xC96E6E) : new Color(0xD05050);
     if (darkUi) {
@@ -218,18 +221,53 @@ public class ChatStyles {
     actionMsgStyle = attrs(STYLE_ACTION_MESSAGE, fg, bg, false, true);
   }
 
-  public AttributeSet timestamp() { return tsStyle; }
-  public AttributeSet from() { return fromStyle; }
-  public AttributeSet message() { return msgStyle; }
-  public AttributeSet noticeFrom() { return noticeFromStyle; }
-  public AttributeSet noticeMessage() { return noticeMsgStyle; }
-  public AttributeSet status() { return statusStyle; }
-  public AttributeSet presence() { return presenceStyle; }
-  public AttributeSet error() { return errorStyle; }
-  public AttributeSet link() { return linkStyle; }
-  public AttributeSet mention() { return mentionStyle; }
-  public AttributeSet actionFrom() { return actionFromStyle; }
-  public AttributeSet actionMessage() { return actionMsgStyle; }
+  public AttributeSet timestamp() {
+    return tsStyle;
+  }
+
+  public AttributeSet from() {
+    return fromStyle;
+  }
+
+  public AttributeSet message() {
+    return msgStyle;
+  }
+
+  public AttributeSet noticeFrom() {
+    return noticeFromStyle;
+  }
+
+  public AttributeSet noticeMessage() {
+    return noticeMsgStyle;
+  }
+
+  public AttributeSet status() {
+    return statusStyle;
+  }
+
+  public AttributeSet presence() {
+    return presenceStyle;
+  }
+
+  public AttributeSet error() {
+    return errorStyle;
+  }
+
+  public AttributeSet link() {
+    return linkStyle;
+  }
+
+  public AttributeSet mention() {
+    return mentionStyle;
+  }
+
+  public AttributeSet actionFrom() {
+    return actionFromStyle;
+  }
+
+  public AttributeSet actionMessage() {
+    return actionMsgStyle;
+  }
 
   public AttributeSet byStyleId(String id) {
     if (id == null) return msgStyle;
@@ -250,7 +288,8 @@ public class ChatStyles {
     };
   }
 
-  private static SimpleAttributeSet attrs(String styleId, Color fg, Color bg, boolean bold, boolean italic) {
+  private static SimpleAttributeSet attrs(
+      String styleId, Color fg, Color bg, boolean bold, boolean italic) {
     SimpleAttributeSet a = new SimpleAttributeSet();
     a.addAttribute(ATTR_STYLE, styleId);
 
@@ -353,11 +392,7 @@ public class ChatStyles {
   }
 
   private static Color ensureReadableTextColor(
-      Color candidate,
-      Color bg,
-      boolean darkUi,
-      double minContrast,
-      Color fallback) {
+      Color candidate, Color bg, boolean darkUi, double minContrast, Color fallback) {
     if (bg == null) return candidate != null ? candidate : fallback;
 
     Color base = candidate != null ? candidate : fallback;
@@ -386,7 +421,8 @@ public class ChatStyles {
     return darkUi ? fgLum > bgLum : fgLum < bgLum;
   }
 
-  private static Color toneDownHighlightColor(Color color, Color bg, double keepColor, float minSaturation) {
+  private static Color toneDownHighlightColor(
+      Color color, Color bg, double keepColor, float minSaturation) {
     if (color == null || bg == null) return color;
     float[] hsb = Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), null);
     if (hsb[1] < minSaturation) return color;

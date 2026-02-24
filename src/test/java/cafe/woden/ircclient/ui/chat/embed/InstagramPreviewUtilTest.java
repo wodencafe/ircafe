@@ -10,7 +10,8 @@ class InstagramPreviewUtilTest {
 
   @Test
   void parsePostDocumentExtractsNestedAuthorDateCaptionAndImage() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://www.instagram.com/p/AbCdEf123/">
           <meta property="og:title" content="A post shared by Alice (@alice) on Instagram">
@@ -37,7 +38,8 @@ class InstagramPreviewUtilTest {
         """;
 
     var doc = Jsoup.parse(html, "https://www.instagram.com/p/AbCdEf123/");
-    LinkPreview preview = InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/AbCdEf123/");
+    LinkPreview preview =
+        InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/AbCdEf123/");
 
     assertNotNull(preview);
     assertEquals("Instagram", preview.siteName());
@@ -53,7 +55,8 @@ class InstagramPreviewUtilTest {
 
   @Test
   void parsePostDocumentHandlesImageArrayShape() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://www.instagram.com/p/QwErTy789/">
           <script type="application/ld+json">
@@ -69,7 +72,8 @@ class InstagramPreviewUtilTest {
         """;
 
     var doc = Jsoup.parse(html, "https://www.instagram.com/p/QwErTy789/");
-    LinkPreview preview = InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/QwErTy789/");
+    LinkPreview preview =
+        InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/QwErTy789/");
 
     assertNotNull(preview);
     assertEquals("https://cdninstagram.com/array-image.jpg", preview.imageUrl());
@@ -77,15 +81,23 @@ class InstagramPreviewUtilTest {
 
   @Test
   void isInstagramPostUriMatchesSupportedPaths() {
-    assertTrue(InstagramPreviewUtil.isInstagramPostUri(URI.create("https://www.instagram.com/p/AbCdEf123/")));
-    assertTrue(InstagramPreviewUtil.isInstagramPostUri(URI.create("https://instagram.com/reel/AbCdEf123")));
-    assertTrue(InstagramPreviewUtil.isInstagramPostUri(URI.create("https://www.instagram.com/tv/AbCdEf123/")));
-    assertFalse(InstagramPreviewUtil.isInstagramPostUri(URI.create("https://www.instagram.com/explore/")));
+    assertTrue(
+        InstagramPreviewUtil.isInstagramPostUri(
+            URI.create("https://www.instagram.com/p/AbCdEf123/")));
+    assertTrue(
+        InstagramPreviewUtil.isInstagramPostUri(
+            URI.create("https://instagram.com/reel/AbCdEf123")));
+    assertTrue(
+        InstagramPreviewUtil.isInstagramPostUri(
+            URI.create("https://www.instagram.com/tv/AbCdEf123/")));
+    assertFalse(
+        InstagramPreviewUtil.isInstagramPostUri(URI.create("https://www.instagram.com/explore/")));
   }
 
   @Test
   void parsePostDocumentExtractsFromInlinePostJsonWhenLdJsonMissing() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://www.instagram.com/p/ZxYwVu987/">
           <meta property="og:title" content="Instagram">
@@ -107,7 +119,8 @@ class InstagramPreviewUtilTest {
         """;
 
     var doc = Jsoup.parse(html, "https://www.instagram.com/p/ZxYwVu987/");
-    LinkPreview preview = InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/ZxYwVu987/");
+    LinkPreview preview =
+        InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/ZxYwVu987/");
 
     assertNotNull(preview);
     assertEquals("Instagram", preview.siteName());
@@ -122,7 +135,8 @@ class InstagramPreviewUtilTest {
 
   @Test
   void parsePostDocumentFallsBackToOgDescriptionForAuthorAndCaption() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://www.instagram.com/p/FaLlBaCk123/">
           <meta property="og:title" content="Instagram">
@@ -132,7 +146,8 @@ class InstagramPreviewUtilTest {
         """;
 
     var doc = Jsoup.parse(html, "https://www.instagram.com/p/FaLlBaCk123/");
-    LinkPreview preview = InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/FaLlBaCk123/");
+    LinkPreview preview =
+        InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/FaLlBaCk123/");
 
     assertNotNull(preview);
     assertEquals("Instagram post by @memehouse", preview.title());
@@ -145,7 +160,8 @@ class InstagramPreviewUtilTest {
 
   @Test
   void parsePostDocumentPrefersLargestDisplayResourceOverThumbnail() {
-    String html = """
+    String html =
+        """
         <html><head>
           <meta property="og:url" content="https://www.instagram.com/p/LArGe123/">
           <meta property="og:title" content="Instagram">
@@ -170,7 +186,8 @@ class InstagramPreviewUtilTest {
         """;
 
     var doc = Jsoup.parse(html, "https://www.instagram.com/p/LArGe123/");
-    LinkPreview preview = InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/LArGe123/");
+    LinkPreview preview =
+        InstagramPreviewUtil.parsePostDocument(doc, "https://www.instagram.com/p/LArGe123/");
 
     assertNotNull(preview);
     assertEquals("https://cdninstagram.com/large.jpg", preview.imageUrl());

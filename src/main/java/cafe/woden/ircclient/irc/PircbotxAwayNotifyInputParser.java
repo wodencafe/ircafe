@@ -16,12 +16,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * InputParser hook for a few low-cost IRCv3 capabilities (away-notify, account-notify, extended-join, account-tag).
+ * InputParser hook for a few low-cost IRCv3 capabilities (away-notify, account-notify,
+ * extended-join, account-tag).
  *
  * <p>Away-notify arrives as raw lines like:
+ *
  * <ul>
- *   <li><code>:nick!user@host AWAY :Gone away for now</code></li>
- *   <li><code>:nick!user@host AWAY</code></li>
+ *   <li><code>:nick!user@host AWAY :Gone away for now</code>
+ *   <li><code>:nick!user@host AWAY</code>
  * </ul>
  */
 final class PircbotxAwayNotifyInputParser extends InputParser {
@@ -57,8 +59,8 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String command,
       String line,
       List<String> parsedLine,
-      ImmutableMap<String, String> tags
-  ) throws IOException {
+      ImmutableMap<String, String> tags)
+      throws IOException {
     Instant now = Instant.now();
     String sourceNick = source != null ? Objects.toString(source.getNick(), "").trim() : "";
 
@@ -75,12 +77,11 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String sub = parsedLine.get(1);
       String capList = capListFrom(parsedLine);
       if (sub != null && !capList.isBlank()) {
-        if ("LS".equalsIgnoreCase(sub) || "NEW".equalsIgnoreCase(sub) || "ACK".equalsIgnoreCase(sub)) {
+        if ("LS".equalsIgnoreCase(sub)
+            || "NEW".equalsIgnoreCase(sub)
+            || "ACK".equalsIgnoreCase(sub)) {
           stsPolicies.observeFromCapList(
-              serverId,
-              conn.connectedHost.get(),
-              conn.connectedWithTls.get(),
-              capList);
+              serverId, conn.connectedHost.get(), conn.connectedWithTls.get(), capList);
         }
         if ("LS".equalsIgnoreCase(sub)
             || "NEW".equalsIgnoreCase(sub)
@@ -101,8 +102,9 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String markerTarget = firstParam(parsedLine);
       String marker = secondParam(parsedLine);
       String from = source != null ? Objects.toString(source.getNick(), "").trim() : "server";
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.ReadMarkerObserved(now, from, markerTarget, marker)));
+      sink.accept(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.ReadMarkerObserved(now, from, markerTarget, marker)));
       return;
     }
 
@@ -117,8 +119,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       if (!redactMsgId.isBlank()) {
         String from = sourceNick.isBlank() ? "server" : sourceNick;
         String convTarget = resolveConversationTarget(redactTarget, sourceNick);
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.MessageRedactionObserved(now, from, convTarget, redactMsgId)));
+        sink.accept(
+            new ServerIrcEvent(
+                serverId,
+                new IrcEvent.MessageRedactionObserved(now, from, convTarget, redactMsgId)));
       }
       return;
     }
@@ -146,10 +150,17 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             name = account;
           }
           // Keep this at TRACE: account-tag can be very chatty.
-          log.trace("[{}] account-tag observed via tags: nick={} cmd={} target={} state={} account={}",
-              serverId, nick, command, target, st, name);
-          sink.accept(new ServerIrcEvent(serverId,
-              new IrcEvent.UserAccountStateObserved(now, nick, st, name)));
+          log.trace(
+              "[{}] account-tag observed via tags: nick={} cmd={} target={} state={} account={}",
+              serverId,
+              nick,
+              command,
+              target,
+              st,
+              name);
+          sink.accept(
+              new ServerIrcEvent(
+                  serverId, new IrcEvent.UserAccountStateObserved(now, nick, st, name)));
         }
       }
     }
@@ -158,21 +169,21 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
     if ("SETNAME".equalsIgnoreCase(command)) {
       String realName = firstParam(parsedLine);
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.UserSetNameObserved(now, nick, realName)));
+      sink.accept(
+          new ServerIrcEvent(serverId, new IrcEvent.UserSetNameObserved(now, nick, realName)));
       return;
     }
 
     if ("CHGHOST".equalsIgnoreCase(command)) {
       String user = firstParam(parsedLine);
       String host = secondParam(parsedLine);
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.UserHostChanged(now, nick, user, host)));
+      sink.accept(
+          new ServerIrcEvent(serverId, new IrcEvent.UserHostChanged(now, nick, user, host)));
 
       if (!user.isBlank() && !host.isBlank()) {
         String hm = nick + "!" + user + "@" + host;
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.UserHostmaskObserved(now, "", nick, hm)));
+        sink.accept(
+            new ServerIrcEvent(serverId, new IrcEvent.UserHostmaskObserved(now, "", nick, hm)));
       }
       return;
     }
@@ -205,8 +216,9 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     // Hostmask capture is most valuable for passive state updates (away/account-notify), since
     // JOIN/PART/QUIT already produce hostmask observations via the bridge listener.
     if ((isAway || isAccount) && PircbotxUtil.isUsefulHostmask(observedHostmask)) {
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.UserHostmaskObserved(now, "", nick, observedHostmask)));
+      sink.accept(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.UserHostmaskObserved(now, "", nick, observedHostmask)));
     }
 
     if (isAway) {
@@ -224,11 +236,17 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       }
 
       // Per-event away-notify logs can get noisy; keep at DEBUG.
-      log.debug("[{}] away-notify observed via InputParser: nick={} state={} msg={} params={} raw={}",
-          serverId, nick, state, msg, parsedLine, line);
+      log.debug(
+          "[{}] away-notify observed via InputParser: nick={} state={} msg={} params={} raw={}",
+          serverId,
+          nick,
+          state,
+          msg,
+          parsedLine,
+          line);
 
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.UserAwayStateObserved(now, nick, state, msg)));
+      sink.accept(
+          new ServerIrcEvent(serverId, new IrcEvent.UserAwayStateObserved(now, nick, state, msg)));
       return;
     }
 
@@ -251,11 +269,18 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         st = IrcEvent.AccountState.LOGGED_IN;
       }
 
-      log.debug("[{}] account-notify observed via InputParser: nick={} state={} account={} params={} raw={}",
-          serverId, nick, st, account, parsedLine, line);
+      log.debug(
+          "[{}] account-notify observed via InputParser: nick={} state={} account={} params={} raw={}",
+          serverId,
+          nick,
+          st,
+          account,
+          parsedLine,
+          line);
 
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
+      sink.accept(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
       return;
     }
 
@@ -291,15 +316,24 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       st = IrcEvent.AccountState.LOGGED_IN;
     }
 
-    log.debug("[{}] extended-join observed via InputParser: nick={} channel={} state={} account={} realName={} params={} raw={}",
-        serverId, nick, channel, st, account, realName, parsedLine, line);
+    log.debug(
+        "[{}] extended-join observed via InputParser: nick={} channel={} state={} account={} realName={} params={} raw={}",
+        serverId,
+        nick,
+        channel,
+        st,
+        account,
+        realName,
+        parsedLine,
+        line);
 
     // We treat this as another best-effort signal for account state.
-    sink.accept(new ServerIrcEvent(serverId,
-        new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
+    sink.accept(
+        new ServerIrcEvent(
+            serverId, new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
     if (realName != null) {
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.UserSetNameObserved(now, nick, realName)));
+      sink.accept(
+          new ServerIrcEvent(serverId, new IrcEvent.UserSetNameObserved(now, nick, realName)));
     }
   }
 
@@ -321,8 +355,11 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             parsed.channel(),
             parsed.details(),
             Objects.toString(line, ""));
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+        sink.accept(
+            new ServerIrcEvent(
+                serverId,
+                new IrcEvent.ChannelModesListed(
+                    Instant.now(), parsed.channel(), parsed.details())));
       } else {
         log.warn(
             "[{}] recovered from PircBotX RPL 324 parse failure but could not parse mode line: line={} parsed={}",
@@ -335,9 +372,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
   }
 
   private static PircbotxChannelModeParsers.ParsedRpl324 parseRpl324Fallback(
-      String line,
-      List<String> parsedLine
-  ) {
+      String line, List<String> parsedLine) {
     PircbotxChannelModeParsers.ParsedRpl324 fromLine = PircbotxChannelModeParsers.parseRpl324(line);
     if (fromLine != null) return fromLine;
 
@@ -406,8 +441,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           if (parsed.maxLines() > 0L) {
             setMultilineOfferedMaxLines(capName, parsed.maxLines());
           }
-          long effectiveMaxBytes = parsed.maxBytes() > 0L ? parsed.maxBytes() : multilineOfferedMaxBytes(capName);
-          long effectiveMaxLines = parsed.maxLines() > 0L ? parsed.maxLines() : multilineOfferedMaxLines(capName);
+          long effectiveMaxBytes =
+              parsed.maxBytes() > 0L ? parsed.maxBytes() : multilineOfferedMaxBytes(capName);
+          long effectiveMaxLines =
+              parsed.maxLines() > 0L ? parsed.maxLines() : multilineOfferedMaxLines(capName);
           setMultilineNegotiatedMaxBytes(capName, effectiveMaxBytes);
           setMultilineNegotiatedMaxLines(capName, effectiveMaxLines);
         }
@@ -451,8 +488,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       }
 
       setCapState(capName, enabled, action);
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, enabled)));
+      sink.accept(
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, enabled)));
     }
   }
 
@@ -466,8 +505,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     for (String token : caps.split("\\s+")) {
       String capName = canonicalCapName(token);
       if (capName == null || capName.isBlank()) continue;
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, false)));
+      sink.accept(
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, false)));
     }
   }
 
@@ -477,8 +518,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String rawTarget,
       String command,
       List<String> parsedLine,
-      ImmutableMap<String, String> tags
-  ) {
+      ImmutableMap<String, String> tags) {
     if (tags == null || tags.isEmpty()) return;
 
     String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
@@ -489,8 +529,9 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if (cmd.equals("PRIVMSG") || cmd.equals("NOTICE") || cmd.equals("TAGMSG")) {
       String replyTo = firstTag(tags, "draft/reply", "+draft/reply");
       if (!replyTo.isBlank()) {
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.MessageReplyObserved(at, nick, convTarget, replyTo)));
+        sink.accept(
+            new ServerIrcEvent(
+                serverId, new IrcEvent.MessageReplyObserved(at, nick, convTarget, replyTo)));
       }
 
       String react = firstTag(tags, "draft/react", "+draft/react");
@@ -499,35 +540,43 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         if (msgId.isBlank()) {
           msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
         }
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.MessageReactObserved(at, nick, convTarget, react, msgId)));
+        sink.accept(
+            new ServerIrcEvent(
+                serverId, new IrcEvent.MessageReactObserved(at, nick, convTarget, react, msgId)));
       }
 
-      String redactMsgId = firstTag(
-          tags,
-          "draft/delete",
-          "+draft/delete",
-          "draft/redact",
-          "+draft/redact");
+      String redactMsgId =
+          firstTag(tags, "draft/delete", "+draft/delete", "draft/redact", "+draft/redact");
       if (!redactMsgId.isBlank()) {
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.MessageRedactionObserved(at, nick, convTarget, redactMsgId)));
+        sink.accept(
+            new ServerIrcEvent(
+                serverId,
+                new IrcEvent.MessageRedactionObserved(at, nick, convTarget, redactMsgId)));
       }
 
       String typing = firstTag(tags, "typing", "+typing");
       if (!typing.isBlank()) {
         if (log.isDebugEnabled()) {
-          log.debug("[{}] IRCv3 +typing tag: from={} target={} state={} cmd={}", serverId, nick, convTarget, typing, cmd);
+          log.debug(
+              "[{}] IRCv3 +typing tag: from={} target={} state={} cmd={}",
+              serverId,
+              nick,
+              convTarget,
+              typing,
+              cmd);
         }
-        sink.accept(new ServerIrcEvent(serverId,
-            new IrcEvent.UserTypingObserved(at, nick, convTarget, typing)));
+        sink.accept(
+            new ServerIrcEvent(
+                serverId, new IrcEvent.UserTypingObserved(at, nick, convTarget, typing)));
       }
     }
 
-    String readMarker = firstTag(tags, "draft/read-marker", "+draft/read-marker", "read-marker", "+read-marker");
+    String readMarker =
+        firstTag(tags, "draft/read-marker", "+draft/read-marker", "read-marker", "+read-marker");
     if (!readMarker.isBlank()) {
-      sink.accept(new ServerIrcEvent(serverId,
-          new IrcEvent.ReadMarkerObserved(at, nick, convTarget, readMarker)));
+      sink.accept(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.ReadMarkerObserved(at, nick, convTarget, readMarker)));
     }
   }
 
@@ -537,67 +586,99 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       case "znc.in/playback" -> {
         boolean prev = conn.zncPlaybackCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: znc.in/playback {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: znc.in/playback {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "batch" -> {
         boolean prev = conn.batchCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: batch {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: batch {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "draft/chathistory", "chathistory" -> {
         boolean prev = conn.chatHistoryCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "soju.im/bouncer-networks" -> {
         boolean prev = conn.sojuBouncerNetworksCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: soju.im/bouncer-networks {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: soju.im/bouncer-networks {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "server-time" -> {
         boolean prev = conn.serverTimeCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: server-time {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: server-time {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "standard-replies" -> {
         boolean prev = conn.standardRepliesCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: standard-replies {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: standard-replies {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "echo-message" -> {
         boolean prev = conn.echoMessageCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: echo-message {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: echo-message {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "cap-notify" -> {
         boolean prev = conn.capNotifyCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: cap-notify {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: cap-notify {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "labeled-response" -> {
         boolean prev = conn.labeledResponseCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: labeled-response {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: labeled-response {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "setname" -> {
         boolean prev = conn.setnameCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: setname {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: setname {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "chghost" -> {
         boolean prev = conn.chghostCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: chghost {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: chghost {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "sts" -> {
@@ -613,7 +694,11 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           conn.multilineMaxLines.set(0L);
         }
         if (prev != enabled) {
-          log.info("[{}] CAP {}: multiline {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: multiline {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "draft/multiline" -> {
@@ -623,61 +708,86 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           conn.draftMultilineMaxLines.set(0L);
         }
         if (prev != enabled) {
-          log.info("[{}] CAP {}: draft/multiline {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: draft/multiline {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "draft/reply" -> {
         boolean prev = conn.draftReplyCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: draft/reply {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: draft/reply {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "draft/react" -> {
         boolean prev = conn.draftReactCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: draft/react {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: draft/react {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "draft/message-edit", "message-edit" -> {
         boolean prev = conn.draftMessageEditCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "draft/message-redaction", "message-redaction" -> {
         boolean prev = conn.draftMessageRedactionCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "message-tags" -> {
         boolean prev = conn.messageTagsCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: message-tags {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: message-tags {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "typing" -> {
         boolean prev = conn.typingCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: typing {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: typing {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "read-marker" -> {
         boolean prev = conn.readMarkerCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: read-marker {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: read-marker {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
         }
       }
       case "monitor" -> {
         boolean prev = conn.monitorCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: monitor {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: monitor {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "extended-monitor", "draft/extended-monitor" -> {
         boolean prev = conn.extendedMonitorCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
+          log.info(
+              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       default -> {
@@ -863,8 +973,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String command,
       String rawLine,
       List<String> parsedLine,
-      ImmutableMap<String, String> tags
-  ) {
+      ImmutableMap<String, String> tags) {
     String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
     if (!"PRIVMSG".equals(cmd)) return;
     if (!isSelfNick(fromNick)) return;
@@ -873,7 +982,9 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if (messageTarget.isBlank()) {
       messageTarget = firstParam(parsedLine);
     }
-    if (messageTarget.isBlank() || isChannelName(messageTarget) || looksLikeSelfTarget(messageTarget)) {
+    if (messageTarget.isBlank()
+        || isChannelName(messageTarget)
+        || looksLikeSelfTarget(messageTarget)) {
       return;
     }
 
@@ -950,8 +1061,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String command,
       String rawLine,
       List<String> parsedLine,
-      ImmutableMap<String, String> tags
-  ) {
+      ImmutableMap<String, String> tags) {
     IrcEvent.StandardReplyKind kind = toStandardReplyKind(command);
     if (kind == null) return;
 
@@ -959,16 +1069,19 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     String msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
     Map<String, String> ircv3Tags = (tags == null) ? Map.of() : tags;
     String line = Objects.toString(rawLine, "").trim();
-    sink.accept(new ServerIrcEvent(serverId, new IrcEvent.StandardReply(
-        at,
-        kind,
-        parsed.command(),
-        parsed.code(),
-        parsed.context(),
-        parsed.description(),
-        line,
-        msgId,
-        ircv3Tags)));
+    sink.accept(
+        new ServerIrcEvent(
+            serverId,
+            new IrcEvent.StandardReply(
+                at,
+                kind,
+                parsed.command(),
+                parsed.code(),
+                parsed.context(),
+                parsed.description(),
+                line,
+                msgId,
+                ircv3Tags)));
   }
 
   private static ParsedStandardReply parseStandardReply(List<String> parsedLine) {
@@ -1035,7 +1148,8 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     };
   }
 
-  private record ParsedStandardReply(String command, String code, String context, String description) {}
+  private record ParsedStandardReply(
+      String command, String code, String context, String description) {}
 
   private static String normalizeTagKey(String raw) {
     String k = Objects.toString(raw, "").trim();

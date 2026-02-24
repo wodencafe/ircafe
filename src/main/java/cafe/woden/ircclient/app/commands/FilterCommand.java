@@ -9,35 +9,44 @@ import java.util.List;
 import java.util.Objects;
 
 /** Parsed representation of the /filter command family. */
-public sealed interface FilterCommand permits
-    FilterCommand.Help,
-    FilterCommand.ListRules,
-    FilterCommand.Export,
-    FilterCommand.Move,
-    FilterCommand.Add,
-    FilterCommand.AddReplace,
-    FilterCommand.Set,
-    FilterCommand.Rename,
-    FilterCommand.Recreate,
-    FilterCommand.Del,
-    FilterCommand.Enable,
-    FilterCommand.Disable,
-    FilterCommand.Toggle,
-    FilterCommand.Show,
-    FilterCommand.Placeholders,
-    FilterCommand.PlaceholdersCollapsed,
-    FilterCommand.PlaceholderPreview,
-    FilterCommand.Defaults,
-    FilterCommand.OverrideList,
-    FilterCommand.OverrideSet,
-    FilterCommand.OverrideDel,
-    FilterCommand.Error {
+public sealed interface FilterCommand
+    permits FilterCommand.Help,
+        FilterCommand.ListRules,
+        FilterCommand.Export,
+        FilterCommand.Move,
+        FilterCommand.Add,
+        FilterCommand.AddReplace,
+        FilterCommand.Set,
+        FilterCommand.Rename,
+        FilterCommand.Recreate,
+        FilterCommand.Del,
+        FilterCommand.Enable,
+        FilterCommand.Disable,
+        FilterCommand.Toggle,
+        FilterCommand.Show,
+        FilterCommand.Placeholders,
+        FilterCommand.PlaceholdersCollapsed,
+        FilterCommand.PlaceholderPreview,
+        FilterCommand.Defaults,
+        FilterCommand.OverrideList,
+        FilterCommand.OverrideSet,
+        FilterCommand.OverrideDel,
+        FilterCommand.Error {
 
   /** For commands that accept on/off/toggle/default. */
-  enum ToggleMode { ON, OFF, TOGGLE, DEFAULT }
+  enum ToggleMode {
+    ON,
+    OFF,
+    TOGGLE,
+    DEFAULT
+  }
 
   /** For override fields: on/off/default (where default means "inherit", i.e., null). */
-  enum TriState { ON, OFF, DEFAULT }
+  enum TriState {
+    ON,
+    OFF,
+    DEFAULT
+  }
 
   record Help() implements FilterCommand {}
 
@@ -56,9 +65,18 @@ public sealed interface FilterCommand permits
   }
 
   /** Reorder filter rules (evaluation is first-match-wins). */
-  enum MoveMode { TO, TOP, BOTTOM, UP, DOWN, BEFORE, AFTER }
+  enum MoveMode {
+    TO,
+    TOP,
+    BOTTOM,
+    UP,
+    DOWN,
+    BEFORE,
+    AFTER
+  }
 
-  record Move(String name, MoveMode mode, Integer positionOneBased, Integer amount, String other) implements FilterCommand {
+  record Move(String name, MoveMode mode, Integer positionOneBased, Integer amount, String other)
+      implements FilterCommand {
     public Move {
       name = Objects.toString(name, "").trim();
       mode = Objects.requireNonNullElse(mode, MoveMode.TO);
@@ -72,9 +90,10 @@ public sealed interface FilterCommand permits
    * Add a new filter rule.
    *
    * <p>IRCafe supports both key=value syntax and WeeChat-style positional syntax:
+   *
    * <ul>
-   *   <li><code>/filter add &lt;name&gt; key=value ...</code></li>
-   *   <li><code>/filter add &lt;name&gt; &lt;buffer&gt; &lt;tags&gt; &lt;regex&gt;</code></li>
+   *   <li><code>/filter add &lt;name&gt; key=value ...</code>
+   *   <li><code>/filter add &lt;name&gt; &lt;buffer&gt; &lt;tags&gt; &lt;regex&gt;</code>
    * </ul>
    */
   record Add(String name, FilterRulePatch patch) implements FilterCommand {}
@@ -132,11 +151,12 @@ public sealed interface FilterCommand permits
    * Toggle "show filtered lines" for a scope.
    *
    * <p>Mode semantics:
+   *
    * <ul>
-   *   <li>ON  = show filtered lines (disable filtering)</li>
-   *   <li>OFF = hide filtered lines (enable filtering)</li>
-   *   <li>TOGGLE = invert current effective state for the active buffer</li>
-   *   <li>DEFAULT = clear override (inherit)</li>
+   *   <li>ON = show filtered lines (disable filtering)
+   *   <li>OFF = hide filtered lines (enable filtering)
+   *   <li>TOGGLE = invert current effective state for the active buffer
+   *   <li>DEFAULT = clear override (inherit)
    * </ul>
    *
    * <p>If scopePattern is null/blank, it means "active buffer exact scope".
@@ -156,7 +176,9 @@ public sealed interface FilterCommand permits
     }
   }
 
-  /** Toggle whether placeholders start collapsed for a scope (or active buffer if scope omitted). */
+  /**
+   * Toggle whether placeholders start collapsed for a scope (or active buffer if scope omitted).
+   */
   record PlaceholdersCollapsed(ToggleMode mode, String scopePattern) implements FilterCommand {
     public PlaceholdersCollapsed {
       mode = Objects.requireNonNullElse(mode, ToggleMode.TOGGLE);
@@ -178,15 +200,23 @@ public sealed interface FilterCommand permits
    * <p>Any field that is not specified is left unchanged.
    */
   record Defaults(
-      Boolean filtersEnabledByDefault, boolean filtersSpecified,
-      Boolean placeholdersEnabledByDefault, boolean placeholdersSpecified,
-      Boolean placeholdersCollapsedByDefault, boolean collapsedSpecified,
-      Integer placeholderMaxPreviewLines, boolean previewSpecified,
-      Integer placeholderMaxLinesPerRun, boolean maxRunSpecified,
-      Integer placeholderTooltipMaxTags, boolean tooltipTagsSpecified,
-      Integer historyPlaceholderMaxRunsPerBatch, boolean maxBatchSpecified,
-      Boolean historyPlaceholdersEnabledByDefault, boolean historySpecified
-  ) implements FilterCommand {
+      Boolean filtersEnabledByDefault,
+      boolean filtersSpecified,
+      Boolean placeholdersEnabledByDefault,
+      boolean placeholdersSpecified,
+      Boolean placeholdersCollapsedByDefault,
+      boolean collapsedSpecified,
+      Integer placeholderMaxPreviewLines,
+      boolean previewSpecified,
+      Integer placeholderMaxLinesPerRun,
+      boolean maxRunSpecified,
+      Integer placeholderTooltipMaxTags,
+      boolean tooltipTagsSpecified,
+      Integer historyPlaceholderMaxRunsPerBatch,
+      boolean maxBatchSpecified,
+      Boolean historyPlaceholdersEnabledByDefault,
+      boolean historySpecified)
+      implements FilterCommand {
     public Defaults {
       if (!previewSpecified) {
         placeholderMaxPreviewLines = null;
@@ -197,38 +227,39 @@ public sealed interface FilterCommand permits
         placeholderMaxPreviewLines = v;
       }
 
-if (!maxRunSpecified) {
-  placeholderMaxLinesPerRun = null;
-} else {
-  int v = (placeholderMaxLinesPerRun == null) ? 0 : placeholderMaxLinesPerRun;
-  if (v < 0) v = 0;
-  if (v > 50_000) v = 50_000;
-  placeholderMaxLinesPerRun = v;
-}
+      if (!maxRunSpecified) {
+        placeholderMaxLinesPerRun = null;
+      } else {
+        int v = (placeholderMaxLinesPerRun == null) ? 0 : placeholderMaxLinesPerRun;
+        if (v < 0) v = 0;
+        if (v > 50_000) v = 50_000;
+        placeholderMaxLinesPerRun = v;
+      }
 
-if (!tooltipTagsSpecified) {
-  placeholderTooltipMaxTags = null;
-} else {
-  int v = (placeholderTooltipMaxTags == null) ? 0 : placeholderTooltipMaxTags;
-  if (v < 0) v = 0;
-  if (v > 500) v = 500;
-  placeholderTooltipMaxTags = v;
-}
+      if (!tooltipTagsSpecified) {
+        placeholderTooltipMaxTags = null;
+      } else {
+        int v = (placeholderTooltipMaxTags == null) ? 0 : placeholderTooltipMaxTags;
+        if (v < 0) v = 0;
+        if (v > 500) v = 500;
+        placeholderTooltipMaxTags = v;
+      }
 
-if (!maxBatchSpecified) {
-  historyPlaceholderMaxRunsPerBatch = null;
-} else {
-  int v = (historyPlaceholderMaxRunsPerBatch == null) ? 0 : historyPlaceholderMaxRunsPerBatch;
-  if (v < 0) v = 0;
-  if (v > 5_000) v = 5_000;
-  historyPlaceholderMaxRunsPerBatch = v;
-}
+      if (!maxBatchSpecified) {
+        historyPlaceholderMaxRunsPerBatch = null;
+      } else {
+        int v = (historyPlaceholderMaxRunsPerBatch == null) ? 0 : historyPlaceholderMaxRunsPerBatch;
+        if (v < 0) v = 0;
+        if (v > 5_000) v = 5_000;
+        historyPlaceholderMaxRunsPerBatch = v;
+      }
 
-if (!historySpecified) {
-  historyPlaceholdersEnabledByDefault = null;
-} else {
-  historyPlaceholdersEnabledByDefault = Boolean.TRUE.equals(historyPlaceholdersEnabledByDefault);
-}
+      if (!historySpecified) {
+        historyPlaceholdersEnabledByDefault = null;
+      } else {
+        historyPlaceholdersEnabledByDefault =
+            Boolean.TRUE.equals(historyPlaceholdersEnabledByDefault);
+      }
     }
   }
 
@@ -245,10 +276,13 @@ if (!historySpecified) {
    */
   record OverrideSet(
       String scopePattern,
-      TriState filtersEnabled, boolean filtersSpecified,
-      TriState placeholdersEnabled, boolean placeholdersSpecified,
-      TriState placeholdersCollapsed, boolean collapsedSpecified
-  ) implements FilterCommand {
+      TriState filtersEnabled,
+      boolean filtersSpecified,
+      TriState placeholdersEnabled,
+      boolean placeholdersSpecified,
+      TriState placeholdersCollapsed,
+      boolean collapsedSpecified)
+      implements FilterCommand {
     public OverrideSet {
       scopePattern = Objects.toString(scopePattern, "*").trim();
       if (scopePattern.isBlank()) scopePattern = "*";
@@ -293,8 +327,7 @@ if (!historySpecified) {
       String tagsExpr,
       boolean tagsSpecified,
       RegexSpec textRegex,
-      boolean textSpecified
-  ) {
+      boolean textSpecified) {
     public FilterRulePatch {
       scope = (scope == null) ? "" : scope.trim();
       from = (from == null) ? List.of() : List.copyOf(from);
@@ -304,15 +337,22 @@ if (!historySpecified) {
 
     public static FilterRulePatch empty() {
       return new FilterRulePatch(
-          "", false,
-          null, false,
-          null, false,
-          null, false,
-          EnumSet.noneOf(LogKind.class), false,
-          List.of(), false,
-          "", false,
-          null, false
-      );
+          "",
+          false,
+          null,
+          false,
+          null,
+          false,
+          null,
+          false,
+          EnumSet.noneOf(LogKind.class),
+          false,
+          List.of(),
+          false,
+          "",
+          false,
+          null,
+          false);
     }
   }
 }

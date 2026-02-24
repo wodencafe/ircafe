@@ -7,74 +7,70 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-public sealed interface IrcEvent permits
-    IrcEvent.Connected,
-    IrcEvent.Connecting,
-    IrcEvent.Disconnected,
-    IrcEvent.Reconnecting,
-    IrcEvent.NickChanged,
-    IrcEvent.ChannelMessage,
-    IrcEvent.ChannelAction,
-
-    IrcEvent.ChannelModeChanged,
-    IrcEvent.ChannelModesListed,
-    IrcEvent.ChannelTopicUpdated,
-    IrcEvent.PrivateMessage,
-    IrcEvent.PrivateAction,
-
-    IrcEvent.Notice,
-    IrcEvent.WallopsReceived,
-
-    IrcEvent.AwayStatusChanged,
-    IrcEvent.UserJoinedChannel,
-    IrcEvent.UserPartedChannel,
-    IrcEvent.LeftChannel,
-    IrcEvent.UserKickedFromChannel,
-    IrcEvent.KickedFromChannel,
-    IrcEvent.InvitedToChannel,
-    IrcEvent.UserQuitChannel,
-    IrcEvent.UserNickChangedChannel,
-    IrcEvent.JoinedChannel,
-    IrcEvent.JoinFailed,
-    IrcEvent.NickListUpdated,
-    IrcEvent.UserHostmaskObserved,
-    IrcEvent.UserHostChanged,
-    IrcEvent.UserAwayStateObserved,
-    IrcEvent.UserAccountStateObserved,
-    IrcEvent.UserSetNameObserved,
-    IrcEvent.MonitorOnlineObserved,
-    IrcEvent.MonitorOfflineObserved,
-    IrcEvent.MonitorListObserved,
-    IrcEvent.MonitorListEnded,
-    IrcEvent.MonitorListFull,
-    IrcEvent.UserTypingObserved,
-    IrcEvent.ReadMarkerObserved,
-    IrcEvent.MessageReplyObserved,
-    IrcEvent.MessageReactObserved,
-    IrcEvent.MessageRedactionObserved,
-    IrcEvent.Ircv3CapabilityChanged,
-    IrcEvent.WhoisResult,
-    IrcEvent.WhoisProbeCompleted,
-    IrcEvent.WhoxSupportObserved,
-    IrcEvent.WhoxSchemaCompatibleObserved,
-    IrcEvent.ServerTimeNotNegotiated,
-    IrcEvent.ChatHistoryBatchReceived,
-    IrcEvent.ZncPlaybackBatchReceived,
-    IrcEvent.ServerResponseLine,
-    IrcEvent.ChannelListStarted,
-    IrcEvent.ChannelListEntry,
-    IrcEvent.ChannelListEnded,
-    IrcEvent.StandardReply,
-    IrcEvent.Error,
-    IrcEvent.CtcpRequestReceived
- {
+public sealed interface IrcEvent
+    permits IrcEvent.Connected,
+        IrcEvent.Connecting,
+        IrcEvent.Disconnected,
+        IrcEvent.Reconnecting,
+        IrcEvent.NickChanged,
+        IrcEvent.ChannelMessage,
+        IrcEvent.ChannelAction,
+        IrcEvent.ChannelModeChanged,
+        IrcEvent.ChannelModesListed,
+        IrcEvent.ChannelTopicUpdated,
+        IrcEvent.PrivateMessage,
+        IrcEvent.PrivateAction,
+        IrcEvent.Notice,
+        IrcEvent.WallopsReceived,
+        IrcEvent.AwayStatusChanged,
+        IrcEvent.UserJoinedChannel,
+        IrcEvent.UserPartedChannel,
+        IrcEvent.LeftChannel,
+        IrcEvent.UserKickedFromChannel,
+        IrcEvent.KickedFromChannel,
+        IrcEvent.InvitedToChannel,
+        IrcEvent.UserQuitChannel,
+        IrcEvent.UserNickChangedChannel,
+        IrcEvent.JoinedChannel,
+        IrcEvent.JoinFailed,
+        IrcEvent.NickListUpdated,
+        IrcEvent.UserHostmaskObserved,
+        IrcEvent.UserHostChanged,
+        IrcEvent.UserAwayStateObserved,
+        IrcEvent.UserAccountStateObserved,
+        IrcEvent.UserSetNameObserved,
+        IrcEvent.MonitorOnlineObserved,
+        IrcEvent.MonitorOfflineObserved,
+        IrcEvent.MonitorListObserved,
+        IrcEvent.MonitorListEnded,
+        IrcEvent.MonitorListFull,
+        IrcEvent.UserTypingObserved,
+        IrcEvent.ReadMarkerObserved,
+        IrcEvent.MessageReplyObserved,
+        IrcEvent.MessageReactObserved,
+        IrcEvent.MessageRedactionObserved,
+        IrcEvent.Ircv3CapabilityChanged,
+        IrcEvent.WhoisResult,
+        IrcEvent.WhoisProbeCompleted,
+        IrcEvent.WhoxSupportObserved,
+        IrcEvent.WhoxSchemaCompatibleObserved,
+        IrcEvent.ServerTimeNotNegotiated,
+        IrcEvent.ChatHistoryBatchReceived,
+        IrcEvent.ZncPlaybackBatchReceived,
+        IrcEvent.ServerResponseLine,
+        IrcEvent.ChannelListStarted,
+        IrcEvent.ChannelListEntry,
+        IrcEvent.ChannelListEnded,
+        IrcEvent.StandardReply,
+        IrcEvent.Error,
+        IrcEvent.CtcpRequestReceived {
 
   /**
    * Best-effort away status for a user.
    *
    * <p>Most networks do not provide away state in NAMES. This is intended to be updated later via
-   * IRCv3 {@code away-notify} (or similar mechanisms). Until then, entries will generally be
-   * {@link #UNKNOWN}.
+   * IRCv3 {@code away-notify} (or similar mechanisms). Until then, entries will generally be {@link
+   * #UNKNOWN}.
    */
   enum AwayState {
     UNKNOWN,
@@ -85,8 +81,8 @@ public sealed interface IrcEvent permits
   /**
    * Best-effort account/login status for a user.
    *
-   * <p>This is primarily populated via IRCv3 {@code account-notify} and
-   * IRCv3 {@code extended-join}.
+   * <p>This is primarily populated via IRCv3 {@code account-notify} and IRCv3 {@code
+   * extended-join}.
    */
   enum AccountState {
     UNKNOWN,
@@ -94,9 +90,12 @@ public sealed interface IrcEvent permits
     LOGGED_IN
   }
 
-  record Connected(Instant at, String serverHost, int serverPort, String nick) implements IrcEvent {}
+  record Connected(Instant at, String serverHost, int serverPort, String nick)
+      implements IrcEvent {}
 
-  record Connecting(Instant at, String serverHost, int serverPort, String nick) implements IrcEvent {}
+  record Connecting(Instant at, String serverHost, int serverPort, String nick)
+      implements IrcEvent {}
+
   record Disconnected(Instant at, String reason) implements IrcEvent {}
 
   record Reconnecting(Instant at, long attempt, long delayMs, String reason) implements IrcEvent {}
@@ -109,8 +108,8 @@ public sealed interface IrcEvent permits
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public ChannelMessage {
       messageId = normalizeMessageId(messageId);
       ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
@@ -127,8 +126,8 @@ public sealed interface IrcEvent permits
       String from,
       String action,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public ChannelAction {
       messageId = normalizeMessageId(messageId);
       ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
@@ -139,18 +138,16 @@ public sealed interface IrcEvent permits
     }
   }
 
-  record ChannelModeChanged(Instant at, String channel, String by, String details) implements IrcEvent {}
+  record ChannelModeChanged(Instant at, String channel, String by, String details)
+      implements IrcEvent {}
+
   record ChannelModesListed(Instant at, String channel, String details) implements IrcEvent {}
 
   record ChannelTopicUpdated(Instant at, String channel, String topic) implements IrcEvent {}
 
   record PrivateMessage(
-      Instant at,
-      String from,
-      String text,
-      String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Instant at, String from, String text, String messageId, Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public PrivateMessage {
       messageId = normalizeMessageId(messageId);
       ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
@@ -160,13 +157,10 @@ public sealed interface IrcEvent permits
       this(at, from, text, "", Map.of());
     }
   }
+
   record PrivateAction(
-      Instant at,
-      String from,
-      String action,
-      String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Instant at, String from, String action, String messageId, Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public PrivateAction {
       messageId = normalizeMessageId(messageId);
       ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
@@ -183,8 +177,8 @@ public sealed interface IrcEvent permits
       String target,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public Notice {
       messageId = normalizeMessageId(messageId);
       ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
@@ -198,11 +192,11 @@ public sealed interface IrcEvent permits
   record WallopsReceived(Instant at, String from, String text) implements IrcEvent {}
 
   /**
-   * A server response line (usually a numeric like 421/433/etc) that doesn't map cleanly onto
-   * a higher-level event in IRCafe.
+   * A server response line (usually a numeric like 421/433/etc) that doesn't map cleanly onto a
+   * higher-level event in IRCafe.
    *
-   * <p>This is primarily intended for the per-server <em>Status</em> transcript, so users can
-   * see replies to raw commands (and other server numerics) without having to watch the console.
+   * <p>This is primarily intended for the per-server <em>Status</em> transcript, so users can see
+   * replies to raw commands (and other server numerics) without having to watch the console.
    */
   record ServerResponseLine(
       Instant at,
@@ -210,8 +204,8 @@ public sealed interface IrcEvent permits
       String message,
       String rawLine,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public ServerResponseLine {
       messageId = normalizeMessageId(messageId);
       ircv3Tags = normalizeIrcv3Tags(ircv3Tags);
@@ -226,7 +220,8 @@ public sealed interface IrcEvent permits
   record ChannelListStarted(Instant at, String banner) implements IrcEvent {}
 
   /** One row from an IRC channel list (/LIST) response stream. */
-  record ChannelListEntry(Instant at, String channel, int visibleUsers, String topic) implements IrcEvent {}
+  record ChannelListEntry(Instant at, String channel, int visibleUsers, String topic)
+      implements IrcEvent {}
 
   /** End of an IRC channel list (/LIST) response stream. */
   record ChannelListEnded(Instant at, String summary) implements IrcEvent {}
@@ -240,8 +235,7 @@ public sealed interface IrcEvent permits
   /**
    * IRCv3 standard reply line (FAIL/WARN/NOTE).
    *
-   * <p>Format is typically:
-   * {@code :server FAIL <command> <code> [context] :description}
+   * <p>Format is typically: {@code :server FAIL <command> <code> [context] :description}
    */
   record StandardReply(
       Instant at,
@@ -252,8 +246,8 @@ public sealed interface IrcEvent permits
       String description,
       String rawLine,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) implements IrcEvent {
+      Map<String, String> ircv3Tags)
+      implements IrcEvent {
     public StandardReply {
       if (kind == null) kind = StandardReplyKind.NOTE;
       command = normalizeToken(command);
@@ -272,8 +266,7 @@ public sealed interface IrcEvent permits
         String code,
         String context,
         String description,
-        String rawLine
-    ) {
+        String rawLine) {
       this(at, kind, command, code, context, description, rawLine, "", Map.of());
     }
   }
@@ -281,49 +274,47 @@ public sealed interface IrcEvent permits
   /** Warns the UI once when IRCv3 {@code server-time} is not negotiated on this connection. */
   record ServerTimeNotNegotiated(Instant at, String message) implements IrcEvent {}
 
-  /**
-   * A collected IRCv3 {@code CHATHISTORY} batch.
-   *
-   */
+  /** A collected IRCv3 {@code CHATHISTORY} batch. */
   record ChatHistoryBatchReceived(
-      Instant at,
-      String target,
-      String batchId,
-      List<ChatHistoryEntry> entries
-  ) implements IrcEvent {}
+      Instant at, String target, String batchId, List<ChatHistoryEntry> entries)
+      implements IrcEvent {}
 
   /**
    * A collected ZNC playback window.
    *
-   * <p>ZNC playback replays normal PRIVMSG/NOTICE/ACTION lines. We capture them
-   * into {@link ChatHistoryEntry} records so the scrollback pipeline can treat
-   * them similarly to IRCv3 CHATHISTORY.
+   * <p>ZNC playback replays normal PRIVMSG/NOTICE/ACTION lines. We capture them into {@link
+   * ChatHistoryEntry} records so the scrollback pipeline can treat them similarly to IRCv3
+   * CHATHISTORY.
    */
   record ZncPlaybackBatchReceived(
       Instant at,
       String target,
       Instant fromInclusive,
       Instant toInclusive,
-      List<ChatHistoryEntry> entries
-  ) implements IrcEvent {}
-  record CtcpRequestReceived(Instant at, String from, String command, String argument, String channel) implements IrcEvent {}
+      List<ChatHistoryEntry> entries)
+      implements IrcEvent {}
+
+  record CtcpRequestReceived(
+      Instant at, String from, String command, String argument, String channel)
+      implements IrcEvent {}
 
   record AwayStatusChanged(Instant at, boolean away, String message) implements IrcEvent {}
 
-  
   record UserJoinedChannel(Instant at, String channel, String nick) implements IrcEvent {}
 
-  
-  record UserPartedChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}
+  record UserPartedChannel(Instant at, String channel, String nick, String reason)
+      implements IrcEvent {}
 
   /** Local user parted a channel (server-confirmed). */
   record LeftChannel(Instant at, String channel, String reason) implements IrcEvent {}
 
   /** Another user was kicked from a channel. */
-  record UserKickedFromChannel(Instant at, String channel, String nick, String by, String reason) implements IrcEvent {}
+  record UserKickedFromChannel(Instant at, String channel, String nick, String by, String reason)
+      implements IrcEvent {}
 
   /** Local user was kicked from a channel. */
-  record KickedFromChannel(Instant at, String channel, String by, String reason) implements IrcEvent {}
+  record KickedFromChannel(Instant at, String channel, String by, String reason)
+      implements IrcEvent {}
 
   /**
    * Local user (or invite-notify observer) received an INVITE event.
@@ -332,13 +323,8 @@ public sealed interface IrcEvent permits
    * invite-notify lines.
    */
   record InvitedToChannel(
-      Instant at,
-      String channel,
-      String from,
-      String invitee,
-      String reason,
-      boolean inviteNotify
-  ) implements IrcEvent {
+      Instant at, String channel, String from, String invitee, String reason, boolean inviteNotify)
+      implements IrcEvent {
     public InvitedToChannel {
       channel = Objects.toString(channel, "").trim();
       from = Objects.toString(from, "").trim();
@@ -351,96 +337,96 @@ public sealed interface IrcEvent permits
     }
   }
 
-  
-  record UserQuitChannel(Instant at, String channel, String nick, String reason) implements IrcEvent {}
+  record UserQuitChannel(Instant at, String channel, String nick, String reason)
+      implements IrcEvent {}
 
-  record UserNickChangedChannel(Instant at, String channel, String oldNick, String newNick) implements IrcEvent {}
+  record UserNickChangedChannel(Instant at, String channel, String oldNick, String newNick)
+      implements IrcEvent {}
 
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
 
   /**
    * Server rejected a join attempt (e.g. +r requires NickServ auth).
    *
-   * <p>Most servers respond to /JOIN failures using numerics (e.g. 471-477).
-   * We surface those as an event so the UI can route the message back to where
-   * the user initiated the join (and also to the server status window).
+   * <p>Most servers respond to /JOIN failures using numerics (e.g. 471-477). We surface those as an
+   * event so the UI can route the message back to where the user initiated the join (and also to
+   * the server status window).
    */
   record JoinFailed(Instant at, String channel, int code, String message) implements IrcEvent {}
+
   record Error(Instant at, String message, Throwable cause) implements IrcEvent {}
 
-    record NickInfo(
+  record NickInfo(
+      String nick,
+      String prefix,
+      String hostmask,
+      AwayState awayState,
+      String awayMessage,
+      AccountState accountState,
+      String accountName,
+      String realName) { // prefix like "@", "+", "~", etc.
+    public NickInfo {
+      // Normalize null to UNKNOWN to keep downstream UI / stores simple.
+      if (awayState == null) awayState = AwayState.UNKNOWN;
+      // Keep empty/blank away messages as null (we use this for tooltip display).
+      if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
+      // If the user is not away, we don't keep a reason.
+      if (awayState != AwayState.AWAY) awayMessage = null;
+
+      if (accountState == null) accountState = AccountState.UNKNOWN;
+      if (accountName != null) {
+        accountName = accountName.trim();
+        if (accountName.isEmpty() || "*".equals(accountName) || "0".equals(accountName))
+          accountName = null;
+      }
+      // Only keep an account name if we are sure they're logged in.
+      if (accountState != AccountState.LOGGED_IN) accountName = null;
+
+      if (realName != null) {
+        realName = realName.trim();
+        if (realName.isEmpty()) realName = null;
+      }
+    }
+
+    public NickInfo(
+        String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) {
+      this(nick, prefix, hostmask, awayState, awayMessage, AccountState.UNKNOWN, null, null);
+    }
+
+    public NickInfo(
         String nick,
         String prefix,
         String hostmask,
         AwayState awayState,
         String awayMessage,
         AccountState accountState,
-        String accountName,
-        String realName
-    ) { // prefix like "@", "+", "~", etc.
-      public NickInfo {
-        // Normalize null to UNKNOWN to keep downstream UI / stores simple.
-        if (awayState == null) awayState = AwayState.UNKNOWN;
-        // Keep empty/blank away messages as null (we use this for tooltip display).
-        if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
-        // If the user is not away, we don't keep a reason.
-        if (awayState != AwayState.AWAY) awayMessage = null;
-
-        if (accountState == null) accountState = AccountState.UNKNOWN;
-        if (accountName != null) {
-          accountName = accountName.trim();
-          if (accountName.isEmpty() || "*".equals(accountName) || "0".equals(accountName)) accountName = null;
-        }
-        // Only keep an account name if we are sure they're logged in.
-        if (accountState != AccountState.LOGGED_IN) accountName = null;
-
-        if (realName != null) {
-          realName = realName.trim();
-          if (realName.isEmpty()) realName = null;
-        }
-      }
-
-      public NickInfo(String nick, String prefix, String hostmask, AwayState awayState, String awayMessage) {
-        this(nick, prefix, hostmask, awayState, awayMessage, AccountState.UNKNOWN, null, null);
-      }
-
-      public NickInfo(
-          String nick,
-          String prefix,
-          String hostmask,
-          AwayState awayState,
-          String awayMessage,
-          AccountState accountState,
-          String accountName
-      ) {
-        this(nick, prefix, hostmask, awayState, awayMessage, accountState, accountName, null);
-      }
-
-      public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
-        this(nick, prefix, hostmask, awayState, null, AccountState.UNKNOWN, null, null);
-      }
-
-      public NickInfo(String nick, String prefix, String hostmask) {
-        this(nick, prefix, hostmask, AwayState.UNKNOWN, null, AccountState.UNKNOWN, null, null);
-      }
+        String accountName) {
+      this(nick, prefix, hostmask, awayState, awayMessage, accountState, accountName, null);
     }
 
+    public NickInfo(String nick, String prefix, String hostmask, AwayState awayState) {
+      this(nick, prefix, hostmask, awayState, null, AccountState.UNKNOWN, null, null);
+    }
+
+    public NickInfo(String nick, String prefix, String hostmask) {
+      this(nick, prefix, hostmask, AwayState.UNKNOWN, null, AccountState.UNKNOWN, null, null);
+    }
+  }
+
   record NickListUpdated(
-      Instant at,
-      String channel,
-      List<NickInfo> nicks,
-      int totalUsers,
-      int operatorCount
-  ) implements IrcEvent {}
+      Instant at, String channel, List<NickInfo> nicks, int totalUsers, int operatorCount)
+      implements IrcEvent {}
 
   /** Opportunistically observed a user's hostmask in the wild (e.g. */
-record UserHostmaskObserved(Instant at, String channel, String nick, String hostmask) implements IrcEvent {}
+  record UserHostmaskObserved(Instant at, String channel, String nick, String hostmask)
+      implements IrcEvent {}
 
   /** Observed IRCv3 CHGHOST for a nick. */
   record UserHostChanged(Instant at, String nick, String user, String host) implements IrcEvent {}
 
   /** Opportunistically observed a user's away state (e.g. */
-record UserAwayStateObserved(Instant at, String nick, AwayState awayState, String awayMessage) implements IrcEvent {
+  record UserAwayStateObserved(Instant at, String nick, AwayState awayState, String awayMessage)
+      implements IrcEvent {
     public UserAwayStateObserved {
       if (awayState == null) awayState = AwayState.UNKNOWN;
       if (awayMessage != null && awayMessage.isBlank()) awayMessage = null;
@@ -448,14 +434,14 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
       if (awayState != AwayState.AWAY) awayMessage = null;
     }
 
-    
     public UserAwayStateObserved(Instant at, String nick, AwayState awayState) {
       this(at, nick, awayState, null);
     }
   }
 
   /** Opportunistically observed a user's account state (IRCv3 account-notify / extended-join). */
-  record UserAccountStateObserved(Instant at, String nick, AccountState accountState, String accountName) implements IrcEvent {
+  record UserAccountStateObserved(
+      Instant at, String nick, AccountState accountState, String accountName) implements IrcEvent {
     public UserAccountStateObserved {
       if (accountState == null) accountState = AccountState.UNKNOWN;
       if (accountName != null && accountName.isBlank()) accountName = null;
@@ -496,12 +482,8 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
   record MonitorListEnded(Instant at) implements IrcEvent {}
 
   /** Observed IRC MONITOR list-full error (ERR_MONLISTFULL 734). */
-  record MonitorListFull(
-      Instant at,
-      int limit,
-      List<String> nicks,
-      String message
-  ) implements IrcEvent {
+  record MonitorListFull(Instant at, int limit, List<String> nicks, String message)
+      implements IrcEvent {
     public MonitorListFull {
       if (limit < 0) limit = 0;
       nicks = normalizeNickList(nicks);
@@ -510,22 +492,29 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
   }
 
   /** Observed IRCv3 typing indicator (typically from +typing tag). */
-  record UserTypingObserved(Instant at, String from, String target, String state) implements IrcEvent {}
+  record UserTypingObserved(Instant at, String from, String target, String state)
+      implements IrcEvent {}
 
   /** Observed IRCv3 read marker signal (draft/read-marker or MARKREAD). */
-  record ReadMarkerObserved(Instant at, String from, String target, String marker) implements IrcEvent {}
+  record ReadMarkerObserved(Instant at, String from, String target, String marker)
+      implements IrcEvent {}
 
   /** Observed IRCv3 draft/reply tag. */
-  record MessageReplyObserved(Instant at, String from, String target, String replyToMsgId) implements IrcEvent {}
+  record MessageReplyObserved(Instant at, String from, String target, String replyToMsgId)
+      implements IrcEvent {}
 
   /** Observed IRCv3 draft/react tag. */
-  record MessageReactObserved(Instant at, String from, String target, String reaction, String messageId) implements IrcEvent {}
+  record MessageReactObserved(
+      Instant at, String from, String target, String reaction, String messageId)
+      implements IrcEvent {}
 
   /** Observed IRCv3 message redaction signal (for example draft/delete tags or REDACT command). */
-  record MessageRedactionObserved(Instant at, String from, String target, String messageId) implements IrcEvent {}
+  record MessageRedactionObserved(Instant at, String from, String target, String messageId)
+      implements IrcEvent {}
 
   /** Observed CAP change line (ACK/NEW/DEL) for a capability. */
-  record Ircv3CapabilityChanged(Instant at, String subcommand, String capability, boolean enabled) implements IrcEvent {}
+  record Ircv3CapabilityChanged(Instant at, String subcommand, String capability, boolean enabled)
+      implements IrcEvent {}
 
   record WhoisResult(Instant at, String nick, List<String> lines) implements IrcEvent {}
 
@@ -540,9 +529,8 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
       String nick,
       boolean sawAwayNumeric,
       boolean sawAccountNumeric,
-      boolean whoisAccountNumericSupported
-  ) implements IrcEvent {}
-
+      boolean whoisAccountNumericSupported)
+      implements IrcEvent {}
 
   /**
    * Indicates the server supports WHOX (RPL_WHOSPCRPL 354 with extended WHO fields).
@@ -560,7 +548,8 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
    * channel-scan WHOX token, enrichment can fall back to plain WHO/USERHOST to avoid silently
    * "working" while not actually producing account updates.
    */
-  record WhoxSchemaCompatibleObserved(Instant at, boolean compatible, String detail) implements IrcEvent {
+  record WhoxSchemaCompatibleObserved(Instant at, boolean compatible, String detail)
+      implements IrcEvent {
     public WhoxSchemaCompatibleObserved {
       if (detail != null && detail.isBlank()) detail = null;
     }

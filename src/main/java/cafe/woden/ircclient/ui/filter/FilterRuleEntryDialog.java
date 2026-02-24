@@ -33,24 +33,27 @@ import javax.swing.event.DocumentListener;
 /** Simple modal dialog for creating/editing a filter rule. */
 public final class FilterRuleEntryDialog {
 
-  private FilterRuleEntryDialog() {
-  }
+  private FilterRuleEntryDialog() {}
 
-  public static Optional<FilterRule> open(Window owner,
-                                         String title,
-                                         FilterRule seed,
-                                         Set<String> reservedNameKeys,
-                                         String suggestedScope) {
+  public static Optional<FilterRule> open(
+      Window owner,
+      String title,
+      FilterRule seed,
+      Set<String> reservedNameKeys,
+      String suggestedScope) {
     if (!SwingUtilities.isEventDispatchThread()) {
-      final Optional<FilterRule>[] box = new Optional[]{Optional.empty()};
+      final Optional<FilterRule>[] box = new Optional[] {Optional.empty()};
       try {
-        SwingUtilities.invokeAndWait(() -> box[0] = open(owner, title, seed, reservedNameKeys, suggestedScope));
+        SwingUtilities.invokeAndWait(
+            () -> box[0] = open(owner, title, seed, reservedNameKeys, suggestedScope));
       } catch (Exception ignored) {
       }
       return box[0];
     }
 
-    JDialog dlg = new JDialog(owner, Objects.toString(title, "Filter Rule"), JDialog.ModalityType.APPLICATION_MODAL);
+    JDialog dlg =
+        new JDialog(
+            owner, Objects.toString(title, "Filter Rule"), JDialog.ModalityType.APPLICATION_MODAL);
     dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
     dlg.setLayout(new BorderLayout(10, 10));
     ((JPanel) dlg.getContentPane()).setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -79,9 +82,13 @@ public final class FilterRuleEntryDialog {
     reI.setSelected(true); // user preference: default case-insensitive
 
     name.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Unique rule name");
-    scope.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Scope pattern (e.g. libera/#llamas, */status, *)");
-    fromGlobs.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Optional from: globs (comma/space separated)");
-    tags.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Optional tags (e.g. irc_in+irc_privmsg, !irc_notice, re:^irc_)");
+    scope.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT, "Scope pattern (e.g. libera/#llamas, */status, *)");
+    fromGlobs.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT, "Optional from: globs (comma/space separated)");
+    tags.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT,
+        "Optional tags (e.g. irc_in+irc_privmsg, !irc_notice, re:^irc_)");
     regex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Optional text regex");
 
     if (seed != null) {
@@ -120,7 +127,10 @@ public final class FilterRuleEntryDialog {
       }
     } else {
       enabled.setSelected(true);
-      scope.setText(Objects.toString(suggestedScope, "*").trim().isEmpty() ? "*" : Objects.toString(suggestedScope, "*").trim());
+      scope.setText(
+          Objects.toString(suggestedScope, "*").trim().isEmpty()
+              ? "*"
+              : Objects.toString(suggestedScope, "*").trim());
       direction.setSelectedItem(FilterDirection.ANY);
     }
 
@@ -224,54 +234,56 @@ public final class FilterRuleEntryDialog {
     buttons.add(ok);
     dlg.add(buttons, BorderLayout.SOUTH);
 
-    final Optional<FilterRule>[] result = new Optional[]{Optional.empty()};
+    final Optional<FilterRule>[] result = new Optional[] {Optional.empty()};
 
-    Runnable validate = () -> {
-      String n = normalizeName(name.getText());
-      String nKey = n.toLowerCase(Locale.ROOT);
-      String sc = normalizeScope(scope.getText());
-      String re = Objects.toString(regex.getText(), "").trim();
+    Runnable validate =
+        () -> {
+          String n = normalizeName(name.getText());
+          String nKey = n.toLowerCase(Locale.ROOT);
+          String sc = normalizeScope(scope.getText());
+          String re = Objects.toString(regex.getText(), "").trim();
 
-      if (n.isEmpty()) {
-        error.setText("Name is required.");
-        ok.setEnabled(false);
-        return;
-      }
-      if (reservedNameKeys != null && reservedNameKeys.contains(nKey)) {
-        error.setText("Name already exists.");
-        ok.setEnabled(false);
-        return;
-      }
-      if (sc.isEmpty()) {
-        error.setText("Scope is required.");
-        ok.setEnabled(false);
-        return;
-      }
-      if (!re.isEmpty()) {
-        try {
-          Pattern.compile(re, toPatternFlags(reI.isSelected(), reM.isSelected(), reS.isSelected()));
-        } catch (PatternSyntaxException ex) {
-          error.setText("Invalid regex: " + sanitize(ex.getDescription()));
-          ok.setEnabled(false);
-          return;
-        } catch (Exception ex) {
-          error.setText("Invalid regex.");
-          ok.setEnabled(false);
-          return;
-        }
-      }
+          if (n.isEmpty()) {
+            error.setText("Name is required.");
+            ok.setEnabled(false);
+            return;
+          }
+          if (reservedNameKeys != null && reservedNameKeys.contains(nKey)) {
+            error.setText("Name already exists.");
+            ok.setEnabled(false);
+            return;
+          }
+          if (sc.isEmpty()) {
+            error.setText("Scope is required.");
+            ok.setEnabled(false);
+            return;
+          }
+          if (!re.isEmpty()) {
+            try {
+              Pattern.compile(
+                  re, toPatternFlags(reI.isSelected(), reM.isSelected(), reS.isSelected()));
+            } catch (PatternSyntaxException ex) {
+              error.setText("Invalid regex: " + sanitize(ex.getDescription()));
+              ok.setEnabled(false);
+              return;
+            } catch (Exception ex) {
+              error.setText("Invalid regex.");
+              ok.setEnabled(false);
+              return;
+            }
+          }
 
-      String tagExpr = Objects.toString(tags.getText(), "").trim();
-      String tagErr = validateTagsExpr(tagExpr);
-      if (tagErr != null) {
-        error.setText(tagErr);
-        ok.setEnabled(false);
-        return;
-      }
+          String tagExpr = Objects.toString(tags.getText(), "").trim();
+          String tagErr = validateTagsExpr(tagExpr);
+          if (tagErr != null) {
+            error.setText(tagErr);
+            ok.setEnabled(false);
+            return;
+          }
 
-      error.setText(" ");
-      ok.setEnabled(true);
-    };
+          error.setText(" ");
+          ok.setEnabled(true);
+        };
 
     DocumentListener dl = new SimpleDocListener(validate);
     name.getDocument().addDocumentListener(dl);
@@ -293,54 +305,56 @@ public final class FilterRuleEntryDialog {
     reM.addActionListener(e -> validate.run());
     reS.addActionListener(e -> validate.run());
 
-    cancel.addActionListener(e -> {
-      result[0] = Optional.empty();
-      dlg.dispose();
-    });
+    cancel.addActionListener(
+        e -> {
+          result[0] = Optional.empty();
+          dlg.dispose();
+        });
 
-    ok.addActionListener(e -> {
-      validate.run();
-      if (!ok.isEnabled()) return;
+    ok.addActionListener(
+        e -> {
+          validate.run();
+          if (!ok.isEnabled()) return;
 
-      String n = normalizeName(name.getText());
-      String sc = normalizeScope(scope.getText());
+          String n = normalizeName(name.getText());
+          String sc = normalizeScope(scope.getText());
 
-      EnumSet<LogKind> kindsSet = EnumSet.noneOf(LogKind.class);
-      if (kindChat.isSelected()) kindsSet.add(LogKind.CHAT);
-      if (kindAction.isSelected()) kindsSet.add(LogKind.ACTION);
-      if (kindNotice.isSelected()) kindsSet.add(LogKind.NOTICE);
-      if (kindStatus.isSelected()) kindsSet.add(LogKind.STATUS);
-      if (kindError.isSelected()) kindsSet.add(LogKind.ERROR);
-      if (kindPresence.isSelected()) kindsSet.add(LogKind.PRESENCE);
-      if (kindSpoiler.isSelected()) kindsSet.add(LogKind.SPOILER);
+          EnumSet<LogKind> kindsSet = EnumSet.noneOf(LogKind.class);
+          if (kindChat.isSelected()) kindsSet.add(LogKind.CHAT);
+          if (kindAction.isSelected()) kindsSet.add(LogKind.ACTION);
+          if (kindNotice.isSelected()) kindsSet.add(LogKind.NOTICE);
+          if (kindStatus.isSelected()) kindsSet.add(LogKind.STATUS);
+          if (kindError.isSelected()) kindsSet.add(LogKind.ERROR);
+          if (kindPresence.isSelected()) kindsSet.add(LogKind.PRESENCE);
+          if (kindSpoiler.isSelected()) kindsSet.add(LogKind.SPOILER);
 
-      List<String> from = splitTokens(fromGlobs.getText());
+          List<String> from = splitTokens(fromGlobs.getText());
 
-      String re = Objects.toString(regex.getText(), "").trim();
-      EnumSet<RegexFlag> regexFlags = EnumSet.noneOf(RegexFlag.class);
-      if (reI.isSelected()) regexFlags.add(RegexFlag.I);
-      if (reM.isSelected()) regexFlags.add(RegexFlag.M);
-      if (reS.isSelected()) regexFlags.add(RegexFlag.S);
-      RegexSpec rs = new RegexSpec(re, regexFlags);
+          String re = Objects.toString(regex.getText(), "").trim();
+          EnumSet<RegexFlag> regexFlags = EnumSet.noneOf(RegexFlag.class);
+          if (reI.isSelected()) regexFlags.add(RegexFlag.I);
+          if (reM.isSelected()) regexFlags.add(RegexFlag.M);
+          if (reS.isSelected()) regexFlags.add(RegexFlag.S);
+          RegexSpec rs = new RegexSpec(re, regexFlags);
 
-      TagSpec tagSpec = TagSpec.parse(Objects.toString(tags.getText(), "").trim());
+          TagSpec tagSpec = TagSpec.parse(Objects.toString(tags.getText(), "").trim());
 
-      FilterRule base = new FilterRule(
-          seed != null ? seed.id() : null,
-          n,
-          enabled.isSelected(),
-          sc,
-          FilterAction.HIDE,
-          (FilterDirection) direction.getSelectedItem(),
-          kindsSet,
-          from,
-          rs,
-          tagSpec
-      );
+          FilterRule base =
+              new FilterRule(
+                  seed != null ? seed.id() : null,
+                  n,
+                  enabled.isSelected(),
+                  sc,
+                  FilterAction.HIDE,
+                  (FilterDirection) direction.getSelectedItem(),
+                  kindsSet,
+                  from,
+                  rs,
+                  tagSpec);
 
-      result[0] = Optional.of(base);
-      dlg.dispose();
-    });
+          result[0] = Optional.of(base);
+          dlg.dispose();
+        });
 
     validate.run();
 
@@ -410,7 +424,7 @@ public final class FilterRuleEntryDialog {
     String s = Objects.toString(raw, "").trim();
     if (s.isEmpty()) return List.of();
 
-    String[] parts = s.split("[\\s,]+" );
+    String[] parts = s.split("[\\s,]+");
     List<String> out = new ArrayList<>();
     for (String p : parts) {
       String t = Objects.toString(p, "").trim();
@@ -434,8 +448,19 @@ public final class FilterRuleEntryDialog {
       this.onChange = onChange;
     }
 
-    @Override public void insertUpdate(DocumentEvent e) { onChange.run(); }
-    @Override public void removeUpdate(DocumentEvent e) { onChange.run(); }
-    @Override public void changedUpdate(DocumentEvent e) { onChange.run(); }
+    @Override
+    public void insertUpdate(DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void removeUpdate(DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void changedUpdate(DocumentEvent e) {
+      onChange.run();
+    }
   }
 }

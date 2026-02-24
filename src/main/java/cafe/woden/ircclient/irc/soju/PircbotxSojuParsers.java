@@ -8,10 +8,10 @@ import java.util.Map;
 public final class PircbotxSojuParsers {
   private PircbotxSojuParsers() {}
 
-  /** Parsed form of a {@code BOUNCER NETWORK} response.
+  /**
+   * Parsed form of a {@code BOUNCER NETWORK} response.
    *
-   * <p>Example line:
-   * {@code :bouncer.example BOUNCER NETWORK 123 name=libera;...}
+   * <p>Example line: {@code :bouncer.example BOUNCER NETWORK 123 name=libera;...}
    */
   public record ParsedBouncerNetwork(String netId, String name, Map<String, String> attrs) {}
 
@@ -46,9 +46,9 @@ public final class PircbotxSojuParsers {
   /**
    * Parse soju's bouncer network list responses.
    *
-   * <p>We expect lines of the form:
-   * {@code BOUNCER NETWORK <netid> <attrs>} where attrs is a semicolon-delimited list of key=value.
-   * Some bouncers may send the attrs as a trailing parameter (after {@code :}).
+   * <p>We expect lines of the form: {@code BOUNCER NETWORK <netid> <attrs>} where attrs is a
+   * semicolon-delimited list of key=value. Some bouncers may send the attrs as a trailing parameter
+   * (after {@code :}).
    *
    * @param rawLine normalized IRC line (prefix ok)
    * @return parsed network info, or null if the line is not a network entry

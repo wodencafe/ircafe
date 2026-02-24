@@ -10,8 +10,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * UI configuration.
  *
- * <p>These values can be overridden by the runtime YAML file imported via
- * {@code spring.config.import}.
+ * <p>These values can be overridden by the runtime YAML file imported via {@code
+ * spring.config.import}.
  */
 @ConfigurationProperties(prefix = "ircafe.ui")
 public record UiProperties(
@@ -25,47 +25,30 @@ public record UiProperties(
     Integer uiFontSize,
     String chatFontFamily,
     int chatFontSize,
-
     String chatThemePreset,
     String chatTimestampColor,
     String chatSystemColor,
     String chatMentionBgColor,
     Integer chatMentionStrength,
-
     Boolean autoConnectOnStart,
-
     Timestamps timestamps,
-
-    
     @Deprecated Boolean chatMessageTimestampsEnabled,
-
     Integer chatHistoryInitialLoadLines,
-
     Integer chatHistoryPageSize,
-
     Integer commandHistoryMaxSize,
-
-
     Boolean clientLineColorEnabled,
-
-    
     String clientLineColor,
-
     Boolean imageEmbedsEnabled,
-
     Boolean imageEmbedsCollapsedByDefault,
-
     Integer imageEmbedsMaxWidthPx,
-
     Integer imageEmbedsMaxHeightPx,
-
     Boolean imageEmbedsAnimateGifs,
 
     /**
      * Hostmask discovery settings.
      *
-     * <p>IRCafe prefers the IRCv3 {@code userhost-in-names} capability (free, no extra traffic).
-     * If hostmasks are still missing and you have hostmask-based ignore rules configured, IRCafe can
+     * <p>IRCafe prefers the IRCv3 {@code userhost-in-names} capability (free, no extra traffic). If
+     * hostmasks are still missing and you have hostmask-based ignore rules configured, IRCafe can
      * carefully use {@code USERHOST} with conservative anti-flood limits.
      */
     HostmaskDiscovery hostmaskDiscovery,
@@ -73,12 +56,12 @@ public record UiProperties(
     /**
      * General user info enrichment (fallback) settings.
      *
-     * <p>IRCafe prefers IRCv3 (account-notify, extended-join, account-tag, userhost-in-names) because
-     * it is accurate and does not require extra traffic.
+     * <p>IRCafe prefers IRCv3 (account-notify, extended-join, account-tag, userhost-in-names)
+     * because it is accurate and does not require extra traffic.
      *
-     * <p>When IRCv3 support is missing, IRCafe can optionally and conservatively enrich user metadata
-     * using {@code USERHOST} (hostmask + away flag) and, if explicitly enabled, {@code WHOIS}
-     * (account name + away message). These are rate-limited and disabled by default.
+     * <p>When IRCv3 support is missing, IRCafe can optionally and conservatively enrich user
+     * metadata using {@code USERHOST} (hostmask + away flag) and, if explicitly enabled, {@code
+     * WHOIS} (account name + away message). These are rate-limited and disabled by default.
      */
     UserInfoEnrichment userInfoEnrichment,
 
@@ -88,13 +71,9 @@ public record UiProperties(
      * <p>Used only when IRC MONITOR is unavailable; IRCafe will poll presence via ISON.
      */
     MonitorFallback monitorFallback,
-
     Boolean linkPreviewsEnabled,
-
     Boolean linkPreviewsCollapsedByDefault,
-
     Boolean nickColoringEnabled,
-
     Boolean presenceFoldsEnabled,
 
     /** Enable sending IRCv3 typing indicators. */
@@ -111,8 +90,8 @@ public record UiProperties(
     String typingTreeIndicatorStyle,
 
     /**
-     * If enabled, inbound CTCP requests are rendered into the currently active chat target (same server).
-     * If disabled, they are routed to their origin target (channel/PM) instead.
+     * If enabled, inbound CTCP requests are rendered into the currently active chat target (same
+     * server). If disabled, they are routed to their origin target (channel/PM) instead.
      */
     Boolean ctcpRequestsInActiveTargetEnabled,
 
@@ -123,42 +102,33 @@ public record UiProperties(
      */
     List<NotificationRuleProperties> notificationRules,
 
-    /**
-     * User-configured IRC event notifications (kicks/modes/invites/etc).
-     */
+    /** User-configured IRC event notifications (kicks/modes/invites/etc). */
     List<IrcEventNotificationRuleProperties> ircEventNotificationRules,
 
     /** Cooldown (seconds) to dedupe repeated rule-match notifications per channel + rule. */
     Integer notificationRuleCooldownSeconds,
-
-
     double nickColorMinContrast,
-
     List<String> nickColors,
-
     Map<String, String> nickColorOverrides,
-
     Filters filters,
-
     Layout layout,
-
     AppDiagnostics appDiagnostics,
-
-    Tray tray
-) {
+    Tray tray) {
 
   /** App defaults used when no runtime overrides exist. */
   public static final String DEFAULT_THEME = "darcula";
+
   /** IRCafe brand accent (cobalt). */
   public static final String DEFAULT_ACCENT_COLOR = "#2D6BFF";
+
   /** 0..100 blend between theme accent and chosen accent. */
   public static final int DEFAULT_ACCENT_STRENGTH = 100;
 
   /**
    * System tray integration.
    *
-   * <p>Defaults are intentionally conservative: if the platform supports a tray,
-   * we show it, but the window close button still exits by default.
+   * <p>Defaults are intentionally conservative: if the platform supports a tray, we show it, but
+   * the window close button still exits by default.
    */
   public record Tray(
       Boolean enabled,
@@ -187,8 +157,8 @@ public record UiProperties(
       /**
        * On Linux desktops, prefer the D-Bus notification API (org.freedesktop.Notifications).
        *
-       * <p>This enables click-to-open behavior on desktops that support notification actions.
-       * If unsupported, IRCafe will silently fall back to {@code notify-send}.
+       * <p>This enables click-to-open behavior on desktops that support notification actions. If
+       * unsupported, IRCafe will silently fall back to {@code notify-send}.
        */
       Boolean linuxDbusActionsEnabled,
 
@@ -205,12 +175,17 @@ public record UiProperties(
       /** The built-in sound id (BuiltInSound enum name) used for notifications. */
       String notificationSound,
 
-      /** If true, play a custom sound file from the runtime config directory instead of a bundled sound. */
+      /**
+       * If true, play a custom sound file from the runtime config directory instead of a bundled
+       * sound.
+       */
       Boolean notificationSoundUseCustom,
 
-      /** Relative path under the runtime config directory for the custom sound file (e.g. "sounds/my.mp3"). */
-      String notificationSoundCustomPath
-  ) {
+      /**
+       * Relative path under the runtime config directory for the custom sound file (e.g.
+       * "sounds/my.mp3").
+       */
+      String notificationSoundCustomPath) {
     public Tray {
       if (enabled == null) enabled = true;
       if (closeToTray == null) closeToTray = false;
@@ -229,7 +204,8 @@ public record UiProperties(
 
       // Default to "on" - we only actually use D-Bus if the session supports actions.
       if (linuxDbusActionsEnabled == null) linuxDbusActionsEnabled = true;
-      if (notificationBackend == null || notificationBackend.isBlank()) notificationBackend = "auto";
+      if (notificationBackend == null || notificationBackend.isBlank())
+        notificationBackend = "auto";
 
       // Keep Phase-2 behavior (on) unless explicitly disabled.
       if (notificationSoundsEnabled == null) notificationSoundsEnabled = true;
@@ -262,8 +238,7 @@ public record UiProperties(
       Integer historyPlaceholderMaxRunsPerBatch,
       Boolean historyPlaceholdersEnabledByDefault,
       List<FilterRuleProperties> rules,
-      List<FilterScopeOverrideProperties> overrides
-  ) {
+      List<FilterScopeOverrideProperties> overrides) {
     public Filters {
       if (enabledByDefault == null) enabledByDefault = true;
       if (placeholdersEnabledByDefault == null) placeholdersEnabledByDefault = true;
@@ -276,62 +251,55 @@ public record UiProperties(
         placeholderMaxPreviewLines = 25;
       }
 
-if (placeholderMaxLinesPerRun == null || placeholderMaxLinesPerRun < 0) {
-  placeholderMaxLinesPerRun = 250;
-}
-// 0 disables the cap (unbounded).
-if (placeholderMaxLinesPerRun > 50_000) {
-  placeholderMaxLinesPerRun = 50_000;
-}
+      if (placeholderMaxLinesPerRun == null || placeholderMaxLinesPerRun < 0) {
+        placeholderMaxLinesPerRun = 250;
+      }
+      // 0 disables the cap (unbounded).
+      if (placeholderMaxLinesPerRun > 50_000) {
+        placeholderMaxLinesPerRun = 50_000;
+      }
 
-if (placeholderTooltipMaxTags == null || placeholderTooltipMaxTags < 0) {
-  placeholderTooltipMaxTags = 12;
-}
-// 0 disables tag listing in tooltips.
-if (placeholderTooltipMaxTags > 500) {
-  placeholderTooltipMaxTags = 500;
-}
+      if (placeholderTooltipMaxTags == null || placeholderTooltipMaxTags < 0) {
+        placeholderTooltipMaxTags = 12;
+      }
+      // 0 disables tag listing in tooltips.
+      if (placeholderTooltipMaxTags > 500) {
+        placeholderTooltipMaxTags = 500;
+      }
 
-if (historyPlaceholderMaxRunsPerBatch == null || historyPlaceholderMaxRunsPerBatch < 0) {
-  historyPlaceholderMaxRunsPerBatch = 10;
-}
-// 0 disables the per-batch cap (unbounded placeholder/hint runs during history loads).
-if (historyPlaceholderMaxRunsPerBatch > 5_000) {
-  historyPlaceholderMaxRunsPerBatch = 5_000;
-}
+      if (historyPlaceholderMaxRunsPerBatch == null || historyPlaceholderMaxRunsPerBatch < 0) {
+        historyPlaceholderMaxRunsPerBatch = 10;
+      }
+      // 0 disables the per-batch cap (unbounded placeholder/hint runs during history loads).
+      if (historyPlaceholderMaxRunsPerBatch > 5_000) {
+        historyPlaceholderMaxRunsPerBatch = 5_000;
+      }
 
-if (historyPlaceholdersEnabledByDefault == null) {
-  historyPlaceholdersEnabledByDefault = true;
-}
+      if (historyPlaceholdersEnabledByDefault == null) {
+        historyPlaceholdersEnabledByDefault = true;
+      }
 
       rules = (rules == null) ? List.of() : rules.stream().filter(Objects::nonNull).toList();
-      overrides = (overrides == null) ? List.of() : overrides.stream().filter(Objects::nonNull).toList();
+      overrides =
+          (overrides == null) ? List.of() : overrides.stream().filter(Objects::nonNull).toList();
     }
   }
 
   /**
    * Docking/layout defaults.
    *
-   * <p>These sizes are used as a best-effort "first open" hint. After the user drags split dividers,
-   * those new sizes are preserved by the split-pane lock logic.
+   * <p>These sizes are used as a best-effort "first open" hint. After the user drags split
+   * dividers, those new sizes are preserved by the split-pane lock logic.
    */
-  public record Layout(
-      Integer serverDockWidthPx,
-      Integer userDockWidthPx
-  ) {
+  public record Layout(Integer serverDockWidthPx, Integer userDockWidthPx) {
     public Layout {
       if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
       if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
     }
   }
 
-  /**
-   * Optional application diagnostics integrations shown under the "Application" tree node.
-   */
-  public record AppDiagnostics(
-      AssertjSwing assertjSwing,
-      Jhiccup jhiccup
-  ) {
+  /** Optional application diagnostics integrations shown under the "Application" tree node. */
+  public record AppDiagnostics(AssertjSwing assertjSwing, Jhiccup jhiccup) {
     public AppDiagnostics {
       if (assertjSwing == null) {
         assertjSwing = new AssertjSwing(null, null, null, null, null, null, null);
@@ -340,9 +308,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
     }
   }
 
-  /**
-   * AssertJ Swing integration + EDT freeze watchdog.
-   */
+  /** AssertJ Swing integration + EDT freeze watchdog. */
   public record AssertjSwing(
       Boolean enabled,
       Boolean edtFreezeWatchdogEnabled,
@@ -350,8 +316,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
       Integer edtWatchdogPollMs,
       Integer edtFallbackViolationReportMs,
       Boolean onIssuePlaySound,
-      Boolean onIssueShowNotification
-  ) {
+      Boolean onIssueShowNotification) {
     public AssertjSwing {
       if (enabled == null) enabled = true;
       if (edtFreezeWatchdogEnabled == null) edtFreezeWatchdogEnabled = true;
@@ -368,41 +333,34 @@ if (historyPlaceholdersEnabledByDefault == null) {
     }
   }
 
-  /**
-   * External jHiccup process integration.
-   */
-  public record Jhiccup(
-      Boolean enabled,
-      String jarPath,
-      String javaCommand,
-      List<String> args
-  ) {
+  /** External jHiccup process integration. */
+  public record Jhiccup(Boolean enabled, String jarPath, String javaCommand, List<String> args) {
     public Jhiccup {
       if (enabled == null) enabled = false;
       if (jarPath != null && jarPath.isBlank()) jarPath = null;
       if (javaCommand == null || javaCommand.isBlank()) javaCommand = "java";
-      args = (args == null)
-          ? List.of()
-          : args.stream()
-              .filter(Objects::nonNull)
-              .map(String::trim)
-              .filter(s -> !s.isEmpty())
-              .toList();
+      args =
+          (args == null)
+              ? List.of()
+              : args.stream()
+                  .filter(Objects::nonNull)
+                  .map(String::trim)
+                  .filter(s -> !s.isEmpty())
+                  .toList();
     }
   }
 
   /**
    * Chat/status timestamp settings.
    *
-   * <p>{@code format} uses Java time patterns (same general style as
-   * {@link java.text.SimpleDateFormat}, but powered by {@link java.time.format.DateTimeFormatter}).
+   * <p>{@code format} uses Java time patterns (same general style as {@link
+   * java.text.SimpleDateFormat}, but powered by {@link java.time.format.DateTimeFormatter}).
    */
   public record Timestamps(
       Boolean enabled,
       String format,
       Boolean includeChatMessages,
-      Boolean includePresenceMessages
-  ) {
+      Boolean includePresenceMessages) {
     public Timestamps {
       if (enabled == null) enabled = true;
       if (format == null || format.isBlank()) format = "HH:mm:ss";
@@ -415,6 +373,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
    * Hostmask discovery configuration.
    *
    * <p>Defaults are intentionally conservative:
+   *
    * <ul>
    *   <li>{@code userhostEnabled=true}
    *   <li>{@code userhostMinIntervalSeconds=7}
@@ -428,14 +387,17 @@ if (historyPlaceholdersEnabledByDefault == null) {
       Integer userhostMinIntervalSeconds,
       Integer userhostMaxCommandsPerMinute,
       Integer userhostNickCooldownMinutes,
-      Integer userhostMaxNicksPerCommand
-  ) {
+      Integer userhostMaxNicksPerCommand) {
     public HostmaskDiscovery {
       if (userhostEnabled == null) userhostEnabled = true;
-      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0) userhostMinIntervalSeconds = 7;
-      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0) userhostMaxCommandsPerMinute = 6;
-      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0) userhostNickCooldownMinutes = 30;
-      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0) userhostMaxNicksPerCommand = 5;
+      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0)
+        userhostMinIntervalSeconds = 7;
+      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0)
+        userhostMaxCommandsPerMinute = 6;
+      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0)
+        userhostNickCooldownMinutes = 30;
+      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0)
+        userhostMaxNicksPerCommand = 5;
       if (userhostMaxNicksPerCommand > 5) userhostMaxNicksPerCommand = 5;
     }
   }
@@ -445,6 +407,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
    *
    * <p>This is a best-effort fallback used when IRCv3 capabilities are unavailable or disabled.
    * Defaults are intentionally conservative and disabled by default:
+   *
    * <ul>
    *   <li>{@code enabled=false}
    *   <li>{@code userhostMinIntervalSeconds=15}
@@ -465,33 +428,38 @@ if (historyPlaceholdersEnabledByDefault == null) {
       Integer userhostMaxCommandsPerMinute,
       Integer userhostNickCooldownMinutes,
       Integer userhostMaxNicksPerCommand,
-
       Boolean whoisFallbackEnabled,
       Integer whoisMinIntervalSeconds,
       Integer whoisNickCooldownMinutes,
-
       Boolean periodicRefreshEnabled,
       Integer periodicRefreshIntervalSeconds,
-      Integer periodicRefreshNicksPerTick
-  ) {
+      Integer periodicRefreshNicksPerTick) {
     public UserInfoEnrichment {
       if (enabled == null) enabled = false;
 
-      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0) userhostMinIntervalSeconds = 15;
-      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0) userhostMaxCommandsPerMinute = 3;
-      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0) userhostNickCooldownMinutes = 60;
-      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0) userhostMaxNicksPerCommand = 5;
+      if (userhostMinIntervalSeconds == null || userhostMinIntervalSeconds <= 0)
+        userhostMinIntervalSeconds = 15;
+      if (userhostMaxCommandsPerMinute == null || userhostMaxCommandsPerMinute <= 0)
+        userhostMaxCommandsPerMinute = 3;
+      if (userhostNickCooldownMinutes == null || userhostNickCooldownMinutes <= 0)
+        userhostNickCooldownMinutes = 60;
+      if (userhostMaxNicksPerCommand == null || userhostMaxNicksPerCommand <= 0)
+        userhostMaxNicksPerCommand = 5;
       if (userhostMaxNicksPerCommand > 5) userhostMaxNicksPerCommand = 5;
 
       // Must be explicitly enabled (off by default).
       if (whoisFallbackEnabled == null) whoisFallbackEnabled = false;
 
-      if (whoisMinIntervalSeconds == null || whoisMinIntervalSeconds <= 0) whoisMinIntervalSeconds = 45;
-      if (whoisNickCooldownMinutes == null || whoisNickCooldownMinutes <= 0) whoisNickCooldownMinutes = 120;
+      if (whoisMinIntervalSeconds == null || whoisMinIntervalSeconds <= 0)
+        whoisMinIntervalSeconds = 45;
+      if (whoisNickCooldownMinutes == null || whoisNickCooldownMinutes <= 0)
+        whoisNickCooldownMinutes = 120;
 
       if (periodicRefreshEnabled == null) periodicRefreshEnabled = false;
-      if (periodicRefreshIntervalSeconds == null || periodicRefreshIntervalSeconds <= 0) periodicRefreshIntervalSeconds = 300;
-      if (periodicRefreshNicksPerTick == null || periodicRefreshNicksPerTick <= 0) periodicRefreshNicksPerTick = 2;
+      if (periodicRefreshIntervalSeconds == null || periodicRefreshIntervalSeconds <= 0)
+        periodicRefreshIntervalSeconds = 300;
+      if (periodicRefreshNicksPerTick == null || periodicRefreshNicksPerTick <= 0)
+        periodicRefreshNicksPerTick = 2;
       if (periodicRefreshNicksPerTick > 10) periodicRefreshNicksPerTick = 10;
     }
   }
@@ -500,13 +468,12 @@ if (historyPlaceholdersEnabledByDefault == null) {
    * Monitor fallback configuration (used when IRC MONITOR is unavailable).
    *
    * <p>Defaults:
+   *
    * <ul>
    *   <li>{@code isonPollIntervalSeconds=30}
    * </ul>
    */
-  public record MonitorFallback(
-      Integer isonPollIntervalSeconds
-  ) {
+  public record MonitorFallback(Integer isonPollIntervalSeconds) {
     public MonitorFallback {
       if (isonPollIntervalSeconds == null || isonPollIntervalSeconds <= 0) {
         isonPollIntervalSeconds = 30;
@@ -521,7 +488,8 @@ if (historyPlaceholdersEnabledByDefault == null) {
       theme = DEFAULT_THEME;
     }
 
-    // Accent defaults to IRCafe cobalt. Users can disable the override explicitly by setting an empty string.
+    // Accent defaults to IRCafe cobalt. Users can disable the override explicitly by setting an
+    // empty string.
     // (Runtime persistence removes the key when disabled.)
     if (accentColor == null) {
       accentColor = DEFAULT_ACCENT_COLOR;
@@ -547,7 +515,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
     // Global LAF tweaks (cheap wins).
     if (density == null || density.isBlank()) density = "auto";
     density = density.trim().toLowerCase(Locale.ROOT);
-    if (!density.equals("auto") && !density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
+    if (!density.equals("auto")
+        && !density.equals("compact")
+        && !density.equals("cozy")
+        && !density.equals("spacious")) {
       density = "auto";
     }
 
@@ -590,11 +561,12 @@ if (historyPlaceholdersEnabledByDefault == null) {
       timestamps = new Timestamps(true, "HH:mm:ss", chatMessageTimestampsEnabled, true);
     } else if (timestamps.includeChatMessages() == null) {
       // Back-compat: if the new nested flag is absent, fall back to the legacy top-level flag.
-      timestamps = new Timestamps(
-          timestamps.enabled(),
-          timestamps.format(),
-          chatMessageTimestampsEnabled,
-          timestamps.includePresenceMessages());
+      timestamps =
+          new Timestamps(
+              timestamps.enabled(),
+              timestamps.format(),
+              chatMessageTimestampsEnabled,
+              timestamps.includePresenceMessages());
     }
     // History defaults: conservative initial load, generous paging.
     if (chatHistoryInitialLoadLines == null) {
@@ -655,7 +627,8 @@ if (historyPlaceholdersEnabledByDefault == null) {
 
     // User info enrichment defaults (disabled by default).
     if (userInfoEnrichment == null) {
-      userInfoEnrichment = new UserInfoEnrichment(false, 15, 3, 60, 5, false, 45, 120, false, 300, 2);
+      userInfoEnrichment =
+          new UserInfoEnrichment(false, 15, 3, 60, 5, false, 45, 120, false, 300, 2);
     }
 
     // Monitor fallback defaults.
@@ -714,7 +687,8 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (ircEventNotificationRules == null) {
       ircEventNotificationRules = IrcEventNotificationRuleProperties.defaultRules();
     } else {
-      ircEventNotificationRules = ircEventNotificationRules.stream().filter(Objects::nonNull).toList();
+      ircEventNotificationRules =
+          ircEventNotificationRules.stream().filter(Objects::nonNull).toList();
     }
     if (nickColors == null) {
       nickColors = List.of();
@@ -771,5 +745,4 @@ if (historyPlaceholdersEnabledByDefault == null) {
       default -> "dots";
     };
   }
-
 }

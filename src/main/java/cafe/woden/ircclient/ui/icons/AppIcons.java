@@ -1,7 +1,5 @@
 package cafe.woden.ircclient.ui.icons;
 
-import javax.imageio.ImageIO;
-import javax.swing.ImageIcon;
 import java.awt.Image;
 import java.awt.Taskbar;
 import java.io.ByteArrayInputStream;
@@ -10,10 +8,10 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
 
-/**
- * Centralized access to app icons bundled in resources.
- */
+/** Centralized access to app icons bundled in resources. */
 public final class AppIcons {
 
   private static final String ICONS_DIR = "icons/";
@@ -23,12 +21,9 @@ public final class AppIcons {
   private static volatile Image cachedTaskbarIcon;
   private static volatile ImageIcon cachedAboutIcon;
 
-  private AppIcons() {
-  }
+  private AppIcons() {}
 
-  /**
-   * Returns the multi-size icon list for {@code JFrame#setIconImages(...)}.
-   */
+  /** Returns the multi-size icon list for {@code JFrame#setIconImages(...)}. */
   public static List<Image> windowIcons() {
     List<Image> icons = cachedWindowIcons;
     if (icons != null) {
@@ -55,9 +50,7 @@ public final class AppIcons {
     return cachedWindowIcons;
   }
 
-  /**
-   * Best-effort taskbar/dock icon (some platforms support it).
-   */
+  /** Best-effort taskbar/dock icon (some platforms support it). */
   public static Image taskbarIcon() {
     Image img = cachedTaskbarIcon;
     if (img != null) {
@@ -85,9 +78,7 @@ public final class AppIcons {
     }
   }
 
-  /**
-   * About dialog icon.
-   */
+  /** About dialog icon. */
   public static ImageIcon aboutIcon() {
     ImageIcon icon = cachedAboutIcon;
     if (icon != null) {
@@ -101,9 +92,7 @@ public final class AppIcons {
     return cachedAboutIcon;
   }
 
-  /**
-   * Returns a tray PNG as a byte-backed stream (safe for callers to consume).
-   */
+  /** Returns a tray PNG as a byte-backed stream (safe for callers to consume). */
   public static InputStream trayPngStream() {
     byte[] bytes = readResourceBytes("icons/tray/ircafe_tray_16.png");
     if (bytes == null || bytes.length == 0) {
