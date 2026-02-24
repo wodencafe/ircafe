@@ -86,6 +86,24 @@ public class UiSettingsBus {
             || Boolean.TRUE.equals(tray.linuxDbusActionsEnabled());
     NotificationBackendMode trayNotificationBackendMode =
         NotificationBackendMode.fromToken(tray != null ? tray.notificationBackend() : null);
+    MemoryUsageDisplayMode memoryUsageDisplayMode =
+        MemoryUsageDisplayMode.fromToken(props.memoryUsageDisplayMode());
+    int memoryUsageWarningNearMaxPercent =
+        props.memoryUsageWarningNearMaxPercent() != null
+            ? props.memoryUsageWarningNearMaxPercent()
+            : 5;
+    boolean memoryUsageWarningTooltipEnabled =
+        props.memoryUsageWarningTooltipEnabled() == null
+            || Boolean.TRUE.equals(props.memoryUsageWarningTooltipEnabled());
+    boolean memoryUsageWarningToastEnabled =
+        props.memoryUsageWarningToastEnabled() != null
+            && Boolean.TRUE.equals(props.memoryUsageWarningToastEnabled());
+    boolean memoryUsageWarningPushyEnabled =
+        props.memoryUsageWarningPushyEnabled() != null
+            && Boolean.TRUE.equals(props.memoryUsageWarningPushyEnabled());
+    boolean memoryUsageWarningSoundEnabled =
+        props.memoryUsageWarningSoundEnabled() != null
+            && Boolean.TRUE.equals(props.memoryUsageWarningSoundEnabled());
 
     boolean enrichmentEnabled = ue != null && Boolean.TRUE.equals(ue.enabled());
     boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
@@ -201,6 +219,12 @@ public class UiSettingsBus {
             props.notificationRuleCooldownSeconds() != null
                 ? props.notificationRuleCooldownSeconds()
                 : 15,
+            memoryUsageDisplayMode,
+            memoryUsageWarningNearMaxPercent,
+            memoryUsageWarningTooltipEnabled,
+            memoryUsageWarningToastEnabled,
+            memoryUsageWarningPushyEnabled,
+            memoryUsageWarningSoundEnabled,
             notificationRules);
   }
 

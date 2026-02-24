@@ -9,6 +9,7 @@ import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -156,6 +157,12 @@ class TrayNotificationServiceTest {
         2,
         30,
         15,
+        MemoryUsageDisplayMode.LONG,
+        5,
+        true,
+        false,
+        false,
+        false,
         List.of());
   }
 }

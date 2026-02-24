@@ -445,6 +445,10 @@ public class TargetCoordinator {
       statusBarChannel = "AssertJ Swing";
     } else if (target.isApplicationJhiccup()) {
       statusBarChannel = "jHiccup";
+    } else if (target.isApplicationJfr()) {
+      statusBarChannel = "JFR";
+    } else if (target.isApplicationSpring()) {
+      statusBarChannel = "Spring";
     } else if (target.isApplicationTerminal()) {
       statusBarChannel = "Terminal";
     } else if (target.isLogViewer()) {

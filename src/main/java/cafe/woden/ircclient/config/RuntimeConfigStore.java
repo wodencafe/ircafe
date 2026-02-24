@@ -436,6 +436,81 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberMemoryUsageDisplayMode(String mode) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      String normalized = Objects.toString(mode, "").trim().toLowerCase(Locale.ROOT);
+      normalized =
+          switch (normalized) {
+            case "short", "compact" -> "short";
+            case "indicator", "gauge", "bar" -> "indicator";
+            case "moon", "moon-phase", "moon-phases", "lunar" -> "moon";
+            case "hidden", "off", "none", "disable", "disabled" -> "hidden";
+            default -> "long";
+          };
+      ui.put("memoryUsageDisplayMode", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.memoryUsageDisplayMode setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberMemoryUsageWarningNearMaxPercent(int percent) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      int p = Math.max(1, Math.min(50, percent));
+      ui.put("memoryUsageWarningNearMaxPercent", p);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist ui.memoryUsageWarningNearMaxPercent setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberMemoryUsageWarningTooltipEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningTooltipEnabled", enabled);
+  }
+
+  public synchronized void rememberMemoryUsageWarningToastEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningToastEnabled", enabled);
+  }
+
+  public synchronized void rememberMemoryUsageWarningPushyEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningPushyEnabled", enabled);
+  }
+
+  public synchronized void rememberMemoryUsageWarningSoundEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningSoundEnabled", enabled);
+  }
+
+  private synchronized void rememberMemoryUsageWarningBoolean(String key, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      ui.put(key, enabled);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.{} setting to '{}'", key, file, e);
+    }
+  }
+
   /**
    * Reads persisted per-server visibility for built-in server tree nodes.
    *

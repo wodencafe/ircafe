@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.DccTransferStore;
+import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.PrivateMessageRequest;
+import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UserActionRequest;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
@@ -16,6 +18,7 @@ import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
@@ -36,6 +39,7 @@ import java.awt.*;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -118,6 +122,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private static final String CARD_MONITOR = "monitor";
   private static final String CARD_LOG_VIEWER = "log-viewer";
   private static final String CARD_INTERCEPTOR = "interceptor";
+  private static final String CARD_APP_JFR = "app-jfr";
+  private static final String CARD_APP_SPRING = "app-spring";
   private static final String CARD_TERMINAL = "terminal";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
@@ -127,6 +133,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final LogViewerPanel logViewerPanel;
   private final InterceptorStore interceptorStore;
   private final InterceptorPanel interceptorPanel;
+  private final RuntimeEventsPanel appJfrPanel;
+  private final RuntimeEventsPanel appSpringPanel;
   private final TerminalDockable terminalPanel;
 
   private static final int TOPIC_DIVIDER_SIZE = 6;
@@ -157,6 +165,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       InterceptorStore interceptorStore,
       DccTransferStore dccTransferStore,
       TerminalDockable terminalDockable,
+      JfrRuntimeEventsService jfrRuntimeEventsService,
+      SpringRuntimeEventsService springRuntimeEventsService,
       UiSettingsBus settingsBus,
       CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
@@ -176,6 +186,22 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.chatHistoryService = chatHistoryService;
     this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
     this.terminalPanel = java.util.Objects.requireNonNull(terminalDockable, "terminalDockable");
+    this.appJfrPanel =
+        new RuntimeEventsPanel(
+            "JFR Events",
+            "Runtime JFR stream + periodic JVM samples.",
+            () ->
+                jfrRuntimeEventsService != null
+                    ? jfrRuntimeEventsService.recentEvents(600)
+                    : List.of());
+    this.appSpringPanel =
+        new RuntimeEventsPanel(
+            "Spring Events",
+            "Application lifecycle, availability, and framework events.",
+            () ->
+                springRuntimeEventsService != null
+                    ? springRuntimeEventsService.recentEvents(600)
+                    : List.of());
 
     this.nickContextMenu =
         nickContextMenuFactory.create(
@@ -299,6 +325,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(monitorPanel, CARD_MONITOR);
     centerCards.add(logViewerPanel, CARD_LOG_VIEWER);
     centerCards.add(interceptorPanel, CARD_INTERCEPTOR);
+    centerCards.add(appJfrPanel, CARD_APP_JFR);
+    centerCards.add(appSpringPanel, CARD_APP_SPRING);
     centerCards.add(terminalPanel, CARD_TERMINAL);
     add(centerCards, BorderLayout.CENTER);
     showTranscriptCard();
@@ -459,6 +487,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       updateTopicPanelForActiveTarget();
       return;
     }
+    if (target.isApplicationJfr()) {
+      showApplicationJfrCard();
+      // Runtime diagnostics view does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isApplicationSpring()) {
+      showApplicationSpringCard();
+      // Runtime diagnostics view does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
     if (target.isApplicationTerminal()) {
       showTerminalCard();
       // Terminal view does not accept input; clear any draft to avoid confusion.
@@ -564,6 +606,24 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     try {
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_TERMINAL);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationJfrCard() {
+    try {
+      appJfrPanel.refreshNow();
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_APP_JFR);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationSpringCard() {
+    try {
+      appSpringPanel.refreshNow();
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_APP_SPRING);
     } catch (Exception ignored) {
     }
   }
@@ -1333,6 +1393,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isApplicationUnhandledErrors()) return "Unhandled Errors";
     if (t.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (t.isApplicationJhiccup()) return "jHiccup";
+    if (t.isApplicationJfr()) return "JFR";
+    if (t.isApplicationSpring()) return "Spring";
     if (t.isApplicationTerminal()) return "Terminal";
     if (t.isLogViewer()) return "Log Viewer";
     if (t.isInterceptor()) {

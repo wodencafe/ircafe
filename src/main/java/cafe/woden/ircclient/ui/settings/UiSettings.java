@@ -64,6 +64,12 @@ public record UiSettings(
     int userInfoEnrichmentPeriodicRefreshNicksPerTick,
     int monitorIsonFallbackPollIntervalSeconds,
     int notificationRuleCooldownSeconds,
+    MemoryUsageDisplayMode memoryUsageDisplayMode,
+    int memoryUsageWarningNearMaxPercent,
+    boolean memoryUsageWarningTooltipEnabled,
+    boolean memoryUsageWarningToastEnabled,
+    boolean memoryUsageWarningPushyEnabled,
+    boolean memoryUsageWarningSoundEnabled,
     List<NotificationRule> notificationRules) {
 
   public UiSettings {
@@ -142,6 +148,10 @@ public record UiSettings(
 
     if (notificationRuleCooldownSeconds < 0) notificationRuleCooldownSeconds = 15;
     if (notificationRuleCooldownSeconds > 3600) notificationRuleCooldownSeconds = 3600;
+
+    if (memoryUsageDisplayMode == null) memoryUsageDisplayMode = MemoryUsageDisplayMode.LONG;
+    if (memoryUsageWarningNearMaxPercent <= 0) memoryUsageWarningNearMaxPercent = 5;
+    if (memoryUsageWarningNearMaxPercent > 50) memoryUsageWarningNearMaxPercent = 50;
 
     if (notificationRules == null) notificationRules = List.of();
   }
@@ -237,6 +247,12 @@ public record UiSettings(
         2,
         30,
         15,
+        MemoryUsageDisplayMode.LONG,
+        5,
+        true,
+        false,
+        false,
+        false,
         List.of());
   }
 
@@ -327,6 +343,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -387,6 +409,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -447,6 +475,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -507,6 +541,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -567,6 +607,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -627,6 +673,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -687,6 +739,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -747,6 +805,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -807,6 +871,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -867,6 +937,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -927,6 +1003,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -987,6 +1069,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -1047,6 +1135,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -1107,6 +1201,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -1167,6 +1267,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
@@ -1227,12 +1333,84 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 
   @Deprecated
   public UiSettings withChatMessageTimestampsEnabled(boolean enabled) {
     return withTimestampsIncludeChatMessages(enabled);
+  }
+
+  public UiSettings withMemoryUsageDisplayMode(MemoryUsageDisplayMode mode) {
+    return new UiSettings(
+        theme,
+        chatFontFamily,
+        chatFontSize,
+        autoConnectOnStart,
+        trayEnabled,
+        trayCloseToTray,
+        trayMinimizeToTray,
+        trayStartMinimized,
+        trayNotifyHighlights,
+        trayNotifyPrivateMessages,
+        trayNotifyConnectionState,
+        trayNotifyOnlyWhenUnfocused,
+        trayNotifyOnlyWhenMinimizedOrHidden,
+        trayNotifySuppressWhenTargetActive,
+        trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
+        imageEmbedsEnabled,
+        imageEmbedsCollapsedByDefault,
+        imageEmbedsMaxWidthPx,
+        imageEmbedsMaxHeightPx,
+        imageEmbedsAnimateGifs,
+        linkPreviewsEnabled,
+        linkPreviewsCollapsedByDefault,
+        presenceFoldsEnabled,
+        ctcpRequestsInActiveTargetEnabled,
+        typingIndicatorsEnabled,
+        typingIndicatorsReceiveEnabled,
+        typingIndicatorsTreeStyle,
+        timestampsEnabled,
+        timestampFormat,
+        timestampsIncludeChatMessages,
+        timestampsIncludePresenceMessages,
+        chatHistoryInitialLoadLines,
+        chatHistoryPageSize,
+        commandHistoryMaxSize,
+        clientLineColorEnabled,
+        clientLineColor,
+        userhostDiscoveryEnabled,
+        userhostMinIntervalSeconds,
+        userhostMaxCommandsPerMinute,
+        userhostNickCooldownMinutes,
+        userhostMaxNicksPerCommand,
+        userInfoEnrichmentEnabled,
+        userInfoEnrichmentUserhostMinIntervalSeconds,
+        userInfoEnrichmentUserhostMaxCommandsPerMinute,
+        userInfoEnrichmentUserhostNickCooldownMinutes,
+        userInfoEnrichmentUserhostMaxNicksPerCommand,
+        userInfoEnrichmentWhoisFallbackEnabled,
+        userInfoEnrichmentWhoisMinIntervalSeconds,
+        userInfoEnrichmentWhoisNickCooldownMinutes,
+        userInfoEnrichmentPeriodicRefreshEnabled,
+        userInfoEnrichmentPeriodicRefreshIntervalSeconds,
+        userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
+        notificationRuleCooldownSeconds,
+        mode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
+        notificationRules);
   }
 
   public UiSettings withAutoConnectOnStart(boolean enabled) {
@@ -1292,6 +1470,12 @@ public record UiSettings(
         userInfoEnrichmentPeriodicRefreshNicksPerTick,
         monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
+        memoryUsageDisplayMode,
+        memoryUsageWarningNearMaxPercent,
+        memoryUsageWarningTooltipEnabled,
+        memoryUsageWarningToastEnabled,
+        memoryUsageWarningPushyEnabled,
+        memoryUsageWarningSoundEnabled,
         notificationRules);
   }
 }

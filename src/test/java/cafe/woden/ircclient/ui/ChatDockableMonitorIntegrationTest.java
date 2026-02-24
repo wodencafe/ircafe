@@ -6,7 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.DccTransferStore;
+import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.app.monitor.MonitorListService;
@@ -111,6 +113,8 @@ class ChatDockableMonitorIntegrationTest {
     when(interceptorStore.changes()).thenReturn(Flowable.never());
     DccTransferStore dccTransferStore = new DccTransferStore();
     TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
+    JfrRuntimeEventsService jfrRuntimeEventsService = new JfrRuntimeEventsService();
+    SpringRuntimeEventsService springRuntimeEventsService = new SpringRuntimeEventsService();
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
@@ -138,6 +142,8 @@ class ChatDockableMonitorIntegrationTest {
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,
+                    jfrRuntimeEventsService,
+                    springRuntimeEventsService,
                     settingsBus,
                     commandHistoryStore));
 

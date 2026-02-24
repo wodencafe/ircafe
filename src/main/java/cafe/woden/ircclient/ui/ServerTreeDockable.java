@@ -115,6 +115,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String APP_UNHANDLED_ERRORS_LABEL = "Unhandled Errors";
   private static final String APP_ASSERTJ_SWING_LABEL = "AssertJ Swing";
   private static final String APP_JHICCUP_LABEL = "jHiccup";
+  private static final String APP_JFR_LABEL = "JFR";
+  private static final String APP_SPRING_LABEL = "Spring";
   private static final String APP_TERMINAL_LABEL = "Terminal";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
@@ -177,6 +179,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final TargetRef applicationUnhandledErrorsRef = TargetRef.applicationUnhandledErrors();
   private final TargetRef applicationAssertjSwingRef = TargetRef.applicationAssertjSwing();
   private final TargetRef applicationJhiccupRef = TargetRef.applicationJhiccup();
+  private final TargetRef applicationJfrRef = TargetRef.applicationJfr();
+  private final TargetRef applicationSpringRef = TargetRef.applicationSpring();
   private final TargetRef applicationTerminalRef = TargetRef.applicationTerminal();
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
@@ -2691,6 +2695,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     addApplicationLeaf(applicationUnhandledErrorsRef, APP_UNHANDLED_ERRORS_LABEL);
     addApplicationLeaf(applicationAssertjSwingRef, APP_ASSERTJ_SWING_LABEL);
     addApplicationLeaf(applicationJhiccupRef, APP_JHICCUP_LABEL);
+    addApplicationLeaf(applicationJfrRef, APP_JFR_LABEL);
+    addApplicationLeaf(applicationSpringRef, APP_SPRING_LABEL);
     addApplicationLeaf(applicationTerminalRef, APP_TERMINAL_LABEL);
   }
 
@@ -2792,6 +2798,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (ref.isApplicationUnhandledErrors()) return APP_UNHANDLED_ERRORS_LABEL;
     if (ref.isApplicationAssertjSwing()) return APP_ASSERTJ_SWING_LABEL;
     if (ref.isApplicationJhiccup()) return APP_JHICCUP_LABEL;
+    if (ref.isApplicationJfr()) return APP_JFR_LABEL;
+    if (ref.isApplicationSpring()) return APP_SPRING_LABEL;
     if (ref.isApplicationTerminal()) return APP_TERMINAL_LABEL;
     return ref.target();
   }
@@ -3634,6 +3642,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       if (nd.ref.isApplicationJhiccup()) {
         return "Diagnostic buffer for jHiccup latency output.";
       }
+      if (nd.ref.isApplicationJfr()) {
+        return "Runtime JFR stream and periodic JVM memory/CPU samples.";
+      }
+      if (nd.ref.isApplicationSpring()) {
+        return "Spring framework lifecycle and availability event feed.";
+      }
       if (nd.ref.isApplicationTerminal()) {
         return "In-app terminal output mirrored from System.out/System.err.";
       }
@@ -4226,6 +4240,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             setTreeIcon("settings");
           } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
             setTreeIcon("refresh");
+          } else if (nd.ref != null && nd.ref.isApplicationJfr()) {
+            setTreeIcon("refresh");
+          } else if (nd.ref != null && nd.ref.isApplicationSpring()) {
+            setTreeIcon("settings");
           } else if (nd.ref != null && nd.ref.isApplicationTerminal()) {
             setTreeIcon("terminal");
           } else if (nd.ref != null && nd.ref.isStatus()) {
