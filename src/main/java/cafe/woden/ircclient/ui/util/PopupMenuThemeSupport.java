@@ -3,10 +3,13 @@ package cafe.woden.ircclient.ui.util;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Font;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JSeparator;
 import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
@@ -46,8 +49,25 @@ public final class PopupMenuThemeSupport {
     Color sepFg = firstColor("PopupMenuSeparator.foreground", "Separator.foreground");
     Color sepBg = firstColor("PopupMenuSeparator.background", "PopupMenu.background");
     Color borderColor = firstColor("PopupMenu.borderColor", "nimbusBorder", "Separator.foreground");
+    Font menuFont = firstFont("Menu.font", "MenuBar.font", "MenuItem.font", "Label.font");
+    Font menuItemFont = firstFont("MenuItem.font", "Menu.font", "Label.font");
+    Font checkItemFont = firstFont("CheckBoxMenuItem.font", "MenuItem.font", "Menu.font", "Label.font");
+    Font radioItemFont = firstFont("RadioButtonMenuItem.font", "MenuItem.font", "Menu.font", "Label.font");
 
-    applyPopupPalette(menu, popupBg, popupFg, itemBg, itemFg, disabledFg, sepFg, sepBg, borderColor);
+    applyPopupPalette(
+        menu,
+        popupBg,
+        popupFg,
+        itemBg,
+        itemFg,
+        disabledFg,
+        sepFg,
+        sepBg,
+        borderColor,
+        menuFont,
+        menuItemFont,
+        checkItemFont,
+        radioItemFont);
   }
 
   private static void applyPopupPalette(
@@ -59,9 +79,14 @@ public final class PopupMenuThemeSupport {
       Color disabledFg,
       Color sepFg,
       Color sepBg,
-      Color borderColor) {
+      Color borderColor,
+      Font menuFont,
+      Font menuItemFont,
+      Font checkItemFont,
+      Font radioItemFont) {
     if (popupBg != null) popup.setBackground(popupBg);
     if (popupFg != null) popup.setForeground(popupFg);
+    if (menuItemFont != null) popup.setFont(menuItemFont);
     popup.setOpaque(true);
 
     if (borderColor != null) {
@@ -72,37 +97,117 @@ public final class PopupMenuThemeSupport {
     }
 
     for (Component child : popup.getComponents()) {
-      applyComponentPalette(child, itemBg, itemFg, disabledFg, sepFg, sepBg);
+      applyComponentPalette(
+          child,
+          itemBg,
+          itemFg,
+          disabledFg,
+          sepFg,
+          sepBg,
+          menuFont,
+          menuItemFont,
+          checkItemFont,
+          radioItemFont);
       if (child instanceof JMenu jm) {
         JPopupMenu sub = jm.getPopupMenu();
         if (sub != null) {
-          applyPopupPalette(sub, popupBg, popupFg, itemBg, itemFg, disabledFg, sepFg, sepBg, borderColor);
+          applyPopupPalette(
+              sub,
+              popupBg,
+              popupFg,
+              itemBg,
+              itemFg,
+              disabledFg,
+              sepFg,
+              sepBg,
+              borderColor,
+              menuFont,
+              menuItemFont,
+              checkItemFont,
+              radioItemFont);
         }
       } else if (child instanceof Container ctr) {
-        applyContainerPalette(ctr, itemBg, itemFg, disabledFg, sepFg, sepBg);
+        applyContainerPalette(
+            ctr,
+            itemBg,
+            itemFg,
+            disabledFg,
+            sepFg,
+            sepBg,
+            menuFont,
+            menuItemFont,
+            checkItemFont,
+            radioItemFont);
       }
     }
   }
 
   private static void applyContainerPalette(
-      Container container, Color itemBg, Color itemFg, Color disabledFg, Color sepFg, Color sepBg) {
+      Container container,
+      Color itemBg,
+      Color itemFg,
+      Color disabledFg,
+      Color sepFg,
+      Color sepBg,
+      Font menuFont,
+      Font menuItemFont,
+      Font checkItemFont,
+      Font radioItemFont) {
     if (container == null) return;
     for (Component child : container.getComponents()) {
-      applyComponentPalette(child, itemBg, itemFg, disabledFg, sepFg, sepBg);
+      applyComponentPalette(
+          child,
+          itemBg,
+          itemFg,
+          disabledFg,
+          sepFg,
+          sepBg,
+          menuFont,
+          menuItemFont,
+          checkItemFont,
+          radioItemFont);
       if (child instanceof Container ctr) {
-        applyContainerPalette(ctr, itemBg, itemFg, disabledFg, sepFg, sepBg);
+        applyContainerPalette(
+            ctr,
+            itemBg,
+            itemFg,
+            disabledFg,
+            sepFg,
+            sepBg,
+            menuFont,
+            menuItemFont,
+            checkItemFont,
+            radioItemFont);
       }
     }
   }
 
   private static void applyComponentPalette(
-      Component component, Color itemBg, Color itemFg, Color disabledFg, Color sepFg, Color sepBg) {
+      Component component,
+      Color itemBg,
+      Color itemFg,
+      Color disabledFg,
+      Color sepFg,
+      Color sepBg,
+      Font menuFont,
+      Font menuItemFont,
+      Font checkItemFont,
+      Font radioItemFont) {
     if (component instanceof JMenuItem item) {
       if (itemBg != null) item.setBackground(itemBg);
       if (item.isEnabled()) {
         if (itemFg != null) item.setForeground(itemFg);
       } else if (disabledFg != null) {
         item.setForeground(disabledFg);
+      }
+      if (item instanceof JMenu) {
+        if (menuFont != null) item.setFont(menuFont);
+      } else if (item instanceof JCheckBoxMenuItem) {
+        if (checkItemFont != null) item.setFont(checkItemFont);
+      } else if (item instanceof JRadioButtonMenuItem) {
+        if (radioItemFont != null) item.setFont(radioItemFont);
+      } else if (menuItemFont != null) {
+        item.setFont(menuItemFont);
       }
       item.setOpaque(true);
       return;
@@ -123,6 +228,16 @@ public final class PopupMenuThemeSupport {
       if (key == null || key.isBlank()) continue;
       Color c = UIManager.getColor(key);
       if (c != null) return c;
+    }
+    return null;
+  }
+
+  private static Font firstFont(String... keys) {
+    if (keys == null) return null;
+    for (String key : keys) {
+      if (key == null || key.isBlank()) continue;
+      Font f = UIManager.getFont(key);
+      if (f != null) return f;
     }
     return null;
   }

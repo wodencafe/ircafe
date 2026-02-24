@@ -45,6 +45,8 @@ public class PircbotxBotFactory {
       "invite-notify",
       "away-notify",
       "account-notify",
+      "monitor",
+      "extended-monitor",
       "extended-join",
       "setname",
       "chghost",

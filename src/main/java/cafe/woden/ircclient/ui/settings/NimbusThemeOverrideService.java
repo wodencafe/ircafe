@@ -867,13 +867,17 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
     ColorUIResource checkBg = toUiResource(lighten(control, 0.02));
 
     // Keep text input surfaces visibly tinted and clearly separated from panel chrome.
-    // The prior values were too close to panel tone for some dark variants.
-    Color fieldBase = mix(mix(bg, nimbusBase, 0.34), focus, 0.16);
-    Color fieldSurface = ThemeColorUtils.ensureContrastAgainstBackground(lighten(fieldBase, 0.12), panelBase, 1.18);
+    // Bias more strongly toward accent/base hues so dark variants don't collapse into neutral gray.
+    Color fieldTint = mix(mix(nimbusBase, focus, 0.56), nimbusBlueGrey, 0.22);
+    Color fieldBase = mix(bg, fieldTint, 0.62);
+    Color fieldSurface =
+        ThemeColorUtils.ensureContrastAgainstBackground(lighten(fieldBase, 0.19), panelBase, 1.22);
     ColorUIResource fieldBg = toUiResource(fieldSurface);
 
-    Color areaBase = mix(mix(bg, nimbusBlueGrey, 0.26), focus, 0.10);
-    Color areaSurface = ThemeColorUtils.ensureContrastAgainstBackground(lighten(areaBase, 0.10), panelBase, 1.12);
+    Color areaTint = mix(mix(nimbusBlueGrey, focus, 0.46), nimbusBase, 0.18);
+    Color areaBase = mix(bg, areaTint, 0.52);
+    Color areaSurface =
+        ThemeColorUtils.ensureContrastAgainstBackground(lighten(areaBase, 0.16), panelBase, 1.16);
     ColorUIResource areaBg = toUiResource(areaSurface);
 
     ColorUIResource listBg = toUiResource(darken(bg, 0.015));
@@ -881,8 +885,8 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
     ColorUIResource treeBg = toUiResource(darken(bg, 0.01));
     ColorUIResource viewportBg = tableBg;
 
-    ColorUIResource menuBarBg = toUiResource(lighten(menuBg, 0.03));
-    ColorUIResource popupBg = toUiResource(lighten(menuBg, 0.015));
+    ColorUIResource menuBarBg = toUiResource(lighten(mix(menuBg, nimbusBase, 0.24), 0.05));
+    ColorUIResource popupBg = toUiResource(lighten(mix(menuBg, nimbusBase, 0.18), 0.035));
     ColorUIResource tooltipBg = toUiResource(lighten(menuBg, 0.07));
     ColorUIResource comboArrowBg = toUiResource(lighten(control, 0.05));
     ColorUIResource splitPaneBg = toUiResource(darken(control, 0.03));
@@ -1047,8 +1051,12 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
     UIManager.put("PopupMenu.background", popupBg);
     UIManager.put("PopupMenu.foreground", text);
     UIManager.put("PopupMenu.borderColor", border);
+    UIManager.put("PopupMenu.opaque", Boolean.TRUE);
     UIManager.put("PopupMenuSeparator.foreground", separator);
     UIManager.put("PopupMenuSeparator.background", popupBg);
+    UIManager.put("MenuItem.opaque", Boolean.TRUE);
+    UIManager.put("CheckBoxMenuItem.opaque", Boolean.TRUE);
+    UIManager.put("RadioButtonMenuItem.opaque", Boolean.TRUE);
 
     UIManager.put("Separator.foreground", separator);
     UIManager.put("Separator.background", panelBg);

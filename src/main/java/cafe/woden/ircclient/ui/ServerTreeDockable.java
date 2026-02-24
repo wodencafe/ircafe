@@ -138,6 +138,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
   public static final String PROP_LOG_VIEWER_NODES_VISIBLE = "logViewerNodesVisible";
+  public static final String PROP_NOTIFICATIONS_NODES_VISIBLE = "notificationsNodesVisible";
+  public static final String PROP_MONITOR_NODES_VISIBLE = "monitorNodesVisible";
   public static final String PROP_INTERCEPTORS_NODES_VISIBLE = "interceptorsNodesVisible";
   public static final String PROP_APPLICATION_ROOT_VISIBLE = "applicationRootVisible";
 
@@ -270,6 +272,8 @@ private static final class InsertionLine {
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
   private volatile boolean showLogViewerNodes = true;
+  private volatile boolean showNotificationsNodes = true;
+  private volatile boolean showMonitorNodes = true;
   private volatile boolean showInterceptorsNodes = true;
   private volatile boolean showApplicationRoot = true;
 
@@ -346,6 +350,7 @@ private static final class InsertionLine {
     tree.setRootVisible(false);
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
+    applyTreeFontFromUiDefaults();
 
     tree.setCellRenderer(treeCellRenderer);
     this.typingActivityTimer = new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
@@ -435,7 +440,7 @@ private static final class InsertionLine {
       settingsListener = evt -> {
         if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
         syncTypingIndicatorStyleFromSettings();
-        tree.repaint();
+        SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange);
       };
       this.settingsBus.addListener(settingsListener);
     }
@@ -2264,6 +2269,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return showLogViewerNodes;
   }
 
+  public boolean isNotificationsNodesVisible() {
+    return showNotificationsNodes;
+  }
+
+  public boolean isMonitorNodesVisible() {
+    return showMonitorNodes;
+  }
+
   public boolean isInterceptorsNodesVisible() {
     return showInterceptorsNodes;
   }
@@ -2297,6 +2310,24 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     showLogViewerNodes = next;
     syncUiLeafVisibility();
     firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, next);
+  }
+
+  public void setNotificationsNodesVisible(boolean visible) {
+    boolean old = showNotificationsNodes;
+    boolean next = visible;
+    if (old == next) return;
+    showNotificationsNodes = next;
+    syncUiLeafVisibility();
+    firePropertyChange(PROP_NOTIFICATIONS_NODES_VISIBLE, old, next);
+  }
+
+  public void setMonitorNodesVisible(boolean visible) {
+    boolean old = showMonitorNodes;
+    boolean next = visible;
+    if (old == next) return;
+    showMonitorNodes = next;
+    syncUiLeafVisibility();
+    firePropertyChange(PROP_MONITOR_NODES_VISIBLE, old, next);
   }
 
   public void setInterceptorsNodesVisible(boolean visible) {
@@ -2441,11 +2472,16 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private void syncApplicationRootVisibility() {
+    Set<TreePath> expandedBefore = snapshotExpandedTreePaths();
+    boolean structureChanged = false;
+
     if (showApplicationRoot) {
       if (applicationRoot.getParent() != root) {
         root.insert(applicationRoot, Math.min(1, root.getChildCount()));
         model.nodeStructureChanged(root);
+        structureChanged = true;
       }
+      if (structureChanged) restoreExpandedTreePaths(expandedBefore);
       tree.expandPath(new TreePath(applicationRoot.getPath()));
       return;
     }
@@ -2466,7 +2502,52 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (applicationRoot.getParent() == root) {
       root.remove(applicationRoot);
       model.nodeStructureChanged(root);
+      structureChanged = true;
     }
+    if (structureChanged) restoreExpandedTreePaths(expandedBefore);
+  }
+
+  private Set<TreePath> snapshotExpandedTreePaths() {
+    TreePath rootPath = new TreePath(root.getPath());
+    Set<TreePath> expanded = new HashSet<>();
+    Enumeration<TreePath> en = tree.getExpandedDescendants(rootPath);
+    if (en != null) {
+      while (en.hasMoreElements()) {
+        expanded.add(en.nextElement());
+      }
+    }
+    return expanded;
+  }
+
+  private void restoreExpandedTreePaths(Set<TreePath> expanded) {
+    if (expanded == null || expanded.isEmpty()) return;
+    for (TreePath p : expanded) {
+      if (isPathInCurrentTreeModel(p)) {
+        tree.expandPath(p);
+      }
+    }
+  }
+
+  private boolean isPathInCurrentTreeModel(TreePath path) {
+    if (path == null) return false;
+    Object[] nodes = path.getPath();
+    if (nodes.length == 0 || nodes[0] != root) return false;
+
+    DefaultMutableTreeNode cursor = root;
+    for (int i = 1; i < nodes.length; i++) {
+      Object next = nodes[i];
+      DefaultMutableTreeNode matched = null;
+      for (int c = 0; c < cursor.getChildCount(); c++) {
+        Object child = cursor.getChildAt(c);
+        if (child == next && child instanceof DefaultMutableTreeNode dmtn) {
+          matched = dmtn;
+          break;
+        }
+      }
+      if (matched == null) return false;
+      cursor = matched;
+    }
+    return true;
   }
 
   private TreePath defaultSelectionPath() {
@@ -2489,18 +2570,27 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   private void syncUiLeafVisibility() {
     TargetRef selected = selectedTargetRef();
+    DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+    boolean selectedMonitorGroup = selectedNode != null && isMonitorGroupNode(selectedNode);
+    boolean selectedInterceptorsGroup = selectedNode != null && isInterceptorsGroupNode(selectedNode);
+    String selectedGroupServerId =
+        (selectedMonitorGroup || selectedInterceptorsGroup) ? owningServerIdForNode(selectedNode) : "";
 
     for (ServerNodes sn : servers.values()) {
       if (sn == null || sn.serverNode == null) continue;
 
+      ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", showNotificationsNodes);
       ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, showLogViewerNodes);
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
+      ensureMonitorGroupVisible(sn, showMonitorNodes);
       ensureInterceptorsGroupVisible(sn, showInterceptorsNodes);
     }
 
     if (selected != null) {
-      if (selected.isLogViewer() && !showLogViewerNodes) {
+      if (selected.isNotifications() && !showNotificationsNodes) {
+        selectTarget(new TargetRef(selected.serverId(), "status"));
+      } else if (selected.isLogViewer() && !showLogViewerNodes) {
         selectTarget(new TargetRef(selected.serverId(), "status"));
       } else if (selected.isChannelList() && !showChannelListNodes) {
         selectTarget(new TargetRef(selected.serverId(), "status"));
@@ -2508,6 +2598,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
         selectTarget(new TargetRef(selected.serverId(), "status"));
       } else if ((selected.isInterceptorsGroup() || selected.isInterceptor()) && !showInterceptorsNodes) {
         selectTarget(new TargetRef(selected.serverId(), "status"));
+      }
+    } else if (selectedMonitorGroup && !showMonitorNodes) {
+      if (!selectedGroupServerId.isBlank()) {
+        selectTarget(new TargetRef(selectedGroupServerId, "status"));
+      }
+    } else if (selectedInterceptorsGroup && !showInterceptorsNodes) {
+      if (!selectedGroupServerId.isBlank()) {
+        selectTarget(new TargetRef(selectedGroupServerId, "status"));
       }
     }
   }
@@ -2567,6 +2665,42 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     sn.serverNode.insert(group, idx);
     model.nodesWereInserted(sn.serverNode, new int[] { idx });
     return true;
+  }
+
+  private boolean ensureMonitorGroupVisible(ServerNodes sn, boolean visible) {
+    if (sn == null || sn.serverNode == null || sn.monitorNode == null) return false;
+    DefaultMutableTreeNode group = sn.monitorNode;
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) group.getParent();
+
+    if (!visible) {
+      if (parent != sn.serverNode) return false;
+      int idx = sn.serverNode.getIndex(group);
+      if (idx < 0) return false;
+      sn.serverNode.remove(group);
+      model.nodesWereRemoved(sn.serverNode, new int[] { idx }, new Object[] { group });
+      return true;
+    }
+
+    if (parent == sn.serverNode) return false;
+    int idx = monitorGroupInsertIndex(sn);
+    sn.serverNode.insert(group, idx);
+    model.nodesWereInserted(sn.serverNode, new int[] { idx });
+    return true;
+  }
+
+  private int monitorGroupInsertIndex(ServerNodes sn) {
+    if (sn == null || sn.serverNode == null) return 0;
+
+    int idx = sn.serverNode.getChildCount();
+    int pmIdx = sn.serverNode.getIndex(sn.pmNode);
+    if (pmIdx >= 0) idx = Math.min(idx, pmIdx);
+
+    if (sn.interceptorsNode != null && sn.interceptorsNode.getParent() == sn.serverNode) {
+      int interceptorsIdx = sn.serverNode.getIndex(sn.interceptorsNode);
+      if (interceptorsIdx >= 0) idx = Math.min(idx, interceptorsIdx);
+    }
+
+    return Math.max(0, Math.min(idx, sn.serverNode.getChildCount()));
   }
 
   private int interceptorsGroupInsertIndex(ServerNodes sn) {
@@ -2640,6 +2774,12 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
     if (ref.isLogViewer() && !showLogViewerNodes) {
       setLogViewerNodesVisible(true);
+    }
+    if (ref.isNotifications() && !showNotificationsNodes) {
+      setNotificationsNodesVisible(true);
+    }
+    if (ref.isMonitorGroup() && !showMonitorNodes) {
+      setMonitorNodesVisible(true);
     }
     if ((ref.isInterceptorsGroup() || ref.isInterceptor()) && !showInterceptorsNodes) {
       setInterceptorsNodesVisible(true);
@@ -2732,6 +2872,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   public void selectTarget(TargetRef ref) {
     if (ref == null) return;
     if (ref.isMonitorGroup()) {
+      ensureNode(ref);
       ServerNodes sn = servers.get(ref.serverId());
       DefaultMutableTreeNode node = (sn == null) ? null : sn.monitorNode;
       if (node == null || node.getParent() != sn.serverNode) return;
@@ -2741,6 +2882,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       return;
     }
     if (ref.isInterceptorsGroup()) {
+      ensureNode(ref);
       ServerNodes sn = servers.get(ref.serverId());
       DefaultMutableTreeNode node = (sn == null) ? null : sn.interceptorsNode;
       if (node == null || node.getParent() != sn.serverNode) return;
@@ -3207,7 +3349,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       return "Interceptors for this server. Count shows total captured hits.";
     }
     if (isMonitorGroupNode(node)) {
-      return "Monitored nick presence for this server (IRC MONITOR).";
+      return "Monitored nick presence for this server (IRC MONITOR, with ISON fallback when unavailable).";
     }
 
     Object uo = node.getUserObject();
@@ -3410,8 +3552,10 @@ private void removeServerRoot(String serverId) {
       notificationsData.highlightUnread = notificationStore.count(id);
     }
     DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
-    serverNode.insert(notificationsLeaf, 1);
-    leaves.put(notificationsRef, notificationsLeaf);
+    if (showNotificationsNodes) {
+      serverNode.insert(notificationsLeaf, 1);
+      leaves.put(notificationsRef, notificationsLeaf);
+    }
 
     TargetRef logViewerRef = TargetRef.logViewer(id);
     int nextUiLeafIndex = 2;
@@ -3441,7 +3585,9 @@ private void removeServerRoot(String serverId) {
     }
     NodeData monitorData = new NodeData(null, MONITOR_GROUP_LABEL);
     DefaultMutableTreeNode monitorNode = new DefaultMutableTreeNode(monitorData);
-    serverNode.add(monitorNode);
+    if (showMonitorNodes) {
+      serverNode.add(monitorNode);
+    }
 
     DefaultMutableTreeNode interceptorsNode = new DefaultMutableTreeNode(interceptorsData);
 
@@ -3570,14 +3716,8 @@ private void removeServerRoot(String serverId) {
 
   private void refreshTreeLayoutAfterUiChange() {
     try {
-      TreePath rootPath = new TreePath(root.getPath());
-      Set<TreePath> expanded = new HashSet<>();
-      Enumeration<TreePath> en = tree.getExpandedDescendants(rootPath);
-      if (en != null) {
-        while (en.hasMoreElements()) {
-          expanded.add(en.nextElement());
-        }
-      }
+      applyTreeFontFromUiDefaults();
+      Set<TreePath> expanded = snapshotExpandedTreePaths();
       tree.setRowHeight(0);
       try {
         treeCellRenderer.updateUI();
@@ -3587,16 +3727,23 @@ private void removeServerRoot(String serverId) {
       } catch (Exception ignored) {
       }
       tree.setCellRenderer(treeCellRenderer);
-    ToolTipManager.sharedInstance().registerComponent(tree);
+      ToolTipManager.sharedInstance().registerComponent(tree);
       model.reload(root);
-
-      for (TreePath p : expanded) {
-        tree.expandPath(p);
-      }
+      restoreExpandedTreePaths(expanded);
 
       tree.revalidate();
       tree.repaint();
     } catch (Exception ignored) {
+    }
+  }
+
+  private void applyTreeFontFromUiDefaults() {
+    Font next = UIManager.getFont("Tree.font");
+    if (next == null) next = UIManager.getFont("defaultFont");
+    if (next == null) return;
+    Font cur = tree.getFont();
+    if (!next.equals(cur)) {
+      tree.setFont(next);
     }
   }
 
@@ -3711,8 +3858,8 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       boolean hasFocus) {
 
     java.awt.Component c = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
-    Font base = tree.getFont();
-    if (base == null) base = UIManager.getFont("Tree.font");
+    Font base = UIManager.getFont("Tree.font");
+    if (base == null) base = tree.getFont();
     if (base == null) base = getFont();
     typingIndicatorAlpha = 0f;
     typingIndicatorSlotVisible = false;

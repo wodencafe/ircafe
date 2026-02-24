@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.ui.monitor;
 
 import cafe.woden.ircclient.app.monitor.MonitorListService;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
@@ -17,6 +19,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -24,8 +27,6 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableRowSorter;
 
@@ -35,6 +36,8 @@ public final class MonitorPanel extends JPanel {
   private static final int COL_STATUS = 0;
   private static final int COL_NICK = 1;
   private static final String DEFAULT_HINT = "Use add/remove controls or /monitor commands.";
+  private static final int ACTION_ICON_SIZE = 16;
+  private static final Dimension ACTION_BUTTON_SIZE = new Dimension(28, 28);
 
   public record Row(String nick, Boolean online) {}
 
@@ -42,12 +45,10 @@ public final class MonitorPanel extends JPanel {
   private final JTable table = new JTable(model);
   private final JLabel title = new JLabel("Monitor");
   private final JLabel subtitle = new JLabel(DEFAULT_HINT);
-  private final JTextField addField = new JTextField();
-  private final JLabel addFieldLabel = new JLabel("Add nicks:");
-  private final JButton addButton = new JButton("Add");
-  private final JButton removeButton = new JButton("Remove Selected");
-  private final JButton clearButton = new JButton("Clear");
-  private final JButton refreshButton = new JButton("Refresh");
+  private final JButton addButton = new JButton();
+  private final JButton removeButton = new JButton();
+  private final JButton clearButton = new JButton();
+  private final JButton refreshButton = new JButton();
   private final TableRowSorter<MonitorTableModel> sorter = new TableRowSorter<>(model);
   private final JPopupMenu rowMenu = new JPopupMenu();
   private final JMenuItem openQueryMenuItem = new JMenuItem("Open Query");
@@ -111,16 +112,8 @@ public final class MonitorPanel extends JPanel {
 
     JPanel controls = new JPanel(new BorderLayout(8, 0));
     controls.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
-    addFieldLabel.setLabelFor(addField);
-    addField.setToolTipText("Comma or space separated nick list.");
-    addField.putClientProperty("JTextField.placeholderText", "alice, bob");
-    addField.setName("monitor.addField");
-    JPanel addRow = new JPanel(new BorderLayout(8, 0));
-    addRow.setOpaque(false);
+    configureActionButtons();
     addButton.setName("monitor.addButton");
-    addRow.add(addFieldLabel, BorderLayout.WEST);
-    addRow.add(addField, BorderLayout.CENTER);
-    addRow.add(addButton, BorderLayout.EAST);
 
     JPanel actionRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 0));
     actionRow.setOpaque(false);
@@ -131,39 +124,50 @@ public final class MonitorPanel extends JPanel {
     removeButton.addActionListener(e -> removeSelectedRequested());
     clearButton.addActionListener(e -> clearRequested());
     refreshButton.addActionListener(e -> refreshRequested());
+    actionRow.add(addButton);
     actionRow.add(removeButton);
     actionRow.add(clearButton);
     actionRow.add(refreshButton);
 
-    JPanel controlsStack = new JPanel();
-    controlsStack.setOpaque(false);
-    controlsStack.setLayout(new javax.swing.BoxLayout(controlsStack, javax.swing.BoxLayout.Y_AXIS));
-    controlsStack.add(addRow);
-    controlsStack.add(javax.swing.Box.createVerticalStrut(6));
-    controlsStack.add(actionRow);
-    controls.add(controlsStack, BorderLayout.CENTER);
+    controls.add(actionRow, BorderLayout.CENTER);
     add(controls, BorderLayout.SOUTH);
-
-    addField.addActionListener(e -> addRequested());
-    addField.getDocument().addDocumentListener(new DocumentListener() {
-      @Override
-      public void insertUpdate(DocumentEvent e) {
-        updateButtonState();
-      }
-
-      @Override
-      public void removeUpdate(DocumentEvent e) {
-        updateButtonState();
-      }
-
-      @Override
-      public void changedUpdate(DocumentEvent e) {
-        updateButtonState();
-      }
-    });
 
     updateHeader();
     updateButtonState();
+  }
+
+  private void configureActionButtons() {
+    configureActionButton(
+        addButton,
+        "plus",
+        "Add user to monitor list",
+        "Add...");
+    configureActionButton(
+        removeButton,
+        "trash",
+        "Remove selected users from monitor list",
+        "Remove selected");
+    configureActionButton(
+        clearButton,
+        "close",
+        "Clear monitor list",
+        "Clear");
+    configureActionButton(
+        refreshButton,
+        "refresh",
+        "Refresh monitor list",
+        "Refresh");
+  }
+
+  private void configureActionButton(JButton button, String iconName, String tooltip, String accessibleName) {
+    if (button == null) return;
+    button.setText("");
+    button.setIcon(SvgIcons.action(iconName, ACTION_ICON_SIZE));
+    button.setDisabledIcon(SvgIcons.actionDisabled(iconName, ACTION_ICON_SIZE));
+    button.setToolTipText(tooltip);
+    button.setFocusable(false);
+    button.setPreferredSize(ACTION_BUTTON_SIZE);
+    button.getAccessibleContext().setAccessibleName(accessibleName);
   }
 
   private void buildRowMenu() {
@@ -194,11 +198,24 @@ public final class MonitorPanel extends JPanel {
   }
 
   private void addRequested() {
-    List<String> nicks = MonitorListService.tokenizeNickInput(addField.getText());
+    List<String> nicks = promptForNicks();
     if (nicks.isEmpty()) return;
     emitCommand("/monitor +" + String.join(",", nicks));
-    addField.selectAll();
-    addField.requestFocusInWindow();
+  }
+
+  private List<String> promptForNicks() {
+    JTextField field = new JTextField();
+    field.putClientProperty("JTextField.placeholderText", "alice");
+    Object[] message = {"Nick:", field};
+    int option =
+        JOptionPane.showConfirmDialog(
+            SwingUtilities.getWindowAncestor(this),
+            message,
+            "Add Monitor User",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+    if (option != JOptionPane.OK_OPTION) return List.of();
+    return MonitorListService.tokenizeNickInput(field.getText());
   }
 
   private void removeSelectedRequested() {
@@ -280,12 +297,11 @@ public final class MonitorPanel extends JPanel {
     Consumer<String> cb = onEmitCommand;
     boolean hasEmitter = cb != null;
     boolean hasServer = !serverId.isBlank();
-    boolean hasAddInput = !MonitorListService.tokenizeNickInput(addField.getText()).isEmpty();
     boolean hasRows = model.getRowCount() > 0;
     boolean hasSelection = table.getSelectedRowCount() > 0;
     boolean hasSingleSelection = table.getSelectedRowCount() == 1;
 
-    addButton.setEnabled(hasEmitter && hasServer && hasAddInput);
+    addButton.setEnabled(hasEmitter && hasServer);
     removeButton.setEnabled(hasEmitter && hasServer && hasSelection);
     clearButton.setEnabled(hasEmitter && hasServer && hasRows);
     refreshButton.setEnabled(hasEmitter && hasServer);

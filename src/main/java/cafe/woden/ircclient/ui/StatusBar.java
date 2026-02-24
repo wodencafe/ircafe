@@ -9,6 +9,7 @@ import javax.swing.*;
 import javax.swing.border.BevelBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -129,6 +130,9 @@ public class StatusBar extends JPanel {
     add(left, BorderLayout.WEST);
     add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
+
+    addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::applyUiFontsFromDefaults));
+    applyUiFontsFromDefaults();
   }
 
   public void setChannel(String channel) {
@@ -453,6 +457,7 @@ public class StatusBar extends JPanel {
 
     noticeHistoryDialog.setContentPane(root);
     noticeHistoryDialog.setSize(900, 340);
+    applyUiFontsFromDefaults();
   }
 
   private StatusNotice selectedHistoryNotice() {
@@ -550,6 +555,44 @@ public class StatusBar extends JPanel {
       StatusNotice selected = selectedHistoryNotice();
       historyOpenButton.setEnabled(selected != null && selected.onClick() != null);
     }
+  }
+
+  private void applyUiFontsFromDefaults() {
+    Font base = UIManager.getFont("Label.font");
+    Font defaultFont = UIManager.getFont("defaultFont");
+    if (defaultFont != null
+        && (base == null || defaultFont.getSize2D() > base.getSize2D())) {
+      base = defaultFont;
+    }
+    if (base == null) return;
+
+    Font buttonFont = UIManager.getFont("Button.font");
+    if (buttonFont == null) buttonFont = base;
+    Font tableFont = UIManager.getFont("Table.font");
+    if (tableFont == null) tableFont = base;
+    Font headerFont = UIManager.getFont("TableHeader.font");
+    if (headerFont == null) headerFont = buttonFont;
+
+    setFont(base);
+    channelLabel.setFont(base);
+    usersLabel.setFont(base);
+    opsLabel.setFont(base);
+    serverLabel.setFont(base);
+    noticeLabel.setFont(base);
+    historyButton.setFont(buttonFont);
+
+    if (noticeHistoryTable != null) {
+      noticeHistoryTable.setFont(tableFont);
+      JTableHeader header = noticeHistoryTable.getTableHeader();
+      if (header != null) header.setFont(headerFont);
+      int rowHeight = Math.max(22, Math.round(tableFont.getSize2D() * 1.75f));
+      noticeHistoryTable.setRowHeight(rowHeight);
+    }
+    if (historyOpenButton != null) historyOpenButton.setFont(buttonFont);
+    if (historyClearSelectedButton != null) historyClearSelectedButton.setFont(buttonFont);
+    if (historyClearButton != null) historyClearButton.setFont(buttonFont);
+    if (historyPopupOpenItem != null) historyPopupOpenItem.setFont(buttonFont);
+    if (historyPopupClearItem != null) historyPopupClearItem.setFont(buttonFont);
   }
 
   private final class NoticeHistoryTableModel extends AbstractTableModel {

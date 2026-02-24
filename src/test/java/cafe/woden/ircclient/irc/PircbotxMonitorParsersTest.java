@@ -12,6 +12,32 @@ import org.junit.jupiter.api.Test;
 class PircbotxMonitorParsersTest {
 
   @Test
+  void parsesMononlineEntriesWithHostmask() {
+    List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> entries =
+        PircbotxMonitorParsers.parseRpl730MonitorOnlineEntries(
+            ":server 730 me :Alice!u@host,bob!ident@host");
+
+    assertEquals(2, entries.size());
+    assertEquals("Alice", entries.get(0).nick());
+    assertEquals("Alice!u@host", entries.get(0).hostmask());
+    assertEquals("bob", entries.get(1).nick());
+    assertEquals("bob!ident@host", entries.get(1).hostmask());
+  }
+
+  @Test
+  void parsesMonofflineEntriesWithoutHostmask() {
+    List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> entries =
+        PircbotxMonitorParsers.parseRpl731MonitorOfflineEntries(
+            ":server 731 me alice,bob");
+
+    assertEquals(2, entries.size());
+    assertEquals("alice", entries.get(0).nick());
+    assertTrue(entries.get(0).hostmask().isEmpty());
+    assertEquals("bob", entries.get(1).nick());
+    assertTrue(entries.get(1).hostmask().isEmpty());
+  }
+
+  @Test
   void parsesMononlineNickListFromTrailingHostmasks() {
     List<String> nicks =
         PircbotxMonitorParsers.parseRpl730MonitorOnlineNicks(

@@ -21,6 +21,7 @@ public class UiSettingsBus {
   public UiSettingsBus(UiProperties props, RuntimeConfigStore runtimeConfig) {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
     UiProperties.UserInfoEnrichment ue = props.userInfoEnrichment();
+    UiProperties.MonitorFallback mf = props.monitorFallback();
     UiProperties.Timestamps ts = props.timestamps();
     UiProperties.Tray tray = props.tray();
 
@@ -60,6 +61,8 @@ public class UiSettingsBus {
     boolean trayNotifySuppressWhenTargetActive = tray == null || tray.notifySuppressWhenTargetActive() == null || Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
 
     boolean trayLinuxDbusActionsEnabled = tray == null || tray.linuxDbusActionsEnabled() == null || Boolean.TRUE.equals(tray.linuxDbusActionsEnabled());
+    NotificationBackendMode trayNotificationBackendMode =
+        NotificationBackendMode.fromToken(tray != null ? tray.notificationBackend() : null);
 
     boolean enrichmentEnabled = ue != null && Boolean.TRUE.equals(ue.enabled());
     boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
@@ -102,6 +105,7 @@ public class UiSettingsBus {
         trayNotifySuppressWhenTargetActive,
 
         trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
 
         props.imageEmbedsEnabled(),
         props.imageEmbedsCollapsedByDefault(),
@@ -148,6 +152,8 @@ public class UiSettingsBus {
         periodicRefreshEnabled,
         ue != null && ue.periodicRefreshIntervalSeconds() != null ? ue.periodicRefreshIntervalSeconds() : 300,
         ue != null && ue.periodicRefreshNicksPerTick() != null ? ue.periodicRefreshNicksPerTick() : 2,
+
+        mf != null && mf.isonPollIntervalSeconds() != null ? mf.isonPollIntervalSeconds() : 30,
 
         props.notificationRuleCooldownSeconds() != null ? props.notificationRuleCooldownSeconds() : 15,
 

@@ -543,7 +543,7 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void redactCommandSendsTaggedTagmsgAndAppliesLocalRedactionWhenEchoUnavailable() {
+  void redactCommandSendsRedactAndAppliesLocalRedactionWhenEchoUnavailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
@@ -551,12 +551,12 @@ class OutboundChatCommandServiceTest {
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/delete=abc123 TAGMSG #ircafe"))
+    when(irc.sendRaw("libera", "REDACT #ircafe abc123"))
         .thenReturn(Completable.complete());
 
-    service.handleRedactMessage(disposables, "abc123");
+    service.handleRedactMessage(disposables, "abc123", "");
 
-    verify(irc).sendRaw("libera", "@+draft/delete=abc123 TAGMSG #ircafe");
+    verify(irc).sendRaw("libera", "REDACT #ircafe abc123");
     verify(ui).applyMessageRedaction(
         eq(chan),
         any(Instant.class),
@@ -567,13 +567,28 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void redactCommandWithReasonSendsTrailingReason() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
+    when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
+    when(irc.sendRaw("libera", "REDACT #ircafe abc123 :cleanup old context"))
+        .thenReturn(Completable.complete());
+
+    service.handleRedactMessage(disposables, "abc123", "cleanup old context");
+
+    verify(irc).sendRaw("libera", "REDACT #ircafe abc123 :cleanup old context");
+  }
+
+  @Test
   void redactCommandRejectsNonOwnedMessageBeforeSending() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(false);
 
-    service.handleRedactMessage(disposables, "abc123");
+    service.handleRedactMessage(disposables, "abc123", "");
 
     verify(ui).appendStatus(chan, "(redact)", "Can only redact your own messages in this buffer.");
     verify(irc, never()).sendRaw(eq("libera"), any());
@@ -602,7 +617,7 @@ class OutboundChatCommandServiceTest {
     verify(ui).appendStatus(
         eq(chan),
         eq("(help)"),
-        contains("/redact <msgid> (alias: /delete) (unavailable:"));
+        contains("/redact <msgid> [reason] (alias: /delete) (unavailable:"));
   }
 
   @Test
@@ -616,7 +631,7 @@ class OutboundChatCommandServiceTest {
     service.handleHelp("redact");
 
     verify(ui).appendStatus(chan, "(help)", "/edit <msgid> <message>");
-    verify(ui).appendStatus(chan, "(help)", "/redact <msgid> (alias: /delete)");
+    verify(ui).appendStatus(chan, "(help)", "/redact <msgid> [reason] (alias: /delete)");
   }
 
   @Test

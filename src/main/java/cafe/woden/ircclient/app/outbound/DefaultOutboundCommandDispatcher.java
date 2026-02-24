@@ -130,7 +130,8 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.RedactMessage cmd ->
           outboundChatCommandService.handleRedactMessage(
               disposables,
-              cmd.messageId());
+              cmd.messageId(),
+              cmd.reason());
       case ParsedInput.Quote cmd -> outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
       case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
       case ParsedInput.Unknown cmd -> {

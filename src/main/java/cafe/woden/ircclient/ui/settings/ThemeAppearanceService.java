@@ -54,6 +54,29 @@ class ThemeAppearanceService {
   };
 
   private static final Object NULL_SENTINEL = new Object();
+  private static final String[] UI_FONT_PRIORITY_KEYS = {
+      "defaultFont",
+      "Label.font",
+      "Button.font",
+      "Table.font",
+      "TableHeader.font",
+      "TextField.font",
+      "TextArea.font",
+      "CheckBox.font",
+      "ComboBox.font",
+      "Tree.font",
+      "TabbedPane.font",
+      "TitledBorder.font",
+      "MenuBar.font",
+      "Menu.font",
+      "MenuItem.font",
+      "CheckBoxMenuItem.font",
+      "RadioButtonMenuItem.font",
+      "PopupMenu.font",
+      "MenuItem.acceleratorFont",
+      "CheckBoxMenuItem.acceleratorFont",
+      "RadioButtonMenuItem.acceleratorFont"
+  };
 
   private final Map<String, Object> accentBaselineValues = new HashMap<>();
   private String accentBaselineLafClassName;
@@ -255,6 +278,16 @@ class ThemeAppearanceService {
     Object defaultFont = UIManager.get("defaultFont");
     if (!uiFontBaselineValues.containsKey("defaultFont")) {
       uiFontBaselineValues.put("defaultFont", defaultFont != null ? defaultFont : NULL_SENTINEL);
+    }
+
+    // Some LAFs expose menu fonts via LazyValue entries; resolve them explicitly.
+    for (String key : UI_FONT_PRIORITY_KEYS) {
+      if (key == null || key.isBlank()) continue;
+      if (uiFontBaselineValues.containsKey(key)) continue;
+      Font font = UIManager.getFont(key);
+      if (font != null) {
+        uiFontBaselineValues.put(key, font);
+      }
     }
 
     uiFontBaselineLafClassName = ThemeLookAndFeelUtils.currentLookAndFeelClassName();

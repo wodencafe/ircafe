@@ -85,7 +85,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     if (this.settingsBus != null) {
       applySettings(this.settingsBus.get());
     } else {
-      chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+      chat.setFont(defaultMonospaceChatFont());
     }
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
     this.transcriptMenu = decorators.add(ChatTranscriptContextMenuDecorator.decorate(
@@ -219,10 +219,18 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     try {
       chat.setFont(new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize()));
     } catch (Exception ignored) {
-      chat.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+      chat.setFont(defaultMonospaceChatFont());
     }
     chat.revalidate();
     chat.repaint();
+  }
+
+  private Font defaultMonospaceChatFont() {
+    Font base = UIManager.getFont("TextPane.font");
+    if (base == null) base = UIManager.getFont("TextArea.font");
+    if (base == null) base = UIManager.getFont("Label.font");
+    int size = base != null ? base.getSize() : 12;
+    return new Font(Font.MONOSPACED, Font.PLAIN, Math.max(10, size));
   }
 
   protected void onTranscriptClicked() {

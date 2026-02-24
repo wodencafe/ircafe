@@ -332,9 +332,16 @@ class CommandParserTest {
     ParsedInput redact = parser.parse("/redact abc123");
     assertTrue(redact instanceof ParsedInput.RedactMessage);
     assertEquals("abc123", ((ParsedInput.RedactMessage) redact).messageId());
+    assertEquals("", ((ParsedInput.RedactMessage) redact).reason());
 
     ParsedInput delete = parser.parse("/delete abc123");
     assertTrue(delete instanceof ParsedInput.RedactMessage);
     assertEquals("abc123", ((ParsedInput.RedactMessage) delete).messageId());
+    assertEquals("", ((ParsedInput.RedactMessage) delete).reason());
+
+    ParsedInput withReason = parser.parse("/redact abc123 cleanup old context");
+    assertTrue(withReason instanceof ParsedInput.RedactMessage);
+    assertEquals("abc123", ((ParsedInput.RedactMessage) withReason).messageId());
+    assertEquals("cleanup old context", ((ParsedInput.RedactMessage) withReason).reason());
   }
 }

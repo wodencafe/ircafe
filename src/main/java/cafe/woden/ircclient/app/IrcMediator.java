@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
+import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
@@ -92,6 +93,7 @@ public class IrcMediator {
   private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotificationService ircEventNotificationService;
   private final InterceptorStore interceptorStore;
+  private final MonitorIsonFallbackService monitorIsonFallbackService;
 
   private final NotificationRuleMatcher notificationRuleMatcher;
 
@@ -146,7 +148,8 @@ public class IrcMediator {
       InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotificationService ircEventNotificationService,
       InterceptorStore interceptorStore,
-      InboundIgnorePolicy inboundIgnorePolicy
+      InboundIgnorePolicy inboundIgnorePolicy,
+      MonitorIsonFallbackService monitorIsonFallbackService
   ) {
 
     this.irc = irc;
@@ -180,6 +183,7 @@ public class IrcMediator {
     this.ircEventNotificationService = ircEventNotificationService;
     this.interceptorStore = interceptorStore;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
+    this.monitorIsonFallbackService = monitorIsonFallbackService;
   }
 
   public void start() {
@@ -2298,6 +2302,9 @@ case IrcEvent.ServerTimeNotNegotiated ev -> {
     String rendered = "[" + ev.code() + "] " + msg;
     updateServerMetadataFromServerResponseLine(sid, ev);
     boolean suppressStatusLine = (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
+    if (ev.code() == 303 && monitorIsonFallbackService.shouldSuppressIsonServerResponse(sid)) {
+      suppressStatusLine = true;
+    }
     if (ev.code() == 321) {
       rendered = "[321] " + (msg.isBlank() ? "Channel list follows (see Channel List)." : (msg + " (see Channel List)."));
     } else if (ev.code() == 323 && !msg.isBlank()) {

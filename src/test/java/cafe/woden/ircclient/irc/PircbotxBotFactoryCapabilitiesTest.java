@@ -20,6 +20,8 @@ class PircbotxBotFactoryCapabilitiesTest {
     assertTrue(caps.contains("invite-notify"));
     assertTrue(caps.contains("labeled-response"));
     assertTrue(caps.contains("standard-replies"));
+    assertTrue(caps.contains("monitor"));
+    assertTrue(caps.contains("extended-monitor"));
     assertTrue(caps.contains("setname"));
     assertTrue(caps.contains("chghost"));
     assertTrue(caps.contains("sts"));

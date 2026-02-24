@@ -244,7 +244,7 @@ public interface IrcClientService {
   }
 
   /**
-   * @return true if IRC MONITOR support is advertised via RPL_ISUPPORT.
+   * @return true if IRC MONITOR support is available via CAP and/or RPL_ISUPPORT.
    */
   default boolean isMonitorAvailable(String serverId) {
     return false;

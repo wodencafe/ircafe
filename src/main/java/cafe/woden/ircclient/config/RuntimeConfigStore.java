@@ -874,6 +874,26 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTrayNotificationBackend(String backendToken) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(backendToken, "").trim().toLowerCase(Locale.ROOT);
+      if (v.isEmpty()) v = "auto";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> tray = getOrCreateMap(ui, "tray");
+
+      tray.put("notificationBackend", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist tray.notificationBackend setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberTrayNotificationSoundsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -2874,6 +2894,24 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist USERHOST max nicks/command setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberMonitorIsonPollIntervalSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> monitorFallback = getOrCreateMap(ui, "monitorFallback");
+
+      int v = Math.max(5, Math.min(600, seconds));
+      monitorFallback.put("isonPollIntervalSeconds", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist monitor fallback ISON interval setting to '{}'", file, e);
     }
   }
 

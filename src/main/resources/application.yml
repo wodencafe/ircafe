@@ -105,6 +105,11 @@ ircafe:
       notifySuppressWhenTargetActive: true
       # Linux only: prefer D-Bus notifications with click actions (falls back to notify-send). Default: true.
       linuxDbusActionsEnabled: true
+      # Desktop notification backend mode. Valid values:
+      # - auto (recommended): native OS backend first, then two-slices fallback
+      # - native-only: native OS backend only
+      # - two-slices-only: skip native backends and use two-slices directly
+      notificationBackend: auto
 
       # Play a sound alongside desktop notifications. Default: true.
       notificationSoundsEnabled: true

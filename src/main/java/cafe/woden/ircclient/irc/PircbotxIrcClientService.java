@@ -791,7 +791,9 @@ public class PircbotxIrcClientService implements IrcClientService {
   public boolean isMonitorAvailable(String serverId) {
     try {
       PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.monitorSupported.get();
+      return c != null
+          && c.botRef.get() != null
+          && (c.monitorSupported.get() || c.monitorCapAcked.get());
     } catch (Exception e) {
       return false;
     }

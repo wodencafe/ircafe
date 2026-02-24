@@ -140,6 +140,8 @@ final class PircbotxConnectionState {
   final AtomicBoolean typingClientTagAllowed = new AtomicBoolean(true);
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean monitorCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean extendedMonitorCapAcked = new AtomicBoolean(false);
 
   // soju bouncer network discovery (cap: soju.im/bouncer-networks)
   final AtomicBoolean sojuBouncerNetworksCapAcked = new AtomicBoolean(false);
@@ -208,6 +210,8 @@ final class PircbotxConnectionState {
     typingClientTagAllowed.set(true);
     typingCapAcked.set(false);
     readMarkerCapAcked.set(false);
+    monitorCapAcked.set(false);
+    extendedMonitorCapAcked.set(false);
     sojuBouncerNetworksCapAcked.set(false);
     serverTimeCapAcked.set(false);
     standardRepliesCapAcked.set(false);

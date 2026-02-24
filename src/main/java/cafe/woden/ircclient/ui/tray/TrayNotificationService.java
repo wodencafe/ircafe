@@ -6,11 +6,15 @@ import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.StatusBar;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
+import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import com.sshtools.twoslices.Toast;
+import com.sshtools.twoslices.ToastType;
+import com.sshtools.twoslices.ToasterFactory;
+import com.sshtools.twoslices.ToasterSettings;
 import dorkbox.notify.Notify;
 import dorkbox.notify.Position;
 import dorkbox.notify.Theme;
@@ -29,6 +33,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.net.URL;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import jakarta.annotation.PreDestroy;
@@ -60,6 +66,8 @@ public class TrayNotificationService {
   private static final String MAC_BUNDLE_ID = "cafe.woden.ircafe";
   private static final String MAC_TERMINAL_NOTIFIER_RELATIVE =
       "terminal-notifier.app/Contents/MacOS/terminal-notifier";
+  private static final int TOAST_TIMEOUT_SECONDS = 5;
+  private static final Duration TWO_SLICES_FAILURE_COOLDOWN = Duration.ofSeconds(30);
 
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<TrayService> trayServiceProvider;
@@ -72,6 +80,10 @@ public class TrayNotificationService {
   private final FlowableProcessor<NotificationRequest> requests;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final Map<String, Long> lastContentAtMs = new ConcurrentHashMap<>();
+  private final AtomicLong twoSlicesDisabledUntilMs = new AtomicLong(0L);
+  private final Object twoSlicesInitLock = new Object();
+  private volatile boolean twoSlicesInitialized;
+  private volatile URL twoSlicesIconUrl;
 
   public TrayNotificationService(
       UiSettingsBus settingsBus,
@@ -421,16 +433,53 @@ public class TrayNotificationService {
 
       if (!req.showToast()) return;
 
-      if (tryWindowsToastPopup(req.title(), req.body(), req.onClick())) return;
-      if (tryLinuxNotifySend(req.title(), req.body(), req.onClick())) return;
-      if (tryMacOsascript(req.title(), req.body(), req.targetKey())) return;
-      if (tryTwoSlicesFallback(req.title(), req.body())) return;
+      NotificationBackendMode mode = resolveNotificationBackendMode();
+      switch (mode) {
+        case NATIVE_ONLY -> {
+          if (tryNativeBackends(req.title(), req.body(), req.targetKey(), req.onClick())) return;
+        }
+        case TWO_SLICES_ONLY -> {
+          if (tryTwoSlicesFallback(req.title(), req.body(), req.onClick())) return;
+        }
+        case AUTO -> {
+          if (tryNativeBackends(req.title(), req.body(), req.targetKey(), req.onClick())) return;
+          if (tryTwoSlicesFallback(req.title(), req.body(), req.onClick())) return;
+        }
+      }
 
       // Last-resort fallback: don't crash the app because a desktop notification couldn't be shown.
+      log.debug("[ircafe] tray notify backend={} could not deliver; falling back to beep", mode.token());
       Toolkit.getDefaultToolkit().beep();
     } catch (Exception e) {
       log.debug("[ircafe] tray notify failed", e);
     }
+  }
+
+  private NotificationBackendMode resolveNotificationBackendMode() {
+    try {
+      UiSettings s = settingsBus != null ? settingsBus.get() : null;
+      if (s != null && s.trayNotificationBackendMode() != null) {
+        return s.trayNotificationBackendMode();
+      }
+    } catch (Exception ignored) {
+    }
+    return NotificationBackendMode.AUTO;
+  }
+
+  private boolean tryNativeBackends(String title, String body, String targetKey, Runnable onClick) {
+    if (tryWindowsToastPopup(title, body, onClick)) {
+      log.debug("[ircafe] tray notify delivered via dorkbox popup backend");
+      return true;
+    }
+    if (tryLinuxNotifySend(title, body, onClick)) {
+      log.debug("[ircafe] tray notify delivered via linux backend");
+      return true;
+    }
+    if (tryMacOsascript(title, body, targetKey)) {
+      log.debug("[ircafe] tray notify delivered via macOS backend");
+      return true;
+    }
+    return false;
   }
 
   private void enqueueStatusBarNotice(NotificationRequest req) {
@@ -592,7 +641,8 @@ public class TrayNotificationService {
         if (backend != null) {
           GnomeDbusNotificationBackend.ProbeResult pr = backend.probe();
           if (pr != null && pr.sessionBusReachable() && pr.actionsSupported()) {
-            GnomeDbusNotificationBackend.NotifyResult nr = backend.notifyWithDefaultAction(title, body, 5_000, onClick);
+            GnomeDbusNotificationBackend.NotifyResult nr =
+                backend.notifyWithDefaultAction(title, body, TOAST_TIMEOUT_SECONDS * 1000, onClick);
             if (nr != null && nr.sent()) {
               log.debug("[ircafe] Sent notification via DBus (id={})", nr.id());
               return true;
@@ -608,7 +658,7 @@ public class TrayNotificationService {
     ProcessBuilder pb = new ProcessBuilder(
         "notify-send",
         "--app-name=IRCafe",
-        "--expire-time=5000",
+        "--expire-time=" + (TOAST_TIMEOUT_SECONDS * 1000),
         title,
         body
     );
@@ -684,14 +734,59 @@ public class TrayNotificationService {
     }
   }
 
-  private static boolean tryTwoSlicesFallback(String title, String body) {
+  private void initializeTwoSlicesSettings() {
+    if (twoSlicesInitialized) return;
+
+    synchronized (twoSlicesInitLock) {
+      if (twoSlicesInitialized) return;
+
+      ToasterSettings settings = new ToasterSettings();
+      settings.setAppName("IRCafe");
+      settings.setTimeout(TOAST_TIMEOUT_SECONDS);
+
+      URL iconUrl = TrayNotificationService.class.getResource("/icons/ircafe_512.png");
+      if (iconUrl != null) {
+        settings.setDefaultImage(iconUrl);
+      }
+      twoSlicesIconUrl = iconUrl;
+
+      ToasterFactory.setSettings(settings);
+      twoSlicesInitialized = true;
+    }
+  }
+
+  private boolean tryTwoSlicesFallback(String title, String body, Runnable onClick) {
+    long now = System.currentTimeMillis();
+    long disabledUntil = twoSlicesDisabledUntilMs.get();
+    if (disabledUntil > now) {
+      return false;
+    }
+
     try {
+      initializeTwoSlicesSettings();
       var builder = Toast.builder();
+      builder.type(ToastType.INFO);
+      builder.timeout(TOAST_TIMEOUT_SECONDS);
+      URL icon = twoSlicesIconUrl;
+      if (icon != null) {
+        builder.icon(icon);
+      }
+      if (onClick != null) {
+        builder.defaultAction(() -> {
+          try {
+            onClick.run();
+          } catch (Throwable ignored) {
+          }
+        });
+      }
       builder.title(sanitizeDesktopText(title));
       builder.content(sanitizeDesktopText(body));
       builder.toast();
+      log.debug("[ircafe] tray notify delivered via two-slices fallback");
       return true;
-    } catch (Throwable ignored) {
+    } catch (Throwable t) {
+      twoSlicesDisabledUntilMs.set(System.currentTimeMillis() + TWO_SLICES_FAILURE_COOLDOWN.toMillis());
+      log.debug("[ircafe] two-slices notify backend failed; suppressing for {} ms", TWO_SLICES_FAILURE_COOLDOWN.toMillis(), t);
       return false;
     }
   }

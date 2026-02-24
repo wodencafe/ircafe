@@ -30,6 +30,7 @@ public record UiSettings(
     boolean trayNotifySuppressWhenTargetActive,
 
     boolean trayLinuxDbusActionsEnabled,
+    NotificationBackendMode trayNotificationBackendMode,
 
     boolean imageEmbedsEnabled,
     boolean imageEmbedsCollapsedByDefault,
@@ -104,6 +105,8 @@ public record UiSettings(
 
     int userInfoEnrichmentPeriodicRefreshNicksPerTick,
 
+    int monitorIsonFallbackPollIntervalSeconds,
+
     int notificationRuleCooldownSeconds,
 
     List<NotificationRule> notificationRules
@@ -131,6 +134,7 @@ public record UiSettings(
 
       trayLinuxDbusActionsEnabled = false;
     }
+    if (trayNotificationBackendMode == null) trayNotificationBackendMode = NotificationBackendMode.AUTO;
 
     if (imageEmbedsMaxWidthPx < 0) imageEmbedsMaxWidthPx = 0;
     if (imageEmbedsMaxHeightPx < 0) imageEmbedsMaxHeightPx = 0;
@@ -166,6 +170,10 @@ public record UiSettings(
     if (userInfoEnrichmentPeriodicRefreshIntervalSeconds <= 0) userInfoEnrichmentPeriodicRefreshIntervalSeconds = 300;
     if (userInfoEnrichmentPeriodicRefreshNicksPerTick <= 0) userInfoEnrichmentPeriodicRefreshNicksPerTick = 2;
     if (userInfoEnrichmentPeriodicRefreshNicksPerTick > 10) userInfoEnrichmentPeriodicRefreshNicksPerTick = 10;
+
+    if (monitorIsonFallbackPollIntervalSeconds <= 0) monitorIsonFallbackPollIntervalSeconds = 30;
+    if (monitorIsonFallbackPollIntervalSeconds < 5) monitorIsonFallbackPollIntervalSeconds = 5;
+    if (monitorIsonFallbackPollIntervalSeconds > 600) monitorIsonFallbackPollIntervalSeconds = 600;
 
     if (notificationRuleCooldownSeconds < 0) notificationRuleCooldownSeconds = 15;
     if (notificationRuleCooldownSeconds > 3600) notificationRuleCooldownSeconds = 3600;
@@ -230,6 +238,7 @@ public record UiSettings(
         true, true, false,
         true, false, true,
         true,
+        NotificationBackendMode.AUTO,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -244,6 +253,7 @@ public record UiSettings(
         false, 15, 3, 60, 5,
         false, 45, 120,
         false, 300, 2,
+        30,
         15,
         List.of());
 }
@@ -282,6 +292,7 @@ public record UiSettings(
     return new UiSettings(nextTheme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -298,6 +309,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -306,6 +318,7 @@ public record UiSettings(
     return new UiSettings(theme, family, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -322,6 +335,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -330,6 +344,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, size, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -346,6 +361,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -354,6 +370,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         enabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -370,6 +387,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -378,6 +396,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, collapsed, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -394,6 +413,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -402,6 +422,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, Math.max(0, maxWidthPx), imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -418,6 +439,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -426,6 +448,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, Math.max(0, maxHeightPx), imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -442,6 +465,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -450,6 +474,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         enabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -466,6 +491,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -474,6 +500,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, collapsed,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -490,6 +517,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -498,6 +526,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         enabled, ctcpRequestsInActiveTargetEnabled,
@@ -514,6 +543,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -522,6 +552,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -538,6 +569,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -546,6 +578,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -562,6 +595,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -570,6 +604,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -586,6 +621,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -594,6 +630,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -610,6 +647,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -618,6 +656,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -634,6 +673,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -642,6 +682,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, autoConnectOnStart,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -658,6 +699,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }
@@ -671,6 +713,7 @@ public record UiSettings(
     return new UiSettings(theme, chatFontFamily, chatFontSize, enabled,
         trayEnabled, trayCloseToTray, trayMinimizeToTray, trayStartMinimized,
         trayNotifyHighlights, trayNotifyPrivateMessages, trayNotifyConnectionState, trayNotifyOnlyWhenUnfocused, trayNotifyOnlyWhenMinimizedOrHidden, trayNotifySuppressWhenTargetActive, trayLinuxDbusActionsEnabled,
+        trayNotificationBackendMode,
         imageEmbedsEnabled, imageEmbedsCollapsedByDefault, imageEmbedsMaxWidthPx, imageEmbedsMaxHeightPx, imageEmbedsAnimateGifs,
         linkPreviewsEnabled, linkPreviewsCollapsedByDefault,
         presenceFoldsEnabled, ctcpRequestsInActiveTargetEnabled,
@@ -687,6 +730,7 @@ public record UiSettings(
         userInfoEnrichmentUserhostNickCooldownMinutes, userInfoEnrichmentUserhostMaxNicksPerCommand,
         userInfoEnrichmentWhoisFallbackEnabled, userInfoEnrichmentWhoisMinIntervalSeconds, userInfoEnrichmentWhoisNickCooldownMinutes,
         userInfoEnrichmentPeriodicRefreshEnabled, userInfoEnrichmentPeriodicRefreshIntervalSeconds, userInfoEnrichmentPeriodicRefreshNicksPerTick,
+        monitorIsonFallbackPollIntervalSeconds,
         notificationRuleCooldownSeconds,
         notificationRules);
   }

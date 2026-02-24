@@ -5,12 +5,12 @@ import cafe.woden.ircclient.irc.soju.SojuNetwork;
 import cafe.woden.ircclient.irc.znc.ZncNetwork;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -1861,6 +1861,8 @@ if (fromSelf) {
       boolean typingTagAllowed = conn.typingClientTagAllowed.get();
       boolean typing = messageTags && (typingTagAllowed || typingCap);
       boolean readMarker = conn.readMarkerCapAcked.get();
+      boolean monitorCap = conn.monitorCapAcked.get();
+      boolean extendedMonitorCap = conn.extendedMonitorCapAcked.get();
       boolean monitorSupported = conn.monitorSupported.get();
       long monitorMaxTargets = conn.monitorMaxTargets.get();
       log.info(
@@ -1869,7 +1871,8 @@ if (fromSelf) {
               + "multiline(final,max-lines)={} multiline(draft)={} multiline(draft,max-bytes)={} "
               + "multiline(draft,max-lines)={} "
               + "draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
-              + "message-tags={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} monitor={} monitor(max-targets)={} "
+              + "message-tags={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
+              + "monitor(isupport)={} monitor(cap)={} extended-monitor(cap)={} monitor(max-targets)={} "
               + "chathistory={} batch={} znc.in/playback={}",
           serverId,
           st,
@@ -1897,6 +1900,8 @@ if (fromSelf) {
           typingCap,
           readMarker,
           monitorSupported,
+          monitorCap,
+          extendedMonitorCap,
           monitorMaxTargets,
           ch,
           batch,
@@ -1943,14 +1948,20 @@ if (fromSelf) {
       Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(originalLine);
       if (at == null) at = Instant.now();
 
-      List<String> online = PircbotxMonitorParsers.parseRpl730MonitorOnlineNicks(raw);
+      List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> onlineEntries =
+          PircbotxMonitorParsers.parseRpl730MonitorOnlineEntries(raw);
+      List<String> online = monitorNickList(onlineEntries);
       if (!online.isEmpty()) {
+        emitMonitorHostmaskObservations(at, onlineEntries);
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.MonitorOnlineObserved(at, online)));
         return true;
       }
 
-      List<String> offline = PircbotxMonitorParsers.parseRpl731MonitorOfflineNicks(raw);
+      List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> offlineEntries =
+          PircbotxMonitorParsers.parseRpl731MonitorOfflineEntries(raw);
+      List<String> offline = monitorNickList(offlineEntries);
       if (!offline.isEmpty()) {
+        emitMonitorHostmaskObservations(at, offlineEntries);
         bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.MonitorOfflineObserved(at, offline)));
         return true;
       }
@@ -1976,6 +1987,32 @@ if (fromSelf) {
         return true;
       }
       return false;
+    }
+
+    private List<String> monitorNickList(List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> entries) {
+      if (entries == null || entries.isEmpty()) return List.of();
+      ArrayList<String> out = new ArrayList<>(entries.size());
+      for (PircbotxMonitorParsers.ParsedMonitorStatusEntry entry : entries) {
+        if (entry == null) continue;
+        String nick = Objects.toString(entry.nick(), "").trim();
+        if (!nick.isEmpty()) out.add(nick);
+      }
+      if (out.isEmpty()) return List.of();
+      return List.copyOf(out);
+    }
+
+    private void emitMonitorHostmaskObservations(
+        Instant at,
+        List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> entries) {
+      if (entries == null || entries.isEmpty()) return;
+      for (PircbotxMonitorParsers.ParsedMonitorStatusEntry entry : entries) {
+        if (entry == null) continue;
+        String nick = Objects.toString(entry.nick(), "").trim();
+        String hostmask = Objects.toString(entry.hostmask(), "").trim();
+        if (nick.isEmpty() || !PircbotxUtil.isUsefulHostmask(hostmask)) continue;
+        bus.onNext(new ServerIrcEvent(serverId,
+            new IrcEvent.UserHostmaskObserved(at, "", nick, hostmask)));
+      }
     }
 
 

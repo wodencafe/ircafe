@@ -18,6 +18,7 @@ import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -521,6 +522,20 @@ public class AppMenuBar extends JMenuBar {
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_LOG_VIEWER_NODES_VISIBLE, evt ->
         showLogViewerNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
+    JCheckBoxMenuItem showNotificationsNodes = new JCheckBoxMenuItem("Show Notifications Nodes");
+    showNotificationsNodes.setSelected(serverTree.isNotificationsNodesVisible());
+    showNotificationsNodes.addActionListener(e ->
+        serverTree.setNotificationsNodesVisible(showNotificationsNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_NOTIFICATIONS_NODES_VISIBLE, evt ->
+        showNotificationsNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    JCheckBoxMenuItem showMonitorNodes = new JCheckBoxMenuItem("Show Monitor Nodes");
+    showMonitorNodes.setSelected(serverTree.isMonitorNodesVisible());
+    showMonitorNodes.addActionListener(e ->
+        serverTree.setMonitorNodesVisible(showMonitorNodes.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_MONITOR_NODES_VISIBLE, evt ->
+        showMonitorNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
     JCheckBoxMenuItem showInterceptorsNodes = new JCheckBoxMenuItem("Show Interceptors Nodes");
     showInterceptorsNodes.setSelected(serverTree.isInterceptorsNodesVisible());
     showInterceptorsNodes.addActionListener(e ->
@@ -549,6 +564,8 @@ public class AppMenuBar extends JMenuBar {
     window.add(showChannelListNodes);
     window.add(showDccNodes);
     window.add(showLogViewerNodes);
+    window.add(showNotificationsNodes);
+    window.add(showMonitorNodes);
     window.add(showInterceptorsNodes);
     window.add(showApplicationRoot);
     window.addSeparator();
@@ -615,6 +632,30 @@ public class AppMenuBar extends JMenuBar {
     add(settings);
     add(window);
     add(help);
+
+    installMenuPopupThemeSync(file, servers, edit, insert, settings, window, help);
+  }
+
+  private static void installMenuPopupThemeSync(JMenu... menus) {
+    if (menus == null || menus.length == 0) return;
+    for (JMenu menu : menus) {
+      if (menu == null) continue;
+      menu.addMenuListener(new MenuListener() {
+        @Override
+        public void menuSelected(MenuEvent e) {
+          try {
+            PopupMenuThemeSupport.prepareForDisplay(menu.getPopupMenu());
+          } catch (Exception ignored) {
+          }
+        }
+
+        @Override
+        public void menuDeselected(MenuEvent e) {}
+
+        @Override
+        public void menuCanceled(MenuEvent e) {}
+      });
+    }
   }
 
   private void resetDockLayout() {

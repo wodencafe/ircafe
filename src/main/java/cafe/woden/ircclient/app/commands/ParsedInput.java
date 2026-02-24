@@ -273,11 +273,15 @@ public sealed interface ParsedInput permits
   record EditMessage(String messageId, String body) implements ParsedInput {}
 
   /**
-   * /redact <msgid>
+   * /redact <msgid> [reason]
    *
-   * <p>IRCv3 draft/message-redaction compose helper.
+   * <p>IRCv3 message-redaction compose helper.
    */
-  record RedactMessage(String messageId) implements ParsedInput {}
+  record RedactMessage(String messageId, String reason) implements ParsedInput {
+    public RedactMessage(String messageId) {
+      this(messageId, "");
+    }
+  }
 
   /** Local /filter ... command family. */
   record Filter(FilterCommand command) implements ParsedInput {}

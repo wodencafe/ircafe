@@ -578,6 +578,7 @@ public class PreferencesDialog {
     UserhostControls userhost = network.userhost;
     UserInfoEnrichmentControls enrichment = network.enrichment;
     HeartbeatControls heartbeat = network.heartbeat;
+    JSpinner monitorIsonPollIntervalSeconds = network.monitorIsonPollIntervalSeconds;
     JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates;
 
     JPanel networkPanel = network.networkPanel;
@@ -743,6 +744,10 @@ public class PreferencesDialog {
       boolean trayNotifySuppressWhenTargetActiveV = trayEnabledV && trayControls.notifySuppressWhenTargetActive.isSelected();
 
       boolean trayLinuxDbusActionsEnabledV = trayEnabledV && trayControls.linuxDbusActions.isSelected();
+      NotificationBackendMode trayNotificationBackendModeV =
+          trayControls.notificationBackend.getSelectedItem() instanceof NotificationBackendMode mode
+              ? mode
+              : NotificationBackendMode.AUTO;
 
       boolean trayNotificationSoundsEnabledV = trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
       BuiltInSound selectedSoundV = (BuiltInSound) trayControls.notificationSound.getSelectedItem();
@@ -873,6 +878,9 @@ public class PreferencesDialog {
       int uiePeriodicRefreshNicksPerTickV = ((Number) enrichment.periodicRefreshNicksPerTick.getValue()).intValue();
       boolean uieWhoisFallbackEnabledV = userInfoEnrichmentEnabledV && uieWhoisFallbackEnabledRawV;
       boolean uiePeriodicRefreshEnabledV = userInfoEnrichmentEnabledV && uiePeriodicRefreshEnabledRawV;
+      int monitorIsonPollIntervalSecondsV = ((Number) monitorIsonPollIntervalSeconds.getValue()).intValue();
+      if (monitorIsonPollIntervalSecondsV < 5) monitorIsonPollIntervalSecondsV = 5;
+      if (monitorIsonPollIntervalSecondsV > 600) monitorIsonPollIntervalSecondsV = 600;
 
       UiSettings prev = settingsBus.get();
       boolean outgoingColorEnabledV = outgoing.enabled.isSelected();
@@ -980,6 +988,7 @@ public class PreferencesDialog {
           trayNotifySuppressWhenTargetActiveV,
 
           trayLinuxDbusActionsEnabledV,
+          trayNotificationBackendModeV,
           imageEmbeds.enabled.isSelected(),
           imageEmbeds.collapsed.isSelected(),
           maxImageW,
@@ -1017,6 +1026,7 @@ public class PreferencesDialog {
           uiePeriodicRefreshEnabledV,
           uiePeriodicRefreshIntervalV,
           uiePeriodicRefreshNicksPerTickV,
+          monitorIsonPollIntervalSecondsV,
 
           notificationRuleCooldownSecondsV,
           notificationRulesV
@@ -1064,6 +1074,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(next.trayNotifyOnlyWhenMinimizedOrHidden());
       runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(next.trayNotifySuppressWhenTargetActive());
       runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
+      runtimeConfig.rememberTrayNotificationBackend(next.trayNotificationBackendMode().token());
 
       if (notificationSoundSettingsBus != null) {
         notificationSoundSettingsBus.set(new NotificationSoundSettings(
@@ -1177,6 +1188,7 @@ public class PreferencesDialog {
       runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(next.userInfoEnrichmentPeriodicRefreshEnabled());
       runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
       runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
+      runtimeConfig.rememberMonitorIsonPollIntervalSeconds(next.monitorIsonFallbackPollIntervalSeconds());
       runtimeConfig.rememberClientProxy(proxyCfg);
       NetProxyContext.configure(proxyCfg);
       runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
@@ -2417,6 +2429,12 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
             : "Click actions aren't available in this session (no D-Bus notification actions support detected).")
         : "Linux only.");
 
+    JComboBox<NotificationBackendMode> notificationBackend =
+        new JComboBox<>(NotificationBackendMode.values());
+    notificationBackend.setSelectedItem(current.trayNotificationBackendMode());
+    notificationBackend.setToolTipText(
+        "Select how desktop notifications are delivered: native backends, two-slices fallback, or two-slices only.");
+
     JButton testNotification = new JButton("Test notification");
     testNotification.setToolTipText("Send a test desktop notification (click to open IRCafe).\n" +
         "This does not require highlight/PM notifications to be enabled.");
@@ -2530,6 +2548,7 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       notifySuppressWhenTargetActive.setEnabled(en);
 
       linuxDbusActions.setEnabled(en && linux && linuxActionsSupported);
+      notificationBackend.setEnabled(en);
       testNotification.setEnabled(en);
 
       notificationSoundsEnabled.setEnabled(en);
@@ -2595,6 +2614,19 @@ notificationEvents.add(notifyHighlights, "growx");
 notificationEvents.add(notifyPrivateMessages, "growx");
 notificationEvents.add(notifyConnectionState, "growx");
 notificationsTab.add(notificationEvents, "growx, wmin 0, wrap");
+JPanel notificationBackendGroup = captionPanel(
+    "Delivery backend",
+    "insets 0, fillx, wrap 2",
+    "[right]8[grow,fill]",
+    "[]");
+notificationBackendGroup.add(new JLabel("Mode:"));
+notificationBackendGroup.add(notificationBackend, "w 260!, wrap");
+notificationBackendGroup.add(
+    helpText(
+        "Auto tries native OS notifications first and falls back to two-slices.\n"
+            + "Native only disables fallback. Two-slices only bypasses OS-native backends."),
+    "span 2, growx");
+notificationsTab.add(notificationBackendGroup, "growx, wmin 0, wrap");
 JPanel notificationVisibility = captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
 notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
 notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
@@ -2668,11 +2700,11 @@ subTabs.addTab("Linux / Advanced", padSubTab(linuxTab));
 
 JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
 panel.setOpaque(false);
-panel.add(subTabs, "growx, wmin 0");
+    panel.add(subTabs, "growx, wmin 0");
     return new TrayControls(enabled, closeToTray, minimizeToTray, startMinimized,
         notifyHighlights, notifyPrivateMessages, notifyConnectionState,
         notifyOnlyWhenUnfocused, notifyOnlyWhenMinimizedOrHidden, notifySuppressWhenTargetActive,
-        linuxDbusActions, testNotification,
+        linuxDbusActions, notificationBackend, testNotification,
         notificationSoundsEnabled, notificationSoundUseCustom, notificationSoundCustomPath, browseCustomSound, clearCustomSound,
         notificationSound, testSound,
         panel);
@@ -3479,6 +3511,14 @@ panel.add(subTabs, "growx, wmin 0");
     lookupPresetPanel.add(new JLabel("Rate limit preset:"));
     lookupPresetPanel.add(lookupPreset, "w 220!");
     lookupPresetPanel.add(lookupPresetHint, "span 2, growx, wmin 0, wrap");
+
+    JSpinner monitorIsonPollIntervalSeconds =
+        numberSpinner(current.monitorIsonFallbackPollIntervalSeconds(), 5, 600, 5, closeables);
+    monitorIsonPollIntervalSeconds.setToolTipText(
+        "Polling interval for ISON monitor fallback when IRC MONITOR is unavailable.");
+    lookupPresetPanel.add(new JLabel("MONITOR fallback poll (sec):"));
+    lookupPresetPanel.add(monitorIsonPollIntervalSeconds, "w 110!, wrap");
+
     JPanel hostmaskPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
     hostmaskPanel.setBorder(BorderFactory.createCompoundBorder(
         BorderFactory.createTitledBorder("Hostmask discovery"),
@@ -3882,7 +3922,15 @@ panel.add(subTabs, "growx, wmin 0");
         enrichmentPeriodicRefreshNicksPerTick
     );
 
-    return new NetworkAdvancedControls(proxyControls, userhostControls, enrichmentControls, heartbeatControls, trustAllTlsCertificates, networkPanel, userLookupsPanel);
+    return new NetworkAdvancedControls(
+        proxyControls,
+        userhostControls,
+        enrichmentControls,
+        heartbeatControls,
+        monitorIsonPollIntervalSeconds,
+        trustAllTlsCertificates,
+        networkPanel,
+        userLookupsPanel);
   }
 
   private JPanel buildAppearancePanel(ThemeControls theme, AccentControls accent, ChatThemeControls chatTheme, FontControls fonts, TweakControls tweaks) {
@@ -8153,6 +8201,7 @@ panel.add(subTabs, "growx, wmin 0");
                               JCheckBox notifyOnlyWhenMinimizedOrHidden,
                               JCheckBox notifySuppressWhenTargetActive,
                               JCheckBox linuxDbusActions,
+                              JComboBox<NotificationBackendMode> notificationBackend,
                               JButton testNotification,
                               JCheckBox notificationSoundsEnabled,
                               JCheckBox notificationSoundUseCustom,
@@ -8268,6 +8317,7 @@ panel.add(subTabs, "growx, wmin 0");
                                          UserhostControls userhost,
                                          UserInfoEnrichmentControls enrichment,
                                          HeartbeatControls heartbeat,
+                                         JSpinner monitorIsonPollIntervalSeconds,
                                          JCheckBox trustAllTlsCertificates,
                                          JPanel networkPanel,
                                          JPanel userLookupsPanel) {

@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.ConnectionCoordinator;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -22,18 +23,21 @@ public class OutboundMonitorCommandService {
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final MonitorListService monitorListService;
+  private final MonitorIsonFallbackService monitorIsonFallbackService;
 
   public OutboundMonitorCommandService(
       IrcClientService irc,
       UiPort ui,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
-      MonitorListService monitorListService) {
+      MonitorListService monitorListService,
+      MonitorIsonFallbackService monitorIsonFallbackService) {
     this.irc = irc;
     this.ui = ui;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.monitorListService = monitorListService;
+    this.monitorIsonFallbackService = monitorIsonFallbackService;
   }
 
   public void handleMonitor(CompositeDisposable disposables, String args) {
@@ -73,7 +77,13 @@ public class OutboundMonitorCommandService {
     String op = opRaw.toLowerCase(Locale.ROOT);
     switch (op) {
       case "list", "l" -> handleList(disposables, sid, monitorTarget, status);
-      case "status", "s" -> sendMonitorRaw(disposables, sid, status, monitorTarget, "MONITOR S", true);
+      case "status", "s" -> {
+        if (monitorIsonFallbackService.isFallbackActive(sid)) {
+          requestFallbackRefresh(sid, status, true);
+        } else {
+          sendMonitorRaw(disposables, sid, status, monitorTarget, "MONITOR S", true);
+        }
+      }
       case "clear", "c" -> handleClear(disposables, sid, monitorTarget, status);
       case "help" -> appendUsage(monitorTarget);
       default -> {
@@ -98,6 +108,10 @@ public class OutboundMonitorCommandService {
           "(monitor)",
           "Monitored nicks (" + local.size() + "): " + String.join(", ", local));
     }
+    if (monitorIsonFallbackService.isFallbackActive(serverId)) {
+      requestFallbackRefresh(serverId, status, true);
+      return;
+    }
     sendMonitorRaw(disposables, serverId, status, monitorTarget, "MONITOR L", true);
   }
 
@@ -111,6 +125,10 @@ public class OutboundMonitorCommandService {
         monitorTarget,
         "(monitor)",
         removed <= 0 ? "Cleared monitor list (already empty)." : ("Cleared monitor list (" + removed + " removed)."));
+    if (monitorIsonFallbackService.isFallbackActive(serverId)) {
+      requestFallbackRefresh(serverId, status, false);
+      return;
+    }
     sendMonitorRaw(disposables, serverId, status, monitorTarget, "MONITOR C", false);
   }
 
@@ -149,6 +167,10 @@ public class OutboundMonitorCommandService {
 
     int chunkSize = irc.negotiatedMonitorLimit(serverId);
     if (chunkSize <= 0) chunkSize = DEFAULT_MONITOR_CHUNK;
+    if (monitorIsonFallbackService.isFallbackActive(serverId)) {
+      requestFallbackRefresh(serverId, status, false);
+      return;
+    }
     for (int i = 0; i < nicks.size(); i += chunkSize) {
       int end = Math.min(i + chunkSize, nicks.size());
       List<String> chunk = nicks.subList(i, end);
@@ -186,6 +208,18 @@ public class OutboundMonitorCommandService {
             .subscribe(
                 () -> {},
                 err -> ui.appendError(status, "(monitor-error)", String.valueOf(err))));
+  }
+
+  private void requestFallbackRefresh(String serverId, TargetRef status, boolean requireConnection) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!connectionCoordinator.isConnected(sid)) {
+      if (requireConnection) {
+        ui.appendStatus(status, "(conn)", "Not connected");
+      }
+      return;
+    }
+    monitorIsonFallbackService.requestImmediateRefresh(sid);
   }
 
   private void appendUsage(TargetRef out) {

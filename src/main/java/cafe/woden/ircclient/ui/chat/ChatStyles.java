@@ -91,9 +91,19 @@ public class ChatStyles {
 
     if (fg == null) fg = UIManager.getColor("Label.foreground");
     if (bg == null) bg = UIManager.getColor("Panel.background");
+    if (bg == null) bg = Color.WHITE;
+
+    boolean darkUi = isDarkUi(bg);
+    Color primaryFallback = darkUi ? new Color(0xE3E8EF) : new Color(0x1D232B);
+    fg = ensureReadableTextColor(fg, bg, darkUi, 4.5, primaryFallback);
+
+    Color dimFallback = mix(fg, bg, darkUi ? 0.62 : 0.70);
+    dim = ensureReadableTextColor(dim, bg, darkUi, 3.0, dimFallback);
 
     Color link = UIManager.getColor("Component.linkColor");
     if (link == null) link = UIManager.getColor("Label.foreground");
+    Color linkFallback = darkUi ? new Color(0x86B8FF) : new Color(0x0A4FB3);
+    link = ensureReadableTextColor(link, bg, darkUi, 3.0, linkFallback);
 
     // Theme-aware warning/error colors. FlatLaf exposes various keys depending on component type
     // and whether we're using outline/border colors. Try several common ones before falling back.
@@ -111,7 +121,6 @@ public class ChatStyles {
         UIManager.getColor("Component.error.focusedBorderColor"),
         UIManager.getColor("Component.error.focusColor")
     );
-    boolean darkUi = isDarkUi(bg);
     if (warn == null) warn = darkUi ? new Color(0xD4AE66) : new Color(0xF0B000);
     if (err == null) err = darkUi ? new Color(0xC96E6E) : new Color(0xD05050);
     if (darkUi) {
@@ -178,6 +187,9 @@ public class ChatStyles {
       // Mention highlight: a subtle background derived from the preset.
       mentionBg = mix(mentionBase, bg, mentionWeight);
     }
+
+    tsFg = ensureReadableTextColor(tsFg, bg, darkUi, 2.6, dim);
+    sysFg = ensureReadableTextColor(sysFg, bg, darkUi, 2.6, dim);
 
     Color mentionFg = fg;
     if (mentionFg != null && mentionBg != null) {
@@ -338,6 +350,40 @@ public class ChatStyles {
   private static boolean isDarkUi(Color bg) {
     if (bg == null) return false;
     return relativeLuminance(bg) < 0.45;
+  }
+
+  private static Color ensureReadableTextColor(
+      Color candidate,
+      Color bg,
+      boolean darkUi,
+      double minContrast,
+      Color fallback) {
+    if (bg == null) return candidate != null ? candidate : fallback;
+
+    Color base = candidate != null ? candidate : fallback;
+    if (base == null) base = darkUi ? Color.WHITE : Color.BLACK;
+
+    if (isReadableDirection(base, bg, darkUi) && contrastRatio(base, bg) >= minContrast) {
+      return base;
+    }
+
+    Color target = darkUi ? Color.WHITE : Color.BLACK;
+    for (int i = 1; i <= 24; i++) {
+      double weight = i / 24.0;
+      Color adjusted = mix(target, base, weight);
+      if (isReadableDirection(adjusted, bg, darkUi) && contrastRatio(adjusted, bg) >= minContrast) {
+        return adjusted;
+      }
+    }
+
+    return target;
+  }
+
+  private static boolean isReadableDirection(Color fg, Color bg, boolean darkUi) {
+    if (fg == null || bg == null) return true;
+    double fgLum = relativeLuminance(fg);
+    double bgLum = relativeLuminance(bg);
+    return darkUi ? fgLum > bgLum : fgLum < bgLum;
   }
 
   private static Color toneDownHighlightColor(Color color, Color bg, double keepColor, float minSaturation) {

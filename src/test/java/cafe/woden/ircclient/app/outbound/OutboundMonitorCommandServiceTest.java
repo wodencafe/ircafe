@@ -10,6 +10,7 @@ import cafe.woden.ircclient.app.ConnectionCoordinator;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
@@ -25,6 +26,7 @@ class OutboundMonitorCommandServiceTest {
   private final TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
   private final ConnectionCoordinator connectionCoordinator = Mockito.mock(ConnectionCoordinator.class);
   private final MonitorListService monitorListService = Mockito.mock(MonitorListService.class);
+  private final MonitorIsonFallbackService monitorIsonFallbackService = Mockito.mock(MonitorIsonFallbackService.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundMonitorCommandService service =
@@ -33,7 +35,8 @@ class OutboundMonitorCommandServiceTest {
           ui,
           targetCoordinator,
           connectionCoordinator,
-          monitorListService);
+          monitorListService,
+          monitorIsonFallbackService);
 
   @AfterEach
   void tearDown() {
@@ -67,5 +70,18 @@ class OutboundMonitorCommandServiceTest {
 
     verify(ui).appendStatus(monitor, "(monitor)", "Monitored nicks (1): alice");
     verify(irc, never()).sendRaw(any(), any());
+  }
+
+  @Test
+  void statusUsesIsonFallbackWhenMonitorUnavailable() {
+    TargetRef active = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(monitorIsonFallbackService.isFallbackActive("libera")).thenReturn(true);
+
+    service.handleMonitor(disposables, "status");
+
+    verify(monitorIsonFallbackService).requestImmediateRefresh("libera");
+    verify(irc, never()).sendRaw(eq("libera"), any());
   }
 }

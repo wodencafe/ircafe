@@ -111,6 +111,18 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       return;
     }
 
+    if ("REDACT".equalsIgnoreCase(command)) {
+      String redactTarget = firstParam(parsedLine);
+      String redactMsgId = secondParam(parsedLine);
+      if (!redactMsgId.isBlank()) {
+        String from = sourceNick.isBlank() ? "server" : sourceNick;
+        String convTarget = resolveConversationTarget(redactTarget, sourceNick);
+        sink.accept(new ServerIrcEvent(serverId,
+            new IrcEvent.MessageRedactionObserved(now, from, convTarget, redactMsgId)));
+      }
+      return;
+    }
+
     if (source == null) return;
     String nick = sourceNick;
     if (nick.isEmpty()) return;
@@ -654,6 +666,18 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         boolean prev = conn.readMarkerCapAcked.getAndSet(enabled);
         if (prev != enabled) {
           log.info("[{}] CAP {}: read-marker {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "monitor" -> {
+        boolean prev = conn.monitorCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: monitor {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+        }
+      }
+      case "extended-monitor", "draft/extended-monitor" -> {
+        boolean prev = conn.extendedMonitorCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info("[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       default -> {

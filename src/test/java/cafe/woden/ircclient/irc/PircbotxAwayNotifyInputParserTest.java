@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -59,6 +60,72 @@ class PircbotxAwayNotifyInputParserTest {
         ImmutableMap.of());
 
     assertTrue(conn.standardRepliesCapAcked.get());
+  }
+
+  @Test
+  void capAckTracksMonitorAndExtendedMonitorState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :monitor extended-monitor",
+        List.of("me", "ACK", ":monitor extended-monitor"),
+        ImmutableMap.of());
+
+    assertTrue(conn.monitorCapAcked.get());
+    assertTrue(conn.extendedMonitorCapAcked.get());
+  }
+
+  @Test
+  void capDelClearsMonitorAndExtendedMonitorState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :monitor extended-monitor",
+        List.of("me", "ACK", ":monitor extended-monitor"),
+        ImmutableMap.of());
+    assertTrue(conn.monitorCapAcked.get());
+    assertTrue(conn.extendedMonitorCapAcked.get());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me DEL :monitor extended-monitor",
+        List.of("me", "DEL", ":monitor extended-monitor"),
+        ImmutableMap.of());
+
+    assertFalse(conn.monitorCapAcked.get());
+    assertFalse(conn.extendedMonitorCapAcked.get());
+  }
+
+  @Test
+  void capAckTracksDraftExtendedMonitorAlias() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :draft/extended-monitor",
+        List.of("me", "ACK", ":draft/extended-monitor"),
+        ImmutableMap.of());
+
+    assertTrue(conn.extendedMonitorCapAcked.get());
   }
 
   @Test
@@ -392,6 +459,32 @@ class PircbotxAwayNotifyInputParserTest {
                         && "#ircafe".equals(r.target())
                         && ":+1".equals(r.reaction())
                         && "abc123".equals(r.messageId())));
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.MessageRedactionObserved r
+                        && "bob".equals(r.from())
+                        && "#ircafe".equals(r.target())
+                        && "abc123".equals(r.messageId())));
+  }
+
+  @Test
+  void redactCommandEmitsMessageRedactionObserved() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "#ircafe",
+        source("bob"),
+        "REDACT",
+        ":bob!u@h REDACT #ircafe abc123 :cleanup",
+        List.of("#ircafe", "abc123", ":cleanup"),
+        ImmutableMap.of());
+
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)

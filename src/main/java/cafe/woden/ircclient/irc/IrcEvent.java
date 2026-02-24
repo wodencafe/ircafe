@@ -521,7 +521,7 @@ record UserAwayStateObserved(Instant at, String nick, AwayState awayState, Strin
   /** Observed IRCv3 draft/react tag. */
   record MessageReactObserved(Instant at, String from, String target, String reaction, String messageId) implements IrcEvent {}
 
-  /** Observed IRCv3 message redaction tag (for example draft/delete). */
+  /** Observed IRCv3 message redaction signal (for example draft/delete tags or REDACT command). */
   record MessageRedactionObserved(Instant at, String from, String target, String messageId) implements IrcEvent {}
 
   /** Observed CAP change line (ACK/NEW/DEL) for a capability. */

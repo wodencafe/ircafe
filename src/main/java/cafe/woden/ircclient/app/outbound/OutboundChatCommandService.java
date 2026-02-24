@@ -998,7 +998,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     sendEditMessage(disposables, at, msgId, text);
   }
 
-  public void handleRedactMessage(CompositeDisposable disposables, String messageId) {
+  public void handleRedactMessage(CompositeDisposable disposables, String messageId, String reason) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(redact)", "Select a server first.");
@@ -1006,8 +1006,14 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     String msgId = normalizeIrcv3Token(messageId);
+    String redactReason = Objects.toString(reason, "").trim();
     if (msgId.isEmpty()) {
-      ui.appendStatus(at, "(redact)", "Usage: /redact <msgid>");
+      ui.appendStatus(at, "(redact)", "Usage: /redact <msgid> [reason]");
+      return;
+    }
+
+    if (containsCrlf(redactReason)) {
+      ui.appendStatus(at, "(redact)", "Reason must be a single line.");
       return;
     }
 
@@ -1020,7 +1026,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(redact)",
-          "draft/message-redaction is not negotiated on this server.");
+          "message-redaction is not negotiated on this server.");
       return;
     }
 
@@ -1029,7 +1035,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    sendRedactionTag(disposables, at, msgId);
+    sendRedactionTag(disposables, at, msgId, redactReason);
   }
 
   private void sendRawFromStatus(CompositeDisposable disposables, String serverId, String rawLine) {
@@ -1506,7 +1512,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
   private void sendRedactionTag(
       CompositeDisposable disposables,
       TargetRef target,
-      String targetMessageId
+      String targetMessageId,
+      String reason
   ) {
     if (target == null) return;
     String msgId = normalizeIrcv3Token(targetMessageId);
@@ -1521,8 +1528,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    String rawLine =
-        "@+draft/delete=" + escapeIrcv3TagValue(msgId) + " TAGMSG " + target.target();
+    String why = Objects.toString(reason, "").trim();
+    String rawLine = why.isEmpty()
+        ? ("REDACT " + target.target() + " " + msgId)
+        : ("REDACT " + target.target() + " " + msgId + " :" + why);
     PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
 
     String me = irc.currentNick(target.serverId()).orElse("me");
@@ -1902,7 +1911,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(
         out,
         "(help)",
-        "/redact <msgid> (alias: /delete)" + availabilitySuffix(
+        "/redact <msgid> [reason] (alias: /delete)" + availabilitySuffix(
             available,
             "requires negotiated draft/message-redaction or message-redaction"));
   }

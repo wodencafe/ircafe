@@ -12,6 +12,13 @@ final class PircbotxMonitorParsers {
 
   static record ParsedMonitorSupport(boolean supported, int limit) {}
 
+  static record ParsedMonitorStatusEntry(String nick, String hostmask) {
+    ParsedMonitorStatusEntry {
+      nick = Objects.toString(nick, "").trim();
+      hostmask = Objects.toString(hostmask, "").trim();
+    }
+  }
+
   static record ParsedMonitorListFull(int limit, List<String> nicks, String message) {
     ParsedMonitorListFull {
       if (limit < 0) limit = 0;
@@ -20,12 +27,20 @@ final class PircbotxMonitorParsers {
     }
   }
 
+  static List<ParsedMonitorStatusEntry> parseRpl730MonitorOnlineEntries(String rawLine) {
+    return parseStatusEntriesForNumeric(rawLine, "730");
+  }
+
   static List<String> parseRpl730MonitorOnlineNicks(String rawLine) {
-    return parseNickListForNumeric(rawLine, "730");
+    return statusEntriesToNickList(parseRpl730MonitorOnlineEntries(rawLine));
+  }
+
+  static List<ParsedMonitorStatusEntry> parseRpl731MonitorOfflineEntries(String rawLine) {
+    return parseStatusEntriesForNumeric(rawLine, "731");
   }
 
   static List<String> parseRpl731MonitorOfflineNicks(String rawLine) {
-    return parseNickListForNumeric(rawLine, "731");
+    return statusEntriesToNickList(parseRpl731MonitorOfflineEntries(rawLine));
   }
 
   static List<String> parseRpl732MonitorListNicks(String rawLine) {
@@ -127,6 +142,66 @@ final class PircbotxMonitorParsers {
       nicksToken = parsed.params().get(parsed.params().size() - 1);
     }
     return parseNickList(nicksToken);
+  }
+
+  private static List<ParsedMonitorStatusEntry> parseStatusEntriesForNumeric(String rawLine, String expectedCode) {
+    ParsedLine parsed = parseLine(rawLine);
+    if (parsed == null || !expectedCode.equals(parsed.command())) return List.of();
+
+    String token = parsed.trailing();
+    if (token.isEmpty() && !parsed.params().isEmpty()) {
+      token = parsed.params().get(parsed.params().size() - 1);
+    }
+    return parseStatusEntries(token);
+  }
+
+  private static List<ParsedMonitorStatusEntry> parseStatusEntries(String rawEntries) {
+    String raw = Objects.toString(rawEntries, "").trim();
+    if (raw.isEmpty()) return List.of();
+
+    LinkedHashMap<String, ParsedMonitorStatusEntry> out = new LinkedHashMap<>();
+    for (String token : raw.split(",")) {
+      ParsedMonitorStatusEntry parsed = parseStatusEntry(token);
+      if (parsed == null || parsed.nick().isEmpty()) continue;
+      String key = parsed.nick().toLowerCase(Locale.ROOT);
+      ParsedMonitorStatusEntry prev = out.get(key);
+      if (prev == null) {
+        out.put(key, parsed);
+      } else if (prev.hostmask().isEmpty() && !parsed.hostmask().isEmpty()) {
+        out.put(key, parsed);
+      }
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out.values());
+  }
+
+  private static ParsedMonitorStatusEntry parseStatusEntry(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (value.startsWith(":")) value = value.substring(1).trim();
+    if (value.isEmpty()) return null;
+
+    String nick = value;
+    String hostmask = "";
+    int bang = value.indexOf('!');
+    int at = value.indexOf('@', bang + 1);
+    if (bang > 0 && at > bang + 1 && at < value.length() - 1) {
+      nick = value.substring(0, bang).trim();
+      hostmask = value;
+    }
+    if (nick.isEmpty()) return null;
+    return new ParsedMonitorStatusEntry(nick, hostmask);
+  }
+
+  private static List<String> statusEntriesToNickList(List<ParsedMonitorStatusEntry> entries) {
+    if (entries == null || entries.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(entries.size());
+    for (ParsedMonitorStatusEntry entry : entries) {
+      if (entry == null) continue;
+      String nick = Objects.toString(entry.nick(), "").trim();
+      if (!nick.isEmpty()) out.add(nick);
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
   }
 
   private static List<String> parseNickList(String rawNicks) {

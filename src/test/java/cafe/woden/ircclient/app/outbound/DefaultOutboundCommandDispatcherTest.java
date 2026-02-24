@@ -190,8 +190,8 @@ class DefaultOutboundCommandDispatcherTest {
     dispatcher.dispatch(disposables, new ParsedInput.EditMessage("abc123", "new body"));
     verify(chat).handleEditMessage(disposables, "abc123", "new body");
 
-    dispatcher.dispatch(disposables, new ParsedInput.RedactMessage("abc123"));
-    verify(chat).handleRedactMessage(disposables, "abc123");
+    dispatcher.dispatch(disposables, new ParsedInput.RedactMessage("abc123", "cleanup"));
+    verify(chat).handleRedactMessage(disposables, "abc123", "cleanup");
   }
 
   @Test

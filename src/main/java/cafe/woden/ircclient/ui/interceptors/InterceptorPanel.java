@@ -12,6 +12,7 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
+import java.awt.Color;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -58,6 +59,7 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import net.miginfocom.swing.MigLayout;
@@ -160,6 +162,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     buildHeader();
     buildBody();
+    applyDerivedFonts();
     installListeners();
     createInterceptorButton.setVisible(false);
     setControlsEnabled(false);
@@ -181,6 +184,13 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
                 }));
   }
 
+  @Override
+  public void updateUI() {
+    super.updateUI();
+    if (title == null || emptyStateTitle == null) return;
+    SwingUtilities.invokeLater(this::applyDerivedFonts);
+  }
+
   public void setInterceptorTarget(String serverId, String interceptorId) {
     this.serverId = Objects.toString(serverId, "").trim();
     this.interceptorId = Objects.toString(interceptorId, "").trim();
@@ -199,11 +209,18 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private void buildHeader() {
-    title.setFont(title.getFont().deriveFont(Font.BOLD));
     JPanel header = new JPanel(new MigLayout("insets 8 10 4 10,fillx,wrap 1", "[grow,fill]", "[]2[]"));
     header.add(title, "growx");
     header.add(subtitle, "growx");
     add(header, BorderLayout.NORTH);
+  }
+
+  private void applyDerivedFonts() {
+    Font base = UIManager.getFont("Label.font");
+    if (base == null) base = title.getFont();
+    if (base == null) return;
+    title.setFont(base.deriveFont(Font.BOLD));
+    emptyStateTitle.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 2f));
   }
 
   private void buildBody() {
@@ -220,25 +237,10 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         FlatClientProperties.PLACEHOLDER_TEXT,
         "e.g. #offtopic, #bots");
 
-    includeMode.setRenderer(modeComboRenderer());
-    excludeMode.setRenderer(modeComboRenderer());
-
-    actionSoundId.setRenderer(
-        new DefaultListCellRenderer() {
-          @Override
-          public java.awt.Component getListCellRendererComponent(
-              javax.swing.JList<?> list,
-              Object value,
-              int index,
-              boolean isSelected,
-              boolean cellHasFocus) {
-            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            if (value instanceof BuiltInSound sound) {
-              setText(sound.displayNameForUi());
-            }
-            return this;
-          }
-        });
+    serverScope.setRenderer(plainComboRenderer(serverScope));
+    includeMode.setRenderer(modeComboRenderer(includeMode));
+    excludeMode.setRenderer(modeComboRenderer(excludeMode));
+    actionSoundId.setRenderer(soundComboRenderer(actionSoundId));
 
     actionSoundCustomPath.setToolTipText("Custom sound path relative to runtime config directory.");
     actionSoundCustomPath.setEditable(false);
@@ -269,8 +271,6 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private void buildEmptyStatePanel() {
     emptyStatePanel.setOpaque(false);
 
-    emptyStateTitle.setFont(
-        emptyStateTitle.getFont().deriveFont(Font.BOLD, emptyStateTitle.getFont().getSize2D() + 2f));
     emptyStateTitle.setHorizontalAlignment(SwingConstants.CENTER);
 
     emptyStateBody.setHorizontalAlignment(SwingConstants.CENTER);
@@ -631,7 +631,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return rulesTable.convertRowIndexToModel(row);
   }
 
-  private DefaultListCellRenderer modeComboRenderer() {
+  private DefaultListCellRenderer modeComboRenderer(JComboBox<?> combo) {
     return new DefaultListCellRenderer() {
       @Override
       public java.awt.Component getListCellRendererComponent(
@@ -640,12 +640,25 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         if (value instanceof InterceptorRuleMode mode) {
           setText(modeLabel(mode));
         }
+        applyComboDisplayPalette(this, combo, index);
         return this;
       }
     };
   }
 
-  private DefaultListCellRenderer ruleDimensionModeComboRenderer() {
+  private DefaultListCellRenderer plainComboRenderer(JComboBox<?> combo) {
+    return new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(
+          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+        applyComboDisplayPalette(this, combo, index);
+        return this;
+      }
+    };
+  }
+
+  private DefaultListCellRenderer ruleDimensionModeComboRenderer(JComboBox<?> combo) {
     return new DefaultListCellRenderer() {
       @Override
       public java.awt.Component getListCellRendererComponent(
@@ -654,9 +667,52 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         if (value instanceof InterceptorRuleMode mode) {
           setText(mode == InterceptorRuleMode.ALL ? "Any" : modeLabel(mode));
         }
+        applyComboDisplayPalette(this, combo, index);
         return this;
       }
     };
+  }
+
+  private DefaultListCellRenderer soundComboRenderer(JComboBox<?> combo) {
+    return new DefaultListCellRenderer() {
+      @Override
+      public java.awt.Component getListCellRendererComponent(
+          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+        super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+        if (value instanceof BuiltInSound sound) {
+          setText(sound.displayNameForUi());
+        }
+        applyComboDisplayPalette(this, combo, index);
+        return this;
+      }
+    };
+  }
+
+  private static void applyComboDisplayPalette(
+      DefaultListCellRenderer renderer,
+      JComboBox<?> combo,
+      int index) {
+    if (renderer == null || combo == null) return;
+    renderer.setFont(combo.getFont());
+    if (index >= 0) return;
+
+    Color foreground = combo.isEnabled()
+        ? firstUiColor("ComboBox.foreground", "TextField.foreground", "Label.foreground")
+        : firstUiColor("ComboBox.disabledText", "Label.disabledForeground", "Label.foreground");
+    Color background = firstUiColor("ComboBox.background", "TextField.background", "Panel.background");
+    if (foreground != null) renderer.setForeground(foreground);
+    if (background != null) renderer.setBackground(background);
+  }
+
+  private static Color firstUiColor(String... keys) {
+    if (keys == null) return null;
+    for (String key : keys) {
+      String k = Objects.toString(key, "").trim();
+      if (k.isEmpty()) continue;
+      Color c = UIManager.getColor(k);
+      if (c != null) return c;
+    }
+    return null;
   }
 
   private static Runnable bindRuleDimensionModeFieldEnabled(
@@ -718,7 +774,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     LinkedHashMap<InterceptorEventType, JCheckBox> eventSelectors = buildRuleEventSelectors(base.eventTypesCsv());
 
     JComboBox<InterceptorRuleMode> messageMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
-    messageMode.setRenderer(ruleDimensionModeComboRenderer());
+    messageMode.setRenderer(ruleDimensionModeComboRenderer(messageMode));
     messageMode.setSelectedItem(base.messageMode());
     JTextField messagePattern = new JTextField(base.messagePattern());
     messagePattern.putClientProperty(
@@ -726,7 +782,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         "Message pattern");
 
     JComboBox<InterceptorRuleMode> nickMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
-    nickMode.setRenderer(ruleDimensionModeComboRenderer());
+    nickMode.setRenderer(ruleDimensionModeComboRenderer(nickMode));
     nickMode.setSelectedItem(base.nickMode());
     JTextField nickPattern = new JTextField(base.nickPattern());
     nickPattern.putClientProperty(
@@ -734,7 +790,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         "Nick pattern");
 
     JComboBox<InterceptorRuleMode> hostmaskMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
-    hostmaskMode.setRenderer(ruleDimensionModeComboRenderer());
+    hostmaskMode.setRenderer(ruleDimensionModeComboRenderer(hostmaskMode));
     hostmaskMode.setSelectedItem(base.hostmaskMode());
     JTextField hostmaskPattern = new JTextField(base.hostmaskPattern());
     hostmaskPattern.putClientProperty(
@@ -1196,12 +1252,21 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JTextArea hint = new JTextArea(2, 1);
     hint.setEditable(false);
     hint.setFocusable(false);
-    hint.setOpaque(false);
     hint.setLineWrap(true);
     hint.setWrapStyleWord(true);
     hint.setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
-    hint.setFont(new JLabel().getFont());
-    hint.setForeground(new JLabel().getForeground());
+    Font font = UIManager.getFont("Label.font");
+    if (font == null) font = new JLabel().getFont();
+    if (font != null) hint.setFont(font);
+    Color foreground = firstUiColor("Label.foreground", "TextArea.foreground");
+    if (foreground != null) hint.setForeground(foreground);
+    Color background = firstUiColor("Panel.background", "control");
+    if (background != null) {
+      hint.setOpaque(true);
+      hint.setBackground(background);
+    } else {
+      hint.setOpaque(false);
+    }
     hint.setText(Objects.toString(text, ""));
     return hint;
   }

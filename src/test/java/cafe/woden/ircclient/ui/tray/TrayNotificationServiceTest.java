@@ -9,6 +9,7 @@ import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.lang.reflect.Method;
@@ -114,6 +115,7 @@ class TrayNotificationServiceTest {
         false,
         suppressWhenTargetActive,
         true,
+        NotificationBackendMode.AUTO,
         false,
         false,
         0,
@@ -151,6 +153,7 @@ class TrayNotificationServiceTest {
         false,
         300,
         2,
+        30,
         15,
         List.of());
   }
