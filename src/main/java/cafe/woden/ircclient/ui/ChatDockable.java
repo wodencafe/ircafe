@@ -25,6 +25,7 @@ import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -117,6 +118,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private static final String CARD_MONITOR = "monitor";
   private static final String CARD_LOG_VIEWER = "log-viewer";
   private static final String CARD_INTERCEPTOR = "interceptor";
+  private static final String CARD_TERMINAL = "terminal";
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel = new ChannelListPanel();
@@ -125,6 +127,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final LogViewerPanel logViewerPanel;
   private final InterceptorStore interceptorStore;
   private final InterceptorPanel interceptorPanel;
+  private final TerminalDockable terminalPanel;
 
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private int lastTopicHeightPx = 58;
@@ -153,6 +156,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ChatLogViewerService chatLogViewerService,
       InterceptorStore interceptorStore,
       DccTransferStore dccTransferStore,
+      TerminalDockable terminalDockable,
       UiSettingsBus settingsBus,
       CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
@@ -171,6 +175,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.proxyResolver = proxyResolver;
     this.chatHistoryService = chatHistoryService;
     this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
+    this.terminalPanel = java.util.Objects.requireNonNull(terminalDockable, "terminalDockable");
 
     this.nickContextMenu =
         nickContextMenuFactory.create(
@@ -294,6 +299,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(monitorPanel, CARD_MONITOR);
     centerCards.add(logViewerPanel, CARD_LOG_VIEWER);
     centerCards.add(interceptorPanel, CARD_INTERCEPTOR);
+    centerCards.add(terminalPanel, CARD_TERMINAL);
     add(centerCards, BorderLayout.CENTER);
     showTranscriptCard();
     hideTopicPanel();
@@ -453,6 +459,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       updateTopicPanelForActiveTarget();
       return;
     }
+    if (target.isApplicationTerminal()) {
+      showTerminalCard();
+      // Terminal view does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
     if (target.isLogViewer()) {
       showLogViewerCard(target.serverId());
       // Log viewer does not accept input; clear any draft to avoid confusion.
@@ -543,6 +556,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       logViewerPanel.setServerId(serverId);
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_LOG_VIEWER);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showTerminalCard() {
+    try {
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_TERMINAL);
     } catch (Exception ignored) {
     }
   }
@@ -1312,6 +1333,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t.isApplicationUnhandledErrors()) return "Unhandled Errors";
     if (t.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (t.isApplicationJhiccup()) return "jHiccup";
+    if (t.isApplicationTerminal()) return "Terminal";
     if (t.isLogViewer()) return "Log Viewer";
     if (t.isInterceptor()) {
       String name = interceptorStore.interceptorName(t.serverId(), t.interceptorId());

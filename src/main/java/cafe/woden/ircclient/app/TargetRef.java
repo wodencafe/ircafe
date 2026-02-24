@@ -26,6 +26,7 @@ public final class TargetRef {
   public static final String APPLICATION_UNHANDLED_ERRORS_TARGET = "__app_unhandled_errors__";
   public static final String APPLICATION_ASSERTJ_SWING_TARGET = "__app_assertj_swing__";
   public static final String APPLICATION_JHICCUP_TARGET = "__app_jhiccup__";
+  public static final String APPLICATION_TERMINAL_TARGET = "__app_terminal__";
   public static final String LOG_VIEWER_TARGET = "__log_viewer__";
 
   private final String serverId;
@@ -76,6 +77,10 @@ public final class TargetRef {
 
   public static TargetRef applicationJhiccup() {
     return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_JHICCUP_TARGET);
+  }
+
+  public static TargetRef applicationTerminal() {
+    return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_TERMINAL_TARGET);
   }
 
   public static TargetRef logViewer(String serverId) {
@@ -155,9 +160,16 @@ public final class TargetRef {
     return APPLICATION_JHICCUP_TARGET.equals(key);
   }
 
+  public boolean isApplicationTerminal() {
+    return APPLICATION_TERMINAL_TARGET.equals(key);
+  }
+
   public boolean isApplicationUi() {
     if (!isApplicationServer()) return false;
-    return isApplicationUnhandledErrors() || isApplicationAssertjSwing() || isApplicationJhiccup();
+    return isApplicationUnhandledErrors()
+        || isApplicationAssertjSwing()
+        || isApplicationJhiccup()
+        || isApplicationTerminal();
   }
 
   public boolean isLogViewer() {
@@ -204,6 +216,7 @@ public final class TargetRef {
     if (APPLICATION_UNHANDLED_ERRORS_TARGET.equals(t)) return APPLICATION_UNHANDLED_ERRORS_TARGET;
     if (APPLICATION_ASSERTJ_SWING_TARGET.equals(t)) return APPLICATION_ASSERTJ_SWING_TARGET;
     if (APPLICATION_JHICCUP_TARGET.equals(t)) return APPLICATION_JHICCUP_TARGET;
+    if (APPLICATION_TERMINAL_TARGET.equals(t)) return APPLICATION_TERMINAL_TARGET;
     if (LOG_VIEWER_TARGET.equals(t)) return LOG_VIEWER_TARGET;
     return t.toLowerCase(Locale.ROOT);
   }

@@ -38,4 +38,16 @@ class TargetRefUiOnlyTest {
     assertFalse(ref.isChannel());
     assertEquals(ref, new TargetRef("srv", TargetRef.MONITOR_GROUP_TARGET));
   }
+
+  @Test
+  void applicationTerminalTargetIsUiOnly() {
+    TargetRef ref = TargetRef.applicationTerminal();
+    assertTrue(ref.isApplicationTerminal());
+    assertTrue(ref.isApplicationUi());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(
+        ref, new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_TERMINAL_TARGET));
+  }
 }

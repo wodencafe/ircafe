@@ -8,7 +8,6 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
-import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -49,7 +48,6 @@ public class MainFrame extends JFrame {
   private final ServerTreeDockable serverTree;
   private final ChatDockable chat;
   private final UserListDockable users;
-  private final TerminalDockable terminal;
 
   public MainFrame(
       IrcMediator controller,
@@ -60,7 +58,6 @@ public class MainFrame extends JFrame {
       ServerTreeDockable serverTree,
       ChatDockable chat,
       UserListDockable users,
-      TerminalDockable terminal,
       ChatDockManager chatDockManager,
       StatusBar statusBar,
       ApplicationShutdownCoordinator shutdownCoordinator) {
@@ -71,7 +68,6 @@ public class MainFrame extends JFrame {
     this.serverTree = serverTree;
     this.chat = chat;
     this.users = users;
-    this.terminal = terminal;
     this.statusBar = statusBar;
 
     // Window/taskbar icon (best-effort, cross-platform).
@@ -113,7 +109,6 @@ public class MainFrame extends JFrame {
     registerDockableIfNeeded(chat);
     registerDockableIfNeeded(serverTree);
     registerDockableIfNeeded(users);
-    registerDockableIfNeeded(terminal);
 
     // First dock must be to an empty root container.
     Docking.dock(chat, this);
