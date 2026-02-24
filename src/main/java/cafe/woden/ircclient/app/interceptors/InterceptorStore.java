@@ -54,37 +54,37 @@ public class InterceptorStore {
 
   private final int maxHitsPerInterceptor;
   private final ExecutorService ingestExecutor =
-      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-store");
+          VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-store");
   private final ExecutorService persistExecutor =
-      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-persist");
+          VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-persist");
   private final AtomicLong persistRequestSeq = new AtomicLong(0L);
   private final AtomicReference<Map<String, List<InterceptorDefinition>>> pendingPersistSnapshot =
-      new AtomicReference<>();
+          new AtomicReference<>();
 
   private final ConcurrentHashMap<String, LinkedHashMap<String, InterceptorDefinition>> defsByServer =
-      new ConcurrentHashMap<>();
+          new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Map<String, List<InterceptorHit>>> hitsByServer =
-      new ConcurrentHashMap<>();
+          new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Pattern> patternCache = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Set<InterceptorEventType>> eventTypeCache = new ConcurrentHashMap<>();
 
   private final FlowableProcessor<Change> changes =
-      PublishProcessor.<Change>create().toSerialized();
+          PublishProcessor.<Change>create().toSerialized();
 
   @Autowired
   public InterceptorStore(
-      RuntimeConfigStore runtimeConfig,
-      NotificationSoundService notificationSoundService,
-      @Lazy TrayNotificationService trayNotificationService,
-      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor
+          RuntimeConfigStore runtimeConfig,
+          NotificationSoundService notificationSoundService,
+          @Lazy TrayNotificationService trayNotificationService,
+          @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor
   ) {
     this(
-        runtimeConfig,
-        notificationSoundService,
-        trayNotificationService,
-        actionScriptExecutor,
-        DEFAULT_MAX_HITS_PER_INTERCEPTOR,
-        true);
+            runtimeConfig,
+            notificationSoundService,
+            trayNotificationService,
+            actionScriptExecutor,
+            DEFAULT_MAX_HITS_PER_INTERCEPTOR,
+            true);
   }
 
   InterceptorStore(int maxHitsPerInterceptor) {
@@ -92,12 +92,12 @@ public class InterceptorStore {
   }
 
   private InterceptorStore(
-      RuntimeConfigStore runtimeConfig,
-      NotificationSoundService notificationSoundService,
-      TrayNotificationService trayNotificationService,
-      ExecutorService actionScriptExecutor,
-      int maxHitsPerInterceptor,
-      boolean loadFromRuntimeConfig
+          RuntimeConfigStore runtimeConfig,
+          NotificationSoundService notificationSoundService,
+          TrayNotificationService trayNotificationService,
+          ExecutorService actionScriptExecutor,
+          int maxHitsPerInterceptor,
+          boolean loadFromRuntimeConfig
   ) {
     this.runtimeConfig = runtimeConfig;
     this.notificationSoundService = notificationSoundService;
@@ -136,41 +136,41 @@ public class InterceptorStore {
 
     String base = sanitizeName(requestedName);
     LinkedHashMap<String, InterceptorDefinition> defs =
-        defsByServer.computeIfAbsent(sid, __ -> new LinkedHashMap<>());
+            defsByServer.computeIfAbsent(sid, __ -> new LinkedHashMap<>());
 
     InterceptorDefinition def;
     synchronized (defs) {
       String name = uniqueName(base, defs.values());
       String id = UUID.randomUUID().toString();
       def = new InterceptorDefinition(
-          id,
-          name,
-          true,
-          sid,
-          InterceptorRuleMode.GLOB,
-          "",
-          InterceptorRuleMode.GLOB,
-          "",
-          false,
-          false,
-          false,
-          "NOTIF_1",
-          false,
-          "",
-          false,
-          "",
-          "",
-          "",
-          List.of(new InterceptorRule(
+              id,
+              name,
               true,
-              "Rule 1",
-              "",
-              InterceptorRuleMode.LIKE,
-              "",
-              InterceptorRuleMode.LIKE,
+              sid,
+              InterceptorRuleMode.GLOB,
               "",
               InterceptorRuleMode.GLOB,
-              ""))
+              "",
+              false,
+              false,
+              false,
+              "NOTIF_1",
+              false,
+              "",
+              false,
+              "",
+              "",
+              "",
+              List.of(new InterceptorRule(
+                      true,
+                      "Rule 1",
+                      "",
+                      InterceptorRuleMode.LIKE,
+                      "",
+                      InterceptorRuleMode.LIKE,
+                      "",
+                      InterceptorRuleMode.GLOB,
+                      ""))
       );
       defs.put(def.id(), def);
     }
@@ -196,25 +196,25 @@ public class InterceptorStore {
       String next = uniqueName(base, defs.values().stream().filter(d -> !iid.equals(d.id())).toList());
       if (Objects.equals(prev.name(), next)) return false;
       defs.put(iid, new InterceptorDefinition(
-          iid,
-          next,
-          prev.enabled(),
-          prev.scopeServerId(),
-          prev.channelIncludeMode(),
-          prev.channelIncludes(),
-          prev.channelExcludeMode(),
-          prev.channelExcludes(),
-          prev.actionSoundEnabled(),
-          prev.actionStatusBarEnabled(),
-          prev.actionToastEnabled(),
-          prev.actionSoundId(),
-          prev.actionSoundUseCustom(),
-          prev.actionSoundCustomPath(),
-          prev.actionScriptEnabled(),
-          prev.actionScriptPath(),
-          prev.actionScriptArgs(),
-          prev.actionScriptWorkingDirectory(),
-          prev.rules()));
+              iid,
+              next,
+              prev.enabled(),
+              prev.scopeServerId(),
+              prev.channelIncludeMode(),
+              prev.channelIncludes(),
+              prev.channelExcludeMode(),
+              prev.channelExcludes(),
+              prev.actionSoundEnabled(),
+              prev.actionStatusBarEnabled(),
+              prev.actionToastEnabled(),
+              prev.actionSoundId(),
+              prev.actionSoundUseCustom(),
+              prev.actionSoundCustomPath(),
+              prev.actionScriptEnabled(),
+              prev.actionScriptPath(),
+              prev.actionScriptArgs(),
+              prev.actionScriptWorkingDirectory(),
+              prev.rules()));
       changed = true;
     }
 
@@ -239,25 +239,25 @@ public class InterceptorStore {
       if (prev == null) return false;
       if (prev.enabled() == enabled) return false;
       defs.put(iid, new InterceptorDefinition(
-          iid,
-          prev.name(),
-          enabled,
-          prev.scopeServerId(),
-          prev.channelIncludeMode(),
-          prev.channelIncludes(),
-          prev.channelExcludeMode(),
-          prev.channelExcludes(),
-          prev.actionSoundEnabled(),
-          prev.actionStatusBarEnabled(),
-          prev.actionToastEnabled(),
-          prev.actionSoundId(),
-          prev.actionSoundUseCustom(),
-          prev.actionSoundCustomPath(),
-          prev.actionScriptEnabled(),
-          prev.actionScriptPath(),
-          prev.actionScriptArgs(),
-          prev.actionScriptWorkingDirectory(),
-          prev.rules()));
+              iid,
+              prev.name(),
+              enabled,
+              prev.scopeServerId(),
+              prev.channelIncludeMode(),
+              prev.channelIncludes(),
+              prev.channelExcludeMode(),
+              prev.channelExcludes(),
+              prev.actionSoundEnabled(),
+              prev.actionStatusBarEnabled(),
+              prev.actionToastEnabled(),
+              prev.actionSoundId(),
+              prev.actionSoundUseCustom(),
+              prev.actionSoundCustomPath(),
+              prev.actionScriptEnabled(),
+              prev.actionScriptPath(),
+              prev.actionScriptArgs(),
+              prev.actionScriptWorkingDirectory(),
+              prev.rules()));
       changed = true;
     }
 
@@ -325,7 +325,7 @@ public class InterceptorStore {
     if (sid.isEmpty() || updated == null || updated.id().isBlank()) return false;
 
     LinkedHashMap<String, InterceptorDefinition> defs =
-        defsByServer.computeIfAbsent(sid, __ -> new LinkedHashMap<>());
+            defsByServer.computeIfAbsent(sid, __ -> new LinkedHashMap<>());
 
     boolean changed;
     synchronized (defs) {
@@ -409,12 +409,12 @@ public class InterceptorStore {
 
   /** Enqueue event evaluation off the EDT. */
   public void ingestEvent(
-      String serverId,
-      String channel,
-      String fromNick,
-      String fromHostmask,
-      String text,
-      InterceptorEventType eventType
+          String serverId,
+          String channel,
+          String fromNick,
+          String fromHostmask,
+          String text,
+          InterceptorEventType eventType
   ) {
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
@@ -441,19 +441,19 @@ public class InterceptorStore {
 
   /** Backward-compatible entrypoint used by the first interceptor implementation. */
   public void ingestChannelMessage(
-      String serverId,
-      String channel,
-      String fromNick,
-      String text,
-      String eventType
+          String serverId,
+          String channel,
+          String fromNick,
+          String text,
+          String eventType
   ) {
     ingestEvent(
-        serverId,
-        channel,
-        fromNick,
-        "",
-        text,
-        InterceptorEventType.fromToken(eventType));
+            serverId,
+            channel,
+            fromNick,
+            "",
+            text,
+            InterceptorEventType.fromToken(eventType));
   }
 
   @PreDestroy
@@ -464,12 +464,12 @@ public class InterceptorStore {
   }
 
   private void ingestNow(
-      String eventServerId,
-      String channel,
-      String fromNick,
-      String fromHostmask,
-      String text,
-      InterceptorEventType eventType
+          String eventServerId,
+          String channel,
+          String fromNick,
+          String fromHostmask,
+          String text,
+          InterceptorEventType eventType
   ) {
     if (defsByServer.isEmpty()) return;
 
@@ -497,16 +497,16 @@ public class InterceptorStore {
         if (reason == null) continue;
 
         InterceptorHit hit = new InterceptorHit(
-            eventServerId,
-            def.id(),
-            def.name(),
-            Instant.now(),
-            channel,
-            fromNick,
-            fromHostmask,
-            eventType.token(),
-            reason,
-            text
+                eventServerId,
+                def.id(),
+                def.name(),
+                Instant.now(),
+                channel,
+                fromNick,
+                fromHostmask,
+                eventType.token(),
+                reason,
+                text
         );
 
         appendHit(ownerServerId, def.id(), hit);
@@ -522,9 +522,9 @@ public class InterceptorStore {
     if (def.actionSoundEnabled() && notificationSoundService != null) {
       try {
         notificationSoundService.playOverride(
-            def.actionSoundId(),
-            def.actionSoundUseCustom(),
-            def.actionSoundCustomPath());
+                def.actionSoundId(),
+                def.actionSoundUseCustom(),
+                def.actionSoundCustomPath());
       } catch (Exception ignored) {
       }
     }
@@ -536,17 +536,17 @@ public class InterceptorStore {
         String target = norm(hit.channel());
         if (target.isEmpty()) target = "status";
         trayNotificationService.notifyCustom(
-            sid,
-            target,
-            "Interceptor: " + def.name(),
-            buildNotificationBody(hit),
-            def.actionToastEnabled(),
-            def.actionStatusBarEnabled(),
-            IrcEventNotificationRule.FocusScope.ANY,
-            false,
-            null,
-            false,
-            null);
+                sid,
+                target,
+                "Interceptor: " + def.name(),
+                buildNotificationBody(hit),
+                def.actionToastEnabled(),
+                def.actionStatusBarEnabled(),
+                IrcEventNotificationRule.FocusScope.ANY,
+                false,
+                null,
+                false,
+                null);
       } catch (Exception ignored) {
       }
     }
@@ -710,9 +710,9 @@ public class InterceptorStore {
 
   private void appendHit(String ownerServerId, String interceptorId, InterceptorHit hit) {
     Map<String, List<InterceptorHit>> perServer =
-        hitsByServer.computeIfAbsent(ownerServerId, __ -> new ConcurrentHashMap<>());
+            hitsByServer.computeIfAbsent(ownerServerId, __ -> new ConcurrentHashMap<>());
     List<InterceptorHit> list =
-        perServer.computeIfAbsent(interceptorId, __ -> Collections.synchronizedList(new ArrayList<>()));
+            perServer.computeIfAbsent(interceptorId, __ -> Collections.synchronizedList(new ArrayList<>()));
 
     synchronized (list) {
       list.add(hit);
@@ -732,7 +732,7 @@ public class InterceptorStore {
     List<String> excludes = splitPatterns(def.channelExcludes());
 
     InterceptorRuleMode includeMode =
-        def.channelIncludeMode() == null ? InterceptorRuleMode.GLOB : def.channelIncludeMode();
+            def.channelIncludeMode() == null ? InterceptorRuleMode.GLOB : def.channelIncludeMode();
     boolean included = switch (includeMode) {
       case ALL -> true;
       case NONE -> false;
@@ -741,7 +741,7 @@ public class InterceptorStore {
     if (!included) return false;
 
     InterceptorRuleMode excludeMode =
-        def.channelExcludeMode() == null ? InterceptorRuleMode.GLOB : def.channelExcludeMode();
+            def.channelExcludeMode() == null ? InterceptorRuleMode.GLOB : def.channelExcludeMode();
     boolean excluded = switch (excludeMode) {
       case ALL -> true;
       case NONE -> false;
@@ -751,11 +751,11 @@ public class InterceptorStore {
   }
 
   private boolean matchesRule(
-      InterceptorRule rule,
-      InterceptorEventType eventType,
-      String text,
-      String fromNick,
-      String fromHostmask
+          InterceptorRule rule,
+          InterceptorEventType eventType,
+          String text,
+          String fromNick,
+          String fromHostmask
   ) {
     if (rule == null || !rule.enabled()) return false;
     boolean hasPattern = rule.hasAnyPattern();
@@ -795,10 +795,10 @@ public class InterceptorStore {
   }
 
   private boolean matchesAnyPattern(
-      InterceptorRuleMode mode,
-      List<String> patterns,
-      String value,
-      boolean strictText
+          InterceptorRuleMode mode,
+          List<String> patterns,
+          String value,
+          boolean strictText
   ) {
     InterceptorRuleMode m = mode == null ? InterceptorRuleMode.LIKE : mode;
     if (m == InterceptorRuleMode.ALL) return true;
@@ -814,10 +814,10 @@ public class InterceptorStore {
   }
 
   private boolean matchesPattern(
-      InterceptorRuleMode mode,
-      String pattern,
-      String value,
-      boolean strictText
+          InterceptorRuleMode mode,
+          String pattern,
+          String value,
+          boolean strictText
   ) {
     String source = Objects.toString(pattern, "");
     String hay = Objects.toString(value, "");
@@ -893,25 +893,25 @@ public class InterceptorStore {
 
   private InterceptorDefinition normalizeForSave(InterceptorDefinition updated) {
     return new InterceptorDefinition(
-        updated.id(),
-        sanitizeName(updated.name()),
-        updated.enabled(),
-        updated.scopeServerId(),
-        updated.channelIncludeMode(),
-        updated.channelIncludes(),
-        updated.channelExcludeMode(),
-        updated.channelExcludes(),
-        updated.actionSoundEnabled(),
-        updated.actionStatusBarEnabled(),
-        updated.actionToastEnabled(),
-        updated.actionSoundId(),
-        updated.actionSoundUseCustom(),
-        updated.actionSoundCustomPath(),
-        updated.actionScriptEnabled(),
-        updated.actionScriptPath(),
-        updated.actionScriptArgs(),
-        updated.actionScriptWorkingDirectory(),
-        updated.rules());
+            updated.id(),
+            sanitizeName(updated.name()),
+            updated.enabled(),
+            updated.scopeServerId(),
+            updated.channelIncludeMode(),
+            updated.channelIncludes(),
+            updated.channelExcludeMode(),
+            updated.channelExcludes(),
+            updated.actionSoundEnabled(),
+            updated.actionStatusBarEnabled(),
+            updated.actionToastEnabled(),
+            updated.actionSoundId(),
+            updated.actionSoundUseCustom(),
+            updated.actionSoundCustomPath(),
+            updated.actionScriptEnabled(),
+            updated.actionScriptPath(),
+            updated.actionScriptArgs(),
+            updated.actionScriptWorkingDirectory(),
+            updated.rules());
   }
 
   private void loadPersistedDefinitions() {
