@@ -36,8 +36,8 @@ public class IrcSwingApp {
     ConsoleTeeHub.install();
 
     new SpringApplicationBuilder(IrcSwingApp.class)
-        .headless(false)
-        .run(args);
+            .headless(false)
+            .run(args);
   }
 
   @Bean
@@ -45,7 +45,8 @@ public class IrcSwingApp {
                                ObjectProvider<IrcMediator> mediatorProvider,
                                ThemeManager themeManager,
                                UiSettingsBus settingsBus,
-                               TrayService trayService) {
+                               TrayService trayService,
+                               cafe.woden.ircclient.app.UiPort ui) {
     return args -> SwingUtilities.invokeLater(() -> {
       // Install theme before showing UI.
       String theme = settingsBus.get().theme();
@@ -59,7 +60,53 @@ public class IrcSwingApp {
 
       trayService.installIfEnabled();
 
-      // If we start minimized, don't show the window (tray icon becomes the entry point).
+      if (java.awt.Desktop.isDesktopSupported()) {
+        java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+
+        try {
+          desktop.addAppEventListener(new java.awt.desktop.AppReopenedListener() {
+            @Override
+            public void appReopened(java.awt.desktop.AppReopenedEvent e) {
+              SwingUtilities.invokeLater(() -> {
+                frame.setVisible(true);
+                frame.setState(java.awt.Frame.NORMAL);
+                frame.toFront();
+              });
+            }
+          });
+        } catch (Exception ignored) {
+        }
+        try {
+          desktop.setOpenURIHandler(e -> {
+            java.net.URI uri = e.getURI();
+            String path = uri.getPath();
+            SwingUtilities.invokeLater(() -> {
+              frame.setVisible(true);
+              frame.setState(java.awt.Frame.NORMAL);
+              frame.toFront();
+
+              if (path != null && "focus".equals(uri.getHost())) {
+                String[] segments = uri.getPath().split("/");
+                System.out.println("URI received: " + uri);
+                if (segments.length >= 3) {
+                  String serverId = segments[1];
+                  try {
+                    String targetName = java.net.URLDecoder.decode(segments[2], java.nio.charset.StandardCharsets.UTF_8);
+
+                    cafe.woden.ircclient.app.TargetRef target = new cafe.woden.ircclient.app.TargetRef(serverId, targetName);
+                    ui.ensureTargetExists(target);
+                    ui.selectTarget(target);
+                  } catch (Exception ignored) {
+                  }
+                }
+              }
+            });
+          });
+        } catch (Exception ignored) {
+        }
+      }
+
+      // Final Visibility Logic
       boolean startMinimized = trayService.isTrayActive() && trayService.isEnabled() && trayService.startMinimized();
       frame.setVisible(!startMinimized);
 
