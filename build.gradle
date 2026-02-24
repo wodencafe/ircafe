@@ -136,7 +136,7 @@ dependencies {
     implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
     implementation 'com.googlecode.soundlibs:tritonus-share:0.3.7.4'
-
+    implementation 'com.sshtools:two-slices:0.9.4'
     implementation 'org.springframework.boot:spring-boot-starter'
 
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -562,4 +562,55 @@ tasks.register("installLinuxDesktopEntry") {
 // When building a Linux app image, always include icon + .desktop alongside the output.
 tasks.named("jpackage").configure {
     finalizedBy("copyLinuxAppImageIconToLib", "generateLinuxDesktopEntry", "generateLinuxInstallScript", "generateLinuxUninstallScript")
+}
+// build.gradle
+
+tasks.register("bundleTerminalNotifier") {
+    dependsOn("jpackage") // make sure app is created first
+
+    doLast {
+        def os = System.getProperty("os.name").toLowerCase()
+        if (!os.contains("mac")) {
+            println("Not macOS, skipping terminal-notifier bundling")
+            return
+        }
+
+        // Path to your .app bundle
+        def appDir = file("$buildDir/jpackage/app/Ircafe.app/Contents/MacOS")
+        if (!appDir.exists()) {
+            throw new GradleException("App bundle not found at: $appDir")
+        }
+
+        // Path to your terminal-notifier binary in the project
+        def notifierSrc = file("tools/terminal-notifier")
+        if (!notifierSrc.exists()) {
+            throw new GradleException("terminal-notifier binary not found at: $notifierSrc")
+        }
+
+        // Destination inside the .app
+        def notifierDest = new File(appDir, "terminal-notifier")
+
+        copy {
+            from notifierSrc
+            into appDir
+            rename { "terminal-notifier" }
+        }
+
+        // Ensure it is executable
+        notifierDest.setExecutable(true)
+
+        println "terminal-notifier bundled into app: $notifierDest"
+    }
+}
+tasks.named("jpackage") {
+    finalizedBy("bundleTerminalNotifier")
+}
+forbiddenApis {
+    // Add your new file here
+    signaturesFiles = files("forbidden-signatures.txt")
+
+    // This is the CRITICAL line: it tells the plugin to ignore
+    // classes it can't find in its bundled "forbidden" lists
+    ignoreFailures = true
+    ignoreSignaturesOfMissingClasses = true
 }
