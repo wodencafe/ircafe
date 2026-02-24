@@ -9,6 +9,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -186,5 +187,32 @@ class MediatorHistoryIngestOrchestratorTest {
         eq("(history)"),
         argThat(msg -> msg != null && msg.contains("Received 3 playback history lines")));
     verify(ui, never()).appendStatus(eq(status), eq("(history)"), anyString());
+  }
+
+  @Test
+  void skipsRenderingRecentDuplicateHistoryLinesAcrossBatches() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    ChatHistoryRequestRoutingState.PendingRequest pending =
+        new ChatHistoryRequestRoutingState.PendingRequest(
+            chan,
+            Instant.now(),
+            20,
+            "*",
+            ChatHistoryRequestRoutingState.QueryMode.LATEST);
+    when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
+        .thenReturn(pending, pending);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+
+    Instant t = Instant.parse("2026-02-16T02:00:01Z");
+    ChatHistoryEntry chat = new ChatHistoryEntry(t, ChatHistoryEntry.Kind.PRIVMSG, "#ircafe", "alice", "hello");
+    IrcEvent.ChatHistoryBatchReceived ev1 =
+        new IrcEvent.ChatHistoryBatchReceived(Instant.now(), "#ircafe", "batch-a", List.of(chat));
+    IrcEvent.ChatHistoryBatchReceived ev2 =
+        new IrcEvent.ChatHistoryBatchReceived(Instant.now(), "#ircafe", "batch-b", List.of(chat));
+
+    orchestrator.onChatHistoryBatchReceived("libera", ev1);
+    orchestrator.onChatHistoryBatchReceived("libera", ev2);
+
+    verify(transcripts, times(1)).appendChatFromHistory(chan, "alice", "hello", false, t.toEpochMilli());
   }
 }

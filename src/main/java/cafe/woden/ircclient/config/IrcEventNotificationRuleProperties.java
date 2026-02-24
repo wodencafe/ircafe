@@ -18,6 +18,8 @@ public record IrcEventNotificationRuleProperties(
     String channelPatterns,
     Boolean toastEnabled,
     Boolean toastWhenFocused,
+    FocusScope focusScope,
+    Boolean statusBarEnabled,
     Boolean notificationsNodeEnabled,
     Boolean soundEnabled,
     String soundId,
@@ -75,8 +77,15 @@ public record IrcEventNotificationRuleProperties(
 
   public enum ChannelScope {
     ALL,
+    ACTIVE_TARGET_ONLY,
     ONLY,
     ALL_EXCEPT
+  }
+
+  public enum FocusScope {
+    ANY,
+    FOREGROUND_ONLY,
+    BACKGROUND_ONLY
   }
 
   /**
@@ -128,14 +137,26 @@ public record IrcEventNotificationRuleProperties(
         channelPatterns = excludeLegacy;
       }
     }
-    if (channelScope == ChannelScope.ALL) {
+    if (channelScope == ChannelScope.ALL || channelScope == ChannelScope.ACTIVE_TARGET_ONLY) {
       channelPatterns = null;
     }
 
     if (toastEnabled == null) toastEnabled = true;
-    if (toastWhenFocused == null) toastWhenFocused = false;
-    if (notificationsNodeEnabled == null) notificationsNodeEnabled = true;
+    if (focusScope == null) {
+      focusScope = Boolean.TRUE.equals(toastWhenFocused)
+          ? FocusScope.ANY
+          : FocusScope.BACKGROUND_ONLY;
+    }
+    if (toastWhenFocused == null) {
+      toastWhenFocused = focusScope != FocusScope.BACKGROUND_ONLY;
+    }
     if (soundEnabled == null) soundEnabled = false;
+    if (statusBarEnabled == null) {
+      // Backward-compatible default for old configs with no statusBarEnabled field.
+      // Previously status-bar notices were emitted whenever toast or sound delivery ran.
+      statusBarEnabled = Boolean.TRUE.equals(toastEnabled) || Boolean.TRUE.equals(soundEnabled);
+    }
+    if (notificationsNodeEnabled == null) notificationsNodeEnabled = true;
 
     if (soundId == null || soundId.isBlank()) soundId = defaultBuiltInSoundForEvent(eventType).name();
     if (soundUseCustom == null) soundUseCustom = false;
@@ -170,6 +191,33 @@ public record IrcEventNotificationRuleProperties(
           null,
           true,
           false,
+          FocusScope.BACKGROUND_ONLY,
+          true,
+          true,
+          false,
+          defaultBuiltInSoundForEvent(t).name(),
+          false,
+          null,
+          false,
+          null,
+          null,
+          null,
+          SourceFilter.ANY,
+          null,
+          null));
+    }
+    for (EventType t : defaultStatusBarAnyCompanionEvents()) {
+      out.add(new IrcEventNotificationRuleProperties(
+          true,
+          t,
+          defaultSourceModeForEvent(t),
+          null,
+          ChannelScope.ALL,
+          null,
+          false,
+          true,
+          FocusScope.ANY,
+          true,
           true,
           false,
           defaultBuiltInSoundForEvent(t).name(),
@@ -222,6 +270,13 @@ public record IrcEventNotificationRuleProperties(
            KLINED -> SourceMode.OTHERS;
       default -> SourceMode.ANY;
     };
+  }
+
+  private static List<EventType> defaultStatusBarAnyCompanionEvents() {
+    return List.of(
+        EventType.KICKED,
+        EventType.BANNED,
+        EventType.KLINED);
   }
 
   private static BuiltInSound defaultBuiltInSoundForEvent(EventType eventType) {

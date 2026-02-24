@@ -9,6 +9,7 @@ import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
+import cafe.woden.ircclient.ui.settings.IntelliJThemePack;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -49,7 +50,6 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class AppMenuBar extends JMenuBar {
-
   // Default proportions used when docking.
   //
   // ModernDocking interprets "proportion" as the share of the split given to the *newly docked* dockable.
@@ -514,6 +514,13 @@ public class AppMenuBar extends JMenuBar {
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
         showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
+    JCheckBoxMenuItem showApplicationRoot = new JCheckBoxMenuItem("Show Application Root");
+    showApplicationRoot.setSelected(serverTree.isApplicationRootVisible());
+    showApplicationRoot.addActionListener(e ->
+        serverTree.setApplicationRootVisible(showApplicationRoot.isSelected()));
+    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_APPLICATION_ROOT_VISIBLE, evt ->
+        showApplicationRoot.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
     JMenuItem openSelectedNodeDock = new JMenuItem("Open Selected Node in Chat Dock");
     openSelectedNodeDock.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O,
         InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
@@ -527,6 +534,7 @@ public class AppMenuBar extends JMenuBar {
     window.addSeparator();
     window.add(showChannelListNodes);
     window.add(showDccNodes);
+    window.add(showApplicationRoot);
     window.addSeparator();
     window.add(openSelectedNodeDock);
     window.addSeparator();
@@ -947,7 +955,23 @@ public class AppMenuBar extends JMenuBar {
 
   private static String normalizeThemeId(String id) {
     String s = Objects.toString(id, "").trim();
-    if (s.isEmpty()) return "dark";
+    if (s.isEmpty()) return "darcula";
+
+    // Preserve case for IntelliJ theme ids and raw LookAndFeel class names.
+    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+      return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
+    }
+    if (looksLikeClassName(s)) return s;
+
     return s.toLowerCase(Locale.ROOT);
+  }
+
+  private static boolean looksLikeClassName(String raw) {
+    if (raw == null) return false;
+    String s = raw.trim();
+    if (!s.contains(".")) return false;
+    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) return true;
+    String last = s.substring(s.lastIndexOf('.') + 1);
+    return !last.isBlank() && Character.isUpperCase(last.charAt(0));
   }
 }

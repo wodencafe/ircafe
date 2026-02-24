@@ -111,8 +111,13 @@ public class ChatStyles {
         UIManager.getColor("Component.error.focusedBorderColor"),
         UIManager.getColor("Component.error.focusColor")
     );
-    if (warn == null) warn = new Color(0xF0B000);
-    if (err == null) err = new Color(0xD05050);
+    boolean darkUi = isDarkUi(bg);
+    if (warn == null) warn = darkUi ? new Color(0xD4AE66) : new Color(0xF0B000);
+    if (err == null) err = darkUi ? new Color(0xC96E6E) : new Color(0xD05050);
+    if (darkUi) {
+      // Keep warning lines readable, but less neon on dark backgrounds.
+      warn = toneDownHighlightColor(warn, bg, 0.86, 0.30f);
+    }
 
     Color selBg = UIManager.getColor("TextPane.selectionBackground");
 
@@ -328,6 +333,18 @@ public class ChatStyles {
   private static double srgbToLinear(int channel) {
     double v = channel / 255.0;
     return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  private static boolean isDarkUi(Color bg) {
+    if (bg == null) return false;
+    return relativeLuminance(bg) < 0.45;
+  }
+
+  private static Color toneDownHighlightColor(Color color, Color bg, double keepColor, float minSaturation) {
+    if (color == null || bg == null) return color;
+    float[] hsb = Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), null);
+    if (hsb[1] < minSaturation) return color;
+    return mix(color, bg, keepColor);
   }
 
   @SafeVarargs

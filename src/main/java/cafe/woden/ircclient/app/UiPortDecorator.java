@@ -160,6 +160,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void enqueueStatusNotice(String text, TargetRef clickTarget) {
+    delegate.enqueueStatusNotice(text, clickTarget);
+  }
+
+  @Override
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
     delegate.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
   }

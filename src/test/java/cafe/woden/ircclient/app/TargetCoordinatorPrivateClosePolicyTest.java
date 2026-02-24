@@ -113,6 +113,8 @@ class TargetCoordinatorPrivateClosePolicyTest {
         mock(UserhostQueryService.class),
         mock(UserInfoEnrichmentService.class),
         mock(ChatHistoryService.class),
-        mock(ChatLogMaintenance.class));
+        mock(ChatLogMaintenance.class),
+        mock(java.util.concurrent.ExecutorService.class),
+        mock(java.util.concurrent.ScheduledExecutorService.class));
   }
 }

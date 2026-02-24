@@ -3,12 +3,15 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
+import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
@@ -31,6 +34,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.awt.Dialog;
+import java.beans.PropertyChangeListener;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -83,6 +87,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -102,7 +107,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
+  private static final String LOG_VIEWER_LABEL = "Log Viewer";
+  private static final String INTERCEPTORS_GROUP_LABEL = "Interceptors";
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
+  private static final String IRC_ROOT_LABEL = "IRC";
+  private static final String APPLICATION_ROOT_LABEL = "Application";
+  private static final String APP_UNHANDLED_ERRORS_LABEL = "Unhandled Errors";
+  private static final String APP_ASSERTJ_SWING_LABEL = "AssertJ Swing";
+  private static final String APP_JHICCUP_LABEL = "jHiccup";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
   private static final int TREE_NODE_ICON_SIZE = 13;
@@ -113,10 +125,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final int TYPING_ACTIVITY_FADE_MS = 900;
   private static final int TYPING_ACTIVITY_PULSE_MS = 1200;
   private static final int TYPING_ACTIVITY_TICK_MS = 100;
-  private static final Color TYPING_ACTIVITY_DOT = new Color(65, 210, 108);
-  private static final Color TYPING_ACTIVITY_GLOW = new Color(120, 255, 150);
+  private static final int TYPING_ACTIVITY_DOT_COUNT = 3;
+  private static final int TYPING_ACTIVITY_DOT_SIZE = 3;
+  private static final int TYPING_ACTIVITY_DOT_GAP = 2;
+  private static final int TYPING_ACTIVITY_DOT_FRAME_MS = 220;
+  private static final int TYPING_ACTIVITY_LEFT_SLOT_WIDTH = 12;
+  private static final Color TYPING_ACTIVITY_GLOW_DOT = new Color(65, 210, 108);
+  private static final Color TYPING_ACTIVITY_GLOW_HALO = new Color(120, 255, 150);
+  private static final Color TYPING_ACTIVITY_INDICATOR_FALLBACK = new Color(90, 150, 235);
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
+  public static final String PROP_APPLICATION_ROOT_VISIBLE = "applicationRootVisible";
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
@@ -145,7 +164,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
-  private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("IRC");
+  // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
+  private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("(root)");
+  private final DefaultMutableTreeNode ircRoot = new DefaultMutableTreeNode(IRC_ROOT_LABEL);
+  private final DefaultMutableTreeNode applicationRoot = new DefaultMutableTreeNode(APPLICATION_ROOT_LABEL);
+  private final TargetRef applicationUnhandledErrorsRef = TargetRef.applicationUnhandledErrors();
+  private final TargetRef applicationAssertjSwingRef = TargetRef.applicationAssertjSwing();
+  private final TargetRef applicationJhiccupRef = TargetRef.applicationJhiccup();
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
   private volatile InsertionLine insertionLine;
@@ -233,9 +258,14 @@ private static final class InsertionLine {
   private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin = new HashMap<>();
 
   private final NotificationStore notificationStore;
+  private final InterceptorStore interceptorStore;
   private final ServerDialogs serverDialogs;
+  private final UiSettingsBus settingsBus;
+  private PropertyChangeListener settingsListener;
+  private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
+  private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -246,6 +276,8 @@ private static final class InsertionLine {
       ConnectButton connectBtn,
       DisconnectButton disconnectBtn,
       NotificationStore notificationStore,
+      InterceptorStore interceptorStore,
+      UiSettingsBus settingsBus,
       ServerDialogs serverDialogs) {
     super(new BorderLayout());
 
@@ -255,7 +287,10 @@ private static final class InsertionLine {
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
+    this.interceptorStore = interceptorStore;
+    this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
+    syncTypingIndicatorStyleFromSettings();
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -294,9 +329,15 @@ private static final class InsertionLine {
     header.add(disconnectBtn);
     header.add(Box.createHorizontalGlue());
 
+    root.add(ircRoot);
+    initializeApplicationTreeNodes();
+    if (showApplicationRoot) {
+      root.add(applicationRoot);
+    }
+
     add(header, BorderLayout.NORTH);
     setConnectionControlsEnabled(true, false);
-    tree.setRootVisible(true);
+    tree.setRootVisible(false);
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
 
@@ -351,6 +392,18 @@ private static final class InsertionLine {
                   err -> log.error("[ircafe] notification store stream error", err))
       );
     }
+    if (interceptorStore != null) {
+      disposables.add(
+          interceptorStore.changes()
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(
+                  ch -> {
+                    refreshInterceptorNodeLabel(ch.serverId(), ch.interceptorId());
+                    refreshInterceptorGroupCount(ch.serverId());
+                  },
+                  err -> log.error("[ircafe] interceptor store stream error", err))
+      );
+    }
 
     if (sojuAutoConnect != null) {
       disposables.add(
@@ -371,12 +424,22 @@ private static final class InsertionLine {
                   err -> log.error("[ircafe] znc auto-connect store stream error", err))
       );
     }
+
+    if (this.settingsBus != null) {
+      settingsListener = evt -> {
+        if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+        syncTypingIndicatorStyleFromSettings();
+        tree.repaint();
+      };
+      this.settingsBus.addListener(settingsListener);
+    }
+
     TreeSelectionListener tsl = e -> {
       DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
       if (!suppressSelectionBroadcast && node != null) {
         Object uo = node.getUserObject();
         if (uo instanceof NodeData nd) {
-          selections.onNext(nd.ref);
+          if (nd.ref != null) selections.onNext(nd.ref);
         }
       }
       tree.repaint();
@@ -629,7 +692,7 @@ private static final class InsertionLine {
       if (first != null) {
         selectTarget(first);
       } else {
-        tree.setSelectionPath(new TreePath(root.getPath()));
+        tree.setSelectionPath(defaultSelectionPath());
       }
     });
   }
@@ -1053,6 +1116,14 @@ private static final class InsertionLine {
       networkInfo.addActionListener(ev -> openServerInfoDialog(serverId));
       menu.add(networkInfo);
 
+      menu.addSeparator();
+      JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
+      addInterceptor.setIcon(SvgIcons.action("plus", 16));
+      addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+      addInterceptor.setEnabled(interceptorStore != null);
+      addInterceptor.addActionListener(ev -> promptAndAddInterceptor(serverId));
+      menu.add(addInterceptor);
+
       // Ephemeral servers can be promoted to persisted servers. This is especially useful for
       // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
       boolean ephemeral = serverCatalog != null
@@ -1071,7 +1142,7 @@ private static final class InsertionLine {
         menu.add(save);
       }
 
-      // Only show server editing for the primary, configured server entries directly under the IRC root.
+      // Only show server editing for the primary, configured server entries directly under the IRC branch.
       if (canReorder) {
         boolean editable = serverDialogs != null
             && serverCatalog != null
@@ -1130,6 +1201,22 @@ private static final class InsertionLine {
       return menu;
     }
 
+    if (isInterceptorsGroupNode(node)) {
+      DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+      if (!isServerNode(parent)) return null;
+      String serverId = Objects.toString(parent.getUserObject(), "").trim();
+      if (serverId.isEmpty()) return null;
+
+      JPopupMenu menu = new JPopupMenu();
+      JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
+      addInterceptor.setIcon(SvgIcons.action("plus", 16));
+      addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+      addInterceptor.setEnabled(interceptorStore != null);
+      addInterceptor.addActionListener(ev -> promptAndAddInterceptor(serverId));
+      menu.add(addInterceptor);
+      return menu;
+    }
+
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd) {
       if (nd.ref != null) {
@@ -1163,6 +1250,38 @@ private static final class InsertionLine {
           }
         }
 
+        if (nd.ref.isInterceptor()) {
+          menu.addSeparator();
+          String sid = Objects.toString(nd.ref.serverId(), "").trim();
+          String iid = Objects.toString(nd.ref.interceptorId(), "").trim();
+          InterceptorDefinition def =
+              interceptorStore != null && !sid.isEmpty() && !iid.isEmpty()
+                  ? interceptorStore.interceptor(sid, iid)
+                  : null;
+          boolean currentlyEnabled = def == null || def.enabled();
+
+          JMenuItem toggleEnabled = new JMenuItem(currentlyEnabled ? "Disable Interceptor" : "Enable Interceptor");
+          toggleEnabled.setIcon(SvgIcons.action(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setDisabledIcon(SvgIcons.actionDisabled(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setEnabled(interceptorStore != null && def != null);
+          toggleEnabled.addActionListener(ev -> setInterceptorEnabled(nd.ref, !currentlyEnabled));
+          menu.add(toggleEnabled);
+
+          JMenuItem rename = new JMenuItem("Rename Interceptor...");
+          rename.setIcon(SvgIcons.action("edit", 16));
+          rename.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+          rename.setEnabled(interceptorStore != null);
+          rename.addActionListener(ev -> promptRenameInterceptor(nd.ref, nd.label));
+          menu.add(rename);
+
+          JMenuItem delete = new JMenuItem("Delete Interceptor...");
+          delete.setIcon(SvgIcons.action("exit", 16));
+          delete.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
+          delete.setEnabled(interceptorStore != null);
+          delete.addActionListener(ev -> confirmDeleteInterceptor(nd.ref, nd.label));
+          menu.add(delete);
+        }
+
         return menu;
       }
     }
@@ -1194,6 +1313,166 @@ private static final class InsertionLine {
     }
   }
 
+  private void promptAndAddInterceptor(String serverId) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    Object input = JOptionPane.showInputDialog(
+        w,
+        "Interceptor name:",
+        "Add Interceptor",
+        JOptionPane.PLAIN_MESSAGE,
+        null,
+        null,
+        "Interceptor");
+    if (input == null) return;
+
+    String requested = Objects.toString(input, "").trim();
+    if (requested.isEmpty()) return;
+
+    try {
+      InterceptorDefinition def = interceptorStore.createInterceptor(sid, requested);
+      TargetRef ref = TargetRef.interceptor(sid, def.id());
+      ensureNode(ref);
+      refreshInterceptorNodeLabel(sid, def.id());
+      refreshInterceptorGroupCount(sid);
+      selectTarget(ref);
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not add interceptor for server {}", sid, ex);
+    }
+  }
+
+  private void promptRenameInterceptor(TargetRef ref, String currentLabel) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    String before = Objects.toString(currentLabel, "").trim();
+    if (before.isEmpty()) before = interceptorStore.interceptorName(sid, iid);
+    if (before.isEmpty()) before = "Interceptor";
+
+    Object input = JOptionPane.showInputDialog(
+        w,
+        "Interceptor name:",
+        "Rename Interceptor",
+        JOptionPane.PLAIN_MESSAGE,
+        null,
+        null,
+        before);
+    if (input == null) return;
+    String next = Objects.toString(input, "").trim();
+    if (next.isEmpty()) return;
+
+    try {
+      if (interceptorStore.renameInterceptor(sid, iid, next)) {
+        refreshInterceptorNodeLabel(sid, iid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not rename interceptor {} on {}", iid, sid, ex);
+    }
+  }
+
+  private void setInterceptorEnabled(TargetRef ref, boolean enabled) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    try {
+      if (interceptorStore.setInterceptorEnabled(sid, iid, enabled)) {
+        refreshInterceptorNodeLabel(sid, iid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not set interceptor enabled={} for {} on {}", enabled, iid, sid, ex);
+    }
+  }
+
+  private void confirmDeleteInterceptor(TargetRef ref, String label) {
+    if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    String pretty = Objects.toString(label, "").trim();
+    if (pretty.isEmpty()) pretty = interceptorStore.interceptorName(sid, iid);
+    if (pretty.isEmpty()) pretty = "Interceptor";
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    int choice = JOptionPane.showConfirmDialog(
+        w,
+        "Delete interceptor \"" + pretty + "\"?",
+        "Delete Interceptor",
+        JOptionPane.YES_NO_OPTION,
+        JOptionPane.WARNING_MESSAGE
+    );
+    if (choice != JOptionPane.YES_OPTION) return;
+
+    try {
+      if (interceptorStore.removeInterceptor(sid, iid)) {
+        selectTarget(new TargetRef(sid, "status"));
+        removeTarget(ref);
+        refreshInterceptorGroupCount(sid);
+      }
+    } catch (Exception ex) {
+      log.warn("[ircafe] could not delete interceptor {} on {}", iid, sid, ex);
+    }
+  }
+
+  private void refreshInterceptorNodeLabel(String serverId, String interceptorId) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    String iid = Objects.toString(interceptorId, "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return;
+
+    TargetRef ref = TargetRef.interceptor(sid, iid);
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData prev) || prev.ref == null) return;
+
+    String nextLabel = Objects.toString(interceptorStore.interceptorName(sid, iid), "").trim();
+    if (nextLabel.isEmpty()) nextLabel = "Interceptor";
+
+    NodeData next = new NodeData(prev.ref, nextLabel);
+    next.unread = prev.unread;
+    next.highlightUnread = prev.highlightUnread;
+    next.copyTypingFrom(prev);
+    if (!Objects.equals(prev.label, nextLabel)) {
+      node.setUserObject(next);
+    }
+    model.nodeChanged(node);
+  }
+
+  private void refreshInterceptorGroupCount(String serverId) {
+    if (interceptorStore == null) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerNodes sn = servers.get(sid);
+    if (sn == null || sn.interceptorsNode == null) return;
+
+    Object uo = sn.interceptorsNode.getUserObject();
+    NodeData nd;
+    if (uo instanceof NodeData existing) {
+      nd = existing;
+    } else {
+      nd = new NodeData(null, INTERCEPTORS_GROUP_LABEL);
+      sn.interceptorsNode.setUserObject(nd);
+    }
+
+    int total = Math.max(0, interceptorStore.totalHitCount(sid));
+    if (nd.unread == total && nd.highlightUnread == 0) return;
+    nd.unread = total;
+    nd.highlightUnread = 0;
+    model.nodeChanged(sn.interceptorsNode);
+  }
+
 private boolean isServerNode(DefaultMutableTreeNode node) {
   if (node == null) return false;
   Object uo = node.getUserObject();
@@ -1203,7 +1482,15 @@ private boolean isServerNode(DefaultMutableTreeNode node) {
 }
 
 private boolean isRootServerNode(DefaultMutableTreeNode node) {
-  return node != null && node.getParent() == root && isServerNode(node);
+  return node != null && node.getParent() == ircRoot && isServerNode(node);
+}
+
+private boolean isIrcRootNode(DefaultMutableTreeNode node) {
+  return node != null && node == ircRoot;
+}
+
+private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
+  return node != null && node == applicationRoot;
 }
 
 
@@ -1221,12 +1508,16 @@ private boolean isRootServerNode(DefaultMutableTreeNode node) {
     int min = 0;
     int count = serverNode.getChildCount();
     while (min < count) {
-      Object uo = ((DefaultMutableTreeNode) serverNode.getChildAt(min)).getUserObject();
-      if (uo instanceof NodeData nd && nd.ref != null) {
-        if (nd.ref.isStatus() || nd.ref.isUiOnly()) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNode.getChildAt(min);
+      Object uo = child.getUserObject();
+      if (uo instanceof NodeData nd) {
+        if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) {
           min++;
           continue;
         }
+      } else if (isInterceptorsGroupNode(child)) {
+        min++;
+        continue;
       }
       break;
     }
@@ -1321,6 +1612,19 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return label.equalsIgnoreCase("Private messages") || label.equalsIgnoreCase("Private Messages");
   }
 
+  private boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (uo instanceof String s) {
+      return INTERCEPTORS_GROUP_LABEL.equalsIgnoreCase(s.trim());
+    }
+    if (uo instanceof NodeData nd) {
+      if (nd.ref != null) return false;
+      return INTERCEPTORS_GROUP_LABEL.equalsIgnoreCase(Objects.toString(nd.label, "").trim());
+    }
+    return false;
+  }
+
   @Override
   public String getPersistentID() {
     return ID;
@@ -1383,6 +1687,45 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public Flowable<TargetRef> openPinnedChatRequests() {
     return openPinnedChatRequests.onBackpressureLatest();
+  }
+
+  /**
+   * Returns currently open channel targets for a server.
+   *
+   * <p>Safe to call from any thread.
+   */
+  public List<String> openChannelsForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return List.of();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return snapshotOpenChannelsForServer(sid);
+    }
+
+    AtomicReference<List<String>> out = new AtomicReference<>(List.of());
+    try {
+      SwingUtilities.invokeAndWait(() -> out.set(snapshotOpenChannelsForServer(sid)));
+      return out.get();
+    } catch (Exception ex) {
+      log.debug("[ircafe] open channel snapshot failed for server={}", sid, ex);
+      return List.of();
+    }
+  }
+
+  private List<String> snapshotOpenChannelsForServer(String serverId) {
+    LinkedHashMap<String, String> byKey = new LinkedHashMap<>();
+    for (TargetRef ref : leaves.keySet()) {
+      if (ref == null) continue;
+      if (!Objects.equals(serverId, ref.serverId())) continue;
+      if (!ref.isChannel()) continue;
+      String target = Objects.toString(ref.target(), "").trim();
+      if (target.isEmpty()) continue;
+      String key = target.toLowerCase(java.util.Locale.ROOT);
+      byKey.putIfAbsent(key, target);
+    }
+    if (byKey.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(byKey.values());
+    out.sort(String.CASE_INSENSITIVE_ORDER);
+    return List.copyOf(out);
   }
 
   public Action moveNodeUpAction() {
@@ -1870,6 +2213,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return showDccTransfersNodes;
   }
 
+  public boolean isApplicationRootVisible() {
+    return showApplicationRoot;
+  }
+
   public void setChannelListNodesVisible(boolean visible) {
     boolean old = showChannelListNodes;
     boolean next = visible;
@@ -1886,6 +2233,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     showDccTransfersNodes = next;
     syncUiLeafVisibility();
     firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
+  }
+
+  public void setApplicationRootVisible(boolean visible) {
+    boolean old = showApplicationRoot;
+    boolean next = visible;
+    if (old == next) return;
+    showApplicationRoot = next;
+    syncApplicationRootVisibility();
+    firePropertyChange(PROP_APPLICATION_ROOT_VISIBLE, old, next);
   }
 
   public boolean canOpenSelectedNodeInChatDock() {
@@ -1997,6 +2353,67 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
   }
 
+  private void initializeApplicationTreeNodes() {
+    applicationRoot.removeAllChildren();
+    addApplicationLeaf(applicationUnhandledErrorsRef, APP_UNHANDLED_ERRORS_LABEL);
+    addApplicationLeaf(applicationAssertjSwingRef, APP_ASSERTJ_SWING_LABEL);
+    addApplicationLeaf(applicationJhiccupRef, APP_JHICCUP_LABEL);
+  }
+
+  private void addApplicationLeaf(TargetRef ref, String label) {
+    if (ref == null) return;
+    DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, label));
+    leaves.put(ref, leaf);
+    applicationRoot.add(leaf);
+  }
+
+  private void syncApplicationRootVisibility() {
+    if (showApplicationRoot) {
+      if (applicationRoot.getParent() != root) {
+        root.insert(applicationRoot, Math.min(1, root.getChildCount()));
+        model.nodeStructureChanged(root);
+      }
+      tree.expandPath(new TreePath(applicationRoot.getPath()));
+      return;
+    }
+
+    TargetRef selected = selectedTargetRef();
+    if (selected != null && selected.isApplicationUi()) {
+      TargetRef first = servers.values().stream()
+          .findFirst()
+          .map(sn -> sn.statusRef)
+          .orElse(null);
+      if (first != null) {
+        selectTarget(first);
+      } else {
+        tree.setSelectionPath(defaultSelectionPath());
+      }
+    }
+
+    if (applicationRoot.getParent() == root) {
+      root.remove(applicationRoot);
+      model.nodeStructureChanged(root);
+    }
+  }
+
+  private TreePath defaultSelectionPath() {
+    if (ircRoot.getParent() == root) {
+      return new TreePath(ircRoot.getPath());
+    }
+    if (applicationRoot.getParent() == root) {
+      return new TreePath(applicationRoot.getPath());
+    }
+    return new TreePath(root.getPath());
+  }
+
+  private static String applicationLeafLabel(TargetRef ref) {
+    if (ref == null) return "";
+    if (ref.isApplicationUnhandledErrors()) return APP_UNHANDLED_ERRORS_LABEL;
+    if (ref.isApplicationAssertjSwing()) return APP_ASSERTJ_SWING_LABEL;
+    if (ref.isApplicationJhiccup()) return APP_JHICCUP_LABEL;
+    return ref.target();
+  }
+
   private void syncUiLeafVisibility() {
     TargetRef selected = selectedTargetRef();
 
@@ -2057,9 +2474,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (leaves.containsKey(sn.statusRef)) idx++;
     if (leaves.containsKey(sn.notificationsRef)) idx++;
 
+    boolean hasLogViewer = leaves.containsKey(sn.logViewerRef);
     boolean hasChannelList = leaves.containsKey(sn.channelListRef);
     boolean hasDccTransfers = leaves.containsKey(sn.dccTransfersRef);
 
+    if (ref.equals(sn.logViewerRef)) {
+      return idx;
+    }
+
+    if (hasLogViewer) idx++;
     if (ref.equals(sn.channelListRef)) {
       return idx;
     }
@@ -2083,6 +2506,16 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   public void ensureNode(TargetRef ref) {
     Objects.requireNonNull(ref, "ref");
+    if (ref.isApplicationUi()) {
+      if (!showApplicationRoot) {
+        setApplicationRootVisible(true);
+      }
+      if (!leaves.containsKey(ref)) {
+        addApplicationLeaf(ref, applicationLeafLabel(ref));
+        model.nodeStructureChanged(applicationRoot);
+      }
+      return;
+    }
     if (ref.isChannelList() && !showChannelListNodes) {
       setChannelListNodesVisible(true);
     }
@@ -2105,9 +2538,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       parent = sn.serverNode;
     } else if (ref.isNotifications()) {
       parent = sn.serverNode;
+    } else if (ref.isInterceptor()) {
+      parent = sn.interceptorsNode != null ? sn.interceptorsNode : sn.serverNode;
     } else if (ref.isChannelList()) {
       parent = sn.serverNode;
     } else if (ref.isDccTransfers()) {
+      parent = sn.serverNode;
+    } else if (ref.isLogViewer()) {
       parent = sn.serverNode;
     } else if (ref.isChannel()) {
       parent = sn.serverNode;
@@ -2118,6 +2555,11 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     String leafLabel = ref.target();
     if (ref.isNotifications()) {
       leafLabel = "Notifications";
+    } else if (ref.isInterceptor()) {
+      String name = interceptorStore != null ? interceptorStore.interceptorName(ref.serverId(), ref.interceptorId()) : "";
+      leafLabel = (name == null || name.isBlank()) ? "Interceptor" : name;
+    } else if (ref.isLogViewer()) {
+      leafLabel = LOG_VIEWER_LABEL;
     } else if (ref.isChannelList()) {
       leafLabel = CHANNEL_LIST_LABEL;
     } else if (ref.isDccTransfers()) {
@@ -2132,13 +2574,17 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       }
     }
     int idx;
-    if (ref.isChannel() && parent == sn.serverNode) {
+    if (ref.isInterceptor() && parent == sn.interceptorsNode) {
+      idx = parent.getChildCount();
+    } else if (ref.isChannel() && parent == sn.serverNode) {
       int beforePm = sn.serverNode.getChildCount();
-      if (beforePm > 0) {
+      while (beforePm > 0) {
         DefaultMutableTreeNode last = (DefaultMutableTreeNode) sn.serverNode.getChildAt(beforePm - 1);
-        if (isPrivateMessagesGroupNode(last)) {
-          beforePm = beforePm - 1;
+        if (isReservedServerTailNode(last)) {
+          beforePm--;
+          continue;
         }
+        break;
       }
       idx = Math.max(minInsertIndex(sn.serverNode), beforePm);
     } else {
@@ -2146,7 +2592,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
     parent.insert(leaf, idx);
 
-    model.reload(parent);
+    model.nodesWereInserted(parent, new int[] { idx });
     tree.expandPath(new TreePath(parent.getPath()));
   }
 
@@ -2160,7 +2606,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   public void removeTarget(TargetRef ref) {
-    if (ref == null || ref.isStatus() || ref.isUiOnly()) return;
+    if (ref == null || ref.isStatus()) return;
+    if (ref.isUiOnly() && !ref.isInterceptor()) return;
     DefaultMutableTreeNode mappedNode = leaves.remove(ref);
     java.util.Set<DefaultMutableTreeNode> nodesToRemove = new HashSet<>();
     if (mappedNode != null) {
@@ -2445,7 +2892,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (first != null) {
       selectTarget(first);
     } else {
-      tree.setSelectionPath(new TreePath(root.getPath()));
+      tree.setSelectionPath(defaultSelectionPath());
     }
   });
 }
@@ -2569,8 +3016,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     int count = 0;
     if (leaves.containsKey(originNodes.statusRef)) count++;
     if (leaves.containsKey(originNodes.notificationsRef)) count++;
+    if (leaves.containsKey(originNodes.logViewerRef)) count++;
     if (leaves.containsKey(originNodes.channelListRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
+    if (originNodes.interceptorsNode != null && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
     return count;
   }
 
@@ -2585,6 +3034,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     Object comp = path.getLastPathComponent();
     if (!(comp instanceof DefaultMutableTreeNode node)) return null;
 
+    if (isIrcRootNode(node)) {
+      return "Configured IRC servers and discovered bouncer networks.";
+    }
+
+    if (isApplicationRootNode(node)) {
+      return "Application diagnostics buffers.";
+    }
+
     if (isSojuNetworksGroupNode(node)) {
       return "Soju networks discovered from the bouncer (not saved).";
     }
@@ -2593,12 +3050,28 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       return "ZNC networks discovered from the bouncer (not saved).";
     }
 
+    if (isInterceptorsGroupNode(node)) {
+      return "Interceptors for this server. Count shows total captured hits.";
+    }
+
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd && nd.ref != null) {
+      if (nd.ref.isApplicationUnhandledErrors()) {
+        return "Uncaught JVM exceptions captured by IRCafe.";
+      }
+      if (nd.ref.isApplicationAssertjSwing()) {
+        return "Diagnostic buffer for AssertJ Swing/watchdog output.";
+      }
+      if (nd.ref.isApplicationJhiccup()) {
+        return "Diagnostic buffer for jHiccup latency output.";
+      }
       if (nd.ref.isStatus() && BOUNCER_CONTROL_LABEL.equals(nd.label)
           && (sojuBouncerControlServerIds.contains(nd.ref.serverId())
               || zncBouncerControlServerIds.contains(nd.ref.serverId()))) {
         return "Bouncer Control connection (used to discover bouncer networks).";
+      }
+      if (nd.ref.isInterceptor()) {
+        return "Custom interceptor rules, actions, and captured matches. Scope can be this server or any server.";
       }
     }
 
@@ -2684,6 +3157,13 @@ private void removeServerRoot(String serverId) {
   ServerNodes sn = servers.remove(serverId);
   if (sn == null) return;
 
+  if (interceptorStore != null) {
+    try {
+      interceptorStore.clearServerHits(serverId);
+    } catch (Exception ignored) {
+    }
+  }
+
   if (Objects.equals(hoveredServerActionServerId, serverId)) {
     hoveredServerActionServerId = "";
   }
@@ -2733,7 +3213,7 @@ private void removeServerRoot(String serverId) {
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
 
-    DefaultMutableTreeNode parent = root;
+    DefaultMutableTreeNode parent = ircRoot;
     if (id.startsWith("soju:")) {
       String origin = sojuOriginByServerId.get(id);
       if (origin == null || origin.isBlank()) {
@@ -2777,29 +3257,66 @@ private void removeServerRoot(String serverId) {
     serverNode.insert(notificationsLeaf, 1);
     leaves.put(notificationsRef, notificationsLeaf);
 
+    TargetRef logViewerRef = TargetRef.logViewer(id);
+    DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
+    serverNode.insert(logViewerLeaf, 2);
+    leaves.put(logViewerRef, logViewerLeaf);
+
     TargetRef channelListRef = TargetRef.channelList(id);
     if (showChannelListNodes) {
       DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
-      serverNode.insert(channelListLeaf, 2);
+      serverNode.insert(channelListLeaf, 3);
       leaves.put(channelListRef, channelListLeaf);
     }
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
-      int dccIndex = showChannelListNodes ? 3 : 2;
+      int dccIndex = showChannelListNodes ? 4 : 3;
       DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
       serverNode.insert(dccTransfersLeaf, dccIndex);
       leaves.put(dccTransfersRef, dccTransfersLeaf);
     }
 
+    NodeData interceptorsData = new NodeData(null, INTERCEPTORS_GROUP_LABEL);
+    if (interceptorStore != null) {
+      interceptorsData.unread = Math.max(0, interceptorStore.totalHitCount(id));
+    }
+    DefaultMutableTreeNode interceptorsNode = new DefaultMutableTreeNode(interceptorsData);
+    serverNode.add(interceptorsNode);
+
+    if (interceptorStore != null) {
+      List<InterceptorDefinition> defs = interceptorStore.listInterceptors(id);
+      if (defs != null) {
+        for (InterceptorDefinition def : defs) {
+          if (def == null) continue;
+          TargetRef ref = TargetRef.interceptor(id, def.id());
+          String label = Objects.toString(def.name(), "").trim();
+          if (label.isEmpty()) label = "Interceptor";
+          DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new NodeData(ref, label));
+          interceptorsNode.add(leaf);
+          leaves.put(ref, leaf);
+        }
+      }
+    }
+
     serverNode.add(pmNode);
 
-    ServerNodes sn = new ServerNodes(serverNode, pmNode, statusRef, notificationsRef, channelListRef, dccTransfersRef);
+    ServerNodes sn =
+        new ServerNodes(
+            serverNode,
+            pmNode,
+            interceptorsNode,
+            statusRef,
+            notificationsRef,
+            logViewerRef,
+            channelListRef,
+            dccTransfersRef);
     servers.put(id, sn);
 
     model.reload(root);
     tree.expandPath(new TreePath(serverNode.getPath()));
     refreshNotificationsCount(id);
+    refreshInterceptorGroupCount(id);
     return sn;
   }
 
@@ -2912,24 +3429,59 @@ private void removeServerRoot(String serverId) {
     }
   }
 
+  private void syncTypingIndicatorStyleFromSettings() {
+    String configured = null;
+    try {
+      configured =
+          settingsBus != null && settingsBus.get() != null
+              ? settingsBus.get().typingIndicatorsTreeStyle()
+              : null;
+    } catch (Exception ignored) {
+    }
+    this.typingIndicatorStyle = TreeTypingIndicatorStyle.from(configured);
+  }
+
+  private enum TreeTypingIndicatorStyle {
+    DOTS,
+    KEYBOARD,
+    GLOW_DOT;
+
+    static TreeTypingIndicatorStyle from(String raw) {
+      String s = Objects.toString(raw, "").trim().toLowerCase(java.util.Locale.ROOT);
+      if (s.isEmpty()) return DOTS;
+      return switch (s) {
+        case "keyboard", "kbd" -> KEYBOARD;
+        case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> GLOW_DOT;
+        default -> DOTS;
+      };
+    }
+  }
+
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
+    final DefaultMutableTreeNode interceptorsNode;
     final TargetRef statusRef;
     final TargetRef notificationsRef;
+    final TargetRef logViewerRef;
     final TargetRef channelListRef;
     final TargetRef dccTransfersRef;
 
-    ServerNodes(DefaultMutableTreeNode serverNode,
+    ServerNodes(
+        DefaultMutableTreeNode serverNode,
         DefaultMutableTreeNode pmNode,
+        DefaultMutableTreeNode interceptorsNode,
         TargetRef statusRef,
         TargetRef notificationsRef,
+        TargetRef logViewerRef,
         TargetRef channelListRef,
         TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
+      this.interceptorsNode = interceptorsNode;
       this.statusRef = statusRef;
       this.notificationsRef = notificationsRef;
+      this.logViewerRef = logViewerRef;
       this.channelListRef = channelListRef;
       this.dccTransfersRef = dccTransfersRef;
     }
@@ -2964,7 +3516,8 @@ private void removeServerRoot(String serverId) {
   }
 
 private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
-  private float typingDotAlpha = 0f;
+  private float typingIndicatorAlpha = 0f;
+  private boolean typingIndicatorSlotVisible = false;
 
   private void setTreeIcon(String name) {
     Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
@@ -2987,7 +3540,8 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Font base = tree.getFont();
     if (base == null) base = UIManager.getFont("Tree.font");
     if (base == null) base = getFont();
-    typingDotAlpha = 0f;
+    typingIndicatorAlpha = 0f;
+    typingIndicatorSlotVisible = false;
 
     if (value instanceof DefaultMutableTreeNode node) {
       Object uo = node.getUserObject();
@@ -3007,17 +3561,31 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, pal);
           setIcon(icon);
           setDisabledIcon(icon);
+        } else if (nd.ref != null && nd.ref.isApplicationUnhandledErrors()) {
+          setTreeIcon("info");
+        } else if (nd.ref != null && nd.ref.isApplicationAssertjSwing()) {
+          setTreeIcon("settings");
+        } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
+          setTreeIcon("refresh");
         } else if (nd.ref != null && nd.ref.isStatus()) {
           setTreeIcon("terminal");
         } else if (nd.ref != null && nd.ref.isNotifications()) {
           setTreeIcon("info");
+        } else if (nd.ref != null && nd.ref.isLogViewer()) {
+          setTreeIcon("terminal");
+        } else if (nd.ref != null && nd.ref.isInterceptor()) {
+          setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
         } else if (nd.ref != null && nd.ref.isChannelList()) {
           setTreeIcon("add");
         } else if (nd.ref != null && nd.ref.isDccTransfers()) {
           setTreeIcon("dock-right");
+        } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
+          setTreeIcon("eye");
         }
         if (supportsTypingActivity(nd.ref)) {
-          typingDotAlpha = nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
+          typingIndicatorSlotVisible = true;
+          typingIndicatorAlpha =
+              nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
         }
       } else if (uo instanceof String id && isServerNode(node)) {
         setText(serverNodeDisplayLabel(id));
@@ -3033,9 +3601,20 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
         setIcon(icon);
         setDisabledIcon(disabled);
+      } else if (isIrcRootNode(node)) {
+        setText(IRC_ROOT_LABEL);
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("terminal");
+      } else if (isApplicationRootNode(node)) {
+        setText(APPLICATION_ROOT_LABEL);
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("settings");
       } else if (isPrivateMessagesGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("account-unknown");
+      } else if (isInterceptorsGroupNode(node)) {
+        setFont(base.deriveFont(Font.PLAIN));
+        setTreeIcon("eye");
       } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("dock-left");
@@ -3049,29 +3628,118 @@ private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     return c;
   }
 
+  private boolean isInterceptorEnabled(TargetRef ref) {
+    if (ref == null || !ref.isInterceptor()) return true;
+    if (interceptorStore == null) return true;
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    String iid = Objects.toString(ref.interceptorId(), "").trim();
+    if (sid.isEmpty() || iid.isEmpty()) return true;
+    InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
+    return def == null || def.enabled();
+  }
+
   @Override
   protected void paintComponent(Graphics g) {
     super.paintComponent(g);
-    if (typingDotAlpha <= 0.01f) return;
+    if (!typingIndicatorSlotVisible || typingIndicatorAlpha <= 0.01f) return;
 
     Graphics2D g2 = (Graphics2D) g.create();
     try {
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      int dot = 8;
-      int x = Math.max(0, getWidth() - dot - 6);
-      int y = Math.max(0, (getHeight() - dot) / 2);
-      float a = Math.max(0f, Math.min(1f, typingDotAlpha));
 
-      g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, a * 0.45f)));
-      g2.setColor(TYPING_ACTIVITY_GLOW);
-      g2.fillOval(x - 2, y - 2, dot + 4, dot + 4);
+      TreeTypingIndicatorStyle style = typingIndicatorStyle;
+      int width = indicatorWidth(style);
+      int height = indicatorHeight(style);
+      java.awt.Insets insets = getInsets();
+      int leftInset = insets != null ? insets.left : 0;
+      int slotWidth = Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, width + 2);
+      int slotLeft = Math.max(0, leftInset - slotWidth - 1);
+      int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
+      int y = Math.max(0, (getHeight() - height) / 2);
+      float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
 
-      g2.setComposite(AlphaComposite.SrcOver.derive(a));
-      g2.setColor(TYPING_ACTIVITY_DOT);
-      g2.fillOval(x, y, dot, dot);
+      switch (style) {
+        case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
+        case GLOW_DOT -> drawGlowDotIndicator(g2, x, y, width, height, alpha);
+        case DOTS -> drawDotsIndicator(g2, x, y, alpha);
+      }
     } finally {
       g2.dispose();
     }
+  }
+
+  private static int indicatorWidth(TreeTypingIndicatorStyle style) {
+    return switch (style) {
+      case KEYBOARD -> 10;
+      case GLOW_DOT -> 8;
+      case DOTS -> TYPING_ACTIVITY_DOT_COUNT * TYPING_ACTIVITY_DOT_SIZE
+          + (TYPING_ACTIVITY_DOT_COUNT - 1) * TYPING_ACTIVITY_DOT_GAP;
+    };
+  }
+
+  private static int indicatorHeight(TreeTypingIndicatorStyle style) {
+    return switch (style) {
+      case KEYBOARD -> 7;
+      case GLOW_DOT -> 8;
+      case DOTS -> TYPING_ACTIVITY_DOT_SIZE;
+    };
+  }
+
+  private void drawDotsIndicator(Graphics2D g2, int x, int y, float alpha) {
+    int dot = TYPING_ACTIVITY_DOT_SIZE;
+    int gap = TYPING_ACTIVITY_DOT_GAP;
+    int phase = (int) ((System.currentTimeMillis() / Math.max(80, TYPING_ACTIVITY_DOT_FRAME_MS)) % TYPING_ACTIVITY_DOT_COUNT);
+    Color base = typingIndicatorColor();
+    g2.setComposite(AlphaComposite.SrcOver);
+    for (int i = 0; i < TYPING_ACTIVITY_DOT_COUNT; i++) {
+      float pulse = (i == phase) ? 1.0f : 0.42f;
+      int a = Math.max(12, Math.min(255, Math.round(255f * alpha * pulse)));
+      g2.setColor(withAlpha(base, a));
+      g2.fillOval(x + (i * (dot + gap)), y, dot, dot);
+    }
+  }
+
+  private void drawKeyboardIndicator(Graphics2D g2, int x, int y, int width, int height, float alpha) {
+    Color base = typingIndicatorColor();
+    int fillA = Math.max(8, Math.min(255, Math.round(50f * alpha)));
+    int strokeA = Math.max(18, Math.min(255, Math.round(225f * alpha)));
+    int keyA = Math.max(14, Math.min(255, Math.round(165f * alpha)));
+    g2.setComposite(AlphaComposite.SrcOver);
+    g2.setColor(withAlpha(base, fillA));
+    g2.fillRoundRect(x, y, width, height, 3, 3);
+    g2.setColor(withAlpha(base, strokeA));
+    g2.drawRoundRect(x, y, width - 1, height - 1, 3, 3);
+
+    int keyY1 = y + 2;
+    int keyY2 = y + 4;
+    g2.setColor(withAlpha(base, keyA));
+    int[] top = {x + 2, x + 4, x + 6, x + 8};
+    for (int keyX : top) {
+      g2.fillRect(keyX, keyY1, 1, 1);
+    }
+    g2.fillRect(x + 3, keyY2, 4, 1);
+  }
+
+  private void drawGlowDotIndicator(Graphics2D g2, int x, int y, int width, int height, float alpha) {
+    int dot = 6;
+    int halo = 4;
+    int cx = x + Math.max(0, (width - dot) / 2);
+    int cy = y + Math.max(0, (height - dot) / 2);
+    g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, alpha * 0.45f)));
+    g2.setColor(TYPING_ACTIVITY_GLOW_HALO);
+    g2.fillOval(cx - (halo / 2), cy - (halo / 2), dot + halo, dot + halo);
+
+    g2.setComposite(AlphaComposite.SrcOver.derive(alpha));
+    g2.setColor(TYPING_ACTIVITY_GLOW_DOT);
+    g2.fillOval(cx, cy, dot, dot);
+  }
+
+  private Color typingIndicatorColor() {
+    Color c = UIManager.getColor("@accentColor");
+    if (c == null) c = UIManager.getColor("Component.focusColor");
+    if (c == null) c = UIManager.getColor("Label.foreground");
+    if (c == null) c = TYPING_ACTIVITY_INDICATOR_FALLBACK;
+    return c;
   }
 }
 
@@ -3178,6 +3846,10 @@ static final class NodeData {
   @PreDestroy
   void shutdown() {
     try {
+      if (settingsBus != null && settingsListener != null) {
+        settingsBus.removeListener(settingsListener);
+        settingsListener = null;
+      }
       if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
       nodeActions.close();

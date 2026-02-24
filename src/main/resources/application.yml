@@ -129,6 +129,30 @@ ircafe:
         "NickServ": "#FFB300"
         "ChanServ": "#26A69A"
 
+    # Optional integrations surfaced under the Server Tree "Application" root.
+    appDiagnostics:
+      assertjSwing:
+        # Enable AssertJ Swing runtime integration (if AssertJ Swing is on the classpath)
+        # plus an EDT freeze watchdog.
+        enabled: true
+        # Poll EDT responsiveness in the background.
+        edtFreezeWatchdogEnabled: true
+        # If EDT stalls longer than this, write freeze events to Application -> AssertJ Swing.
+        edtFreezeThresholdMs: 2500
+        # Watchdog poll cadence.
+        edtWatchdogPollMs: 500
+
+      jhiccup:
+        # Optional external jHiccup process integration.
+        # Set enabled=true and point jarPath to your jHiccup jar to stream output into
+        # Application -> jHiccup.
+        enabled: false
+        # Absolute path or path relative to the runtime config directory.
+        # jarPath: "tools/jHiccup.jar"
+        javaCommand: "java"
+        # Optional args passed after "-jar <jarPath>".
+        args: []
+
   soju:
     # Soju bouncer integration.
     discovery:

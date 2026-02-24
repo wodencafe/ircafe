@@ -2,10 +2,13 @@ package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.app.TargetRef;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -23,6 +26,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
+import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -95,6 +100,11 @@ public class ChatLogDatabaseConfig {
     return new ChatLogRepository(jdbc);
   }
 
+  @Bean
+  public ChatLogViewerService chatLogViewerService(ChatLogRepository repo) {
+    return new DbChatLogViewerService(repo);
+  }
+
   @Bean(destroyMethod = "close")
   public ChatLogService chatLogService(
       ChatLogRepository repo,
@@ -113,8 +123,10 @@ public class ChatLogDatabaseConfig {
   public ChatLogRetentionPruner chatLogRetentionPruner(ChatLogRepository repo,
                                                        @Qualifier("chatLogTx") TransactionTemplate tx,
                                                        LogProperties props,
-                                                       @Qualifier("chatLogFlyway") Flyway flyway) {
-    return new ChatLogRetentionPruner(repo, tx, props, flyway);
+                                                       @Qualifier("chatLogFlyway") Flyway flyway,
+                                                       @Qualifier(ExecutorConfig.CHAT_LOG_RETENTION_SCHEDULER)
+                                                       ScheduledExecutorService retentionScheduler) {
+    return new ChatLogRetentionPruner(repo, tx, props, flyway, retentionScheduler);
   }
 
   private static Path resolveDbBasePath(LogProperties props, RuntimeConfigStore runtimeConfigStore) {
@@ -150,8 +162,10 @@ public class ChatLogDatabaseConfig {
                                               ChatTranscriptStore transcripts,
                                               UiSettingsBus settingsBus,
                                               IrcClientService irc,
-                                              ChatHistoryIngestBus ingestBus) {
-    return new DbChatHistoryService(repo, props, transcripts, settingsBus, irc, ingestBus);
+                                              ChatHistoryIngestBus ingestBus,
+                                              @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_EXECUTOR)
+                                              ExecutorService chatHistoryExecutor) {
+    return new DbChatHistoryService(repo, props, transcripts, settingsBus, irc, ingestBus, chatHistoryExecutor);
   }
 
   @Bean

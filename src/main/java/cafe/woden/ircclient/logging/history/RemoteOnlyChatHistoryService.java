@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.model.LogDirection;
@@ -9,7 +10,6 @@ import cafe.woden.ircclient.logging.model.LogLine;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Completable;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -36,6 +36,7 @@ import javax.swing.text.Position;
 import javax.swing.text.StyledDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -70,15 +71,15 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       ChatHistoryBatchBus batchBus,
       ZncPlaybackBus zncPlaybackBus,
       ChatTranscriptStore transcripts,
-      UiSettingsBus settingsBus
+      UiSettingsBus settingsBus,
+      @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec
   ) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
     this.zncPlaybackBus = zncPlaybackBus;
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
     this.settingsBus = settingsBus;
-
-    this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-remote-history");
+    this.exec = Objects.requireNonNull(exec, "exec");
   }
 
   @Override

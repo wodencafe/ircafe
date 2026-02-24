@@ -2,8 +2,8 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
-import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -25,6 +25,7 @@ import java.util.function.Function;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,14 +50,19 @@ final class PircbotxConnectionTimersRx {
   // Prevent scheduling (and noisy UndeliverableException logs) during JVM/app shutdown.
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
-  PircbotxConnectionTimersRx(IrcProperties props, ServerCatalog serverCatalog) {
+  PircbotxConnectionTimersRx(
+      IrcProperties props,
+      ServerCatalog serverCatalog,
+      @Qualifier(ExecutorConfig.PIRCBOTX_HEARTBEAT_SCHEDULER) ScheduledExecutorService heartbeatExec,
+      @Qualifier(ExecutorConfig.PIRCBOTX_RECONNECT_SCHEDULER) ScheduledExecutorService reconnectExec
+  ) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     IrcProperties.Client c = (props != null) ? props.client() : null;
     this.reconnectPolicy = (c != null) ? c.reconnect() : null;
     this.heartbeatPolicy = (c != null) ? c.heartbeat() : null;
 
-    this.heartbeatExec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-heartbeat");
-    this.reconnectExec = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-reconnect");
+    this.heartbeatExec = Objects.requireNonNull(heartbeatExec, "heartbeatExec");
+    this.reconnectExec = Objects.requireNonNull(reconnectExec, "reconnectExec");
     this.heartbeatScheduler = Schedulers.from(heartbeatExec);
   }
 
@@ -250,11 +256,5 @@ final class PircbotxConnectionTimersRx {
   @PreDestroy
   void shutdown() {
     shuttingDown.set(true);
-    try {
-      heartbeatExec.shutdownNow();
-    } catch (Exception ignored) {}
-    try {
-      reconnectExec.shutdownNow();
-    } catch (Exception ignored) {}
   }
 }

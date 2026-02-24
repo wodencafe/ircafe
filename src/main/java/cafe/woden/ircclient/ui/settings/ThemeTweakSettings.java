@@ -13,17 +13,20 @@ public record ThemeTweakSettings(
 ) {
 
   public enum ThemeDensity {
+    AUTO,
     COMPACT,
     COZY,
     SPACIOUS;
 
     public static ThemeDensity from(String raw) {
-      if (raw == null) return COZY;
+      if (raw == null) return AUTO;
       String s = raw.trim().toLowerCase(Locale.ROOT);
       return switch (s) {
+        case "auto" -> AUTO;
         case "compact" -> COMPACT;
+        case "cozy" -> COZY;
         case "spacious" -> SPACIOUS;
-        default -> COZY;
+        default -> AUTO;
       };
     }
 
@@ -33,13 +36,13 @@ public record ThemeTweakSettings(
   }
 
   public ThemeTweakSettings {
-    if (density == null) density = ThemeDensity.COZY;
+    if (density == null) density = ThemeDensity.AUTO;
 
     if (cornerRadius < 0) cornerRadius = 0;
     if (cornerRadius > 20) cornerRadius = 20;
   }
 
   public String densityId() {
-    return density != null ? density.id() : ThemeDensity.COZY.id();
+    return density != null ? density.id() : ThemeDensity.AUTO.id();
   }
 }

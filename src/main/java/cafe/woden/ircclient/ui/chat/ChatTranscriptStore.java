@@ -1817,6 +1817,13 @@ public void appendChatAt(TargetRef ref,
                          String notificationRuleHighlightColor) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  if (!normalizedMsgId.isBlank()) {
+    StyledDocument existingDoc = docs.get(ref);
+    if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+      return;
+    }
+  }
 
   LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
   LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
@@ -1838,7 +1845,6 @@ public void appendChatAt(TargetRef ref,
   applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
   applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
-  String normalizedMsgId = normalizeMessageId(messageId);
   String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
   String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
   if (!replyToMsgId.isBlank()) {
@@ -2136,6 +2142,22 @@ public void appendChatAt(TargetRef ref,
     return insertNoticeFromHistoryAt(ref, 0, from, text, tsEpochMs);
   }
 
+  private AttributeSet statusFromStyleFor(TargetRef ref) {
+    if (ref != null && ref.isApplicationUi()) {
+      // Application diagnostics read better when the source tag is visually distinct.
+      return styles.noticeFrom();
+    }
+    return styles.status();
+  }
+
+  private AttributeSet errorFromStyleFor(TargetRef ref) {
+    if (ref != null && ref.isApplicationUi()) {
+      // Keep source tags consistent across status/error lines in diagnostics buffers.
+      return styles.noticeFrom();
+    }
+    return styles.error();
+  }
+
   public synchronized int insertStatusFromHistoryAt(TargetRef ref,
                                                     int insertAt,
                                                     String from,
@@ -2158,8 +2180,15 @@ public void appendChatAt(TargetRef ref,
       return Math.max(0, insertAt);
     }
 
-    return insertLineInternalAt(ref, insertAt, from, text,
-        styles.status(), styles.status(), false, meta);
+    return insertLineInternalAt(
+        ref,
+        insertAt,
+        from,
+        text,
+        statusFromStyleFor(ref),
+        styles.status(),
+        false,
+        meta);
   }
 
   public synchronized int prependStatusFromHistory(TargetRef ref,
@@ -2191,8 +2220,15 @@ public void appendChatAt(TargetRef ref,
       return Math.max(0, insertAt);
     }
 
-    return insertLineInternalAt(ref, insertAt, from, text,
-        styles.error(), styles.error(), false, meta);
+    return insertLineInternalAt(
+        ref,
+        insertAt,
+        from,
+        text,
+        errorFromStyleFor(ref),
+        styles.error(),
+        false,
+        meta);
   }
 
   public synchronized int prependErrorFromHistory(TargetRef ref,
@@ -3571,6 +3607,13 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
     long tsEpochMs = epochMs != null ? epochMs : System.currentTimeMillis();
     noteEpochMs(ref, tsEpochMs);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank()) {
+      StyledDocument existingDoc = docs.get(ref);
+      if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+        return;
+      }
+    }
 
     LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null, messageId, ircv3Tags);
 
@@ -3584,7 +3627,6 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
 
-    String normalizedMsgId = normalizeMessageId(messageId);
     String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
     String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
     if (!replyToMsgId.isBlank()) {
@@ -3679,7 +3721,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.status(), styles.status(), true, meta);
+    appendLineInternal(ref, from, text, statusFromStyleFor(ref), styles.status(), true, meta);
   }
 
   public void appendError(TargetRef ref, String from, String text) {
@@ -3690,7 +3732,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.error(), styles.error(), true, meta);
+    appendLineInternal(ref, from, text, errorFromStyleFor(ref), styles.error(), true, meta);
   }
 
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
@@ -3716,7 +3758,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.status(), styles.status(), false, meta);
+    appendLineInternal(ref, from, text, statusFromStyleFor(ref), styles.status(), false, meta);
   }
 
   public void appendErrorFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
@@ -3729,7 +3771,7 @@ private static int findSpoilerOffset(StyledDocument doc, int guess, SpoilerMessa
       return;
     }
     breakPresenceRun(ref);
-    appendLineInternal(ref, from, text, styles.error(), styles.error(), false, meta);
+    appendLineInternal(ref, from, text, errorFromStyleFor(ref), styles.error(), false, meta);
   }
 /**
  * Append a notice with a timestamp, allowing embeds.
@@ -3748,6 +3790,13 @@ public void appendNoticeAt(
 ) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  if (!normalizedMsgId.isBlank()) {
+    StyledDocument existingDoc = docs.get(ref);
+    if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+      return;
+    }
+  }
   LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
   if (m != null) {
@@ -3755,7 +3804,6 @@ public void appendNoticeAt(
     return;
   }
   breakPresenceRun(ref);
-  String normalizedMsgId = normalizeMessageId(messageId);
   String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
   String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
   if (!replyToMsgId.isBlank()) {
@@ -3789,6 +3837,13 @@ public void appendStatusAt(
 ) {
   ensureTargetExists(ref);
   noteEpochMs(ref, tsEpochMs);
+  String normalizedMsgId = normalizeMessageId(messageId);
+  if (!normalizedMsgId.isBlank()) {
+    StyledDocument existingDoc = docs.get(ref);
+    if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+      return;
+    }
+  }
   LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, from, tsEpochMs, null, messageId, ircv3Tags);
   FilterEngine.Match m = hideMatch(ref, LogKind.STATUS, LogDirection.SYSTEM, from, text, meta.tags());
   if (m != null) {
@@ -3796,7 +3851,7 @@ public void appendStatusAt(
     return;
   }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.status(), styles.status(), true, meta);
+  appendLineInternal(ref, from, text, statusFromStyleFor(ref), styles.status(), true, meta);
 }
 
 /**
@@ -3812,7 +3867,7 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     return;
   }
   breakPresenceRun(ref);
-  appendLineInternal(ref, from, text, styles.error(), styles.error(), true, meta);
+  appendLineInternal(ref, from, text, errorFromStyleFor(ref), styles.error(), true, meta);
 }
   public void appendPresenceFromHistory(TargetRef ref, String displayText, long tsEpochMs) {
     ensureTargetExists(ref);

@@ -5,8 +5,8 @@ import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.io.BufferedInputStream;
@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -82,13 +83,14 @@ public class OutboundDccCommandService {
       IrcClientService irc,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
-      DccTransferStore dccTransferStore) {
+      DccTransferStore dccTransferStore,
+      @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR) ExecutorService io) {
     this.ui = ui;
     this.irc = irc;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.dccTransferStore = dccTransferStore;
-    this.io = VirtualThreads.newThreadPerTaskExecutor("ircafe-dcc");
+    this.io = io;
   }
 
   public void handleDcc(CompositeDisposable disposables, String subcommand, String nick, String argument) {
@@ -1318,7 +1320,6 @@ public class OutboundDccCommandService {
     pendingChatOffers.clear();
     pendingSendOffers.clear();
 
-    io.shutdownNow();
   }
 
   private record PendingChatOffer(

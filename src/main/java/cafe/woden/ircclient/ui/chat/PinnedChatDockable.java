@@ -249,11 +249,27 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   public void showTypingIndicator(String nick, String state) {
     if (nick == null || nick.isBlank()) return;
-    inputPanel.showRemoteTypingIndicator(nick, state);
+    boolean atBottomBefore = isTranscriptAtBottom();
+    if (atBottomBefore) {
+      armTailPinOnNextAppendIfAtBottom();
+    }
+    boolean typingBannerVisibilityChanged = inputPanel.showRemoteTypingIndicator(nick, state);
+    repinAfterInputAreaGeometryChange(atBottomBefore, typingBannerVisibilityChanged);
   }
 
   public void clearTypingIndicator() {
-    inputPanel.clearRemoteTypingIndicator();
+    boolean atBottomBefore = isTranscriptAtBottom();
+    if (atBottomBefore) {
+      armTailPinOnNextAppendIfAtBottom();
+    }
+    boolean typingBannerVisibilityChanged = inputPanel.clearRemoteTypingIndicator();
+    repinAfterInputAreaGeometryChange(atBottomBefore, typingBannerVisibilityChanged);
+  }
+
+  private void repinAfterInputAreaGeometryChange(boolean atBottomBefore, boolean inputAreaChangedHeight) {
+    if (!inputAreaChangedHeight) return;
+    if (!atBottomBefore && !isFollowTail()) return;
+    SwingUtilities.invokeLater(this::scrollToBottom);
   }
 
   public void refreshTypingSignalAvailability() {

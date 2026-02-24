@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.irc.enrichment;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -25,6 +25,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -78,17 +79,20 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
 
   private final Disposable eventsSub;
 
-  private final ScheduledExecutorService exec = VirtualThreads.newSingleThreadScheduledExecutor("user-info-enrichment");
+  private final ScheduledExecutorService exec;
   private final Object scheduleLock = new Object();
   private ScheduledFuture<?> scheduledTick;
   private long scheduledAtEpochMs = Long.MAX_VALUE;
 
   public UserInfoEnrichmentService(IrcClientService irc,
                                    ObjectProvider<UiSettingsBus> settingsBusProvider,
-                                   UserInfoEnrichmentPlanner planner) {
+                                   UserInfoEnrichmentPlanner planner,
+                                   @Qualifier(ExecutorConfig.USER_INFO_ENRICHMENT_SCHEDULER)
+                                   ScheduledExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.settingsBusProvider = Objects.requireNonNull(settingsBusProvider, "settingsBusProvider");
     this.planner = Objects.requireNonNull(planner, "planner");
+    this.exec = Objects.requireNonNull(exec, "exec");
 
     this.eventsSub = irc.events().subscribe(this::onEvent, err ->
         log.debug("UserInfoEnrichmentService event handler failed", err));
@@ -107,7 +111,6 @@ private final ConcurrentHashMap<String, Map<String, Instant>> lastActiveAtByNick
       }
       scheduledAtEpochMs = Long.MAX_VALUE;
     }
-    exec.shutdownNow();
   }
 
   public void clearServer(String serverId) {

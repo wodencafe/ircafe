@@ -2,6 +2,9 @@ package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.ui.settings.NotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
+import cafe.woden.ircclient.app.interceptors.InterceptorRule;
+import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
 import cafe.woden.ircclient.app.commands.UserCommandAlias;
 import cafe.woden.ircclient.ui.filter.FilterRule;
 import cafe.woden.ircclient.ui.filter.TagSpec;
@@ -420,10 +423,10 @@ public class RuntimeConfigStore {
       String d = density != null ? density.trim().toLowerCase(java.util.Locale.ROOT) : "";
       if (d.isEmpty()) {
         ui.remove("density");
-      } else if (d.equals("compact") || d.equals("cozy") || d.equals("spacious")) {
+      } else if (d.equals("auto") || d.equals("compact") || d.equals("cozy") || d.equals("spacious")) {
         ui.put("density", d);
       } else {
-        ui.put("density", "cozy");
+        ui.put("density", "auto");
       }
 
       writeFile(doc);
@@ -944,6 +947,231 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized boolean readAppDiagnosticsAssertjSwingEnabled(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("enabled", defaultValue);
+  }
+
+  public synchronized boolean readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("edtFreezeWatchdogEnabled", defaultValue);
+  }
+
+  public synchronized int readAppDiagnosticsAssertjSwingFreezeThresholdMs(int defaultValue) {
+    try {
+      if (file.toString().isBlank()) return clampAssertjFreezeThresholdMs(defaultValue);
+      if (!Files.exists(file)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return clampAssertjFreezeThresholdMs(defaultValue);
+
+      if (!assertjSwing.containsKey("edtFreezeThresholdMs")) return clampAssertjFreezeThresholdMs(defaultValue);
+      return clampAssertjFreezeThresholdMs(asInt(assertjSwing.get("edtFreezeThresholdMs")).orElse(defaultValue));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs from '{}'", file, e);
+      return clampAssertjFreezeThresholdMs(defaultValue);
+    }
+  }
+
+  public synchronized int readAppDiagnosticsAssertjSwingWatchdogPollMs(int defaultValue) {
+    try {
+      if (file.toString().isBlank()) return clampAssertjWatchdogPollMs(defaultValue);
+      if (!Files.exists(file)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return clampAssertjWatchdogPollMs(defaultValue);
+
+      if (!assertjSwing.containsKey("edtWatchdogPollMs")) return clampAssertjWatchdogPollMs(defaultValue);
+      return clampAssertjWatchdogPollMs(asInt(assertjSwing.get("edtWatchdogPollMs")).orElse(defaultValue));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtWatchdogPollMs from '{}'", file, e);
+      return clampAssertjWatchdogPollMs(defaultValue);
+    }
+  }
+
+  public synchronized boolean readAppDiagnosticsJhiccupEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return defaultValue;
+
+      if (!jhiccup.containsKey("enabled")) return defaultValue;
+      return asBoolean(jhiccup.get("enabled")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.enabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  public synchronized String readAppDiagnosticsJhiccupJarPath(String defaultValue) {
+    try {
+      if (file.toString().isBlank()) return Objects.toString(defaultValue, "").trim();
+      if (!Files.exists(file)) return Objects.toString(defaultValue, "").trim();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Objects.toString(defaultValue, "").trim();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Objects.toString(defaultValue, "").trim();
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return Objects.toString(defaultValue, "").trim();
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return Objects.toString(defaultValue, "").trim();
+
+      if (!jhiccup.containsKey("jarPath")) return Objects.toString(defaultValue, "").trim();
+      String raw = Objects.toString(jhiccup.get("jarPath"), "").trim();
+      return raw.isEmpty() ? Objects.toString(defaultValue, "").trim() : raw;
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.jarPath from '{}'", file, e);
+      return Objects.toString(defaultValue, "").trim();
+    }
+  }
+
+  public synchronized String readAppDiagnosticsJhiccupJavaCommand(String defaultValue) {
+    try {
+      String fallback = Objects.toString(defaultValue, "").trim();
+      if (fallback.isEmpty()) fallback = "java";
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return fallback;
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return fallback;
+
+      if (!jhiccup.containsKey("javaCommand")) return fallback;
+      String raw = Objects.toString(jhiccup.get("javaCommand"), "").trim();
+      return raw.isEmpty() ? fallback : raw;
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.javaCommand from '{}'", file, e);
+      String fallback = Objects.toString(defaultValue, "").trim();
+      return fallback.isEmpty() ? "java" : fallback;
+    }
+  }
+
+  public synchronized List<String> readAppDiagnosticsJhiccupArgs(List<String> defaultValue) {
+    try {
+      if (file.toString().isBlank()) return sanitizeArgs(defaultValue);
+      if (!Files.exists(file)) return sanitizeArgs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return sanitizeArgs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return sanitizeArgs(defaultValue);
+
+      Object jhiccupObj = appDiagnostics.get("jhiccup");
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return sanitizeArgs(defaultValue);
+
+      if (!jhiccup.containsKey("args")) return sanitizeArgs(defaultValue);
+      Object argsObj = jhiccup.get("args");
+      if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
+
+      List<String> out = new ArrayList<>();
+      for (Object entry : raw) {
+        String a = Objects.toString(entry, "").trim();
+        if (!a.isEmpty()) out.add(a);
+      }
+      return List.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.args from '{}'", file, e);
+      return sanitizeArgs(defaultValue);
+    }
+  }
+
+  private boolean readAppDiagnosticsAssertjSwingBoolean(String key, boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return defaultValue;
+
+      if (!assertjSwing.containsKey(key)) return defaultValue;
+      return asBoolean(assertjSwing.get(key)).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.{} from '{}'", key, file, e);
+      return defaultValue;
+    }
+  }
+
+  private static int clampAssertjFreezeThresholdMs(int value) {
+    if (value < 500) return 500;
+    if (value > 120_000) return 120_000;
+    return value;
+  }
+
+  private static int clampAssertjWatchdogPollMs(int value) {
+    if (value < 100) return 100;
+    if (value > 10_000) return 10_000;
+    return value;
+  }
+
+  private static List<String> sanitizeArgs(List<String> args) {
+    if (args == null || args.isEmpty()) return List.of();
+    List<String> out = new ArrayList<>();
+    for (String a : args) {
+      String t = Objects.toString(a, "").trim();
+      if (!t.isEmpty()) out.add(t);
+    }
+    return List.copyOf(out);
+  }
+
   public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("enabled", defaultValue);
   }
@@ -1025,6 +1253,163 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberAppDiagnosticsAssertjSwingEnabled(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean("enabled", enabled, "enabled");
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean(
+        "edtFreezeWatchdogEnabled", enabled, "edtFreezeWatchdogEnabled");
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingFreezeThresholdMs(int ms) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampAssertjFreezeThresholdMs(ms);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put("edtFreezeThresholdMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingWatchdogPollMs(int ms) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampAssertjWatchdogPollMs(ms);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put("edtWatchdogPollMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtWatchdogPollMs to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      jhiccup.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.enabled to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupJarPath(String jarPath) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(jarPath, "").trim();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      if (v.isEmpty()) {
+        jhiccup.remove("jarPath");
+      } else {
+        jhiccup.put("jarPath", v);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.jarPath to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupJavaCommand(String javaCommand) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String v = Objects.toString(javaCommand, "").trim();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      if (v.isEmpty()) {
+        jhiccup.remove("javaCommand");
+      } else {
+        jhiccup.put("javaCommand", v);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.javaCommand to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsJhiccupArgs(List<String> args) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      List<String> sanitized = sanitizeArgs(args);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+
+      if (sanitized.isEmpty()) {
+        jhiccup.remove("args");
+      } else {
+        jhiccup.put("args", sanitized);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jhiccup.args to '{}'", file, e);
+    }
+  }
+
+  private void rememberAppDiagnosticsAssertjSwingBoolean(String key, boolean value, String label) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put(key, value);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.{} to '{}'", label, file, e);
+    }
+  }
+
   public synchronized void rememberIrcEventNotificationRules(List<IrcEventNotificationRule> rules) {
     try {
       if (file.toString().isBlank()) return;
@@ -1050,7 +1435,12 @@ public class RuntimeConfigStore {
           if (!channelPatterns.isEmpty()) m.put("channelPatterns", channelPatterns);
 
           m.put("toastEnabled", r.toastEnabled());
-          m.put("toastWhenFocused", r.toastWhenFocused());
+          IrcEventNotificationRule.FocusScope focusScope =
+              r.focusScope() != null ? r.focusScope() : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+          m.put("focusScope", focusScope.name());
+          // Legacy compatibility for older builds that only understand toastWhenFocused.
+          m.put("toastWhenFocused", focusScope != IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
+          m.put("statusBarEnabled", r.statusBarEnabled());
           m.put("notificationsNodeEnabled", r.notificationsNodeEnabled());
           m.put("soundEnabled", r.soundEnabled());
           m.put("soundId", Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());
@@ -1075,6 +1465,154 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist ircEventNotificationRules to '{}'", file, e);
+    }
+  }
+
+  public synchronized Map<String, List<InterceptorDefinition>> readInterceptorDefinitions() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object interceptorsObj = ui.get("interceptors");
+      if (!(interceptorsObj instanceof Map<?, ?> interceptors)) return Map.of();
+
+      Object serversObj = interceptors.get("servers");
+      if (!(serversObj instanceof Map<?, ?> servers)) return Map.of();
+
+      LinkedHashMap<String, List<InterceptorDefinition>> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : servers.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        List<InterceptorDefinition> defs = parseInterceptorDefinitionsForServer(entry.getValue(), sid);
+        if (!defs.isEmpty()) {
+          out.put(sid, defs);
+        }
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read interceptor definitions from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  public synchronized void rememberInterceptorDefinitions(Map<String, List<InterceptorDefinition>> defsByServer) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> interceptors = getOrCreateMap(ui, "interceptors");
+
+      LinkedHashMap<String, Object> serversOut = new LinkedHashMap<>();
+      if (defsByServer != null) {
+        for (Map.Entry<String, List<InterceptorDefinition>> entry : defsByServer.entrySet()) {
+          String sid = Objects.toString(entry.getKey(), "").trim();
+          if (sid.isEmpty()) continue;
+
+          List<Map<String, Object>> defsOut = new ArrayList<>();
+          List<InterceptorDefinition> defs = entry.getValue();
+          if (defs != null) {
+            for (InterceptorDefinition def : defs) {
+              if (def == null) continue;
+              String id = Objects.toString(def.id(), "").trim();
+              if (id.isEmpty()) continue;
+
+              Map<String, Object> m = new LinkedHashMap<>();
+              m.put("id", id);
+              m.put("name", Objects.toString(def.name(), "").trim());
+              m.put("enabled", def.enabled());
+
+              String scopeServerId = Objects.toString(def.scopeServerId(), "").trim();
+              // Keep this key even when blank so "any server" survives round-trip.
+              m.put("scopeServerId", scopeServerId);
+
+              m.put("channelIncludeMode",
+                  def.channelIncludeMode() != null ? def.channelIncludeMode().name() : InterceptorRuleMode.GLOB.name());
+              String channelIncludes = Objects.toString(def.channelIncludes(), "").trim();
+              if (!channelIncludes.isEmpty()) m.put("channelIncludes", channelIncludes);
+
+              m.put("channelExcludeMode",
+                  def.channelExcludeMode() != null ? def.channelExcludeMode().name() : InterceptorRuleMode.GLOB.name());
+              String channelExcludes = Objects.toString(def.channelExcludes(), "").trim();
+              if (!channelExcludes.isEmpty()) m.put("channelExcludes", channelExcludes);
+
+              m.put("actionSoundEnabled", def.actionSoundEnabled());
+              m.put("actionStatusBarEnabled", def.actionStatusBarEnabled());
+              m.put("actionToastEnabled", def.actionToastEnabled());
+              String soundId = Objects.toString(def.actionSoundId(), "").trim();
+              m.put("actionSoundId", soundId.isEmpty() ? "NOTIF_1" : soundId);
+              m.put("actionSoundUseCustom", def.actionSoundUseCustom());
+              String soundCustom = Objects.toString(def.actionSoundCustomPath(), "").trim();
+              if (!soundCustom.isEmpty()) m.put("actionSoundCustomPath", soundCustom);
+
+              m.put("actionScriptEnabled", def.actionScriptEnabled());
+              String scriptPath = Objects.toString(def.actionScriptPath(), "").trim();
+              if (!scriptPath.isEmpty()) m.put("actionScriptPath", scriptPath);
+              String scriptArgs = Objects.toString(def.actionScriptArgs(), "").trim();
+              if (!scriptArgs.isEmpty()) m.put("actionScriptArgs", scriptArgs);
+              String scriptWorkingDirectory = Objects.toString(def.actionScriptWorkingDirectory(), "").trim();
+              if (!scriptWorkingDirectory.isEmpty()) m.put("actionScriptWorkingDirectory", scriptWorkingDirectory);
+
+              List<Map<String, Object>> rulesOut = new ArrayList<>();
+              if (def.rules() != null) {
+                for (InterceptorRule rule : def.rules()) {
+                  if (rule == null) continue;
+                  Map<String, Object> rm = new LinkedHashMap<>();
+                  rm.put("enabled", rule.enabled());
+                  rm.put("label", Objects.toString(rule.label(), "").trim());
+                  String eventTypesCsv = Objects.toString(rule.eventTypesCsv(), "").trim();
+                  if (!eventTypesCsv.isEmpty()) rm.put("eventTypesCsv", eventTypesCsv);
+
+                  rm.put("messageMode",
+                      rule.messageMode() != null ? rule.messageMode().name() : InterceptorRuleMode.LIKE.name());
+                  String messagePattern = Objects.toString(rule.messagePattern(), "").trim();
+                  if (!messagePattern.isEmpty()) rm.put("messagePattern", messagePattern);
+
+                  rm.put("nickMode",
+                      rule.nickMode() != null ? rule.nickMode().name() : InterceptorRuleMode.LIKE.name());
+                  String nickPattern = Objects.toString(rule.nickPattern(), "").trim();
+                  if (!nickPattern.isEmpty()) rm.put("nickPattern", nickPattern);
+
+                  rm.put("hostmaskMode",
+                      rule.hostmaskMode() != null ? rule.hostmaskMode().name() : InterceptorRuleMode.GLOB.name());
+                  String hostmaskPattern = Objects.toString(rule.hostmaskPattern(), "").trim();
+                  if (!hostmaskPattern.isEmpty()) rm.put("hostmaskPattern", hostmaskPattern);
+                  rulesOut.add(rm);
+                }
+              }
+              m.put("rules", rulesOut);
+              defsOut.add(m);
+            }
+          }
+
+          if (!defsOut.isEmpty()) {
+            serversOut.put(sid, defsOut);
+          }
+        }
+      }
+
+      if (serversOut.isEmpty()) {
+        interceptors.remove("servers");
+        if (interceptors.isEmpty()) {
+          ui.remove("interceptors");
+        }
+      } else {
+        interceptors.put("servers", serversOut);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist interceptor definitions to '{}'", file, e);
     }
   }
 
@@ -1427,6 +1965,24 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist incoming typing indicators setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTypingTreeIndicatorStyle(String style) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = UiProperties.normalizeTypingTreeIndicatorStyle(style);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("typingTreeIndicatorStyle", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist typing tree indicator style to '{}'", file, e);
     }
   }
 
@@ -2740,9 +3296,157 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     return created;
   }
 
+  private static List<InterceptorDefinition> parseInterceptorDefinitionsForServer(Object rawList, String ownerServerId) {
+    String owner = Objects.toString(ownerServerId, "").trim();
+    if (!(rawList instanceof List<?> list) || owner.isEmpty()) return List.of();
+
+    ArrayList<InterceptorDefinition> out = new ArrayList<>();
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> m)) continue;
+
+      String id = Objects.toString(m.get("id"), "").trim();
+      if (id.isEmpty()) continue;
+      String name = Objects.toString(m.get("name"), "").trim();
+      boolean enabled = asBoolean(m.get("enabled")).orElse(Boolean.TRUE);
+
+      String scopeServerId = Objects.toString(m.get("scopeServerId"), "").trim();
+      if (!m.containsKey("scopeServerId")) {
+        // Backward compatibility: old definitions were server-local.
+        scopeServerId = owner;
+      }
+
+      InterceptorRuleMode channelIncludeMode = asRuleMode(m.get("channelIncludeMode"), InterceptorRuleMode.GLOB);
+      String channelIncludes = Objects.toString(m.get("channelIncludes"), "").trim();
+      if (channelIncludes.isEmpty()) {
+        // Backward compatibility with the old "channelsCsv" shape.
+        channelIncludes = Objects.toString(m.get("channelsCsv"), "").trim();
+      }
+
+      InterceptorRuleMode channelExcludeMode = asRuleMode(m.get("channelExcludeMode"), InterceptorRuleMode.GLOB);
+      String channelExcludes = Objects.toString(m.get("channelExcludes"), "").trim();
+
+      boolean actionSoundEnabled = asBoolean(m.get("actionSoundEnabled")).orElse(Boolean.FALSE);
+      boolean actionStatusBarEnabled = asBoolean(m.get("actionStatusBarEnabled")).orElse(Boolean.FALSE);
+      boolean actionToastEnabled = asBoolean(m.get("actionToastEnabled")).orElse(Boolean.FALSE);
+      String actionSoundId = Objects.toString(m.get("actionSoundId"), "").trim();
+      if (actionSoundId.isEmpty()) actionSoundId = "NOTIF_1";
+      boolean actionSoundUseCustom = asBoolean(m.get("actionSoundUseCustom")).orElse(Boolean.FALSE);
+      String actionSoundCustomPath = Objects.toString(m.get("actionSoundCustomPath"), "").trim();
+
+      boolean actionScriptEnabled = asBoolean(m.get("actionScriptEnabled")).orElse(Boolean.FALSE);
+      String actionScriptPath = Objects.toString(m.get("actionScriptPath"), "").trim();
+      String actionScriptArgs = Objects.toString(m.get("actionScriptArgs"), "").trim();
+      String actionScriptWorkingDirectory = Objects.toString(m.get("actionScriptWorkingDirectory"), "").trim();
+
+      List<InterceptorRule> rules = parseInterceptorRules(m.get("rules"));
+      if (rules.isEmpty()) {
+        // Backward compatibility with the old single-dimension rule shape.
+        rules = List.of(new InterceptorRule(
+            true,
+            "Rule 1",
+            "message,action",
+            asRuleMode(m.get("mode"), InterceptorRuleMode.LIKE),
+            Objects.toString(m.get("pattern"), "").trim(),
+            InterceptorRuleMode.LIKE,
+            "",
+            InterceptorRuleMode.GLOB,
+            ""));
+      }
+
+      out.add(new InterceptorDefinition(
+          id,
+          name,
+          enabled,
+          scopeServerId,
+          channelIncludeMode,
+          channelIncludes,
+          channelExcludeMode,
+          channelExcludes,
+          actionSoundEnabled,
+          actionStatusBarEnabled,
+          actionToastEnabled,
+          actionSoundId,
+          actionSoundUseCustom,
+          actionSoundCustomPath,
+          actionScriptEnabled,
+          actionScriptPath,
+          actionScriptArgs,
+          actionScriptWorkingDirectory,
+          rules));
+    }
+    return List.copyOf(out);
+  }
+
+  private static List<InterceptorRule> parseInterceptorRules(Object rawRules) {
+    if (!(rawRules instanceof List<?> list)) return List.of();
+
+    ArrayList<InterceptorRule> out = new ArrayList<>();
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?> m)) continue;
+
+      boolean enabled = asBoolean(m.get("enabled")).orElse(Boolean.TRUE);
+      String label = Objects.toString(m.get("label"), "").trim();
+      String eventTypesCsv = Objects.toString(m.get("eventTypesCsv"), "").trim();
+      if (eventTypesCsv.isEmpty()) {
+        // Backward compatibility with key variants.
+        eventTypesCsv = Objects.toString(m.get("eventTypes"), "").trim();
+      }
+
+      InterceptorRuleMode messageMode = asRuleMode(
+          m.containsKey("messageMode") ? m.get("messageMode") : m.get("mode"),
+          InterceptorRuleMode.LIKE);
+      String messagePattern = Objects.toString(
+          m.containsKey("messagePattern") ? m.get("messagePattern") : m.get("pattern"),
+          "").trim();
+
+      InterceptorRuleMode nickMode = asRuleMode(m.get("nickMode"), InterceptorRuleMode.LIKE);
+      String nickPattern = Objects.toString(m.get("nickPattern"), "").trim();
+
+      InterceptorRuleMode hostmaskMode = asRuleMode(m.get("hostmaskMode"), InterceptorRuleMode.GLOB);
+      String hostmaskPattern = Objects.toString(m.get("hostmaskPattern"), "").trim();
+
+      out.add(new InterceptorRule(
+          enabled,
+          label,
+          eventTypesCsv,
+          messageMode,
+          messagePattern,
+          nickMode,
+          nickPattern,
+          hostmaskMode,
+          hostmaskPattern));
+    }
+    return List.copyOf(out);
+  }
+
+  private static InterceptorRuleMode asRuleMode(Object value, InterceptorRuleMode fallback) {
+    if (value instanceof InterceptorRuleMode mode) return mode;
+    String raw = Objects.toString(value, "").trim();
+    if (raw.isEmpty()) return fallback;
+    try {
+      return InterceptorRuleMode.valueOf(raw.toUpperCase(Locale.ROOT));
+    } catch (Exception ignored) {
+      return fallback;
+    }
+  }
+
   private static String normalizeCapabilityKey(String capability) {
     String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
     return c.isEmpty() ? null : c;
+  }
+
+  private static Optional<Integer> asInt(Object value) {
+    if (value instanceof Number n) return Optional.of(n.intValue());
+    if (value instanceof String s) {
+      String t = s.trim();
+      if (t.isEmpty()) return Optional.empty();
+      try {
+        return Optional.of(Integer.parseInt(t));
+      } catch (Exception ignored) {
+        return Optional.empty();
+      }
+    }
+    return Optional.empty();
   }
 
   private static Optional<Boolean> asBoolean(Object value) {

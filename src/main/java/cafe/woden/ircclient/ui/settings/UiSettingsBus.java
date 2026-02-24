@@ -116,6 +116,7 @@ public class UiSettingsBus {
         props.typingIndicatorsReceiveEnabled() == null
             ? props.typingIndicatorsEnabled()
             : props.typingIndicatorsReceiveEnabled(),
+        props.typingTreeIndicatorStyle(),
         timestampsEnabled,
         timestampFormat,
         timestampsIncludeChatMessages,

@@ -94,6 +94,13 @@ public record UiProperties(
     Boolean typingIndicatorsReceiveEnabled,
 
     /**
+     * Style used for typing-activity markers in the server tree channel list.
+     *
+     * <p>Allowed values: {@code dots}, {@code keyboard}, {@code glow-dot}.
+     */
+    String typingTreeIndicatorStyle,
+
+    /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same server).
      * If disabled, they are routed to their origin target (channel/PM) instead.
      */
@@ -124,6 +131,8 @@ public record UiProperties(
     Filters filters,
 
     Layout layout,
+
+    AppDiagnostics appDiagnostics,
 
     Tray tray
 ) {
@@ -299,6 +308,61 @@ if (historyPlaceholdersEnabledByDefault == null) {
   }
 
   /**
+   * Optional application diagnostics integrations shown under the "Application" tree node.
+   */
+  public record AppDiagnostics(
+      AssertjSwing assertjSwing,
+      Jhiccup jhiccup
+  ) {
+    public AppDiagnostics {
+      if (assertjSwing == null) assertjSwing = new AssertjSwing(null, null, null, null);
+      if (jhiccup == null) jhiccup = new Jhiccup(null, null, null, null);
+    }
+  }
+
+  /**
+   * AssertJ Swing integration + EDT freeze watchdog.
+   */
+  public record AssertjSwing(
+      Boolean enabled,
+      Boolean edtFreezeWatchdogEnabled,
+      Integer edtFreezeThresholdMs,
+      Integer edtWatchdogPollMs
+  ) {
+    public AssertjSwing {
+      if (enabled == null) enabled = true;
+      if (edtFreezeWatchdogEnabled == null) edtFreezeWatchdogEnabled = true;
+      if (edtFreezeThresholdMs == null || edtFreezeThresholdMs < 500) edtFreezeThresholdMs = 2500;
+      if (edtFreezeThresholdMs > 120_000) edtFreezeThresholdMs = 120_000;
+      if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 500;
+      if (edtWatchdogPollMs > 10_000) edtWatchdogPollMs = 10_000;
+    }
+  }
+
+  /**
+   * External jHiccup process integration.
+   */
+  public record Jhiccup(
+      Boolean enabled,
+      String jarPath,
+      String javaCommand,
+      List<String> args
+  ) {
+    public Jhiccup {
+      if (enabled == null) enabled = false;
+      if (jarPath != null && jarPath.isBlank()) jarPath = null;
+      if (javaCommand == null || javaCommand.isBlank()) javaCommand = "java";
+      args = (args == null)
+          ? List.of()
+          : args.stream()
+              .filter(Objects::nonNull)
+              .map(String::trim)
+              .filter(s -> !s.isEmpty())
+              .toList();
+    }
+  }
+
+  /**
    * Chat/status timestamp settings.
    *
    * <p>{@code format} uses Java time patterns (same general style as
@@ -432,10 +496,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (accentStrength > 100) accentStrength = 100;
 
     // Global LAF tweaks (cheap wins).
-    if (density == null || density.isBlank()) density = "cozy";
+    if (density == null || density.isBlank()) density = "auto";
     density = density.trim().toLowerCase(Locale.ROOT);
-    if (!density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
-      density = "cozy";
+    if (!density.equals("auto") && !density.equals("compact") && !density.equals("cozy") && !density.equals("spacious")) {
+      density = "auto";
     }
 
     if (cornerRadius == null) cornerRadius = 10;
@@ -489,6 +553,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
 
     if (layout == null) {
       layout = new Layout(null, null);
+    }
+
+    if (appDiagnostics == null) {
+      appDiagnostics = new AppDiagnostics(null, null);
     }
 
     // Image embeds default: disabled.
@@ -557,6 +625,7 @@ if (historyPlaceholdersEnabledByDefault == null) {
     if (typingIndicatorsReceiveEnabled == null) {
       typingIndicatorsReceiveEnabled = typingIndicatorsEnabled;
     }
+    typingTreeIndicatorStyle = normalizeTypingTreeIndicatorStyle(typingTreeIndicatorStyle);
 
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
@@ -621,6 +690,17 @@ if (historyPlaceholdersEnabledByDefault == null) {
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  static String normalizeTypingTreeIndicatorStyle(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "dots";
+    return switch (s) {
+      case "dots", "ellipsis" -> "dots";
+      case "keyboard", "kbd" -> "keyboard";
+      case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
+      default -> "dots";
+    };
   }
 
 }
