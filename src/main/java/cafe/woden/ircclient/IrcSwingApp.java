@@ -1,6 +1,8 @@
 package cafe.woden.ircclient;
 
 import cafe.woden.ircclient.app.IrcMediator;
+import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
@@ -13,7 +15,14 @@ import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Desktop;
+import java.awt.Frame;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import javax.swing.SwingUtilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -32,12 +41,14 @@ import org.springframework.context.annotation.Bean;
     ZncProperties.class
 })
 public class IrcSwingApp {
+  private static final Logger log = LoggerFactory.getLogger(IrcSwingApp.class);
+
   public static void main(String[] args) {
     ConsoleTeeHub.install();
 
     new SpringApplicationBuilder(IrcSwingApp.class)
-            .headless(false)
-            .run(args);
+        .headless(false)
+        .run(args);
   }
 
   @Bean
@@ -46,7 +57,7 @@ public class IrcSwingApp {
                                ThemeManager themeManager,
                                UiSettingsBus settingsBus,
                                TrayService trayService,
-                               cafe.woden.ircclient.app.UiPort ui) {
+                               UiPort ui) {
     return args -> SwingUtilities.invokeLater(() -> {
       // Install theme before showing UI.
       String theme = settingsBus.get().theme();
@@ -59,54 +70,9 @@ public class IrcSwingApp {
       frame.repaint();
 
       trayService.installIfEnabled();
+      installDesktopHandlers(frame, ui);
 
-      if (java.awt.Desktop.isDesktopSupported()) {
-        java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
-
-        try {
-          desktop.addAppEventListener(new java.awt.desktop.AppReopenedListener() {
-            @Override
-            public void appReopened(java.awt.desktop.AppReopenedEvent e) {
-              SwingUtilities.invokeLater(() -> {
-                frame.setVisible(true);
-                frame.setState(java.awt.Frame.NORMAL);
-                frame.toFront();
-              });
-            }
-          });
-        } catch (Exception ignored) {
-        }
-        try {
-          desktop.setOpenURIHandler(e -> {
-            java.net.URI uri = e.getURI();
-            String path = uri.getPath();
-            SwingUtilities.invokeLater(() -> {
-              frame.setVisible(true);
-              frame.setState(java.awt.Frame.NORMAL);
-              frame.toFront();
-
-              if (path != null && "focus".equals(uri.getHost())) {
-                String[] segments = uri.getPath().split("/");
-                System.out.println("URI received: " + uri);
-                if (segments.length >= 3) {
-                  String serverId = segments[1];
-                  try {
-                    String targetName = java.net.URLDecoder.decode(segments[2], java.nio.charset.StandardCharsets.UTF_8);
-
-                    cafe.woden.ircclient.app.TargetRef target = new cafe.woden.ircclient.app.TargetRef(serverId, targetName);
-                    ui.ensureTargetExists(target);
-                    ui.selectTarget(target);
-                  } catch (Exception ignored) {
-                  }
-                }
-              }
-            });
-          });
-        } catch (Exception ignored) {
-        }
-      }
-
-      // Final Visibility Logic
+      // If we start minimized, don't show the window (tray icon becomes the entry point).
       boolean startMinimized = trayService.isTrayActive() && trayService.isEnabled() && trayService.startMinimized();
       frame.setVisible(!startMinimized);
 
@@ -115,5 +81,64 @@ public class IrcSwingApp {
         mediator.connectAll();
       }
     });
+  }
+
+  private static void installDesktopHandlers(MainFrame frame, UiPort ui) {
+    if (!Desktop.isDesktopSupported()) return;
+    Desktop desktop = Desktop.getDesktop();
+
+    try {
+      desktop.addAppEventListener((java.awt.desktop.AppReopenedListener) e ->
+          SwingUtilities.invokeLater(() -> focusMainWindow(frame)));
+    } catch (Exception e) {
+      log.debug("[ircafe] app reopen listener unavailable", e);
+    }
+
+    try {
+      desktop.setOpenURIHandler(e -> SwingUtilities.invokeLater(() -> routeOpenUri(frame, ui, e.getURI())));
+    } catch (Exception e) {
+      log.debug("[ircafe] open-uri handler unavailable", e);
+    }
+  }
+
+  private static void routeOpenUri(MainFrame frame, UiPort ui, URI uri) {
+    focusMainWindow(frame);
+
+    TargetRef target = parseFocusTarget(uri);
+    if (target == null) return;
+
+    try {
+      ui.ensureTargetExists(target);
+      ui.selectTarget(target);
+    } catch (Exception e) {
+      log.debug("[ircafe] failed to route URI {}", uri, e);
+    }
+  }
+
+  private static TargetRef parseFocusTarget(URI uri) {
+    if (uri == null || !"focus".equals(uri.getHost())) return null;
+    String path = uri.getPath();
+    if (path == null || path.isBlank()) return null;
+
+    String[] segments = path.split("/", 4);
+    if (segments.length < 3) return null;
+
+    String serverId = segments[1].trim();
+    String encodedTarget = segments[2].trim();
+    if (serverId.isEmpty() || encodedTarget.isEmpty()) return null;
+
+    try {
+      String targetName = URLDecoder.decode(encodedTarget, StandardCharsets.UTF_8);
+      if (targetName.isBlank()) return null;
+      return new TargetRef(serverId, targetName);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static void focusMainWindow(MainFrame frame) {
+    frame.setVisible(true);
+    frame.setState(Frame.NORMAL);
+    frame.toFront();
   }
 }

@@ -1,4 +1,0 @@
-# Allow two-slices notifications
-@defaultMessage Using the two-slices library for native notifications is allowed.
-com.sshtools.twoslices.Toast
-com.sshtools.twoslices.Toast$ToastBuilder

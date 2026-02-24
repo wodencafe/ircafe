@@ -308,6 +308,7 @@ afterEvaluate {
 }
 
 def isLinux = OperatingSystem.current().isLinux()
+def isMac = OperatingSystem.current().isMacOsX()
 def appName = "IRCafe"
 def appImageDir = layout.buildDirectory.dir("dist/${appName}")
 def desktopFileName = "${appName}.desktop"
@@ -561,56 +562,47 @@ tasks.register("installLinuxDesktopEntry") {
 
 // When building a Linux app image, always include icon + .desktop alongside the output.
 tasks.named("jpackage").configure {
-    finalizedBy("copyLinuxAppImageIconToLib", "generateLinuxDesktopEntry", "generateLinuxInstallScript", "generateLinuxUninstallScript")
+    finalizedBy(
+        "copyLinuxAppImageIconToLib",
+        "generateLinuxDesktopEntry",
+        "generateLinuxInstallScript",
+        "generateLinuxUninstallScript",
+        "bundleTerminalNotifier"
+    )
 }
-// build.gradle
-
 tasks.register("bundleTerminalNotifier") {
-    dependsOn("jpackage") // make sure app is created first
+    onlyIf { isMac }
 
     doLast {
-        def os = System.getProperty("os.name").toLowerCase()
-        if (!os.contains("mac")) {
-            println("Not macOS, skipping terminal-notifier bundling")
-            return
-        }
-
-        // Path to your .app bundle
-        def appDir = file("$buildDir/jpackage/app/Ircafe.app/Contents/MacOS")
-        if (!appDir.exists()) {
-            throw new GradleException("App bundle not found at: $appDir")
-        }
-
-        // Path to your terminal-notifier binary in the project
-        def notifierSrc = file("tools/terminal-notifier")
+        def notifierSrc = file("packaging/macos/terminal-notifier.app")
         if (!notifierSrc.exists()) {
-            throw new GradleException("terminal-notifier binary not found at: $notifierSrc")
+            throw new GradleException("terminal-notifier.app not found at: $notifierSrc")
         }
 
-        // Destination inside the .app
-        def notifierDest = new File(appDir, "terminal-notifier")
+        def resourcesDir = file("$buildDir/dist/${appName}.app/Contents/Resources")
+        if (!resourcesDir.exists()) {
+            throw new GradleException("jpackage output Resources directory not found at: $resourcesDir")
+        }
 
         copy {
             from notifierSrc
-            into appDir
-            rename { "terminal-notifier" }
+            into resourcesDir
         }
 
-        // Ensure it is executable
-        notifierDest.setExecutable(true)
+        def notifierDest = new File(resourcesDir, "terminal-notifier.app/Contents/MacOS/terminal-notifier")
+        if (!notifierDest.exists()) {
+            throw new GradleException("terminal-notifier binary was not copied to: $notifierDest")
+        }
+        notifierDest.setExecutable(true, false)
 
-        println "terminal-notifier bundled into app: $notifierDest"
+        println "Bundled terminal-notifier into app: $notifierDest"
     }
 }
-tasks.named("jpackage") {
-    finalizedBy("bundleTerminalNotifier")
-}
-forbiddenApis {
-    // Add your new file here
-    signaturesFiles = files("forbidden-signatures.txt")
 
-    // This is the CRITICAL line: it tells the plugin to ignore
-    // classes it can't find in its bundled "forbidden" lists
-    ignoreFailures = true
-    ignoreSignaturesOfMissingClasses = true
+forbiddenApis {
+    // Keep this task configured so it fails on accidental shell execution shortcuts.
+    signatures = [
+        "java.lang.Runtime#exec(java.lang.String)",
+        "java.lang.Runtime#exec(java.lang.String[])"
+    ]
 }
