@@ -11,8 +11,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
 /**
- * Tracks outbound IRCv3 {@code label=} correlation so numeric/server responses can be routed
- * back to the originating chat buffer.
+ * Tracks outbound IRCv3 {@code label=} correlation so numeric/server responses can be routed back
+ * to the originating chat buffer.
  */
 @Component
 public class LabeledResponseRoutingState {
@@ -37,8 +37,7 @@ public class LabeledResponseRoutingState {
       String requestPreview,
       Instant startedAt,
       Outcome outcome,
-      Instant outcomeAt
-  ) {
+      Instant outcomeAt) {
     public PendingLabeledRequest {
       requestPreview = normalizePreview(requestPreview);
       startedAt = (startedAt == null) ? Instant.now() : startedAt;
@@ -64,11 +63,7 @@ public class LabeledResponseRoutingState {
   }
 
   public record TimedOutLabeledRequest(
-      String serverId,
-      String label,
-      PendingLabeledRequest request,
-      Instant timedOutAt
-  ) {
+      String serverId, String label, PendingLabeledRequest request, Instant timedOutAt) {
     public TimedOutLabeledRequest {
       serverId = normalizeServer(serverId);
       label = normalizeLabel(label);
@@ -128,8 +123,7 @@ public class LabeledResponseRoutingState {
       String label,
       TargetRef originTarget,
       String requestPreview,
-      Instant startedAt
-  ) {
+      Instant startedAt) {
     String sid = normalizeServer(serverId);
     if (sid.isEmpty() && originTarget != null) {
       sid = normalizeServer(originTarget.serverId());
@@ -144,8 +138,7 @@ public class LabeledResponseRoutingState {
     pruneStaleEntriesForServer(sid, at.minus(STALE_RETENTION));
 
     pendingByLabel.put(
-        new LabelKey(sid, lbl),
-        new PendingLabeledRequest(normalizedTarget, requestPreview, at));
+        new LabelKey(sid, lbl), new PendingLabeledRequest(normalizedTarget, requestPreview, at));
   }
 
   /**
@@ -181,11 +174,7 @@ public class LabeledResponseRoutingState {
    * @return updated entry only when this call changed state from pending to terminal.
    */
   public PendingLabeledRequest markOutcomeIfPending(
-      String serverId,
-      String label,
-      Outcome outcome,
-      Instant at
-  ) {
+      String serverId, String label, Outcome outcome, Instant at) {
     String sid = normalizeServer(serverId);
     String lbl = normalizeLabel(label);
     if (sid.isEmpty() || lbl.isEmpty()) return null;
@@ -196,20 +185,22 @@ public class LabeledResponseRoutingState {
     java.util.concurrent.atomic.AtomicReference<PendingLabeledRequest> transitioned =
         new java.util.concurrent.atomic.AtomicReference<>();
 
-    pendingByLabel.computeIfPresent(key, (k, cur) -> {
-      if (cur == null) return null;
-      Outcome current = cur.outcome();
-      boolean shouldTransition;
-      if (current == Outcome.PENDING) {
-        shouldTransition = true;
-      } else {
-        shouldTransition = (next == Outcome.FAILURE && current != Outcome.FAILURE);
-      }
-      if (!shouldTransition) return cur;
-      PendingLabeledRequest updated = cur.withOutcome(next, at);
-      transitioned.set(updated);
-      return updated;
-    });
+    pendingByLabel.computeIfPresent(
+        key,
+        (k, cur) -> {
+          if (cur == null) return null;
+          Outcome current = cur.outcome();
+          boolean shouldTransition;
+          if (current == Outcome.PENDING) {
+            shouldTransition = true;
+          } else {
+            shouldTransition = (next == Outcome.FAILURE && current != Outcome.FAILURE);
+          }
+          if (!shouldTransition) return cur;
+          PendingLabeledRequest updated = cur.withOutcome(next, at);
+          transitioned.set(updated);
+          return updated;
+        });
     return transitioned.get();
   }
 
@@ -220,9 +211,10 @@ public class LabeledResponseRoutingState {
    * short-term correlation visibility until stale retention prunes them.
    */
   public java.util.List<TimedOutLabeledRequest> collectTimedOut(Duration timeout, int maxCount) {
-    Duration to = (timeout == null || timeout.isNegative() || timeout.isZero())
-        ? Duration.ofSeconds(30)
-        : timeout;
+    Duration to =
+        (timeout == null || timeout.isNegative() || timeout.isZero())
+            ? Duration.ofSeconds(30)
+            : timeout;
     int cap = Math.max(1, maxCount);
     Instant now = Instant.now();
     Instant cutoff = now.minus(to);
@@ -237,7 +229,8 @@ public class LabeledResponseRoutingState {
       Instant started = (cur.startedAt() == null) ? Instant.EPOCH : cur.startedAt();
       if (!started.isBefore(cutoff)) continue;
 
-      PendingLabeledRequest marked = markOutcomeIfPending(key.serverId, key.label, Outcome.TIMEOUT, now);
+      PendingLabeledRequest marked =
+          markOutcomeIfPending(key.serverId, key.label, Outcome.TIMEOUT, now);
       if (marked != null) {
         out.add(new TimedOutLabeledRequest(key.serverId, key.label, marked, now));
       }
@@ -257,11 +250,16 @@ public class LabeledResponseRoutingState {
 
   private void pruneStaleEntriesForServer(String serverId, Instant cutoff) {
     if (cutoff == null) return;
-    pendingByLabel.entrySet().removeIf(e -> {
-      if (serverId != null && !serverId.isBlank() && !Objects.equals(e.getKey().serverId, serverId)) return false;
-      Instant started = (e.getValue() == null) ? null : e.getValue().startedAt();
-      return started == null || started.isBefore(cutoff);
-    });
+    pendingByLabel
+        .entrySet()
+        .removeIf(
+            e -> {
+              if (serverId != null
+                  && !serverId.isBlank()
+                  && !Objects.equals(e.getKey().serverId, serverId)) return false;
+              Instant started = (e.getValue() == null) ? null : e.getValue().startedAt();
+              return started == null || started.isBefore(cutoff);
+            });
   }
 
   private static TargetRef normalizeTargetForServer(TargetRef target, String serverId) {

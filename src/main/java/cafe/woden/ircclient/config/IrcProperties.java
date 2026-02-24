@@ -19,13 +19,15 @@ public record IrcProperties(Client client, List<Server> servers) {
    * Global IRC client identity/settings.
    *
    * <p>Example YAML:
+   *
    * <pre>
    * irc:
    *   client:
    *     version: "IRCafe 1.2.3"
    * </pre>
    */
-  public record Client(String version, Reconnect reconnect, Heartbeat heartbeat, Proxy proxy, Tls tls) {
+  public record Client(
+      String version, Reconnect reconnect, Heartbeat heartbeat, Proxy proxy, Tls tls) {
 
     /** TLS settings for outbound connections (IRC-over-TLS and HTTPS fetching). */
     public record Tls(boolean trustAllCertificates) {
@@ -51,7 +53,10 @@ public record IrcProperties(Client client, List<Server> servers) {
     }
   }
 
-  /** SOCKS5 proxy settings used for IRC connections and outbound HTTP fetching (link previews, image embeds, etc.). */
+  /**
+   * SOCKS5 proxy settings used for IRC connections and outbound HTTP fetching (link previews, image
+   * embeds, etc.).
+   */
   public record Proxy(
       boolean enabled,
       String host,
@@ -60,8 +65,7 @@ public record IrcProperties(Client client, List<Server> servers) {
       String password,
       boolean remoteDns,
       long connectTimeoutMs,
-      long readTimeoutMs
-  ) {
+      long readTimeoutMs) {
     public Proxy {
       if (host == null) host = "";
       if (username == null) username = "";
@@ -74,7 +78,8 @@ public record IrcProperties(Client client, List<Server> servers) {
           throw new IllegalArgumentException("irc.client.proxy.enabled=true but host is blank");
         }
         if (port <= 0 || port > 65535) {
-          throw new IllegalArgumentException("irc.client.proxy.enabled=true but port is invalid: " + port);
+          throw new IllegalArgumentException(
+              "irc.client.proxy.enabled=true but port is invalid: " + port);
         }
       }
     }
@@ -84,15 +89,13 @@ public record IrcProperties(Client client, List<Server> servers) {
     }
   }
 
-
   public record Reconnect(
       boolean enabled,
       long initialDelayMs,
       long maxDelayMs,
       double multiplier,
       double jitterPct,
-      int maxAttempts
-  ) {
+      int maxAttempts) {
     public Reconnect {
       if (initialDelayMs <= 0) initialDelayMs = 1_000;
       if (maxDelayMs <= 0) maxDelayMs = 120_000;
@@ -105,11 +108,7 @@ public record IrcProperties(Client client, List<Server> servers) {
     }
   }
 
-  public record Heartbeat(
-      boolean enabled,
-      long checkPeriodMs,
-      long timeoutMs
-  ) {
+  public record Heartbeat(boolean enabled, long checkPeriodMs, long timeoutMs) {
     public Heartbeat {
       if (checkPeriodMs <= 0) checkPeriodMs = 15_000;
       if (timeoutMs <= 0) timeoutMs = 360_000;
@@ -137,25 +136,23 @@ public record IrcProperties(Client client, List<Server> servers) {
       /**
        * Optional per-server proxy override.
        *
-       * <p>If {@code null}, the server inherits {@code irc.client.proxy}.
-       * If non-null and {@code enabled} is {@code false}, the server explicitly disables proxying.
+       * <p>If {@code null}, the server inherits {@code irc.client.proxy}. If non-null and {@code
+       * enabled} is {@code false}, the server explicitly disables proxying.
        */
-      Proxy proxy
-  ) {
+      Proxy proxy) {
     public record Sasl(
         boolean enabled,
         String username,
         String password,
         String mechanism,
         /**
-         * If true, a SASL failure (e.g. wrong password) is treated as a hard connect failure.
-         * The client will disconnect and surface the error. If false, the client may remain
-         * connected without SASL (useful for networks where SASL is optional).
+         * If true, a SASL failure (e.g. wrong password) is treated as a hard connect failure. The
+         * client will disconnect and surface the error. If false, the client may remain connected
+         * without SASL (useful for networks where SASL is optional).
          *
          * <p>If omitted, defaults to {@code true}.
          */
-        Boolean disconnectOnFailure
-    ) {
+        Boolean disconnectOnFailure) {
       public Sasl {
         if (mechanism == null || mechanism.isBlank()) {
           mechanism = "PLAIN";
@@ -196,12 +193,13 @@ public record IrcProperties(Client client, List<Server> servers) {
   }
 
   public Map<String, Server> byId() {
-    return servers.stream().collect(Collectors.toUnmodifiableMap(
-        s -> s.id().trim(),
-        Function.identity(),
-        (a, b) -> {
-          throw new IllegalStateException("Duplicate server id: " + a.id());
-        }
-    ));
+    return servers.stream()
+        .collect(
+            Collectors.toUnmodifiableMap(
+                s -> s.id().trim(),
+                Function.identity(),
+                (a, b) -> {
+                  throw new IllegalStateException("Duplicate server id: " + a.id());
+                }));
   }
 }

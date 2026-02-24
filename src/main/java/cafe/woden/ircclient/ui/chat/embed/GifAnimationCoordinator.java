@@ -6,7 +6,8 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Per-transcript coordinator to ensure only the most-recent GIF animates (based on transcript insertion order).
+ * Per-transcript coordinator to ensure only the most-recent GIF animates (based on transcript
+ * insertion order).
  *
  * <p>All calls are expected to happen on the Swing EDT.
  */

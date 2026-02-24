@@ -99,7 +99,8 @@ class ServerTreeNodeReorderPolicyTest {
   }
 
   private static ServerTreeNodeReorderPolicy policyForServerLabel(String label) {
-    return new ServerTreeNodeReorderPolicy(node -> node != null && label.equals(node.getUserObject()));
+    return new ServerTreeNodeReorderPolicy(
+        node -> node != null && label.equals(node.getUserObject()));
   }
 
   private static DefaultMutableTreeNode serverNode(String id) {

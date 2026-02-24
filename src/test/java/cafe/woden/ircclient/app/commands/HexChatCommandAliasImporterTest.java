@@ -22,9 +22,7 @@ class HexChatCommandAliasImporterTest {
 
     assertEquals(2, out.aliases().size());
     assertEquals("slap", out.aliases().get(0).name());
-    assertEquals(
-        "/me slaps %1 with %2-; /msg %1 from=%e last=&1",
-        out.aliases().get(0).template());
+    assertEquals("/me slaps %1 with %2-; /msg %1 from=%e last=&1", out.aliases().get(0).template());
     assertEquals("shout", out.aliases().get(1).name());
     assertEquals(
         "/say hi %%t %hexchat_time %hexchat_machine %hexchat_version",

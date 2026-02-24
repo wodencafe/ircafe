@@ -20,16 +20,12 @@ import org.springframework.stereotype.Component;
 public class NickColorService {
   public static final String ATTR_NICK = "chat.nick";
 
-  private static final List<String> DEFAULT_32 = List.of(
-      "#E06C75", "#BE5046", "#D19A66", "#E5C07B",
-      "#98C379", "#56B6C2", "#61AFEF", "#C678DD",
-      "#FF6B6B", "#F06595", "#CC5DE8", "#845EF7",
-      "#5C7CFA", "#339AF0", "#22B8CF", "#20C997",
-      "#51CF66", "#94D82D", "#FCC419", "#FF922B",
-      "#FF8787", "#FFA8A8", "#B197FC", "#9775FA",
-      "#74C0FC", "#66D9E8", "#63E6BE", "#8CE99A",
-      "#D0BFFF", "#FFD8A8", "#FFE066", "#FFB5A7"
-  );
+  private static final List<String> DEFAULT_32 =
+      List.of(
+          "#E06C75", "#BE5046", "#D19A66", "#E5C07B", "#98C379", "#56B6C2", "#61AFEF", "#C678DD",
+          "#FF6B6B", "#F06595", "#CC5DE8", "#845EF7", "#5C7CFA", "#339AF0", "#22B8CF", "#20C997",
+          "#51CF66", "#94D82D", "#FCC419", "#FF922B", "#FF8787", "#FFA8A8", "#B197FC", "#9775FA",
+          "#74C0FC", "#66D9E8", "#63E6BE", "#8CE99A", "#D0BFFF", "#FFD8A8", "#FFE066", "#FFB5A7");
 
   private final NickColorSettingsBus settingsBus;
   private final List<Color> palette;
@@ -69,7 +65,10 @@ public class NickColorService {
     this.overrides = parseOverrides(this.overridesHex);
   }
 
-  /** Create an attribute set based on {@code base}, storing the nick marker and (optionally) applying a color. */
+  /**
+   * Create an attribute set based on {@code base}, storing the nick marker and (optionally)
+   * applying a color.
+   */
   public SimpleAttributeSet forNick(String nick, AttributeSet base) {
     SimpleAttributeSet a = new SimpleAttributeSet(base);
     String lower = normalizeNick(nick);
@@ -117,14 +116,16 @@ public class NickColorService {
   }
 
   /**
-   * Compute a nick color for preview purposes using explicit parameters (does not depend on current runtime settings).
-   * This lets the Preferences UI show an immediate preview while the user tweaks controls before pressing Apply.
+   * Compute a nick color for preview purposes using explicit parameters (does not depend on current
+   * runtime settings). This lets the Preferences UI show an immediate preview while the user tweaks
+   * controls before pressing Apply.
    */
-  public Color previewColorForNick(String nick,
-                                  Color background,
-                                  Color fallbackForeground,
-                                  boolean enabled,
-                                  double minContrast) {
+  public Color previewColorForNick(
+      String nick,
+      Color background,
+      Color fallbackForeground,
+      boolean enabled,
+      double minContrast) {
     if (!enabled) return fallbackForeground;
     String lower = normalizeNick(nick);
     if (lower.isEmpty()) return fallbackForeground;
@@ -136,7 +137,6 @@ public class NickColorService {
     double mc = (minContrast > 0) ? minContrast : 3.0;
     return adjustedForContrast(baseColor(lower), bg, mc, fallbackForeground);
   }
-
 
   private Color baseColor(String nickLower) {
     Color o = overrides.get(nickLower);
@@ -301,7 +301,7 @@ public class NickColorService {
       }
       h /= 6f;
     }
-    return new float[]{h, s, l};
+    return new float[] {h, s, l};
   }
 
   private static Color hslToRgb(float h, float s, float l) {

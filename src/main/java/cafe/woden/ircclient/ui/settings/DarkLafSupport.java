@@ -17,10 +17,14 @@ final class DarkLafSupport {
   private static final String THEME_BASE_CLASS = "com.github.weisj.darklaf.theme.Theme";
   private static final String ONE_DARK_THEME_CLASS = "com.github.weisj.darklaf.theme.OneDarkTheme";
   private static final String DARCULA_THEME_CLASS = "com.github.weisj.darklaf.theme.DarculaTheme";
-  private static final String SOLARIZED_DARK_THEME_CLASS = "com.github.weisj.darklaf.theme.SolarizedDarkTheme";
-  private static final String SOLARIZED_LIGHT_THEME_CLASS = "com.github.weisj.darklaf.theme.SolarizedLightTheme";
-  private static final String HIGH_CONTRAST_DARK_THEME_CLASS = "com.github.weisj.darklaf.theme.HighContrastDarkTheme";
-  private static final String HIGH_CONTRAST_LIGHT_THEME_CLASS = "com.github.weisj.darklaf.theme.HighContrastLightTheme";
+  private static final String SOLARIZED_DARK_THEME_CLASS =
+      "com.github.weisj.darklaf.theme.SolarizedDarkTheme";
+  private static final String SOLARIZED_LIGHT_THEME_CLASS =
+      "com.github.weisj.darklaf.theme.SolarizedLightTheme";
+  private static final String HIGH_CONTRAST_DARK_THEME_CLASS =
+      "com.github.weisj.darklaf.theme.HighContrastDarkTheme";
+  private static final String HIGH_CONTRAST_LIGHT_THEME_CLASS =
+      "com.github.weisj.darklaf.theme.HighContrastLightTheme";
   private static final String INTELLIJ_THEME_CLASS = "com.github.weisj.darklaf.theme.IntelliJTheme";
   private static volatile Boolean available;
 

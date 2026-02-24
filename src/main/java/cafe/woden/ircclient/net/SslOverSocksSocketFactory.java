@@ -11,9 +11,9 @@ import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Creates TLS sockets routed through a SOCKS5 proxy.
- * <p>
- * This is primarily used for IRC-over-TLS connections where the client library
- * accepts a {@link SocketFactory}.
+ *
+ * <p>This is primarily used for IRC-over-TLS connections where the client library accepts a {@link
+ * SocketFactory}.
  */
 public final class SslOverSocksSocketFactory extends SocketFactory {
 
@@ -22,14 +22,21 @@ public final class SslOverSocksSocketFactory extends SocketFactory {
   private final Proxy proxy;
 
   public SslOverSocksSocketFactory(IrcProperties.Proxy cfg, SSLSocketFactory ssl) {
-    this.cfg = (cfg != null) ? cfg : new IrcProperties.Proxy(false, "", 0, null, null, true, 10_000, 30_000);
+    this.cfg =
+        (cfg != null)
+            ? cfg
+            : new IrcProperties.Proxy(false, "", 0, null, null, true, 10_000, 30_000);
     this.ssl = (ssl != null) ? ssl : NetTlsContext.sslSocketFactory();
 
     // Use an explicit Proxy to support per-server overrides.
     // Do NOT rely on JVM-global socksProxyHost/socksProxyPort system properties.
-    this.proxy = (this.cfg.enabled() && this.cfg.host() != null && !this.cfg.host().isBlank() && this.cfg.port() > 0)
-        ? new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(this.cfg.host(), this.cfg.port()))
-        : Proxy.NO_PROXY;
+    this.proxy =
+        (this.cfg.enabled()
+                && this.cfg.host() != null
+                && !this.cfg.host().isBlank()
+                && this.cfg.port() > 0)
+            ? new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(this.cfg.host(), this.cfg.port()))
+            : Proxy.NO_PROXY;
 
     NetProxyContext.registerSocksAuth(this.cfg);
   }
@@ -37,9 +44,10 @@ public final class SslOverSocksSocketFactory extends SocketFactory {
   private Socket connectSocks(String host, int port) throws IOException {
     Socket base = new Socket(proxy);
 
-    InetSocketAddress target = cfg.remoteDns()
-        ? InetSocketAddress.createUnresolved(host, port)
-        : new InetSocketAddress(host, port);
+    InetSocketAddress target =
+        cfg.remoteDns()
+            ? InetSocketAddress.createUnresolved(host, port)
+            : new InetSocketAddress(host, port);
 
     int connectTimeoutMs = (int) Math.max(1, cfg.connectTimeoutMs());
 
@@ -56,13 +64,15 @@ public final class SslOverSocksSocketFactory extends SocketFactory {
   }
 
   @Override
-  public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+  public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+      throws IOException {
     Socket base = new Socket(proxy);
     base.bind(new InetSocketAddress(localHost, localPort));
 
-    InetSocketAddress target = cfg.remoteDns()
-        ? InetSocketAddress.createUnresolved(host, port)
-        : new InetSocketAddress(host, port);
+    InetSocketAddress target =
+        cfg.remoteDns()
+            ? InetSocketAddress.createUnresolved(host, port)
+            : new InetSocketAddress(host, port);
 
     base.connect(target, (int) Math.max(1, cfg.connectTimeoutMs()));
     base.setSoTimeout((int) Math.max(1, cfg.readTimeoutMs()));
@@ -75,7 +85,8 @@ public final class SslOverSocksSocketFactory extends SocketFactory {
   }
 
   @Override
-  public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+  public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
+      throws IOException {
     return createSocket(address.getHostName(), port, localAddress, localPort);
   }
 

@@ -11,9 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Routes non-IRC application diagnostics into dedicated application buffers.
- */
+/** Routes non-IRC application diagnostics into dedicated application buffers. */
 @Component
 public class ApplicationDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(ApplicationDiagnosticsService.class);
@@ -22,7 +20,8 @@ public class ApplicationDiagnosticsService {
 
   private final UiPort ui;
   private final AtomicBoolean installed = new AtomicBoolean(false);
-  private final Thread.UncaughtExceptionHandler uncaughtExceptionHandler = this::handleUncaughtException;
+  private final Thread.UncaughtExceptionHandler uncaughtExceptionHandler =
+      this::handleUncaughtException;
   private volatile Thread.UncaughtExceptionHandler previousDefaultHandler;
 
   public ApplicationDiagnosticsService(UiPort ui) {
@@ -80,10 +79,7 @@ public class ApplicationDiagnosticsService {
         appendStack(TargetRef.applicationAssertjSwing(), error);
       }
       appendDiagnostic(
-          TargetRef.applicationUnhandledErrors(),
-          "(uncaught)",
-          threadName + ": " + summary,
-          true);
+          TargetRef.applicationUnhandledErrors(), "(uncaught)", threadName + ": " + summary, true);
       appendStack(TargetRef.applicationUnhandledErrors(), error);
     } catch (Throwable t) {
       log.error("[ircafe] failed to publish uncaught exception to diagnostics buffer", t);
@@ -94,7 +90,8 @@ public class ApplicationDiagnosticsService {
       if (error != null) {
         log.error("[ircafe] uncaught exception on {}", normalizeThreadName(thread), error);
       } else {
-        log.error("[ircafe] uncaught exception on {}: (null throwable)", normalizeThreadName(thread));
+        log.error(
+            "[ircafe] uncaught exception on {}: (null throwable)", normalizeThreadName(thread));
       }
     } catch (Throwable ignored) {
     }

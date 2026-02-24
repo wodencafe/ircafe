@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.irc.soju;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
@@ -7,16 +9,14 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class SojuAutoConnectStoreTest {
 
   @Test
   void initializesFromPropertiesAndMatchesCaseInsensitively() {
-    SojuProperties props = new SojuProperties(Map.of(
-        "soju",
-        Map.of("Libera", true, "OFTC", false)
-    ), new SojuProperties.Discovery(true));
+    SojuProperties props =
+        new SojuProperties(
+            Map.of("soju", Map.of("Libera", true, "OFTC", false)),
+            new SojuProperties.Discovery(true));
 
     RuntimeConfigStore runtime = new RuntimeConfigStore(" ", new IrcProperties(null, List.of()));
 

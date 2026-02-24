@@ -6,10 +6,11 @@ import java.util.Objects;
  * Parses ZNC-style usernames.
  *
  * <p>Common forms:
+ *
  * <ul>
- *   <li>{@code user}</li>
- *   <li>{@code user/network}</li>
- *   <li>{@code user@clientid/network}</li>
+ *   <li>{@code user}
+ *   <li>{@code user/network}
+ *   <li>{@code user@clientid/network}
  * </ul>
  */
 public record ZncLoginParts(String baseUser, String clientId, String network) {
@@ -59,9 +60,7 @@ public record ZncLoginParts(String baseUser, String clientId, String network) {
     return new ZncLoginParts(user, client, net);
   }
 
-  /**
-   * Merge two parses, preferring non-empty fields from {@code this}.
-   */
+  /** Merge two parses, preferring non-empty fields from {@code this}. */
   public ZncLoginParts mergePreferThis(ZncLoginParts other) {
     if (other == null) return this;
     String u = (this.baseUser != null && !this.baseUser.isBlank()) ? this.baseUser : other.baseUser;

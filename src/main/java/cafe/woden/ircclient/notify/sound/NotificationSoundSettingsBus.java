@@ -18,7 +18,10 @@ public class NotificationSoundSettingsBus {
   public NotificationSoundSettingsBus(UiProperties props) {
     UiProperties.Tray tray = props != null ? props.tray() : null;
 
-    boolean enabled = tray == null || tray.notificationSoundsEnabled() == null || Boolean.TRUE.equals(tray.notificationSoundsEnabled());
+    boolean enabled =
+        tray == null
+            || tray.notificationSoundsEnabled() == null
+            || Boolean.TRUE.equals(tray.notificationSoundsEnabled());
     String id = tray != null ? tray.notificationSound() : BuiltInSound.NOTIF_1.name();
     if (id == null || id.isBlank()) id = BuiltInSound.NOTIF_1.name();
 

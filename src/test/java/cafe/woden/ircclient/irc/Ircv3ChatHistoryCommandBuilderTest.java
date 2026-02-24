@@ -10,13 +10,10 @@ class Ircv3ChatHistoryCommandBuilderTest {
 
   @Test
   void buildsBeforeWithTimestampSelector() {
-    String line = Ircv3ChatHistoryCommandBuilder.buildBeforeByTimestamp(
-        "#ircafe",
-        Instant.parse("2026-02-16T12:34:56.789Z"),
-        75);
-    assertEquals(
-        "CHATHISTORY BEFORE #ircafe timestamp=2026-02-16T12:34:56.789Z 75",
-        line);
+    String line =
+        Ircv3ChatHistoryCommandBuilder.buildBeforeByTimestamp(
+            "#ircafe", Instant.parse("2026-02-16T12:34:56.789Z"), 75);
+    assertEquals("CHATHISTORY BEFORE #ircafe timestamp=2026-02-16T12:34:56.789Z 75", line);
   }
 
   @Test
@@ -27,7 +24,9 @@ class Ircv3ChatHistoryCommandBuilderTest {
 
   @Test
   void normalizesSelectorKeyAndRejectsInvalidSelector() {
-    String line = Ircv3ChatHistoryCommandBuilder.buildBefore("#ircafe", "TIMESTAMP=2026-02-16T12:34:56.000Z", 10);
+    String line =
+        Ircv3ChatHistoryCommandBuilder.buildBefore(
+            "#ircafe", "TIMESTAMP=2026-02-16T12:34:56.000Z", 10);
     assertEquals("CHATHISTORY BEFORE #ircafe timestamp=2026-02-16T12:34:56.000Z 10", line);
 
     assertThrows(
@@ -53,9 +52,6 @@ class Ircv3ChatHistoryCommandBuilderTest {
     assertEquals(
         "CHATHISTORY BETWEEN #ircafe timestamp=2026-02-16T00:00:00.000Z * 60",
         Ircv3ChatHistoryCommandBuilder.buildBetween(
-            "#ircafe",
-            "timestamp=2026-02-16T00:00:00.000Z",
-            "*",
-            60));
+            "#ircafe", "timestamp=2026-02-16T00:00:00.000Z", "*", 60));
   }
 }

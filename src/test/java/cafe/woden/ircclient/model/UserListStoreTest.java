@@ -17,18 +17,24 @@ class UserListStoreTest {
     UserListStore store = new UserListStore();
     String serverId = "libera";
 
-    store.put(serverId, "#ircafe", List.of(
-        new NickInfo(
-            "Alice",
-            "@",
-            "Alice!user@old.host",
-            AwayState.AWAY,
-            "brb",
-            AccountState.LOGGED_IN,
-            "alice-account"),
-        new NickInfo("Bob", "+", "Bob!user@host")));
-    store.put(serverId, "#java", List.of(
-        new NickInfo("alice", "", "", AwayState.UNKNOWN, null, AccountState.UNKNOWN, null)));
+    store.put(
+        serverId,
+        "#ircafe",
+        List.of(
+            new NickInfo(
+                "Alice",
+                "@",
+                "Alice!user@old.host",
+                AwayState.AWAY,
+                "brb",
+                AccountState.LOGGED_IN,
+                "alice-account"),
+            new NickInfo("Bob", "+", "Bob!user@host")));
+    store.put(
+        serverId,
+        "#java",
+        List.of(
+            new NickInfo("alice", "", "", AwayState.UNKNOWN, null, AccountState.UNKNOWN, null)));
 
     Set<String> changed = store.updateRealNameAcrossChannels(serverId, "ALICE", "Alice Liddell");
     assertEquals(Set.of("#ircafe", "#java"), changed);
@@ -71,7 +77,8 @@ class UserListStoreTest {
     store.put(serverId, "##Llamas", List.of(new NickInfo("alpaca", "", "alpaca!u@h")));
     store.put(serverId, "##Chat-Overflow", List.of(new NickInfo("QuinSmith", "", "QuinSmith!u@h")));
 
-    assertEquals(Set.of("##chat", "##chat-overflow"), store.channelsContainingNick(serverId, "QUINSMITH"));
+    assertEquals(
+        Set.of("##chat", "##chat-overflow"), store.channelsContainingNick(serverId, "QUINSMITH"));
     assertTrue(store.channelsContainingNick(serverId, "nobody").isEmpty());
   }
 }

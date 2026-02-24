@@ -86,19 +86,13 @@ class LabeledResponseRoutingStateTest {
 
     var first =
         state.markOutcomeIfPending(
-            "libera",
-            "req-1",
-            LabeledResponseRoutingState.Outcome.SUCCESS,
-            Instant.now());
+            "libera", "req-1", LabeledResponseRoutingState.Outcome.SUCCESS, Instant.now());
     assertNotNull(first);
     assertEquals(LabeledResponseRoutingState.Outcome.SUCCESS, first.outcome());
 
     var second =
         state.markOutcomeIfPending(
-            "libera",
-            "req-1",
-            LabeledResponseRoutingState.Outcome.FAILURE,
-            Instant.now());
+            "libera", "req-1", LabeledResponseRoutingState.Outcome.FAILURE, Instant.now());
     assertNotNull(second);
     assertEquals(LabeledResponseRoutingState.Outcome.FAILURE, second.outcome());
   }

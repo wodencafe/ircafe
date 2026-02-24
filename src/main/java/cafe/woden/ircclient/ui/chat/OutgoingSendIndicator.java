@@ -16,14 +16,13 @@ import javax.swing.Timer;
 /**
  * Small inline status indicator used for outbound message delivery.
  *
- * <p>We keep this intentionally lightweight: it is embedded into the chat transcript as a
- * {@link javax.swing.text.StyleConstants#setComponent(javax.swing.text.MutableAttributeSet, java.awt.Component)}
- * and painted inline by the {@link javax.swing.JTextPane}.</p>
+ * <p>We keep this intentionally lightweight: it is embedded into the chat transcript as a {@link
+ * javax.swing.text.StyleConstants#setComponent(javax.swing.text.MutableAttributeSet,
+ * java.awt.Component)} and painted inline by the {@link javax.swing.JTextPane}.
  */
 public final class OutgoingSendIndicator {
 
-  private OutgoingSendIndicator() {
-  }
+  private OutgoingSendIndicator() {}
 
   /** Animated spinner that runs indefinitely while the component is displayable. */
   public static final class PendingSpinner extends JComponent {
@@ -43,21 +42,23 @@ public final class OutgoingSendIndicator {
       setOpaque(false);
       // ~30 FPS is plenty for a tiny inline spinner.
       this.timer = new Timer(33, null);
-      this.timer.addActionListener(e -> {
-        if (frozen) return;
-        if (startedAtMs > 0L && (System.currentTimeMillis() - startedAtMs) >= MAX_ANIMATION_MS) {
-          frozen = true;
-          try {
-            timer.stop();
-          } catch (Exception ignored) {
-          }
-          repaint();
-          return;
-        }
-        angleDeg += 18f;
-        if (angleDeg >= 360f) angleDeg -= 360f;
-        repaint();
-      });
+      this.timer.addActionListener(
+          e -> {
+            if (frozen) return;
+            if (startedAtMs > 0L
+                && (System.currentTimeMillis() - startedAtMs) >= MAX_ANIMATION_MS) {
+              frozen = true;
+              try {
+                timer.stop();
+              } catch (Exception ignored) {
+              }
+              repaint();
+              return;
+            }
+            angleDeg += 18f;
+            if (angleDeg >= 360f) angleDeg -= 360f;
+            repaint();
+          });
       this.timer.setRepeats(true);
     }
 
@@ -155,7 +156,8 @@ public final class OutgoingSendIndicator {
   }
 
   /**
-   * Green dot that fades out, then runs an optional callback (e.g. to remove itself from a document).
+   * Green dot that fades out, then runs an optional callback (e.g. to remove itself from a
+   * document).
    */
   public static final class ConfirmedDot extends JComponent {
     private static final int DEFAULT_SIZE = 10;
@@ -256,7 +258,8 @@ public final class OutgoingSendIndicator {
       Graphics2D g2 = (Graphics2D) g.create();
       try {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, Math.min(1f, alpha))));
+        g2.setComposite(
+            AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, Math.min(1f, alpha))));
 
         int h = getHeight();
         int size = Math.min(DEFAULT_SIZE, h - 2);

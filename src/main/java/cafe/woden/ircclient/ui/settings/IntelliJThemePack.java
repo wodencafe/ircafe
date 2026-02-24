@@ -14,8 +14,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Helper for accessing the FlatLaf IntelliJ Themes Pack (flatlaf-intellij-themes).
  *
- * <p>This class is intentionally defensive: it uses reflection so that IRCafe can still
- * start even if the theme pack is not present on the classpath.
+ * <p>This class is intentionally defensive: it uses reflection so that IRCafe can still start even
+ * if the theme pack is not present on the classpath.
  */
 public final class IntelliJThemePack {
 
@@ -150,6 +150,9 @@ public final class IntelliJThemePack {
   private static boolean looksDark(String name) {
     if (name == null) return false;
     String n = name.toLowerCase();
-    return n.contains("dark") || n.contains("darcula") || n.contains("dracula") || n.contains("black");
+    return n.contains("dark")
+        || n.contains("darcula")
+        || n.contains("dracula")
+        || n.contains("black");
   }
 }

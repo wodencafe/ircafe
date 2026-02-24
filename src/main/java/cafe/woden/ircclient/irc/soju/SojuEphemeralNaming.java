@@ -29,7 +29,8 @@ public final class SojuEphemeralNaming {
     return derive(bouncerServer, network, DEFAULT_CLIENT_SUFFIX);
   }
 
-  public static Derived derive(IrcProperties.Server bouncerServer, SojuNetwork network, String clientSuffix) {
+  public static Derived derive(
+      IrcProperties.Server bouncerServer, SojuNetwork network, String clientSuffix) {
     Objects.requireNonNull(bouncerServer, "bouncerServer");
     Objects.requireNonNull(network, "network");
     String bouncerId = normalize(bouncerServer.id());
@@ -78,10 +79,11 @@ public final class SojuEphemeralNaming {
    * Normalize a base username by stripping any existing network selection or client suffix.
    *
    * <p>Examples:
+   *
    * <ul>
-   *   <li>{@code user/libera} -> {@code user}</li>
-   *   <li>{@code user@laptop} -> {@code user}</li>
-   *   <li>{@code user/libera@laptop} -> {@code user}</li>
+   *   <li>{@code user/libera} -> {@code user}
+   *   <li>{@code user@laptop} -> {@code user}
+   *   <li>{@code user/libera@laptop} -> {@code user}
    * </ul>
    */
   public static String normalizeBaseUser(String user) {

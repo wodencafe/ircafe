@@ -5,13 +5,10 @@ import java.util.Locale;
 /**
  * Optional theme accent override.
  *
- * <p>If {@link #accentColor()} is null, the theme's built-in accent is used.
- * {@link #strength()} blends between the theme's default accent and the chosen accent.
+ * <p>If {@link #accentColor()} is null, the theme's built-in accent is used. {@link #strength()}
+ * blends between the theme's default accent and the chosen accent.
  */
-public record ThemeAccentSettings(
-    String accentColor,
-    int strength
-) {
+public record ThemeAccentSettings(String accentColor, int strength) {
 
   public ThemeAccentSettings {
     if (accentColor != null && accentColor.isBlank()) accentColor = null;
@@ -44,9 +41,7 @@ public record ThemeAccentSettings(
 
     for (int i = 0; i < 6; i++) {
       char c = s.charAt(i);
-      boolean ok = (c >= '0' && c <= '9')
-          || (c >= 'a' && c <= 'f')
-          || (c >= 'A' && c <= 'F');
+      boolean ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
       if (!ok) return null;
     }
 

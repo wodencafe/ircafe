@@ -1,15 +1,15 @@
 package cafe.woden.ircclient.ui.tray;
 
-import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.TargetCoordinator;
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.StatusBar;
-import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import com.sshtools.twoslices.Toast;
 import com.sshtools.twoslices.ToastType;
@@ -21,11 +21,13 @@ import dorkbox.notify.Theme;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import jakarta.annotation.PreDestroy;
 import java.awt.Frame;
 import java.awt.Toolkit;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -33,11 +35,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.net.URL;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import jakarta.annotation.PreDestroy;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
@@ -49,9 +49,9 @@ import org.springframework.stereotype.Component;
 /**
  * Desktop notifications for tray users.
  *
- * <p>We intentionally avoid hard dependencies here. On Linux we try {@code notify-send}.
- * On macOS we prefer a bundled {@code terminal-notifier}, then fall back to {@code osascript}.
- * If OS-native paths fail, we try {@code two-slices} before a final beep fallback.
+ * <p>We intentionally avoid hard dependencies here. On Linux we try {@code notify-send}. On macOS
+ * we prefer a bundled {@code terminal-notifier}, then fall back to {@code osascript}. If OS-native
+ * paths fail, we try {@code two-slices} before a final beep fallback.
  */
 @Component
 public class TrayNotificationService {
@@ -93,8 +93,7 @@ public class TrayNotificationService {
       ObjectProvider<TargetCoordinator> targetCoordinatorProvider,
       ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
       ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
-      NotificationSoundService soundService
-  ) {
+      NotificationSoundService soundService) {
     this.settingsBus = settingsBus;
     this.trayServiceProvider = trayServiceProvider;
     this.mainFrameProvider = mainFrameProvider;
@@ -120,11 +119,13 @@ public class TrayNotificationService {
     UiSettings s = settingsBus.get();
     if (!s.trayEnabled() || !s.trayNotifyHighlights()) return;
     String title = "Highlight" + (channel != null && !channel.isBlank() ? " in " + channel : "");
-    String body = (fromNick != null && !fromNick.isBlank() ? fromNick + ": " : "") + safeBody(message);
+    String body =
+        (fromNick != null && !fromNick.isBlank() ? fromNick + ": " : "") + safeBody(message);
     TargetRef target = safeTargetRef(serverId, channel, "status");
     if (!passesNotifyConditions(target)) return;
     String targetKey = targetKey(serverId, channel);
-    notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
+    notifyAsync(
+        targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
   }
 
   public void notifyPrivateMessage(String serverId, String fromNick, String message) {
@@ -135,7 +136,8 @@ public class TrayNotificationService {
     TargetRef target = safeTargetRef(serverId, fromNick, "status");
     if (!passesNotifyConditions(target)) return;
     String targetKey = targetKey(serverId, fromNick);
-    notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
+    notifyAsync(
+        targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
   }
 
   public void notifyInvite(String serverId, String channel, String fromNick, String reason) {
@@ -160,36 +162,43 @@ public class TrayNotificationService {
     TargetRef target = safeTargetRef(serverId, "status", "status");
     if (!passesNotifyConditions(target)) return;
     String targetKey = targetKey(serverId, ch.isBlank() ? "status" : ch);
-    notifyAsync(targetKey, contentKey(targetKey, title, body.toString()), title, body.toString(), () -> openTarget(target));
+    notifyAsync(
+        targetKey,
+        contentKey(targetKey, title, body.toString()),
+        title,
+        body.toString(),
+        () -> openTarget(target));
   }
 
   public void notifyConnectionState(String serverId, String state, String detail) {
     UiSettings s = settingsBus.get();
     if (!s.trayEnabled() || !s.trayNotifyConnectionState()) return;
-    String title = "Connection" + (serverId != null && !serverId.isBlank() ? " (" + serverId + ")" : "");
-    String body = (state != null && !state.isBlank() ? state : "") +
-        (detail != null && !detail.isBlank() ? (state != null && !state.isBlank() ? ": " : "") + safeBody(detail) : "");
+    String title =
+        "Connection" + (serverId != null && !serverId.isBlank() ? " (" + serverId + ")" : "");
+    String body =
+        (state != null && !state.isBlank() ? state : "")
+            + (detail != null && !detail.isBlank()
+                ? (state != null && !state.isBlank() ? ": " : "") + safeBody(detail)
+                : "");
     TargetRef target = safeTargetRef(serverId, "status", "status");
     if (!passesNotifyConditions(target)) return;
     String targetKey = targetKey(serverId, "status");
-    notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
+    notifyAsync(
+        targetKey, contentKey(targetKey, title, body), title, body, () -> openTarget(target));
   }
 
-  /**
-   * Sends a test notification from the preferences UI.
-   */
+  /** Sends a test notification from the preferences UI. */
   public void notifyTest() {
     UiSettings s = settingsBus.get();
     if (s == null || !s.trayEnabled()) return;
     String title = "IRCafe";
     String body = "Test notification (click to open IRCafe)";
     String targetKey = targetKey("", "");
-    notifyAsync(targetKey, contentKey(targetKey, title, body), title, body, this::showMainWindowOnly);
+    notifyAsync(
+        targetKey, contentKey(targetKey, title, body), title, body, this::showMainWindowOnly);
   }
 
-  /**
-   * One-time discoverability hint shown when IRCafe is first hidden to tray.
-   */
+  /** One-time discoverability hint shown when IRCafe is first hidden to tray. */
   public void notifyCloseToTrayHint() {
     UiSettings s = settingsBus.get();
     if (s == null || !s.trayEnabled()) return;
@@ -208,9 +217,7 @@ public class TrayNotificationService {
         SoundDirective.none());
   }
 
-  /**
-   * Sends a custom notification driven by user-configured IRC event rules.
-   */
+  /** Sends a custom notification driven by user-configured IRC event rules. */
   public void notifyCustom(
       String serverId,
       String target,
@@ -222,8 +229,7 @@ public class TrayNotificationService {
       boolean playSound,
       String soundId,
       boolean soundUseCustom,
-      String soundCustomPath
-  ) {
+      String soundCustomPath) {
     UiSettings s = settingsBus.get();
     boolean trayEnabled = s != null && s.trayEnabled();
     StatusBar statusBar = statusBarProvider != null ? statusBarProvider.getIfAvailable() : null;
@@ -248,14 +254,16 @@ public class TrayNotificationService {
     if (effectiveFocusScope == IrcEventNotificationRule.FocusScope.FOREGROUND_ONLY && !focusedNow) {
       scopedShowToast = false;
       scopedPlaySound = false;
-    } else if (effectiveFocusScope == IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY && focusedNow) {
+    } else if (effectiveFocusScope == IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY
+        && focusedNow) {
       scopedShowToast = false;
       scopedPlaySound = false;
     }
 
     boolean effectiveShowToast = false;
     boolean effectivePlaySound = false;
-    boolean allowWhenFocused = effectiveFocusScope != IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+    boolean allowWhenFocused =
+        effectiveFocusScope != IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
     if (trayEnabled && (scopedShowToast || scopedPlaySound)) {
       boolean trayAllowed = passesNotifyConditions(openTarget, allowWhenFocused);
       effectiveShowToast = trayAllowed && scopedShowToast;
@@ -274,14 +282,13 @@ public class TrayNotificationService {
     } else {
       routeKey = "sound";
     }
-    String contentKey = contentKey(
-        targetKey,
-        "event",
-        routeKey + "|" + finalTitle + "|" + finalBody);
+    String contentKey =
+        contentKey(targetKey, "event", routeKey + "|" + finalTitle + "|" + finalBody);
 
-    SoundDirective soundDirective = effectivePlaySound
-        ? SoundDirective.override(soundId, soundUseCustom, soundCustomPath)
-        : SoundDirective.none();
+    SoundDirective soundDirective =
+        effectivePlaySound
+            ? SoundDirective.override(soundId, soundUseCustom, soundCustomPath)
+            : SoundDirective.none();
 
     Runnable onClick = () -> openTarget(openTarget);
     notifyAsync(
@@ -337,7 +344,8 @@ public class TrayNotificationService {
 
   private boolean isTargetActive(TargetRef target) {
     try {
-      TargetCoordinator tc = targetCoordinatorProvider != null ? targetCoordinatorProvider.getIfAvailable() : null;
+      TargetCoordinator tc =
+          targetCoordinatorProvider != null ? targetCoordinatorProvider.getIfAvailable() : null;
       if (tc == null) return false;
       TargetRef active = tc.getActiveTarget();
       return active != null && active.equals(target);
@@ -346,7 +354,8 @@ public class TrayNotificationService {
     }
   }
 
-  private void notifyAsync(String targetKey, String contentKey, String title, String body, Runnable onClick) {
+  private void notifyAsync(
+      String targetKey, String contentKey, String title, String body, Runnable onClick) {
     // Push into the Rx pipeline; rate limiting and dedupe happen there.
     notifyAsync(targetKey, contentKey, title, body, onClick, true, true, SoundDirective.global());
   }
@@ -359,42 +368,48 @@ public class TrayNotificationService {
       Runnable onClick,
       boolean showToast,
       boolean showStatusBar,
-      SoundDirective soundDirective
-  ) {
-    requests.onNext(new NotificationRequest(
-        targetKey,
-        contentKey,
-        title,
-        body,
-        onClick,
-        showToast,
-        showStatusBar,
-        soundDirective != null ? soundDirective : SoundDirective.global()));
+      SoundDirective soundDirective) {
+    requests.onNext(
+        new NotificationRequest(
+            targetKey,
+            contentKey,
+            title,
+            body,
+            onClick,
+            showToast,
+            showStatusBar,
+            soundDirective != null ? soundDirective : SoundDirective.global()));
   }
 
   private void installRateLimiterPipeline() {
     // Periodic cleanup of dedupe keys so long-running sessions don't accumulate unlimited entries.
     disposables.add(
-        io.reactivex.rxjava3.core.Flowable.interval(1, 1, TimeUnit.MINUTES, RxVirtualSchedulers.computation())
-            .subscribe(tick -> cleanupContentKeys(), err -> log.debug("[ircafe] notify cleanup failed", err))
-    );
+        io.reactivex.rxjava3.core.Flowable.interval(
+                1, 1, TimeUnit.MINUTES, RxVirtualSchedulers.computation())
+            .subscribe(
+                tick -> cleanupContentKeys(),
+                err -> log.debug("[ircafe] notify cleanup failed", err)));
 
     disposables.add(
         requests
-            .onBackpressureDrop(req -> log.debug("[ircafe] dropping tray notification due to backpressure: {}", req.targetKey()))
+            .onBackpressureDrop(
+                req ->
+                    log.debug(
+                        "[ircafe] dropping tray notification due to backpressure: {}",
+                        req.targetKey()))
             .filter(this::allowByContentDedupe)
             // Per-target: allow up to N per window.
             .groupBy(NotificationRequest::targetKey)
-            .flatMap(group -> group
-                .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
-                .flatMap(win -> win.take(PER_TARGET_MAX_PER_WINDOW))
-            )
+            .flatMap(
+                group ->
+                    group
+                        .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
+                        .flatMap(win -> win.take(PER_TARGET_MAX_PER_WINDOW)))
             // Global: allow up to N per window.
             .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
             .flatMap(win -> win.take(GLOBAL_MAX_PER_WINDOW))
             .observeOn(RxVirtualSchedulers.io())
-            .subscribe(this::sendNow, err -> log.debug("[ircafe] tray notify stream failed", err))
-    );
+            .subscribe(this::sendNow, err -> log.debug("[ircafe] tray notify stream failed", err)));
   }
 
   private boolean allowByContentDedupe(NotificationRequest req) {
@@ -422,12 +437,12 @@ public class TrayNotificationService {
       if (soundService != null && req.soundDirective() != null) {
         switch (req.soundDirective().mode()) {
           case GLOBAL -> soundService.play();
-          case NONE -> {
-          }
-          case OVERRIDE -> soundService.playOverride(
-              req.soundDirective().soundId(),
-              req.soundDirective().soundUseCustom(),
-              req.soundDirective().soundCustomPath());
+          case NONE -> {}
+          case OVERRIDE ->
+              soundService.playOverride(
+                  req.soundDirective().soundId(),
+                  req.soundDirective().soundUseCustom(),
+                  req.soundDirective().soundCustomPath());
         }
       }
 
@@ -448,7 +463,8 @@ public class TrayNotificationService {
       }
 
       // Last-resort fallback: don't crash the app because a desktop notification couldn't be shown.
-      log.debug("[ircafe] tray notify backend={} could not deliver; falling back to beep", mode.token());
+      log.debug(
+          "[ircafe] tray notify backend={} could not deliver; falling back to beep", mode.token());
       Toolkit.getDefaultToolkit().beep();
     } catch (Exception e) {
       log.debug("[ircafe] tray notify failed", e);
@@ -505,37 +521,42 @@ public class TrayNotificationService {
     String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
     if (!os.contains("win")) return false;
 
-    // dorkbox/Notify uses its own lightweight, toast-like popup window. It's not a native Windows Action Center
+    // dorkbox/Notify uses its own lightweight, toast-like popup window. It's not a native Windows
+    // Action Center
     // notification, but it's reliable and requires no extra system components.
     try {
       UiSettings s = settingsBus.get();
-      boolean light = s != null && s.theme() != null && s.theme().toLowerCase(Locale.ROOT).contains("light");
+      boolean light =
+          s != null && s.theme() != null && s.theme().toLowerCase(Locale.ROOT).contains("light");
 
-      Runnable show = () -> {
-        try {
-          Function1<Notify, Unit> click = n -> {
-            if (onClick != null) {
-              try {
-                onClick.run();
-              } catch (Throwable ignored) {
-              }
+      Runnable show =
+          () -> {
+            try {
+              Function1<Notify, Unit> click =
+                  n -> {
+                    if (onClick != null) {
+                      try {
+                        onClick.run();
+                      } catch (Throwable ignored) {
+                      }
+                    }
+                    return Unit.INSTANCE;
+                  };
+
+              Notify.Companion.create()
+                  .title(title)
+                  .text(body)
+                  .position(Position.BOTTOM_RIGHT)
+                  .hideAfter(5_000)
+                  .theme(
+                      light ? Theme.Companion.getDefaultLight() : Theme.Companion.getDefaultDark())
+                  .onClickAction(click)
+                  .showWarning();
+            } catch (Throwable t) {
+              // If this fails for any reason, we fall back to other mechanisms.
+              throw new RuntimeException(t);
             }
-            return Unit.INSTANCE;
           };
-
-          Notify.Companion.create()
-              .title(title)
-              .text(body)
-              .position(Position.BOTTOM_RIGHT)
-              .hideAfter(5_000)
-              .theme(light ? Theme.Companion.getDefaultLight() : Theme.Companion.getDefaultDark())
-              .onClickAction(click)
-              .showWarning();
-        } catch (Throwable t) {
-          // If this fails for any reason, we fall back to other mechanisms.
-          throw new RuntimeException(t);
-        }
-      };
 
       // Keep it Swing-safe.
       if (SwingUtilities.isEventDispatchThread()) {
@@ -552,29 +573,31 @@ public class TrayNotificationService {
   private void openTarget(TargetRef target) {
     if (target == null) return;
 
-    Runnable r = () -> {
-      try {
-        TrayService tray = trayServiceProvider.getIfAvailable();
-        if (tray == null) {
-          tray = trayServiceProvider.getObject();
-        }
-        if (tray != null) {
-          tray.showMainWindow();
-        }
-      } catch (Throwable ignored) {
-      }
+    Runnable r =
+        () -> {
+          try {
+            TrayService tray = trayServiceProvider.getIfAvailable();
+            if (tray == null) {
+              tray = trayServiceProvider.getObject();
+            }
+            if (tray != null) {
+              tray.showMainWindow();
+            }
+          } catch (Throwable ignored) {
+          }
 
-      try {
-        cafe.woden.ircclient.ui.ServerTreeDockable serverTree = serverTreeProvider.getIfAvailable();
-        if (serverTree == null) {
-          serverTree = serverTreeProvider.getObject();
-        }
-        if (serverTree != null) {
-          serverTree.selectTarget(target);
-        }
-      } catch (Throwable ignored) {
-      }
-    };
+          try {
+            cafe.woden.ircclient.ui.ServerTreeDockable serverTree =
+                serverTreeProvider.getIfAvailable();
+            if (serverTree == null) {
+              serverTree = serverTreeProvider.getObject();
+            }
+            if (serverTree != null) {
+              serverTree.selectTarget(target);
+            }
+          } catch (Throwable ignored) {
+          }
+        };
 
     // Jumping to a buffer is a UI action.
     if (SwingUtilities.isEventDispatchThread()) {
@@ -585,18 +608,19 @@ public class TrayNotificationService {
   }
 
   private void showMainWindowOnly() {
-    Runnable r = () -> {
-      try {
-        TrayService tray = trayServiceProvider.getIfAvailable();
-        if (tray == null) {
-          tray = trayServiceProvider.getObject();
-        }
-        if (tray != null) {
-          tray.showMainWindow();
-        }
-      } catch (Throwable ignored) {
-      }
-    };
+    Runnable r =
+        () -> {
+          try {
+            TrayService tray = trayServiceProvider.getIfAvailable();
+            if (tray == null) {
+              tray = trayServiceProvider.getObject();
+            }
+            if (tray != null) {
+              tray.showMainWindow();
+            }
+          } catch (Throwable ignored) {
+          }
+        };
 
     if (SwingUtilities.isEventDispatchThread()) {
       r.run();
@@ -655,13 +679,13 @@ public class TrayNotificationService {
     }
 
     // Very common on GNOME/KDE/etc. If missing, we'll silently fall back.
-    ProcessBuilder pb = new ProcessBuilder(
-        "notify-send",
-        "--app-name=IRCafe",
-        "--expire-time=" + (TOAST_TIMEOUT_SECONDS * 1000),
-        title,
-        body
-    );
+    ProcessBuilder pb =
+        new ProcessBuilder(
+            "notify-send",
+            "--app-name=IRCafe",
+            "--expire-time=" + (TOAST_TIMEOUT_SECONDS * 1000),
+            title,
+            body);
     pb.redirectErrorStream(true);
     try {
       Process p = pb.start();
@@ -722,7 +746,12 @@ public class TrayNotificationService {
   }
 
   private static boolean tryMacAppleScript(String title, String body) {
-    String script = "display notification \"" + escapeApple(body) + "\" with title \"" + escapeApple(title) + "\"";
+    String script =
+        "display notification \""
+            + escapeApple(body)
+            + "\" with title \""
+            + escapeApple(title)
+            + "\"";
     ProcessBuilder pb = new ProcessBuilder("osascript", "-e", script);
     pb.redirectErrorStream(true);
     try {
@@ -772,12 +801,13 @@ public class TrayNotificationService {
         builder.icon(icon);
       }
       if (onClick != null) {
-        builder.defaultAction(() -> {
-          try {
-            onClick.run();
-          } catch (Throwable ignored) {
-          }
-        });
+        builder.defaultAction(
+            () -> {
+              try {
+                onClick.run();
+              } catch (Throwable ignored) {
+              }
+            });
       }
       builder.title(sanitizeDesktopText(title));
       builder.content(sanitizeDesktopText(body));
@@ -785,8 +815,12 @@ public class TrayNotificationService {
       log.debug("[ircafe] tray notify delivered via two-slices fallback");
       return true;
     } catch (Throwable t) {
-      twoSlicesDisabledUntilMs.set(System.currentTimeMillis() + TWO_SLICES_FAILURE_COOLDOWN.toMillis());
-      log.debug("[ircafe] two-slices notify backend failed; suppressing for {} ms", TWO_SLICES_FAILURE_COOLDOWN.toMillis(), t);
+      twoSlicesDisabledUntilMs.set(
+          System.currentTimeMillis() + TWO_SLICES_FAILURE_COOLDOWN.toMillis());
+      log.debug(
+          "[ircafe] two-slices notify backend failed; suppressing for {} ms",
+          TWO_SLICES_FAILURE_COOLDOWN.toMillis(),
+          t);
       return false;
     }
   }
@@ -800,15 +834,13 @@ public class TrayNotificationService {
     String target = targetKey.substring(split + 1).trim();
     if (serverId.isEmpty() || target.isEmpty()) return null;
 
-    return "ircafe://focus/"
-        + encodeUriPathSegment(serverId)
-        + "/"
-        + encodeUriPathSegment(target);
+    return "ircafe://focus/" + encodeUriPathSegment(serverId) + "/" + encodeUriPathSegment(target);
   }
 
   private static String encodeUriPathSegment(String value) {
     // URLEncoder emits '+' for spaces, but this is a URI path segment.
-    return java.net.URLEncoder.encode(Objects.toString(value, ""), StandardCharsets.UTF_8).replace("+", "%20");
+    return java.net.URLEncoder.encode(Objects.toString(value, ""), StandardCharsets.UTF_8)
+        .replace("+", "%20");
   }
 
   private static String sanitizeDesktopText(String value) {
@@ -816,7 +848,8 @@ public class TrayNotificationService {
   }
 
   private static void drain(Process p) {
-    try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+    try (BufferedReader br =
+        new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
       while (br.readLine() != null) {
         // discard
       }
@@ -843,7 +876,11 @@ public class TrayNotificationService {
 
   private static String contentKey(String targetKey, String title, String body) {
     // Body is already bounded and sanitized; keep the key readable for debug.
-    return Objects.toString(targetKey, "") + "|" + Objects.toString(title, "") + "|" + Objects.toString(body, "");
+    return Objects.toString(targetKey, "")
+        + "|"
+        + Objects.toString(title, "")
+        + "|"
+        + Objects.toString(body, "");
   }
 
   private record NotificationRequest(
@@ -854,9 +891,7 @@ public class TrayNotificationService {
       Runnable onClick,
       boolean showToast,
       boolean showStatusBar,
-      SoundDirective soundDirective
-  ) {
-  }
+      SoundDirective soundDirective) {}
 
   private enum SoundMode {
     GLOBAL,
@@ -865,11 +900,7 @@ public class TrayNotificationService {
   }
 
   private record SoundDirective(
-      SoundMode mode,
-      String soundId,
-      boolean soundUseCustom,
-      String soundCustomPath
-  ) {
+      SoundMode mode, String soundId, boolean soundUseCustom, String soundCustomPath) {
     static SoundDirective global() {
       return new SoundDirective(SoundMode.GLOBAL, null, false, null);
     }

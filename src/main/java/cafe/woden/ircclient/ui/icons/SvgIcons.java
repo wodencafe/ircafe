@@ -12,13 +12,14 @@ import javax.swing.UIManager;
 /**
  * Small helper for loading classpath SVG icons via FlatLaf's {@link FlatSVGIcon}.
  *
- * <p>Why: crisp scaling on HiDPI, consistent icon styling, and easy recoloring to match the active theme.
+ * <p>Why: crisp scaling on HiDPI, consistent icon styling, and easy recoloring to match the active
+ * theme.
  */
 public final class SvgIcons {
 
   /**
-   * A simple palette enum that lets us recolor a small set of token colors used in our SVGs.
-   * SVG authoring rule: use only these token colors (or nothing) for strokes/fills.
+   * A simple palette enum that lets us recolor a small set of token colors used in our SVGs. SVG
+   * authoring rule: use only these token colors (or nothing) for strokes/fills.
    */
   public enum Palette {
     /** Tree icons that should follow tree/label foreground. */
@@ -57,11 +58,13 @@ public final class SvgIcons {
     int s = Math.max(1, size);
     Palette p = palette != null ? palette : Palette.TREE;
 
-    return CACHE.computeIfAbsent(new Key(name, s, p), k -> {
-      FlatSVGIcon svg = new FlatSVGIcon(resourcePath(k.name), k.size, k.size);
-      svg.setColorFilter(new FlatSVGIcon.ColorFilter(colorMapper(k.palette)));
-      return svg;
-    });
+    return CACHE.computeIfAbsent(
+        new Key(name, s, p),
+        k -> {
+          FlatSVGIcon svg = new FlatSVGIcon(resourcePath(k.name), k.size, k.size);
+          svg.setColorFilter(new FlatSVGIcon.ColorFilter(colorMapper(k.palette)));
+          return svg;
+        });
   }
 
   public static Icon tree(String name, int size) {
@@ -101,9 +104,10 @@ public final class SvgIcons {
 
       // Base icon color
       if (rgb == TOKEN_BASE || rgb == 0xFF000000) {
-        Color fg = (palette == Palette.ACTION || palette == Palette.ACTION_DISABLED)
-            ? labelForeground()
-            : treeOrLabelForeground();
+        Color fg =
+            (palette == Palette.ACTION || palette == Palette.ACTION_DISABLED)
+                ? labelForeground()
+                : treeOrLabelForeground();
         if (palette == Palette.QUIET) {
           return withAlpha(fg, 170);
         }

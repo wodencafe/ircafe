@@ -14,7 +14,8 @@ class IrcEventMessageIdentityTest {
   @Test
   void oldChannelMessageConstructorDefaultsIdentityMetadata() {
     IrcEvent.ChannelMessage ev =
-        new IrcEvent.ChannelMessage(Instant.parse("2026-02-16T00:00:00Z"), "#ircafe", "alice", "hello");
+        new IrcEvent.ChannelMessage(
+            Instant.parse("2026-02-16T00:00:00Z"), "#ircafe", "alice", "hello");
 
     assertTrue(ev.messageId().isEmpty());
     assertTrue(ev.ircv3Tags().isEmpty());
@@ -29,11 +30,7 @@ class IrcEventMessageIdentityTest {
 
     IrcEvent.PrivateMessage ev =
         new IrcEvent.PrivateMessage(
-            Instant.parse("2026-02-16T00:00:00Z"),
-            "bob",
-            "hi",
-            "  abc123  ",
-            raw);
+            Instant.parse("2026-02-16T00:00:00Z"), "bob", "hi", "  abc123  ", raw);
 
     assertEquals("abc123", ev.messageId());
     assertEquals("abc123", ev.ircv3Tags().get("msgid"));

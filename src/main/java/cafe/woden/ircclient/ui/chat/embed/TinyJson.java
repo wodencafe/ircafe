@@ -50,7 +50,6 @@ final class TinyJson {
     return null;
   }
 
-  
   static String firstObjectInArray(String arrayJson) {
     if (arrayJson == null) return null;
     int start = arrayJson.indexOf('{');

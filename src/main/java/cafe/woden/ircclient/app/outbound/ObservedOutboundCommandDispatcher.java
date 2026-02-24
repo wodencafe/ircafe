@@ -9,18 +9,16 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-/**
- * Decorator that adds lightweight logging around outbound command dispatch.
- */
+/** Decorator that adds lightweight logging around outbound command dispatch. */
 @Component
 @Primary
 public class ObservedOutboundCommandDispatcher extends OutboundCommandDispatcherDecorator {
 
-  private static final Logger log = LoggerFactory.getLogger(ObservedOutboundCommandDispatcher.class);
+  private static final Logger log =
+      LoggerFactory.getLogger(ObservedOutboundCommandDispatcher.class);
 
   public ObservedOutboundCommandDispatcher(
-      @Qualifier("defaultOutboundCommandDispatcher") OutboundCommandDispatcher delegate
-  ) {
+      @Qualifier("defaultOutboundCommandDispatcher") OutboundCommandDispatcher delegate) {
     super(delegate);
   }
 

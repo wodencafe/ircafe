@@ -6,11 +6,7 @@ package cafe.woden.ircclient.notify.sound;
  * <p>Phase 3: a single global sound with a global enable toggle.
  */
 public record NotificationSoundSettings(
-    boolean enabled,
-    String soundId,
-    boolean useCustom,
-    String customPath
-) {
+    boolean enabled, String soundId, boolean useCustom, String customPath) {
 
   public NotificationSoundSettings {
     if (soundId == null || soundId.isBlank()) {

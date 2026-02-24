@@ -1,33 +1,40 @@
 package cafe.woden.ircclient.model;
 
-import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
+import cafe.woden.ircclient.irc.IrcEvent.AwayState;
+import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
 @Component
 public class UserListStore {
 
-  private final Map<String, Map<String, List<NickInfo>>> usersByServerAndChannel = new ConcurrentHashMap<>();
-  private final Map<String, Map<String, Set<String>>> lowerNickSetByServerAndChannel = new ConcurrentHashMap<>();
-  private final Map<String, Map<String, String>> hostmaskByServerAndNickLower = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, List<NickInfo>>> usersByServerAndChannel =
+      new ConcurrentHashMap<>();
+  private final Map<String, Map<String, Set<String>>> lowerNickSetByServerAndChannel =
+      new ConcurrentHashMap<>();
+  private final Map<String, Map<String, String>> hostmaskByServerAndNickLower =
+      new ConcurrentHashMap<>();
 
-  private final Map<String, Map<String, AwayState>> awayStateByServerAndNickLower = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, AwayState>> awayStateByServerAndNickLower =
+      new ConcurrentHashMap<>();
 
-  private final Map<String, Map<String, String>> awayMessageByServerAndNickLower = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, String>> awayMessageByServerAndNickLower =
+      new ConcurrentHashMap<>();
 
+  private final Map<String, Map<String, AccountState>> accountStateByServerAndNickLower =
+      new ConcurrentHashMap<>();
 
-  private final Map<String, Map<String, AccountState>> accountStateByServerAndNickLower = new ConcurrentHashMap<>();
-
-  private final Map<String, Map<String, String>> accountNameByServerAndNickLower = new ConcurrentHashMap<>();
-  private final Map<String, Map<String, String>> realNameByServerAndNickLower = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, String>> accountNameByServerAndNickLower =
+      new ConcurrentHashMap<>();
+  private final Map<String, Map<String, String>> realNameByServerAndNickLower =
+      new ConcurrentHashMap<>();
 
   private static String norm(String s) {
     return Objects.toString(s, "").trim();
@@ -62,7 +69,6 @@ public class UserListStore {
   private static boolean isKnownAway(AwayState state) {
     return state != null && state != AwayState.UNKNOWN;
   }
-
 
   private static boolean isKnownAccount(AccountState state) {
     return state != null && state != AccountState.UNKNOWN;
@@ -112,8 +118,8 @@ public class UserListStore {
   /**
    * Best-effort union of all nicks currently present in cached channel rosters for a server.
    *
-   * <p>This is intended for background enrichment (USERHOST/WHOIS) planning.
-   * The result is de-duplicated by lowercased nick, preserving first-seen casing.
+   * <p>This is intended for background enrichment (USERHOST/WHOIS) planning. The result is
+   * de-duplicated by lowercased nick, preserving first-seen casing.
    */
   public Set<String> getServerNicks(String serverId) {
     String sid = norm(serverId);
@@ -134,7 +140,8 @@ public class UserListStore {
       }
     }
     if (firstCasedByLower.isEmpty()) return Collections.emptySet();
-    return java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(firstCasedByLower.values()));
+    return java.util.Collections.unmodifiableSet(
+        new java.util.LinkedHashSet<>(firstCasedByLower.values()));
   }
 
   public boolean isNickPresentOnServer(String serverId, String nick) {
@@ -194,17 +201,20 @@ public class UserListStore {
     Map<String, String> knownHostmasks = hostmaskByServerAndNickLower.getOrDefault(sid, Map.of());
     Map<String, AwayState> knownAway = awayStateByServerAndNickLower.getOrDefault(sid, Map.of());
     Map<String, String> knownAwayMsg = awayMessageByServerAndNickLower.getOrDefault(sid, Map.of());
-    Map<String, AccountState> knownAccount = accountStateByServerAndNickLower.getOrDefault(sid, Map.of());
-    Map<String, String> knownAccountName = accountNameByServerAndNickLower.getOrDefault(sid, Map.of());
+    Map<String, AccountState> knownAccount =
+        accountStateByServerAndNickLower.getOrDefault(sid, Map.of());
+    Map<String, String> knownAccountName =
+        accountNameByServerAndNickLower.getOrDefault(sid, Map.of());
     Map<String, String> knownRealName = realNameByServerAndNickLower.getOrDefault(sid, Map.of());
     List<NickInfo> safe;
-    if (nicks == null || nicks.isEmpty()
+    if (nicks == null
+        || nicks.isEmpty()
         || (knownHostmasks.isEmpty()
-        && knownAway.isEmpty()
-        && knownAwayMsg.isEmpty()
-        && knownAccount.isEmpty()
-        && knownAccountName.isEmpty()
-        && knownRealName.isEmpty())) {
+            && knownAway.isEmpty()
+            && knownAwayMsg.isEmpty()
+            && knownAccount.isEmpty()
+            && knownAccountName.isEmpty()
+            && knownRealName.isEmpty())) {
       safe = nicks == null ? List.of() : List.copyOf(nicks);
     } else {
       java.util.ArrayList<NickInfo> merged = new java.util.ArrayList<>(nicks.size());
@@ -294,7 +304,9 @@ public class UserListStore {
         }
 
         if (changed) {
-          merged.add(new NickInfo(ni.nick(), ni.prefix(), hmNext, asNext, amNext, accNext, anNext, rnNext));
+          merged.add(
+              new NickInfo(
+                  ni.nick(), ni.prefix(), hmNext, asNext, amNext, accNext, anNext, rnNext));
         } else {
           merged.add(ni);
         }
@@ -302,9 +314,7 @@ public class UserListStore {
       safe = List.copyOf(merged);
     }
 
-    usersByServerAndChannel
-        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-        .put(ch, safe);
+    usersByServerAndChannel.computeIfAbsent(sid, k -> new ConcurrentHashMap<>()).put(ch, safe);
 
     // Precompute lowercased nick set for fast mention checking.
     // Note: this can run on the EDT (IRC events are observed on SwingEdt), so keep it lean.
@@ -383,15 +393,16 @@ public class UserListStore {
       if (!niNick.isBlank() && niNick.equalsIgnoreCase(n)) {
         String existing = Objects.toString(ni.hostmask(), "").trim();
         if (!Objects.equals(existing, hm)) {
-          next.add(new NickInfo(
-              ni.nick(),
-              ni.prefix(),
-              hm,
-              ni.awayState(),
-              ni.awayMessage(),
-              ni.accountState(),
-              ni.accountName(),
-              ni.realName()));
+          next.add(
+              new NickInfo(
+                  ni.nick(),
+                  ni.prefix(),
+                  hm,
+                  ni.awayState(),
+                  ni.awayMessage(),
+                  ni.accountState(),
+                  ni.accountName(),
+                  ni.realName()));
           changed = true;
           continue;
         }
@@ -441,7 +452,16 @@ public class UserListStore {
         if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
           String existing = norm(ni.hostmask());
           if (!Objects.equals(existing, hm)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), hm, ni.awayState(), ni.awayMessage(), ni.accountState(), ni.accountName(), ni.realName()));
+            next.add(
+                new NickInfo(
+                    ni.nick(),
+                    ni.prefix(),
+                    hm,
+                    ni.awayState(),
+                    ni.awayMessage(),
+                    ni.accountState(),
+                    ni.accountName(),
+                    ni.realName()));
             changed = true;
             continue;
           }
@@ -458,11 +478,13 @@ public class UserListStore {
     return java.util.Set.copyOf(changedChannels);
   }
 
-  public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState) {
+  public boolean updateAwayState(
+      String serverId, String channel, String nick, AwayState awayState) {
     return updateAwayState(serverId, channel, nick, awayState, null);
   }
 
-  public boolean updateAwayState(String serverId, String channel, String nick, AwayState awayState, String awayMessage) {
+  public boolean updateAwayState(
+      String serverId, String channel, String nick, AwayState awayState, String awayMessage) {
     String sid = norm(serverId);
     String ch = channelKey(channel);
     String n = norm(nick);
@@ -509,15 +531,16 @@ public class UserListStore {
         // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing reason.
         String nextMsg = (as == AwayState.AWAY) ? ((msg != null) ? msg : existingMsg) : null;
         if (!Objects.equals(existing, as) || !Objects.equals(existingMsg, nextMsg)) {
-          next.add(new NickInfo(
-              ni.nick(),
-              ni.prefix(),
-              ni.hostmask(),
-              as,
-              nextMsg,
-              ni.accountState(),
-              ni.accountName(),
-              ni.realName()));
+          next.add(
+              new NickInfo(
+                  ni.nick(),
+                  ni.prefix(),
+                  ni.hostmask(),
+                  as,
+                  nextMsg,
+                  ni.accountState(),
+                  ni.accountName(),
+                  ni.realName()));
           changed = true;
           continue;
         }
@@ -531,11 +554,13 @@ public class UserListStore {
     return true;
   }
 
-  public Set<String> updateAwayStateAcrossChannels(String serverId, String nick, AwayState awayState) {
+  public Set<String> updateAwayStateAcrossChannels(
+      String serverId, String nick, AwayState awayState) {
     return updateAwayStateAcrossChannels(serverId, nick, awayState, null);
   }
 
-  public Set<String> updateAwayStateAcrossChannels(String serverId, String nick, AwayState awayState, String awayMessage) {
+  public Set<String> updateAwayStateAcrossChannels(
+      String serverId, String nick, AwayState awayState, String awayMessage) {
     String sid = norm(serverId);
     String n = norm(nick);
     AwayState as = (awayState == null) ? AwayState.UNKNOWN : awayState;
@@ -582,10 +607,20 @@ public class UserListStore {
         if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
           AwayState existing = (ni.awayState() == null) ? AwayState.UNKNOWN : ni.awayState();
           String existingMsg = normalizeAwayMessage(existing, ni.awayMessage());
-          // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing reason.
+          // If we learn "AWAY" without a reason (e.g. USERHOST +/-), don't erase an existing
+          // reason.
           String nextMsg = (as == AwayState.AWAY) ? ((msg != null) ? msg : existingMsg) : null;
           if (!Objects.equals(existing, as) || !Objects.equals(existingMsg, nextMsg)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), as, nextMsg, ni.accountState(), ni.accountName(), ni.realName()));
+            next.add(
+                new NickInfo(
+                    ni.nick(),
+                    ni.prefix(),
+                    ni.hostmask(),
+                    as,
+                    nextMsg,
+                    ni.accountState(),
+                    ni.accountName(),
+                    ni.realName()));
             changed = true;
             continue;
           }
@@ -602,7 +637,8 @@ public class UserListStore {
     return java.util.Set.copyOf(changedChannels);
   }
 
-  public Set<String> updateAccountAcrossChannels(String serverId, String nick, AccountState accountState, String accountName) {
+  public Set<String> updateAccountAcrossChannels(
+      String serverId, String nick, AccountState accountState, String accountName) {
     String sid = norm(serverId);
     String n = norm(nick);
     AccountState st = (accountState == null) ? AccountState.UNKNOWN : accountState;
@@ -647,14 +683,26 @@ public class UserListStore {
         }
         String niNick = norm(ni.nick());
         if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
-          AccountState existing = (ni.accountState() == null) ? AccountState.UNKNOWN : ni.accountState();
+          AccountState existing =
+              (ni.accountState() == null) ? AccountState.UNKNOWN : ni.accountState();
           String existingName = normalizeAccountName(existing, ni.accountName());
 
           // If we learn LOGGED_IN without a name, don't erase an existing name.
-          String nextName = (st == AccountState.LOGGED_IN) ? ((name != null) ? name : existingName) : null;
+          String nextName =
+              (st == AccountState.LOGGED_IN) ? ((name != null) ? name : existingName) : null;
 
-          if (!java.util.Objects.equals(existing, st) || !java.util.Objects.equals(existingName, nextName)) {
-            next.add(new NickInfo(ni.nick(), ni.prefix(), ni.hostmask(), ni.awayState(), ni.awayMessage(), st, nextName, ni.realName()));
+          if (!java.util.Objects.equals(existing, st)
+              || !java.util.Objects.equals(existingName, nextName)) {
+            next.add(
+                new NickInfo(
+                    ni.nick(),
+                    ni.prefix(),
+                    ni.hostmask(),
+                    ni.awayState(),
+                    ni.awayMessage(),
+                    st,
+                    nextName,
+                    ni.realName()));
             changed = true;
             continue;
           }
@@ -709,15 +757,16 @@ public class UserListStore {
         if (!niNick.isEmpty() && niNick.equalsIgnoreCase(n)) {
           String existing = normalizeRealName(ni.realName());
           if (!Objects.equals(existing, rn)) {
-            next.add(new NickInfo(
-                ni.nick(),
-                ni.prefix(),
-                ni.hostmask(),
-                ni.awayState(),
-                ni.awayMessage(),
-                ni.accountState(),
-                ni.accountName(),
-                rn));
+            next.add(
+                new NickInfo(
+                    ni.nick(),
+                    ni.prefix(),
+                    ni.hostmask(),
+                    ni.awayState(),
+                    ni.awayMessage(),
+                    ni.accountState(),
+                    ni.accountName(),
+                    rn));
             changed = true;
             continue;
           }
@@ -733,5 +782,4 @@ public class UserListStore {
 
     return java.util.Set.copyOf(changedChannels);
   }
-
 }

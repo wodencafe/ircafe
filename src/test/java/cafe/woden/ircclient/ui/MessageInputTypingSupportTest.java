@@ -126,7 +126,9 @@ class MessageInputTypingSupportTest {
   void sendToggleStillEmitsWhenReceiveToggleIsOff() throws Exception {
     AtomicReference<UiSettings> settings =
         new AtomicReference<>(
-            defaultSettings().withTypingIndicatorsEnabled(true).withTypingIndicatorsReceiveEnabled(false));
+            defaultSettings()
+                .withTypingIndicatorsEnabled(true)
+                .withTypingIndicatorsReceiveEnabled(false));
     Fixture f = newFixture(settings::get);
     List<String> states = new ArrayList<>();
     onEdt(

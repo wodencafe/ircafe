@@ -13,9 +13,7 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
-/**
- * Parses {@code /filter ...} commands using the mini-spec token grammar.
- */
+/** Parses {@code /filter ...} commands using the mini-spec token grammar. */
 @Component
 public class FilterCommandParser {
 
@@ -48,7 +46,8 @@ public class FilterCommandParser {
         for (int i = 2; i < toks.size(); i++) {
           String t = toks.get(i);
           int eq = t.indexOf('=');
-          if (eq < 0) return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
+          if (eq < 0)
+            return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
           String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
           String val = t.substring(eq + 1).trim();
           if (key.equals("format")) {
@@ -87,7 +86,8 @@ public class FilterCommandParser {
         return parseAddOrAddReplace(toks, true);
       }
       case "set" -> {
-        if (toks.size() < 3) return new FilterCommand.Error("Usage: /filter set <name> key=value ...");
+        if (toks.size() < 3)
+          return new FilterCommand.Error("Usage: /filter set <name> key=value ...");
         String name = toks.get(2);
         try {
           FilterCommand.FilterRulePatch patch = parseRulePatch(toks, 3);
@@ -105,26 +105,29 @@ public class FilterCommandParser {
         return new FilterCommand.Recreate(toks.get(2));
       }
       case "del", "delete", "rm", "remove" -> {
-        if (toks.size() < 3) return new FilterCommand.Error("Usage: /filter del <name-or-mask> [more...] (use '*' and '?' for masks, or re:/.../)");
+        if (toks.size() < 3)
+          return new FilterCommand.Error(
+              "Usage: /filter del <name-or-mask> [more...] (use '*' and '?' for masks, or re:/.../)");
         return new FilterCommand.Del(toks.subList(2, toks.size()));
       }
       case "enable" -> {
-  // WeeChat parity: no args => enable filters globally; "@" => current buffer.
-  if (toks.size() == 2) return new FilterCommand.Enable(List.of());
-  return new FilterCommand.Enable(toks.subList(2, toks.size()));
-}
+        // WeeChat parity: no args => enable filters globally; "@" => current buffer.
+        if (toks.size() == 2) return new FilterCommand.Enable(List.of());
+        return new FilterCommand.Enable(toks.subList(2, toks.size()));
+      }
       case "disable" -> {
-  // WeeChat parity: no args => disable filters globally; "@" => current buffer.
-  if (toks.size() == 2) return new FilterCommand.Disable(List.of());
-  return new FilterCommand.Disable(toks.subList(2, toks.size()));
-}
+        // WeeChat parity: no args => disable filters globally; "@" => current buffer.
+        if (toks.size() == 2) return new FilterCommand.Disable(List.of());
+        return new FilterCommand.Disable(toks.subList(2, toks.size()));
+      }
       case "toggle" -> {
-  // WeeChat parity: no args => toggle filters globally; "@" => current buffer.
-  if (toks.size() == 2) return new FilterCommand.Toggle(List.of());
-  return new FilterCommand.Toggle(toks.subList(2, toks.size()));
-}
+        // WeeChat parity: no args => toggle filters globally; "@" => current buffer.
+        if (toks.size() == 2) return new FilterCommand.Toggle(List.of());
+        return new FilterCommand.Toggle(toks.subList(2, toks.size()));
+      }
       default -> {
-        return new FilterCommand.Error("Unknown /filter subcommand: '" + sub + "'. Try: /filter help");
+        return new FilterCommand.Error(
+            "Unknown /filter subcommand: '" + sub + "'. Try: /filter help");
       }
     }
   }
@@ -133,9 +136,10 @@ public class FilterCommandParser {
     // /filter add <name> key=value ...
     // /filter add <name> <buffer> <tags> <regex>
     if (toks.size() < 3) {
-      return new FilterCommand.Error(addReplace
-          ? "Usage: /filter addreplace <name> key=value ... (or: /filter addreplace <name> <buffer> <tags> <regex>)"
-          : "Usage: /filter add <name> key=value ... (or: /filter add <name> <buffer> <tags> <regex>)");
+      return new FilterCommand.Error(
+          addReplace
+              ? "Usage: /filter addreplace <name> key=value ... (or: /filter addreplace <name> <buffer> <tags> <regex>)"
+              : "Usage: /filter add <name> key=value ... (or: /filter add <name> <buffer> <tags> <regex>)");
     }
 
     String name = toks.get(2);
@@ -151,10 +155,14 @@ public class FilterCommandParser {
         patch = parseRulePatch(toks, 3);
       } else {
         return new FilterCommand.Error(
-            "Usage: /filter " + (addReplace ? "addreplace" : "add") + " <name> <buffer> <tags> <regex> (tip: quote the regex if it contains spaces)");
+            "Usage: /filter "
+                + (addReplace ? "addreplace" : "add")
+                + " <name> <buffer> <tags> <regex> (tip: quote the regex if it contains spaces)");
       }
 
-      return addReplace ? new FilterCommand.AddReplace(name, patch) : new FilterCommand.Add(name, patch);
+      return addReplace
+          ? new FilterCommand.AddReplace(name, patch)
+          : new FilterCommand.Add(name, patch);
     } catch (IllegalArgumentException e) {
       return new FilterCommand.Error(e.getMessage());
     }
@@ -173,7 +181,8 @@ public class FilterCommandParser {
     return !toks.get(3).contains("=") && !toks.get(4).contains("=");
   }
 
-  private static FilterCommand.FilterRulePatch parseWeeChatPositionalPatch(String buffer, String tags, String regex) {
+  private static FilterCommand.FilterRulePatch parseWeeChatPositionalPatch(
+      String buffer, String tags, String regex) {
     String scope = normalizeWeeChatBufferTokenToScope(buffer);
 
     EnumSet<LogKind> kinds = EnumSet.noneOf(LogKind.class);
@@ -206,13 +215,20 @@ public class FilterCommandParser {
         } else if (sl.contains("action")) {
           kinds.add(LogKind.ACTION);
           kindsSpecified = true;
-        } else if (sl.contains("join") || sl.contains("part") || sl.contains("quit") || sl.contains("nick") || sl.contains("away")) {
+        } else if (sl.contains("join")
+            || sl.contains("part")
+            || sl.contains("quit")
+            || sl.contains("nick")
+            || sl.contains("away")) {
           kinds.add(LogKind.PRESENCE);
           kindsSpecified = true;
         } else if (sl.contains("topic") || sl.contains("mode") || sl.contains("status")) {
           kinds.add(LogKind.STATUS);
           kindsSpecified = true;
-        } else if (sl.contains("privmsg") || sl.contains("chat") || sl.equals("msg") || sl.endsWith("_msg")) {
+        } else if (sl.contains("privmsg")
+            || sl.contains("chat")
+            || sl.equals("msg")
+            || sl.endsWith("_msg")) {
           kinds.add(LogKind.CHAT);
           kindsSpecified = true;
         }
@@ -233,15 +249,22 @@ public class FilterCommandParser {
     }
 
     return new FilterCommand.FilterRulePatch(
-        scope, true,
-        null, false,
-        null, false,
-        null, false,
-        kinds, kindsSpecified,
-        from, fromSpecified,
-        tagExpr, (!tagExpr.isEmpty() && !tagExpr.equals("*")),
-        textRegex, textSpecified
-    );
+        scope,
+        true,
+        null,
+        false,
+        null,
+        false,
+        null,
+        false,
+        kinds,
+        kindsSpecified,
+        from,
+        fromSpecified,
+        tagExpr,
+        (!tagExpr.isEmpty() && !tagExpr.equals("*")),
+        textRegex,
+        textSpecified);
   }
 
   private static String normalizeWeeChatBufferTokenToScope(String buffer) {
@@ -302,7 +325,8 @@ public class FilterCommandParser {
     }
 
     if (!format.equals("cmd") && !format.equals("all")) {
-      return new FilterCommand.Error("Invalid export format: '" + format + "' (expected cmd or all)");
+      return new FilterCommand.Error(
+          "Invalid export format: '" + format + "' (expected cmd or all)");
     }
 
     return new FilterCommand.Export(format, file);
@@ -331,23 +355,28 @@ public class FilterCommandParser {
             yield new FilterCommand.Move(name, FilterCommand.MoveMode.TO, pos, 1, null);
           }
           case "top" -> new FilterCommand.Move(name, FilterCommand.MoveMode.TOP, null, 1, null);
-          case "bottom" -> new FilterCommand.Move(name, FilterCommand.MoveMode.BOTTOM, null, 1, null);
+          case "bottom" ->
+              new FilterCommand.Move(name, FilterCommand.MoveMode.BOTTOM, null, 1, null);
           case "up" -> {
             Integer n = safeParseInt(val);
-            if (n == null || n < 1) yield new FilterCommand.Error("Invalid move amount: '" + val + "'");
+            if (n == null || n < 1)
+              yield new FilterCommand.Error("Invalid move amount: '" + val + "'");
             yield new FilterCommand.Move(name, FilterCommand.MoveMode.UP, null, n, null);
           }
           case "down" -> {
             Integer n = safeParseInt(val);
-            if (n == null || n < 1) yield new FilterCommand.Error("Invalid move amount: '" + val + "'");
+            if (n == null || n < 1)
+              yield new FilterCommand.Error("Invalid move amount: '" + val + "'");
             yield new FilterCommand.Move(name, FilterCommand.MoveMode.DOWN, null, n, null);
           }
           case "before" -> {
-            if (val.isBlank()) yield new FilterCommand.Error("Usage: /filter move <name> before <other>");
+            if (val.isBlank())
+              yield new FilterCommand.Error("Usage: /filter move <name> before <other>");
             yield new FilterCommand.Move(name, FilterCommand.MoveMode.BEFORE, null, 1, val);
           }
           case "after" -> {
-            if (val.isBlank()) yield new FilterCommand.Error("Usage: /filter move <name> after <other>");
+            if (val.isBlank())
+              yield new FilterCommand.Error("Usage: /filter move <name> after <other>");
             yield new FilterCommand.Move(name, FilterCommand.MoveMode.AFTER, null, 1, val);
           }
           default -> new FilterCommand.Error("Unknown key for /filter move: '" + key + "'");
@@ -370,7 +399,8 @@ public class FilterCommandParser {
         int n = 1;
         if (toks.size() == 5) {
           Integer parsed = safeParseInt(toks.get(4));
-          if (parsed == null || parsed < 1) return new FilterCommand.Error("Invalid move amount: '" + toks.get(4) + "'");
+          if (parsed == null || parsed < 1)
+            return new FilterCommand.Error("Invalid move amount: '" + toks.get(4) + "'");
           n = parsed;
         }
         return new FilterCommand.Move(name, FilterCommand.MoveMode.UP, null, n, null);
@@ -380,17 +410,20 @@ public class FilterCommandParser {
         int n = 1;
         if (toks.size() == 5) {
           Integer parsed = safeParseInt(toks.get(4));
-          if (parsed == null || parsed < 1) return new FilterCommand.Error("Invalid move amount: '" + toks.get(4) + "'");
+          if (parsed == null || parsed < 1)
+            return new FilterCommand.Error("Invalid move amount: '" + toks.get(4) + "'");
           n = parsed;
         }
         return new FilterCommand.Move(name, FilterCommand.MoveMode.DOWN, null, n, null);
       }
       case "before" -> {
-        if (toks.size() != 5) return new FilterCommand.Error("Usage: /filter move <name> before <other>");
+        if (toks.size() != 5)
+          return new FilterCommand.Error("Usage: /filter move <name> before <other>");
         return new FilterCommand.Move(name, FilterCommand.MoveMode.BEFORE, null, 1, toks.get(4));
       }
       case "after" -> {
-        if (toks.size() != 5) return new FilterCommand.Error("Usage: /filter move <name> after <other>");
+        if (toks.size() != 5)
+          return new FilterCommand.Error("Usage: /filter move <name> after <other>");
         return new FilterCommand.Move(name, FilterCommand.MoveMode.AFTER, null, 1, toks.get(4));
       }
       default -> {
@@ -423,7 +456,9 @@ public class FilterCommandParser {
     int i = 2;
     if (toks.size() > i && !toks.get(i).contains("=")) {
       mode = parseToggleMode(toks.get(i));
-      if (mode == null) return new FilterCommand.Error("Invalid mode for /filter show: '" + toks.get(i) + "' (use on|off|toggle|default)");
+      if (mode == null)
+        return new FilterCommand.Error(
+            "Invalid mode for /filter show: '" + toks.get(i) + "' (use on|off|toggle|default)");
       i++;
     }
 
@@ -437,7 +472,8 @@ public class FilterCommandParser {
       if (key.equals("target") || key.equals("scope")) {
         scope = normalizeScopePattern(val);
       } else {
-        return new FilterCommand.Error("Unknown key for /filter show: '" + key + "' (allowed: target=)");
+        return new FilterCommand.Error(
+            "Unknown key for /filter show: '" + key + "' (allowed: target=)");
       }
     }
 
@@ -461,7 +497,10 @@ public class FilterCommandParser {
     if (toks.size() > i && !toks.get(i).contains("=")) {
       mode = parseToggleMode(toks.get(i));
       if (mode == null) {
-        return new FilterCommand.Error("Invalid mode for /filter placeholders: '" + toks.get(i) + "' (use on|off|toggle|default)");
+        return new FilterCommand.Error(
+            "Invalid mode for /filter placeholders: '"
+                + toks.get(i)
+                + "' (use on|off|toggle|default)");
       }
       i++;
     }
@@ -476,7 +515,8 @@ public class FilterCommandParser {
       if (key.equals("target") || key.equals("scope")) {
         scope = normalizeScopePattern(val);
       } else {
-        return new FilterCommand.Error("Unknown key for /filter placeholders: '" + key + "' (allowed: target=)");
+        return new FilterCommand.Error(
+            "Unknown key for /filter placeholders: '" + key + "' (allowed: target=)");
       }
     }
 
@@ -487,7 +527,8 @@ public class FilterCommandParser {
   private static FilterCommand parsePlaceholderPreview(List<String> toks) {
     // /filter placeholder-preview <n>
     // /filter placeholder-preview max=<n>
-    if (toks.size() < 3) return new FilterCommand.Error("Usage: /filter placeholder-preview <0..25>");
+    if (toks.size() < 3)
+      return new FilterCommand.Error("Usage: /filter placeholder-preview <0..25>");
 
     String t = toks.get(2).trim();
     int n;
@@ -497,14 +538,17 @@ public class FilterCommandParser {
       String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
       String val = t.substring(eq + 1).trim();
       if (!(key.equals("max") || key.equals("n") || key.equals("lines") || key.equals("preview"))) {
-        return new FilterCommand.Error("Unknown key for /filter placeholder-preview: '" + key + "'");
+        return new FilterCommand.Error(
+            "Unknown key for /filter placeholder-preview: '" + key + "'");
       }
       Integer parsed = parseInt(val);
-      if (parsed == null) return new FilterCommand.Error("Invalid integer for placeholder-preview: '" + val + "'");
+      if (parsed == null)
+        return new FilterCommand.Error("Invalid integer for placeholder-preview: '" + val + "'");
       n = parsed;
     } else {
       Integer parsed = parseInt(t);
-      if (parsed == null) return new FilterCommand.Error("Invalid integer for placeholder-preview: '" + t + "'");
+      if (parsed == null)
+        return new FilterCommand.Error("Invalid integer for placeholder-preview: '" + t + "'");
       n = parsed;
     }
 
@@ -514,7 +558,8 @@ public class FilterCommandParser {
   private static FilterCommand parseDefaults(List<String> toks) {
     // /filter defaults filters=on placeholders=on collapsed=on preview=3
     if (toks.size() < 3) {
-      return new FilterCommand.Error("Usage: /filter defaults filters=on|off placeholders=on|off collapsed=on|off preview=<0..25> maxrun=<0..50000> maxtags=<0..500> maxbatch=<0..5000> history=on|off");
+      return new FilterCommand.Error(
+          "Usage: /filter defaults filters=on|off placeholders=on|off collapsed=on|off preview=<0..25> maxrun=<0..50000> maxtags=<0..500> maxbatch=<0..5000> history=on|off");
     }
 
     Boolean filters = null;
@@ -526,14 +571,14 @@ public class FilterCommandParser {
     Integer preview = null;
     boolean previewSpecified = false;
 
-Integer maxRun = null;
-boolean maxRunSpecified = false;
-Integer maxTags = null;
-boolean maxTagsSpecified = false;
-Integer maxBatch = null;
-boolean maxBatchSpecified = false;
-Boolean history = null;
-boolean historySpecified = false;
+    Integer maxRun = null;
+    boolean maxRunSpecified = false;
+    Integer maxTags = null;
+    boolean maxTagsSpecified = false;
+    Integer maxBatch = null;
+    boolean maxBatchSpecified = false;
+    Boolean history = null;
+    boolean historySpecified = false;
 
     for (int i = 2; i < toks.size(); i++) {
       String t = toks.get(i);
@@ -547,51 +592,67 @@ boolean historySpecified = false;
         case "filters", "enabled", "enabledbydefault", "filtersenabledbydefault" -> {
           filtersSpecified = true;
           Boolean b = parseBoolean(val);
-          if (b == null) return new FilterCommand.Error("Invalid boolean for filters=: '" + val + "'");
+          if (b == null)
+            return new FilterCommand.Error("Invalid boolean for filters=: '" + val + "'");
           filters = b;
         }
         case "placeholders", "placeholdersenabledbydefault" -> {
           placeholdersSpecified = true;
           Boolean b = parseBoolean(val);
-          if (b == null) return new FilterCommand.Error("Invalid boolean for placeholders=: '" + val + "'");
+          if (b == null)
+            return new FilterCommand.Error("Invalid boolean for placeholders=: '" + val + "'");
           placeholders = b;
         }
         case "collapsed", "placeholderscollapsedbydefault" -> {
           collapsedSpecified = true;
           Boolean b = parseBoolean(val);
-          if (b == null) return new FilterCommand.Error("Invalid boolean for collapsed=: '" + val + "'");
+          if (b == null)
+            return new FilterCommand.Error("Invalid boolean for collapsed=: '" + val + "'");
           collapsed = b;
         }
         case "preview", "placeholderpreview", "placeholdermaxpreviewlines" -> {
           previewSpecified = true;
           Integer p = parseInt(val);
-          if (p == null) return new FilterCommand.Error("Invalid integer for preview=: '" + val + "'");
+          if (p == null)
+            return new FilterCommand.Error("Invalid integer for preview=: '" + val + "'");
           preview = p;
         }
-case "maxrun", "maxrunlines", "placeholdermaxlinesperrun", "runmax", "runcap" -> {
-  maxRunSpecified = true;
-  Integer p = parseInt(val);
-  if (p == null) return new FilterCommand.Error("Invalid integer for maxrun=: '" + val + "'");
-  maxRun = p;
-}
-case "maxtags", "tooltipmaxtags", "placeholdertooltipmaxtags" -> {
-  maxTagsSpecified = true;
-  Integer p = parseInt(val);
-  if (p == null) return new FilterCommand.Error("Invalid integer for maxtags=: '" + val + "'");
-  maxTags = p;
-}
-case "maxbatch", "maxbatchruns", "maxhistoryruns", "historymaxruns", "batchcap", "historybatchcap" -> {
-  maxBatchSpecified = true;
-  Integer p = parseInt(val);
-  if (p == null) return new FilterCommand.Error("Invalid integer for maxbatch=: '" + val + "'");
-  maxBatch = p;
-}
-case "history", "historyplaceholders", "historyplaceholdersenabled", "historyplaceholdersenabledbydefault" -> {
-  historySpecified = true;
-  Boolean b = parseBoolean(val);
-  if (b == null) return new FilterCommand.Error("Invalid boolean for history=: '" + val + "'");
-  history = b;
-}
+        case "maxrun", "maxrunlines", "placeholdermaxlinesperrun", "runmax", "runcap" -> {
+          maxRunSpecified = true;
+          Integer p = parseInt(val);
+          if (p == null)
+            return new FilterCommand.Error("Invalid integer for maxrun=: '" + val + "'");
+          maxRun = p;
+        }
+        case "maxtags", "tooltipmaxtags", "placeholdertooltipmaxtags" -> {
+          maxTagsSpecified = true;
+          Integer p = parseInt(val);
+          if (p == null)
+            return new FilterCommand.Error("Invalid integer for maxtags=: '" + val + "'");
+          maxTags = p;
+        }
+        case "maxbatch",
+            "maxbatchruns",
+            "maxhistoryruns",
+            "historymaxruns",
+            "batchcap",
+            "historybatchcap" -> {
+          maxBatchSpecified = true;
+          Integer p = parseInt(val);
+          if (p == null)
+            return new FilterCommand.Error("Invalid integer for maxbatch=: '" + val + "'");
+          maxBatch = p;
+        }
+        case "history",
+            "historyplaceholders",
+            "historyplaceholdersenabled",
+            "historyplaceholdersenabledbydefault" -> {
+          historySpecified = true;
+          Boolean b = parseBoolean(val);
+          if (b == null)
+            return new FilterCommand.Error("Invalid boolean for history=: '" + val + "'");
+          history = b;
+        }
         default -> {
           return new FilterCommand.Error("Unknown key for /filter defaults: '" + key + "'");
         }
@@ -606,13 +667,13 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
         maxRun, maxRunSpecified,
         maxTags, maxTagsSpecified,
         maxBatch, maxBatchSpecified,
-        history, historySpecified
-    );
+        history, historySpecified);
   }
 
   private static FilterCommand parseOverride(List<String> toks) {
     // /filter override list [format=table|cmd]
-    // /filter override set scope=<glob> filters=on|off|default placeholders=on|off|default collapsed=on|off|default
+    // /filter override set scope=<glob> filters=on|off|default placeholders=on|off|default
+    // collapsed=on|off|default
     // /filter override del scope=<glob>
     if (toks.size() < 3) {
       return new FilterCommand.Error("Usage: /filter override list|set|del ...");
@@ -625,7 +686,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
         for (int i = 3; i < toks.size(); i++) {
           String t = toks.get(i);
           int eq = t.indexOf('=');
-          if (eq < 0) return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
+          if (eq < 0)
+            return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
           String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
           String val = t.substring(eq + 1).trim();
           if (key.equals("format")) {
@@ -637,7 +699,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
         return new FilterCommand.OverrideList(format);
       }
       case "del", "delete", "rm", "remove" -> {
-        if (toks.size() < 4) return new FilterCommand.Error("Usage: /filter override del scope=<glob>");
+        if (toks.size() < 4)
+          return new FilterCommand.Error("Usage: /filter override del scope=<glob>");
         String scope = null;
 
         // allow positional: /filter override del libera/*
@@ -647,18 +710,24 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
           for (int i = 3; i < toks.size(); i++) {
             String t = toks.get(i);
             int eq = t.indexOf('=');
-            if (eq < 0) return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
+            if (eq < 0)
+              return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
             String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
             String val = t.substring(eq + 1).trim();
             if (key.equals("scope") || key.equals("target")) scope = normalizeScopePattern(val);
-            else return new FilterCommand.Error("Unknown key for /filter override del: '" + key + "' (allowed: scope=)");
+            else
+              return new FilterCommand.Error(
+                  "Unknown key for /filter override del: '" + key + "' (allowed: scope=)");
           }
         }
-        if (scope == null || scope.isBlank()) return new FilterCommand.Error("Usage: /filter override del scope=<glob>");
+        if (scope == null || scope.isBlank())
+          return new FilterCommand.Error("Usage: /filter override del scope=<glob>");
         return new FilterCommand.OverrideDel(scope);
       }
       case "set" -> {
-        if (toks.size() < 4) return new FilterCommand.Error("Usage: /filter override set scope=<glob> filters=... placeholders=... collapsed=...");
+        if (toks.size() < 4)
+          return new FilterCommand.Error(
+              "Usage: /filter override set scope=<glob> filters=... placeholders=... collapsed=...");
 
         String scope = null;
 
@@ -679,7 +748,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
         for (; i < toks.size(); i++) {
           String t = toks.get(i);
           int eq = t.indexOf('=');
-          if (eq < 0) return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
+          if (eq < 0)
+            return new FilterCommand.Error("Invalid token: '" + t + "' (expected key=value)");
           String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
           String val = t.substring(eq + 1).trim();
 
@@ -688,19 +758,25 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
             case "filters", "filter", "show" -> {
               filtersSpecified = true;
               FilterCommand.TriState ts = parseTriState(val);
-              if (ts == null) return new FilterCommand.Error("Invalid value for filters=: '" + val + "' (use on|off|default)");
+              if (ts == null)
+                return new FilterCommand.Error(
+                    "Invalid value for filters=: '" + val + "' (use on|off|default)");
               filters = ts;
             }
             case "placeholders" -> {
               placeholdersSpecified = true;
               FilterCommand.TriState ts = parseTriState(val);
-              if (ts == null) return new FilterCommand.Error("Invalid value for placeholders=: '" + val + "' (use on|off|default)");
+              if (ts == null)
+                return new FilterCommand.Error(
+                    "Invalid value for placeholders=: '" + val + "' (use on|off|default)");
               placeholders = ts;
             }
             case "collapsed" -> {
               collapsedSpecified = true;
               FilterCommand.TriState ts = parseTriState(val);
-              if (ts == null) return new FilterCommand.Error("Invalid value for collapsed=: '" + val + "' (use on|off|default)");
+              if (ts == null)
+                return new FilterCommand.Error(
+                    "Invalid value for collapsed=: '" + val + "' (use on|off|default)");
               collapsed = ts;
             }
             default -> {
@@ -709,17 +785,21 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
           }
         }
 
-        if (scope == null || scope.isBlank()) return new FilterCommand.Error("Usage: /filter override set scope=<glob> ...");
+        if (scope == null || scope.isBlank())
+          return new FilterCommand.Error("Usage: /filter override set scope=<glob> ...");
 
         return new FilterCommand.OverrideSet(
             scope,
-            filters, filtersSpecified,
-            placeholders, placeholdersSpecified,
-            collapsed, collapsedSpecified
-        );
+            filters,
+            filtersSpecified,
+            placeholders,
+            placeholdersSpecified,
+            collapsed,
+            collapsedSpecified);
       }
       default -> {
-        return new FilterCommand.Error("Unknown /filter override subcommand: '" + sub + "'. Try: /filter override list");
+        return new FilterCommand.Error(
+            "Unknown /filter override subcommand: '" + sub + "'. Try: /filter override list");
       }
     }
   }
@@ -748,7 +828,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
   private static Boolean parseBoolean(String val) {
     String v = Objects.toString(val, "").trim().toLowerCase(Locale.ROOT);
     if (v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("on")) return Boolean.TRUE;
-    if (v.equals("false") || v.equals("0") || v.equals("no") || v.equals("off")) return Boolean.FALSE;
+    if (v.equals("false") || v.equals("0") || v.equals("no") || v.equals("off"))
+      return Boolean.FALSE;
     return null;
   }
 
@@ -781,7 +862,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
     for (int i = startIdx; i < toks.size(); i++) {
       String t = toks.get(i);
       int eq = t.indexOf('=');
-      if (eq < 0) throw new IllegalArgumentException("Invalid token: '" + t + "' (expected key=value)");
+      if (eq < 0)
+        throw new IllegalArgumentException("Invalid token: '" + t + "' (expected key=value)");
       String key = t.substring(0, eq).trim().toLowerCase(Locale.ROOT);
       String val = t.substring(eq + 1);
       val = (val == null) ? "" : val.trim();
@@ -794,7 +876,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
         case "enabled" -> {
           enabledSpecified = true;
           enabled = parseBoolean(val);
-          if (enabled == null) throw new IllegalArgumentException("Invalid boolean for enabled=: '" + val + "'");
+          if (enabled == null)
+            throw new IllegalArgumentException("Invalid boolean for enabled=: '" + val + "'");
         }
         case "action" -> {
           actionSpecified = true;
@@ -802,13 +885,15 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
           if (a.isEmpty() || a.equals("hide")) {
             action = FilterAction.HIDE;
           } else {
-            throw new IllegalArgumentException("Unknown action: '" + val + "' (only 'hide' is supported)");
+            throw new IllegalArgumentException(
+                "Unknown action: '" + val + "' (only 'hide' is supported)");
           }
         }
         case "dir" -> {
           directionSpecified = true;
           direction = parseDirection(val);
-          if (direction == null) throw new IllegalArgumentException("Invalid dir=: '" + val + "' (use in|out|any)");
+          if (direction == null)
+            throw new IllegalArgumentException("Invalid dir=: '" + val + "' (use in|out|any)");
         }
         case "kind", "kinds" -> {
           kindsSpecified = true;
@@ -833,7 +918,10 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
           textRegex = parseTextPattern("glob:" + val);
         }
         default -> {
-          throw new IllegalArgumentException("Unknown key: '" + key + "'. Allowed: scope, enabled, action, dir, kind, from, tags, text");
+          throw new IllegalArgumentException(
+              "Unknown key: '"
+                  + key
+                  + "'. Allowed: scope, enabled, action, dir, kind, from, tags, text");
         }
       }
     }
@@ -850,8 +938,7 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
         kinds, kindsSpecified,
         from, fromSpecified,
         tagsExpr, tagsSpecified,
-        textRegex, textSpecified
-    );
+        textRegex, textSpecified);
   }
 
   private static FilterDirection parseDirection(String val) {
@@ -900,11 +987,12 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
    * Parses a text matcher.
    *
    * <p>Supported forms:
+   *
    * <ul>
-   *   <li><code>glob:&lt;glob&gt;</code> (simple * and ? wildcards)</li>
-   *   <li><code>re:&lt;regex&gt;</code> (raw Java regex body)</li>
-   *   <li><code>/{body}/{flags}</code> (regex literal, flags = i,m,s)</li>
-   *   <li><code>&lt;regex&gt;</code> (raw Java regex body)</li>
+   *   <li><code>glob:&lt;glob&gt;</code> (simple * and ? wildcards)
+   *   <li><code>re:&lt;regex&gt;</code> (raw Java regex body)
+   *   <li><code>/{body}/{flags}</code> (regex literal, flags = i,m,s)
+   *   <li><code>&lt;regex&gt;</code> (raw Java regex body)
    * </ul>
    */
   private static RegexSpec parseTextPattern(String val) {
@@ -930,8 +1018,8 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
   }
 
   /**
-   * Accepts either a regex literal (/{body}/{flags}) or a plain pattern.
-   * Empty string clears the regex.
+   * Accepts either a regex literal (/{body}/{flags}) or a plain pattern. Empty string clears the
+   * regex.
    */
   private static RegexSpec parseRegexLiteralOrBody(String v) {
     if (v.startsWith("/") && v.length() >= 2) {
@@ -998,10 +1086,11 @@ case "history", "historyplaceholders", "historyplaceholdersenabled", "historypla
 
   /**
    * Scope shorthand support:
+   *
    * <ul>
-   *   <li>{@code libera} => {@code libera/*}</li>
-   *   <li>{@code #llamas} => {@code *}{@code /#llamas}</li>
-   *   <li>{@code status} => {@code *}{@code /status}</li>
+   *   <li>{@code libera} => {@code libera/*}
+   *   <li>{@code #llamas} => {@code *}{@code /#llamas}
+   *   <li>{@code status} => {@code *}{@code /status}
    * </ul>
    */
   private static String normalizeScopePattern(String raw) {

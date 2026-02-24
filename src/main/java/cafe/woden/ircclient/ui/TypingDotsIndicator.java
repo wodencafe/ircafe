@@ -1,13 +1,11 @@
 package cafe.woden.ircclient.ui;
 
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import javax.swing.*;
 
-/**
- * Small animated three-dot indicator used for "is typing" activity.
- */
+/** Small animated three-dot indicator used for "is typing" activity. */
 final class TypingDotsIndicator extends JComponent {
 
   private static final int DOT_COUNT = 3;
@@ -20,13 +18,16 @@ final class TypingDotsIndicator extends JComponent {
   TypingDotsIndicator() {
     setOpaque(false);
     setVisible(false);
-    animationTimer = new Timer(FRAME_MS, new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        phase = (phase + 1) % DOT_COUNT;
-        repaint();
-      }
-    });
+    animationTimer =
+        new Timer(
+            FRAME_MS,
+            new ActionListener() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                phase = (phase + 1) % DOT_COUNT;
+                repaint();
+              }
+            });
     animationTimer.setRepeats(true);
   }
 

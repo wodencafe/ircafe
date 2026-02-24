@@ -33,7 +33,9 @@ class ObservedOutboundCommandDispatcherTest {
     delegate.throwOnDispatch = true;
     ObservedOutboundCommandDispatcher observed = new ObservedOutboundCommandDispatcher(delegate);
 
-    assertThrows(IllegalStateException.class, () -> observed.dispatch(disposables, new ParsedInput.Say("hello")));
+    assertThrows(
+        IllegalStateException.class,
+        () -> observed.dispatch(disposables, new ParsedInput.Say("hello")));
 
     assertEquals(1, delegate.calls);
   }

@@ -37,7 +37,8 @@ final class YouTubeInlinePlayerPanel extends JPanel {
 
   private void init() {
     if (!isSupported()) {
-      add(new JLabel("Inline playback requires JavaFX (javafx-web).", SwingConstants.CENTER),
+      add(
+          new JLabel("Inline playback requires JavaFX (javafx-web).", SwingConstants.CENTER),
           BorderLayout.CENTER);
       return;
     }

@@ -23,27 +23,25 @@ class PircbotxIrcClientServiceMultilineLimitsTest {
 
   @Test
   void requireWithinMultilineMaxBytesThrowsWhenExceeded() {
-    IllegalArgumentException ex = assertThrows(
-        IllegalArgumentException.class,
-        () -> PircbotxIrcClientService.requireWithinMultilineMaxBytes(
-            5L,
-            List.of("hello", "world"),
-            "libera"));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                PircbotxIrcClientService.requireWithinMultilineMaxBytes(
+                    5L, List.of("hello", "world"), "libera"));
     assertEquals(
-        "Message exceeds negotiated IRCv3 multiline max-bytes 11 > 5 for libera",
-        ex.getMessage());
+        "Message exceeds negotiated IRCv3 multiline max-bytes 11 > 5 for libera", ex.getMessage());
   }
 
   @Test
   void requireWithinMultilineMaxLinesThrowsWhenExceeded() {
-    IllegalArgumentException ex = assertThrows(
-        IllegalArgumentException.class,
-        () -> PircbotxIrcClientService.requireWithinMultilineMaxLines(
-            1L,
-            List.of("hello", "world"),
-            "libera"));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                PircbotxIrcClientService.requireWithinMultilineMaxLines(
+                    1L, List.of("hello", "world"), "libera"));
     assertEquals(
-        "Message exceeds negotiated IRCv3 multiline max-lines 2 > 1 for libera",
-        ex.getMessage());
+        "Message exceeds negotiated IRCv3 multiline max-lines 2 > 1 for libera", ex.getMessage());
   }
 }

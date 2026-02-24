@@ -22,35 +22,41 @@ final class InstagramPreviewUtil {
 
   private InstagramPreviewUtil() {}
 
-  private static final Pattern IG_POST_PATH = Pattern.compile("^/(p|reel|tv)/[^/]+/?$", Pattern.CASE_INSENSITIVE);
+  private static final Pattern IG_POST_PATH =
+      Pattern.compile("^/(p|reel|tv)/[^/]+/?$", Pattern.CASE_INSENSITIVE);
 
   // Example title pattern: "A post shared by Name (@handle) on Instagram".
-  private static final Pattern SHARED_BY = Pattern.compile("A post shared by\\s+(.+?)\\s+\\(@([A-Za-z0-9_.]+)\\)",
-      Pattern.CASE_INSENSITIVE);
+  private static final Pattern SHARED_BY =
+      Pattern.compile(
+          "A post shared by\\s+(.+?)\\s+\\(@([A-Za-z0-9_.]+)\\)", Pattern.CASE_INSENSITIVE);
 
-  private static final Pattern ON_INSTAGRAM = Pattern.compile("\\(@([A-Za-z0-9_.]+)\\)\\s+on\\s+Instagram",
-      Pattern.CASE_INSENSITIVE);
+  private static final Pattern ON_INSTAGRAM =
+      Pattern.compile("\\(@([A-Za-z0-9_.]+)\\)\\s+on\\s+Instagram", Pattern.CASE_INSENSITIVE);
   private static final Pattern SIMPLE_ON_INSTAGRAM =
       Pattern.compile("([A-Za-z0-9._]+)\\s+on\\s+Instagram", Pattern.CASE_INSENSITIVE);
   private static final Pattern CAPTION_AFTER_INSTAGRAM =
       Pattern.compile("on\\s+Instagram:\\s*[\"'“”]?(.+?)[\"'“”]?$", Pattern.CASE_INSENSITIVE);
   private static final Pattern LIKES_COMMENTS_PREFIX =
-      Pattern.compile("^[\\d.,]+\\s+likes?(?:\\s*,\\s*[\\d.,]+\\s+comments?)?\\s*-\\s*", Pattern.CASE_INSENSITIVE);
+      Pattern.compile(
+          "^[\\d.,]+\\s+likes?(?:\\s*,\\s*[\\d.,]+\\s+comments?)?\\s*-\\s*",
+          Pattern.CASE_INSENSITIVE);
   private static final Pattern LONG_FIELD =
       Pattern.compile("\"([A-Za-z0-9_]+)\"\\s*:\\s*([0-9]{6,})");
   private static final Pattern JSON_SRC_FIELD =
       Pattern.compile("\"src\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
   private static final Pattern EDGE_CAPTION_TEXT_FIELD =
-      Pattern.compile("\"edge_media_to_caption\"\\s*:\\s*\\{.*?\"text\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"",
+      Pattern.compile(
+          "\"edge_media_to_caption\"\\s*:\\s*\\{.*?\"text\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"",
           Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
   private static final Pattern CAPTION_FIELD =
       Pattern.compile("\"caption\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"", Pattern.CASE_INSENSITIVE);
   private static final Pattern EDGE_CAPTION_TEXT_FALLBACK_FIELD =
-      Pattern.compile("\"edge_media_to_caption_text\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"",
+      Pattern.compile(
+          "\"edge_media_to_caption_text\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"",
           Pattern.CASE_INSENSITIVE);
   private static final Pattern ACCESSIBILITY_CAPTION_FIELD =
-      Pattern.compile("\"accessibility_caption\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"",
-          Pattern.CASE_INSENSITIVE);
+      Pattern.compile(
+          "\"accessibility_caption\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"", Pattern.CASE_INSENSITIVE);
 
   static boolean isInstagramPostUrl(String url) {
     if (url == null || url.isBlank()) return false;
@@ -67,7 +73,8 @@ final class InstagramPreviewUtil {
     if (host == null) return false;
     String h = host.toLowerCase(Locale.ROOT);
     if (h.startsWith("www.")) h = h.substring(4);
-    if (!(h.equals("instagram.com") || h.endsWith(".instagram.com") || h.equals("instagr.am"))) return false;
+    if (!(h.equals("instagram.com") || h.endsWith(".instagram.com") || h.equals("instagr.am")))
+      return false;
 
     String path = uri.getPath();
     if (path == null) return false;
@@ -100,34 +107,27 @@ final class InstagramPreviewUtil {
     LocalDate date = extractDate(ldJson, postJson, doc);
 
     // Title: prefer "@handle" when we have it; otherwise keep it generic.
-    String title = firstNonBlank(
-        author != null ? "Instagram post by @" + author : null,
-        cleanTitle(base.title()),
-        "Instagram post"
-    );
+    String title =
+        firstNonBlank(
+            author != null ? "Instagram post by @" + author : null,
+            cleanTitle(base.title()),
+            "Instagram post");
 
     // Caption/description: try LD+JSON first, then OG description/title heuristics.
     String caption = extractCaption(ldJson, postJson, base);
     caption = cleanCaption(caption);
 
     // Image: try LD+JSON, then OG image, then scan <img> tags (useful for embed pages).
-    String image = firstNonBlank(
-        resolveAgainst(canonicalUrl, extractImage(ldJson, postJson)),
-        resolveAgainst(canonicalUrl, base.imageUrl()),
-        resolveAgainst(canonicalUrl, bestImageFromDoc(doc))
-    );
+    String image =
+        firstNonBlank(
+            resolveAgainst(canonicalUrl, extractImage(ldJson, postJson)),
+            resolveAgainst(canonicalUrl, base.imageUrl()),
+            resolveAgainst(canonicalUrl, bestImageFromDoc(doc)));
 
     String description = buildDescription(author, date, caption);
 
     int mediaCount = (image != null && !image.isBlank()) ? 1 : 0;
-    return new LinkPreview(
-        canonicalUrl,
-        title,
-        description,
-        "Instagram",
-        image,
-        mediaCount
-    );
+    return new LinkPreview(canonicalUrl, title, description, "Instagram", image, mediaCount);
   }
 
   private static String extractLdJson(Document doc) {
@@ -138,7 +138,10 @@ final class InstagramPreviewUtil {
         if (txt == null || txt.isBlank()) continue;
         // Heuristic: look for Instagram post-ish JSON.
         String lower = txt.toLowerCase(Locale.ROOT);
-        if (lower.contains("@type") && (lower.contains("imageobject") || lower.contains("socialmediapost") || lower.contains("datepublished"))) {
+        if (lower.contains("@type")
+            && (lower.contains("imageobject")
+                || lower.contains("socialmediapost")
+                || lower.contains("datepublished"))) {
           return txt;
         }
       }
@@ -192,27 +195,27 @@ final class InstagramPreviewUtil {
     String imageObj = TinyJson.findObject(ldJson, "image");
     String imageArr = TinyJson.findArray(ldJson, "image");
 
-    String direct = firstNonBlank(
-        TinyJson.findString(ldJson, "image"),
-        TinyJson.findString(ldJson, "thumbnailUrl"),
-        TinyJson.findString(ldJson, "contentUrl")
-    );
+    String direct =
+        firstNonBlank(
+            TinyJson.findString(ldJson, "image"),
+            TinyJson.findString(ldJson, "thumbnailUrl"),
+            TinyJson.findString(ldJson, "contentUrl"));
     if (direct != null) return direct;
 
-    String fromObj = firstNonBlank(
-        TinyJson.findString(imageObj, "url"),
-        TinyJson.findString(imageObj, "contentUrl"),
-        TinyJson.findString(imageObj, "thumbnailUrl")
-    );
+    String fromObj =
+        firstNonBlank(
+            TinyJson.findString(imageObj, "url"),
+            TinyJson.findString(imageObj, "contentUrl"),
+            TinyJson.findString(imageObj, "thumbnailUrl"));
     if (fromObj != null) return fromObj;
 
     if (imageArr != null) {
       String firstObj = TinyJson.firstObjectInArray(imageArr);
-      String fromArrayObj = firstNonBlank(
-          TinyJson.findString(firstObj, "url"),
-          TinyJson.findString(firstObj, "contentUrl"),
-          TinyJson.findString(firstObj, "thumbnailUrl")
-      );
+      String fromArrayObj =
+          firstNonBlank(
+              TinyJson.findString(firstObj, "url"),
+              TinyJson.findString(firstObj, "contentUrl"),
+              TinyJson.findString(firstObj, "thumbnailUrl"));
       if (fromArrayObj != null) return fromArrayObj;
 
       // Array of strings fallback.
@@ -238,20 +241,21 @@ final class InstagramPreviewUtil {
   private static String extractImageFromPostJsonBody(String postJson) {
     if (postJson == null || postJson.isBlank()) return null;
 
-    String media = firstNonBlank(
-        TinyJson.findString(postJson, "display_url"),
-        TinyJson.findString(postJson, "display_src"),
-        TinyJson.findString(postJson, "display_uri"),
-        TinyJson.findString(postJson, "image_url")
-    );
+    String media =
+        firstNonBlank(
+            TinyJson.findString(postJson, "display_url"),
+            TinyJson.findString(postJson, "display_src"),
+            TinyJson.findString(postJson, "display_uri"),
+            TinyJson.findString(postJson, "image_url"));
     if (media != null) return media;
 
     String resources = TinyJson.findArray(postJson, "display_resources");
     if (resources != null) {
-      String src = firstNonBlank(
-          extractLargestDisplayResource(resources),
-          TinyJson.findString(TinyJson.firstObjectInArray(resources), "src"),
-          TinyJson.findString(TinyJson.firstObjectInArray(resources), "url"));
+      String src =
+          firstNonBlank(
+              extractLargestDisplayResource(resources),
+              TinyJson.findString(TinyJson.firstObjectInArray(resources), "src"),
+              TinyJson.findString(TinyJson.firstObjectInArray(resources), "url"));
       if (src != null) return src;
     }
 
@@ -303,11 +307,11 @@ final class InstagramPreviewUtil {
     String authorArr = TinyJson.findArray(ldJson, "author");
     String firstAuthorObj = TinyJson.firstObjectInArray(authorArr);
 
-    String alt = firstNonBlank(
-        TinyJson.findString(authorObj, "alternateName"),
-        TinyJson.findString(firstAuthorObj, "alternateName"),
-        TinyJson.findString(ldJson, "author_name")
-    );
+    String alt =
+        firstNonBlank(
+            TinyJson.findString(authorObj, "alternateName"),
+            TinyJson.findString(firstAuthorObj, "alternateName"),
+            TinyJson.findString(ldJson, "author_name"));
     if (alt != null) {
       alt = alt.strip();
       if (alt.startsWith("@")) alt = alt.substring(1);
@@ -316,11 +320,11 @@ final class InstagramPreviewUtil {
 
     // Fallback: author.name sometimes looks like "Name (@handle)".
     if (handle == null) {
-      String name = firstNonBlank(
-          TinyJson.findString(authorObj, "name"),
-          TinyJson.findString(firstAuthorObj, "name"),
-          TinyJson.findString(ldJson, "author")
-      );
+      String name =
+          firstNonBlank(
+              TinyJson.findString(authorObj, "name"),
+              TinyJson.findString(firstAuthorObj, "name"),
+              TinyJson.findString(ldJson, "author"));
       if (name != null) {
         Matcher m = Pattern.compile("\\(@([A-Za-z0-9_.]+)\\)").matcher(name);
         if (m.find()) handle = m.group(1);
@@ -332,27 +336,32 @@ final class InstagramPreviewUtil {
   private static String extractAuthorFromPostJson(String postJson) {
     if (postJson == null || postJson.isBlank()) return null;
     String ownerObj = TinyJson.findObject(postJson, "owner");
-    String handle = firstNonBlank(
-        TinyJson.findString(ownerObj, "username"),
-        TinyJson.findString(postJson, "username"),
-        TinyJson.findString(postJson, "owner_username"));
+    String handle =
+        firstNonBlank(
+            TinyJson.findString(ownerObj, "username"),
+            TinyJson.findString(postJson, "username"),
+            TinyJson.findString(postJson, "owner_username"));
     if (handle != null && handle.startsWith("@")) handle = handle.substring(1);
     return safe(handle);
   }
 
   private static LocalDate extractDate(String ldJson, String postJson, Document doc) {
-    LocalDate fromLd = parseLocalDate(firstNonBlank(
-        TinyJson.findString(ldJson, "datePublished"),
-        TinyJson.findString(ldJson, "uploadDate"),
-        TinyJson.findString(ldJson, "dateCreated")));
+    LocalDate fromLd =
+        parseLocalDate(
+            firstNonBlank(
+                TinyJson.findString(ldJson, "datePublished"),
+                TinyJson.findString(ldJson, "uploadDate"),
+                TinyJson.findString(ldJson, "dateCreated")));
     if (fromLd != null) return fromLd;
 
-    LocalDate fromMeta = parseLocalDate(firstNonBlank(
-        meta(doc, "property", "article:published_time"),
-        meta(doc, "property", "article:modified_time"),
-        meta(doc, "property", "og:updated_time"),
-        meta(doc, "name", "parsely-pub-date"),
-        firstTimeDateTime(doc)));
+    LocalDate fromMeta =
+        parseLocalDate(
+            firstNonBlank(
+                meta(doc, "property", "article:published_time"),
+                meta(doc, "property", "article:modified_time"),
+                meta(doc, "property", "og:updated_time"),
+                meta(doc, "name", "parsely-pub-date"),
+                firstTimeDateTime(doc)));
     if (fromMeta != null) return fromMeta;
 
     Long ts = findLongField(postJson, "taken_at_timestamp");
@@ -425,12 +434,12 @@ final class InstagramPreviewUtil {
   private static String extractCaption(String ldJson, String postJson, LinkPreview base) {
     if (ldJson != null && !ldJson.isBlank()) {
       // caption/text/articleBody are all seen in the wild.
-      String text = firstNonBlank(
-          TinyJson.findString(ldJson, "caption"),
-          TinyJson.findString(ldJson, "text"),
-          TinyJson.findString(ldJson, "articleBody"),
-          TinyJson.findString(ldJson, "description")
-      );
+      String text =
+          firstNonBlank(
+              TinyJson.findString(ldJson, "caption"),
+              TinyJson.findString(ldJson, "text"),
+              TinyJson.findString(ldJson, "articleBody"),
+              TinyJson.findString(ldJson, "description"));
       if (text != null && !text.isBlank()) {
         return stripWrappingQuotes(text);
       }
@@ -467,15 +476,16 @@ final class InstagramPreviewUtil {
     String firstEdge = TinyJson.firstObjectInArray(edges);
     String node = TinyJson.findObject(firstEdge, "node");
 
-    String text = firstNonBlank(
-        TinyJson.findString(node, "text"),
-        TinyJson.findString(postJson, "caption"),
-        TinyJson.findString(postJson, "edge_media_to_caption_text"),
-        TinyJson.findString(postJson, "accessibility_caption"),
-        firstCaptured(postJson, EDGE_CAPTION_TEXT_FIELD),
-        firstCaptured(postJson, CAPTION_FIELD),
-        firstCaptured(postJson, EDGE_CAPTION_TEXT_FALLBACK_FIELD),
-        firstCaptured(postJson, ACCESSIBILITY_CAPTION_FIELD));
+    String text =
+        firstNonBlank(
+            TinyJson.findString(node, "text"),
+            TinyJson.findString(postJson, "caption"),
+            TinyJson.findString(postJson, "edge_media_to_caption_text"),
+            TinyJson.findString(postJson, "accessibility_caption"),
+            firstCaptured(postJson, EDGE_CAPTION_TEXT_FIELD),
+            firstCaptured(postJson, CAPTION_FIELD),
+            firstCaptured(postJson, EDGE_CAPTION_TEXT_FALLBACK_FIELD),
+            firstCaptured(postJson, ACCESSIBILITY_CAPTION_FIELD));
 
     if (text == null || text.isBlank()) return null;
     text = unescapeBackslashEscapes(text);
@@ -497,7 +507,9 @@ final class InstagramPreviewUtil {
 
     String s = t.strip();
     // Remove leading "A post shared by ..." segment if present.
-    Matcher m = Pattern.compile("^A post shared by\\s+.+?\\)\\s*(.*)$", Pattern.CASE_INSENSITIVE).matcher(s);
+    Matcher m =
+        Pattern.compile("^A post shared by\\s+.+?\\)\\s*(.*)$", Pattern.CASE_INSENSITIVE)
+            .matcher(s);
     if (m.find()) {
       String rest = m.group(1);
       rest = rest == null ? null : rest.strip();
@@ -592,7 +604,8 @@ final class InstagramPreviewUtil {
     }
 
     // Remove the boilerplate "A post shared by..." prefix if present.
-    Matcher m = Pattern.compile("^A post shared by\\s+.+?\\)\\s*$", Pattern.CASE_INSENSITIVE).matcher(t);
+    Matcher m =
+        Pattern.compile("^A post shared by\\s+.+?\\)\\s*$", Pattern.CASE_INSENSITIVE).matcher(t);
     if (m.find()) {
       return null;
     }
@@ -606,7 +619,8 @@ final class InstagramPreviewUtil {
     if (t.length() >= 4 && t.startsWith("\\\"") && t.endsWith("\\\"")) {
       t = t.substring(2, t.length() - 2).strip();
     }
-    if (t.length() >= 2 && ((t.startsWith("\"") && t.endsWith("\"")) || (t.startsWith("'") && t.endsWith("'")))) {
+    if (t.length() >= 2
+        && ((t.startsWith("\"") && t.endsWith("\"")) || (t.startsWith("'") && t.endsWith("'")))) {
       t = t.substring(1, t.length() - 1).strip();
     }
     return t;
@@ -628,10 +642,17 @@ final class InstagramPreviewUtil {
     if (t.isEmpty()) return false;
 
     String lower = t.toLowerCase(Locale.ROOT);
-    boolean hasLogin = lower.contains("log in") || lower.contains("log-in") || lower.contains("login");
-    boolean hasSignup = lower.contains("sign up") || lower.contains("create an account")
-        || lower.contains("don't have an account") || lower.contains("dont have an account");
-    boolean hasAppPrompt = lower.contains("open in app") || lower.contains("get the app") || lower.contains("use the app");
+    boolean hasLogin =
+        lower.contains("log in") || lower.contains("log-in") || lower.contains("login");
+    boolean hasSignup =
+        lower.contains("sign up")
+            || lower.contains("create an account")
+            || lower.contains("don't have an account")
+            || lower.contains("dont have an account");
+    boolean hasAppPrompt =
+        lower.contains("open in app")
+            || lower.contains("get the app")
+            || lower.contains("use the app");
 
     // Only treat it as an interstitial when it's clearly account/login chatter.
     if (hasLogin && (hasSignup || hasAppPrompt)) {
@@ -639,7 +660,10 @@ final class InstagramPreviewUtil {
     }
 
     // Short generic copy on some interstitial pages.
-    if (t.length() <= 50 && (lower.equals("instagram") || lower.equals("instagram post") || lower.equals("instagram photo"))) {
+    if (t.length() <= 50
+        && (lower.equals("instagram")
+            || lower.equals("instagram post")
+            || lower.equals("instagram photo"))) {
       return true;
     }
 
@@ -662,10 +686,11 @@ final class InstagramPreviewUtil {
       // Exclude obvious non-content assets.
       if (lower.contains("sprite") || lower.contains("icon") || lower.contains("logo")) continue;
 
-      boolean plausible = lower.contains("cdninstagram")
-          || lower.contains("scontent")
-          || lower.contains("fbcdn")
-          || lower.contains("instagram");
+      boolean plausible =
+          lower.contains("cdninstagram")
+              || lower.contains("scontent")
+              || lower.contains("fbcdn")
+              || lower.contains("instagram");
       if (!plausible) continue;
 
       int w = parseInt(img.attr("width"));
@@ -676,7 +701,8 @@ final class InstagramPreviewUtil {
       int score = area;
       if (score == 0) {
         // Prefer actual media hosts when dims are missing.
-        if (lower.contains("scontent") || lower.contains("cdninstagram") || lower.contains("fbcdn")) score = 50;
+        if (lower.contains("scontent") || lower.contains("cdninstagram") || lower.contains("fbcdn"))
+          score = 50;
         else score = 10;
       }
 

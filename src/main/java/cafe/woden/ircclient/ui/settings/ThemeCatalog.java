@@ -24,214 +24,250 @@ class ThemeCatalog {
   private static final String NIMBUS_LAF_CLASS = "javax.swing.plaf.nimbus.NimbusLookAndFeel";
   private static final String METAL_LAF_CLASS = "javax.swing.plaf.metal.MetalLookAndFeel";
   private static final String MOTIF_LAF_CLASS = "com.sun.java.swing.plaf.motif.MotifLookAndFeel";
-  private static final String WINDOWS_LAF_CLASS = "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
+  private static final String WINDOWS_LAF_CLASS =
+      "com.sun.java.swing.plaf.windows.WindowsLookAndFeel";
   private static final String GTK_LAF_CLASS = "com.sun.java.swing.plaf.gtk.GTKLookAndFeel";
 
   private static final LegacySystemThemeDefinition[] LEGACY_SYSTEM_THEME_DEFINITIONS =
       new LegacySystemThemeDefinition[] {
-          new LegacySystemThemeDefinition(
-              "nimbus", "Nimbus", ThemeManager.ThemeTone.LIGHT, NIMBUS_LAF_CLASS, true),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark", "Nimbus (Dark)", ThemeManager.ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark-amber",
-              "Nimbus (Dark Amber)",
-              ThemeManager.ThemeTone.DARK,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark-blue",
-              "Nimbus (Dark Blue)",
-              ThemeManager.ThemeTone.DARK,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark-violet",
-              "Nimbus (Dark Violet)",
-              ThemeManager.ThemeTone.DARK,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark-green",
-              "Nimbus (Dark Green)",
-              ThemeManager.ThemeTone.DARK,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark-orange",
-              "Nimbus (Dark Orange)",
-              ThemeManager.ThemeTone.DARK,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-dark-magenta",
-              "Nimbus (Dark Magenta)",
-              ThemeManager.ThemeTone.DARK,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-orange",
-              "Nimbus (Orange)",
-              ThemeManager.ThemeTone.LIGHT,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-green",
-              "Nimbus (Green)",
-              ThemeManager.ThemeTone.LIGHT,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-blue", "Nimbus (Blue)", ThemeManager.ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
-          new LegacySystemThemeDefinition(
-              "nimbus-violet",
-              "Nimbus (Violet)",
-              ThemeManager.ThemeTone.LIGHT,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-magenta",
-              "Nimbus (Magenta)",
-              ThemeManager.ThemeTone.LIGHT,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "nimbus-amber",
-              "Nimbus (Amber)",
-              ThemeManager.ThemeTone.LIGHT,
-              NIMBUS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "metal-ocean", "Metal (Ocean)", ThemeManager.ThemeTone.LIGHT, METAL_LAF_CLASS, true),
-          new LegacySystemThemeDefinition(
-              "metal-steel", "Metal (Steel)", ThemeManager.ThemeTone.LIGHT, METAL_LAF_CLASS, false),
-          new LegacySystemThemeDefinition(
-              "motif", "Motif", ThemeManager.ThemeTone.LIGHT, MOTIF_LAF_CLASS, true),
-          new LegacySystemThemeDefinition(
-              "windows",
-              "Windows Classic",
-              ThemeManager.ThemeTone.SYSTEM,
-              WINDOWS_LAF_CLASS,
-              false),
-          new LegacySystemThemeDefinition(
-              "gtk", "GTK", ThemeManager.ThemeTone.SYSTEM, GTK_LAF_CLASS, false)
+        new LegacySystemThemeDefinition(
+            "nimbus", "Nimbus", ThemeManager.ThemeTone.LIGHT, NIMBUS_LAF_CLASS, true),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark", "Nimbus (Dark)", ThemeManager.ThemeTone.DARK, NIMBUS_LAF_CLASS, false),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark-amber",
+            "Nimbus (Dark Amber)",
+            ThemeManager.ThemeTone.DARK,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark-blue",
+            "Nimbus (Dark Blue)",
+            ThemeManager.ThemeTone.DARK,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark-violet",
+            "Nimbus (Dark Violet)",
+            ThemeManager.ThemeTone.DARK,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark-green",
+            "Nimbus (Dark Green)",
+            ThemeManager.ThemeTone.DARK,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark-orange",
+            "Nimbus (Dark Orange)",
+            ThemeManager.ThemeTone.DARK,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-dark-magenta",
+            "Nimbus (Dark Magenta)",
+            ThemeManager.ThemeTone.DARK,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-orange",
+            "Nimbus (Orange)",
+            ThemeManager.ThemeTone.LIGHT,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-green",
+            "Nimbus (Green)",
+            ThemeManager.ThemeTone.LIGHT,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-blue", "Nimbus (Blue)", ThemeManager.ThemeTone.LIGHT, NIMBUS_LAF_CLASS, false),
+        new LegacySystemThemeDefinition(
+            "nimbus-violet",
+            "Nimbus (Violet)",
+            ThemeManager.ThemeTone.LIGHT,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-magenta",
+            "Nimbus (Magenta)",
+            ThemeManager.ThemeTone.LIGHT,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "nimbus-amber",
+            "Nimbus (Amber)",
+            ThemeManager.ThemeTone.LIGHT,
+            NIMBUS_LAF_CLASS,
+            false),
+        new LegacySystemThemeDefinition(
+            "metal-ocean", "Metal (Ocean)", ThemeManager.ThemeTone.LIGHT, METAL_LAF_CLASS, true),
+        new LegacySystemThemeDefinition(
+            "metal-steel", "Metal (Steel)", ThemeManager.ThemeTone.LIGHT, METAL_LAF_CLASS, false),
+        new LegacySystemThemeDefinition(
+            "motif", "Motif", ThemeManager.ThemeTone.LIGHT, MOTIF_LAF_CLASS, true),
+        new LegacySystemThemeDefinition(
+            "windows", "Windows Classic", ThemeManager.ThemeTone.SYSTEM, WINDOWS_LAF_CLASS, false),
+        new LegacySystemThemeDefinition(
+            "gtk", "GTK", ThemeManager.ThemeTone.SYSTEM, GTK_LAF_CLASS, false)
       };
 
   private static final ThemeManager.ThemeOption[] BASE_THEMES =
       new ThemeManager.ThemeOption[] {
-          new ThemeManager.ThemeOption(
-              "system", "Native (System)", ThemeManager.ThemeTone.SYSTEM, ThemeManager.ThemePack.SYSTEM, true),
-
-          new ThemeManager.ThemeOption(
-              "dark", "Flat Dark", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.FLATLAF, true),
-          new ThemeManager.ThemeOption(
-              "darcula",
-              "Flat Darcula",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.FLATLAF,
-              true),
-          new ThemeManager.ThemeOption(
-              "light", "Flat Light", ThemeManager.ThemeTone.LIGHT, ThemeManager.ThemePack.FLATLAF, true),
-
-          new ThemeManager.ThemeOption(
-              "crt-green", "CRT Green", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.RETRO, false),
-          new ThemeManager.ThemeOption(
-              "cde-blue", "CDE Blue", ThemeManager.ThemeTone.LIGHT, ThemeManager.ThemePack.RETRO, false),
-
-          new ThemeManager.ThemeOption(
-              "tokyo-night",
-              "Tokyo Night",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.MODERN,
-              true),
-          new ThemeManager.ThemeOption(
-              "catppuccin-mocha",
-              "Catppuccin Mocha",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.MODERN,
-              false),
-          new ThemeManager.ThemeOption(
-              "gruvbox-dark",
-              "Gruvbox Dark",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.MODERN,
-              false),
-          new ThemeManager.ThemeOption(
-              "github-soft-light",
-              "GitHub Soft Light",
-              ThemeManager.ThemeTone.LIGHT,
-              ThemeManager.ThemePack.MODERN,
-              true),
-
-          new ThemeManager.ThemeOption(
-              "blue-dark", "Flat Blue (Dark)", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.IRCAFE, true),
-          new ThemeManager.ThemeOption(
-              "violet-nebula",
-              "Violet Nebula",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.IRCAFE,
-              true),
-          new ThemeManager.ThemeOption(
-              "high-contrast-dark",
-              "High Contrast Dark",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.IRCAFE,
-              true),
-          new ThemeManager.ThemeOption(
-              "graphite-mono",
-              "Graphite Mono",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.IRCAFE,
-              false),
-          new ThemeManager.ThemeOption(
-              "forest-dark",
-              "Forest Dark",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.IRCAFE,
-              false),
-          new ThemeManager.ThemeOption(
-              "ruby-night", "Ruby Night", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.IRCAFE, false),
-          new ThemeManager.ThemeOption(
-              "solarized-dark",
-              "Solarized Dark",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.IRCAFE,
-              false),
-          new ThemeManager.ThemeOption(
-              "sunset-dark", "Sunset Dark", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.IRCAFE, false),
-          new ThemeManager.ThemeOption(
-              "terminal-amber",
-              "Terminal Amber",
-              ThemeManager.ThemeTone.DARK,
-              ThemeManager.ThemePack.IRCAFE,
-              false),
-          new ThemeManager.ThemeOption(
-              "teal-deep", "Teal Deep", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.IRCAFE, false),
-          new ThemeManager.ThemeOption(
-              "orange", "Flat Orange (Dark)", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.IRCAFE, false),
-
-          new ThemeManager.ThemeOption(
-              "nordic-light",
-              "Nordic Light",
-              ThemeManager.ThemeTone.LIGHT,
-              ThemeManager.ThemePack.IRCAFE,
-              true),
-          new ThemeManager.ThemeOption(
-              "blue-light", "Flat Blue (Light)", ThemeManager.ThemeTone.LIGHT, ThemeManager.ThemePack.IRCAFE, true),
-          new ThemeManager.ThemeOption(
-              "arctic-light",
-              "Arctic Light",
-              ThemeManager.ThemeTone.LIGHT,
-              ThemeManager.ThemePack.IRCAFE,
-              false),
-          new ThemeManager.ThemeOption(
-              "mint-light", "Mint Light", ThemeManager.ThemeTone.LIGHT, ThemeManager.ThemePack.IRCAFE, false),
-          new ThemeManager.ThemeOption(
-              "solarized-light",
-              "Solarized Light",
-              ThemeManager.ThemeTone.LIGHT,
-              ThemeManager.ThemePack.IRCAFE,
-              false)
+        new ThemeManager.ThemeOption(
+            "system",
+            "Native (System)",
+            ThemeManager.ThemeTone.SYSTEM,
+            ThemeManager.ThemePack.SYSTEM,
+            true),
+        new ThemeManager.ThemeOption(
+            "dark", "Flat Dark", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.FLATLAF, true),
+        new ThemeManager.ThemeOption(
+            "darcula",
+            "Flat Darcula",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.FLATLAF,
+            true),
+        new ThemeManager.ThemeOption(
+            "light",
+            "Flat Light",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.FLATLAF,
+            true),
+        new ThemeManager.ThemeOption(
+            "crt-green",
+            "CRT Green",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.RETRO,
+            false),
+        new ThemeManager.ThemeOption(
+            "cde-blue",
+            "CDE Blue",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.RETRO,
+            false),
+        new ThemeManager.ThemeOption(
+            "tokyo-night",
+            "Tokyo Night",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.MODERN,
+            true),
+        new ThemeManager.ThemeOption(
+            "catppuccin-mocha",
+            "Catppuccin Mocha",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.MODERN,
+            false),
+        new ThemeManager.ThemeOption(
+            "gruvbox-dark",
+            "Gruvbox Dark",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.MODERN,
+            false),
+        new ThemeManager.ThemeOption(
+            "github-soft-light",
+            "GitHub Soft Light",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.MODERN,
+            true),
+        new ThemeManager.ThemeOption(
+            "blue-dark",
+            "Flat Blue (Dark)",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            true),
+        new ThemeManager.ThemeOption(
+            "violet-nebula",
+            "Violet Nebula",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            true),
+        new ThemeManager.ThemeOption(
+            "high-contrast-dark",
+            "High Contrast Dark",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            true),
+        new ThemeManager.ThemeOption(
+            "graphite-mono",
+            "Graphite Mono",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "forest-dark",
+            "Forest Dark",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "ruby-night",
+            "Ruby Night",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "solarized-dark",
+            "Solarized Dark",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "sunset-dark",
+            "Sunset Dark",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "terminal-amber",
+            "Terminal Amber",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "teal-deep",
+            "Teal Deep",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "orange",
+            "Flat Orange (Dark)",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "nordic-light",
+            "Nordic Light",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.IRCAFE,
+            true),
+        new ThemeManager.ThemeOption(
+            "blue-light",
+            "Flat Blue (Light)",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.IRCAFE,
+            true),
+        new ThemeManager.ThemeOption(
+            "arctic-light",
+            "Arctic Light",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "mint-light",
+            "Mint Light",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.IRCAFE,
+            false),
+        new ThemeManager.ThemeOption(
+            "solarized-light",
+            "Solarized Light",
+            ThemeManager.ThemeTone.LIGHT,
+            ThemeManager.ThemePack.IRCAFE,
+            false)
       };
 
   private static volatile ThemeManager.ThemeOption[] cachedThemes;
@@ -284,8 +320,11 @@ class ThemeCatalog {
         if (t == null || t.id() == null || t.id().isBlank()) continue;
         if (!seen.add(t.id())) continue;
 
-        ThemeManager.ThemeTone tone = t.dark() ? ThemeManager.ThemeTone.DARK : ThemeManager.ThemeTone.LIGHT;
-        out.add(new ThemeManager.ThemeOption(t.id(), "IntelliJ: " + t.label(), tone, ThemeManager.ThemePack.INTELLIJ, false));
+        ThemeManager.ThemeTone tone =
+            t.dark() ? ThemeManager.ThemeTone.DARK : ThemeManager.ThemeTone.LIGHT;
+        out.add(
+            new ThemeManager.ThemeOption(
+                t.id(), "IntelliJ: " + t.label(), tone, ThemeManager.ThemePack.INTELLIJ, false));
       }
     }
 
@@ -313,7 +352,11 @@ class ThemeCatalog {
     if (!DarkLafSupport.isAvailable()) return List.of();
     return List.of(
         new ThemeManager.ThemeOption(
-            "darklaf", "DarkLaf (One Dark)", ThemeManager.ThemeTone.DARK, ThemeManager.ThemePack.DARKLAF, true),
+            "darklaf",
+            "DarkLaf (One Dark)",
+            ThemeManager.ThemeTone.DARK,
+            ThemeManager.ThemePack.DARKLAF,
+            true),
         new ThemeManager.ThemeOption(
             "darklaf-darcula",
             "DarkLaf (Darcula)",
@@ -408,7 +451,11 @@ class ThemeCatalog {
 
           curated.add(
               new ThemeManager.ThemeOption(
-                  t.id(), "IntelliJ: " + t.label(), tone, ThemeManager.ThemePack.INTELLIJ, featured));
+                  t.id(),
+                  "IntelliJ: " + t.label(),
+                  tone,
+                  ThemeManager.ThemePack.INTELLIJ,
+                  featured));
         };
 
     for (String fragment : priority) {
@@ -419,7 +466,8 @@ class ThemeCatalog {
         if (t == null) continue;
 
         String name = t.label() != null ? t.label().toLowerCase(Locale.ROOT) : "";
-        String className = t.lafClassName() != null ? t.lafClassName().toLowerCase(Locale.ROOT) : "";
+        String className =
+            t.lafClassName() != null ? t.lafClassName().toLowerCase(Locale.ROOT) : "";
         if (name.contains(lowerFragment) || className.contains(lowerFragment.replace(" ", ""))) {
           add.accept(t);
           break;
@@ -442,7 +490,9 @@ class ThemeCatalog {
   }
 
   private static void addFeaturedById(
-      List<ThemeManager.ThemeOption> out, List<ThemeManager.ThemeOption> featured, String wantedId) {
+      List<ThemeManager.ThemeOption> out,
+      List<ThemeManager.ThemeOption> featured,
+      String wantedId) {
     if (out == null || featured == null || wantedId == null || wantedId.isBlank()) return;
 
     for (ThemeManager.ThemeOption t : featured) {

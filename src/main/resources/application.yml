@@ -137,8 +137,8 @@ ircafe:
     # Optional integrations surfaced under the Server Tree "Application" root.
     appDiagnostics:
       assertjSwing:
-        # Enable AssertJ Swing runtime integration (if AssertJ Swing is on the classpath)
-        # plus an EDT freeze watchdog.
+        # Enable AssertJ Swing runtime integration (if AssertJ Swing is on the classpath),
+        # otherwise IRCafe uses a built-in fallback EDT violation detector.
         enabled: true
         # Poll EDT responsiveness in the background.
         edtFreezeWatchdogEnabled: true
@@ -146,6 +146,11 @@ ircafe:
         edtFreezeThresholdMs: 2500
         # Watchdog poll cadence.
         edtWatchdogPollMs: 500
+        # Fallback detector throttling: minimum interval between repeated off-EDT violation reports.
+        edtFallbackViolationReportMs: 5000
+        # Optional issue actions when EDT freeze/violation problems are detected.
+        onIssuePlaySound: false
+        onIssueShowNotification: false
 
       jhiccup:
         # Optional external jHiccup process integration.
@@ -184,6 +189,19 @@ ircafe:
     #     libera: true
     #     oftc: true
 
+  pushy:
+    # Optional Pushy integration for IRC event notifications.
+    # Configure this from Preferences -> Tray & Notifications -> Pushy.
+    enabled: false
+    endpoint: "https://api.pushy.me/push"
+    # Secret API key from your Pushy app dashboard.
+    # apiKey: "replace-me"
+    # Set exactly one destination:
+    # deviceToken: "replace-me"
+    # topic: "my-ircafe-topic"
+    titlePrefix: "IRCafe"
+    connectTimeoutSeconds: 5
+    readTimeoutSeconds: 8
 
   logging:
     # Master toggle for persistence logging (chat history / message logs).

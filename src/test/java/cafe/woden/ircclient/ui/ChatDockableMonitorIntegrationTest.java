@@ -22,6 +22,8 @@ import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
+import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Component;
 import java.awt.Container;
@@ -36,8 +38,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ChatDockableMonitorIntegrationTest {
 
-  @TempDir
-  Path tempDir;
+  @TempDir Path tempDir;
 
   @Test
   void monitorCardActivatesAndRefreshesFromServiceAndOnlineState() throws Exception {
@@ -109,6 +110,7 @@ class ChatDockableMonitorIntegrationTest {
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     when(interceptorStore.changes()).thenReturn(Flowable.never());
     DccTransferStore dccTransferStore = new DccTransferStore();
+    TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
@@ -135,6 +137,7 @@ class ChatDockableMonitorIntegrationTest {
                     chatLogViewerService,
                     interceptorStore,
                     dccTransferStore,
+                    terminalDockable,
                     settingsBus,
                     commandHistoryStore));
 
@@ -235,5 +238,8 @@ class ChatDockableMonitorIntegrationTest {
   }
 
   private record Fixture(
-      ChatDockable chat, MonitorListService monitorListService, JLabel monitorTitle, JTable monitorTable) {}
+      ChatDockable chat,
+      MonitorListService monitorListService,
+      JLabel monitorTitle,
+      JTable monitorTable) {}
 }

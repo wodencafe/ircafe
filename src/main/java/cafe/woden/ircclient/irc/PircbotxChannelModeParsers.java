@@ -3,8 +3,8 @@ package cafe.woden.ircclient.irc;
 /**
  * Parsers for IRC channel-mode listing lines.
  *
- * <p>This class intentionally contains only pure parsing helpers extracted from
- * {@link PircbotxIrcClientService} during refactor step B2.5.
+ * <p>This class intentionally contains only pure parsing helpers extracted from {@link
+ * PircbotxIrcClientService} during refactor step B2.5.
  */
 final class PircbotxChannelModeParsers {
   private PircbotxChannelModeParsers() {}
@@ -14,7 +14,8 @@ final class PircbotxChannelModeParsers {
   /**
    * Parse RPL_CHANNELMODEIS (324).
    *
-   * <p>Expected tokenized format (after optional prefix): {@code 324 <me> <#chan> <modes> [args...]}.
+   * <p>Expected tokenized format (after optional prefix): {@code 324 <me> <#chan> <modes>
+   * [args...]}.
    */
   static ParsedRpl324 parseRpl324(String line) {
     if (line == null) return null;

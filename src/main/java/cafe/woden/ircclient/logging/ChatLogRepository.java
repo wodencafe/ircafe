@@ -20,7 +20,8 @@ public class ChatLogRepository {
 
   private static final int TEXT_MAX = 8192;
 
-  private static final String INSERT_SQL = """
+  private static final String INSERT_SQL =
+      """
       INSERT INTO chat_log(
         server_id,
         target,
@@ -36,7 +37,8 @@ public class ChatLogRepository {
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
       """;
 
-  private static final String SELECT_RECENT_SQL = """
+  private static final String SELECT_RECENT_SQL =
+      """
       SELECT server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
              outgoing_local_echo, soft_ignored, meta
         FROM chat_log
@@ -46,8 +48,10 @@ public class ChatLogRepository {
        LIMIT ?
       """;
 
-  // Same as SELECT_RECENT_SQL, but includes the identity id so callers can maintain a deterministic cursor.
-  private static final String SELECT_RECENT_ROWS_WITH_ID_SQL = """
+  // Same as SELECT_RECENT_SQL, but includes the identity id so callers can maintain a deterministic
+  // cursor.
+  private static final String SELECT_RECENT_ROWS_WITH_ID_SQL =
+      """
       SELECT id, server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
              outgoing_local_echo, soft_ignored, meta
         FROM chat_log
@@ -59,7 +63,8 @@ public class ChatLogRepository {
 
   // Fetch rows strictly older than (beforeTs, beforeId).
   // Order is newest-first within the fetched page.
-  private static final String SELECT_OLDER_ROWS_WITH_ID_SQL = """
+  private static final String SELECT_OLDER_ROWS_WITH_ID_SQL =
+      """
       SELECT id, server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
              outgoing_local_echo, soft_ignored, meta
         FROM chat_log
@@ -74,7 +79,8 @@ public class ChatLogRepository {
       """;
 
   // Existence check for older history (used to decide whether to show a "Load older..." control).
-  private static final String SELECT_HAS_OLDER_SQL = """
+  private static final String SELECT_HAS_OLDER_SQL =
+      """
       SELECT 1
         FROM chat_log
        WHERE server_id = ?
@@ -86,18 +92,21 @@ public class ChatLogRepository {
        LIMIT 1
       """;
 
-  private static final String DELETE_OLDER_THAN_SQL = """
+  private static final String DELETE_OLDER_THAN_SQL =
+      """
       DELETE FROM chat_log
        WHERE ts_epoch_ms < ?
       """;
 
-  private static final String SELECT_MAX_TS_FOR_SERVER_SQL = """
+  private static final String SELECT_MAX_TS_FOR_SERVER_SQL =
+      """
       SELECT MAX(ts_epoch_ms)
         FROM chat_log
        WHERE server_id = ?
       """;
 
-  private static final String SELECT_DISTINCT_TARGETS_SQL = """
+  private static final String SELECT_DISTINCT_TARGETS_SQL =
+      """
       SELECT DISTINCT target
         FROM chat_log
        WHERE server_id = ?
@@ -107,7 +116,8 @@ public class ChatLogRepository {
 
   // Exact-existence check used for remote history ingestion de-duplication.
   // NOTE: there is no unique constraint in the schema, so we must check before insert.
-  private static final String SELECT_EXISTS_EXACT_SQL = """
+  private static final String SELECT_EXISTS_EXACT_SQL =
+      """
       SELECT 1
         FROM chat_log
        WHERE server_id = ?
@@ -120,24 +130,8 @@ public class ChatLogRepository {
        LIMIT 1
       """;
 
-
-  private static final RowMapper<LogLine> ROW_MAPPER = (rs, rowNum) ->
-      new LogLine(
-          rs.getString("server_id"),
-          rs.getString("target"),
-          rs.getLong("ts_epoch_ms"),
-          parseDirection(rs.getString("direction")),
-          parseKind(rs.getString("kind")),
-          rs.getString("from_nick"),
-          rs.getString("text"),
-          rs.getBoolean("outgoing_local_echo"),
-          rs.getBoolean("soft_ignored"),
-          rs.getString("meta")
-      );
-
-  private static final RowMapper<LogRow> ROW_WITH_ID_MAPPER = (rs, rowNum) ->
-      new LogRow(
-          rs.getLong("id"),
+  private static final RowMapper<LogLine> ROW_MAPPER =
+      (rs, rowNum) ->
           new LogLine(
               rs.getString("server_id"),
               rs.getString("target"),
@@ -148,9 +142,23 @@ public class ChatLogRepository {
               rs.getString("text"),
               rs.getBoolean("outgoing_local_echo"),
               rs.getBoolean("soft_ignored"),
-              rs.getString("meta")
-          )
-      );
+              rs.getString("meta"));
+
+  private static final RowMapper<LogRow> ROW_WITH_ID_MAPPER =
+      (rs, rowNum) ->
+          new LogRow(
+              rs.getLong("id"),
+              new LogLine(
+                  rs.getString("server_id"),
+                  rs.getString("target"),
+                  rs.getLong("ts_epoch_ms"),
+                  parseDirection(rs.getString("direction")),
+                  parseKind(rs.getString("kind")),
+                  rs.getString("from_nick"),
+                  rs.getString("text"),
+                  rs.getBoolean("outgoing_local_echo"),
+                  rs.getBoolean("soft_ignored"),
+                  rs.getString("meta")));
 
   private final JdbcTemplate jdbc;
 
@@ -158,7 +166,6 @@ public class ChatLogRepository {
     this.jdbc = jdbc;
   }
 
-  
   public void insert(LogLine line) {
     if (line == null) return;
     try {
@@ -169,7 +176,6 @@ public class ChatLogRepository {
     }
   }
 
-  
   public int[] insertBatch(List<LogLine> lines) {
     if (lines == null || lines.isEmpty()) return new int[0];
 
@@ -221,17 +227,17 @@ public class ChatLogRepository {
     if (from == null) from = "";
     String text = truncate(line.text());
     try {
-      List<Integer> rows = jdbc.query(
-          SELECT_EXISTS_EXACT_SQL,
-          (rs, rowNum) -> rs.getInt(1),
-          line.serverId(),
-          line.target(),
-          line.tsEpochMs(),
-          line.direction().name(),
-          line.kind().name(),
-          from,
-          text
-      );
+      List<Integer> rows =
+          jdbc.query(
+              SELECT_EXISTS_EXACT_SQL,
+              (rs, rowNum) -> rs.getInt(1),
+              line.serverId(),
+              line.target(),
+              line.tsEpochMs(),
+              line.direction().name(),
+              line.kind().name(),
+              from,
+              text);
       return rows != null && !rows.isEmpty();
     } catch (Exception ex) {
       // Fail open: treat as "not present" so ingestion can proceed.
@@ -280,12 +286,14 @@ public class ChatLogRepository {
   }
 
   /**
-   * Fetch rows strictly older than the provided cursor ({@code beforeTs}/{@code beforeId}) (newest-first).
+   * Fetch rows strictly older than the provided cursor ({@code beforeTs}/{@code beforeId})
+   * (newest-first).
    *
-   * <p>Cursor rule: rows are considered older if {@code ts_epoch_ms < beforeTs} OR
-   * {@code (ts_epoch_ms == beforeTs AND id < beforeId)}.
+   * <p>Cursor rule: rows are considered older if {@code ts_epoch_ms < beforeTs} OR {@code
+   * (ts_epoch_ms == beforeTs AND id < beforeId)}.
    */
-  public List<LogRow> fetchOlderRows(String serverId, String target, long beforeTs, long beforeId, int limit) {
+  public List<LogRow> fetchOlderRows(
+      String serverId, String target, long beforeTs, long beforeId, int limit) {
     if (limit <= 0) return List.of();
     return jdbc.query(
         SELECT_OLDER_ROWS_WITH_ID_SQL,
@@ -295,8 +303,7 @@ public class ChatLogRepository {
         beforeTs,
         beforeTs,
         beforeId,
-        limit
-    );
+        limit);
   }
 
   /**
@@ -309,7 +316,9 @@ public class ChatLogRepository {
     String sid = (serverId == null) ? "" : serverId.trim();
     if (sid.isEmpty() || limit <= 0) return List.of();
 
-    StringBuilder sql = new StringBuilder("""
+    StringBuilder sql =
+        new StringBuilder(
+            """
         SELECT id, server_id, target, ts_epoch_ms, direction, kind, from_nick, text,
                outgoing_local_echo, soft_ignored, meta
           FROM chat_log
@@ -332,23 +341,21 @@ public class ChatLogRepository {
     return jdbc.query(sql.toString(), ROW_WITH_ID_MAPPER, args.toArray());
   }
 
-  
   public boolean hasOlderRows(String serverId, String target, long beforeTs, long beforeId) {
     // NOTE: Avoid JdbcTemplate#query overload ambiguity when using lambdas.
     // We only need existence; the query is LIMIT 1.
-    List<Integer> rows = jdbc.query(
-        SELECT_HAS_OLDER_SQL,
-        (rs, rowNum) -> rs.getInt(1),
-        serverId,
-        target,
-        beforeTs,
-        beforeTs,
-        beforeId
-    );
+    List<Integer> rows =
+        jdbc.query(
+            SELECT_HAS_OLDER_SQL,
+            (rs, rowNum) -> rs.getInt(1),
+            serverId,
+            target,
+            beforeTs,
+            beforeTs,
+            beforeId);
     return rows != null && !rows.isEmpty();
   }
 
-  
   public int deleteOlderThan(long cutoffEpochMs) {
     return jdbc.update(DELETE_OLDER_THAN_SQL, cutoffEpochMs);
   }
@@ -383,8 +390,7 @@ public class ChatLogRepository {
         line.outgoingLocalEcho(),
         line.softIgnored(),
         line.metaJson(),
-        normalizeMessageId(extractMessageId(line.metaJson()))
-    );
+        normalizeMessageId(extractMessageId(line.metaJson())));
   }
 
   private static void setInsertArgs(PreparedStatement ps, LogLine line) throws SQLException {

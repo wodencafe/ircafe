@@ -46,15 +46,7 @@ final class RottenTomatoesPreviewUtil {
       // Force https and strip query/fragment.
       String h = host.toLowerCase(Locale.ROOT);
       if (h.startsWith("www.")) h = h.substring(4);
-      return new URI(
-          "https",
-          null,
-          h,
-          -1,
-          path,
-          null,
-          null
-      );
+      return new URI("https", null, h, -1, path, null, null);
     } catch (Exception ignored) {
       return uri;
     }

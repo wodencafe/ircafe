@@ -13,10 +13,11 @@ final class GitHubLinkPreviewResolver implements LinkPreviewResolver {
       URI api = GitHubPreviewUtil.apiUri(link);
       if (api == null) return null;
 
-      var resp = http.getString(api, "application/vnd.github+json",
-          PreviewHttp.headers(
-              "X-GitHub-Api-Version", "2022-11-28"
-          ));
+      var resp =
+          http.getString(
+              api,
+              "application/vnd.github+json",
+              PreviewHttp.headers("X-GitHub-Api-Version", "2022-11-28"));
 
       if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
         return null;

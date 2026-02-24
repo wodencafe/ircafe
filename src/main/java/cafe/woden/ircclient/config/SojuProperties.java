@@ -5,14 +5,9 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/**
- * Soju bouncer integration settings.
- */
+/** Soju bouncer integration settings. */
 @ConfigurationProperties(prefix = "ircafe.soju")
-public record SojuProperties(
-    Map<String, Map<String, Boolean>> autoConnect,
-    Discovery discovery
-) {
+public record SojuProperties(Map<String, Map<String, Boolean>> autoConnect, Discovery discovery) {
 
   public SojuProperties {
     if (autoConnect == null) autoConnect = Map.of();

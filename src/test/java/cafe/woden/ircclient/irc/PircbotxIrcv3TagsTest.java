@@ -11,8 +11,9 @@ class PircbotxIrcv3TagsTest {
 
   @Test
   void parsesRawLineTagsAndUnescapesValues() {
-    Map<String, String> tags = PircbotxIrcv3Tags.fromRawLine(
-        "@time=2026-02-16T12:34:56.000Z;label=req\\:42;draft/reply=abc\\s123;empty :server 001 nick :hi");
+    Map<String, String> tags =
+        PircbotxIrcv3Tags.fromRawLine(
+            "@time=2026-02-16T12:34:56.000Z;label=req\\:42;draft/reply=abc\\s123;empty :server 001 nick :hi");
 
     assertEquals("2026-02-16T12:34:56.000Z", tags.get("time"));
     assertEquals("req;42", tags.get("label"));

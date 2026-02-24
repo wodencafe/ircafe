@@ -8,10 +8,9 @@ import org.springframework.stereotype.Component;
 /**
  * Tracks the last time we observed a status-mode change (e.g. +v/+o) per channel.
  *
- * <p>Some stacks will immediately query MODE after a status change; the reply can look
- * like a fresh MODE event containing the full channel flags (e.g. +Cnst), even though
- * nothing changed. We use this as a weak signal to suppress that echo when we don't yet
- * have channel-flag state seeded.
+ * <p>Some stacks will immediately query MODE after a status change; the reply can look like a fresh
+ * MODE event containing the full channel flags (e.g. +Cnst), even though nothing changed. We use
+ * this as a weak signal to suppress that echo when we don't yet have channel-flag state seeded.
  */
 @Component
 public class RecentStatusModeState {

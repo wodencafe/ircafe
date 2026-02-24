@@ -27,8 +27,7 @@ class PircbotxMonitorParsersTest {
   @Test
   void parsesMonofflineEntriesWithoutHostmask() {
     List<PircbotxMonitorParsers.ParsedMonitorStatusEntry> entries =
-        PircbotxMonitorParsers.parseRpl731MonitorOfflineEntries(
-            ":server 731 me alice,bob");
+        PircbotxMonitorParsers.parseRpl731MonitorOfflineEntries(":server 731 me alice,bob");
 
     assertEquals(2, entries.size());
     assertEquals("alice", entries.get(0).nick());
@@ -49,8 +48,7 @@ class PircbotxMonitorParsersTest {
   @Test
   void parsesMonofflineNickListFromParam() {
     List<String> nicks =
-        PircbotxMonitorParsers.parseRpl731MonitorOfflineNicks(
-            ":server 731 me alice,bob");
+        PircbotxMonitorParsers.parseRpl731MonitorOfflineNicks(":server 731 me alice,bob");
 
     assertEquals(List.of("alice", "bob"), nicks);
   }
@@ -58,15 +56,15 @@ class PircbotxMonitorParsersTest {
   @Test
   void parsesMonlistNickList() {
     List<String> nicks =
-        PircbotxMonitorParsers.parseRpl732MonitorListNicks(
-            ":server 732 me :alice,bob,charlie");
+        PircbotxMonitorParsers.parseRpl732MonitorListNicks(":server 732 me :alice,bob,charlie");
 
     assertEquals(List.of("alice", "bob", "charlie"), nicks);
   }
 
   @Test
   void detectsEndOfMonitorList() {
-    assertTrue(PircbotxMonitorParsers.isRpl733MonitorListEnd(":server 733 me :End of MONITOR list"));
+    assertTrue(
+        PircbotxMonitorParsers.isRpl733MonitorListEnd(":server 733 me :End of MONITOR list"));
     assertFalse(PircbotxMonitorParsers.isRpl733MonitorListEnd(":server 732 me :alice,bob"));
   }
 

@@ -21,8 +21,7 @@ public record ChatLogViewerQuery(
     boolean includeProtocolDetails,
     Long fromEpochMs,
     Long toEpochMs,
-    int limit
-) {
+    int limit) {
 
   public ChatLogViewerQuery {
     serverId = norm(serverId);

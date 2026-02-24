@@ -64,12 +64,13 @@ public class InterceptorStore {
   private final AtomicReference<Map<String, List<InterceptorDefinition>>> pendingPersistSnapshot =
       new AtomicReference<>();
 
-  private final ConcurrentHashMap<String, LinkedHashMap<String, InterceptorDefinition>> defsByServer =
-      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, LinkedHashMap<String, InterceptorDefinition>>
+      defsByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Map<String, List<InterceptorHit>>> hitsByServer =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Pattern> patternCache = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Set<InterceptorEventType>> eventTypeCache = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Set<InterceptorEventType>> eventTypeCache =
+      new ConcurrentHashMap<>();
 
   private final FlowableProcessor<Change> changes =
       PublishProcessor.<Change>create().toSerialized();
@@ -79,8 +80,7 @@ public class InterceptorStore {
       RuntimeConfigStore runtimeConfig,
       NotificationSoundService notificationSoundService,
       @Lazy TrayNotificationService trayNotificationService,
-      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor
-  ) {
+      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor) {
     this(
         runtimeConfig,
         notificationSoundService,
@@ -100,8 +100,7 @@ public class InterceptorStore {
       TrayNotificationService trayNotificationService,
       ExecutorService actionScriptExecutor,
       int maxHitsPerInterceptor,
-      boolean loadFromRuntimeConfig
-  ) {
+      boolean loadFromRuntimeConfig) {
     this.runtimeConfig = runtimeConfig;
     this.notificationSoundService = notificationSoundService;
     this.trayNotificationService = trayNotificationService;
@@ -133,7 +132,10 @@ public class InterceptorStore {
     }
   }
 
-  /** Import a custom interceptor sound into IRCafe's runtime sounds directory and return its relative path. */
+  /**
+   * Import a custom interceptor sound into IRCafe's runtime sounds directory and return its
+   * relative path.
+   */
   public String importInterceptorCustomSoundFile(File source) throws Exception {
     if (source == null) throw new IllegalArgumentException("Source file is required");
 
@@ -191,36 +193,37 @@ public class InterceptorStore {
     synchronized (defs) {
       String name = uniqueName(base, defs.values());
       String id = UUID.randomUUID().toString();
-      def = new InterceptorDefinition(
-          id,
-          name,
-          true,
-          sid,
-          InterceptorRuleMode.GLOB,
-          "",
-          InterceptorRuleMode.GLOB,
-          "",
-          false,
-          false,
-          false,
-          "NOTIF_1",
-          false,
-          "",
-          false,
-          "",
-          "",
-          "",
-          List.of(new InterceptorRule(
+      def =
+          new InterceptorDefinition(
+              id,
+              name,
               true,
-              "Rule 1",
-              "",
-              InterceptorRuleMode.LIKE,
-              "",
-              InterceptorRuleMode.LIKE,
+              sid,
+              InterceptorRuleMode.GLOB,
               "",
               InterceptorRuleMode.GLOB,
-              ""))
-      );
+              "",
+              false,
+              false,
+              false,
+              "NOTIF_1",
+              false,
+              "",
+              false,
+              "",
+              "",
+              "",
+              List.of(
+                  new InterceptorRule(
+                      true,
+                      "Rule 1",
+                      "",
+                      InterceptorRuleMode.LIKE,
+                      "",
+                      InterceptorRuleMode.LIKE,
+                      "",
+                      InterceptorRuleMode.GLOB,
+                      "")));
       defs.put(def.id(), def);
     }
 
@@ -242,28 +245,31 @@ public class InterceptorStore {
       InterceptorDefinition prev = defs.get(iid);
       if (prev == null) return false;
       String base = sanitizeName(requestedName);
-      String next = uniqueName(base, defs.values().stream().filter(d -> !iid.equals(d.id())).toList());
+      String next =
+          uniqueName(base, defs.values().stream().filter(d -> !iid.equals(d.id())).toList());
       if (Objects.equals(prev.name(), next)) return false;
-      defs.put(iid, new InterceptorDefinition(
+      defs.put(
           iid,
-          next,
-          prev.enabled(),
-          prev.scopeServerId(),
-          prev.channelIncludeMode(),
-          prev.channelIncludes(),
-          prev.channelExcludeMode(),
-          prev.channelExcludes(),
-          prev.actionSoundEnabled(),
-          prev.actionStatusBarEnabled(),
-          prev.actionToastEnabled(),
-          prev.actionSoundId(),
-          prev.actionSoundUseCustom(),
-          prev.actionSoundCustomPath(),
-          prev.actionScriptEnabled(),
-          prev.actionScriptPath(),
-          prev.actionScriptArgs(),
-          prev.actionScriptWorkingDirectory(),
-          prev.rules()));
+          new InterceptorDefinition(
+              iid,
+              next,
+              prev.enabled(),
+              prev.scopeServerId(),
+              prev.channelIncludeMode(),
+              prev.channelIncludes(),
+              prev.channelExcludeMode(),
+              prev.channelExcludes(),
+              prev.actionSoundEnabled(),
+              prev.actionStatusBarEnabled(),
+              prev.actionToastEnabled(),
+              prev.actionSoundId(),
+              prev.actionSoundUseCustom(),
+              prev.actionSoundCustomPath(),
+              prev.actionScriptEnabled(),
+              prev.actionScriptPath(),
+              prev.actionScriptArgs(),
+              prev.actionScriptWorkingDirectory(),
+              prev.rules()));
       changed = true;
     }
 
@@ -287,26 +293,28 @@ public class InterceptorStore {
       InterceptorDefinition prev = defs.get(iid);
       if (prev == null) return false;
       if (prev.enabled() == enabled) return false;
-      defs.put(iid, new InterceptorDefinition(
+      defs.put(
           iid,
-          prev.name(),
-          enabled,
-          prev.scopeServerId(),
-          prev.channelIncludeMode(),
-          prev.channelIncludes(),
-          prev.channelExcludeMode(),
-          prev.channelExcludes(),
-          prev.actionSoundEnabled(),
-          prev.actionStatusBarEnabled(),
-          prev.actionToastEnabled(),
-          prev.actionSoundId(),
-          prev.actionSoundUseCustom(),
-          prev.actionSoundCustomPath(),
-          prev.actionScriptEnabled(),
-          prev.actionScriptPath(),
-          prev.actionScriptArgs(),
-          prev.actionScriptWorkingDirectory(),
-          prev.rules()));
+          new InterceptorDefinition(
+              iid,
+              prev.name(),
+              enabled,
+              prev.scopeServerId(),
+              prev.channelIncludeMode(),
+              prev.channelIncludes(),
+              prev.channelExcludeMode(),
+              prev.channelExcludes(),
+              prev.actionSoundEnabled(),
+              prev.actionStatusBarEnabled(),
+              prev.actionToastEnabled(),
+              prev.actionSoundId(),
+              prev.actionSoundUseCustom(),
+              prev.actionSoundCustomPath(),
+              prev.actionScriptEnabled(),
+              prev.actionScriptPath(),
+              prev.actionScriptArgs(),
+              prev.actionScriptWorkingDirectory(),
+              prev.rules()));
       changed = true;
     }
 
@@ -463,8 +471,7 @@ public class InterceptorStore {
       String fromNick,
       String fromHostmask,
       String text,
-      InterceptorEventType eventType
-  ) {
+      InterceptorEventType eventType) {
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
 
@@ -490,19 +497,8 @@ public class InterceptorStore {
 
   /** Backward-compatible entrypoint used by the first interceptor implementation. */
   public void ingestChannelMessage(
-      String serverId,
-      String channel,
-      String fromNick,
-      String text,
-      String eventType
-  ) {
-    ingestEvent(
-        serverId,
-        channel,
-        fromNick,
-        "",
-        text,
-        InterceptorEventType.fromToken(eventType));
+      String serverId, String channel, String fromNick, String text, String eventType) {
+    ingestEvent(serverId, channel, fromNick, "", text, InterceptorEventType.fromToken(eventType));
   }
 
   @PreDestroy
@@ -518,11 +514,11 @@ public class InterceptorStore {
       String fromNick,
       String fromHostmask,
       String text,
-      InterceptorEventType eventType
-  ) {
+      InterceptorEventType eventType) {
     if (defsByServer.isEmpty()) return;
 
-    for (Map.Entry<String, LinkedHashMap<String, InterceptorDefinition>> entry : defsByServer.entrySet()) {
+    for (Map.Entry<String, LinkedHashMap<String, InterceptorDefinition>> entry :
+        defsByServer.entrySet()) {
       String ownerServerId = entry.getKey();
       LinkedHashMap<String, InterceptorDefinition> defs = entry.getValue();
       if (defs == null || defs.isEmpty()) continue;
@@ -545,18 +541,18 @@ public class InterceptorStore {
         }
         if (reason == null) continue;
 
-        InterceptorHit hit = new InterceptorHit(
-            eventServerId,
-            def.id(),
-            def.name(),
-            Instant.now(),
-            channel,
-            fromNick,
-            fromHostmask,
-            eventType.token(),
-            reason,
-            text
-        );
+        InterceptorHit hit =
+            new InterceptorHit(
+                eventServerId,
+                def.id(),
+                def.name(),
+                Instant.now(),
+                channel,
+                fromNick,
+                fromHostmask,
+                eventType.token(),
+                reason,
+                text);
 
         appendHit(ownerServerId, def.id(), hit);
         dispatchActions(def, ownerServerId, hit);
@@ -565,20 +561,20 @@ public class InterceptorStore {
     }
   }
 
-  private void dispatchActions(InterceptorDefinition def, String ownerServerId, InterceptorHit hit) {
+  private void dispatchActions(
+      InterceptorDefinition def, String ownerServerId, InterceptorHit hit) {
     if (def == null || hit == null) return;
 
     if (def.actionSoundEnabled() && notificationSoundService != null) {
       try {
         notificationSoundService.playOverride(
-            def.actionSoundId(),
-            def.actionSoundUseCustom(),
-            def.actionSoundCustomPath());
+            def.actionSoundId(), def.actionSoundUseCustom(), def.actionSoundCustomPath());
       } catch (Exception ignored) {
       }
     }
 
-    if ((def.actionStatusBarEnabled() || def.actionToastEnabled()) && trayNotificationService != null) {
+    if ((def.actionStatusBarEnabled() || def.actionToastEnabled())
+        && trayNotificationService != null) {
       try {
         String sid = norm(hit.serverId());
         if (sid.isEmpty()) sid = norm(ownerServerId);
@@ -640,7 +636,8 @@ public class InterceptorStore {
     return out.toString();
   }
 
-  private void runActionScript(InterceptorDefinition def, String ownerServerId, InterceptorHit hit) {
+  private void runActionScript(
+      InterceptorDefinition def, String ownerServerId, InterceptorHit hit) {
     String scriptPath = norm(def.actionScriptPath());
     if (scriptPath.isEmpty()) return;
 
@@ -658,7 +655,9 @@ public class InterceptorStore {
       if (!scriptWorkingDirectory.isEmpty()) {
         File cwd = new File(scriptWorkingDirectory);
         if (!cwd.isDirectory()) {
-          log.warn("[ircafe] Interceptor script working directory does not exist: {}", scriptWorkingDirectory);
+          log.warn(
+              "[ircafe] Interceptor script working directory does not exist: {}",
+              scriptWorkingDirectory);
           return;
         }
         pb.directory(cwd);
@@ -683,7 +682,10 @@ public class InterceptorStore {
       boolean exited = p.waitFor(SCRIPT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       if (!exited) {
         p.destroyForcibly();
-        log.warn("[ircafe] Interceptor script timed out after {}s: {}", SCRIPT_TIMEOUT_SECONDS, scriptPath);
+        log.warn(
+            "[ircafe] Interceptor script timed out after {}s: {}",
+            SCRIPT_TIMEOUT_SECONDS,
+            scriptPath);
       }
     } catch (Exception ex) {
       log.warn("[ircafe] Could not run interceptor script: {}", scriptPath, ex);
@@ -761,7 +763,8 @@ public class InterceptorStore {
     Map<String, List<InterceptorHit>> perServer =
         hitsByServer.computeIfAbsent(ownerServerId, __ -> new ConcurrentHashMap<>());
     List<InterceptorHit> list =
-        perServer.computeIfAbsent(interceptorId, __ -> Collections.synchronizedList(new ArrayList<>()));
+        perServer.computeIfAbsent(
+            interceptorId, __ -> Collections.synchronizedList(new ArrayList<>()));
 
     synchronized (list) {
       list.add(hit);
@@ -782,20 +785,24 @@ public class InterceptorStore {
 
     InterceptorRuleMode includeMode =
         def.channelIncludeMode() == null ? InterceptorRuleMode.GLOB : def.channelIncludeMode();
-    boolean included = switch (includeMode) {
-      case ALL -> true;
-      case NONE -> false;
-      case LIKE, GLOB, REGEX -> includes.isEmpty() || matchesAnyPattern(includeMode, includes, chan, true);
-    };
+    boolean included =
+        switch (includeMode) {
+          case ALL -> true;
+          case NONE -> false;
+          case LIKE, GLOB, REGEX ->
+              includes.isEmpty() || matchesAnyPattern(includeMode, includes, chan, true);
+        };
     if (!included) return false;
 
     InterceptorRuleMode excludeMode =
         def.channelExcludeMode() == null ? InterceptorRuleMode.GLOB : def.channelExcludeMode();
-    boolean excluded = switch (excludeMode) {
-      case ALL -> true;
-      case NONE -> false;
-      case LIKE, GLOB, REGEX -> !excludes.isEmpty() && matchesAnyPattern(excludeMode, excludes, chan, true);
-    };
+    boolean excluded =
+        switch (excludeMode) {
+          case ALL -> true;
+          case NONE -> false;
+          case LIKE, GLOB, REGEX ->
+              !excludes.isEmpty() && matchesAnyPattern(excludeMode, excludes, chan, true);
+        };
     return !excluded;
   }
 
@@ -804,8 +811,7 @@ public class InterceptorStore {
       InterceptorEventType eventType,
       String text,
       String fromNick,
-      String fromHostmask
-  ) {
+      String fromHostmask) {
     if (rule == null || !rule.enabled()) return false;
     boolean hasPattern = rule.hasAnyPattern();
     boolean hasEventSelector = !norm(rule.eventTypesCsv()).isBlank();
@@ -825,11 +831,14 @@ public class InterceptorStore {
     String csv = norm(rule.eventTypesCsv()).toLowerCase(Locale.ROOT);
     if (csv.isEmpty()) return true;
 
-    Set<InterceptorEventType> allowed = eventTypeCache.computeIfAbsent(csv, __ -> {
-      EnumSet<InterceptorEventType> parsed = InterceptorEventType.parseCsv(csv);
-      if (parsed.isEmpty()) return Set.of();
-      return Set.copyOf(parsed);
-    });
+    Set<InterceptorEventType> allowed =
+        eventTypeCache.computeIfAbsent(
+            csv,
+            __ -> {
+              EnumSet<InterceptorEventType> parsed = InterceptorEventType.parseCsv(csv);
+              if (parsed.isEmpty()) return Set.of();
+              return Set.copyOf(parsed);
+            });
 
     if (allowed.isEmpty()) return false;
     return allowed.contains(type);
@@ -844,11 +853,7 @@ public class InterceptorStore {
   }
 
   private boolean matchesAnyPattern(
-      InterceptorRuleMode mode,
-      List<String> patterns,
-      String value,
-      boolean strictText
-  ) {
+      InterceptorRuleMode mode, List<String> patterns, String value, boolean strictText) {
     InterceptorRuleMode m = mode == null ? InterceptorRuleMode.LIKE : mode;
     if (m == InterceptorRuleMode.ALL) return true;
     if (m == InterceptorRuleMode.NONE) return false;
@@ -863,11 +868,7 @@ public class InterceptorStore {
   }
 
   private boolean matchesPattern(
-      InterceptorRuleMode mode,
-      String pattern,
-      String value,
-      boolean strictText
-  ) {
+      InterceptorRuleMode mode, String pattern, String value, boolean strictText) {
     String source = Objects.toString(pattern, "");
     String hay = Objects.toString(value, "");
     if (source.isBlank() || hay.isBlank()) return false;
@@ -919,7 +920,8 @@ public class InterceptorStore {
       switch (c) {
         case '*' -> sb.append(".*");
         case '?' -> sb.append('.');
-        case '.', '\\', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|' -> sb.append('\\').append(c);
+        case '.', '\\', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|' ->
+            sb.append('\\').append(c);
         default -> sb.append(c);
       }
     }
@@ -966,7 +968,8 @@ public class InterceptorStore {
   private void loadPersistedDefinitions() {
     if (runtimeConfig == null) return;
     try {
-      Map<String, List<InterceptorDefinition>> persisted = runtimeConfig.readInterceptorDefinitions();
+      Map<String, List<InterceptorDefinition>> persisted =
+          runtimeConfig.readInterceptorDefinitions();
       if (persisted == null || persisted.isEmpty()) return;
 
       for (Map.Entry<String, List<InterceptorDefinition>> entry : persisted.entrySet()) {
@@ -1023,7 +1026,8 @@ public class InterceptorStore {
 
   private Map<String, List<InterceptorDefinition>> snapshotDefinitionsByServer() {
     LinkedHashMap<String, List<InterceptorDefinition>> out = new LinkedHashMap<>();
-    for (Map.Entry<String, LinkedHashMap<String, InterceptorDefinition>> entry : defsByServer.entrySet()) {
+    for (Map.Entry<String, LinkedHashMap<String, InterceptorDefinition>> entry :
+        defsByServer.entrySet()) {
       String sid = norm(entry.getKey());
       if (sid.isEmpty()) continue;
       LinkedHashMap<String, InterceptorDefinition> defs = entry.getValue();
@@ -1047,7 +1051,8 @@ public class InterceptorStore {
     return n.isEmpty() ? "Interceptor" : n;
   }
 
-  private static String uniqueName(String base, java.util.Collection<InterceptorDefinition> existing) {
+  private static String uniqueName(
+      String base, java.util.Collection<InterceptorDefinition> existing) {
     String b = sanitizeName(base);
     if (existing == null || existing.isEmpty()) return b;
 
@@ -1056,7 +1061,8 @@ public class InterceptorStore {
 
     for (int i = 2; i <= 9_999; i++) {
       String candidate = b + " " + i;
-      boolean exists = existing.stream().anyMatch(d -> d != null && candidate.equalsIgnoreCase(d.name()));
+      boolean exists =
+          existing.stream().anyMatch(d -> d != null && candidate.equalsIgnoreCase(d.name()));
       if (!exists) return candidate;
     }
     return b + " " + System.currentTimeMillis();

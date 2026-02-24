@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.ui.servers;
 
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.AutoJoinEntryCodec;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.net.NetProxyContext;
+import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
-import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
@@ -22,11 +22,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JComponent;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -37,12 +39,8 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
-import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
 
-/**
- * Add/edit a single IRC server configuration.
- */
+/** Add/edit a single IRC server configuration. */
 public class ServerEditorDialog extends JDialog {
 
   private Optional<IrcProperties.Server> result = Optional.empty();
@@ -59,18 +57,18 @@ public class ServerEditorDialog extends JDialog {
 
   private final JCheckBox saslEnabledBox = new JCheckBox("Enable SASL");
   private final JTextField saslUserField = new JTextField();
+
   /**
-   * SASL secret (password / key material). Use a password field so we don't echo secrets in plain text.
+   * SASL secret (password / key material). Use a password field so we don't echo secrets in plain
+   * text.
    */
   private final JPasswordField saslPassField = new JPasswordField();
-  private final JComboBox<String> saslMechanism = new JComboBox<>(new String[]{
-      "AUTO",
-      "PLAIN",
-      "SCRAM-SHA-256",
-      "SCRAM-SHA-1",
-      "EXTERNAL",
-      "ECDSA-NIST256P-CHALLENGE"
-  });
+
+  private final JComboBox<String> saslMechanism =
+      new JComboBox<>(
+          new String[] {
+            "AUTO", "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-1", "EXTERNAL", "ECDSA-NIST256P-CHALLENGE"
+          });
 
   private final JLabel saslHintLabel = new JLabel();
 
@@ -83,7 +81,8 @@ public class ServerEditorDialog extends JDialog {
   private final JCheckBox proxyEnabledBox = new JCheckBox("Use SOCKS5 proxy");
   private final JTextField proxyHostField = new JTextField();
   private final JTextField proxyPortField = new JTextField();
-  private final JCheckBox proxyRemoteDnsBox = new JCheckBox("Remote DNS (resolve hostnames via proxy)");
+  private final JCheckBox proxyRemoteDnsBox =
+      new JCheckBox("Remote DNS (resolve hostnames via proxy)");
   private final JTextField proxyUserField = new JTextField();
   private final JPasswordField proxyPassField = new JPasswordField();
   private final JTextField proxyConnectTimeoutMsField = new JTextField();
@@ -96,8 +95,8 @@ public class ServerEditorDialog extends JDialog {
   private final JButton cancelBtn = new JButton("Cancel");
 
   /**
-   * When a proxy test succeeds, we paint "success" outlines on relevant fields.
-   * We only keep the success state while the tested inputs remain unchanged.
+   * When a proxy test succeeds, we paint "success" outlines on relevant fields. We only keep the
+   * success state while the tested inputs remain unchanged.
    */
   private ProxyTestSnapshot lastProxyTestOk;
 
@@ -111,8 +110,7 @@ public class ServerEditorDialog extends JDialog {
       String proxyUser,
       int proxyPassHash,
       String connectTimeoutMs,
-      String readTimeoutMs
-  ) {
+      String readTimeoutMs) {
     static ProxyTestSnapshot capture(ServerEditorDialog d) {
       return new ProxyTestSnapshot(
           d.proxyOverrideBox.isSelected(),
@@ -122,8 +120,7 @@ public class ServerEditorDialog extends JDialog {
           trim(d.proxyUserField.getText()),
           java.util.Arrays.hashCode(d.proxyPassField.getPassword()),
           trim(d.proxyConnectTimeoutMsField.getText()),
-          trim(d.proxyReadTimeoutMsField.getText())
-      );
+          trim(d.proxyReadTimeoutMsField.getText()));
     }
   }
 
@@ -156,10 +153,11 @@ public class ServerEditorDialog extends JDialog {
     actions.add(saveBtn);
     add(actions, BorderLayout.SOUTH);
 
-    cancelBtn.addActionListener(e -> {
-      result = Optional.empty();
-      dispose();
-    });
+    cancelBtn.addActionListener(
+        e -> {
+          result = Optional.empty();
+          dispose();
+        });
     saveBtn.addActionListener(e -> onSave());
 
     // Seed values
@@ -183,7 +181,8 @@ public class ServerEditorDialog extends JDialog {
 
       List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
       autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
-      autoJoinPmArea.setText(String.join("\n", AutoJoinEntryCodec.privateMessageNicks(autoJoinSeed)));
+      autoJoinPmArea.setText(
+          String.join("\n", AutoJoinEntryCodec.privateMessageNicks(autoJoinSeed)));
       List<String> performSeed = seed.perform() == null ? List.of() : seed.perform();
       performArea.setText(String.join("\n", performSeed));
       portAuto = false; // user likely set explicitly
@@ -223,7 +222,8 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
-    autoJoinPmArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "NickServ\nfriend_nick");
+    autoJoinPmArea.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT, "NickServ\nfriend_nick");
     performArea.putClientProperty(
         FlatClientProperties.PLACEHOLDER_TEXT,
         "/msg NickServ IDENTIFY password\n"
@@ -233,11 +233,28 @@ public class ServerEditorDialog extends JDialog {
 
     // Auto-update default port when toggling TLS, if the user hasn't customized it.
     tlsBox.addActionListener(e -> maybeAdjustPortForTls());
-    portField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; updateValidation(); }
-      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; updateValidation(); }
-      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { portAuto = false; updateValidation(); }
-    });
+    portField
+        .getDocument()
+        .addDocumentListener(
+            new javax.swing.event.DocumentListener() {
+              @Override
+              public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                portAuto = false;
+                updateValidation();
+              }
+
+              @Override
+              public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                portAuto = false;
+                updateValidation();
+              }
+
+              @Override
+              public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                portAuto = false;
+                updateValidation();
+              }
+            });
 
     saslEnabledBox.addActionListener(e -> updateSaslEnabled());
     saslMechanism.addActionListener(e -> updateSaslEnabled());
@@ -286,7 +303,8 @@ public class ServerEditorDialog extends JDialog {
     p.add(proxyOverrideBox, g);
 
     g.gridy++;
-    proxyHintLabel.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    proxyHintLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     p.add(proxyHintLabel, g);
 
     g.gridwidth = 1;
@@ -309,7 +327,8 @@ public class ServerEditorDialog extends JDialog {
     proxyTestBtn.setDisabledIcon(SvgIcons.actionDisabled("refresh", 16));
     testRow.add(proxyTestBtn);
     testRow.add(javax.swing.Box.createHorizontalStrut(10));
-    proxyStatusLabel.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    proxyStatusLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     testRow.add(proxyStatusLabel);
     testRow.add(javax.swing.Box.createHorizontalGlue());
 
@@ -360,10 +379,14 @@ public class ServerEditorDialog extends JDialog {
     IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
 
     if (!override) {
-      proxyHintLabel.setText(global.enabled()
-          ? "Inheriting global proxy from Preferences (enabled: " + global.host() + ":" + global.port() + ")"
-          : "Inheriting global proxy from Preferences (disabled)"
-      );
+      proxyHintLabel.setText(
+          global.enabled()
+              ? "Inheriting global proxy from Preferences (enabled: "
+                  + global.host()
+                  + ":"
+                  + global.port()
+                  + ")"
+              : "Inheriting global proxy from Preferences (disabled)");
     } else {
       proxyHintLabel.setText("Override the global proxy for this server.\n");
     }
@@ -402,7 +425,8 @@ public class ServerEditorDialog extends JDialog {
     } catch (IllegalArgumentException ex) {
       proxyStatusLabel.setText(" ");
       proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(this, ex.getMessage(), "Invalid proxy settings", JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(
+          this, ex.getMessage(), "Invalid proxy settings", JOptionPane.ERROR_MESSAGE);
       return;
     }
 
@@ -412,20 +436,23 @@ public class ServerEditorDialog extends JDialog {
     } catch (Exception e) {
       proxyStatusLabel.setText(" ");
       proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(this, "Port must be a number", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(
+          this, "Port must be a number", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
       return;
     }
 
     if (host.isBlank()) {
       proxyStatusLabel.setText(" ");
       proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(this, "Host is required", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(
+          this, "Host is required", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
       return;
     }
     if (port <= 0 || port > 65535) {
       proxyStatusLabel.setText(" ");
       proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(this, "Port must be 1-65535", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(
+          this, "Port must be 1-65535", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
       return;
     }
 
@@ -454,18 +481,26 @@ public class ServerEditorDialog extends JDialog {
             lastProxyTestOk = ProxyTestSnapshot.capture(ServerEditorDialog.this);
             updateValidation();
 
-            JOptionPane.showMessageDialog(ServerEditorDialog.this,
-                "Connection test succeeded.\n\n" +
-                    "TLS: " + (tls ? "yes" : "no") + "\n" +
-                    "Proxy: " + (cfg.enabled() ? (cfg.host() + ":" + cfg.port()) : "disabled") + "\n" +
-                    "Time: " + r.elapsedMs + " ms",
+            JOptionPane.showMessageDialog(
+                ServerEditorDialog.this,
+                "Connection test succeeded.\n\n"
+                    + "TLS: "
+                    + (tls ? "yes" : "no")
+                    + "\n"
+                    + "Proxy: "
+                    + (cfg.enabled() ? (cfg.host() + ":" + cfg.port()) : "disabled")
+                    + "\n"
+                    + "Time: "
+                    + r.elapsedMs
+                    + " ms",
                 "Proxy test",
                 JOptionPane.INFORMATION_MESSAGE);
           } else {
             proxyStatusLabel.setText("Failed: " + r.shortMessage());
             lastProxyTestOk = null;
             updateValidation();
-            JOptionPane.showMessageDialog(ServerEditorDialog.this,
+            JOptionPane.showMessageDialog(
+                ServerEditorDialog.this,
                 "Connection test failed.\n\n" + r.longMessage(),
                 "Proxy test",
                 JOptionPane.ERROR_MESSAGE);
@@ -474,7 +509,8 @@ public class ServerEditorDialog extends JDialog {
           proxyStatusLabel.setText("Failed");
           lastProxyTestOk = null;
           updateValidation();
-          JOptionPane.showMessageDialog(ServerEditorDialog.this,
+          JOptionPane.showMessageDialog(
+              ServerEditorDialog.this,
               "Connection test failed.\n\n" + e,
               "Proxy test",
               JOptionPane.ERROR_MESSAGE);
@@ -511,7 +547,8 @@ public class ServerEditorDialog extends JDialog {
     return new IrcProperties.Proxy(true, host, port, user, pass, remoteDns, connectMs, readMs);
   }
 
-  private static void testConnect(String host, int port, boolean tls, IrcProperties.Proxy cfg) throws Exception {
+  private static void testConnect(String host, int port, boolean tls, IrcProperties.Proxy cfg)
+      throws Exception {
     long connectTimeoutMs = Math.max(1, cfg.connectTimeoutMs());
     int readTimeoutMs = (int) Math.max(1, Math.min(Integer.MAX_VALUE, cfg.readTimeoutMs()));
 
@@ -519,8 +556,9 @@ public class ServerEditorDialog extends JDialog {
       // Proxy path
       Socket s;
       if (tls) {
-        s = new SocksProxySslSocketFactory(cfg, NetTlsContext.sslSocketFactory())
-            .createSocket(host, port);
+        s =
+            new SocksProxySslSocketFactory(cfg, NetTlsContext.sslSocketFactory())
+                .createSocket(host, port);
       } else {
         s = new SocksProxySocketFactory(cfg).createSocket(host, port);
       }
@@ -534,7 +572,8 @@ public class ServerEditorDialog extends JDialog {
 
     // Direct path: explicitly bypass any JVM-level SOCKS properties.
     Socket tcp = new Socket(Proxy.NO_PROXY);
-    tcp.connect(new InetSocketAddress(host, port), (int) Math.min(Integer.MAX_VALUE, connectTimeoutMs));
+    tcp.connect(
+        new InetSocketAddress(host, port), (int) Math.min(Integer.MAX_VALUE, connectTimeoutMs));
     tcp.setSoTimeout(readTimeoutMs);
 
     if (!tls) {
@@ -657,7 +696,8 @@ public class ServerEditorDialog extends JDialog {
     addRow(p, g, 2, "Secret", saslPassField);
     addRow(p, g, 3, "Mechanism", saslMechanism);
 
-    saslHintLabel.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    saslHintLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     saslHintLabel.setText(" ");
     g.gridy = 4;
     g.gridx = 0;
@@ -677,7 +717,9 @@ public class ServerEditorDialog extends JDialog {
   private JPanel buildAutoJoinPanel() {
     JPanel p = new JPanel(new BorderLayout(8, 8));
     p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-    JLabel hint = new JLabel("<html>Channels and PM targets restored after connect.<br/>One entry per line.</html>");
+    JLabel hint =
+        new JLabel(
+            "<html>Channels and PM targets restored after connect.<br/>One entry per line.</html>");
     hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     p.add(hint, BorderLayout.NORTH);
 
@@ -752,11 +794,13 @@ public class ServerEditorDialog extends JDialog {
         // TLS client certificate auth; secret is unused.
         secretEnabled = false;
         secretPlaceholder = "(ignored)";
-        hint = "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.";
+        hint =
+            "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.";
       }
       case "ECDSA-NIST256P-CHALLENGE" -> {
         secretPlaceholder = "base64 PKCS#8 EC private key";
-        hint = "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.";
+        hint =
+            "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.";
       }
       case "SCRAM-SHA-256" -> {
         secretPlaceholder = "password";
@@ -768,7 +812,8 @@ public class ServerEditorDialog extends JDialog {
       }
       case "AUTO" -> {
         secretPlaceholder = "password (leave blank for EXTERNAL)";
-        hint = "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.";
+        hint =
+            "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.";
       }
       default -> {
         secretPlaceholder = "password";
@@ -789,7 +834,6 @@ public class ServerEditorDialog extends JDialog {
 
     updateValidation();
   }
-
 
   // FlatLaf validation outlines.
   private static final String OUTLINE_PROP = "JComponent.outline";
@@ -872,16 +916,18 @@ public class ServerEditorDialog extends JDialog {
       String p = new String(saslPassField.getPassword());
       boolean hasSecret = !p.isBlank();
 
-      boolean needsUser = switch (mechUpper) {
-        case "EXTERNAL" -> false;
-        case "AUTO" -> hasSecret;
-        default -> true;
-      };
-      boolean needsSecret = switch (mechUpper) {
-        case "EXTERNAL" -> false;
-        case "AUTO" -> false;
-        default -> true;
-      };
+      boolean needsUser =
+          switch (mechUpper) {
+            case "EXTERNAL" -> false;
+            case "AUTO" -> hasSecret;
+            default -> true;
+          };
+      boolean needsSecret =
+          switch (mechUpper) {
+            case "EXTERNAL" -> false;
+            case "AUTO" -> false;
+            default -> true;
+          };
 
       boolean userBad = needsUser && u.isEmpty();
       boolean secretBad = needsSecret && p.isBlank();
@@ -941,7 +987,8 @@ public class ServerEditorDialog extends JDialog {
       }
     }
 
-    // If a proxy test previously succeeded, keep success outlines only while inputs remain unchanged.
+    // If a proxy test previously succeeded, keep success outlines only while inputs remain
+    // unchanged.
     applyProxyTestSuccessDecoration();
 
     saveBtn.setEnabled(ok);
@@ -963,16 +1010,22 @@ public class ServerEditorDialog extends JDialog {
       return;
     }
 
-    // Only paint success when the relevant proxy fields are enabled (per-server override + proxy enabled).
+    // Only paint success when the relevant proxy fields are enabled (per-server override + proxy
+    // enabled).
     if (!proxyHostField.isEnabled() || !proxyPortField.isEnabled()) return;
 
     // If the proxy fields have an error/warning outline, don't overwrite it.
     setSuccess(proxyHostField, true);
     setSuccess(proxyPortField, true);
 
-    // Timeouts are part of the test config too; mark them success if user entered valid values or left blank.
-    boolean ctoOk = trim(proxyConnectTimeoutMsField.getText()).isEmpty() || isPositiveLong(proxyConnectTimeoutMsField.getText());
-    boolean rtoOk = trim(proxyReadTimeoutMsField.getText()).isEmpty() || isPositiveLong(proxyReadTimeoutMsField.getText());
+    // Timeouts are part of the test config too; mark them success if user entered valid values or
+    // left blank.
+    boolean ctoOk =
+        trim(proxyConnectTimeoutMsField.getText()).isEmpty()
+            || isPositiveLong(proxyConnectTimeoutMsField.getText());
+    boolean rtoOk =
+        trim(proxyReadTimeoutMsField.getText()).isEmpty()
+            || isPositiveLong(proxyReadTimeoutMsField.getText());
     setSuccess(proxyConnectTimeoutMsField, ctoOk);
     setSuccess(proxyReadTimeoutMsField, rtoOk);
   }
@@ -984,11 +1037,21 @@ public class ServerEditorDialog extends JDialog {
       this.onChange = onChange;
     }
 
-    @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onChange.run(); }
-    @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { onChange.run(); }
-    @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { onChange.run(); }
-  }
+    @Override
+    public void insertUpdate(javax.swing.event.DocumentEvent e) {
+      onChange.run();
+    }
 
+    @Override
+    public void removeUpdate(javax.swing.event.DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void changedUpdate(javax.swing.event.DocumentEvent e) {
+      onChange.run();
+    }
+  }
 
   private void maybeAdjustPortForTls() {
     if (!portAuto) return;
@@ -1001,10 +1064,8 @@ public class ServerEditorDialog extends JDialog {
       result = Optional.of(server);
       dispose();
     } catch (IllegalArgumentException ex) {
-      JOptionPane.showMessageDialog(this,
-          ex.getMessage(),
-          "Invalid server configuration",
-          JOptionPane.ERROR_MESSAGE);
+      JOptionPane.showMessageDialog(
+          this, ex.getMessage(), "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
     }
   }
 
@@ -1038,22 +1099,25 @@ public class ServerEditorDialog extends JDialog {
     IrcProperties.Server.Sasl sasl;
     if (saslEnabledBox.isSelected()) {
       String u = trim(saslUserField.getText());
-      // JPasswordField stores secret as a char[]. Convert only when building the immutable config object.
+      // JPasswordField stores secret as a char[]. Convert only when building the immutable config
+      // object.
       String p = new String(saslPassField.getPassword());
       String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
 
       String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
       boolean hasSecret = !p.isBlank();
-      boolean needsUser = switch (mechUpper) {
-        case "EXTERNAL" -> false;
-        case "AUTO" -> hasSecret;
-        default -> true;
-      };
-      boolean needsSecret = switch (mechUpper) {
-        case "EXTERNAL" -> false;
-        case "AUTO" -> false;
-        default -> true;
-      };
+      boolean needsUser =
+          switch (mechUpper) {
+            case "EXTERNAL" -> false;
+            case "AUTO" -> hasSecret;
+            default -> true;
+          };
+      boolean needsSecret =
+          switch (mechUpper) {
+            case "EXTERNAL" -> false;
+            case "AUTO" -> false;
+            default -> true;
+          };
 
       if (needsUser && u.isEmpty()) {
         throw new IllegalArgumentException("SASL username is required for mechanism " + mechUpper);
@@ -1106,7 +1170,8 @@ public class ServerEditorDialog extends JDialog {
         boolean remoteDns = proxyRemoteDnsBox.isSelected();
         String user = trim(proxyUserField.getText());
         String pass = new String(proxyPassField.getPassword());
-        proxyOverride = new IrcProperties.Proxy(true, pHost, pPort, user, pass, remoteDns, connectMs, readMs);
+        proxyOverride =
+            new IrcProperties.Proxy(true, pHost, pPort, user, pass, remoteDns, connectMs, readMs);
       }
     }
 
@@ -1122,8 +1187,7 @@ public class ServerEditorDialog extends JDialog {
         sasl,
         autoJoin,
         perform,
-        proxyOverride
-    );
+        proxyOverride);
   }
 
   private static void applyFieldStyle(JTextField f, String placeholder) {
@@ -1153,7 +1217,8 @@ public class ServerEditorDialog extends JDialog {
     return g;
   }
 
-  private static void addRow(JPanel panel, GridBagConstraints g, int row, String label, java.awt.Component field) {
+  private static void addRow(
+      JPanel panel, GridBagConstraints g, int row, String label, java.awt.Component field) {
     g.gridy = row;
     g.gridx = 0;
     g.weightx = 0.0;

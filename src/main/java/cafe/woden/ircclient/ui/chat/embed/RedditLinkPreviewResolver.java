@@ -46,7 +46,10 @@ final class RedditLinkPreviewResolver implements LinkPreviewResolver {
       if (post == null) return null;
 
       String title = TinyJson.findString(post, "title");
-      String subreddit = firstNonBlank(TinyJson.findString(post, "subreddit_name_prefixed"), TinyJson.findString(post, "subreddit"));
+      String subreddit =
+          firstNonBlank(
+              TinyJson.findString(post, "subreddit_name_prefixed"),
+              TinyJson.findString(post, "subreddit"));
       if (subreddit != null && !subreddit.startsWith("r/")) subreddit = "r/" + subreddit;
       String author = TinyJson.findString(post, "author");
       String selfText = TinyJson.findString(post, "selftext");
@@ -125,7 +128,11 @@ final class RedditLinkPreviewResolver implements LinkPreviewResolver {
     if (looksLikeHttpUrl(thumb)) {
       // Reddit uses sentinel values here sometimes.
       String lower = thumb.toLowerCase(Locale.ROOT);
-      if (!(lower.equals("self") || lower.equals("default") || lower.equals("nsfw") || lower.equals("spoiler") || lower.equals("image"))) {
+      if (!(lower.equals("self")
+          || lower.equals("default")
+          || lower.equals("nsfw")
+          || lower.equals("spoiler")
+          || lower.equals("image"))) {
         return thumb;
       }
     }

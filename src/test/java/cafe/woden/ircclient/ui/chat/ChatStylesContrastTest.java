@@ -19,14 +19,14 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 class ChatStylesContrastTest {
 
   private static final String[] SNAPSHOT_KEYS = {
-      "TextPane.background",
-      "TextPane.foreground",
-      "Label.foreground",
-      "Label.disabledForeground",
-      "Component.linkColor",
-      "TextPane.selectionBackground",
-      "Component.warningColor",
-      "Component.errorColor"
+    "TextPane.background",
+    "TextPane.foreground",
+    "Label.foreground",
+    "Label.disabledForeground",
+    "Component.linkColor",
+    "TextPane.selectionBackground",
+    "Component.warningColor",
+    "Component.errorColor"
   };
 
   private Map<String, Object> snapshot;

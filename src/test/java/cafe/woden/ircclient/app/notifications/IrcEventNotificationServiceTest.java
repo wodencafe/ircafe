@@ -100,12 +100,7 @@ class IrcEventNotificationServiceTest {
               org.mockito.ArgumentMatchers.anyBoolean(),
               org.mockito.ArgumentMatchers.isNull());
       verify(store, times(1))
-          .recordIrcEvent(
-              eq("libera"),
-              eq("status"),
-              eq("alice"),
-              anyString(),
-              anyString());
+          .recordIrcEvent(eq("libera"), eq("status"), eq("alice"), anyString(), anyString());
     } finally {
       exec.shutdownNow();
     }

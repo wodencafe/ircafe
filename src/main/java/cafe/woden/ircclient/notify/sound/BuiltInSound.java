@@ -9,7 +9,6 @@ import java.util.Comparator;
  * <p>Phase 2: a single global sound is selected. Per-notification overrides come later.
  */
 public enum BuiltInSound {
-
   NOTIF_1("Notification 1", "sounds/notification/notif1.mp3"),
   NOTIF_2("Notification 2", "sounds/notification/notif2.mp3"),
   NOTIF_3("Notification 3", "sounds/notification/notif3.mp3"),
@@ -58,17 +57,24 @@ public enum BuiltInSound {
   SOMEBODY_DEOPPED("Somebody De-Opped", "sounds/voice/somebody_deopped.mp3"),
   SOMEBODY_BANNED("Somebody Banned", "sounds/voice/somebody_banned.mp3"),
   SOMEBODY_OPPED("Somebody Opped", "sounds/voice/somebody_opped.mp3"),
-  SOMEBODY_GAVE_SOMEBODY_VOICE("Somebody Gave Voice", "sounds/voice/somebody_gave_somebody_voice.mp3"),
+  SOMEBODY_GAVE_SOMEBODY_VOICE(
+      "Somebody Gave Voice", "sounds/voice/somebody_gave_somebody_voice.mp3"),
   SOMEONE_ELSE_TOOK_VOICE("Someone Else Took Voice", "sounds/voice/someone_else_took_voice.mp3"),
   SOMEBODY_HALF_OPPED("Somebody Half-Opped", "sounds/voice/somebody_half_opped.mp3"),
   SOMEBODY_LOST_HALFOPS("Somebody Lost Half-Ops", "sounds/voice/somebody_lost_halfops.mp3"),
   SOMEBODY_NICK_CHANGED("Somebody Nick Changed", "sounds/voice/somebody_nick_changed.mp3"),
-  SOMEBODY_SAID_SOMETHING_1("Somebody Said Something", "sounds/voice/somebody_said_something_1.mp3"),
-  SOMEBODY_SAID_SOMETHING_2("Somebody Said Something (Alt 2)", "sounds/voice/somebody_said_something_2.mp3"),
-  SOMEBODY_SAID_SOMETHING_3("Somebody Said Something (Alt 3)", "sounds/voice/somebody_said_something_3.mp3"),
-  SOMEBODY_SAID_SOMETHING_4("Somebody Said Something (Alt 4)", "sounds/voice/somebody_said_something_4.mp3"),
-  SOMEBODY_SAID_SOMETHING_5("Somebody Said Something (Alt 5)", "sounds/voice/somebody_said_something_5.mp3"),
-  SOMEBODY_SAID_SOMETHING_6("Somebody Said Something (Alt 6)", "sounds/voice/somebody_said_something_6.mp3"),
+  SOMEBODY_SAID_SOMETHING_1(
+      "Somebody Said Something", "sounds/voice/somebody_said_something_1.mp3"),
+  SOMEBODY_SAID_SOMETHING_2(
+      "Somebody Said Something (Alt 2)", "sounds/voice/somebody_said_something_2.mp3"),
+  SOMEBODY_SAID_SOMETHING_3(
+      "Somebody Said Something (Alt 3)", "sounds/voice/somebody_said_something_3.mp3"),
+  SOMEBODY_SAID_SOMETHING_4(
+      "Somebody Said Something (Alt 4)", "sounds/voice/somebody_said_something_4.mp3"),
+  SOMEBODY_SAID_SOMETHING_5(
+      "Somebody Said Something (Alt 5)", "sounds/voice/somebody_said_something_5.mp3"),
+  SOMEBODY_SAID_SOMETHING_6(
+      "Somebody Said Something (Alt 6)", "sounds/voice/somebody_said_something_6.mp3"),
   CHANNEL_INVITE_1("Channel Invite", "sounds/voice/channel_invite_1.mp3"),
   WALLOPS_1("Wallops", "sounds/voice/wallops_1.mp3"),
   NETSPLIT_1("Netsplit", "sounds/voice/netsplit_1.mp3"),
@@ -104,7 +110,8 @@ public enum BuiltInSound {
   UNKNOWN_EVENT_1("Unknown Event 1", "sounds/voice/unknown_event_1.mp3"),
   UNKNOWN_EVENT_2("Unknown Event 2", "sounds/voice/unknown_event_2.mp3"),
   UNKNOWN_EVENT_3("Unknown Event 3", "sounds/voice/unknown_event_3.mp3"),
-  SOMETHING_SOMETHING_IRCAFE("Something Something IRCafe", "sounds/voice/something_something_ircafe.mp3"),
+  SOMETHING_SOMETHING_IRCAFE(
+      "Something Something IRCafe", "sounds/voice/something_something_ircafe.mp3"),
   WTF("WTF", "sounds/voice/wtf.mp3"),
   OH_SHIT_WTF_1("Oh Shit WTF 1", "sounds/voice/oh_shit_wtf_1.mp3"),
   OH_SHIT_WTF_2("Oh Shit WTF 2", "sounds/voice/oh_shit_wtf_2.mp3");

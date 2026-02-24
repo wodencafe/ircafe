@@ -17,10 +17,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * {@link UiPort} decorator that persists everything that reaches the transcript boundary.
- *
- */
+/** {@link UiPort} decorator that persists everything that reaches the transcript boundary. */
 public final class LoggingUiPortDecorator extends UiPortDecorator {
 
   private static final Logger log = LoggerFactory.getLogger(LoggingUiPortDecorator.class);
@@ -31,14 +28,11 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
   private final LogLineFactory factory;
   private final LogProperties props;
   private final Object dedupLock = new Object();
-  private final LinkedHashMap<LogDedupKey, Long> recentDedup = new LinkedHashMap<>(256, 0.75f, true);
+  private final LinkedHashMap<LogDedupKey, Long> recentDedup =
+      new LinkedHashMap<>(256, 0.75f, true);
 
   public LoggingUiPortDecorator(
-      UiPort delegate,
-      ChatLogWriter writer,
-      LogLineFactory factory,
-      LogProperties props
-  ) {
+      UiPort delegate, ChatLogWriter writer, LogLineFactory factory, LogProperties props) {
     super(delegate);
     this.writer = Objects.requireNonNull(writer, "writer");
     this.factory = Objects.requireNonNull(factory, "factory");
@@ -52,7 +46,8 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
   }
 
   @Override
-  public void appendChatAt(TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
+  public void appendChatAt(
+      TargetRef target, Instant at, String from, String text, boolean outgoingLocalEcho) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     tryLog(target, () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts));
     super.appendChatAt(target, at, from, text, outgoingLocalEcho);
@@ -66,10 +61,11 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String text,
       boolean outgoingLocalEcho,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(target, () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    tryLog(
+        target,
+        () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
     super.appendChatAt(target, at, from, text, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -82,10 +78,11 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       boolean outgoingLocalEcho,
       String messageId,
       Map<String, String> ircv3Tags,
-      String notificationRuleHighlightColor
-  ) {
+      String notificationRuleHighlightColor) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(target, () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    tryLog(
+        target,
+        () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
     super.appendChatAt(
         target,
         at,
@@ -105,12 +102,16 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
-    boolean resolved = super.resolvePendingOutgoingChat(target, pendingId, at, from, text, messageId, ircv3Tags);
+      Map<String, String> ircv3Tags) {
+    boolean resolved =
+        super.resolvePendingOutgoingChat(target, pendingId, at, from, text, messageId, ircv3Tags);
     if (resolved) {
       long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-      tryLog(target, () -> factory.resolvedOutgoingChatAt(target, from, text, ts, pendingId, messageId, ircv3Tags));
+      tryLog(
+          target,
+          () ->
+              factory.resolvedOutgoingChatAt(
+                  target, from, text, ts, pendingId, messageId, ircv3Tags));
     }
     return resolved;
   }
@@ -139,23 +140,25 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     if (Boolean.TRUE.equals(props.logSoftIgnoredLines())) {
       long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-      tryLog(target, () -> factory.softIgnoredSpoilerAt(target, from, text, ts, messageId, ircv3Tags));
+      tryLog(
+          target, () -> factory.softIgnoredSpoilerAt(target, from, text, ts, messageId, ircv3Tags));
     }
     super.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
   }
 
   @Override
-  public void appendAction(TargetRef target, String from, String action, boolean outgoingLocalEcho) {
+  public void appendAction(
+      TargetRef target, String from, String action, boolean outgoingLocalEcho) {
     tryLog(target, () -> factory.action(target, from, action, outgoingLocalEcho));
     super.appendAction(target, from, action, outgoingLocalEcho);
   }
 
   @Override
-  public void appendActionAt(TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
+  public void appendActionAt(
+      TargetRef target, Instant at, String from, String action, boolean outgoingLocalEcho) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     tryLog(target, () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts));
     super.appendActionAt(target, at, from, action, outgoingLocalEcho);
@@ -169,10 +172,11 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String action,
       boolean outgoingLocalEcho,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(target, () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    tryLog(
+        target,
+        () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
     super.appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -185,10 +189,11 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       boolean outgoingLocalEcho,
       String messageId,
       Map<String, String> ircv3Tags,
-      String notificationRuleHighlightColor
-  ) {
+      String notificationRuleHighlightColor) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
-    tryLog(target, () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    tryLog(
+        target,
+        () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
     super.appendActionAt(
         target,
         at,
@@ -226,8 +231,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     tryLog(target, () -> factory.noticeAt(target, from, text, ts, messageId, ircv3Tags));
     super.appendNoticeAt(target, at, from, text, messageId, ircv3Tags);
@@ -253,8 +257,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String from,
       String text,
       String messageId,
-      Map<String, String> ircv3Tags
-  ) {
+      Map<String, String> ircv3Tags) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     tryLog(target, () -> factory.statusAt(target, from, text, ts, messageId, ircv3Tags));
     super.appendStatusAt(target, at, from, text, messageId, ircv3Tags);
@@ -366,8 +369,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String fromNick,
       String text,
       boolean outgoingLocalEcho,
-      boolean softIgnored
-  ) {
+      boolean softIgnored) {
     static LogDedupKey from(LogLine line) {
       String sid = Objects.toString(line.serverId(), "").trim();
       String target = Objects.toString(line.target(), "").trim();

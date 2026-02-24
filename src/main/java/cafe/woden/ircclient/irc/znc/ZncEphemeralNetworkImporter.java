@@ -37,8 +37,7 @@ public class ZncEphemeralNetworkImporter {
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
       ZncAutoConnectStore autoConnect,
-      @Lazy IrcClientService irc
-  ) {
+      @Lazy IrcClientService irc) {
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.ephemeralServers = Objects.requireNonNull(ephemeralServers, "ephemeralServers");
     this.autoConnect = Objects.requireNonNull(autoConnect, "autoConnect");
@@ -56,7 +55,10 @@ public class ZncEphemeralNetworkImporter {
     String bouncerId = network.bouncerServerId();
     Optional<IrcProperties.Server> bouncerOpt = serverRegistry.find(bouncerId);
     if (bouncerOpt.isEmpty()) {
-      log.debug("[znc] Ignoring discovered network '{}' for unknown bouncer id '{}'", network.name(), bouncerId);
+      log.debug(
+          "[znc] Ignoring discovered network '{}' for unknown bouncer id '{}'",
+          network.name(),
+          bouncerId);
       return;
     }
 
@@ -72,7 +74,8 @@ public class ZncEphemeralNetworkImporter {
 
     Optional<IrcProperties.Server> existingOpt = ephemeralServers.find(server.id());
     boolean same = existingOpt.isPresent() && existingOpt.get().equals(server);
-    boolean sameOrigin = ephemeralServers.originOf(server.id()).map(o -> o.equals(bouncerId)).orElse(false);
+    boolean sameOrigin =
+        ephemeralServers.originOf(server.id()).map(o -> o.equals(bouncerId)).orElse(false);
     if (same && sameOrigin) return;
 
     ephemeralServers.upsert(server, bouncerId);
@@ -81,14 +84,16 @@ public class ZncEphemeralNetworkImporter {
     maybeAutoConnect(bouncerId, network.name(), server.id());
   }
 
-  /** Remove all ephemeral servers that were discovered from the given origin (bouncer control connection). */
+  /**
+   * Remove all ephemeral servers that were discovered from the given origin (bouncer control
+   * connection).
+   */
   public void onOriginDisconnected(String originServerId) {
     String origin = Objects.toString(originServerId, "").trim();
     if (origin.isEmpty()) return;
 
-    long count = ephemeralServers.entries().stream()
-        .filter(e -> origin.equals(e.originId()))
-        .count();
+    long count =
+        ephemeralServers.entries().stream().filter(e -> origin.equals(e.originId())).count();
     if (count == 0) return;
 
     ephemeralServers.removeByOrigin(origin);
@@ -107,28 +112,38 @@ public class ZncEphemeralNetworkImporter {
     if (!autoConnectQueued.add(sid)) return;
 
     try {
-      irc.connect(sid).subscribe(
-          () -> {},
-          err -> log.warn("[znc] Auto-connect failed for '{}' ({}): {}", networkName, sid, String.valueOf(err))
-      );
-      log.info("[znc] Auto-connect enabled for '{}' on '{}' -> connecting {}", networkName, bouncerId, sid);
+      irc.connect(sid)
+          .subscribe(
+              () -> {},
+              err ->
+                  log.warn(
+                      "[znc] Auto-connect failed for '{}' ({}): {}",
+                      networkName,
+                      sid,
+                      String.valueOf(err)));
+      log.info(
+          "[znc] Auto-connect enabled for '{}' on '{}' -> connecting {}",
+          networkName,
+          bouncerId,
+          sid);
     } catch (Exception e) {
       log.warn("[znc] Auto-connect threw for '{}' ({}): {}", networkName, sid, String.valueOf(e));
     }
   }
 
-  private static IrcProperties.Server buildEphemeralServer(IrcProperties.Server bouncer, ZncEphemeralNaming.Derived d) {
+  private static IrcProperties.Server buildEphemeralServer(
+      IrcProperties.Server bouncer, ZncEphemeralNaming.Derived d) {
     IrcProperties.Server.Sasl sasl = bouncer.sasl();
 
     // Always set the derived username variant (even if SASL is disabled) so later toggles
     // don't require re-importing.
-    IrcProperties.Server.Sasl updatedSasl = new IrcProperties.Server.Sasl(
-        sasl.enabled(),
-        d.loginUser(),
-        sasl.password(),
-        sasl.mechanism(),
-        sasl.disconnectOnFailure()
-    );
+    IrcProperties.Server.Sasl updatedSasl =
+        new IrcProperties.Server.Sasl(
+            sasl.enabled(),
+            d.loginUser(),
+            sasl.password(),
+            sasl.mechanism(),
+            sasl.disconnectOnFailure());
 
     return new IrcProperties.Server(
         d.serverId(),
@@ -142,7 +157,6 @@ public class ZncEphemeralNetworkImporter {
         updatedSasl,
         List.of(),
         List.of(),
-        bouncer.proxy()
-    );
+        bouncer.proxy());
   }
 }

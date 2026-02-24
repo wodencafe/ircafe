@@ -1,8 +1,6 @@
 package cafe.woden.ircclient.ui.tray;
 
 import cafe.woden.ircclient.ui.icons.AppIcons;
-
-import javax.imageio.ImageIO;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
@@ -14,6 +12,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import javax.imageio.ImageIO;
 
 /**
  * Small programmatic tray icon.
@@ -23,8 +22,7 @@ import java.io.InputStream;
  */
 final class TrayIconFactory {
 
-  private TrayIconFactory() {
-  }
+  private TrayIconFactory() {}
 
   static Image createDefaultTrayImage() {
     int size = 16;
@@ -32,7 +30,8 @@ final class TrayIconFactory {
     Graphics2D g = img.createGraphics();
     try {
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+      g.setRenderingHint(
+          RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
       // Background badge
       g.setColor(new Color(0x5A3CFF));

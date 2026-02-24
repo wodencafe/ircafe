@@ -1,13 +1,15 @@
 package cafe.woden.ircclient.logging.model;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /**
  * A single persisted transcript line.
  *
- * <p>This is intentionally UI-facing, not protocol-facing: it represents what IRCafe
- * chose to render for a given target at a point in time.
+ * <p>This is intentionally UI-facing, not protocol-facing: it represents what IRCafe chose to
+ * render for a given target at a point in time.
  */
+@ValueObject
 public record LogLine(
     String serverId,
     String target,
@@ -18,8 +20,7 @@ public record LogLine(
     String text,
     boolean outgoingLocalEcho,
     boolean softIgnored,
-    String metaJson
-) {
+    String metaJson) {
   public LogLine {
     Objects.requireNonNull(serverId, "serverId");
     Objects.requireNonNull(target, "target");

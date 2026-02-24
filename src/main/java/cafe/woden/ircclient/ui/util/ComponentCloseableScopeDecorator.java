@@ -12,15 +12,16 @@ public final class ComponentCloseableScopeDecorator {
     CloseableScope scope = new CloseableScope();
     if (component == null) return scope;
 
-    HierarchyListener listener = new HierarchyListener() {
-      @Override
-      public void hierarchyChanged(HierarchyEvent e) {
-        if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
-        if (!component.isDisplayable()) {
-          scope.closeQuietly();
-        }
-      }
-    };
+    HierarchyListener listener =
+        new HierarchyListener() {
+          @Override
+          public void hierarchyChanged(HierarchyEvent e) {
+            if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
+            if (!component.isDisplayable()) {
+              scope.closeQuietly();
+            }
+          }
+        };
 
     component.addHierarchyListener(listener);
     scope.addCleanup(() -> component.removeHierarchyListener(listener));

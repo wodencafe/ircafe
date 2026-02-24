@@ -56,7 +56,10 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
       long d = dropped.incrementAndGet();
       // Don't spam logs; warn occasionally.
       if (d == 1 || d % 1000 == 0) {
-        log.warn("[ircafe] Chat log queue full ({} max). Dropping lines. Dropped so far: {}", MAX_QUEUE, d);
+        log.warn(
+            "[ircafe] Chat log queue full ({} max). Dropping lines. Dropped so far: {}",
+            MAX_QUEUE,
+            d);
       }
     }
   }
@@ -132,7 +135,8 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
     }
 
     if (writerThread.isAlive()) {
-      log.warn("[ircafe] Chat log writer did not stop within timeout; skipping final synchronous flush");
+      log.warn(
+          "[ircafe] Chat log writer did not stop within timeout; skipping final synchronous flush");
       return;
     }
 

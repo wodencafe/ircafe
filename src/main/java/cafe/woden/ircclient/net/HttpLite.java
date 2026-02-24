@@ -2,7 +2,6 @@ package cafe.woden.ircclient.net;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URI;
@@ -20,15 +19,14 @@ import java.util.zip.GZIPInputStream;
 /**
  * Very small HTTP helper for GET requests that works with SOCKS proxies.
  *
- * <p>We intentionally use {@link HttpURLConnection} here (instead of {@code java.net.http.HttpClient})
- * because the JDK HttpClient does not support SOCKS proxies.
+ * <p>We intentionally use {@link HttpURLConnection} here (instead of {@code
+ * java.net.http.HttpClient}) because the JDK HttpClient does not support SOCKS proxies.
  */
 public final class HttpLite {
 
   public static final int DEFAULT_MAX_REDIRECTS = 5;
 
-  private HttpLite() {
-  }
+  private HttpLite() {}
 
   public static final class Headers {
     private final Map<String, List<String>> raw;
@@ -74,9 +72,10 @@ public final class HttpLite {
       Map<String, String> requestHeaders,
       Proxy proxy,
       int connectTimeoutMs,
-      int readTimeoutMs
-  ) throws IOException {
-    return getStream(uri, requestHeaders, proxy, connectTimeoutMs, readTimeoutMs, DEFAULT_MAX_REDIRECTS);
+      int readTimeoutMs)
+      throws IOException {
+    return getStream(
+        uri, requestHeaders, proxy, connectTimeoutMs, readTimeoutMs, DEFAULT_MAX_REDIRECTS);
   }
 
   public static Response<InputStream> getStream(
@@ -85,8 +84,8 @@ public final class HttpLite {
       Proxy proxy,
       int connectTimeoutMs,
       int readTimeoutMs,
-      int maxRedirects
-  ) throws IOException {
+      int maxRedirects)
+      throws IOException {
     URI current = uri;
     for (int i = 0; i <= maxRedirects; i++) {
       HttpURLConnection conn = open(current, proxy, connectTimeoutMs, readTimeoutMs);
@@ -108,7 +107,8 @@ public final class HttpLite {
         // Ensure we don't leak the connection.
         closeQuietly(conn);
         if (loc == null || loc.isBlank()) {
-          return new Response<>(code, new Headers(conn.getHeaderFields()), InputStream.nullInputStream());
+          return new Response<>(
+              code, new Headers(conn.getHeaderFields()), InputStream.nullInputStream());
         }
         current = current.resolve(loc);
         continue;
@@ -133,9 +133,10 @@ public final class HttpLite {
       Map<String, String> requestHeaders,
       Proxy proxy,
       int connectTimeoutMs,
-      int readTimeoutMs
-  ) throws IOException {
-    Response<InputStream> r = getStream(uri, requestHeaders, proxy, connectTimeoutMs, readTimeoutMs);
+      int readTimeoutMs)
+      throws IOException {
+    Response<InputStream> r =
+        getStream(uri, requestHeaders, proxy, connectTimeoutMs, readTimeoutMs);
     byte[] bytes;
     try (InputStream in = r.body()) {
       bytes = in.readAllBytes();
@@ -165,12 +166,17 @@ public final class HttpLite {
     return code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
   }
 
-  private static HttpURLConnection open(URI uri, Proxy proxy, int connectTimeoutMs, int readTimeoutMs) throws IOException {
+  private static HttpURLConnection open(
+      URI uri, Proxy proxy, int connectTimeoutMs, int readTimeoutMs) throws IOException {
     URL url = uri.toURL();
-    URLConnection uc = (proxy == null || proxy == Proxy.NO_PROXY) ? url.openConnection() : url.openConnection(proxy);
+    URLConnection uc =
+        (proxy == null || proxy == Proxy.NO_PROXY)
+            ? url.openConnection()
+            : url.openConnection(proxy);
     // If the user has enabled \"trust all certificates\", apply the relaxed TLS settings
     // for HTTPS connections (used by link previews, image embeds, etc).
-    if (NetTlsContext.trustAllCertificates() && uc instanceof javax.net.ssl.HttpsURLConnection https) {
+    if (NetTlsContext.trustAllCertificates()
+        && uc instanceof javax.net.ssl.HttpsURLConnection https) {
       https.setSSLSocketFactory(NetTlsContext.sslSocketFactory());
       https.setHostnameVerifier(NetTlsContext.hostnameVerifier());
     }

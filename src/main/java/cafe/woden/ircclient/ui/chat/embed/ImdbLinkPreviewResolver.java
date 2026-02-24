@@ -7,11 +7,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
 
@@ -20,12 +20,8 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   // JSON-LD "@type" values we treat as a title page.
-  private static final List<String> SUPPORTED_TYPES = List.of(
-      "Movie",
-      "TVSeries",
-      "TVEpisode",
-      "VideoGame"
-  );
+  private static final List<String> SUPPORTED_TYPES =
+      List.of("Movie", "TVSeries", "TVEpisode", "VideoGame");
 
   @Override
   public LinkPreview tryResolve(URI uri, String originalUrl, PreviewHttp http) {
@@ -38,11 +34,11 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
 
       // IMDb increasingly serves anti-bot/JS interstitial pages to non-browser clients.
       // Use a browser-ish UA to improve our odds of getting the real HTML with JSON-LD.
-      var resp = http.getString(
-          target,
-          "text/html,application/xhtml+xml",
-          PreviewHttp.headers("User-Agent", PreviewHttp.BROWSER_USER_AGENT)
-      );
+      var resp =
+          http.getString(
+              target,
+              "text/html,application/xhtml+xml",
+              PreviewHttp.headers("User-Agent", PreviewHttp.BROWSER_USER_AGENT));
       int status = resp.statusCode();
       if (status < 200 || status >= 300) {
         log.debug("IMDb preview: HTTP {} for {}", status, target);
@@ -54,7 +50,8 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
 
       if (looksLikeBotOrJsInterstitial(html)) {
         String ct = PreviewHttp.header(resp, "content-type").orElse("");
-        log.info("IMDb preview: blocked by bot/JS interstitial for {} (content-type: {})", target, ct);
+        log.info(
+            "IMDb preview: blocked by bot/JS interstitial for {} (content-type: {})", target, ct);
         return null;
       }
 
@@ -95,15 +92,17 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
         imageUrl = normalizeImageUrl(target, firstImageUrl(titleNode.get("thumbnailUrl")));
       }
       if (imageUrl == null) {
-        // Fallback to OG/Twitter images if the JSON-LD doesn't include an image (or is shaped oddly).
-        imageUrl = normalizeImageUrl(target,
-            firstNonBlank(
-                metaImage(doc, "meta[property=og:image]"),
-                metaImage(doc, "meta[property=og:image:url]"),
-                metaImage(doc, "meta[property=og:image:secure_url]"),
-                metaImage(doc, "meta[name=twitter:image]"),
-                metaImage(doc, "meta[property=twitter:image]")
-            ));
+        // Fallback to OG/Twitter images if the JSON-LD doesn't include an image (or is shaped
+        // oddly).
+        imageUrl =
+            normalizeImageUrl(
+                target,
+                firstNonBlank(
+                    metaImage(doc, "meta[property=og:image]"),
+                    metaImage(doc, "meta[property=og:image:url]"),
+                    metaImage(doc, "meta[property=og:image:secure_url]"),
+                    metaImage(doc, "meta[name=twitter:image]"),
+                    metaImage(doc, "meta[property=twitter:image]")));
       }
 
       if (imageUrl == null || imageUrl.isBlank()) {
@@ -114,12 +113,13 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
         imageUrl = ImdbPreviewUtil.maybeSizeAmazonPosterUrl(imageUrl, 256);
       }
 
-      String details = joinDot(" • ",
-          year,
-          blankToNull(contentRating),
-          runtime,
-          (score != null && !score.isBlank()) ? ("IMDb " + score.strip() + "/10") : null
-      );
+      String details =
+          joinDot(
+              " • ",
+              year,
+              blankToNull(contentRating),
+              runtime,
+              (score != null && !score.isBlank()) ? ("IMDb " + score.strip() + "/10") : null);
 
       StringBuilder desc = new StringBuilder();
       if (details != null && !details.isBlank()) {
@@ -145,8 +145,7 @@ final class ImdbLinkPreviewResolver implements LinkPreviewResolver {
           finalDesc,
           "IMDb",
           imageUrl,
-          imageUrl != null && !imageUrl.isBlank() ? 1 : 0
-      );
+          imageUrl != null && !imageUrl.isBlank() ? 1 : 0);
     } catch (Exception ex) {
       // Keep resolver best-effort; log so we can diagnose broken pages/CDN blocks.
       log.warn("IMDb preview resolve failed for {}: {}", originalUrl, ex.toString());

@@ -79,7 +79,8 @@ public class MonitorListService {
     int removed = 0;
     synchronized (list) {
       for (String nick : normalized) {
-        boolean changed = list.removeIf(existing -> existing != null && existing.equalsIgnoreCase(nick));
+        boolean changed =
+            list.removeIf(existing -> existing != null && existing.equalsIgnoreCase(nick));
         if (changed) removed++;
       }
       if (removed <= 0) return 0;
@@ -101,7 +102,8 @@ public class MonitorListService {
       list.addAll(normalized);
     }
     runtimeConfig.replaceMonitorNicks(sid, normalized);
-    changes.onNext(new Change(sid, normalized.isEmpty() ? ChangeKind.CLEARED : ChangeKind.REPLACED));
+    changes.onNext(
+        new Change(sid, normalized.isEmpty() ? ChangeKind.CLEARED : ChangeKind.REPLACED));
     return normalized.size();
   }
 

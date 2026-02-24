@@ -14,14 +14,9 @@ class Ircv3MultilineAccumulatorTest {
   void nonBatchLinePassesThroughUnchanged() {
     Ircv3MultilineAccumulator acc = new Ircv3MultilineAccumulator();
 
-    Ircv3MultilineAccumulator.FoldResult out = acc.fold(
-        "PRIVMSG",
-        "alice",
-        "#ircafe",
-        Instant.EPOCH,
-        "hello",
-        "m1",
-        Map.of("msgid", "m1"));
+    Ircv3MultilineAccumulator.FoldResult out =
+        acc.fold(
+            "PRIVMSG", "alice", "#ircafe", Instant.EPOCH, "hello", "m1", Map.of("msgid", "m1"));
 
     assertFalse(out.suppressed());
     assertEquals("hello", out.text());
@@ -33,24 +28,26 @@ class Ircv3MultilineAccumulatorTest {
   void concatChunksAreBufferedUntilFinalLine() {
     Ircv3MultilineAccumulator acc = new Ircv3MultilineAccumulator();
 
-    Ircv3MultilineAccumulator.FoldResult first = acc.fold(
-        "PRIVMSG",
-        "alice",
-        "#ircafe",
-        Instant.EPOCH,
-        "line one",
-        "m1",
-        Map.of("batch", "b1", "draft/multiline-concat", "1", "msgid", "m1"));
+    Ircv3MultilineAccumulator.FoldResult first =
+        acc.fold(
+            "PRIVMSG",
+            "alice",
+            "#ircafe",
+            Instant.EPOCH,
+            "line one",
+            "m1",
+            Map.of("batch", "b1", "draft/multiline-concat", "1", "msgid", "m1"));
     assertTrue(first.suppressed());
 
-    Ircv3MultilineAccumulator.FoldResult second = acc.fold(
-        "PRIVMSG",
-        "alice",
-        "#ircafe",
-        Instant.EPOCH.plusSeconds(1),
-        "line two",
-        "",
-        Map.of("batch", "b1"));
+    Ircv3MultilineAccumulator.FoldResult second =
+        acc.fold(
+            "PRIVMSG",
+            "alice",
+            "#ircafe",
+            Instant.EPOCH.plusSeconds(1),
+            "line two",
+            "",
+            Map.of("batch", "b1"));
 
     assertFalse(second.suppressed());
     assertEquals("line one\nline two", second.text());
@@ -64,14 +61,15 @@ class Ircv3MultilineAccumulatorTest {
   void batchTaggedNonConcatWithoutBufferPassesThrough() {
     Ircv3MultilineAccumulator acc = new Ircv3MultilineAccumulator();
 
-    Ircv3MultilineAccumulator.FoldResult out = acc.fold(
-        "NOTICE",
-        "server",
-        "status",
-        Instant.EPOCH,
-        "regular batched line",
-        "m2",
-        Map.of("batch", "history-1", "msgid", "m2"));
+    Ircv3MultilineAccumulator.FoldResult out =
+        acc.fold(
+            "NOTICE",
+            "server",
+            "status",
+            Instant.EPOCH,
+            "regular batched line",
+            "m2",
+            Map.of("batch", "history-1", "msgid", "m2"));
 
     assertFalse(out.suppressed());
     assertEquals("regular batched line", out.text());

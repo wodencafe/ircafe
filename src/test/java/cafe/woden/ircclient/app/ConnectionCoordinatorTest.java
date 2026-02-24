@@ -10,10 +10,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
@@ -25,7 +25,8 @@ import org.junit.jupiter.api.Test;
 
 class ConnectionCoordinatorTest {
 
-  private static final LogProperties LOG_PROPS = new LogProperties(false, true, true, true, true, 0, null);
+  private static final LogProperties LOG_PROPS =
+      new LogProperties(false, true, true, true, true, 0, null);
 
   @Test
   void queuedConnectDuringDisconnectReconnectsAfterDisconnectedEvent() {
@@ -59,9 +60,7 @@ class ConnectionCoordinatorTest {
     verify(irc, times(1)).disconnect("libera", null);
 
     coordinator.handleConnectivityEvent(
-        "libera",
-        new IrcEvent.Disconnected(Instant.now(), "client requested disconnect"),
-        null);
+        "libera", new IrcEvent.Disconnected(Instant.now(), "client requested disconnect"), null);
 
     verify(irc, times(2)).connect("libera");
   }
@@ -160,11 +159,10 @@ class ConnectionCoordinatorTest {
     coordinator.connectOne("libera");
 
     coordinator.handleConnectivityEvent(
-        "libera",
-        new IrcEvent.Reconnecting(Instant.now(), 1, 5_000L, "Ping timeout"),
-        null);
+        "libera", new IrcEvent.Reconnecting(Instant.now(), 1, 5_000L, "Ping timeout"), null);
 
-    verify(ui, atLeastOnce()).setServerConnectionDiagnostics(eq("libera"), eq("Ping timeout"), any());
+    verify(ui, atLeastOnce())
+        .setServerConnectionDiagnostics(eq("libera"), eq("Ping timeout"), any());
   }
 
   @Test
@@ -191,9 +189,7 @@ class ConnectionCoordinatorTest {
             trayNotificationService);
 
     coordinator.handleConnectivityEvent(
-        "libera",
-        new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "alice-me"),
-        null);
+        "libera", new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "alice-me"), null);
 
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));

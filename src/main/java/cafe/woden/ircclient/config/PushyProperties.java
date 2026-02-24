@@ -17,8 +17,7 @@ public record PushyProperties(
     String topic,
     String titlePrefix,
     Integer connectTimeoutSeconds,
-    Integer readTimeoutSeconds
-) {
+    Integer readTimeoutSeconds) {
 
   public PushyProperties {
     if (enabled == null) enabled = false;
@@ -43,8 +42,7 @@ public record PushyProperties(
   public boolean configured() {
     if (!Boolean.TRUE.equals(enabled)) return false;
     if (apiKey == null || apiKey.isBlank()) return false;
-    return (deviceToken != null && !deviceToken.isBlank())
-        || (topic != null && !topic.isBlank());
+    return (deviceToken != null && !deviceToken.isBlank()) || (topic != null && !topic.isBlank());
   }
 
   private static String trimToNull(String raw) {

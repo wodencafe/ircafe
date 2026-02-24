@@ -24,8 +24,7 @@ public record InterceptorDefinition(
     String actionScriptPath,
     String actionScriptArgs,
     String actionScriptWorkingDirectory,
-    List<InterceptorRule> rules
-) {
+    List<InterceptorRule> rules) {
   public InterceptorDefinition {
     id = norm(id);
     name = norm(name);
@@ -49,7 +48,8 @@ public record InterceptorDefinition(
 
     if (actionScriptEnabled && actionScriptPath.isBlank()) actionScriptEnabled = false;
 
-    rules = rules == null ? List.of() : List.copyOf(rules.stream().filter(Objects::nonNull).toList());
+    rules =
+        rules == null ? List.of() : List.copyOf(rules.stream().filter(Objects::nonNull).toList());
   }
 
   /** Blank scope means this interceptor can match events from any server. */

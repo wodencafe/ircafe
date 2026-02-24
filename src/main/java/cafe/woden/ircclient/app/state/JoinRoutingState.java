@@ -9,13 +9,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
 /**
- * Remembers where the user initiated a {@code /join} so that join-failure numerics
- * (e.g. 471-477) can be surfaced in the correct UI buffer.
+ * Remembers where the user initiated a {@code /join} so that join-failure numerics (e.g. 471-477)
+ * can be surfaced in the correct UI buffer.
  */
 @Component
 public class JoinRoutingState {
 
   private record Key(String serverId, String channelLower) {}
+
   private record RecentTarget(TargetRef target, Instant at) {}
 
   private final ConcurrentHashMap<Key, RecentTarget> recentJoinTargets = new ConcurrentHashMap<>();

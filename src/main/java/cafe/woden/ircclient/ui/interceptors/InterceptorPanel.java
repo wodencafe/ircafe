@@ -12,10 +12,10 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
-import java.awt.Color;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Font;
 import java.awt.Insets;
 import java.awt.Window;
@@ -78,9 +78,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     InterceptorRuleMode.REGEX
   };
   private static final InterceptorRuleMode[] RULE_DIMENSION_MODES = {
-    InterceptorRuleMode.LIKE,
-    InterceptorRuleMode.GLOB,
-    InterceptorRuleMode.REGEX
+    InterceptorRuleMode.LIKE, InterceptorRuleMode.GLOB, InterceptorRuleMode.REGEX
   };
   private static final InterceptorRuleMode[] RULE_DIMENSION_MODES_WITH_ANY = {
     InterceptorRuleMode.ALL,
@@ -102,11 +100,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JTextField interceptorName = new JTextField();
   private final JCheckBox enabled = new JCheckBox("Enabled");
   private final JComboBox<ServerScopeOption> serverScope =
-      new JComboBox<>(new ServerScopeOption[] {ServerScopeOption.THIS_SERVER, ServerScopeOption.ANY_SERVER});
+      new JComboBox<>(
+          new ServerScopeOption[] {ServerScopeOption.THIS_SERVER, ServerScopeOption.ANY_SERVER});
 
-  private final JComboBox<InterceptorRuleMode> includeMode = new JComboBox<>(CHANNEL_FILTER_MODES.clone());
+  private final JComboBox<InterceptorRuleMode> includeMode =
+      new JComboBox<>(CHANNEL_FILTER_MODES.clone());
   private final JTextField includes = new JTextField();
-  private final JComboBox<InterceptorRuleMode> excludeMode = new JComboBox<>(CHANNEL_FILTER_MODES.clone());
+  private final JComboBox<InterceptorRuleMode> excludeMode =
+      new JComboBox<>(CHANNEL_FILTER_MODES.clone());
   private final JTextField excludes = new JTextField();
 
   private final JCheckBox actionStatusBarEnabled = new JCheckBox("Status bar notice");
@@ -209,7 +210,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private void buildHeader() {
-    JPanel header = new JPanel(new MigLayout("insets 8 10 4 10,fillx,wrap 1", "[grow,fill]", "[]2[]"));
+    JPanel header =
+        new JPanel(new MigLayout("insets 8 10 4 10,fillx,wrap 1", "[grow,fill]", "[]2[]"));
     header.add(title, "growx");
     header.add(subtitle, "growx");
     add(header, BorderLayout.NORTH);
@@ -231,11 +233,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     excludes.setToolTipText(
         "Exclude channel patterns (comma/newline separated). Use mode All to exclude all channels or None to disable exclusion.");
     includes.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT,
-        "e.g. #general, #help, #staff-*");
-    excludes.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT,
-        "e.g. #offtopic, #bots");
+        FlatClientProperties.PLACEHOLDER_TEXT, "e.g. #general, #help, #staff-*");
+    excludes.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "e.g. #offtopic, #bots");
 
     serverScope.setRenderer(plainComboRenderer(serverScope));
     includeMode.setRenderer(modeComboRenderer(includeMode));
@@ -245,7 +244,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     actionSoundCustomPath.setToolTipText("Custom sound path relative to runtime config directory.");
     actionSoundCustomPath.setEditable(false);
     actionScriptPath.setToolTipText("Executable script/program path.");
-    actionScriptArgs.setToolTipText("Optional script arguments (quote-aware). Environment variables are injected.");
+    actionScriptArgs.setToolTipText(
+        "Optional script arguments (quote-aware). Environment variables are injected.");
     actionScriptWorkingDirectory.setToolTipText("Optional working directory for script execution.");
     configureActionButtons();
 
@@ -288,17 +288,12 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private JPanel buildDefinitionTab() {
     JPanel tab =
         new JPanel(
-            new MigLayout(
-                "insets 8 10 8 10,fillx,wrap 1,hidemode 3",
-                "[grow,fill]",
-                "[]8[]6[]"));
+            new MigLayout("insets 8 10 8 10,fillx,wrap 1,hidemode 3", "[grow,fill]", "[]8[]6[]"));
 
     JPanel identity =
         new JPanel(
             new MigLayout(
-                "insets 8,fillx,wrap 4,hidemode 3",
-                "[right][grow,fill]16[right][pref!]",
-                "[]6[]"));
+                "insets 8,fillx,wrap 4,hidemode 3", "[right][grow,fill]16[right][pref!]", "[]6[]"));
     identity.setBorder(BorderFactory.createTitledBorder("Interceptor"));
     identity.add(new JLabel("Name:"));
     identity.add(interceptorName, "growx");
@@ -310,9 +305,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JPanel channels =
         new JPanel(
             new MigLayout(
-                "insets 8,fillx,wrap 3,hidemode 3",
-                "[right][pref!][grow,fill]",
-                "[]6[]6[]"));
+                "insets 8,fillx,wrap 3,hidemode 3", "[right][pref!][grow,fill]", "[]6[]6[]"));
     channels.setBorder(BorderFactory.createTitledBorder("Channel Filtering"));
     channels.add(new JLabel("Include:"));
     channels.add(includeMode, "w 78!");
@@ -351,17 +344,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private JPanel buildActionsTab() {
     JPanel tab =
         new JPanel(
-            new MigLayout(
-                "insets 8 10 8 10,fillx,wrap 1,hidemode 3",
-                "[grow,fill]",
-                "[]8[]8[]"));
+            new MigLayout("insets 8 10 8 10,fillx,wrap 1,hidemode 3", "[grow,fill]", "[]8[]8[]"));
 
     JPanel notifications =
         new JPanel(
-            new MigLayout(
-                "insets 8,fillx,wrap 2,hidemode 3",
-                "[grow,fill][grow,fill]",
-                "[]"));
+            new MigLayout("insets 8,fillx,wrap 2,hidemode 3", "[grow,fill][grow,fill]", "[]"));
     notifications.setBorder(BorderFactory.createTitledBorder("Notifications"));
     notifications.add(actionStatusBarEnabled, "growx");
     notifications.add(actionToastEnabled, "growx");
@@ -386,9 +373,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JPanel script =
         new JPanel(
             new MigLayout(
-                "insets 8,fillx,wrap 3,hidemode 3",
-                "[pref!][grow,fill][pref!]",
-                "[]6[]6[]"));
+                "insets 8,fillx,wrap 3,hidemode 3", "[pref!][grow,fill][pref!]", "[]6[]6[]"));
     script.setBorder(BorderFactory.createTitledBorder("Script"));
     script.add(actionScriptEnabled, "span 3,wrap");
     script.add(new JLabel("Path:"));
@@ -522,7 +507,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     addRule.addActionListener(
         e -> {
-          InterceptorRule next = promptRuleDialog("Add Trigger Rule", defaultRule(rulesModel.getRowCount() + 1));
+          InterceptorRule next =
+              promptRuleDialog("Add Trigger Rule", defaultRule(rulesModel.getRowCount() + 1));
           if (next == null) return;
           int row = rulesModel.addRule(next);
           if (row >= 0) {
@@ -635,7 +621,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return new DefaultListCellRenderer() {
       @Override
       public java.awt.Component getListCellRendererComponent(
-          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+          javax.swing.JList<?> list,
+          Object value,
+          int index,
+          boolean isSelected,
+          boolean cellHasFocus) {
         super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
         if (value instanceof InterceptorRuleMode mode) {
           setText(modeLabel(mode));
@@ -650,7 +640,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return new DefaultListCellRenderer() {
       @Override
       public java.awt.Component getListCellRendererComponent(
-          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+          javax.swing.JList<?> list,
+          Object value,
+          int index,
+          boolean isSelected,
+          boolean cellHasFocus) {
         super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
         applyComboDisplayPalette(this, combo, index);
         return this;
@@ -662,7 +656,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return new DefaultListCellRenderer() {
       @Override
       public java.awt.Component getListCellRendererComponent(
-          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+          javax.swing.JList<?> list,
+          Object value,
+          int index,
+          boolean isSelected,
+          boolean cellHasFocus) {
         super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
         if (value instanceof InterceptorRuleMode mode) {
           setText(mode == InterceptorRuleMode.ALL ? "Any" : modeLabel(mode));
@@ -677,7 +675,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return new DefaultListCellRenderer() {
       @Override
       public java.awt.Component getListCellRendererComponent(
-          javax.swing.JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+          javax.swing.JList<?> list,
+          Object value,
+          int index,
+          boolean isSelected,
+          boolean cellHasFocus) {
         super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
         if (value instanceof BuiltInSound sound) {
           setText(sound.displayNameForUi());
@@ -689,17 +691,17 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private static void applyComboDisplayPalette(
-      DefaultListCellRenderer renderer,
-      JComboBox<?> combo,
-      int index) {
+      DefaultListCellRenderer renderer, JComboBox<?> combo, int index) {
     if (renderer == null || combo == null) return;
     renderer.setFont(combo.getFont());
     if (index >= 0) return;
 
-    Color foreground = combo.isEnabled()
-        ? firstUiColor("ComboBox.foreground", "TextField.foreground", "Label.foreground")
-        : firstUiColor("ComboBox.disabledText", "Label.disabledForeground", "Label.foreground");
-    Color background = firstUiColor("ComboBox.background", "TextField.background", "Panel.background");
+    Color foreground =
+        combo.isEnabled()
+            ? firstUiColor("ComboBox.foreground", "TextField.foreground", "Label.foreground")
+            : firstUiColor("ComboBox.disabledText", "Label.disabledForeground", "Label.foreground");
+    Color background =
+        firstUiColor("ComboBox.background", "TextField.background", "Panel.background");
     if (foreground != null) renderer.setForeground(foreground);
     if (background != null) renderer.setBackground(background);
   }
@@ -721,8 +723,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
       JComboBox<InterceptorRuleMode> nickMode,
       JTextField nickPattern,
       JComboBox<InterceptorRuleMode> hostmaskMode,
-      JTextField hostmaskPattern
-  ) {
+      JTextField hostmaskPattern) {
     Runnable refresh =
         () -> {
           setRuleDimensionFieldEnabled(messageMode, messagePattern);
@@ -736,9 +737,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private static void setRuleDimensionFieldEnabled(
-      JComboBox<InterceptorRuleMode> modeCombo,
-      JTextField field
-  ) {
+      JComboBox<InterceptorRuleMode> modeCombo, JTextField field) {
     if (field == null) return;
     InterceptorRuleMode mode = selectedMode(modeCombo, InterceptorRuleMode.LIKE);
     boolean enabled = mode != InterceptorRuleMode.ALL;
@@ -746,7 +745,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     field.setEditable(enabled);
   }
 
-  private static String effectiveRulePattern(JComboBox<InterceptorRuleMode> modeCombo, JTextField field) {
+  private static String effectiveRulePattern(
+      JComboBox<InterceptorRuleMode> modeCombo, JTextField field) {
     if (selectedMode(modeCombo, InterceptorRuleMode.LIKE) == InterceptorRuleMode.ALL) {
       return "";
     }
@@ -770,32 +770,31 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JCheckBox ruleEnabled = new JCheckBox("Enabled", base.enabled());
     JTextField ruleLabel = new JTextField(base.label());
     JCheckBox anyEventType =
-        new JCheckBox(RULE_ANY_EVENT_LABEL, Objects.toString(base.eventTypesCsv(), "").trim().isBlank());
-    LinkedHashMap<InterceptorEventType, JCheckBox> eventSelectors = buildRuleEventSelectors(base.eventTypesCsv());
+        new JCheckBox(
+            RULE_ANY_EVENT_LABEL, Objects.toString(base.eventTypesCsv(), "").trim().isBlank());
+    LinkedHashMap<InterceptorEventType, JCheckBox> eventSelectors =
+        buildRuleEventSelectors(base.eventTypesCsv());
 
-    JComboBox<InterceptorRuleMode> messageMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
+    JComboBox<InterceptorRuleMode> messageMode =
+        new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
     messageMode.setRenderer(ruleDimensionModeComboRenderer(messageMode));
     messageMode.setSelectedItem(base.messageMode());
     JTextField messagePattern = new JTextField(base.messagePattern());
-    messagePattern.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT,
-        "Message pattern");
+    messagePattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Message pattern");
 
-    JComboBox<InterceptorRuleMode> nickMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
+    JComboBox<InterceptorRuleMode> nickMode =
+        new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
     nickMode.setRenderer(ruleDimensionModeComboRenderer(nickMode));
     nickMode.setSelectedItem(base.nickMode());
     JTextField nickPattern = new JTextField(base.nickPattern());
-    nickPattern.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT,
-        "Nick pattern");
+    nickPattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Nick pattern");
 
-    JComboBox<InterceptorRuleMode> hostmaskMode = new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
+    JComboBox<InterceptorRuleMode> hostmaskMode =
+        new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
     hostmaskMode.setRenderer(ruleDimensionModeComboRenderer(hostmaskMode));
     hostmaskMode.setSelectedItem(base.hostmaskMode());
     JTextField hostmaskPattern = new JTextField(base.hostmaskPattern());
-    hostmaskPattern.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT,
-        "Hostmask pattern");
+    hostmaskPattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Hostmask pattern");
 
     JPanel panel =
         new JPanel(
@@ -811,10 +810,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     JPanel eventsGrid =
         new JPanel(
-            new MigLayout(
-                "insets 0,fillx,wrap 2,hidemode 3",
-                "[grow,fill][grow,fill]",
-                "[]2[]"));
+            new MigLayout("insets 0,fillx,wrap 2,hidemode 3", "[grow,fill][grow,fill]", "[]2[]"));
     for (JCheckBox selector : eventSelectors.values()) {
       selector.setToolTipText("Match " + selector.getText() + " events.");
       eventsGrid.add(selector, "growx");
@@ -826,11 +822,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     eventsScroll.getVerticalScrollBar().setUnitIncrement(14);
 
     JPanel eventsPanel =
-        new JPanel(
-            new MigLayout(
-                "insets 0,fillx,wrap 1,hidemode 3",
-                "[grow,fill]",
-                "[]4[]"));
+        new JPanel(new MigLayout("insets 0,fillx,wrap 1,hidemode 3", "[grow,fill]", "[]4[]"));
     eventsPanel.add(anyEventType, "growx");
     eventsPanel.add(eventsScroll, "growx,pushx,wmin 0");
 
@@ -860,17 +852,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     panel.add(hostmaskPattern, "growx,pushx,wmin 0,wrap");
 
     Runnable refreshDimensionFieldState =
-        bindRuleDimensionModeFieldEnabled(messageMode, messagePattern, nickMode, nickPattern, hostmaskMode, hostmaskPattern);
+        bindRuleDimensionModeFieldEnabled(
+            messageMode, messagePattern, nickMode, nickPattern, hostmaskMode, hostmaskPattern);
     refreshDimensionFieldState.run();
 
     Window owner = SwingUtilities.getWindowAncestor(this);
     int choice =
         JOptionPane.showConfirmDialog(
-            owner,
-            panel,
-            dialogTitle,
-            JOptionPane.OK_CANCEL_OPTION,
-            JOptionPane.PLAIN_MESSAGE);
+            owner, panel, dialogTitle, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
     if (choice != JOptionPane.OK_OPTION) return null;
 
     String eventTypesCsv = selectedRuleEvents(anyEventType, eventSelectors);
@@ -895,7 +884,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         effectiveRulePattern(hostmaskMode, hostmaskPattern));
   }
 
-  private LinkedHashMap<InterceptorEventType, JCheckBox> buildRuleEventSelectors(String selectedCsv) {
+  private LinkedHashMap<InterceptorEventType, JCheckBox> buildRuleEventSelectors(
+      String selectedCsv) {
     LinkedHashMap<InterceptorEventType, JCheckBox> out = new LinkedHashMap<>();
     EnumSet<InterceptorEventType> selected = InterceptorEventType.parseCsv(selectedCsv);
     boolean any = Objects.toString(selectedCsv, "").trim().isBlank();
@@ -924,9 +914,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private static String selectedRuleEvents(
-      JCheckBox anyEventType,
-      LinkedHashMap<InterceptorEventType, JCheckBox> selectors
-  ) {
+      JCheckBox anyEventType, LinkedHashMap<InterceptorEventType, JCheckBox> selectors) {
     if (anyEventType == null || anyEventType.isSelected()) return "";
     if (selectors == null || selectors.isEmpty()) return "";
 
@@ -941,9 +929,10 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     if (tokens.size() == selectors.size()) {
       // Preserve explicit synthetic/derived selectors (e.g. Highlight) instead of
       // collapsing to blank "Any", which intentionally excludes them for compatibility.
-      boolean hasSynthetic = selectors.containsKey(InterceptorEventType.HIGHLIGHT)
-          && selectors.get(InterceptorEventType.HIGHLIGHT) != null
-          && selectors.get(InterceptorEventType.HIGHLIGHT).isSelected();
+      boolean hasSynthetic =
+          selectors.containsKey(InterceptorEventType.HIGHLIGHT)
+              && selectors.get(InterceptorEventType.HIGHLIGHT) != null
+              && selectors.get(InterceptorEventType.HIGHLIGHT).isSelected();
       if (!hasSynthetic) return "";
     }
     return String.join(",", tokens);
@@ -986,7 +975,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     configureIconButton(testSound, "play", "Test selected sound");
     configureIconButton(browseSoundCustomPath, "folder-open", "Browse/import custom sound file");
     configureIconButton(browseScriptPath, "terminal", "Browse for script/program");
-    configureIconButton(browseScriptWorkingDirectory, "settings", "Browse for script working directory");
+    configureIconButton(
+        browseScriptWorkingDirectory, "settings", "Browse for script working directory");
   }
 
   private static void configureIconButton(JButton button, String iconName, String tooltip) {
@@ -1003,9 +993,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     if (!controlsEnabled) return;
     if (!actionSoundEnabled.isSelected()) return;
     store.previewSoundOverride(
-        selectedSoundId(),
-        actionSoundUseCustom.isSelected(),
-        actionSoundCustomPath.getText());
+        selectedSoundId(), actionSoundUseCustom.isSelected(), actionSoundCustomPath.getText());
   }
 
   private void createInterceptorFromOverview() {
@@ -1154,7 +1142,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     chooser.setDialogTitle("Choose interceptor sound (MP3 or WAV)");
     chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
     chooser.setAcceptAllFileFilterUsed(true);
-    chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+    chooser.addChoosableFileFilter(
+        new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
     int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(this));
     if (result != JFileChooser.APPROVE_OPTION) return;
 
@@ -1218,7 +1207,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     saveCurrentDefinition();
   }
 
-  private static void seedChooserPath(JFileChooser chooser, String rawPath, boolean preferDirectory) {
+  private static void seedChooserPath(
+      JFileChooser chooser, String rawPath, boolean preferDirectory) {
     if (chooser == null) return;
     String path = Objects.toString(rawPath, "").trim();
     if (path.isEmpty()) return;
@@ -1328,8 +1318,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     if (req != refreshSeq.get()) return;
     loading = true;
 
-    boolean interceptorsOverview = !Objects.toString(serverId, "").trim().isBlank()
-        && Objects.toString(interceptorId, "").trim().isBlank();
+    boolean interceptorsOverview =
+        !Objects.toString(serverId, "").trim().isBlank()
+            && Objects.toString(interceptorId, "").trim().isBlank();
     if (interceptorsOverview) {
       title.setText("Interceptors");
       subtitle.setText("Automation rules for IRC events on this server.");
@@ -1414,7 +1405,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     InterceptorDefinition loadedDef = def;
     List<InterceptorHit> loadedHits = sorted;
-    SwingUtilities.invokeLater(() -> applyLoadedInterceptorSnapshot(req, sid, iid, loadedDef, loadedHits));
+    SwingUtilities.invokeLater(
+        () -> applyLoadedInterceptorSnapshot(req, sid, iid, loadedDef, loadedHits));
   }
 
   private void applyLoadedInterceptorSnapshot(
@@ -1422,8 +1414,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
       String sid,
       String iid,
       InterceptorDefinition def,
-      List<InterceptorHit> sortedHits
-  ) {
+      List<InterceptorHit> sortedHits) {
     if (req != refreshSeq.get()) return;
     if (!Objects.equals(serverId, sid) || !Objects.equals(interceptorId, iid)) return;
     if (def == null) {
@@ -1439,7 +1430,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     interceptorName.setText(def.name());
     enabled.setSelected(def.enabled());
-    serverScope.setSelectedItem(def.scopeAnyServer() ? ServerScopeOption.ANY_SERVER : ServerScopeOption.THIS_SERVER);
+    serverScope.setSelectedItem(
+        def.scopeAnyServer() ? ServerScopeOption.ANY_SERVER : ServerScopeOption.THIS_SERVER);
 
     includeMode.setSelectedItem(def.channelIncludeMode());
     includes.setText(def.channelIncludes());
@@ -1557,10 +1549,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     if (current == null) return;
 
     List<InterceptorRule> rules = rulesModel.snapshot();
-    String soundId = defaultInterceptorSoundIdForRulesIfGeneric(
-        selectedSoundId(),
-        actionSoundUseCustom.isSelected(),
-        rules);
+    String soundId =
+        defaultInterceptorSoundIdForRulesIfGeneric(
+            selectedSoundId(), actionSoundUseCustom.isSelected(), rules);
 
     InterceptorDefinition updated =
         new InterceptorDefinition(
@@ -1615,10 +1606,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private static String defaultInterceptorSoundIdForRulesIfGeneric(
-      String selectedSoundId,
-      boolean useCustomSound,
-      List<InterceptorRule> rules
-  ) {
+      String selectedSoundId, boolean useCustomSound, List<InterceptorRule> rules) {
     BuiltInSound current = BuiltInSound.fromId(selectedSoundId);
     if (useCustomSound || current != BuiltInSound.NOTIF_1) return current.name();
 
@@ -1637,7 +1625,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     for (InterceptorRule rule : rules) {
       if (rule == null || !rule.enabled()) continue;
 
-      EnumSet<InterceptorEventType> eventTypes = InterceptorEventType.parseCsv(rule.eventTypesCsv());
+      EnumSet<InterceptorEventType> eventTypes =
+          InterceptorEventType.parseCsv(rule.eventTypesCsv());
       for (InterceptorEventType eventType : eventTypes) {
         if (eventType == null) continue;
 
@@ -1654,7 +1643,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return best;
   }
 
-  private static BuiltInSound defaultBuiltInSoundForInterceptorEventType(InterceptorEventType eventType) {
+  private static BuiltInSound defaultBuiltInSoundForInterceptorEventType(
+      InterceptorEventType eventType) {
     if (eventType == null) return null;
     return switch (eventType) {
       case HIGHLIGHT -> BuiltInSound.YOU_HIGHLIGHTED_1;

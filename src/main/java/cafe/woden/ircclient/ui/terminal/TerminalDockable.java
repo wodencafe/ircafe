@@ -33,9 +33,7 @@ import javax.swing.text.Document;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * A simple in-app "terminal" dock that mirrors whatever is printed to the real console.
- */
+/** A simple in-app "terminal" dock that mirrors whatever is printed to the real console. */
 @Component
 @Lazy
 public class TerminalDockable extends JPanel implements Dockable {
@@ -70,12 +68,14 @@ public class TerminalDockable extends JPanel implements Dockable {
     tb.setFloatable(false);
     tb.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
-    JButton clear = new JButton(new AbstractAction("Clear") {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        area.setText("");
-      }
-    });
+    JButton clear =
+        new JButton(
+            new AbstractAction("Clear") {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                area.setText("");
+              }
+            });
     clear.setFocusable(false);
     followTail.setFocusable(false);
 
@@ -115,21 +115,20 @@ public class TerminalDockable extends JPanel implements Dockable {
     menu.add(save);
 
     // Keep "Copy" enabled only when there is a selection.
-    menu.addPopupMenuListener(new PopupMenuListener() {
-      @Override
-      public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-        boolean hasSelection = area.getSelectionStart() != area.getSelectionEnd();
-        copyItem.setEnabled(hasSelection);
-      }
+    menu.addPopupMenuListener(
+        new PopupMenuListener() {
+          @Override
+          public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+            boolean hasSelection = area.getSelectionStart() != area.getSelectionEnd();
+            copyItem.setEnabled(hasSelection);
+          }
 
-      @Override
-      public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
-      }
+          @Override
+          public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {}
 
-      @Override
-      public void popupMenuCanceled(PopupMenuEvent e) {
-      }
-    });
+          @Override
+          public void popupMenuCanceled(PopupMenuEvent e) {}
+        });
 
     area.setComponentPopupMenu(menu);
   }

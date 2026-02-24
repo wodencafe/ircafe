@@ -7,7 +7,8 @@ import java.util.Objects;
 final class PircbotxListParsers {
   private PircbotxListParsers() {}
 
-  static record ListEntry(String channel, int visibleUsers, boolean hasVisibleUsers, String topic) {}
+  static record ListEntry(
+      String channel, int visibleUsers, boolean hasVisibleUsers, String topic) {}
 
   static String parseListStartBanner(String command, String trailing) {
     String cmd = Objects.toString(command, "").trim();
@@ -23,7 +24,8 @@ final class PircbotxListParsers {
     return t.isEmpty() ? "End of /LIST" : t;
   }
 
-  static ListEntry parseListEntry(String command, List<String> params, String trailing, String myNick) {
+  static ListEntry parseListEntry(
+      String command, List<String> params, String trailing, String myNick) {
     String cmd = Objects.toString(command, "").trim();
     if (!"322".equals(cmd)) return null;
 
@@ -61,10 +63,11 @@ final class PircbotxListParsers {
   }
 
   /**
-   * Returns a friendly rendering for LIST numerics, or {@code null} if the command is not part
-   * of LIST handling (or if an entry line is malformed).
+   * Returns a friendly rendering for LIST numerics, or {@code null} if the command is not part of
+   * LIST handling (or if an entry line is malformed).
    */
-  static String tryFormatListNumeric(String command, List<String> params, String trailing, String myNick) {
+  static String tryFormatListNumeric(
+      String command, List<String> params, String trailing, String myNick) {
     String start = parseListStartBanner(command, trailing);
     if (start != null) return start;
 

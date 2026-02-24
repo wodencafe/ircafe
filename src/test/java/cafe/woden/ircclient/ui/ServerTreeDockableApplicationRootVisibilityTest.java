@@ -36,7 +36,9 @@ class ServerTreeDockableApplicationRootVisibilityTest {
             dockable.setApplicationRootVisible(false);
 
             assertFalse(dockable.isApplicationRootVisible());
-            assertTrue(tree.isExpanded(ircPath), "IRC root must remain expanded when hiding Application root");
+            assertTrue(
+                tree.isExpanded(ircPath),
+                "IRC root must remain expanded when hiding Application root");
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -55,19 +57,29 @@ class ServerTreeDockableApplicationRootVisibilityTest {
             TargetRef notificationsRef = TargetRef.notifications(serverId);
             TargetRef statusRef = new TargetRef(serverId, "status");
 
-            assertTrue(hasLeaf(dockable, notificationsRef), "precondition: notifications node should exist");
+            assertTrue(
+                hasLeaf(dockable, notificationsRef),
+                "precondition: notifications node should exist");
 
             dockable.selectTarget(notificationsRef);
-            assertEquals(notificationsRef, selectedTargetRef(dockable), "precondition: notifications should be selected");
+            assertEquals(
+                notificationsRef,
+                selectedTargetRef(dockable),
+                "precondition: notifications should be selected");
 
             dockable.setNotificationsNodesVisible(false);
             assertFalse(dockable.isNotificationsNodesVisible());
-            assertFalse(hasLeaf(dockable, notificationsRef), "notifications node should be removed");
-            assertEquals(statusRef, selectedTargetRef(dockable), "selection should fall back to server status");
+            assertFalse(
+                hasLeaf(dockable, notificationsRef), "notifications node should be removed");
+            assertEquals(
+                statusRef,
+                selectedTargetRef(dockable),
+                "selection should fall back to server status");
 
             dockable.setNotificationsNodesVisible(true);
             assertTrue(dockable.isNotificationsNodesVisible());
-            assertTrue(hasLeaf(dockable, notificationsRef), "notifications node should be restored");
+            assertTrue(
+                hasLeaf(dockable, notificationsRef), "notifications node should be restored");
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -86,19 +98,27 @@ class ServerTreeDockableApplicationRootVisibilityTest {
             TargetRef monitorRef = TargetRef.monitorGroup(serverId);
             TargetRef statusRef = new TargetRef(serverId, "status");
 
-            assertTrue(hasMonitorGroupAttached(dockable, serverId), "precondition: monitor group should exist");
+            assertTrue(
+                hasMonitorGroupAttached(dockable, serverId),
+                "precondition: monitor group should exist");
 
             dockable.selectTarget(monitorRef);
-            assertTrue(isMonitorGroupSelected(dockable), "precondition: monitor group should be selected");
+            assertTrue(
+                isMonitorGroupSelected(dockable), "precondition: monitor group should be selected");
 
             dockable.setMonitorNodesVisible(false);
             assertFalse(dockable.isMonitorNodesVisible());
-            assertFalse(hasMonitorGroupAttached(dockable, serverId), "monitor group should be removed");
-            assertEquals(statusRef, selectedTargetRef(dockable), "selection should fall back to server status");
+            assertFalse(
+                hasMonitorGroupAttached(dockable, serverId), "monitor group should be removed");
+            assertEquals(
+                statusRef,
+                selectedTargetRef(dockable),
+                "selection should fall back to server status");
 
             dockable.setMonitorNodesVisible(true);
             assertTrue(dockable.isMonitorNodesVisible());
-            assertTrue(hasMonitorGroupAttached(dockable, serverId), "monitor group should be restored");
+            assertTrue(
+                hasMonitorGroupAttached(dockable, serverId), "monitor group should be restored");
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -131,7 +151,8 @@ class ServerTreeDockableApplicationRootVisibilityTest {
   private static boolean hasLeaf(ServerTreeDockable dockable, TargetRef ref) throws Exception {
     Field f = ServerTreeDockable.class.getDeclaredField("leaves");
     f.setAccessible(true);
-    Map<TargetRef, DefaultMutableTreeNode> leaves = (Map<TargetRef, DefaultMutableTreeNode>) f.get(dockable);
+    Map<TargetRef, DefaultMutableTreeNode> leaves =
+        (Map<TargetRef, DefaultMutableTreeNode>) f.get(dockable);
     return leaves.containsKey(ref);
   }
 
@@ -159,7 +180,9 @@ class ServerTreeDockableApplicationRootVisibilityTest {
     JTree tree = getTree(dockable);
     Object selected = tree.getLastSelectedPathComponent();
     if (!(selected instanceof DefaultMutableTreeNode node)) return false;
-    Method m = ServerTreeDockable.class.getDeclaredMethod("isMonitorGroupNode", DefaultMutableTreeNode.class);
+    Method m =
+        ServerTreeDockable.class.getDeclaredMethod(
+            "isMonitorGroupNode", DefaultMutableTreeNode.class);
     m.setAccessible(true);
     return Boolean.TRUE.equals(m.invoke(dockable, node));
   }

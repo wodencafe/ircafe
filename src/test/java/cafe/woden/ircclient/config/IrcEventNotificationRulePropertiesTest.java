@@ -9,7 +9,8 @@ class IrcEventNotificationRulePropertiesTest {
 
   @Test
   void defaultsIncludeStatusBarAnyCompanionsForCoreModerationEvents() {
-    List<IrcEventNotificationRuleProperties> defaults = IrcEventNotificationRuleProperties.defaultRules();
+    List<IrcEventNotificationRuleProperties> defaults =
+        IrcEventNotificationRuleProperties.defaultRules();
     assertHasStatusBarAnyCompanion(defaults, IrcEventNotificationRuleProperties.EventType.KICKED);
     assertHasStatusBarAnyCompanion(defaults, IrcEventNotificationRuleProperties.EventType.BANNED);
     assertHasStatusBarAnyCompanion(defaults, IrcEventNotificationRuleProperties.EventType.KLINED);
@@ -17,17 +18,17 @@ class IrcEventNotificationRulePropertiesTest {
 
   private static void assertHasStatusBarAnyCompanion(
       List<IrcEventNotificationRuleProperties> rules,
-      IrcEventNotificationRuleProperties.EventType eventType
-  ) {
+      IrcEventNotificationRuleProperties.EventType eventType) {
     assertTrue(
-        rules.stream().anyMatch(r ->
-            r != null
-                && r.eventType() == eventType
-                && Boolean.TRUE.equals(r.enabled())
-                && Boolean.FALSE.equals(r.toastEnabled())
-                && r.focusScope() == IrcEventNotificationRuleProperties.FocusScope.ANY
-                && Boolean.TRUE.equals(r.statusBarEnabled())
-                && Boolean.FALSE.equals(r.soundEnabled())));
+        rules.stream()
+            .anyMatch(
+                r ->
+                    r != null
+                        && r.eventType() == eventType
+                        && Boolean.TRUE.equals(r.enabled())
+                        && Boolean.FALSE.equals(r.toastEnabled())
+                        && r.focusScope() == IrcEventNotificationRuleProperties.FocusScope.ANY
+                        && Boolean.TRUE.equals(r.statusBarEnabled())
+                        && Boolean.FALSE.equals(r.soundEnabled())));
   }
 }
-

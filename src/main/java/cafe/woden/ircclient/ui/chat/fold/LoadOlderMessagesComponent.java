@@ -53,11 +53,12 @@ public final class LoadOlderMessagesComponent extends JPanel {
     applyTheme();
     setState(State.READY);
 
-    button.addActionListener(e -> {
-      if (state != State.READY) return;
-      if (!button.isEnabled()) return;
-      requestLoadOnce();
-    });
+    button.addActionListener(
+        e -> {
+          if (state != State.READY) return;
+          if (!button.isEnabled()) return;
+          requestLoadOnce();
+        });
 
     row.add(button);
     add(row);
@@ -65,7 +66,6 @@ public final class LoadOlderMessagesComponent extends JPanel {
     setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
   }
 
-  
   public void setTranscriptFont(Font base) {
     if (base == null) return;
     button.setFont(base);
@@ -118,7 +118,8 @@ public final class LoadOlderMessagesComponent extends JPanel {
     Insets in = getInsets();
     int ascent = 0;
     try {
-      if (button.getFont() != null) ascent = Math.max(ascent, getFontMetrics(button.getFont()).getAscent());
+      if (button.getFont() != null)
+        ascent = Math.max(ascent, getFontMetrics(button.getFont()).getAscent());
     } catch (Exception ignored) {
     }
     if (ascent <= 0) return -1;
@@ -145,10 +146,7 @@ public final class LoadOlderMessagesComponent extends JPanel {
     }
   }
 
-  /**
-   * Programmatically request a load as if the user clicked the control.
-   *
-   */
+  /** Programmatically request a load as if the user clicked the control. */
   public void requestLoad() {
     if (state != State.READY) return;
     requestLoadOnce();

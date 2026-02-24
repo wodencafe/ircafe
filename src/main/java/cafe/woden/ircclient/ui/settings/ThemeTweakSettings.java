@@ -12,8 +12,7 @@ public record ThemeTweakSettings(
     int cornerRadius,
     boolean uiFontOverrideEnabled,
     String uiFontFamily,
-    int uiFontSize
-) {
+    int uiFontSize) {
 
   public static final String DEFAULT_UI_FONT_FAMILY = "Dialog";
   public static final int DEFAULT_UI_FONT_SIZE = 13;
@@ -55,7 +54,8 @@ public record ThemeTweakSettings(
   }
 
   /**
-   * Back-compat constructor used by existing call sites that only care about density + corner radius.
+   * Back-compat constructor used by existing call sites that only care about density + corner
+   * radius.
    */
   public ThemeTweakSettings(ThemeDensity density, int cornerRadius) {
     this(density, cornerRadius, false, DEFAULT_UI_FONT_FAMILY, DEFAULT_UI_FONT_SIZE);

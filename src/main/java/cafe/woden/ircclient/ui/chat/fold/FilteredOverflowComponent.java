@@ -1,14 +1,15 @@
 package cafe.woden.ircclient.ui.chat.fold;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 /**
- * Summary row used when history/backfill filtering would otherwise generate too many placeholder/hint rows.
+ * Summary row used when history/backfill filtering would otherwise generate too many
+ * placeholder/hint rows.
  *
  * <p>It aggregates the remainder of hidden lines for the current load into a single counter.
  */
@@ -66,7 +67,9 @@ public class FilteredOverflowComponent extends JPanel {
     refreshTooltip();
   }
 
-  /** Provides extra tooltip context: which rule(s) filtered this batch and which tags were present. */
+  /**
+   * Provides extra tooltip context: which rule(s) filtered this batch and which tags were present.
+   */
   public void setFilterDetails(String ruleLabel, boolean multiple, Collection<String> tags) {
     this.filterRuleLabel = (ruleLabel == null || ruleLabel.isBlank()) ? null : ruleLabel;
     this.multipleRules = multiple;
@@ -99,10 +102,12 @@ public class FilteredOverflowComponent extends JPanel {
   }
 
   private void refreshTooltip() {
-    setToolTipText(buildTooltipHtml(count, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
+    setToolTipText(
+        buildTooltipHtml(count, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
   }
 
-  private static String buildTooltipHtml(int count, String ruleLabel, boolean multiple, List<String> tags, int maxTags) {
+  private static String buildTooltipHtml(
+      int count, String ruleLabel, boolean multiple, List<String> tags, int maxTags) {
     if (count <= 0) return null;
 
     StringBuilder sb = new StringBuilder();
@@ -182,9 +187,8 @@ public class FilteredOverflowComponent extends JPanel {
     int w = p.getWidth();
     if (w <= 0) return -1;
 
-    Insets insets = (p instanceof JComponent)
-        ? ((JComponent) p).getInsets()
-        : new Insets(0, 0, 0, 0);
+    Insets insets =
+        (p instanceof JComponent) ? ((JComponent) p).getInsets() : new Insets(0, 0, 0, 0);
 
     w = w - insets.left - insets.right;
     return Math.max(0, w);
@@ -192,8 +196,7 @@ public class FilteredOverflowComponent extends JPanel {
 
   private static String escapeHtml(String s) {
     if (s == null) return "";
-    return s
-        .replace("&", "&amp;")
+    return s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;");

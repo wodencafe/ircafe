@@ -21,7 +21,8 @@ public class UserCommandAliasesBus {
   private volatile boolean unknownCommandAsRawEnabled;
 
   public UserCommandAliasesBus(RuntimeConfigStore runtimeConfig) {
-    List<UserCommandAlias> seeded = runtimeConfig != null ? runtimeConfig.readUserCommandAliases() : List.of();
+    List<UserCommandAlias> seeded =
+        runtimeConfig != null ? runtimeConfig.readUserCommandAliases() : List.of();
     this.current = sanitize(seeded);
     this.unknownCommandAsRawEnabled =
         runtimeConfig != null && runtimeConfig.readUnknownCommandAsRawEnabled(false);

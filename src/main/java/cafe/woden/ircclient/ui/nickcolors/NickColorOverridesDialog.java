@@ -50,9 +50,10 @@ public class NickColorOverridesDialog {
 
   private JDialog dialog;
 
-  public NickColorOverridesDialog(NickColorService nickColors,
-                                 RuntimeConfigStore runtimeConfig,
-                                 ChatTranscriptStore transcripts) {
+  public NickColorOverridesDialog(
+      NickColorService nickColors,
+      RuntimeConfigStore runtimeConfig,
+      ChatTranscriptStore transcripts) {
     this.nickColors = nickColors;
     this.runtimeConfig = runtimeConfig;
     this.transcripts = transcripts;
@@ -81,7 +82,8 @@ public class NickColorOverridesDialog {
     JScrollPane scroll = new JScrollPane(table);
     scroll.setPreferredSize(new Dimension(640, 340));
 
-    JLabel help = new JLabel("Overrides apply case-insensitively and take precedence over the palette.");
+    JLabel help =
+        new JLabel("Overrides apply case-insensitively and take precedence over the palette.");
     help.putClientProperty(FlatClientProperties.STYLE, "font: -1");
 
     JButton add = new JButton("Add...");
@@ -103,74 +105,86 @@ public class NickColorOverridesDialog {
     clear.setEnabled(model.getRowCount() > 0);
 
     // Enable/disable actions based on selection.
-    ListSelectionListener selListener = new ListSelectionListener() {
-      @Override
-      public void valueChanged(ListSelectionEvent e) {
-        if (e.getValueIsAdjusting()) return;
-        int count = table.getSelectedRowCount();
-        edit.setEnabled(count == 1);
-        remove.setEnabled(count > 0);
-      }
-    };
+    ListSelectionListener selListener =
+        new ListSelectionListener() {
+          @Override
+          public void valueChanged(ListSelectionEvent e) {
+            if (e.getValueIsAdjusting()) return;
+            int count = table.getSelectedRowCount();
+            edit.setEnabled(count == 1);
+            remove.setEnabled(count > 0);
+          }
+        };
     table.getSelectionModel().addListSelectionListener(selListener);
 
-    Runnable doAdd = () -> {
-      NickColorOverrideEntryDialog.Entry seed = null;
-      NickColorOverrideEntryDialog.open(owner, "Add Nick Color", seed).ifPresent(entry -> {
-        model.upsert(entry.nickLower(), entry.hex());
-        clear.setEnabled(model.getRowCount() > 0);
-      });
-    };
+    Runnable doAdd =
+        () -> {
+          NickColorOverrideEntryDialog.Entry seed = null;
+          NickColorOverrideEntryDialog.open(owner, "Add Nick Color", seed)
+              .ifPresent(
+                  entry -> {
+                    model.upsert(entry.nickLower(), entry.hex());
+                    clear.setEnabled(model.getRowCount() > 0);
+                  });
+        };
 
-    Runnable doEdit = () -> {
-      int viewRow = table.getSelectedRow();
-      if (viewRow < 0) return;
-      int row = table.convertRowIndexToModel(viewRow);
-      NickColorOverrideEntryDialog.Entry cur = model.getEntry(row);
-      NickColorOverrideEntryDialog.open(owner, "Edit Nick Color", cur).ifPresent(entry -> {
-        model.remove(row);
-        model.upsert(entry.nickLower(), entry.hex());
-        clear.setEnabled(model.getRowCount() > 0);
-      });
-    };
+    Runnable doEdit =
+        () -> {
+          int viewRow = table.getSelectedRow();
+          if (viewRow < 0) return;
+          int row = table.convertRowIndexToModel(viewRow);
+          NickColorOverrideEntryDialog.Entry cur = model.getEntry(row);
+          NickColorOverrideEntryDialog.open(owner, "Edit Nick Color", cur)
+              .ifPresent(
+                  entry -> {
+                    model.remove(row);
+                    model.upsert(entry.nickLower(), entry.hex());
+                    clear.setEnabled(model.getRowCount() > 0);
+                  });
+        };
 
-    Runnable doRemove = () -> {
-      int[] viewRows = table.getSelectedRows();
-      if (viewRows == null || viewRows.length == 0) return;
-      // Remove in descending model-index order.
-      List<Integer> rows = new ArrayList<>();
-      for (int vr : viewRows) {
-        rows.add(table.convertRowIndexToModel(vr));
-      }
-      rows.sort(Comparator.reverseOrder());
-      for (int r : rows) {
-        model.remove(r);
-      }
-      clear.setEnabled(model.getRowCount() > 0);
-    };
+    Runnable doRemove =
+        () -> {
+          int[] viewRows = table.getSelectedRows();
+          if (viewRows == null || viewRows.length == 0) return;
+          // Remove in descending model-index order.
+          List<Integer> rows = new ArrayList<>();
+          for (int vr : viewRows) {
+            rows.add(table.convertRowIndexToModel(vr));
+          }
+          rows.sort(Comparator.reverseOrder());
+          for (int r : rows) {
+            model.remove(r);
+          }
+          clear.setEnabled(model.getRowCount() > 0);
+        };
 
     add.addActionListener(e -> doAdd.run());
     edit.addActionListener(e -> doEdit.run());
     remove.addActionListener(e -> doRemove.run());
-    clear.addActionListener(e -> {
-      if (JOptionPane.showConfirmDialog(dialog,
-          "Clear all nick color overrides?",
-          "Clear Overrides",
-          JOptionPane.OK_CANCEL_OPTION,
-          JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION) {
-        model.clear();
-        clear.setEnabled(false);
-      }
-    });
+    clear.addActionListener(
+        e -> {
+          if (JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Clear all nick color overrides?",
+                  "Clear Overrides",
+                  JOptionPane.OK_CANCEL_OPTION,
+                  JOptionPane.WARNING_MESSAGE)
+              == JOptionPane.OK_OPTION) {
+            model.clear();
+            clear.setEnabled(false);
+          }
+        });
 
-    table.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (e.getClickCount() == 2 && table.getSelectedRowCount() == 1) {
-          doEdit.run();
-        }
-      }
-    });
+    table.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e.getClickCount() == 2 && table.getSelectedRowCount() == 1) {
+              doEdit.run();
+            }
+          }
+        });
 
     JPanel leftButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
     leftButtons.add(add);
@@ -190,34 +204,36 @@ public class NickColorOverridesDialog {
     cancel.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
     apply.putClientProperty(FlatClientProperties.BUTTON_TYPE, "primary");
 
-    Runnable doApply = () -> {
-      Map<String, String> out = model.toMapLowerCaseKeys();
-      // Apply live
-      if (nickColors != null) {
-        nickColors.setOverrides(out);
-      }
-      // Persist
-      if (runtimeConfig != null) {
-        runtimeConfig.rememberNickColorOverrides(out);
-      }
-      // Restyle existing transcripts
-      if (transcripts != null) {
-        transcripts.restyleAllDocumentsCoalesced();
-      }
-      // Nudge repaint for other components (e.g., user list)
-      for (Window w : Window.getWindows()) {
-        try {
-          w.repaint();
-        } catch (Exception ignored) {
-        }
-      }
-    };
+    Runnable doApply =
+        () -> {
+          Map<String, String> out = model.toMapLowerCaseKeys();
+          // Apply live
+          if (nickColors != null) {
+            nickColors.setOverrides(out);
+          }
+          // Persist
+          if (runtimeConfig != null) {
+            runtimeConfig.rememberNickColorOverrides(out);
+          }
+          // Restyle existing transcripts
+          if (transcripts != null) {
+            transcripts.restyleAllDocumentsCoalesced();
+          }
+          // Nudge repaint for other components (e.g., user list)
+          for (Window w : Window.getWindows()) {
+            try {
+              w.repaint();
+            } catch (Exception ignored) {
+            }
+          }
+        };
 
     apply.addActionListener(e -> doApply.run());
-    ok.addActionListener(e -> {
-      doApply.run();
-      dialog.dispose();
-    });
+    ok.addActionListener(
+        e -> {
+          doApply.run();
+          dialog.dispose();
+        });
     cancel.addActionListener(e -> dialog.dispose());
 
     JPanel rightButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -259,7 +275,7 @@ public class NickColorOverridesDialog {
 
   private static class OverridesTableModel extends AbstractTableModel {
 
-    private static final String[] COLS = new String[]{"Nick", "Color"};
+    private static final String[] COLS = new String[] {"Nick", "Color"};
 
     private final List<Row> rows = new ArrayList<>();
 
@@ -348,22 +364,23 @@ public class NickColorOverridesDialog {
       rows.sort(Comparator.comparing(a -> a.nickLower, String.CASE_INSENSITIVE_ORDER));
     }
 
-    private record Row(String nickLower, String hex) {
-    }
+    private record Row(String nickLower, String hex) {}
   }
 
   private static class ColorCellRenderer extends DefaultTableCellRenderer {
 
     @Override
-    public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                   boolean hasFocus, int row, int column) {
+    public java.awt.Component getTableCellRendererComponent(
+        JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
       super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
       String hex = Objects.toString(value, "").trim();
       Color c = NickColorOverrideEntryDialog.parseHexColor(hex);
 
       setText(NickColorOverrideEntryDialog.normalizeHex(hex));
-      setIcon(new ColorSwatchIcon(c != null ? c : UIManager.getColor("Label.disabledForeground"), 12, 12));
+      setIcon(
+          new ColorSwatchIcon(
+              c != null ? c : UIManager.getColor("Label.disabledForeground"), 12, 12));
       setIconTextGap(8);
       return this;
     }

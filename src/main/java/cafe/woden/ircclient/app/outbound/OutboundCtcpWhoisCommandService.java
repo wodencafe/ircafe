@@ -42,7 +42,6 @@ public class OutboundCtcpWhoisCommandService {
     this.whoisRoutingState = whoisRoutingState;
   }
 
-
   public void requestWhois(CompositeDisposable disposables, TargetRef ctx, String nick) {
     if (ctx == null) return;
     String sid = ctx.serverId();
@@ -60,11 +59,8 @@ public class OutboundCtcpWhoisCommandService {
     ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + n + "...");
 
     disposables.add(
-        irc.whois(sid, n).subscribe(
-            () -> {},
-            err -> ui.appendError(ctx, "(whois)", String.valueOf(err))
-        )
-    );
+        irc.whois(sid, n)
+            .subscribe(() -> {}, err -> ui.appendError(ctx, "(whois)", String.valueOf(err))));
   }
 
   public void ctcpVersion(CompositeDisposable disposables, TargetRef ctx, String nick) {
@@ -81,7 +77,6 @@ public class OutboundCtcpWhoisCommandService {
     // Preserve previous UX: do not show the token in the status line for the context-menu ping.
     sendCtcpForUserAction(disposables, ctx, nick, "PING", token, token, "→ " + nick + " PING");
   }
-
 
   public void handleWhois(CompositeDisposable disposables, String nick) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -129,13 +124,9 @@ public class OutboundCtcpWhoisCommandService {
     }
 
     disposables.add(
-        irc.whowas(at.serverId(), n, count).subscribe(
-            () -> {},
-            err -> ui.appendError(at, "(whowas)", String.valueOf(err))
-        )
-    );
+        irc.whowas(at.serverId(), n, count)
+            .subscribe(() -> {}, err -> ui.appendError(at, "(whowas)", String.valueOf(err))));
   }
-
 
   public void handleCtcpVersion(CompositeDisposable disposables, String nick) {
     sendCtcpSlash(disposables, "VERSION", nick, "", false);
@@ -151,7 +142,8 @@ public class OutboundCtcpWhoisCommandService {
     sendCtcpSlash(disposables, "TIME", nick, "", false);
   }
 
-  public void handleCtcp(CompositeDisposable disposables, String nick, String command, String args) {
+  public void handleCtcp(
+      CompositeDisposable disposables, String nick, String command, String args) {
     String n = nick == null ? "" : nick.trim();
     String cmd = command == null ? "" : command.trim();
     String a = args == null ? "" : args.trim();
@@ -196,7 +188,12 @@ public class OutboundCtcpWhoisCommandService {
     sendCtcp(disposables, at, ctx, n, cmdU, a, null, null);
   }
 
-  private void sendCtcpSlash(CompositeDisposable disposables, String cmdUpper, String nick, String args, boolean expectsReply) {
+  private void sendCtcpSlash(
+      CompositeDisposable disposables,
+      String cmdUpper,
+      String nick,
+      String args,
+      boolean expectsReply) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(ctcp)", "Select a server first.");
@@ -206,8 +203,7 @@ public class OutboundCtcpWhoisCommandService {
     String n = nick == null ? "" : nick.trim();
     String a = args == null ? "" : args.trim();
     if (n.isEmpty()) {
-      ui.appendStatus(at, "(ctcp)",
-          "Usage: /" + cmdUpper.toLowerCase(Locale.ROOT) + " <nick>");
+      ui.appendStatus(at, "(ctcp)", "Usage: /" + cmdUpper.toLowerCase(Locale.ROOT) + " <nick>");
       return;
     }
 
@@ -262,16 +258,14 @@ public class OutboundCtcpWhoisCommandService {
     // Track pending so replies can be routed back to the current context.
     ctcpRoutingState.put(sid, n, cmd, tokenKey, ctx);
 
-    String display = displayOverride != null
-        ? displayOverride
-        : ("→ " + n + " " + cmd + (a.isEmpty() ? "" : " " + a));
+    String display =
+        displayOverride != null
+            ? displayOverride
+            : ("→ " + n + " " + cmd + (a.isEmpty() ? "" : " " + a));
     ui.appendStatus(ctx, "(ctcp)", display);
 
     disposables.add(
-        irc.sendPrivateMessage(sid, n, ctcp).subscribe(
-            () -> {},
-            err -> ui.appendError(ctx, "(ctcp-error)", String.valueOf(err))
-        )
-    );
+        irc.sendPrivateMessage(sid, n, ctcp)
+            .subscribe(() -> {}, err -> ui.appendError(ctx, "(ctcp-error)", String.valueOf(err))));
   }
 }

@@ -25,14 +25,20 @@ public class UiSettingsBus {
     UiProperties.Timestamps ts = props.timestamps();
     UiProperties.Tray tray = props.tray();
 
-    boolean timestampsEnabled = ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
+    boolean timestampsEnabled =
+        ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
     String timestampFormat = ts != null ? ts.format() : "HH:mm:ss";
     boolean timestampsIncludeChatMessages =
-        ts == null || ts.includeChatMessages() == null || Boolean.TRUE.equals(ts.includeChatMessages());
+        ts == null
+            || ts.includeChatMessages() == null
+            || Boolean.TRUE.equals(ts.includeChatMessages());
     boolean timestampsIncludePresenceMessages =
-        ts == null || ts.includePresenceMessages() == null || Boolean.TRUE.equals(ts.includePresenceMessages());
+        ts == null
+            || ts.includePresenceMessages() == null
+            || Boolean.TRUE.equals(ts.includePresenceMessages());
 
-    boolean trayEnabled = tray == null || tray.enabled() == null || Boolean.TRUE.equals(tray.enabled());
+    boolean trayEnabled =
+        tray == null || tray.enabled() == null || Boolean.TRUE.equals(tray.enabled());
 
     // Migration rule:
     // - New installs default to "close exits" (closeToTray=false)
@@ -52,15 +58,32 @@ public class UiSettingsBus {
     boolean trayMinimizeToTray = tray != null && Boolean.TRUE.equals(tray.minimizeToTray());
     boolean trayStartMinimized = tray != null && Boolean.TRUE.equals(tray.startMinimized());
 
-    boolean trayNotifyHighlights = tray == null || tray.notifyHighlights() == null || Boolean.TRUE.equals(tray.notifyHighlights());
-    boolean trayNotifyPrivateMessages = tray == null || tray.notifyPrivateMessages() == null || Boolean.TRUE.equals(tray.notifyPrivateMessages());
-    boolean trayNotifyConnectionState = tray != null && Boolean.TRUE.equals(tray.notifyConnectionState());
+    boolean trayNotifyHighlights =
+        tray == null
+            || tray.notifyHighlights() == null
+            || Boolean.TRUE.equals(tray.notifyHighlights());
+    boolean trayNotifyPrivateMessages =
+        tray == null
+            || tray.notifyPrivateMessages() == null
+            || Boolean.TRUE.equals(tray.notifyPrivateMessages());
+    boolean trayNotifyConnectionState =
+        tray != null && Boolean.TRUE.equals(tray.notifyConnectionState());
 
-    boolean trayNotifyOnlyWhenUnfocused = tray == null || tray.notifyOnlyWhenUnfocused() == null || Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
-    boolean trayNotifyOnlyWhenMinimizedOrHidden = tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenMinimizedOrHidden());
-    boolean trayNotifySuppressWhenTargetActive = tray == null || tray.notifySuppressWhenTargetActive() == null || Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
+    boolean trayNotifyOnlyWhenUnfocused =
+        tray == null
+            || tray.notifyOnlyWhenUnfocused() == null
+            || Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
+    boolean trayNotifyOnlyWhenMinimizedOrHidden =
+        tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenMinimizedOrHidden());
+    boolean trayNotifySuppressWhenTargetActive =
+        tray == null
+            || tray.notifySuppressWhenTargetActive() == null
+            || Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
 
-    boolean trayLinuxDbusActionsEnabled = tray == null || tray.linuxDbusActionsEnabled() == null || Boolean.TRUE.equals(tray.linuxDbusActionsEnabled());
+    boolean trayLinuxDbusActionsEnabled =
+        tray == null
+            || tray.linuxDbusActionsEnabled() == null
+            || Boolean.TRUE.equals(tray.linuxDbusActionsEnabled());
     NotificationBackendMode trayNotificationBackendMode =
         NotificationBackendMode.fromToken(tray != null ? tray.notificationBackend() : null);
 
@@ -68,97 +91,117 @@ public class UiSettingsBus {
     boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
     boolean periodicRefreshEnabled = ue != null && Boolean.TRUE.equals(ue.periodicRefreshEnabled());
 
-    List<NotificationRule> notificationRules = props.notificationRules() == null
-        ? List.of()
-        : props.notificationRules().stream()
-            .filter(Objects::nonNull)
-            .map(r -> {
-              NotificationRule.Type t = r.type() != null
-                  ? NotificationRule.Type.valueOf(r.type().name())
-                  : NotificationRule.Type.WORD;
-              return new NotificationRule(
-                  r.label(),
-                  t,
-                  r.pattern(),
-                  Boolean.TRUE.equals(r.enabled()),
-                  Boolean.TRUE.equals(r.caseSensitive()),
-                  Boolean.TRUE.equals(r.wholeWord()),
-                  r.highlightFg());
-            })
-            .toList();
+    List<NotificationRule> notificationRules =
+        props.notificationRules() == null
+            ? List.of()
+            : props.notificationRules().stream()
+                .filter(Objects::nonNull)
+                .map(
+                    r -> {
+                      NotificationRule.Type t =
+                          r.type() != null
+                              ? NotificationRule.Type.valueOf(r.type().name())
+                              : NotificationRule.Type.WORD;
+                      return new NotificationRule(
+                          r.label(),
+                          t,
+                          r.pattern(),
+                          Boolean.TRUE.equals(r.enabled()),
+                          Boolean.TRUE.equals(r.caseSensitive()),
+                          Boolean.TRUE.equals(r.wholeWord()),
+                          r.highlightFg());
+                    })
+                .toList();
 
-    this.current = new UiSettings(
-        props.theme(),
-        props.chatFontFamily(),
-        props.chatFontSize(),
-        props.autoConnectOnStart() == null || Boolean.TRUE.equals(props.autoConnectOnStart()),
-        trayEnabled,
-        trayCloseToTray,
-        trayMinimizeToTray,
-        trayStartMinimized,
-        trayNotifyHighlights,
-        trayNotifyPrivateMessages,
-        trayNotifyConnectionState,
+    this.current =
+        new UiSettings(
+            props.theme(),
+            props.chatFontFamily(),
+            props.chatFontSize(),
+            props.autoConnectOnStart() == null || Boolean.TRUE.equals(props.autoConnectOnStart()),
+            trayEnabled,
+            trayCloseToTray,
+            trayMinimizeToTray,
+            trayStartMinimized,
+            trayNotifyHighlights,
+            trayNotifyPrivateMessages,
+            trayNotifyConnectionState,
+            trayNotifyOnlyWhenUnfocused,
+            trayNotifyOnlyWhenMinimizedOrHidden,
+            trayNotifySuppressWhenTargetActive,
+            trayLinuxDbusActionsEnabled,
+            trayNotificationBackendMode,
+            props.imageEmbedsEnabled(),
+            props.imageEmbedsCollapsedByDefault(),
+            props.imageEmbedsMaxWidthPx(),
+            props.imageEmbedsMaxHeightPx(),
+            props.imageEmbedsAnimateGifs(),
+            props.linkPreviewsEnabled(),
+            props.linkPreviewsCollapsedByDefault(),
+            props.presenceFoldsEnabled(),
+            props.ctcpRequestsInActiveTargetEnabled() == null
+                || Boolean.TRUE.equals(props.ctcpRequestsInActiveTargetEnabled()),
+            props.typingIndicatorsEnabled(),
+            props.typingIndicatorsReceiveEnabled() == null
+                ? props.typingIndicatorsEnabled()
+                : props.typingIndicatorsReceiveEnabled(),
+            props.typingTreeIndicatorStyle(),
+            timestampsEnabled,
+            timestampFormat,
+            timestampsIncludeChatMessages,
+            timestampsIncludePresenceMessages,
+            props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
+            props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
+            props.commandHistoryMaxSize() != null ? props.commandHistoryMaxSize() : 500,
+            props.clientLineColorEnabled(),
+            props.clientLineColor(),
 
-        trayNotifyOnlyWhenUnfocused,
-        trayNotifyOnlyWhenMinimizedOrHidden,
-        trayNotifySuppressWhenTargetActive,
+            // Hostmask discovery / USERHOST
+            hm == null || Boolean.TRUE.equals(hm.userhostEnabled()),
+            hm != null && hm.userhostMinIntervalSeconds() != null
+                ? hm.userhostMinIntervalSeconds()
+                : 7,
+            hm != null && hm.userhostMaxCommandsPerMinute() != null
+                ? hm.userhostMaxCommandsPerMinute()
+                : 6,
+            hm != null && hm.userhostNickCooldownMinutes() != null
+                ? hm.userhostNickCooldownMinutes()
+                : 30,
+            hm != null && hm.userhostMaxNicksPerCommand() != null
+                ? hm.userhostMaxNicksPerCommand()
+                : 5,
 
-        trayLinuxDbusActionsEnabled,
-        trayNotificationBackendMode,
-
-        props.imageEmbedsEnabled(),
-        props.imageEmbedsCollapsedByDefault(),
-        props.imageEmbedsMaxWidthPx(),
-        props.imageEmbedsMaxHeightPx(),
-        props.imageEmbedsAnimateGifs(),
-        props.linkPreviewsEnabled(),
-        props.linkPreviewsCollapsedByDefault(),
-        props.presenceFoldsEnabled(),
-        props.ctcpRequestsInActiveTargetEnabled() == null || Boolean.TRUE.equals(props.ctcpRequestsInActiveTargetEnabled()),
-        props.typingIndicatorsEnabled(),
-        props.typingIndicatorsReceiveEnabled() == null
-            ? props.typingIndicatorsEnabled()
-            : props.typingIndicatorsReceiveEnabled(),
-        props.typingTreeIndicatorStyle(),
-        timestampsEnabled,
-        timestampFormat,
-        timestampsIncludeChatMessages,
-        timestampsIncludePresenceMessages,
-        props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
-        props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
-        props.commandHistoryMaxSize() != null ? props.commandHistoryMaxSize() : 500,
-        props.clientLineColorEnabled(),
-        props.clientLineColor(),
-
-        // Hostmask discovery / USERHOST
-        hm == null || Boolean.TRUE.equals(hm.userhostEnabled()),
-        hm != null && hm.userhostMinIntervalSeconds() != null ? hm.userhostMinIntervalSeconds() : 7,
-        hm != null && hm.userhostMaxCommandsPerMinute() != null ? hm.userhostMaxCommandsPerMinute() : 6,
-        hm != null && hm.userhostNickCooldownMinutes() != null ? hm.userhostNickCooldownMinutes() : 30,
-        hm != null && hm.userhostMaxNicksPerCommand() != null ? hm.userhostMaxNicksPerCommand() : 5,
-
-        // User info enrichment (fallback)
-        enrichmentEnabled,
-        ue != null && ue.userhostMinIntervalSeconds() != null ? ue.userhostMinIntervalSeconds() : 15,
-        ue != null && ue.userhostMaxCommandsPerMinute() != null ? ue.userhostMaxCommandsPerMinute() : 3,
-        ue != null && ue.userhostNickCooldownMinutes() != null ? ue.userhostNickCooldownMinutes() : 60,
-        ue != null && ue.userhostMaxNicksPerCommand() != null ? ue.userhostMaxNicksPerCommand() : 5,
-
-        whoisFallbackEnabled,
-        ue != null && ue.whoisMinIntervalSeconds() != null ? ue.whoisMinIntervalSeconds() : 45,
-        ue != null && ue.whoisNickCooldownMinutes() != null ? ue.whoisNickCooldownMinutes() : 120,
-
-        periodicRefreshEnabled,
-        ue != null && ue.periodicRefreshIntervalSeconds() != null ? ue.periodicRefreshIntervalSeconds() : 300,
-        ue != null && ue.periodicRefreshNicksPerTick() != null ? ue.periodicRefreshNicksPerTick() : 2,
-
-        mf != null && mf.isonPollIntervalSeconds() != null ? mf.isonPollIntervalSeconds() : 30,
-
-        props.notificationRuleCooldownSeconds() != null ? props.notificationRuleCooldownSeconds() : 15,
-
-        notificationRules
-    );
+            // User info enrichment (fallback)
+            enrichmentEnabled,
+            ue != null && ue.userhostMinIntervalSeconds() != null
+                ? ue.userhostMinIntervalSeconds()
+                : 15,
+            ue != null && ue.userhostMaxCommandsPerMinute() != null
+                ? ue.userhostMaxCommandsPerMinute()
+                : 3,
+            ue != null && ue.userhostNickCooldownMinutes() != null
+                ? ue.userhostNickCooldownMinutes()
+                : 60,
+            ue != null && ue.userhostMaxNicksPerCommand() != null
+                ? ue.userhostMaxNicksPerCommand()
+                : 5,
+            whoisFallbackEnabled,
+            ue != null && ue.whoisMinIntervalSeconds() != null ? ue.whoisMinIntervalSeconds() : 45,
+            ue != null && ue.whoisNickCooldownMinutes() != null
+                ? ue.whoisNickCooldownMinutes()
+                : 120,
+            periodicRefreshEnabled,
+            ue != null && ue.periodicRefreshIntervalSeconds() != null
+                ? ue.periodicRefreshIntervalSeconds()
+                : 300,
+            ue != null && ue.periodicRefreshNicksPerTick() != null
+                ? ue.periodicRefreshNicksPerTick()
+                : 2,
+            mf != null && mf.isonPollIntervalSeconds() != null ? mf.isonPollIntervalSeconds() : 30,
+            props.notificationRuleCooldownSeconds() != null
+                ? props.notificationRuleCooldownSeconds()
+                : 15,
+            notificationRules);
   }
 
   public UiSettings get() {

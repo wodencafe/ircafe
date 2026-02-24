@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
  * Resolves the effective proxy configuration for a given server.
  *
  * <p>Precedence:
+ *
  * <ol>
  *   <li>If the server has an explicit proxy override (including "enabled=false"), use it.
  *   <li>Otherwise, fall back to the current default proxy configured via {@link NetProxyContext}.
@@ -32,7 +33,8 @@ public class ServerProxyResolver {
   public IrcProperties.Proxy effectiveProxy(String serverId) {
     String id = Objects.toString(serverId, "").trim();
     if (!id.isEmpty()) {
-      IrcProperties.Proxy override = serverCatalog.find(id).map(IrcProperties.Server::proxy).orElse(null);
+      IrcProperties.Proxy override =
+          serverCatalog.find(id).map(IrcProperties.Server::proxy).orElse(null);
       if (override != null) {
         return NetProxyContext.normalize(override);
       }

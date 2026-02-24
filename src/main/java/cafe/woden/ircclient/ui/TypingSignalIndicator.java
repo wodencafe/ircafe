@@ -1,18 +1,18 @@
 package cafe.woden.ircclient.ui;
 
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.util.Locale;
+import javax.swing.*;
 
 /**
  * Small right-side telemetry icon showing typing-signal availability and sends.
  *
- * <p>Renders a subtle keyboard icon and themed chevron telemetry:
- * active -> one double-chevron group scanning left-to-right, paused -> ghost gray hold, done -> fade out.</p>
+ * <p>Renders a subtle keyboard icon and themed chevron telemetry: active -> one double-chevron
+ * group scanning left-to-right, paused -> ghost gray hold, done -> fade out.
  */
 final class TypingSignalIndicator extends JComponent {
 
@@ -40,12 +40,15 @@ final class TypingSignalIndicator extends JComponent {
   TypingSignalIndicator() {
     setOpaque(false);
     setVisible(false);
-    fadeTimer = new Timer(FRAME_MS, new ActionListener() {
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        onFadeTick();
-      }
-    });
+    fadeTimer =
+        new Timer(
+            FRAME_MS,
+            new ActionListener() {
+              @Override
+              public void actionPerformed(ActionEvent e) {
+                onFadeTick();
+              }
+            });
     fadeTimer.setRepeats(true);
     // Enable per-region tooltips via getToolTipText(MouseEvent).
     setToolTipText("");
@@ -248,7 +251,8 @@ final class TypingSignalIndicator extends JComponent {
     return index == activeIndex ? 1f : 0f;
   }
 
-  private static void drawDoubleChevron(Graphics2D g2, int x, int y, int h, Color glow, Color stroke) {
+  private static void drawDoubleChevron(
+      Graphics2D g2, int x, int y, int h, Color glow, Color stroke) {
     drawChevron(g2, x, y, h, glow, stroke);
     drawChevron(g2, x + CHEVRON_PAIR_OFFSET, y, h, glow, stroke);
   }

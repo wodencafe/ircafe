@@ -11,15 +11,18 @@ import javax.swing.BoundedRangeModel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.text.StyledDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Decorates a transcript scrollpane with "follow tail" behavior: if the user is at the bottom, new content keeps the view pinned to the bot… */
+/**
+ * Decorates a transcript scrollpane with "follow tail" behavior: if the user is at the bottom, new
+ * content keeps the view pinned to the bot…
+ */
 public final class FollowTailScrollDecorator implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(FollowTailScrollDecorator.class);
@@ -27,10 +30,11 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
   private final int id = IDS.incrementAndGet();
 
   /**
-   * This class can emit a lot of state-change chatter while scrolling. Keep it
-   * at DEBUG so default INFO logging isn't spammy, and rate-limit it further.
+   * This class can emit a lot of state-change chatter while scrolling. Keep it at DEBUG so default
+   * INFO logging isn't spammy, and rate-limit it further.
    */
   private static final long DEBUG_INTERVAL_NS = TimeUnit.SECONDS.toNanos(1);
+
   private volatile long lastDebugNs = 0L;
 
   private final JScrollPane scroll;
@@ -52,16 +56,29 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
   private int lastBarExtent = 0;
   private int lastBarValue = 0;
 
-  private final DocumentListener docListener = new DocumentListener() {
-    @Override public void insertUpdate(DocumentEvent e) { maybeAutoScroll(); }
-    @Override public void removeUpdate(DocumentEvent e) { maybeAutoScroll(); }
-    @Override public void changedUpdate(DocumentEvent e) { maybeAutoScroll(); }
-  };
+  private final DocumentListener docListener =
+      new DocumentListener() {
+        @Override
+        public void insertUpdate(DocumentEvent e) {
+          maybeAutoScroll();
+        }
 
-  private final AdjustmentListener barListener = e -> {
-    if (programmaticScroll) return;
-    updateScrollStateFromBar();
-  };
+        @Override
+        public void removeUpdate(DocumentEvent e) {
+          maybeAutoScroll();
+        }
+
+        @Override
+        public void changedUpdate(DocumentEvent e) {
+          maybeAutoScroll();
+        }
+      };
+
+  private final AdjustmentListener barListener =
+      e -> {
+        if (programmaticScroll) return;
+        updateScrollStateFromBar();
+      };
 
   private final ChangeListener modelListener = (ChangeEvent e) -> onBarModelChanged();
 
@@ -72,8 +89,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
       BooleanSupplier isFollowTail,
       Consumer<Boolean> setFollowTail,
       IntSupplier getSavedScrollValue,
-      IntConsumer setSavedScrollValue
-  ) {
+      IntConsumer setSavedScrollValue) {
     this.scroll = scroll;
     this.bar = scroll.getVerticalScrollBar();
     this.barModel = this.bar.getModel();
@@ -106,7 +122,8 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
       int extent = barModel.getExtent();
       int val = bar.getValue();
       boolean atBottomNow = (val + extent) >= (max - 2);
-      log.debug("[FollowTail#{}] {} followTail={} forcePinOnce={} atBottomNow={} val={} extent={} max={} lastVal={} lastExtent={} lastMax={}",
+      log.debug(
+          "[FollowTail#{}] {} followTail={} forcePinOnce={} atBottomNow={} val={} extent={} max={} lastVal={} lastExtent={} lastMax={}",
           id,
           reason,
           safeIsFollowTail(),
@@ -119,7 +136,8 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
           lastBarExtent,
           lastBarMax);
     } catch (Throwable t) {
-      log.debug("[FollowTail#{}] {} (unable to snapshot scroll state: {})", id, reason, t.toString());
+      log.debug(
+          "[FollowTail#{}] {} (unable to snapshot scroll state: {})", id, reason, t.toString());
     }
   }
 
@@ -181,7 +199,8 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
     if (!follow && !forcePinOnce && atBottomNow) {
       if (log.isDebugEnabled()) {
-        log.debug("[FollowTail#{}] docMutation atBottomNow=true but followTail=false -> auto enable", id);
+        log.debug(
+            "[FollowTail#{}] docMutation atBottomNow=true but followTail=false -> auto enable", id);
       }
       setFollowTailWithReason(true, "docMutation.atBottomAutoEnable");
       follow = true;
@@ -195,14 +214,15 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     }
 
     infoOnce("docMutation -> maybeAutoScroll");
-    SwingUtilities.invokeLater(() -> {
-      try {
-        scrollToBottom();
-      } finally {
-        // Clear the one-shot pin after we have successfully re-pinned.
-        forcePinOnce = false;
-      }
-    });
+    SwingUtilities.invokeLater(
+        () -> {
+          try {
+            scrollToBottom();
+          } finally {
+            // Clear the one-shot pin after we have successfully re-pinned.
+            forcePinOnce = false;
+          }
+        });
   }
 
   private void onBarModelChanged() {
@@ -233,13 +253,14 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
     if ((safeIsFollowTail() && wasAtBottom) || forcePinOnce) {
       infoOnce("barModelChanged -> repin");
-      SwingUtilities.invokeLater(() -> {
-        try {
-          scrollToBottom();
-        } finally {
-          forcePinOnce = false;
-        }
-      });
+      SwingUtilities.invokeLater(
+          () -> {
+            try {
+              scrollToBottom();
+            } finally {
+              forcePinOnce = false;
+            }
+          });
     }
   }
 
@@ -325,15 +346,16 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
     }
 
     int saved = getSavedScrollValue.getAsInt();
-    SwingUtilities.invokeLater(() -> {
-      try {
-        programmaticScroll = true;
-        bar.setValue(Math.min(saved, Math.max(0, bar.getMaximum())));
-        captureBarState();
-      } finally {
-        programmaticScroll = false;
-      }
-    });
+    SwingUtilities.invokeLater(
+        () -> {
+          try {
+            programmaticScroll = true;
+            bar.setValue(Math.min(saved, Math.max(0, bar.getMaximum())));
+            captureBarState();
+          } finally {
+            programmaticScroll = false;
+          }
+        });
   }
 
   @Override

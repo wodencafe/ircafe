@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class AwayStatusStore {
 
-  
   public record AwayStatus(boolean isAway, String message, Instant at) {
     public AwayStatus {
       message = Objects.toString(message, "").trim();
@@ -19,7 +18,8 @@ public class AwayStatusStore {
     }
   }
 
-  private final Map<String, Map<String, AwayStatus>> awayByServerAndNickLower = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, AwayStatus>> awayByServerAndNickLower =
+      new ConcurrentHashMap<>();
 
   private static String norm(String s) {
     return Objects.toString(s, "").trim();
@@ -56,12 +56,12 @@ public class AwayStatusStore {
 
     AwayStatus next = new AwayStatus(isAway, message, at);
 
-    Map<String, AwayStatus> byNick = awayByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+    Map<String, AwayStatus> byNick =
+        awayByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
     AwayStatus prev = byNick.put(nk, next);
     return !Objects.equals(prev, next);
   }
 
-  
   public boolean clear(String serverId, String nick) {
     String sid = norm(serverId);
     String nk = nickKey(nick);

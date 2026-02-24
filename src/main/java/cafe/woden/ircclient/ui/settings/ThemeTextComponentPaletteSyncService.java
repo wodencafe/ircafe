@@ -22,9 +22,11 @@ class ThemeTextComponentPaletteSyncService {
   void syncAllWindows() {
     if (!isNimbusLookAndFeelActive()) return;
 
-    Color fieldBg = firstUiColor("TextField.background", "TextComponent.background", "nimbusLightBackground");
+    Color fieldBg =
+        firstUiColor("TextField.background", "TextComponent.background", "nimbusLightBackground");
     Color fieldFg = firstUiColor("TextField.foreground", "Label.foreground", "textText");
-    Color areaBg = firstUiColor("TextPane.background", "TextArea.background", "TextComponent.background");
+    Color areaBg =
+        firstUiColor("TextPane.background", "TextArea.background", "TextComponent.background");
     Color areaFg = firstUiColor("TextPane.foreground", "TextArea.foreground", "Label.foreground");
     Color selectionBg =
         firstUiColor(
@@ -39,21 +41,23 @@ class ThemeTextComponentPaletteSyncService {
 
     int updated = 0;
     for (Window window : Window.getWindows()) {
-      updated += syncComponentTree(window, fieldBg, fieldFg, areaBg, areaFg, selectionBg, selectionFg);
+      updated +=
+          syncComponentTree(window, fieldBg, fieldFg, areaBg, areaFg, selectionBg, selectionFg);
     }
 
     if (ThemeLookAndFeelUtils.isNimbusDebugEnabled()) {
-      String message = String.format(
-          Locale.ROOT,
-          "[ircafe][nimbus] text-component palette sync touched %d components (laf=%s fieldBg=%s areaBg=%s fieldFg=%s areaFg=%s selBg=%s selFg=%s)",
-          updated,
-          ThemeLookAndFeelUtils.currentLookAndFeelClassName(),
-          toHexOrNull(fieldBg),
-          toHexOrNull(areaBg),
-          toHexOrNull(fieldFg),
-          toHexOrNull(areaFg),
-          toHexOrNull(selectionBg),
-          toHexOrNull(selectionFg));
+      String message =
+          String.format(
+              Locale.ROOT,
+              "[ircafe][nimbus] text-component palette sync touched %d components (laf=%s fieldBg=%s areaBg=%s fieldFg=%s areaFg=%s selBg=%s selFg=%s)",
+              updated,
+              ThemeLookAndFeelUtils.currentLookAndFeelClassName(),
+              toHexOrNull(fieldBg),
+              toHexOrNull(areaBg),
+              toHexOrNull(fieldFg),
+              toHexOrNull(areaFg),
+              toHexOrNull(selectionBg),
+              toHexOrNull(selectionFg));
       log.warn(message);
       System.err.println(message);
     }
@@ -103,11 +107,7 @@ class ThemeTextComponentPaletteSyncService {
   }
 
   private static void applyPalette(
-      JTextComponent c,
-      Color bg,
-      Color fg,
-      Color selectionBg,
-      Color selectionFg) {
+      JTextComponent c, Color bg, Color fg, Color selectionBg, Color selectionFg) {
     if (bg != null) c.setBackground(bg);
     if (fg != null) {
       c.setForeground(fg);
@@ -137,6 +137,11 @@ class ThemeTextComponentPaletteSyncService {
     return String.format(
         Locale.ROOT,
         "#%02X%02X%02X(%d,%d,%d)",
-        c.getRed(), c.getGreen(), c.getBlue(), c.getRed(), c.getGreen(), c.getBlue());
+        c.getRed(),
+        c.getGreen(),
+        c.getBlue(),
+        c.getRed(),
+        c.getGreen(),
+        c.getBlue());
   }
 }

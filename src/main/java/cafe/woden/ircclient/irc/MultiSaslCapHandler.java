@@ -7,7 +7,6 @@ import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,13 +27,14 @@ import org.slf4j.LoggerFactory;
  * SASL cap handler supporting multiple mechanisms.
  *
  * <p>Supported mechanisms:
+ *
  * <ul>
- *   <li>PLAIN</li>
- *   <li>EXTERNAL</li>
- *   <li>SCRAM-SHA-1</li>
- *   <li>SCRAM-SHA-256</li>
- *   <li>ECDSA-NIST256P-CHALLENGE (secret interpreted as base64 PKCS#8 DER EC private key)</li>
- *   <li>AUTO (choose strongest offered & satisfiable mechanism)</li>
+ *   <li>PLAIN
+ *   <li>EXTERNAL
+ *   <li>SCRAM-SHA-1
+ *   <li>SCRAM-SHA-256
+ *   <li>ECDSA-NIST256P-CHALLENGE (secret interpreted as base64 PKCS#8 DER EC private key)
+ *   <li>AUTO (choose strongest offered & satisfiable mechanism)
  * </ul>
  *
  * <p>Note: The "password" field in config is treated as a generic {@code secret}.
@@ -65,7 +65,8 @@ public final class MultiSaslCapHandler implements CapHandler {
   // SCRAM state
   private ScramContext scram;
 
-  public MultiSaslCapHandler(String username, String secret, String mechanism, boolean disconnectOnFailure) {
+  public MultiSaslCapHandler(
+      String username, String secret, String mechanism, boolean disconnectOnFailure) {
     this.username = Objects.toString(username, "");
     this.secret = Objects.toString(secret, "");
     this.configuredMechanism = Objects.toString(mechanism, "PLAIN").trim();
@@ -83,7 +84,8 @@ public final class MultiSaslCapHandler implements CapHandler {
         if (normalized.startsWith(":")) normalized = normalized.substring(1).trim();
         if (normalized.isEmpty()) continue;
 
-        if (normalized.equalsIgnoreCase("sasl") || normalized.toLowerCase(Locale.ROOT).startsWith("sasl=")) {
+        if (normalized.equalsIgnoreCase("sasl")
+            || normalized.toLowerCase(Locale.ROOT).startsWith("sasl=")) {
           saslOffered = true;
           int idx = normalized.indexOf('=');
           if (idx >= 0 && idx + 1 < normalized.length()) {
@@ -104,7 +106,8 @@ public final class MultiSaslCapHandler implements CapHandler {
       saslRequested = true;
       state = State.REQUESTED;
       bot.sendCAP().request("sasl");
-      log.debug("[SASL] Requested capability sasl (offered mechanisms: {})", offeredMechanismsUpper);
+      log.debug(
+          "[SASL] Requested capability sasl (offered mechanisms: {})", offeredMechanismsUpper);
     }
     return false;
   }
@@ -118,8 +121,13 @@ public final class MultiSaslCapHandler implements CapHandler {
 
     chosenMechanism = chooseMechanism();
     if (chosenMechanism == null || chosenMechanism.isBlank()) {
-      return fail(bot, "No usable SASL mechanism available (configured=" + configuredMechanism
-          + ", offered=" + offeredMechanismsUpper + ")");
+      return fail(
+          bot,
+          "No usable SASL mechanism available (configured="
+              + configuredMechanism
+              + ", offered="
+              + offeredMechanismsUpper
+              + ")");
     }
 
     log.info("[SASL] Starting SASL mechanism {}", chosenMechanism);
@@ -194,7 +202,8 @@ public final class MultiSaslCapHandler implements CapHandler {
     try {
       decoded = Base64.getDecoder().decode(joined);
     } catch (IllegalArgumentException e) {
-      throw new CAPException(CAPException.Reason.OTHER, "Invalid base64 from server during SASL", e);
+      throw new CAPException(
+          CAPException.Reason.OTHER, "Invalid base64 from server during SASL", e);
     }
     handleServerAuthMessage(bot, decoded);
   }
@@ -205,9 +214,13 @@ public final class MultiSaslCapHandler implements CapHandler {
       case "PLAIN" -> handlePlain(bot);
       case "EXTERNAL" -> handleExternal(bot);
       case "SCRAM-SHA-1" -> handleScram(bot, "SHA-1", new String(decoded, StandardCharsets.UTF_8));
-      case "SCRAM-SHA-256" -> handleScram(bot, "SHA-256", new String(decoded, StandardCharsets.UTF_8));
+      case "SCRAM-SHA-256" ->
+          handleScram(bot, "SHA-256", new String(decoded, StandardCharsets.UTF_8));
       case "ECDSA-NIST256P-CHALLENGE" -> handleEcdsa(bot, decoded);
-      default -> throw new CAPException(CAPException.Reason.UNSUPPORTED_CAPABILITY, "Unsupported SASL mechanism: " + chosenMechanism);
+      default ->
+          throw new CAPException(
+              CAPException.Reason.UNSUPPORTED_CAPABILITY,
+              "Unsupported SASL mechanism: " + chosenMechanism);
     }
   }
 
@@ -215,7 +228,8 @@ public final class MultiSaslCapHandler implements CapHandler {
     if (state == State.EXCHANGING) return;
     state = State.EXCHANGING;
     String payload = "\0" + username + "\0" + secret;
-    sendAuthenticateResponse(bot, Base64.getEncoder().encodeToString(payload.getBytes(StandardCharsets.UTF_8)));
+    sendAuthenticateResponse(
+        bot, Base64.getEncoder().encodeToString(payload.getBytes(StandardCharsets.UTF_8)));
   }
 
   private void handleExternal(PircBotX bot) {
@@ -226,7 +240,8 @@ public final class MultiSaslCapHandler implements CapHandler {
       bot.sendRaw().rawLine("AUTHENTICATE +");
       return;
     }
-    sendAuthenticateResponse(bot, Base64.getEncoder().encodeToString(username.getBytes(StandardCharsets.UTF_8)));
+    sendAuthenticateResponse(
+        bot, Base64.getEncoder().encodeToString(username.getBytes(StandardCharsets.UTF_8)));
   }
 
   private void handleEcdsa(PircBotX bot, byte[] challenge) throws CAPException {
@@ -237,7 +252,8 @@ public final class MultiSaslCapHandler implements CapHandler {
     // NOTE: This is best-effort; if your network expects a different signing scheme, we can adjust.
     try {
       byte[] keyBytes = Base64.getDecoder().decode(secret.trim());
-      PrivateKey pk = KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
+      PrivateKey pk =
+          KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
       Signature sig = Signature.getInstance("SHA256withECDSA");
       sig.initSign(pk);
       sig.update(challenge);
@@ -253,14 +269,16 @@ public final class MultiSaslCapHandler implements CapHandler {
       scram = new ScramContext(digest, username, secret);
       // Client first message (no server data required; serverMsg should be empty on '+').
       String clientFirst = scram.clientFirstMessage();
-      sendAuthenticateResponse(bot, Base64.getEncoder().encodeToString(clientFirst.getBytes(StandardCharsets.UTF_8)));
+      sendAuthenticateResponse(
+          bot, Base64.getEncoder().encodeToString(clientFirst.getBytes(StandardCharsets.UTF_8)));
       return;
     }
 
     if (!scram.serverFirstSeen) {
       scram.onServerFirst(serverMsg);
       String clientFinal = scram.clientFinalMessage();
-      sendAuthenticateResponse(bot, Base64.getEncoder().encodeToString(clientFinal.getBytes(StandardCharsets.UTF_8)));
+      sendAuthenticateResponse(
+          bot, Base64.getEncoder().encodeToString(clientFinal.getBytes(StandardCharsets.UTF_8)));
       return;
     }
 
@@ -310,7 +328,8 @@ public final class MultiSaslCapHandler implements CapHandler {
       if (c == null) continue;
       String n = c.trim();
       if (n.startsWith(":")) n = n.substring(1).trim();
-      if (n.equalsIgnoreCase(want) || n.toLowerCase(Locale.ROOT).startsWith(want.toLowerCase(Locale.ROOT) + "=")) {
+      if (n.equalsIgnoreCase(want)
+          || n.toLowerCase(Locale.ROOT).startsWith(want.toLowerCase(Locale.ROOT) + "=")) {
         return true;
       }
     }
@@ -329,7 +348,8 @@ public final class MultiSaslCapHandler implements CapHandler {
     boolean hasUser = username != null && !username.isBlank();
     boolean hasSecret = secret != null && !secret.isBlank();
 
-    // Some servers advertise "sasl" without listing mechanisms (or PircBotX provides a bare 'sasl').
+    // Some servers advertise "sasl" without listing mechanisms (or PircBotX provides a bare
+    // 'sasl').
     // In that case, make a conservative guess.
     if (offeredMechanismsUpper.isEmpty()) {
       if (!hasSecret) {
@@ -384,7 +404,8 @@ public final class MultiSaslCapHandler implements CapHandler {
     }
 
     boolean isNumeric() {
-      return command != null && command.length() == 3
+      return command != null
+          && command.length() == 3
           && Character.isDigit(command.charAt(0))
           && Character.isDigit(command.charAt(1))
           && Character.isDigit(command.charAt(2));
@@ -478,10 +499,12 @@ public final class MultiSaslCapHandler implements CapHandler {
       String s = kv.get("s");
       String i = kv.get("i");
       if (r == null || s == null || i == null) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM server-first-message");
+        throw new CAPException(
+            CAPException.Reason.SASL_FAILED, "Invalid SCRAM server-first-message");
       }
       if (!r.startsWith(clientNonce)) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "SCRAM server nonce does not start with client nonce");
+        throw new CAPException(
+            CAPException.Reason.SASL_FAILED, "SCRAM server nonce does not start with client nonce");
       }
 
       byte[] salt;
@@ -497,7 +520,8 @@ public final class MultiSaslCapHandler implements CapHandler {
       } catch (NumberFormatException e) {
         throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM iteration count");
       }
-      if (it <= 0) throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM iteration count");
+      if (it <= 0)
+        throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM iteration count");
 
       // client-final-message without proof
       // channel binding is "biws" (no binding)
@@ -505,11 +529,14 @@ public final class MultiSaslCapHandler implements CapHandler {
       this.authMessage = clientFirstBare + "," + serverFirstMessage + "," + clientFinalWithoutProof;
 
       this.saltedPassword = hi(pass.getBytes(StandardCharsets.UTF_8), salt, it, digest);
-      byte[] clientKey = hmac(saltedPassword, "Client Key".getBytes(StandardCharsets.UTF_8), digest);
+      byte[] clientKey =
+          hmac(saltedPassword, "Client Key".getBytes(StandardCharsets.UTF_8), digest);
       byte[] storedKey = hash(clientKey, digest);
-      byte[] clientSignature = hmac(storedKey, authMessage.getBytes(StandardCharsets.UTF_8), digest);
+      byte[] clientSignature =
+          hmac(storedKey, authMessage.getBytes(StandardCharsets.UTF_8), digest);
       byte[] clientProof = xor(clientKey, clientSignature);
-      byte[] serverKey = hmac(saltedPassword, "Server Key".getBytes(StandardCharsets.UTF_8), digest);
+      byte[] serverKey =
+          hmac(saltedPassword, "Server Key".getBytes(StandardCharsets.UTF_8), digest);
       this.serverSignature = hmac(serverKey, authMessage.getBytes(StandardCharsets.UTF_8), digest);
 
       this._clientProofB64 = Base64.getEncoder().encodeToString(clientProof);
@@ -536,7 +563,8 @@ public final class MultiSaslCapHandler implements CapHandler {
         throw new CAPException(CAPException.Reason.SASL_FAILED, "Missing SCRAM server signature");
       }
       if (!_serverSignatureB64.equals(v)) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "SCRAM server signature verification failed");
+        throw new CAPException(
+            CAPException.Reason.SASL_FAILED, "SCRAM server signature verification failed");
       }
       serverFinalSeen = true;
     }
@@ -565,7 +593,8 @@ public final class MultiSaslCapHandler implements CapHandler {
       return out;
     }
 
-    private static byte[] hi(byte[] password, byte[] salt, int iterations, String digest) throws CAPException {
+    private static byte[] hi(byte[] password, byte[] salt, int iterations, String digest)
+        throws CAPException {
       // Hi(str, salt, i) = U1 XOR U2 XOR ... XOR Ui
       // U1 = HMAC(str, salt + INT(1))
       byte[] salt1 = new byte[salt.length + 4];

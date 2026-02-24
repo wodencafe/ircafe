@@ -53,13 +53,14 @@ final class InstagramLinkPreviewResolver implements LinkPreviewResolver {
       if (primary == null) {
         primary = new LinkPreview(originalUrl, "Instagram post", null, "Instagram", mediaUrl, 1);
       } else {
-        primary = new LinkPreview(
-            primary.url(),
-            primary.title(),
-            primary.description(),
-            primary.siteName(),
-            mediaUrl,
-            Math.max(1, primary.mediaCount()));
+        primary =
+            new LinkPreview(
+                primary.url(),
+                primary.title(),
+                primary.description(),
+                primary.siteName(),
+                mediaUrl,
+                Math.max(1, primary.mediaCount()));
       }
     }
 
@@ -72,20 +73,17 @@ final class InstagramLinkPreviewResolver implements LinkPreviewResolver {
     return primary;
   }
 
-  private LinkPreview tryFetchAndParse(URI fetchUri, String originalUrl, PreviewHttp http) throws Exception {
+  private LinkPreview tryFetchAndParse(URI fetchUri, String originalUrl, PreviewHttp http)
+      throws Exception {
     if (fetchUri == null) return null;
 
-    Map<String, String> headers = PreviewHttp.headers(
-        "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
-        "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE,
-        "Referer", IG_ORIGIN
-    );
+    Map<String, String> headers =
+        PreviewHttp.headers(
+            "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
+            "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE,
+            "Referer", IG_ORIGIN);
 
-    var resp = http.getStream(
-        fetchUri,
-        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        headers
-    );
+    var resp = http.getStream(fetchUri, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8", headers);
 
     int status = resp.statusCode();
     if (status < 200 || status >= 300) {
@@ -114,11 +112,11 @@ final class InstagramLinkPreviewResolver implements LinkPreviewResolver {
       URI mediaUri = legacyMediaUri(originalUri);
       if (mediaUri == null) return null;
 
-      Map<String, String> headers = PreviewHttp.headers(
-          "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
-          "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE,
-          "Referer", IG_ORIGIN
-      );
+      Map<String, String> headers =
+          PreviewHttp.headers(
+              "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
+              "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE,
+              "Referer", IG_ORIGIN);
 
       var resp = http.getStream(mediaUri, "image/*,*/*;q=0.8", headers);
       int status = resp.statusCode();

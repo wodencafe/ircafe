@@ -1,10 +1,10 @@
 package cafe.woden.ircclient.irc.znc;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class ZncEphemeralNamingTest {
 
@@ -64,23 +64,12 @@ class ZncEphemeralNamingTest {
   }
 
   private static IrcProperties.Server server(String id, String login, String saslUser) {
-    IrcProperties.Server.Sasl sasl = (saslUser == null)
-        ? new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null)
-        : new IrcProperties.Server.Sasl(true, saslUser, "pw", "PLAIN", null);
+    IrcProperties.Server.Sasl sasl =
+        (saslUser == null)
+            ? new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null)
+            : new IrcProperties.Server.Sasl(true, saslUser, "pw", "PLAIN", null);
 
     return new IrcProperties.Server(
-        id,
-        "znc.example",
-        6697,
-        true,
-        "",
-        "nick",
-        login,
-        "real",
-        sasl,
-        List.of(),
-        List.of(),
-        null
-    );
+        id, "znc.example", 6697, true, "", "nick", login, "real", sasl, List.of(), List.of(), null);
   }
 }

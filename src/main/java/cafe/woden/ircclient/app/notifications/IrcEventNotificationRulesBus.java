@@ -19,7 +19,8 @@ public class IrcEventNotificationRulesBus {
   private volatile List<IrcEventNotificationRule> current;
 
   public IrcEventNotificationRulesBus(UiProperties props) {
-    List<IrcEventNotificationRuleProperties> raw = props != null ? props.ircEventNotificationRules() : null;
+    List<IrcEventNotificationRuleProperties> raw =
+        props != null ? props.ircEventNotificationRules() : null;
     if (raw == null) {
       this.current = IrcEventNotificationRule.defaults();
     } else {
@@ -51,7 +52,8 @@ public class IrcEventNotificationRulesBus {
     pcs.removePropertyChangeListener(l);
   }
 
-  private static List<IrcEventNotificationRule> mapRules(List<IrcEventNotificationRuleProperties> props) {
+  private static List<IrcEventNotificationRule> mapRules(
+      List<IrcEventNotificationRuleProperties> props) {
     if (props == null) return IrcEventNotificationRule.defaults();
     return sanitize(
         props.stream()
@@ -108,9 +110,10 @@ public class IrcEventNotificationRulesBus {
     try {
       focusScope = IrcEventNotificationRule.FocusScope.valueOf(p.focusScope().name());
     } catch (Exception ignored) {
-      focusScope = Boolean.TRUE.equals(p.toastWhenFocused())
-          ? IrcEventNotificationRule.FocusScope.ANY
-          : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+      focusScope =
+          Boolean.TRUE.equals(p.toastWhenFocused())
+              ? IrcEventNotificationRule.FocusScope.ANY
+              : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
     }
 
     return new IrcEventNotificationRule(

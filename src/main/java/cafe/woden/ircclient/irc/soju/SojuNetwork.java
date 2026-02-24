@@ -3,7 +3,8 @@ package cafe.woden.ircclient.irc.soju;
 import java.util.Map;
 import java.util.Objects;
 
-public record SojuNetwork(String bouncerServerId, String netId, String name, Map<String, String> attrs) {
+public record SojuNetwork(
+    String bouncerServerId, String netId, String name, Map<String, String> attrs) {
 
   public SojuNetwork {
     bouncerServerId = normalize(bouncerServerId);

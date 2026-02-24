@@ -42,7 +42,8 @@ public final class ThemeIdUtils {
     String s = String.valueOf(id != null ? id : "").trim();
     if (s.isEmpty()) return "darcula";
 
-    if (s.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+    if (s.regionMatches(
+        true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
       return IntelliJThemePack.ID_PREFIX + s.substring(IntelliJThemePack.ID_PREFIX.length());
     }
     if (looksLikeClassName(s)) return s;
@@ -59,7 +60,10 @@ public final class ThemeIdUtils {
     String s = raw.trim();
     if (!s.contains(".")) return false;
 
-    if (s.startsWith("com.") || s.startsWith("org.") || s.startsWith("net.") || s.startsWith("io.")) {
+    if (s.startsWith("com.")
+        || s.startsWith("org.")
+        || s.startsWith("net.")
+        || s.startsWith("io.")) {
       return true;
     }
 
@@ -71,7 +75,8 @@ public final class ThemeIdUtils {
     String raw = themeId != null ? themeId.trim() : "";
     if (raw.isEmpty()) return true;
 
-    if (raw.regionMatches(true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
+    if (raw.regionMatches(
+        true, 0, IntelliJThemePack.ID_PREFIX, 0, IntelliJThemePack.ID_PREFIX.length())) {
       return true;
     }
     if (looksLikeClassName(raw)) {

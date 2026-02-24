@@ -30,7 +30,8 @@ public enum NotificationBackendMode {
     return switch (v) {
       case "auto" -> AUTO;
       case "native", "native-only" -> NATIVE_ONLY;
-      case "two-slices", "two_slices", "two-slices-only", "twoslices", "twoslices-only" -> TWO_SLICES_ONLY;
+      case "two-slices", "two_slices", "two-slices-only", "twoslices", "twoslices-only" ->
+          TWO_SLICES_ONLY;
       default -> AUTO;
     };
   }

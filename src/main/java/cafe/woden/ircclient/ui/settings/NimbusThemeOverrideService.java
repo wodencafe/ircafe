@@ -24,311 +24,327 @@ class NimbusThemeOverrideService {
   private record NimbusVariantSpec(boolean darkVariant, Runnable applyOverrides) {}
 
   private static final String[] NIMBUS_DARK_OVERRIDE_KEYS = {
-      "control",
-      "info",
-      "nimbusBase",
-      "nimbusBlueGrey",
-      "nimbusBorder",
-      "nimbusLightBackground",
-      "nimbusFocus",
-      "nimbusSelectionBackground",
-      "nimbusSelectedText",
-      "nimbusDisabledText",
-      "nimbusInfoBlue",
-      "nimbusAlertYellow",
-      "nimbusOrange",
-      "nimbusRed",
-      "nimbusGreen",
-      "textHighlight",
-      "textHighlightText",
-      "text",
-      "textForeground",
-      "textText",
-      "controlText",
-      "controlDkShadow",
-      "controlShadow",
-      "controlLtHighlight",
-      "Label.foreground",
-      "Panel.background",
-      "menu",
-      "Component.focusColor",
-      "Component.accentColor",
-      "Component.linkColor",
-      "Component.borderColor",
-      "Component.warningColor",
-      "Component.warning.outlineColor",
-      "Component.warning.borderColor",
-      "Component.warning.focusedBorderColor",
-      "Component.warning.focusColor",
-      "Component.errorColor",
-      "Component.error.outlineColor",
-      "Component.error.borderColor",
-      "Component.error.focusedBorderColor",
-      "Component.error.focusColor",
-      "TextField.background",
-      "TextField.foreground",
-      "TextField.borderColor",
-      "TextArea.background",
-      "TextArea.foreground",
-      "TextComponent.selectionBackground",
-      "TextComponent.selectionForeground",
-      "ComboBox.background",
-      "ComboBox.foreground",
-      "ComboBox.disabled",
-      "ComboBox.disabledText",
-      "ComboBox.selectionBackground",
-      "ComboBox.selectionForeground",
-      "ComboBox.rendererUseListColors",
-      "ComboBox:\"ComboBox.listRenderer\".background",
-      "ComboBox:\"ComboBox.listRenderer\".textForeground",
-      "ComboBox:\"ComboBox.listRenderer\"[Selected].background",
-      "ComboBox:\"ComboBox.listRenderer\"[Selected].textForeground",
-      "ComboBox:\"ComboBox.renderer\".background",
-      "ComboBox:\"ComboBox.renderer\".textForeground",
-      "ComboBox:\"ComboBox.renderer\"[Selected].background",
-      "ComboBox:\"ComboBox.renderer\"[Selected].textForeground",
-      "ComboBox:\"ComboBox.renderer\"[Disabled].textForeground",
-      "ComboBox:\"ComboBox.textField\".background",
-      "ComboBox:\"ComboBox.textField\".textForeground",
-      "ComboBox:\"ComboBox.textField\"[Selected].textForeground",
-      "ComboBox:\"ComboBox.arrowButton\".background",
-      "ComboBox:\"ComboBox.arrowButton\".foreground",
-      "Button.background",
-      "Button.foreground",
-      "Button.disabledText",
-      "Button.select",
-      "Button[Enabled].textForeground",
-      "Button[Disabled].textForeground",
-      "Button[Pressed].textForeground",
-      "Button[Default].textForeground",
-      "Button[Default+Pressed].textForeground",
-      "ToggleButton.background",
-      "ToggleButton.foreground",
-      "ToggleButton.disabledText",
-      "ToggleButton.select",
-      "CheckBox.background",
-      "CheckBox.foreground",
-      "CheckBox.disabledText",
-      "RadioButton.background",
-      "RadioButton.foreground",
-      "RadioButton.disabledText",
-      "List.background",
-      "List.foreground",
-      "List.selectionBackground",
-      "List.selectionForeground",
-      "Table.background",
-      "Table.foreground",
-      "Table.gridColor",
-      "Table.selectionBackground",
-      "Table.selectionForeground",
-      "Tree.textForeground",
-      "Tree.textBackground",
-      "Tree.selectionForeground",
-      "Tree.selectionBackground",
-      "MenuBar.background",
-      "MenuBar.foreground",
-      "MenuBar.borderColor",
-      "Menu.background",
-      "Menu.foreground",
-      "Menu.selectionBackground",
-      "Menu.selectionForeground",
-      "Menu.disabledForeground",
-      "MenuBar:Menu[Enabled].textForeground",
-      "MenuBar:Menu[Disabled].textForeground",
-      "MenuBar:Menu[Selected].textForeground",
-      "Menu[Enabled].textForeground",
-      "Menu[Disabled].textForeground",
-      "Menu[Enabled+Selected].textForeground",
-      "MenuItem.background",
-      "MenuItem.foreground",
-      "MenuItem.selectionBackground",
-      "MenuItem.selectionForeground",
-      "MenuItem.disabledForeground",
-      "Menu:MenuItemAccelerator[MouseOver].textForeground",
-      "MenuItem[Enabled].textForeground",
-      "MenuItem[Disabled].textForeground",
-      "MenuItem[MouseOver].textForeground",
-      "MenuItem:MenuItemAccelerator[Enabled].textForeground",
-      "MenuItem:MenuItemAccelerator[MouseOver].textForeground",
-      "MenuItem:MenuItemAccelerator[Disabled].textForeground",
-      "CheckBoxMenuItem.background",
-      "CheckBoxMenuItem.foreground",
-      "CheckBoxMenuItem.selectionBackground",
-      "CheckBoxMenuItem.selectionForeground",
-      "CheckBoxMenuItem.disabledForeground",
-      "CheckBoxMenuItem[Enabled].textForeground",
-      "CheckBoxMenuItem[Disabled].textForeground",
-      "CheckBoxMenuItem[MouseOver].textForeground",
-      "CheckBoxMenuItem[MouseOver+Selected].textForeground",
-      "CheckBoxMenuItem:MenuItemAccelerator[Enabled].textForeground",
-      "CheckBoxMenuItem:MenuItemAccelerator[MouseOver].textForeground",
-      "CheckBoxMenuItem:MenuItemAccelerator[Disabled].textForeground",
-      "RadioButtonMenuItem.background",
-      "RadioButtonMenuItem.foreground",
-      "RadioButtonMenuItem.selectionBackground",
-      "RadioButtonMenuItem.selectionForeground",
-      "RadioButtonMenuItem.disabledForeground",
-      "RadioButtonMenuItem[Enabled].textForeground",
-      "RadioButtonMenuItem[Disabled].textForeground",
-      "RadioButtonMenuItem[MouseOver].textForeground",
-      "RadioButtonMenuItem[MouseOver+Selected].textForeground",
-      "RadioButtonMenuItem:MenuItemAccelerator[Enabled].textForeground",
-      "RadioButtonMenuItem:MenuItemAccelerator[MouseOver].textForeground",
-      "RadioButtonMenuItem:MenuItemAccelerator[Disabled].textForeground",
-      "PopupMenu.background",
-      "PopupMenu.foreground",
-      "PopupMenu.borderColor",
-      "PopupMenuSeparator.foreground",
-      "PopupMenuSeparator.background",
-      "Separator.foreground",
-      "Separator.background",
-      "ToolBar.separatorColor",
-      "SplitPane.background",
-      "SplitPane.foreground",
-      "SplitPaneDivider.draggingColor",
-      "ScrollPane.borderColor",
-      "PasswordField.background",
-      "PasswordField.borderColor",
-      "PasswordField.foreground",
-      "FormattedTextField.background",
-      "FormattedTextField.borderColor",
-      "FormattedTextField.foreground",
-      "TextPane.background",
-      "TextPane.foreground",
-      "EditorPane.background",
-      "EditorPane.foreground",
-      "Tree.background",
-      "TableHeader.background",
-      "TableHeader.foreground",
-      "TableHeader:\"TableHeader.renderer\".background",
-      "TableHeader:\"TableHeader.renderer\".foreground",
-      "Viewport.background",
-      "Viewport.foreground",
-      "Spinner.background",
-      "Spinner.foreground",
-      "Spinner:\"Spinner.formattedTextField\".background",
-      "Spinner:\"Spinner.formattedTextField\".foreground",
-      "ToolTip.background",
-      "ToolTip.foreground",
-      "TabbedPane.focus"
+    "control",
+    "info",
+    "nimbusBase",
+    "nimbusBlueGrey",
+    "nimbusBorder",
+    "nimbusLightBackground",
+    "nimbusFocus",
+    "nimbusSelectionBackground",
+    "nimbusSelectedText",
+    "nimbusDisabledText",
+    "nimbusInfoBlue",
+    "nimbusAlertYellow",
+    "nimbusOrange",
+    "nimbusRed",
+    "nimbusGreen",
+    "textHighlight",
+    "textHighlightText",
+    "text",
+    "textForeground",
+    "textText",
+    "controlText",
+    "controlDkShadow",
+    "controlShadow",
+    "controlLtHighlight",
+    "Label.foreground",
+    "Panel.background",
+    "menu",
+    "Component.focusColor",
+    "Component.accentColor",
+    "Component.linkColor",
+    "Component.borderColor",
+    "Component.warningColor",
+    "Component.warning.outlineColor",
+    "Component.warning.borderColor",
+    "Component.warning.focusedBorderColor",
+    "Component.warning.focusColor",
+    "Component.errorColor",
+    "Component.error.outlineColor",
+    "Component.error.borderColor",
+    "Component.error.focusedBorderColor",
+    "Component.error.focusColor",
+    "TextField.background",
+    "TextField.foreground",
+    "TextField.borderColor",
+    "TextArea.background",
+    "TextArea.foreground",
+    "TextComponent.selectionBackground",
+    "TextComponent.selectionForeground",
+    "ComboBox.background",
+    "ComboBox.foreground",
+    "ComboBox.disabled",
+    "ComboBox.disabledText",
+    "ComboBox.selectionBackground",
+    "ComboBox.selectionForeground",
+    "ComboBox.rendererUseListColors",
+    "ComboBox:\"ComboBox.listRenderer\".background",
+    "ComboBox:\"ComboBox.listRenderer\".textForeground",
+    "ComboBox:\"ComboBox.listRenderer\"[Selected].background",
+    "ComboBox:\"ComboBox.listRenderer\"[Selected].textForeground",
+    "ComboBox:\"ComboBox.renderer\".background",
+    "ComboBox:\"ComboBox.renderer\".textForeground",
+    "ComboBox:\"ComboBox.renderer\"[Selected].background",
+    "ComboBox:\"ComboBox.renderer\"[Selected].textForeground",
+    "ComboBox:\"ComboBox.renderer\"[Disabled].textForeground",
+    "ComboBox:\"ComboBox.textField\".background",
+    "ComboBox:\"ComboBox.textField\".textForeground",
+    "ComboBox:\"ComboBox.textField\"[Selected].textForeground",
+    "ComboBox:\"ComboBox.arrowButton\".background",
+    "ComboBox:\"ComboBox.arrowButton\".foreground",
+    "Button.background",
+    "Button.foreground",
+    "Button.disabledText",
+    "Button.select",
+    "Button[Enabled].textForeground",
+    "Button[Disabled].textForeground",
+    "Button[Pressed].textForeground",
+    "Button[Default].textForeground",
+    "Button[Default+Pressed].textForeground",
+    "ToggleButton.background",
+    "ToggleButton.foreground",
+    "ToggleButton.disabledText",
+    "ToggleButton.select",
+    "CheckBox.background",
+    "CheckBox.foreground",
+    "CheckBox.disabledText",
+    "RadioButton.background",
+    "RadioButton.foreground",
+    "RadioButton.disabledText",
+    "List.background",
+    "List.foreground",
+    "List.selectionBackground",
+    "List.selectionForeground",
+    "Table.background",
+    "Table.foreground",
+    "Table.gridColor",
+    "Table.selectionBackground",
+    "Table.selectionForeground",
+    "Tree.textForeground",
+    "Tree.textBackground",
+    "Tree.selectionForeground",
+    "Tree.selectionBackground",
+    "MenuBar.background",
+    "MenuBar.foreground",
+    "MenuBar.borderColor",
+    "Menu.background",
+    "Menu.foreground",
+    "Menu.selectionBackground",
+    "Menu.selectionForeground",
+    "Menu.disabledForeground",
+    "MenuBar:Menu[Enabled].textForeground",
+    "MenuBar:Menu[Disabled].textForeground",
+    "MenuBar:Menu[Selected].textForeground",
+    "Menu[Enabled].textForeground",
+    "Menu[Disabled].textForeground",
+    "Menu[Enabled+Selected].textForeground",
+    "MenuItem.background",
+    "MenuItem.foreground",
+    "MenuItem.selectionBackground",
+    "MenuItem.selectionForeground",
+    "MenuItem.disabledForeground",
+    "Menu:MenuItemAccelerator[MouseOver].textForeground",
+    "MenuItem[Enabled].textForeground",
+    "MenuItem[Disabled].textForeground",
+    "MenuItem[MouseOver].textForeground",
+    "MenuItem:MenuItemAccelerator[Enabled].textForeground",
+    "MenuItem:MenuItemAccelerator[MouseOver].textForeground",
+    "MenuItem:MenuItemAccelerator[Disabled].textForeground",
+    "CheckBoxMenuItem.background",
+    "CheckBoxMenuItem.foreground",
+    "CheckBoxMenuItem.selectionBackground",
+    "CheckBoxMenuItem.selectionForeground",
+    "CheckBoxMenuItem.disabledForeground",
+    "CheckBoxMenuItem[Enabled].textForeground",
+    "CheckBoxMenuItem[Disabled].textForeground",
+    "CheckBoxMenuItem[MouseOver].textForeground",
+    "CheckBoxMenuItem[MouseOver+Selected].textForeground",
+    "CheckBoxMenuItem:MenuItemAccelerator[Enabled].textForeground",
+    "CheckBoxMenuItem:MenuItemAccelerator[MouseOver].textForeground",
+    "CheckBoxMenuItem:MenuItemAccelerator[Disabled].textForeground",
+    "RadioButtonMenuItem.background",
+    "RadioButtonMenuItem.foreground",
+    "RadioButtonMenuItem.selectionBackground",
+    "RadioButtonMenuItem.selectionForeground",
+    "RadioButtonMenuItem.disabledForeground",
+    "RadioButtonMenuItem[Enabled].textForeground",
+    "RadioButtonMenuItem[Disabled].textForeground",
+    "RadioButtonMenuItem[MouseOver].textForeground",
+    "RadioButtonMenuItem[MouseOver+Selected].textForeground",
+    "RadioButtonMenuItem:MenuItemAccelerator[Enabled].textForeground",
+    "RadioButtonMenuItem:MenuItemAccelerator[MouseOver].textForeground",
+    "RadioButtonMenuItem:MenuItemAccelerator[Disabled].textForeground",
+    "PopupMenu.background",
+    "PopupMenu.foreground",
+    "PopupMenu.borderColor",
+    "PopupMenuSeparator.foreground",
+    "PopupMenuSeparator.background",
+    "Separator.foreground",
+    "Separator.background",
+    "ToolBar.separatorColor",
+    "SplitPane.background",
+    "SplitPane.foreground",
+    "SplitPaneDivider.draggingColor",
+    "ScrollPane.borderColor",
+    "PasswordField.background",
+    "PasswordField.borderColor",
+    "PasswordField.foreground",
+    "FormattedTextField.background",
+    "FormattedTextField.borderColor",
+    "FormattedTextField.foreground",
+    "TextPane.background",
+    "TextPane.foreground",
+    "EditorPane.background",
+    "EditorPane.foreground",
+    "Tree.background",
+    "TableHeader.background",
+    "TableHeader.foreground",
+    "TableHeader:\"TableHeader.renderer\".background",
+    "TableHeader:\"TableHeader.renderer\".foreground",
+    "Viewport.background",
+    "Viewport.foreground",
+    "Spinner.background",
+    "Spinner.foreground",
+    "Spinner:\"Spinner.formattedTextField\".background",
+    "Spinner:\"Spinner.formattedTextField\".foreground",
+    "ToolTip.background",
+    "ToolTip.foreground",
+    "TabbedPane.focus"
   };
 
   private static final String[] NIMBUS_TINT_OVERRIDE_KEYS = {
-      "control",
-      "info",
-      "nimbusBase",
-      "nimbusBlueGrey",
-      "nimbusBorder",
-      "nimbusLightBackground",
-      "nimbusFocus",
-      "nimbusSelectionBackground",
-      "nimbusSelectedText",
-      "nimbusDisabledText",
-      "nimbusInfoBlue",
-      "nimbusOrange",
-      "nimbusAlertYellow",
-      "nimbusRed",
-      "nimbusGreen",
-      "textHighlight",
-      "textHighlightText",
-      "text",
-      "textForeground",
-      "textText",
-      "controlText",
-      "Label.foreground",
-      "Panel.background",
-      "menu",
-      "Component.focusColor",
-      "Component.accentColor",
-      "Component.linkColor",
-      "TextField.background",
-      "TextField.foreground",
-      "TextArea.background",
-      "TextArea.foreground",
-      "List.background",
-      "List.foreground",
-      "Table.background",
-      "Table.foreground",
-      "Tree.textBackground",
-      "Tree.textForeground",
-      "TextComponent.selectionBackground",
-      "TextComponent.selectionForeground",
-      "List.selectionBackground",
-      "List.selectionForeground",
-      "Table.selectionBackground",
-      "Table.selectionForeground",
-      "Tree.selectionBackground",
-      "Tree.selectionForeground",
-      "MenuBar.background",
-      "MenuBar.foreground",
-      "Menu.background",
-      "Menu.foreground",
-      "Menu.selectionBackground",
-      "Menu.selectionForeground",
-      "MenuItem.background",
-      "MenuItem.foreground",
-      "MenuItem.selectionBackground",
-      "MenuItem.selectionForeground",
-      "MenuItem:MenuItemAccelerator[Enabled].textForeground",
-      "MenuItem:MenuItemAccelerator[MouseOver].textForeground",
-      "MenuItem:MenuItemAccelerator[Disabled].textForeground",
-      "CheckBoxMenuItem.background",
-      "CheckBoxMenuItem.foreground",
-      "CheckBoxMenuItem.selectionBackground",
-      "CheckBoxMenuItem.selectionForeground",
-      "CheckBoxMenuItem:MenuItemAccelerator[Enabled].textForeground",
-      "CheckBoxMenuItem:MenuItemAccelerator[MouseOver].textForeground",
-      "CheckBoxMenuItem:MenuItemAccelerator[Disabled].textForeground",
-      "RadioButtonMenuItem.background",
-      "RadioButtonMenuItem.foreground",
-      "RadioButtonMenuItem.selectionBackground",
-      "RadioButtonMenuItem.selectionForeground",
-      "RadioButtonMenuItem:MenuItemAccelerator[Enabled].textForeground",
-      "RadioButtonMenuItem:MenuItemAccelerator[MouseOver].textForeground",
-      "RadioButtonMenuItem:MenuItemAccelerator[Disabled].textForeground",
-      "PopupMenu.background",
-      "PopupMenu.foreground",
-      "PopupMenu.borderColor",
-      "Button.select",
-      "ToggleButton.select",
-      "TabbedPane.focus"
+    "control",
+    "info",
+    "nimbusBase",
+    "nimbusBlueGrey",
+    "nimbusBorder",
+    "nimbusLightBackground",
+    "nimbusFocus",
+    "nimbusSelectionBackground",
+    "nimbusSelectedText",
+    "nimbusDisabledText",
+    "nimbusInfoBlue",
+    "nimbusOrange",
+    "nimbusAlertYellow",
+    "nimbusRed",
+    "nimbusGreen",
+    "textHighlight",
+    "textHighlightText",
+    "text",
+    "textForeground",
+    "textText",
+    "controlText",
+    "Label.foreground",
+    "Panel.background",
+    "menu",
+    "Component.focusColor",
+    "Component.accentColor",
+    "Component.linkColor",
+    "TextField.background",
+    "TextField.foreground",
+    "TextArea.background",
+    "TextArea.foreground",
+    "List.background",
+    "List.foreground",
+    "Table.background",
+    "Table.foreground",
+    "Tree.textBackground",
+    "Tree.textForeground",
+    "TextComponent.selectionBackground",
+    "TextComponent.selectionForeground",
+    "List.selectionBackground",
+    "List.selectionForeground",
+    "Table.selectionBackground",
+    "Table.selectionForeground",
+    "Tree.selectionBackground",
+    "Tree.selectionForeground",
+    "MenuBar.background",
+    "MenuBar.foreground",
+    "Menu.background",
+    "Menu.foreground",
+    "Menu.selectionBackground",
+    "Menu.selectionForeground",
+    "MenuItem.background",
+    "MenuItem.foreground",
+    "MenuItem.selectionBackground",
+    "MenuItem.selectionForeground",
+    "MenuItem:MenuItemAccelerator[Enabled].textForeground",
+    "MenuItem:MenuItemAccelerator[MouseOver].textForeground",
+    "MenuItem:MenuItemAccelerator[Disabled].textForeground",
+    "CheckBoxMenuItem.background",
+    "CheckBoxMenuItem.foreground",
+    "CheckBoxMenuItem.selectionBackground",
+    "CheckBoxMenuItem.selectionForeground",
+    "CheckBoxMenuItem:MenuItemAccelerator[Enabled].textForeground",
+    "CheckBoxMenuItem:MenuItemAccelerator[MouseOver].textForeground",
+    "CheckBoxMenuItem:MenuItemAccelerator[Disabled].textForeground",
+    "RadioButtonMenuItem.background",
+    "RadioButtonMenuItem.foreground",
+    "RadioButtonMenuItem.selectionBackground",
+    "RadioButtonMenuItem.selectionForeground",
+    "RadioButtonMenuItem:MenuItemAccelerator[Enabled].textForeground",
+    "RadioButtonMenuItem:MenuItemAccelerator[MouseOver].textForeground",
+    "RadioButtonMenuItem:MenuItemAccelerator[Disabled].textForeground",
+    "PopupMenu.background",
+    "PopupMenu.foreground",
+    "PopupMenu.borderColor",
+    "Button.select",
+    "ToggleButton.select",
+    "TabbedPane.focus"
   };
 
   private static final Map<String, NimbusVariantSpec> NIMBUS_VARIANTS =
       Map.ofEntries(
-          Map.entry("nimbus-dark", new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkOverrides)),
+          Map.entry(
+              "nimbus-dark",
+              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkOverrides)),
           Map.entry(
               "nimbus-dark-amber",
-              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkAmberOverrides)),
+              new NimbusVariantSpec(
+                  true, NimbusThemeOverrideService::applyNimbusDarkAmberOverrides)),
           Map.entry(
               "nimbus-dark-blue",
-              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkBlueOverrides)),
+              new NimbusVariantSpec(
+                  true, NimbusThemeOverrideService::applyNimbusDarkBlueOverrides)),
           Map.entry(
               "nimbus-dark-violet",
-              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkVioletOverrides)),
+              new NimbusVariantSpec(
+                  true, NimbusThemeOverrideService::applyNimbusDarkVioletOverrides)),
           Map.entry(
               "nimbus-dark-green",
-              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkGreenOverrides)),
+              new NimbusVariantSpec(
+                  true, NimbusThemeOverrideService::applyNimbusDarkGreenOverrides)),
           Map.entry(
               "nimbus-dark-orange",
-              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkOrangeOverrides)),
+              new NimbusVariantSpec(
+                  true, NimbusThemeOverrideService::applyNimbusDarkOrangeOverrides)),
           Map.entry(
               "nimbus-dark-magenta",
-              new NimbusVariantSpec(true, NimbusThemeOverrideService::applyNimbusDarkMagentaOverrides)),
-          Map.entry("nimbus-orange", new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusOrangeOverrides)),
-          Map.entry("nimbus-green", new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusGreenOverrides)),
-          Map.entry("nimbus-blue", new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusBlueOverrides)),
+              new NimbusVariantSpec(
+                  true, NimbusThemeOverrideService::applyNimbusDarkMagentaOverrides)),
+          Map.entry(
+              "nimbus-orange",
+              new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusOrangeOverrides)),
+          Map.entry(
+              "nimbus-green",
+              new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusGreenOverrides)),
+          Map.entry(
+              "nimbus-blue",
+              new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusBlueOverrides)),
           Map.entry(
               "nimbus-violet",
               new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusVioletOverrides)),
           Map.entry(
               "nimbus-magenta",
-              new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusMagentaOverrides)),
-          Map.entry("nimbus-amber", new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusAmberOverrides)));
+              new NimbusVariantSpec(
+                  false, NimbusThemeOverrideService::applyNimbusMagentaOverrides)),
+          Map.entry(
+              "nimbus-amber",
+              new NimbusVariantSpec(false, NimbusThemeOverrideService::applyNimbusAmberOverrides)));
 
   private static final Set<String> NIMBUS_DARK_VARIANTS = nimbusVariantIds(true);
   private static final Set<String> NIMBUS_TINT_VARIANTS = nimbusVariantIds(false);
-
 
   Set<String> variantIds() {
     return NIMBUS_VARIANTS.keySet();
@@ -363,9 +379,10 @@ class NimbusThemeOverrideService {
 
   private static Set<String> nimbusVariantIds(boolean darkVariants) {
     Set<String> out = new HashSet<>();
-    NIMBUS_VARIANTS.forEach((id, spec) -> {
-      if (spec.darkVariant() == darkVariants) out.add(id);
-    });
+    NIMBUS_VARIANTS.forEach(
+        (id, spec) -> {
+          if (spec.darkVariant() == darkVariants) out.add(id);
+        });
     return Set.copyOf(out);
   }
 
@@ -586,8 +603,7 @@ class NimbusThemeOverrideService {
         uiColor(0xD3, 0xA4, 0x5B),
         uiColor(0xC7, 0x73, 0x63),
         uiColor(0x73, 0xAB, 0x7F),
-        uiColor(0x7B, 0x64, 0x40)
-    );
+        uiColor(0x7B, 0x64, 0x40));
   }
 
   private static void applyNimbusDarkBlueOverrides() {
@@ -603,8 +619,7 @@ class NimbusThemeOverrideService {
         uiColor(0xBE, 0xA5, 0x6B),
         uiColor(0xB7, 0x70, 0x67),
         uiColor(0x73, 0xA9, 0x82),
-        uiColor(0x55, 0x6B, 0x87)
-    );
+        uiColor(0x55, 0x6B, 0x87));
   }
 
   private static void applyNimbusDarkVioletOverrides() {
@@ -620,8 +635,7 @@ class NimbusThemeOverrideService {
         uiColor(0xC0, 0xA5, 0x73),
         uiColor(0xC0, 0x72, 0x8B),
         uiColor(0x74, 0xA9, 0x89),
-        uiColor(0x6A, 0x59, 0x91)
-    );
+        uiColor(0x6A, 0x59, 0x91));
   }
 
   private static void applyNimbusDarkGreenOverrides() {
@@ -637,8 +651,7 @@ class NimbusThemeOverrideService {
         uiColor(0xA3, 0xD3, 0xA4),
         uiColor(0xB9, 0x6E, 0x68),
         uiColor(0x57, 0xB8, 0x79),
-        uiColor(0x45, 0x6A, 0x55)
-    );
+        uiColor(0x45, 0x6A, 0x55));
   }
 
   private static void applyNimbusDarkOrangeOverrides() {
@@ -654,8 +667,7 @@ class NimbusThemeOverrideService {
         uiColor(0xE8, 0xA9, 0x5A),
         uiColor(0xC5, 0x6E, 0x5F),
         uiColor(0x77, 0xAA, 0x82),
-        uiColor(0x89, 0x61, 0x46)
-    );
+        uiColor(0x89, 0x61, 0x46));
   }
 
   private static void applyNimbusDarkMagentaOverrides() {
@@ -671,180 +683,180 @@ class NimbusThemeOverrideService {
         uiColor(0xD7, 0x9A, 0xE0),
         uiColor(0xC2, 0x76, 0x90),
         uiColor(0x78, 0xAA, 0x86),
-        uiColor(0x7A, 0x54, 0x7C)
-    );
+        uiColor(0x7A, 0x54, 0x7C));
   }
 
-private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
-                                                   ColorUIResource nimbusBlueGrey,
-                                                   ColorUIResource focus,
-                                                   ColorUIResource link,
-                                                   ColorUIResource selectionBg,
-                                                   ColorUIResource menuSelectionBg,
-                                                   ColorUIResource nimbusInfoBlue,
-                                                   ColorUIResource nimbusOrange,
-                                                   ColorUIResource nimbusAlertYellow,
-                                                   ColorUIResource nimbusRed,
-                                                   ColorUIResource nimbusGreen,
-                                                   ColorUIResource splitPaneDraggingColor) {
-  applyNimbusDarkOverrides();
+  private static void applyNimbusDarkAccentOverrides(
+      ColorUIResource nimbusBase,
+      ColorUIResource nimbusBlueGrey,
+      ColorUIResource focus,
+      ColorUIResource link,
+      ColorUIResource selectionBg,
+      ColorUIResource menuSelectionBg,
+      ColorUIResource nimbusInfoBlue,
+      ColorUIResource nimbusOrange,
+      ColorUIResource nimbusAlertYellow,
+      ColorUIResource nimbusRed,
+      ColorUIResource nimbusGreen,
+      ColorUIResource splitPaneDraggingColor) {
+    applyNimbusDarkOverrides();
 
-  // Tint the dark neutral surfaces for each Nimbus dark accent variant.
-  // Without this, all dark variants inherit the same gray base from applyNimbusDarkOverrides().
-  ColorUIResource control = new ColorUIResource(mix(nimbusBlueGrey, nimbusBase, 0.35));
-  ColorUIResource bg = new ColorUIResource(darken(control, 0.10));
-  ColorUIResource menuBg = new ColorUIResource(darken(control, 0.05));
-  ColorUIResource border = new ColorUIResource(lighten(control, 0.10));
-  ColorUIResource separator = new ColorUIResource(lighten(control, 0.05));
+    // Tint the dark neutral surfaces for each Nimbus dark accent variant.
+    // Without this, all dark variants inherit the same gray base from applyNimbusDarkOverrides().
+    ColorUIResource control = new ColorUIResource(mix(nimbusBlueGrey, nimbusBase, 0.35));
+    ColorUIResource bg = new ColorUIResource(darken(control, 0.10));
+    ColorUIResource menuBg = new ColorUIResource(darken(control, 0.05));
+    ColorUIResource border = new ColorUIResource(lighten(control, 0.10));
+    ColorUIResource separator = new ColorUIResource(lighten(control, 0.05));
 
-  // Chef's-kiss pass: tint the supporting neutrals so the whole theme reads as one palette.
-  ColorUIResource controlShadow = new ColorUIResource(darken(control, 0.20));
-  ColorUIResource controlDkShadow = new ColorUIResource(darken(control, 0.34));
-  ColorUIResource controlLtHighlight = new ColorUIResource(lighten(control, 0.12));
-  ColorUIResource viewportBg = bg;
-  ColorUIResource tableHeaderBg = new ColorUIResource(lighten(control, 0.04));
-  ColorUIResource tooltipBg = new ColorUIResource(lighten(menuBg, 0.04));
+    // Chef's-kiss pass: tint the supporting neutrals so the whole theme reads as one palette.
+    ColorUIResource controlShadow = new ColorUIResource(darken(control, 0.20));
+    ColorUIResource controlDkShadow = new ColorUIResource(darken(control, 0.34));
+    ColorUIResource controlLtHighlight = new ColorUIResource(lighten(control, 0.12));
+    ColorUIResource viewportBg = bg;
+    ColorUIResource tableHeaderBg = new ColorUIResource(lighten(control, 0.04));
+    ColorUIResource tooltipBg = new ColorUIResource(lighten(menuBg, 0.04));
 
-  UIManager.put("control", control);
-  UIManager.put("info", control);
-  UIManager.put("Panel.background", control);
-  UIManager.put("menu", menuBg);
+    UIManager.put("control", control);
+    UIManager.put("info", control);
+    UIManager.put("Panel.background", control);
+    UIManager.put("menu", menuBg);
 
-  UIManager.put("nimbusLightBackground", bg);
-  UIManager.put("nimbusBorder", border);
+    UIManager.put("nimbusLightBackground", bg);
+    UIManager.put("nimbusBorder", border);
 
-  UIManager.put("Component.borderColor", border);
-  UIManager.put("controlShadow", controlShadow);
-  UIManager.put("controlDkShadow", controlDkShadow);
-  UIManager.put("controlLtHighlight", controlLtHighlight);
+    UIManager.put("Component.borderColor", border);
+    UIManager.put("controlShadow", controlShadow);
+    UIManager.put("controlDkShadow", controlDkShadow);
+    UIManager.put("controlLtHighlight", controlLtHighlight);
 
-  UIManager.put("TextField.background", bg);
-  UIManager.put("TextField.borderColor", border);
+    UIManager.put("TextField.background", bg);
+    UIManager.put("TextField.borderColor", border);
 
-  UIManager.put("PasswordField.background", bg);
-  UIManager.put("PasswordField.borderColor", border);
+    UIManager.put("PasswordField.background", bg);
+    UIManager.put("PasswordField.borderColor", border);
 
-  UIManager.put("FormattedTextField.background", bg);
-  UIManager.put("FormattedTextField.borderColor", border);
+    UIManager.put("FormattedTextField.background", bg);
+    UIManager.put("FormattedTextField.borderColor", border);
 
-  UIManager.put("TextArea.background", bg);
-  UIManager.put("TextPane.background", bg);
-  UIManager.put("EditorPane.background", bg);
+    UIManager.put("TextArea.background", bg);
+    UIManager.put("TextPane.background", bg);
+    UIManager.put("EditorPane.background", bg);
 
-  UIManager.put("List.background", bg);
-  UIManager.put("Tree.background", bg);
-  UIManager.put("Tree.textBackground", bg);
+    UIManager.put("List.background", bg);
+    UIManager.put("Tree.background", bg);
+    UIManager.put("Tree.textBackground", bg);
 
-  UIManager.put("Table.background", bg);
-  UIManager.put("Table.gridColor", separator);
-  UIManager.put("TableHeader.background", tableHeaderBg);
-  UIManager.put("TableHeader:\"TableHeader.renderer\".background", tableHeaderBg);
+    UIManager.put("Table.background", bg);
+    UIManager.put("Table.gridColor", separator);
+    UIManager.put("TableHeader.background", tableHeaderBg);
+    UIManager.put("TableHeader:\"TableHeader.renderer\".background", tableHeaderBg);
 
-  UIManager.put("Viewport.background", viewportBg);
+    UIManager.put("Viewport.background", viewportBg);
 
-  UIManager.put("ComboBox.background", bg);
-  UIManager.put("ComboBox.disabled", control);
-  UIManager.put("ComboBox:\"ComboBox.listRenderer\".background", bg);
-  UIManager.put("ComboBox:\"ComboBox.renderer\".background", bg);
-  UIManager.put("ComboBox:\"ComboBox.textField\".background", bg);
-  UIManager.put("ComboBox:\"ComboBox.arrowButton\".background", control);
+    UIManager.put("ComboBox.background", bg);
+    UIManager.put("ComboBox.disabled", control);
+    UIManager.put("ComboBox:\"ComboBox.listRenderer\".background", bg);
+    UIManager.put("ComboBox:\"ComboBox.renderer\".background", bg);
+    UIManager.put("ComboBox:\"ComboBox.textField\".background", bg);
+    UIManager.put("ComboBox:\"ComboBox.arrowButton\".background", control);
 
-  UIManager.put("Spinner.background", bg);
-  UIManager.put("Spinner:\"Spinner.formattedTextField\".background", bg);
+    UIManager.put("Spinner.background", bg);
+    UIManager.put("Spinner:\"Spinner.formattedTextField\".background", bg);
 
-  UIManager.put("Button.background", control);
-  UIManager.put("ToggleButton.background", control);
-  UIManager.put("CheckBox.background", control);
-  UIManager.put("RadioButton.background", control);
+    UIManager.put("Button.background", control);
+    UIManager.put("ToggleButton.background", control);
+    UIManager.put("CheckBox.background", control);
+    UIManager.put("RadioButton.background", control);
 
-  UIManager.put("MenuBar.background", menuBg);
-  UIManager.put("MenuBar.borderColor", border);
-  UIManager.put("Menu.background", menuBg);
-  UIManager.put("MenuItem.background", menuBg);
-  UIManager.put("CheckBoxMenuItem.background", menuBg);
-  UIManager.put("RadioButtonMenuItem.background", menuBg);
-  UIManager.put("PopupMenu.background", menuBg);
+    UIManager.put("MenuBar.background", menuBg);
+    UIManager.put("MenuBar.borderColor", border);
+    UIManager.put("Menu.background", menuBg);
+    UIManager.put("MenuItem.background", menuBg);
+    UIManager.put("CheckBoxMenuItem.background", menuBg);
+    UIManager.put("RadioButtonMenuItem.background", menuBg);
+    UIManager.put("PopupMenu.background", menuBg);
 
-  UIManager.put("PopupMenu.borderColor", border);
-  UIManager.put("PopupMenuSeparator.background", menuBg);
-  UIManager.put("PopupMenuSeparator.foreground", separator);
-  UIManager.put("ScrollPane.borderColor", border);
-  UIManager.put("Separator.foreground", separator);
-  UIManager.put("Separator.background", control);
-  UIManager.put("ToolBar.separatorColor", separator);
+    UIManager.put("PopupMenu.borderColor", border);
+    UIManager.put("PopupMenuSeparator.background", menuBg);
+    UIManager.put("PopupMenuSeparator.foreground", separator);
+    UIManager.put("ScrollPane.borderColor", border);
+    UIManager.put("Separator.foreground", separator);
+    UIManager.put("Separator.background", control);
+    UIManager.put("ToolBar.separatorColor", separator);
 
-  UIManager.put("ToolTip.background", tooltipBg);
+    UIManager.put("ToolTip.background", tooltipBg);
 
-  UIManager.put("SplitPane.background", control);
-  UIManager.put("SplitPane.foreground", separator);
+    UIManager.put("SplitPane.background", control);
+    UIManager.put("SplitPane.foreground", separator);
 
-  ColorUIResource selectionFg = uiColor(0xF3, 0xF7, 0xFD);
-  UIManager.put("nimbusBase", nimbusBase);
-  UIManager.put("nimbusBlueGrey", nimbusBlueGrey);
-  UIManager.put("nimbusFocus", focus);
-  UIManager.put("nimbusSelectionBackground", selectionBg);
-  UIManager.put("nimbusInfoBlue", nimbusInfoBlue);
-  UIManager.put("nimbusOrange", nimbusOrange);
-  UIManager.put("nimbusAlertYellow", nimbusAlertYellow);
-  UIManager.put("nimbusRed", nimbusRed);
-  UIManager.put("nimbusGreen", nimbusGreen);
-  UIManager.put("Component.focusColor", focus);
-  UIManager.put("Component.accentColor", focus);
-  UIManager.put("Component.linkColor", link);
-  UIManager.put("textHighlight", selectionBg);
-  UIManager.put("textHighlightText", selectionFg);
-  UIManager.put("TextComponent.selectionBackground", selectionBg);
-  UIManager.put("TextComponent.selectionForeground", selectionFg);
-  UIManager.put("List.selectionBackground", selectionBg);
-  UIManager.put("List.selectionForeground", selectionFg);
-  UIManager.put("Table.selectionBackground", selectionBg);
-  UIManager.put("Table.selectionForeground", selectionFg);
-  UIManager.put("Tree.selectionBackground", selectionBg);
-  UIManager.put("Tree.selectionForeground", selectionFg);
-  UIManager.put("Menu.selectionBackground", menuSelectionBg);
-  UIManager.put("Menu.selectionForeground", selectionFg);
-  UIManager.put("MenuItem.selectionBackground", menuSelectionBg);
-  UIManager.put("MenuItem.selectionForeground", selectionFg);
-  UIManager.put("CheckBoxMenuItem.selectionBackground", menuSelectionBg);
-  UIManager.put("CheckBoxMenuItem.selectionForeground", selectionFg);
-  UIManager.put("RadioButtonMenuItem.selectionBackground", menuSelectionBg);
-  UIManager.put("RadioButtonMenuItem.selectionForeground", selectionFg);
-  UIManager.put("Button.select", selectionBg);
-  UIManager.put("ToggleButton.select", selectionBg);
+    ColorUIResource selectionFg = uiColor(0xF3, 0xF7, 0xFD);
+    UIManager.put("nimbusBase", nimbusBase);
+    UIManager.put("nimbusBlueGrey", nimbusBlueGrey);
+    UIManager.put("nimbusFocus", focus);
+    UIManager.put("nimbusSelectionBackground", selectionBg);
+    UIManager.put("nimbusInfoBlue", nimbusInfoBlue);
+    UIManager.put("nimbusOrange", nimbusOrange);
+    UIManager.put("nimbusAlertYellow", nimbusAlertYellow);
+    UIManager.put("nimbusRed", nimbusRed);
+    UIManager.put("nimbusGreen", nimbusGreen);
+    UIManager.put("Component.focusColor", focus);
+    UIManager.put("Component.accentColor", focus);
+    UIManager.put("Component.linkColor", link);
+    UIManager.put("textHighlight", selectionBg);
+    UIManager.put("textHighlightText", selectionFg);
+    UIManager.put("TextComponent.selectionBackground", selectionBg);
+    UIManager.put("TextComponent.selectionForeground", selectionFg);
+    UIManager.put("List.selectionBackground", selectionBg);
+    UIManager.put("List.selectionForeground", selectionFg);
+    UIManager.put("Table.selectionBackground", selectionBg);
+    UIManager.put("Table.selectionForeground", selectionFg);
+    UIManager.put("Tree.selectionBackground", selectionBg);
+    UIManager.put("Tree.selectionForeground", selectionFg);
+    UIManager.put("Menu.selectionBackground", menuSelectionBg);
+    UIManager.put("Menu.selectionForeground", selectionFg);
+    UIManager.put("MenuItem.selectionBackground", menuSelectionBg);
+    UIManager.put("MenuItem.selectionForeground", selectionFg);
+    UIManager.put("CheckBoxMenuItem.selectionBackground", menuSelectionBg);
+    UIManager.put("CheckBoxMenuItem.selectionForeground", selectionFg);
+    UIManager.put("RadioButtonMenuItem.selectionBackground", menuSelectionBg);
+    UIManager.put("RadioButtonMenuItem.selectionForeground", selectionFg);
+    UIManager.put("Button.select", selectionBg);
+    UIManager.put("ToggleButton.select", selectionBg);
 
-  applyNimbusDarkComponentShades(
-      control,
-      bg,
-      menuBg,
-      nimbusBase,
-      nimbusBlueGrey,
-      border,
-      separator,
-      uiColor(0xE6, 0xEA, 0xF0),
-      uiColor(0x8A, 0x92, 0x9D),
-      selectionBg,
-      selectionFg,
-      focus,
-      splitPaneDraggingColor);
+    applyNimbusDarkComponentShades(
+        control,
+        bg,
+        menuBg,
+        nimbusBase,
+        nimbusBlueGrey,
+        border,
+        separator,
+        uiColor(0xE6, 0xEA, 0xF0),
+        uiColor(0x8A, 0x92, 0x9D),
+        selectionBg,
+        selectionFg,
+        focus,
+        splitPaneDraggingColor);
 
-  // Match text on newly tinted surfaces.
-  Object labelText = UIManager.get("Label.foreground");
-  if (labelText != null) {
-    UIManager.put("PasswordField.foreground", labelText);
-    UIManager.put("FormattedTextField.foreground", labelText);
-    UIManager.put("TextPane.foreground", labelText);
-    UIManager.put("EditorPane.foreground", labelText);
-    UIManager.put("TableHeader.foreground", labelText);
-    UIManager.put("TableHeader:\"TableHeader.renderer\".foreground", labelText);
-    UIManager.put("ToolTip.foreground", labelText);
-    UIManager.put("Viewport.foreground", labelText);
-    UIManager.put("Spinner.foreground", labelText);
-    UIManager.put("Spinner:\"Spinner.formattedTextField\".foreground", labelText);
+    // Match text on newly tinted surfaces.
+    Object labelText = UIManager.get("Label.foreground");
+    if (labelText != null) {
+      UIManager.put("PasswordField.foreground", labelText);
+      UIManager.put("FormattedTextField.foreground", labelText);
+      UIManager.put("TextPane.foreground", labelText);
+      UIManager.put("EditorPane.foreground", labelText);
+      UIManager.put("TableHeader.foreground", labelText);
+      UIManager.put("TableHeader:\"TableHeader.renderer\".foreground", labelText);
+      UIManager.put("ToolTip.foreground", labelText);
+      UIManager.put("Viewport.foreground", labelText);
+      UIManager.put("Spinner.foreground", labelText);
+      UIManager.put("Spinner:\"Spinner.formattedTextField\".foreground", labelText);
+    }
+
+    UIManager.put("TabbedPane.focus", focus);
+    UIManager.put("SplitPaneDivider.draggingColor", splitPaneDraggingColor);
   }
-
-  UIManager.put("TabbedPane.focus", focus);
-  UIManager.put("SplitPaneDivider.draggingColor", splitPaneDraggingColor);
-}
 
   private static void applyNimbusDarkComponentShades(
       ColorUIResource control,
@@ -936,7 +948,8 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
     UIManager.put("FormattedTextField.background", fieldBg);
     UIManager.put("FormattedTextField.foreground", text);
     UIManager.put("FormattedTextField.borderColor", border);
-    UIManager.put("FormattedTextField.inactiveBackground", toUiResource(mix(fieldBg, panelBg, 0.55)));
+    UIManager.put(
+        "FormattedTextField.inactiveBackground", toUiResource(mix(fieldBg, panelBg, 0.55)));
 
     UIManager.put("TextArea.background", areaBg);
     UIManager.put("TextArea.foreground", text);
@@ -1090,8 +1103,7 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
         uiColor(0x7A, 0x95, 0xB0),
         uiColor(0xB2, 0x62, 0x5A),
         uiColor(0x6E, 0x9B, 0x6E),
-        uiColor(0x8E, 0x7D, 0x6B)
-    );
+        uiColor(0x8E, 0x7D, 0x6B));
   }
 
   private static void applyNimbusGreenOverrides() {
@@ -1113,8 +1125,7 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
         uiColor(0x5B, 0x84, 0xB3),
         uiColor(0xAF, 0x5E, 0x58),
         uiColor(0x5F, 0x9C, 0x6A),
-        uiColor(0x86, 0x9D, 0x80)
-    );
+        uiColor(0x86, 0x9D, 0x80));
   }
 
   private static void applyNimbusBlueOverrides() {
@@ -1136,8 +1147,7 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
         uiColor(0x3E, 0x75, 0xBF),
         uiColor(0xB2, 0x62, 0x5A),
         uiColor(0x66, 0x9E, 0x71),
-        uiColor(0x84, 0x95, 0xAC)
-    );
+        uiColor(0x84, 0x95, 0xAC));
   }
 
   private static void applyNimbusVioletOverrides() {
@@ -1159,8 +1169,7 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
         uiColor(0x5F, 0x86, 0xBC),
         uiColor(0xB2, 0x62, 0x75),
         uiColor(0x68, 0x9D, 0x77),
-        uiColor(0x93, 0x83, 0xA8)
-    );
+        uiColor(0x93, 0x83, 0xA8));
   }
 
   private static void applyNimbusMagentaOverrides() {
@@ -1182,8 +1191,7 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
         uiColor(0x6A, 0x86, 0xBC),
         uiColor(0xB3, 0x5A, 0x71),
         uiColor(0x6B, 0xA0, 0x77),
-        uiColor(0xA0, 0x7D, 0x92)
-    );
+        uiColor(0xA0, 0x7D, 0x92));
   }
 
   private static void applyNimbusAmberOverrides() {
@@ -1205,28 +1213,28 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
         uiColor(0x66, 0x86, 0xB5),
         uiColor(0xB3, 0x5F, 0x5C),
         uiColor(0x6F, 0x9F, 0x72),
-        uiColor(0x99, 0x84, 0x5E)
-    );
+        uiColor(0x99, 0x84, 0x5E));
   }
 
-  private static void applyNimbusTintOverrides(ColorUIResource control,
-                                               ColorUIResource bg,
-                                               ColorUIResource menuBg,
-                                               ColorUIResource text,
-                                               ColorUIResource border,
-                                               ColorUIResource focus,
-                                               ColorUIResource link,
-                                               ColorUIResource selectionBg,
-                                               ColorUIResource selectionFg,
-                                               ColorUIResource menuSelectionBg,
-                                               ColorUIResource nimbusBase,
-                                               ColorUIResource nimbusBlueGrey,
-                                               ColorUIResource nimbusOrange,
-                                               ColorUIResource nimbusAlertYellow,
-                                               ColorUIResource nimbusInfoBlue,
-                                               ColorUIResource nimbusRed,
-                                               ColorUIResource nimbusGreen,
-                                               ColorUIResource disabledText) {
+  private static void applyNimbusTintOverrides(
+      ColorUIResource control,
+      ColorUIResource bg,
+      ColorUIResource menuBg,
+      ColorUIResource text,
+      ColorUIResource border,
+      ColorUIResource focus,
+      ColorUIResource link,
+      ColorUIResource selectionBg,
+      ColorUIResource selectionFg,
+      ColorUIResource menuSelectionBg,
+      ColorUIResource nimbusBase,
+      ColorUIResource nimbusBlueGrey,
+      ColorUIResource nimbusOrange,
+      ColorUIResource nimbusAlertYellow,
+      ColorUIResource nimbusInfoBlue,
+      ColorUIResource nimbusRed,
+      ColorUIResource nimbusGreen,
+      ColorUIResource disabledText) {
     UIManager.put("control", control);
     UIManager.put("info", bg);
     UIManager.put("nimbusBase", nimbusBase);
@@ -1383,6 +1391,7 @@ private static void applyNimbusDarkAccentOverrides(ColorUIResource nimbusBase,
       }
     }
   }
+
   private static Color mix(Color a, Color b, double t) {
     return ThemeColorUtils.mix(a, b, t);
   }

@@ -1,13 +1,13 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.core.Scheduler;
+import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
@@ -31,8 +31,8 @@ import org.springframework.stereotype.Component;
 /**
  * RxJava-driven timers for a single server connection: heartbeat monitoring and reconnect backoff.
  *
- * <p>This intentionally centralizes all scheduling so {@link PircbotxIrcClientService} and
- * {@link PircbotxBridgeListener} don't need their own executor plumbing.
+ * <p>This intentionally centralizes all scheduling so {@link PircbotxIrcClientService} and {@link
+ * PircbotxBridgeListener} don't need their own executor plumbing.
  */
 @Component
 final class PircbotxConnectionTimersRx {
@@ -53,9 +53,10 @@ final class PircbotxConnectionTimersRx {
   PircbotxConnectionTimersRx(
       IrcProperties props,
       ServerCatalog serverCatalog,
-      @Qualifier(ExecutorConfig.PIRCBOTX_HEARTBEAT_SCHEDULER) ScheduledExecutorService heartbeatExec,
-      @Qualifier(ExecutorConfig.PIRCBOTX_RECONNECT_SCHEDULER) ScheduledExecutorService reconnectExec
-  ) {
+      @Qualifier(ExecutorConfig.PIRCBOTX_HEARTBEAT_SCHEDULER)
+          ScheduledExecutorService heartbeatExec,
+      @Qualifier(ExecutorConfig.PIRCBOTX_RECONNECT_SCHEDULER)
+          ScheduledExecutorService reconnectExec) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     IrcProperties.Client c = (props != null) ? props.client() : null;
     this.reconnectPolicy = (c != null) ? c.reconnect() : null;
@@ -97,16 +98,12 @@ final class PircbotxConnectionTimersRx {
       return;
     }
 
-    Disposable d = Flowable
-        .interval(
-            hb.checkPeriodMs(),
-            hb.checkPeriodMs(),
-            TimeUnit.MILLISECONDS,
-            heartbeatScheduler)
-        .subscribe(
-            tick -> checkHeartbeat(c),
-            err -> log.debug("[ircafe] Heartbeat ticker error for {}", c.serverId, err)
-        );
+    Disposable d =
+        Flowable.interval(
+                hb.checkPeriodMs(), hb.checkPeriodMs(), TimeUnit.MILLISECONDS, heartbeatScheduler)
+            .subscribe(
+                tick -> checkHeartbeat(c),
+                err -> log.debug("[ircafe] Heartbeat ticker error for {}", c.serverId, err));
 
     Disposable prev = c.heartbeatDisposable.getAndSet(d);
     if (prev != null && !prev.isDisposed()) prev.dispose();
@@ -130,9 +127,11 @@ final class PircbotxConnectionTimersRx {
     if (idleMs > hb.timeoutMs() && c.localTimeoutEmitted.compareAndSet(false, true)) {
       // Don't emit Disconnected here (DisconnectEvent will fire). Instead, stash a reason override.
       c.disconnectReasonOverride.set(
-          "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)"
-      );
-      try { bot.close(); } catch (Exception ignored) {}
+          "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)");
+      try {
+        bot.close();
+      } catch (Exception ignored) {
+      }
     }
   }
 
@@ -146,8 +145,7 @@ final class PircbotxConnectionTimersRx {
       PircbotxConnectionState c,
       String reason,
       Function<String, Completable> connectFn,
-      Consumer<ServerIrcEvent> emit
-  ) {
+      Consumer<ServerIrcEvent> emit) {
     if (c == null) return;
     if (shuttingDown.get() || reconnectExec.isShutdown() || reconnectExec.isTerminated()) return;
     IrcProperties.Reconnect p = reconnectPolicy;
@@ -156,53 +154,55 @@ final class PircbotxConnectionTimersRx {
 
     long attempt = c.reconnectAttempts.incrementAndGet();
     if (p.maxAttempts() > 0 && attempt > p.maxAttempts()) {
-      emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
-          Instant.now(),
-          "Reconnect aborted (max attempts reached)",
-          null
-      )));
+      emit.accept(
+          new ServerIrcEvent(
+              c.serverId,
+              new IrcEvent.Error(Instant.now(), "Reconnect aborted (max attempts reached)", null)));
       return;
     }
 
     long delayMs = computeBackoffDelayMs(p, attempt);
-    emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Reconnecting(
-        Instant.now(),
-        attempt,
-        delayMs,
-        Objects.toString(reason, "Disconnected")
-    )));
+    emit.accept(
+        new ServerIrcEvent(
+            c.serverId,
+            new IrcEvent.Reconnecting(
+                Instant.now(), attempt, delayMs, Objects.toString(reason, "Disconnected"))));
 
     // Replace any existing scheduled reconnect.
     final Disposable next;
     try {
-      final ScheduledFuture<?> future = reconnectExec.schedule(() -> {
-        if (shuttingDown.get() || c.manualDisconnect.get()) return;
+      final ScheduledFuture<?> future =
+          reconnectExec.schedule(
+              () -> {
+                if (shuttingDown.get() || c.manualDisconnect.get()) return;
 
-        // If the server was removed while waiting, abort.
-        if (!serverCatalog.containsId(c.serverId)) {
-          emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
-              Instant.now(),
-              "Reconnect cancelled (server removed)",
-              null
-          )));
-          return;
-        }
-
-        // Connect is idempotent per-server; it will no-op if already connected.
-        connectFn.apply(c.serverId)
-            .subscribe(
-                () -> {},
-                err -> {
-                  emit.accept(new ServerIrcEvent(c.serverId, new IrcEvent.Error(
-                      Instant.now(),
-                      "Reconnect attempt failed",
-                      err
-                  )));
-                  // Backoff again.
-                  scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
+                // If the server was removed while waiting, abort.
+                if (!serverCatalog.containsId(c.serverId)) {
+                  emit.accept(
+                      new ServerIrcEvent(
+                          c.serverId,
+                          new IrcEvent.Error(
+                              Instant.now(), "Reconnect cancelled (server removed)", null)));
+                  return;
                 }
-            );
-      }, delayMs, TimeUnit.MILLISECONDS);
+
+                // Connect is idempotent per-server; it will no-op if already connected.
+                connectFn
+                    .apply(c.serverId)
+                    .subscribe(
+                        () -> {},
+                        err -> {
+                          emit.accept(
+                              new ServerIrcEvent(
+                                  c.serverId,
+                                  new IrcEvent.Error(
+                                      Instant.now(), "Reconnect attempt failed", err)));
+                          // Backoff again.
+                          scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
+                        });
+              },
+              delayMs,
+              TimeUnit.MILLISECONDS);
 
       // RxJava's Disposables helper isn't present in some older RxJava 3 minor lines.
       // Wrap the ScheduledFuture into a lightweight Disposable.

@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app;
 
-import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.ChannelFlagModeState;
+import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.RecentStatusModeState;
 import cafe.woden.ircclient.irc.IrcEvent;
 import org.slf4j.Logger;
@@ -9,7 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Handles inbound channel MODE-related events and keeps MODE-specific state out of {@link IrcMediator}.
+ * Handles inbound channel MODE-related events and keeps MODE-specific state out of {@link
+ * IrcMediator}.
  */
 @Component
 public class InboundModeEventHandler {
@@ -27,8 +28,7 @@ public class InboundModeEventHandler {
       JoinModeBurstService joinModeBurstService,
       ModeFormattingService modeFormattingService,
       ChannelFlagModeState channelFlagModeState,
-      RecentStatusModeState recentStatusModeState
-  ) {
+      RecentStatusModeState recentStatusModeState) {
     this.ui = ui;
     this.modeRoutingState = modeRoutingState;
     this.joinModeBurstService = joinModeBurstService;
@@ -74,7 +74,8 @@ public class InboundModeEventHandler {
 
     String details = ev.details();
 
-    // Weak signal: if this is a status-mode change (+v/+o/+h/+a/+q) we may see a MODE echo right after.
+    // Weak signal: if this is a status-mode change (+v/+o/+h/+a/+q) we may see a MODE echo right
+    // after.
     if (containsStatusMode(details)) {
       recentStatusModeState.markStatusMode(serverId, ev.channel());
     }
@@ -88,8 +89,12 @@ public class InboundModeEventHandler {
 
     if (joinModeBurstService.handleChannelModeChanged(serverId, ev.channel(), details)) {
       if (log.isDebugEnabled()) {
-        log.debug("MODEDBG handler ChannelModeChanged consumedByJoinBurst serverId={} channel={} by={} details={}",
-            serverId, ev.channel(), ev.by(), clip(details));
+        log.debug(
+            "MODEDBG handler ChannelModeChanged consumedByJoinBurst serverId={} channel={} by={} details={}",
+            serverId,
+            ev.channel(),
+            ev.by(),
+            clip(details));
       }
       return;
     }
@@ -98,15 +103,21 @@ public class InboundModeEventHandler {
     if (flagOnly) {
       if (!hadFlagState && recentStatusModeState.isRecent(serverId, ev.channel(), 2000L)) {
         if (log.isDebugEnabled()) {
-          log.debug("MODEDBG handler suppress echo (no flag state yet) serverId={} channel={} details={}",
-              serverId, ev.channel(), clip(details));
+          log.debug(
+              "MODEDBG handler suppress echo (no flag state yet) serverId={} channel={} details={}",
+              serverId,
+              ev.channel(),
+              clip(details));
         }
         return;
       }
       if (!changedFlagState) {
         if (log.isDebugEnabled()) {
-          log.debug("MODEDBG handler suppress no-op flag delta serverId={} channel={} details={}",
-              serverId, ev.channel(), clip(details));
+          log.debug(
+              "MODEDBG handler suppress no-op flag delta serverId={} channel={} details={}",
+              serverId,
+              ev.channel(),
+              clip(details));
         }
         return;
       }
@@ -115,8 +126,13 @@ public class InboundModeEventHandler {
     String byRaw = ev.by();
     var lines = modeFormattingService.prettyModeChange(byRaw, ev.channel(), details);
     if (log.isDebugEnabled()) {
-      log.debug("MODEDBG handler ChannelModeChanged serverId={} channel={} by={} details={} -> {} lines",
-          serverId, ev.channel(), byRaw, clip(details), lines.size());
+      log.debug(
+          "MODEDBG handler ChannelModeChanged serverId={} channel={} by={} details={} -> {} lines",
+          serverId,
+          ev.channel(),
+          byRaw,
+          clip(details),
+          lines.size());
     }
     for (String line : lines) {
       ui.appendNotice(chan, "(mode)", line);
@@ -181,7 +197,8 @@ public class InboundModeEventHandler {
 
     String summary = modeFormattingService.describeCurrentChannelModes(ev.details());
     if (summary != null && !summary.isBlank()) {
-      if (joinModeBurstService.shouldSuppressModesListedSummary(serverId, ev.channel(), out.equals(chan))) {
+      if (joinModeBurstService.shouldSuppressModesListedSummary(
+          serverId, ev.channel(), out.equals(chan))) {
         return;
       }
       ui.appendNotice(out, "(mode)", summary);

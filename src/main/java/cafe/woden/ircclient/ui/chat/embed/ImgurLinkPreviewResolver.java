@@ -17,15 +17,14 @@ final class ImgurLinkPreviewResolver implements LinkPreviewResolver {
       return null;
     }
 
-    var resp = http.getStream(
-        uri,
-        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        PreviewHttp.headers(
-            "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
-            "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE,
-            "Referer", "https://imgur.com/"
-        )
-    );
+    var resp =
+        http.getStream(
+            uri,
+            "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            PreviewHttp.headers(
+                "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
+                "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE,
+                "Referer", "https://imgur.com/"));
 
     int status = resp.statusCode();
     if (status < 200 || status >= 300) {

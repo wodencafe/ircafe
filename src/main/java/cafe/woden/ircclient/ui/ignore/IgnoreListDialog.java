@@ -8,8 +8,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Toolkit;
 import java.awt.Window;
-import java.awt.event.KeyEvent;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.Objects;
 import javax.swing.BorderFactory;
@@ -107,26 +107,27 @@ public class IgnoreListDialog {
     hardCtcpToggle.setSelected(ignores != null && ignores.hardIgnoreIncludesCtcp());
     hardCtcpToggle.setToolTipText(
         "When enabled, CTCP messages (e.g., VERSION/PING/ACTION) from hard-ignored users are also dropped.");
-    hardCtcpToggle.addActionListener(e -> {
-      if (ignores == null) return;
-      ignores.setHardIgnoreIncludesCtcp(hardCtcpToggle.isSelected());
-    });
+    hardCtcpToggle.addActionListener(
+        e -> {
+          if (ignores == null) return;
+          ignores.setHardIgnoreIncludesCtcp(hardCtcpToggle.isSelected());
+        });
 
     JCheckBox softCtcpToggle = new JCheckBox("Soft ignore includes CTCP");
     softCtcpToggle.setSelected(ignores != null && ignores.softIgnoreIncludesCtcp());
-    softCtcpToggle.setToolTipText("When enabled, CTCP messages from soft-ignored users are fully dropped (not shown as spoilers).\n" +
-        "This applies to CTCP requests/replies and /me actions.");
-    softCtcpToggle.addActionListener(e -> {
-      if (ignores == null) return;
-      ignores.setSoftIgnoreIncludesCtcp(softCtcpToggle.isSelected());
-    });
+    softCtcpToggle.setToolTipText(
+        "When enabled, CTCP messages from soft-ignored users are fully dropped (not shown as spoilers).\n"
+            + "This applies to CTCP requests/replies and /me actions.");
+    softCtcpToggle.addActionListener(
+        e -> {
+          if (ignores == null) return;
+          ignores.setSoftIgnoreIncludesCtcp(softCtcpToggle.isSelected());
+        });
 
     JPanel toggles = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
     toggles.setOpaque(false);
     toggles.add(hardCtcpToggle);
     toggles.add(softCtcpToggle);
-
-
 
     JPanel footer = new JPanel(new BorderLayout());
     footer.add(toggles, BorderLayout.WEST);
@@ -141,10 +142,12 @@ public class IgnoreListDialog {
     dialog = new JDialog(owner, "Ignore Lists - " + sid);
     dialog.setModal(false);
     dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-    dialog.getRootPane().registerKeyboardAction(
-        e -> dialog.dispose(),
-        KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
-        JComponent.WHEN_IN_FOCUSED_WINDOW);
+    dialog
+        .getRootPane()
+        .registerKeyboardAction(
+            e -> dialog.dispose(),
+            KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW);
     dialog.setContentPane(root);
     dialog.pack();
     dialog.setLocationRelativeTo(owner);
@@ -177,85 +180,83 @@ public class IgnoreListDialog {
     remove.setEnabled(false);
     copy.setEnabled(false);
 
-    list.addListSelectionListener(e -> {
-      if (e.getValueIsAdjusting()) return;
-      boolean hasSel = list.getSelectedIndices().length > 0;
-      remove.setEnabled(hasSel);
-      copy.setEnabled(list.getSelectedIndices().length == 1);
-    });
+    list.addListSelectionListener(
+        e -> {
+          if (e.getValueIsAdjusting()) return;
+          boolean hasSel = list.getSelectedIndices().length > 0;
+          remove.setEnabled(hasSel);
+          copy.setEnabled(list.getSelectedIndices().length == 1);
+        });
 
-    add.addActionListener(e -> {
-      String title = kind == Kind.SOFT_IGNORE ? "Add Soft Ignore" : "Add Ignore";
-      String prompt = kind == Kind.SOFT_IGNORE
-          ? "Enter a hostmask / pattern to soft-ignore (stored per-server):"
-          : "Enter a hostmask / pattern to ignore (stored per-server):";
+    add.addActionListener(
+        e -> {
+          String title = kind == Kind.SOFT_IGNORE ? "Add Soft Ignore" : "Add Ignore";
+          String prompt =
+              kind == Kind.SOFT_IGNORE
+                  ? "Enter a hostmask / pattern to soft-ignore (stored per-server):"
+                  : "Enter a hostmask / pattern to ignore (stored per-server):";
 
-      String input = (String) JOptionPane.showInputDialog(
-          dialog,
-          prompt,
-          title,
-          JOptionPane.PLAIN_MESSAGE,
-          null,
-          null,
-          ""
-      );
-      if (input == null) return;
-      String trimmed = input.trim();
-      if (trimmed.isEmpty()) return;
+          String input =
+              (String)
+                  JOptionPane.showInputDialog(
+                      dialog, prompt, title, JOptionPane.PLAIN_MESSAGE, null, null, "");
+          if (input == null) return;
+          String trimmed = input.trim();
+          if (trimmed.isEmpty()) return;
 
-      boolean added;
-      if (kind == Kind.SOFT_IGNORE) {
-        added = ignores.addSoftMask(serverId, trimmed);
-      } else {
-        added = ignores.addMask(serverId, trimmed);
-      }
+          boolean added;
+          if (kind == Kind.SOFT_IGNORE) {
+            added = ignores.addSoftMask(serverId, trimmed);
+          } else {
+            added = ignores.addMask(serverId, trimmed);
+          }
 
-      String stored = IgnoreListService.normalizeMaskOrNickToHostmask(trimmed);
-      if (!added) {
-        JOptionPane.showMessageDialog(
-            dialog,
-            "Already in list: " + stored,
-            title,
-            JOptionPane.INFORMATION_MESSAGE
-        );
-      }
+          String stored = IgnoreListService.normalizeMaskOrNickToHostmask(trimmed);
+          if (!added) {
+            JOptionPane.showMessageDialog(
+                dialog, "Already in list: " + stored, title, JOptionPane.INFORMATION_MESSAGE);
+          }
 
-      refresh(model, serverId, kind);
-    });
+          refresh(model, serverId, kind);
+        });
 
-    remove.addActionListener(e -> {
-      List<String> sel = list.getSelectedValuesList();
-      if (sel == null || sel.isEmpty()) return;
+    remove.addActionListener(
+        e -> {
+          List<String> sel = list.getSelectedValuesList();
+          if (sel == null || sel.isEmpty()) return;
 
-      String title = kind == Kind.SOFT_IGNORE ? "Remove Soft Ignores" : "Remove Ignores";
-      int ok = JOptionPane.showConfirmDialog(
-          dialog,
-          "Remove selected mask(s)?",
-          title,
-          JOptionPane.OK_CANCEL_OPTION,
-          JOptionPane.WARNING_MESSAGE
-      );
-      if (ok != JOptionPane.OK_OPTION) return;
+          String title = kind == Kind.SOFT_IGNORE ? "Remove Soft Ignores" : "Remove Ignores";
+          int ok =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove selected mask(s)?",
+                  title,
+                  JOptionPane.OK_CANCEL_OPTION,
+                  JOptionPane.WARNING_MESSAGE);
+          if (ok != JOptionPane.OK_OPTION) return;
 
-      for (String m : sel) {
-        if (m == null || m.isBlank()) continue;
-        if (kind == Kind.SOFT_IGNORE) {
-          ignores.removeSoftMask(serverId, m);
-        } else {
-          ignores.removeMask(serverId, m);
-        }
-      }
-      refresh(model, serverId, kind);
-    });
+          for (String m : sel) {
+            if (m == null || m.isBlank()) continue;
+            if (kind == Kind.SOFT_IGNORE) {
+              ignores.removeSoftMask(serverId, m);
+            } else {
+              ignores.removeMask(serverId, m);
+            }
+          }
+          refresh(model, serverId, kind);
+        });
 
-    copy.addActionListener(e -> {
-      String m = list.getSelectedValue();
-      if (m == null || m.isBlank()) return;
-      try {
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(m), null);
-      } catch (Exception ignored) {
-      }
-    });
+    copy.addActionListener(
+        e -> {
+          String m = list.getSelectedValue();
+          if (m == null || m.isBlank()) return;
+          try {
+            Toolkit.getDefaultToolkit()
+                .getSystemClipboard()
+                .setContents(new StringSelection(m), null);
+          } catch (Exception ignored) {
+          }
+        });
 
     JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT));
     left.add(add);
@@ -275,7 +276,8 @@ public class IgnoreListDialog {
   private void refresh(DefaultListModel<String> model, String serverId, Kind kind) {
     model.clear();
     if (ignores == null) return;
-    List<String> masks = (kind == Kind.SOFT_IGNORE) ? ignores.listSoftMasks(serverId) : ignores.listMasks(serverId);
+    List<String> masks =
+        (kind == Kind.SOFT_IGNORE) ? ignores.listSoftMasks(serverId) : ignores.listMasks(serverId);
     for (String m : masks) {
       if (m == null || m.isBlank()) continue;
       model.addElement(m);

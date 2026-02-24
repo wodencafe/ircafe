@@ -25,9 +25,13 @@ public class IgnoreListService {
 
   private final ConcurrentHashMap<String, List<String>> masksByServer = new ConcurrentHashMap<>();
 
-  private final ConcurrentHashMap<String, List<String>> softMasksByServer = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, List<String>> softMasksByServer =
+      new ConcurrentHashMap<>();
 
-  public enum ListKind { IGNORE, SOFT_IGNORE }
+  public enum ListKind {
+    IGNORE,
+    SOFT_IGNORE
+  }
 
   public record Change(String serverId, ListKind kind) {}
 
@@ -55,12 +59,13 @@ public class IgnoreListService {
     this.softIgnoreIncludesCtcp = enabled;
     runtimeConfig.rememberSoftIgnoreIncludesCtcp(enabled);
   }
+
   public IgnoreListService(IgnoreProperties props, RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
-    this.hardIgnoreIncludesCtcp = (props == null)
-        ? true
-        : Boolean.TRUE.equals(props.hardIgnoreIncludesCtcp());
-    this.softIgnoreIncludesCtcp = (props != null) && Boolean.TRUE.equals(props.softIgnoreIncludesCtcp());
+    this.hardIgnoreIncludesCtcp =
+        (props == null) ? true : Boolean.TRUE.equals(props.hardIgnoreIncludesCtcp());
+    this.softIgnoreIncludesCtcp =
+        (props != null) && Boolean.TRUE.equals(props.softIgnoreIncludesCtcp());
     // Seed from configuration (including runtime YAML import).
     if (props != null && props.servers() != null) {
       for (Map.Entry<String, IgnoreProperties.ServerIgnore> e : props.servers().entrySet()) {
@@ -116,7 +121,6 @@ public class IgnoreListService {
     }
   }
 
-  
   public boolean addMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -124,7 +128,8 @@ public class IgnoreListService {
     String mask = normalizeMaskOrNickToHostmask(rawMaskOrNick);
     if (mask.isEmpty()) return false;
 
-    List<String> list = masksByServer.computeIfAbsent(sid, k -> Collections.synchronizedList(new ArrayList<>()));
+    List<String> list =
+        masksByServer.computeIfAbsent(sid, k -> Collections.synchronizedList(new ArrayList<>()));
     synchronized (list) {
       if (list.stream().anyMatch(m -> m.equalsIgnoreCase(mask))) {
         return false;
@@ -137,7 +142,6 @@ public class IgnoreListService {
     return true;
   }
 
-  
   public boolean addSoftMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -145,7 +149,9 @@ public class IgnoreListService {
     String mask = normalizeMaskOrNickToHostmask(rawMaskOrNick);
     if (mask.isEmpty()) return false;
 
-    List<String> list = softMasksByServer.computeIfAbsent(sid, k -> Collections.synchronizedList(new ArrayList<>()));
+    List<String> list =
+        softMasksByServer.computeIfAbsent(
+            sid, k -> Collections.synchronizedList(new ArrayList<>()));
     synchronized (list) {
       if (list.stream().anyMatch(m -> m.equalsIgnoreCase(mask))) {
         return false;
@@ -158,7 +164,6 @@ public class IgnoreListService {
     return true;
   }
 
-  
   public boolean removeMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -182,7 +187,6 @@ public class IgnoreListService {
     return removed;
   }
 
-  
   public boolean removeSoftMask(String serverId, String rawMaskOrNick) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
@@ -210,7 +214,6 @@ public class IgnoreListService {
     return Objects.toString(serverId, "").trim();
   }
 
-  
   private static String normalizeMask(String raw) {
     String s = Objects.toString(raw, "").trim();
     // no internal whitespace in masks
@@ -317,5 +320,4 @@ public class IgnoreListService {
     while (p < ptn.length() && ptn.charAt(p) == '*') p++;
     return p == ptn.length();
   }
-
 }

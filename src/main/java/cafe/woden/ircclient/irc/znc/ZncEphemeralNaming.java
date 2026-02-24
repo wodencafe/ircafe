@@ -76,10 +76,11 @@ public final class ZncEphemeralNaming {
    * Normalize a network key used for ids/persistence.
    *
    * <p>Rules:
+   *
    * <ul>
-   *   <li>Trim</li>
-   *   <li>Replace non {@code [A-Za-z0-9._-]} with {@code _}</li>
-   *   <li>Lowercase</li>
+   *   <li>Trim
+   *   <li>Replace non {@code [A-Za-z0-9._-]} with {@code _}
+   *   <li>Lowercase
    * </ul>
    */
   public static String normalizeNetworkKey(String networkName) {
@@ -95,12 +96,13 @@ public final class ZncEphemeralNaming {
     StringBuilder out = new StringBuilder(s.length());
     for (int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
-      boolean ok = (c >= 'a' && c <= 'z')
-          || (c >= 'A' && c <= 'Z')
-          || (c >= '0' && c <= '9')
-          || c == '.'
-          || c == '_'
-          || c == '-';
+      boolean ok =
+          (c >= 'a' && c <= 'z')
+              || (c >= 'A' && c <= 'Z')
+              || (c >= '0' && c <= '9')
+              || c == '.'
+              || c == '_'
+              || c == '-';
       out.append(ok ? c : '_');
     }
 

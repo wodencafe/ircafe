@@ -23,7 +23,6 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +55,7 @@ public class ServersDialog extends JDialog {
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     list.setCellRenderer(new ServerCellRenderer());
-    list.putClientProperty(FlatClientProperties.STYLE, "selectionArc:12;" );
+    list.putClientProperty(FlatClientProperties.STYLE, "selectionArc:12;");
 
     JScrollPane scroll = new JScrollPane(list);
     scroll.setPreferredSize(new Dimension(520, 320));
@@ -103,15 +102,20 @@ public class ServersDialog extends JDialog {
 
     // live updates
     disposables.add(
-        serverRegistry.updates()
+        serverRegistry
+            .updates()
             .observeOn(SwingEdt.scheduler())
-            .subscribe(latest -> {
-              String selectedId = Optional.ofNullable(list.getSelectedValue()).map(IrcProperties.Server::id).orElse(null);
-              reload(latest, selectedId);
-            }, err -> {
-              log.error("[ircafe] Servers dialog updates stream error", err);
-            })
-    );
+            .subscribe(
+                latest -> {
+                  String selectedId =
+                      Optional.ofNullable(list.getSelectedValue())
+                          .map(IrcProperties.Server::id)
+                          .orElse(null);
+                  reload(latest, selectedId);
+                },
+                err -> {
+                  log.error("[ircafe] Servers dialog updates stream error", err);
+                }));
 
     pack();
     setLocationRelativeTo(parent);
@@ -177,7 +181,8 @@ public class ServersDialog extends JDialog {
     IrcProperties.Server next = out.get();
     String nextId = next.id();
     if (!Objects.equals(originalId, nextId) && serverRegistry.containsId(nextId)) {
-      JOptionPane.showMessageDialog(this,
+      JOptionPane.showMessageDialog(
+          this,
           "A server with id '" + nextId + "' already exists.",
           "Duplicate server id",
           JOptionPane.ERROR_MESSAGE);
@@ -194,13 +199,15 @@ public class ServersDialog extends JDialog {
     IrcProperties.Server cur = list.getSelectedValue();
     if (cur == null) return;
 
-    int ok = JOptionPane.showConfirmDialog(
-        this,
-        "Remove server '" + cur.id() + "'?\n\nThis updates your runtime config file immediately.",
-        "Remove server",
-        JOptionPane.OK_CANCEL_OPTION,
-        JOptionPane.WARNING_MESSAGE
-    );
+    int ok =
+        JOptionPane.showConfirmDialog(
+            this,
+            "Remove server '"
+                + cur.id()
+                + "'?\n\nThis updates your runtime config file immediately.",
+            "Remove server",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.WARNING_MESSAGE);
 
     if (ok != JOptionPane.OK_OPTION) return;
     serverRegistry.remove(cur.id());
@@ -209,20 +216,26 @@ public class ServersDialog extends JDialog {
   private static final class ServerCellRenderer extends DefaultListCellRenderer {
     @Override
     public java.awt.Component getListCellRendererComponent(
-        JList<?> list,
-        Object value,
-        int index,
-        boolean isSelected,
-        boolean cellHasFocus
-    ) {
+        JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
       super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
       if (value instanceof IrcProperties.Server s) {
         String host = Objects.toString(s.host(), "");
         int port = s.port();
         String tls = s.tls() ? "TLS" : "plain";
         String nick = Objects.toString(s.nick(), "");
-        setText("<html><b>" + escape(s.id()) + "</b>  <span style='opacity:0.75'>" + escape(host) + ":" + port + " · " + tls + "</span><br/>" +
-            "<span style='opacity:0.75'>Nick:</span> " + escape(nick) + "</html>");
+        setText(
+            "<html><b>"
+                + escape(s.id())
+                + "</b>  <span style='opacity:0.75'>"
+                + escape(host)
+                + ":"
+                + port
+                + " · "
+                + tls
+                + "</span><br/>"
+                + "<span style='opacity:0.75'>Nick:</span> "
+                + escape(nick)
+                + "</html>");
       }
       setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
       return this;

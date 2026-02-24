@@ -96,25 +96,22 @@ class ThemeAppearanceServiceTest {
             throw new IllegalStateException("defaultFont baseline missing");
           }
 
+          int targetSize = baselineDefault.getSize() == 16 ? 17 : 16;
+          String targetFamily =
+              "Dialog".equalsIgnoreCase(baselineDefault.getFamily()) ? "Monospaced" : "Dialog";
+
           service.applyCommonTweaks(
               new ThemeTweakSettings(
-                  ThemeTweakSettings.ThemeDensity.AUTO,
-                  10,
-                  true,
-                  "Dialog",
-                  16));
+                  ThemeTweakSettings.ThemeDensity.AUTO, 10, true, targetFamily, targetSize));
 
           Font afterApply = UIManager.getFont("defaultFont");
           assertNotEquals(baselineDefault.getSize(), afterApply.getSize());
-          assertEquals(16, afterApply.getSize());
+          assertEquals(targetSize, afterApply.getSize());
+          assertEquals(targetFamily, afterApply.getFamily());
 
           service.applyCommonTweaks(
               new ThemeTweakSettings(
-                  ThemeTweakSettings.ThemeDensity.AUTO,
-                  10,
-                  false,
-                  "Dialog",
-                  16));
+                  ThemeTweakSettings.ThemeDensity.AUTO, 10, false, targetFamily, targetSize));
 
           Font afterDisable = UIManager.getFont("defaultFont");
           assertEquals(baselineDefault.getFamily(), afterDisable.getFamily());

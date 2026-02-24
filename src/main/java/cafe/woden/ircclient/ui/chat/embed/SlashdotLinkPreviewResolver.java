@@ -12,14 +12,13 @@ final class SlashdotLinkPreviewResolver implements LinkPreviewResolver {
   public LinkPreview tryResolve(URI uri, String originalUrl, PreviewHttp http) throws Exception {
     if (!SlashdotPreviewUtil.isSlashdotStoryUri(uri)) return null;
 
-    var resp = http.getStream(
-        uri,
-        "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-        PreviewHttp.headers(
-            "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
-            "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE
-        )
-    );
+    var resp =
+        http.getStream(
+            uri,
+            "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            PreviewHttp.headers(
+                "User-Agent", PreviewHttp.BROWSER_USER_AGENT,
+                "Accept-Language", PreviewHttp.ACCEPT_LANGUAGE));
 
     int status = resp.statusCode();
     if (status < 200 || status >= 300) {

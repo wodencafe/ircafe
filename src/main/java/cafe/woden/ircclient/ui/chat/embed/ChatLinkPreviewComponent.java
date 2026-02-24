@@ -14,9 +14,9 @@ import java.net.URI;
 import java.util.Locale;
 import java.util.Objects;
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
@@ -120,14 +120,20 @@ final class ChatLinkPreviewComponent extends JPanel {
   // unnecessary relayout, but still relayout when the collapsed state changes.
   private volatile boolean lastCollapsedLayout = false;
   private java.awt.Component resizeListeningOn;
-  private final java.awt.event.ComponentListener resizeListener = new java.awt.event.ComponentAdapter() {
-    @Override
-    public void componentResized(java.awt.event.ComponentEvent e) {
-      SwingUtilities.invokeLater(ChatLinkPreviewComponent.this::layoutForCurrentWidth);
-    }
-  };
+  private final java.awt.event.ComponentListener resizeListener =
+      new java.awt.event.ComponentAdapter() {
+        @Override
+        public void componentResized(java.awt.event.ComponentEvent e) {
+          SwingUtilities.invokeLater(ChatLinkPreviewComponent.this::layoutForCurrentWidth);
+        }
+      };
 
-  ChatLinkPreviewComponent(String serverId, String url, LinkPreviewFetchService fetch, ImageFetchService imageFetch, boolean collapsedByDefault) {
+  ChatLinkPreviewComponent(
+      String serverId,
+      String url,
+      LinkPreviewFetchService fetch,
+      ImageFetchService imageFetch,
+      boolean collapsedByDefault) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
     this.serverId = serverId;
     this.url = url;
@@ -137,9 +143,10 @@ final class ChatLinkPreviewComponent extends JPanel {
     this.collapsed = collapsedByDefault;
 
     setOpaque(false);
-    setBorder(BorderFactory.createEmptyBorder(
-        OUTER_PAD_EXPANDED.top, OUTER_PAD_EXPANDED.left,
-        OUTER_PAD_EXPANDED.bottom, OUTER_PAD_EXPANDED.right));
+    setBorder(
+        BorderFactory.createEmptyBorder(
+            OUTER_PAD_EXPANDED.top, OUTER_PAD_EXPANDED.left,
+            OUTER_PAD_EXPANDED.bottom, OUTER_PAD_EXPANDED.right));
 
     status.setOpaque(false);
     status.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
@@ -154,16 +161,17 @@ final class ChatLinkPreviewComponent extends JPanel {
       return;
     }
 
-    sub = fetch.fetch(serverId, url)
-        .observeOn(SwingEdt.scheduler())
-        .subscribe(
-            this::renderPreview,
-            err -> {
-              status.setText("");
-              status.setText("(preview failed)");
-              status.setToolTipText(url + System.lineSeparator() + err.getMessage());
-            }
-        );
+    sub =
+        fetch
+            .fetch(serverId, url)
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                this::renderPreview,
+                err -> {
+                  status.setText("");
+                  status.setText("(preview failed)");
+                  status.setToolTipText(url + System.lineSeparator() + err.getMessage());
+                });
   }
 
   private void renderPreview(LinkPreview p) {
@@ -191,13 +199,16 @@ final class ChatLinkPreviewComponent extends JPanel {
     boolean instagramByTarget = InstagramPreviewUtil.isInstagramPostUrl(targetUrl);
     boolean instagramByOriginal = InstagramPreviewUtil.isInstagramPostUrl(url);
     boolean instagramBySite = previewSite != null && previewSite.equalsIgnoreCase("instagram");
-    boolean instagramByTitle = previewTitle != null && previewTitle.toLowerCase(Locale.ROOT).contains("instagram");
-    instagramExtended = instagramByTarget || instagramByOriginal || instagramBySite || instagramByTitle;
+    boolean instagramByTitle =
+        previewTitle != null && previewTitle.toLowerCase(Locale.ROOT).contains("instagram");
+    instagramExtended =
+        instagramByTarget || instagramByOriginal || instagramBySite || instagramByTitle;
     boolean imgurByTarget = ImgurPreviewUtil.isImgurUrl(targetUrl);
     boolean imgurByOriginal = ImgurPreviewUtil.isImgurUrl(url);
     boolean imgurBySite = previewSite != null && previewSite.equalsIgnoreCase("imgur");
     boolean imgurByDesc = ImgurPreviewUtil.looksLikeImgurDescription(safe(p.description()));
-    imgurExtended = !instagramExtended && (imgurByTarget || imgurByOriginal || imgurBySite || imgurByDesc);
+    imgurExtended =
+        !instagramExtended && (imgurByTarget || imgurByOriginal || imgurBySite || imgurByDesc);
     boolean newsByTarget = NewsPreviewUtil.isLikelyNewsArticleUrl(targetUrl);
     boolean newsBySite = NewsPreviewUtil.isLikelyNewsSiteName(previewSite);
     newsExtended = !instagramExtended && !imgurExtended && (newsByTarget || newsBySite);
@@ -212,11 +223,12 @@ final class ChatLinkPreviewComponent extends JPanel {
     collapseBtn.setOpaque(false);
     collapseBtn.setMargin(new Insets(0, 0, 0, 0));
     collapseBtn.setToolTipText(collapsed ? "Expand preview" : "Collapse preview");
-    collapseBtn.addActionListener(e -> {
-      collapsed = !collapsed;
-      applyCollapsedState();
-      layoutForCurrentWidth();
-    });
+    collapseBtn.addActionListener(
+        e -> {
+          collapsed = !collapsed;
+          applyCollapsedState();
+          layoutForCurrentWidth();
+        });
 
     JPanel headerText = new JPanel();
     headerText.setOpaque(false);
@@ -244,23 +256,33 @@ final class ChatLinkPreviewComponent extends JPanel {
     header.add(headerText, BorderLayout.CENTER);
 
     // Body: optional thumbnail + description.
-    body = new JPanel(new BorderLayout((instagramExtended || imgurExtended) ? 0 : 10, (instagramExtended || imgurExtended) ? 8 : 0));
+    body =
+        new JPanel(
+            new BorderLayout(
+                (instagramExtended || imgurExtended) ? 0 : 10,
+                (instagramExtended || imgurExtended) ? 8 : 0));
     body.setOpaque(false);
 
     thumb = new JLabel();
     thumbHost = thumb;
     thumbnailBesideText = !(instagramExtended || imgurExtended);
     boolean tallPoster = imdbExtended || rtExtended;
-    int thumbW = instagramExtended
-        ? INSTAGRAM_THUMB_W
-        : (imgurExtended
-            ? IMGUR_THUMB_W
-            : (youtubeExtended ? YT_THUMB_W : (xExtended ? X_THUMB_W : (tallPoster ? IMDB_THUMB_W : THUMB_SIZE))));
-    int thumbH = instagramExtended
-        ? INSTAGRAM_THUMB_H
-        : (imgurExtended
-            ? IMGUR_THUMB_H
-            : (youtubeExtended ? YT_THUMB_H : (xExtended ? X_THUMB_H : (tallPoster ? IMDB_THUMB_H : THUMB_SIZE))));
+    int thumbW =
+        instagramExtended
+            ? INSTAGRAM_THUMB_W
+            : (imgurExtended
+                ? IMGUR_THUMB_W
+                : (youtubeExtended
+                    ? YT_THUMB_W
+                    : (xExtended ? X_THUMB_W : (tallPoster ? IMDB_THUMB_W : THUMB_SIZE))));
+    int thumbH =
+        instagramExtended
+            ? INSTAGRAM_THUMB_H
+            : (imgurExtended
+                ? IMGUR_THUMB_H
+                : (youtubeExtended
+                    ? YT_THUMB_H
+                    : (xExtended ? X_THUMB_H : (tallPoster ? IMDB_THUMB_H : THUMB_SIZE))));
     setThumbHostSize(thumbW, thumbH);
     thumb.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
@@ -299,7 +321,8 @@ final class ChatLinkPreviewComponent extends JPanel {
     String rawDesc = safe(p.description());
 
     if (p.imageUrl() != null && !p.imageUrl().isBlank()) {
-      body.add(thumbHost, (instagramExtended || imgurExtended) ? BorderLayout.NORTH : BorderLayout.WEST);
+      body.add(
+          thumbHost, (instagramExtended || imgurExtended) ? BorderLayout.NORTH : BorderLayout.WEST);
       installImageOpenBehavior(p.imageUrl());
       loadThumbnail(p.imageUrl());
     }
@@ -321,7 +344,8 @@ final class ChatLinkPreviewComponent extends JPanel {
         imdbMeta.setAlignmentX(LEFT_ALIGNMENT);
         imdbMeta.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
         try {
-          imdbMeta.setFont(imdbMeta.getFont().deriveFont(imdbMeta.getFont().getStyle() | Font.BOLD));
+          imdbMeta.setFont(
+              imdbMeta.getFont().deriveFont(imdbMeta.getFont().getStyle() | Font.BOLD));
         } catch (Exception ignored) {
         }
         // Wrap in a BorderLayout anchored WEST to avoid BoxLayout centering quirks.
@@ -585,14 +609,15 @@ final class ChatLinkPreviewComponent extends JPanel {
     card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     card.setToolTipText(targetUrl);
     installPopup(card, targetUrl);
-    card.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
-          openUrl(targetUrl);
-        }
-      }
-    });
+    card.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+              openUrl(targetUrl);
+            }
+          }
+        });
 
     add(card);
 
@@ -628,61 +653,64 @@ final class ChatLinkPreviewComponent extends JPanel {
       thumbSub = null;
     }
 
-    thumbSub = imageFetch.fetch(serverId, imageUrl)
-        .observeOn(SwingEdt.scheduler())
-        .subscribe(
-            bytes -> {
-              try {
-                DecodedImage d = ImageDecodeUtil.decode(imageUrl, bytes);
-                java.awt.image.BufferedImage img = null;
-                if (d instanceof StaticImageDecoded st) {
-                  img = st.image();
-                } else if (d instanceof AnimatedGifDecoded gif && !gif.frames().isEmpty()) {
-                  img = gif.frames().get(0);
-                }
-                if (img != null) {
-                  int maxW = THUMB_SIZE;
+    thumbSub =
+        imageFetch
+            .fetch(serverId, imageUrl)
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                bytes -> {
                   try {
-                    Dimension dsz = thumb != null ? thumb.getPreferredSize() : null;
-                    if (dsz != null && dsz.width > 0) maxW = dsz.width;
-                  } catch (Exception ignored2) {
-                    // best effort
-                  }
-                  if (instagramExtended || imgurExtended) {
-                    int inlineW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
-                    if (inlineW > 0) {
-                      // Keep vertical media previews inside the card's usable content width.
-                      maxW = Math.max(120, inlineW - 28);
+                    DecodedImage d = ImageDecodeUtil.decode(imageUrl, bytes);
+                    java.awt.image.BufferedImage img = null;
+                    if (d instanceof StaticImageDecoded st) {
+                      img = st.image();
+                    } else if (d instanceof AnimatedGifDecoded gif && !gif.frames().isEmpty()) {
+                      img = gif.frames().get(0);
                     }
+                    if (img != null) {
+                      int maxW = THUMB_SIZE;
+                      try {
+                        Dimension dsz = thumb != null ? thumb.getPreferredSize() : null;
+                        if (dsz != null && dsz.width > 0) maxW = dsz.width;
+                      } catch (Exception ignored2) {
+                        // best effort
+                      }
+                      if (instagramExtended || imgurExtended) {
+                        int inlineW =
+                            EmbedHostLayoutUtil.computeMaxInlineWidth(
+                                this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
+                        if (inlineW > 0) {
+                          // Keep vertical media previews inside the card's usable content width.
+                          maxW = Math.max(120, inlineW - 28);
+                        }
+                      }
+                      java.awt.image.BufferedImage scaled =
+                          ImageScaleUtil.scaleDownToWidth(img, maxW);
+                      if (instagramExtended || imgurExtended) {
+                        // Portrait photos can exceed the initial placeholder height.
+                        // Grow the host to the scaled image so it doesn't look cramped/cropped.
+                        setThumbHostSize(scaled.getWidth(), scaled.getHeight());
+                      }
+                      thumb.setIcon(new javax.swing.ImageIcon(scaled));
+                      if (instagramExtended || imgurExtended) {
+                        lastMaxW = -1;
+                        layoutForCurrentWidth();
+                      }
+                    } else {
+                      log.warn("Thumbnail decode produced no image for {}", imageUrl);
+                      dropThumbnailPlaceholder();
+                    }
+                  } catch (Exception ex) {
+                    log.warn("Thumbnail decode failed for {}: {}", imageUrl, ex.toString());
+                    dropThumbnailPlaceholder();
                   }
-                  java.awt.image.BufferedImage scaled = ImageScaleUtil.scaleDownToWidth(img, maxW);
-                  if (instagramExtended || imgurExtended) {
-                    // Portrait photos can exceed the initial placeholder height.
-                    // Grow the host to the scaled image so it doesn't look cramped/cropped.
-                    setThumbHostSize(scaled.getWidth(), scaled.getHeight());
-                  }
-                  thumb.setIcon(new javax.swing.ImageIcon(scaled));
-                  if (instagramExtended || imgurExtended) {
-                    lastMaxW = -1;
-                    layoutForCurrentWidth();
-                  }
-                } else {
-                  log.warn("Thumbnail decode produced no image for {}", imageUrl);
+                },
+                err -> {
+                  log.warn("Thumbnail download failed for {}: {}", imageUrl, err.toString());
                   dropThumbnailPlaceholder();
-                }
-              } catch (Exception ex) {
-                log.warn("Thumbnail decode failed for {}: {}", imageUrl, ex.toString());
-                dropThumbnailPlaceholder();
-              }
-            },
-            err -> {
-              log.warn("Thumbnail download failed for {}: {}", imageUrl, err.toString());
-              dropThumbnailPlaceholder();
-            }
-        );
+                });
   }
 
-  
   private void dropThumbnailPlaceholder() {
     try {
       if (body == null || thumbHost == null) return;
@@ -690,19 +718,20 @@ final class ChatLinkPreviewComponent extends JPanel {
       if (thumb != null && thumb.getIcon() != null) return;
       if (thumbHost.getParent() != body) return;
 
-      SwingUtilities.invokeLater(() -> {
-        try {
-          if (thumb != null && thumb.getIcon() != null) return;
-          if (body == null || thumbHost == null) return;
-          if (thumbHost.getParent() != body) return;
-          body.remove(thumbHost);
-          body.revalidate();
-          body.repaint();
-          lastMaxW = -1; // bust cached layout
-          layoutForCurrentWidth();
-        } catch (Exception ignored) {
-        }
-      });
+      SwingUtilities.invokeLater(
+          () -> {
+            try {
+              if (thumb != null && thumb.getIcon() != null) return;
+              if (body == null || thumbHost == null) return;
+              if (thumbHost.getParent() != body) return;
+              body.remove(thumbHost);
+              body.revalidate();
+              body.repaint();
+              lastMaxW = -1; // bust cached layout
+              layoutForCurrentWidth();
+            } catch (Exception ignored) {
+            }
+          });
     } catch (Exception ignored) {
     }
   }
@@ -734,7 +763,8 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private void layoutForCurrentWidth() {
     if (card == null) return;
-    int maxW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
+    int maxW =
+        EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
     if (maxW <= 0) maxW = FALLBACK_MAX_W;
 
     if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0 && collapsed == lastCollapsedLayout) return;
@@ -787,12 +817,9 @@ final class ChatLinkPreviewComponent extends JPanel {
       imdbCredits.setSize(new Dimension(descInnerW, Short.MAX_VALUE));
 
       if (imdbCreditsText != null && !imdbCreditsText.isBlank()) {
-        String clampedCredits = PreviewTextUtil.clampToLines(
-            imdbCreditsText,
-            imdbCredits,
-            descInnerW,
-            IMDB_CREDITS_MAX_LINES
-        );
+        String clampedCredits =
+            PreviewTextUtil.clampToLines(
+                imdbCreditsText, imdbCredits, descInnerW, IMDB_CREDITS_MAX_LINES);
         if (clampedCredits != null && !clampedCredits.equals(imdbCredits.getText())) {
           imdbCredits.setText(clampedCredits);
         }
@@ -840,8 +867,10 @@ final class ChatLinkPreviewComponent extends JPanel {
 
     for (int i = 1; i < lines.length; i++) {
       String line = lines[i] == null ? "" : lines[i].strip();
-      if (line.startsWith("Director:") || line.startsWith("Cast:")
-          || line.startsWith("Creator:") || line.startsWith("Creators:")) {
+      if (line.startsWith("Director:")
+          || line.startsWith("Cast:")
+          || line.startsWith("Creator:")
+          || line.startsWith("Creators:")) {
         if (!credits.isEmpty()) credits.append("\n");
         credits.append(line);
         continue;
@@ -875,7 +904,10 @@ final class ChatLinkPreviewComponent extends JPanel {
       String line = lines[i] == null ? "" : lines[i].strip();
       if (line.isBlank()) {
         // Blank line can separate meta from summary; stop once we've found any meta.
-        if (submitter != null || date != null) { i++; break; }
+        if (submitter != null || date != null) {
+          i++;
+          break;
+        }
         continue;
       }
 
@@ -921,7 +953,10 @@ final class ChatLinkPreviewComponent extends JPanel {
     for (; i < lines.length; i++) {
       String line = lines[i] == null ? "" : lines[i].strip();
       if (line.isBlank()) {
-        if (author != null || date != null || publisher != null) { i++; break; }
+        if (author != null || date != null || publisher != null) {
+          i++;
+          break;
+        }
         continue;
       }
 
@@ -974,7 +1009,10 @@ final class ChatLinkPreviewComponent extends JPanel {
     for (; i < lines.length; i++) {
       String line = lines[i] == null ? "" : lines[i].strip();
       if (line.isBlank()) {
-        if (author != null || date != null) { i++; break; }
+        if (author != null || date != null) {
+          i++;
+          break;
+        }
         continue;
       }
 
@@ -1025,7 +1063,10 @@ final class ChatLinkPreviewComponent extends JPanel {
     for (; i < lines.length; i++) {
       String line = lines[i] == null ? "" : lines[i].strip();
       if (line.isBlank()) {
-        if (submitter != null || date != null) { i++; break; }
+        if (submitter != null || date != null) {
+          i++;
+          break;
+        }
         continue;
       }
 
@@ -1102,7 +1143,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   }
 
   private void hookResizeListener() {
-    resizeListeningOn = EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
+    resizeListeningOn =
+        EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
   }
 
   private void unhookResizeListener() {
@@ -1140,15 +1182,16 @@ final class ChatLinkPreviewComponent extends JPanel {
     String u = safe(imageUrl);
     if (u == null || u.isBlank()) return;
 
-    java.awt.event.MouseAdapter openImage = new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
-          openUrl(u);
-          e.consume();
-        }
-      }
-    };
+    java.awt.event.MouseAdapter openImage =
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+              openUrl(u);
+              e.consume();
+            }
+          }
+        };
 
     if (thumb != null) {
       thumb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -1171,12 +1214,15 @@ final class ChatLinkPreviewComponent extends JPanel {
     open.addActionListener(e -> openUrl(targetUrl));
 
     JMenuItem copy = new JMenuItem("Copy link");
-    copy.addActionListener(e -> {
-      try {
-        java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(targetUrl), null);
-      } catch (Exception ignored) {
-      }
-    });
+    copy.addActionListener(
+        e -> {
+          try {
+            java.awt.Toolkit.getDefaultToolkit()
+                .getSystemClipboard()
+                .setContents(new StringSelection(targetUrl), null);
+          } catch (Exception ignored) {
+          }
+        });
 
     menu.add(open);
     menu.add(copy);
@@ -1227,8 +1273,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     Insets pad = collapsed ? CARD_PAD_COLLAPSED : CARD_PAD_EXPANDED;
     return BorderFactory.createCompoundBorder(
         BorderFactory.createMatteBorder(1, 4, 1, 1, borderColor()),
-        BorderFactory.createEmptyBorder(pad.top, pad.left, pad.bottom, pad.right)
-    );
+        BorderFactory.createEmptyBorder(pad.top, pad.left, pad.bottom, pad.right));
   }
 
   private static java.awt.Color borderColor() {

@@ -5,7 +5,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ircafe.logging")
 public record LogProperties(
     Boolean enabled,
-
     Boolean logSoftIgnoredLines,
 
     /** Whether PM/query messages are persisted in the local chat log DB. */
@@ -13,7 +12,6 @@ public record LogProperties(
 
     /** Whether PM/query targets are remembered and restored into the chat list. */
     Boolean savePrivateMessageList,
-
     Boolean keepForever,
 
     /**
@@ -22,16 +20,10 @@ public record LogProperties(
      * <p>Ignored when {@code keepForever=true}. If {@code <= 0}, treated as "no retention".
      */
     Integer retentionDays,
+    Hsqldb hsqldb) {
 
-    Hsqldb hsqldb
-) {
+  public record Hsqldb(String fileBaseName, Boolean nextToRuntimeConfig) {
 
-  
-  public record Hsqldb(
-      String fileBaseName,
-
-      Boolean nextToRuntimeConfig
-  ) {
     public Hsqldb {
       if (fileBaseName == null || fileBaseName.isBlank()) {
         fileBaseName = "ircafe-chatlog";

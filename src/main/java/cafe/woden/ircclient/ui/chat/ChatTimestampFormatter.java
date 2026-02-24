@@ -34,7 +34,10 @@ public class ChatTimestampFormatter {
 
     UiProperties.Timestamps ts = props != null ? props.timestamps() : null;
     this.defaultEnabled = ts == null || ts.enabled() == null || Boolean.TRUE.equals(ts.enabled());
-    this.defaultPattern = ts != null && ts.format() != null && !ts.format().isBlank() ? ts.format().trim() : "HH:mm:ss";
+    this.defaultPattern =
+        ts != null && ts.format() != null && !ts.format().isBlank()
+            ? ts.format().trim()
+            : "HH:mm:ss";
 
     // Prime caches
     refreshFromSettings();
@@ -51,8 +54,9 @@ public class ChatTimestampFormatter {
     try {
       s = LocalTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault()).format(fmt);
     } catch (RuntimeException e) {
-      s = LocalTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault())
-          .format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+      s =
+          LocalTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault())
+              .format(DateTimeFormatter.ofPattern("HH:mm:ss"));
     }
     return "[" + s + "] ";
   }
@@ -103,7 +107,9 @@ public class ChatTimestampFormatter {
     } catch (IllegalArgumentException | DateTimeParseException e) {
       if (lastWarnedBadPattern == null || !lastWarnedBadPattern.equals(pattern)) {
         lastWarnedBadPattern = pattern;
-        log.warn("Invalid timestamp format '{}' (Preferences → Chat → Timestamps); falling back to HH:mm:ss", pattern);
+        log.warn(
+            "Invalid timestamp format '{}' (Preferences → Chat → Timestamps); falling back to HH:mm:ss",
+            pattern);
       }
       return DateTimeFormatter.ofPattern("HH:mm:ss");
     }

@@ -15,9 +15,8 @@ import javax.swing.SwingUtilities;
 /**
  * Decorates a {@link JTree} with Alt+wheel row navigation.
  *
- * <p>Default wheel behavior remains normal viewport scrolling. Holding Alt while wheeling moves
- * the tree selection up/down by one row at a time.
- *
+ * <p>Default wheel behavior remains normal viewport scrolling. Holding Alt while wheeling moves the
+ * tree selection up/down by one row at a time.
  */
 public final class TreeWheelSelectionDecorator implements AutoCloseable {
 
@@ -46,23 +45,22 @@ public final class TreeWheelSelectionDecorator implements AutoCloseable {
     this.previousWheelScrollingEnabled = scroll.isWheelScrollingEnabled();
 
     // Debounce micro-bursts so some touchpads don't skip nodes.
-    this.subscription = stepRequests
-        .throttleFirst(microburstWindowMs, TimeUnit.MILLISECONDS)
-        .subscribe(
-            dir -> SwingUtilities.invokeLater(() -> moveSelectionBy(dir)),
-            err -> {
-            }
-        );
+    this.subscription =
+        stepRequests
+            .throttleFirst(microburstWindowMs, TimeUnit.MILLISECONDS)
+            .subscribe(dir -> SwingUtilities.invokeLater(() -> moveSelectionBy(dir)), err -> {});
 
     this.wheelListener = this::onMouseWheel;
     tree.addMouseWheelListener(wheelListener);
 
     // If the tree becomes undisplayable, dispose the Rx subscription to avoid leaks.
-    this.hierarchyListener = e -> {
-      if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0 && !tree.isDisplayable()) {
-        if (!subscription.isDisposed()) subscription.dispose();
-      }
-    };
+    this.hierarchyListener =
+        e -> {
+          if ((e.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0
+              && !tree.isDisplayable()) {
+            if (!subscription.isDisposed()) subscription.dispose();
+          }
+        };
     tree.addHierarchyListener(hierarchyListener);
   }
 

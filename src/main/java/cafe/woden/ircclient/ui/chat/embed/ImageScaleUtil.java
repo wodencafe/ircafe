@@ -23,7 +23,8 @@ final class ImageScaleUtil {
     BufferedImage out = new BufferedImage(tw, th, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = out.createGraphics();
     try {
-      g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+      g.setRenderingHint(
+          RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
       g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
       g.drawImage(src, 0, 0, tw, th, null);
@@ -50,7 +51,8 @@ final class ImageScaleUtil {
     BufferedImage out = new BufferedImage(tw, th, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = out.createGraphics();
     try {
-      g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+      g.setRenderingHint(
+          RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
       g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
       g.drawImage(src, 0, 0, tw, th, null);

@@ -5,7 +5,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.time.Duration;
@@ -46,7 +45,9 @@ final class YouTubePreviewUtil {
     }
 
     // youtube.* domains
-    if (!(host.contains("youtube.") || host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com"))) {
+    if (!(host.contains("youtube.")
+        || host.endsWith("youtube.com")
+        || host.endsWith("youtube-nocookie.com"))) {
       return null;
     }
 
@@ -79,7 +80,8 @@ final class YouTubePreviewUtil {
     return URI.create("https://www.youtube.com/oembed?format=json&url=" + encoded);
   }
 
-  static LinkPreview parseOEmbedJson(String json, URI originalVideoUri, String ogDescriptionFallback, YtMeta meta) {
+  static LinkPreview parseOEmbedJson(
+      String json, URI originalVideoUri, String ogDescriptionFallback, YtMeta meta) {
     if (json == null || json.isBlank() || originalVideoUri == null) return null;
 
     String id = extractVideoId(originalVideoUri);
@@ -115,7 +117,7 @@ final class YouTubePreviewUtil {
   }
 
   /** Attempt to enrich via yt-dlp if it is installed on PATH. */
-static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
+  static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
     if (url == null || url.isBlank()) return null;
 
     // Try common executable names.
@@ -131,7 +133,10 @@ static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
         Long likes = MiniJson.findLong(json, "like_count");
         String description = MiniJson.findString(json, "description");
 
-        if (duration == null && views == null && likes == null && (description == null || description.isBlank())) {
+        if (duration == null
+            && views == null
+            && likes == null
+            && (description == null || description.isBlank())) {
           continue;
         }
         return new YtMeta(duration, views, likes, description);
@@ -145,14 +150,8 @@ static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
 
   private static String runProcessJson(String exe, String url, Duration timeout) throws Exception {
     // yt-dlp -J/--dump-single-json prints JSON for the video without downloading.
-    ProcessBuilder pb = new ProcessBuilder(
-        exe,
-        "-J",
-        "--no-playlist",
-        "--no-warnings",
-        "--skip-download",
-        url
-    );
+    ProcessBuilder pb =
+        new ProcessBuilder(exe, "-J", "--no-playlist", "--no-warnings", "--skip-download", url);
     pb.redirectErrorStream(true);
 
     Process p = pb.start();
@@ -344,10 +343,12 @@ static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
     // YouTube IDs are typically 11 chars, but be permissive.
     for (int i = 0; i < t.length(); i++) {
       char c = t.charAt(i);
-      boolean ok = (c >= 'a' && c <= 'z')
-          || (c >= 'A' && c <= 'Z')
-          || (c >= '0' && c <= '9')
-          || c == '_' || c == '-';
+      boolean ok =
+          (c >= 'a' && c <= 'z')
+              || (c >= 'A' && c <= 'Z')
+              || (c >= '0' && c <= '9')
+              || c == '_'
+              || c == '-';
       if (!ok) return null;
     }
     if (t.length() < 6) return null;
@@ -457,7 +458,8 @@ static YtMeta tryFetchYtDlpMeta(String url, Duration timeout) {
                 String hex = json.substring(i + 2, i + 6);
                 try {
                   out.append((char) Integer.parseInt(hex, 16));
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
                 i += 4;
               }
             }

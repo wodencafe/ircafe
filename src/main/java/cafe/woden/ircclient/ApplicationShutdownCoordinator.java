@@ -23,9 +23,7 @@ public class ApplicationShutdownCoordinator {
   private final AtomicBoolean shutdownStarted = new AtomicBoolean(false);
 
   public ApplicationShutdownCoordinator(
-      ConfigurableApplicationContext applicationContext,
-      IrcClientService ircClientService
-  ) {
+      ConfigurableApplicationContext applicationContext, IrcClientService ircClientService) {
     this.applicationContext = applicationContext;
     this.ircClientService = ircClientService;
   }
@@ -35,46 +33,53 @@ public class ApplicationShutdownCoordinator {
       return;
     }
 
-    VirtualThreads.start("ircafe-shutdown-watchdog", () -> {
-      try {
-        Thread.sleep(SHUTDOWN_WATCHDOG_MS);
-      } catch (InterruptedException ignored) {
-        return;
-      }
-      log.error("[ircafe] Shutdown watchdog fired after {}ms; forcing JVM halt.", SHUTDOWN_WATCHDOG_MS);
-      Runtime.getRuntime().halt(1);
-    });
+    VirtualThreads.start(
+        "ircafe-shutdown-watchdog",
+        () -> {
+          try {
+            Thread.sleep(SHUTDOWN_WATCHDOG_MS);
+          } catch (InterruptedException ignored) {
+            return;
+          }
+          log.error(
+              "[ircafe] Shutdown watchdog fired after {}ms; forcing JVM halt.",
+              SHUTDOWN_WATCHDOG_MS);
+          Runtime.getRuntime().halt(1);
+        });
 
-    VirtualThreads.start("ircafe-shutdown", () -> {
-      int exitCode = 0;
-      try {
-        ircClientService.shutdownNow();
-      } catch (Throwable t) {
-        log.warn("[ircafe] Error while shutting down IRC client service", t);
-        exitCode = 1;
-      }
+    VirtualThreads.start(
+        "ircafe-shutdown",
+        () -> {
+          int exitCode = 0;
+          try {
+            ircClientService.shutdownNow();
+          } catch (Throwable t) {
+            log.warn("[ircafe] Error while shutting down IRC client service", t);
+            exitCode = 1;
+          }
 
-      try {
-        if (isApplicationContextAlreadyClosed()) {
-          log.debug("[ircafe] Spring context already closed before shutdown coordinator exit call.");
-        } else {
-          exitCode = SpringApplication.exit(applicationContext, () -> 0);
-        }
-      } catch (IllegalStateException ise) {
-        if (isAlreadyClosedException(ise)) {
-          // Benign shutdown race: another path already closed the context.
-          log.debug("[ircafe] Spring context already closed during shutdown.", ise);
-        } else {
-          log.warn("[ircafe] Error while closing Spring context", ise);
-          exitCode = 1;
-        }
-      } catch (Throwable t) {
-        log.warn("[ircafe] Error while closing Spring context", t);
-        exitCode = 1;
-      }
+          try {
+            if (isApplicationContextAlreadyClosed()) {
+              log.debug(
+                  "[ircafe] Spring context already closed before shutdown coordinator exit call.");
+            } else {
+              exitCode = SpringApplication.exit(applicationContext, () -> 0);
+            }
+          } catch (IllegalStateException ise) {
+            if (isAlreadyClosedException(ise)) {
+              // Benign shutdown race: another path already closed the context.
+              log.debug("[ircafe] Spring context already closed during shutdown.", ise);
+            } else {
+              log.warn("[ircafe] Error while closing Spring context", ise);
+              exitCode = 1;
+            }
+          } catch (Throwable t) {
+            log.warn("[ircafe] Error while closing Spring context", t);
+            exitCode = 1;
+          }
 
-      System.exit(exitCode);
-    });
+          System.exit(exitCode);
+        });
   }
 
   private boolean isApplicationContextAlreadyClosed() {
@@ -90,6 +95,7 @@ public class ApplicationShutdownCoordinator {
   private static boolean isAlreadyClosedException(IllegalStateException ex) {
     String msg = ex == null ? "" : String.valueOf(ex.getMessage());
     msg = msg.toLowerCase(Locale.ROOT);
-    return msg.contains("has been closed already") || msg.contains("beanfactory not initialized or already closed");
+    return msg.contains("has been closed already")
+        || msg.contains("beanfactory not initialized or already closed");
   }
 }

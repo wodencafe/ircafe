@@ -29,20 +29,17 @@ import org.springframework.stereotype.Component;
 public class PushyNotificationService {
 
   private static final Logger log = LoggerFactory.getLogger(PushyNotificationService.class);
+  private static final PushyProperties DISABLED_DEFAULTS =
+      new PushyProperties(false, null, null, null, null, null, null, null);
 
-  private final PushyProperties properties;
-  private final HttpClient client;
+  private final PushySettingsBus settingsBus;
   private final ExecutorService executor;
 
-  public PushyNotificationService(PushyProperties properties,
-                                  @Qualifier(ExecutorConfig.PUSHY_NOTIFICATION_EXECUTOR) ExecutorService executor) {
-    this.properties = properties != null
-        ? properties
-        : new PushyProperties(false, null, null, null, null, null, null, null);
+  public PushyNotificationService(
+      PushySettingsBus settingsBus,
+      @Qualifier(ExecutorConfig.PUSHY_NOTIFICATION_EXECUTOR) ExecutorService executor) {
+    this.settingsBus = settingsBus;
     this.executor = executor;
-    this.client = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(this.properties.connectTimeoutSeconds()))
-        .build();
   }
 
   public boolean notifyEvent(
@@ -52,62 +49,109 @@ public class PushyNotificationService {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
+    PushyProperties properties = currentProperties();
     if (!properties.configured()) return false;
 
     String endpoint = Objects.toString(properties.endpoint(), "").trim();
     String apiKey = Objects.toString(properties.apiKey(), "").trim();
     if (endpoint.isEmpty() || apiKey.isEmpty()) return false;
 
-    String finalTitle = buildTitle(title);
+    String finalTitle = buildTitle(properties, title);
     String finalBody = Objects.toString(body, "").trim();
     if (finalBody.isEmpty()) finalBody = Objects.toString(eventType, "Event");
 
-    String payload = buildPayload(
-        eventType,
-        serverId,
-        channel,
-        sourceNick,
-        sourceIsSelf,
-        finalTitle,
-        finalBody);
+    String payload =
+        buildPayload(
+            properties,
+            eventType,
+            serverId,
+            channel,
+            sourceNick,
+            sourceIsSelf,
+            finalTitle,
+            finalBody);
     if (payload == null || payload.isBlank()) return false;
 
     String url = endpoint + "?api_key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
-    executor.execute(() -> sendPush(url, payload));
+    executor.execute(() -> sendPush(properties, url, payload));
     return true;
   }
 
-  private void sendPush(String url, String payload) {
-    try {
-      HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-          .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()))
-          .header("Content-Type", "application/json")
-          .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-          .build();
+  public PushResult sendTestNotification(PushyProperties settings, String title, String body) {
+    PushyProperties properties = settings != null ? settings : currentProperties();
+    if (!Boolean.TRUE.equals(properties.enabled())) {
+      return PushResult.failed("Pushy is disabled.");
+    }
 
-      HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    String endpoint = Objects.toString(properties.endpoint(), "").trim();
+    String apiKey = Objects.toString(properties.apiKey(), "").trim();
+    if (endpoint.isEmpty() || apiKey.isEmpty()) {
+      return PushResult.failed("Pushy endpoint and API key are required.");
+    }
+
+    String finalTitle = buildTitle(properties, title);
+    String finalBody = Objects.toString(body, "").trim();
+    if (finalBody.isEmpty()) finalBody = "Pushy integration test from IRCafe.";
+
+    String payload =
+        buildPayload(
+            properties,
+            IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
+            "local",
+            "status",
+            "ircafe",
+            false,
+            finalTitle,
+            finalBody);
+    if (payload == null || payload.isBlank()) {
+      return PushResult.failed("Set either a device token or topic destination.");
+    }
+
+    String url = endpoint + "?api_key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
+    return sendPush(properties, url, payload);
+  }
+
+  private PushResult sendPush(PushyProperties properties, String url, String payload) {
+    try {
+      HttpClient client =
+          HttpClient.newBuilder()
+              .connectTimeout(Duration.ofSeconds(properties.connectTimeoutSeconds()))
+              .build();
+      HttpRequest request =
+          HttpRequest.newBuilder(URI.create(url))
+              .timeout(Duration.ofSeconds(properties.readTimeoutSeconds()))
+              .header("Content-Type", "application/json")
+              .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+              .build();
+
+      HttpResponse<String> response =
+          client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
       int status = response.statusCode();
       if (status < 200 || status >= 300) {
         String body = Objects.toString(response.body(), "").trim();
         if (body.length() > 240) body = body.substring(0, 240) + "...";
         log.warn("[ircafe] Pushy request failed: status={} body={}", status, body);
+        return PushResult.failed("Pushy request failed (" + status + ").");
       }
+      return PushResult.success("Push sent (HTTP " + status + ").");
     } catch (Exception e) {
       log.debug("[ircafe] Pushy request failed", e);
+      String msg = Objects.toString(e.getMessage(), "").trim();
+      if (msg.isEmpty()) msg = e.getClass().getSimpleName();
+      return PushResult.failed(msg);
     }
   }
 
   private String buildPayload(
+      PushyProperties properties,
       IrcEventNotificationRule.EventType eventType,
       String serverId,
       String channel,
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body
-  ) {
+      String body) {
     String to = Objects.toString(properties.deviceToken(), "").trim();
     String topic = Objects.toString(properties.topic(), "").trim();
     if (to.isEmpty() && topic.isEmpty()) return null;
@@ -134,7 +178,8 @@ public class PushyNotificationService {
     json.append(',');
     appendJsonField(json, "sourceNick", Objects.toString(sourceNick, ""), false);
     json.append(',');
-    appendJsonField(json, "sourceIsSelf", sourceIsSelf == null ? "unknown" : sourceIsSelf.toString(), false);
+    appendJsonField(
+        json, "sourceIsSelf", sourceIsSelf == null ? "unknown" : sourceIsSelf.toString(), false);
     json.append(',');
     appendJsonField(json, "timestampMs", Long.toString(System.currentTimeMillis()), false);
     json.append('}');
@@ -142,7 +187,7 @@ public class PushyNotificationService {
     return json.toString();
   }
 
-  private String buildTitle(String title) {
+  private String buildTitle(PushyProperties properties, String title) {
     String prefix = Objects.toString(properties.titlePrefix(), "").trim();
     String t = Objects.toString(title, "").trim();
     if (t.isEmpty()) t = "IRC Event";
@@ -151,7 +196,23 @@ public class PushyNotificationService {
     return prefix + " - " + t;
   }
 
-  private static void appendJsonField(StringBuilder out, String key, String value, boolean includeComma) {
+  private PushyProperties currentProperties() {
+    PushyProperties p = settingsBus != null ? settingsBus.get() : null;
+    return p != null ? p : DISABLED_DEFAULTS;
+  }
+
+  public record PushResult(boolean success, String message) {
+    public static PushResult success(String message) {
+      return new PushResult(true, Objects.toString(message, "").trim());
+    }
+
+    public static PushResult failed(String message) {
+      return new PushResult(false, Objects.toString(message, "").trim());
+    }
+  }
+
+  private static void appendJsonField(
+      StringBuilder out, String key, String value, boolean includeComma) {
     if (includeComma) out.append(',');
     out.append('"').append(escapeJson(key)).append('"').append(':');
     out.append('"').append(escapeJson(Objects.toString(value, ""))).append('"');

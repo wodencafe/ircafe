@@ -1,102 +1,100 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
+import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.awt.Cursor;
-import java.awt.Rectangle;
-import java.awt.Window;
+import jakarta.annotation.PreDestroy;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
+import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Dialog;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.Stroke;
-import java.awt.Dialog;
-import java.beans.PropertyChangeListener;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Enumeration;
-import javax.swing.JMenuItem;
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JButton;
-import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.Icon;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
-import javax.swing.ScrollPaneConstants;
-import javax.swing.Scrollable;
-import javax.swing.JDialog;
-import javax.swing.JTabbedPane;
-import javax.swing.JTable;
-import javax.swing.JTree;
-import javax.swing.SwingConstants;
-import javax.swing.ToolTipManager;
-import javax.swing.JOptionPane;
-import javax.swing.UIManager;
-import javax.swing.Action;
-import javax.swing.AbstractAction;
-import javax.swing.SwingUtilities;
-import javax.swing.JViewport;
-import javax.swing.JComponent;
-import javax.swing.KeyStroke;
-import javax.swing.Timer;
-import javax.swing.event.TreeSelectionListener;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.DefaultTreeCellRenderer;
-import javax.swing.tree.TreePath;
-import javax.swing.table.DefaultTableModel;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.Window;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.HierarchyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.AbstractAction;
+import javax.swing.Action;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.Icon;
+import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.JTree;
+import javax.swing.JViewport;
+import javax.swing.KeyStroke;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.ToolTipManager;
+import javax.swing.UIManager;
+import javax.swing.event.TreeSelectionListener;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
+import net.miginfocom.swing.MigLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
-import net.miginfocom.swing.MigLayout;
-
-import jakarta.annotation.PreDestroy;
-import cafe.woden.ircclient.ui.icons.SvgIcons;
-import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 
 @org.springframework.stereotype.Component
 @Lazy
@@ -117,6 +115,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String APP_UNHANDLED_ERRORS_LABEL = "Unhandled Errors";
   private static final String APP_ASSERTJ_SWING_LABEL = "AssertJ Swing";
   private static final String APP_JHICCUP_LABEL = "jHiccup";
+  private static final String APP_TERMINAL_LABEL = "Terminal";
   private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
   private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
   private static final int TREE_NODE_ICON_SIZE = 13;
@@ -173,54 +172,57 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("(root)");
   private final DefaultMutableTreeNode ircRoot = new DefaultMutableTreeNode(IRC_ROOT_LABEL);
-  private final DefaultMutableTreeNode applicationRoot = new DefaultMutableTreeNode(APPLICATION_ROOT_LABEL);
+  private final DefaultMutableTreeNode applicationRoot =
+      new DefaultMutableTreeNode(APPLICATION_ROOT_LABEL);
   private final TargetRef applicationUnhandledErrorsRef = TargetRef.applicationUnhandledErrors();
   private final TargetRef applicationAssertjSwingRef = TargetRef.applicationAssertjSwing();
   private final TargetRef applicationJhiccupRef = TargetRef.applicationJhiccup();
+  private final TargetRef applicationTerminalRef = TargetRef.applicationTerminal();
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
   private volatile InsertionLine insertionLine;
   private String hoveredServerActionServerId = "";
 
-private static final class InsertionLine {
-  final int x1;
-  final int x2;
-  final int y;
+  private static final class InsertionLine {
+    final int x1;
+    final int x2;
+    final int y;
 
-  InsertionLine(int x1, int y, int x2) {
-    this.x1 = x1;
-    this.x2 = x2;
-    this.y = y;
+    InsertionLine(int x1, int y, int x2) {
+      this.x1 = x1;
+      this.x2 = x2;
+      this.y = y;
+    }
+
+    Rectangle repaintRect() {
+      int left = Math.min(x1, x2);
+      int right = Math.max(x1, x2);
+      int w = Math.max(1, right - left);
+      return new Rectangle(left, Math.max(0, y - 3), w, 6);
+    }
   }
 
-  Rectangle repaintRect() {
-    int left = Math.min(x1, x2);
-    int right = Math.max(x1, x2);
-    int w = Math.max(1, right - left);
-    return new Rectangle(left, Math.max(0, y - 3), w, 6);
-  }
-}
+  private final JTree tree =
+      new JTree(model) {
+        @Override
+        protected void paintComponent(Graphics g) {
+          super.paintComponent(g);
+          ServerTreeDockable.this.paintInsertionLine(g);
+          ServerTreeDockable.this.paintVisibleServerActions(g);
+        }
 
-  private final JTree tree = new JTree(model) {
-    @Override
-    protected void paintComponent(Graphics g) {
-      super.paintComponent(g);
-      ServerTreeDockable.this.paintInsertionLine(g);
-      ServerTreeDockable.this.paintVisibleServerActions(g);
-    }
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+          JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+          if (vp == null) return false;
+          return vp.getWidth() > getPreferredSize().width;
+        }
 
-    @Override
-    public boolean getScrollableTracksViewportWidth() {
-      JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
-      if (vp == null) return false;
-      return vp.getWidth() > getPreferredSize().width;
-    }
-
-    @Override
-    public String getToolTipText(MouseEvent event) {
-      return ServerTreeDockable.this.toolTipForEvent(event);
-    }
-  };
+        @Override
+        public String getToolTipText(MouseEvent event) {
+          return ServerTreeDockable.this.toolTipForEvent(event);
+        }
+      };
   private final JScrollPane treeScroll = new JScrollPane(tree);
 
   private final ServerTreeCellRenderer treeCellRenderer = new ServerTreeCellRenderer();
@@ -271,10 +273,10 @@ private static final class InsertionLine {
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
-  private volatile boolean showLogViewerNodes = true;
-  private volatile boolean showNotificationsNodes = true;
-  private volatile boolean showMonitorNodes = true;
-  private volatile boolean showInterceptorsNodes = true;
+  private volatile ServerBuiltInNodesVisibility defaultBuiltInNodesVisibility =
+      ServerBuiltInNodesVisibility.defaults();
+  private final Map<String, ServerBuiltInNodesVisibility> builtInNodesVisibilityByServer =
+      new HashMap<>();
   private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
@@ -300,6 +302,7 @@ private static final class InsertionLine {
     this.interceptorStore = interceptorStore;
     this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
+    loadPersistedBuiltInNodesVisibility();
     syncTypingIndicatorStyleFromSettings();
 
     this.connectBtn = connectBtn;
@@ -311,11 +314,12 @@ private static final class InsertionLine {
     this.addServerBtn.setFocusable(false);
     this.addServerBtn.setPreferredSize(new Dimension(26, 26));
     this.addServerBtn.setEnabled(serverDialogs != null);
-    this.addServerBtn.addActionListener(ev -> {
-      if (serverDialogs == null) return;
-      Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
-      serverDialogs.openAddServer(w);
-    });
+    this.addServerBtn.addActionListener(
+        ev -> {
+          if (serverDialogs == null) return;
+          Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+          serverDialogs.openAddServer(w);
+        });
     this.connectBtn.setText("");
     this.connectBtn.setIcon(SvgIcons.action("check", 16));
     this.connectBtn.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
@@ -353,30 +357,33 @@ private static final class InsertionLine {
     applyTreeFontFromUiDefaults();
 
     tree.setCellRenderer(treeCellRenderer);
-    this.typingActivityTimer = new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
+    this.typingActivityTimer =
+        new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
     this.typingActivityTimer.setRepeats(true);
-    tree.addHierarchyListener(e -> {
-      if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
-      if (tree.isShowing()) {
-        startTypingActivityTimerIfNeeded();
-        tree.repaint();
-        return;
-      }
-      typingActivityTimer.stop();
-    });
+    tree.addHierarchyListener(
+        e -> {
+          if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) return;
+          if (tree.isShowing()) {
+            startTypingActivityTimerIfNeeded();
+            tree.repaint();
+            return;
+          }
+          typingActivityTimer.stop();
+        });
     ToolTipManager.sharedInstance().registerComponent(tree);
-    tree.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
-    this.nodeActions = new TreeNodeActions<>(
-        tree,
-        model,
-        new ServerTreeNodeReorderPolicy(this::isServerNode),
-        n -> {
-          Object uo = n.getUserObject();
-          if (uo instanceof NodeData nd) return nd.ref;
-          return null;
-        },
-        ref -> closeTargetRequests.onNext(ref)
-    );
+    tree.addPropertyChangeListener(
+        "UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
+    this.nodeActions =
+        new TreeNodeActions<>(
+            tree,
+            model,
+            new ServerTreeNodeReorderPolicy(this::isServerNode),
+            n -> {
+              Object uo = n.getUserObject();
+              if (uo instanceof NodeData nd) return nd.ref;
+              return null;
+            },
+            ref -> closeTargetRequests.onNext(ref));
     installTreeKeyBindings();
 
     treeScroll.setPreferredSize(new Dimension(260, 400));
@@ -388,339 +395,354 @@ private static final class InsertionLine {
       syncServers(serverCatalog.entries());
 
       disposables.add(
-          serverCatalog.updates()
+          serverCatalog
+              .updates()
               .observeOn(SwingEdt.scheduler())
-              .subscribe(this::syncServers,
-                  err -> log.error("[ircafe] server catalog stream error", err))
-      );
+              .subscribe(
+                  this::syncServers,
+                  err -> log.error("[ircafe] server catalog stream error", err)));
     }
     if (notificationStore != null) {
       disposables.add(
-          notificationStore.changes()
+          notificationStore
+              .changes()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
                   ch -> refreshNotificationsCount(ch.serverId()),
-                  err -> log.error("[ircafe] notification store stream error", err))
-      );
+                  err -> log.error("[ircafe] notification store stream error", err)));
     }
     if (interceptorStore != null) {
       disposables.add(
-          interceptorStore.changes()
+          interceptorStore
+              .changes()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
                   ch -> {
                     refreshInterceptorNodeLabel(ch.serverId(), ch.interceptorId());
                     refreshInterceptorGroupCount(ch.serverId());
                   },
-                  err -> log.error("[ircafe] interceptor store stream error", err))
-      );
+                  err -> log.error("[ircafe] interceptor store stream error", err)));
     }
 
     if (sojuAutoConnect != null) {
       disposables.add(
-          sojuAutoConnect.updates()
+          sojuAutoConnect
+              .updates()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
                   __ -> refreshSojuAutoConnectBadges(),
-                  err -> log.error("[ircafe] soju auto-connect store stream error", err))
-      );
+                  err -> log.error("[ircafe] soju auto-connect store stream error", err)));
     }
 
     if (zncAutoConnect != null) {
       disposables.add(
-          zncAutoConnect.updates()
+          zncAutoConnect
+              .updates()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
                   __ -> refreshZncAutoConnectBadges(),
-                  err -> log.error("[ircafe] znc auto-connect store stream error", err))
-      );
+                  err -> log.error("[ircafe] znc auto-connect store stream error", err)));
     }
 
     if (this.settingsBus != null) {
-      settingsListener = evt -> {
-        if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
-        syncTypingIndicatorStyleFromSettings();
-        SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange);
-      };
+      settingsListener =
+          evt -> {
+            if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+            syncTypingIndicatorStyleFromSettings();
+            SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange);
+          };
       this.settingsBus.addListener(settingsListener);
     }
 
-    TreeSelectionListener tsl = e -> {
-      DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
-      if (!suppressSelectionBroadcast && node != null) {
-        Object uo = node.getUserObject();
-        if (uo instanceof NodeData nd) {
-          if (nd.ref != null) {
-            selections.onNext(nd.ref);
-          } else if (isMonitorGroupNode(node)) {
-            String serverId = owningServerIdForNode(node);
-            if (!serverId.isBlank()) selections.onNext(TargetRef.monitorGroup(serverId));
-          } else if (isInterceptorsGroupNode(node)) {
-            String serverId = owningServerIdForNode(node);
-            if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
+    TreeSelectionListener tsl =
+        e -> {
+          DefaultMutableTreeNode node =
+              (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+          if (!suppressSelectionBroadcast && node != null) {
+            Object uo = node.getUserObject();
+            if (uo instanceof NodeData nd) {
+              if (nd.ref != null) {
+                selections.onNext(nd.ref);
+              } else if (isMonitorGroupNode(node)) {
+                String serverId = owningServerIdForNode(node);
+                if (!serverId.isBlank()) selections.onNext(TargetRef.monitorGroup(serverId));
+              } else if (isInterceptorsGroupNode(node)) {
+                String serverId = owningServerIdForNode(node);
+                if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
+              }
+            } else if (isMonitorGroupNode(node)) {
+              String serverId = owningServerIdForNode(node);
+              if (!serverId.isBlank()) selections.onNext(TargetRef.monitorGroup(serverId));
+            } else if (isInterceptorsGroupNode(node)) {
+              String serverId = owningServerIdForNode(node);
+              if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
+            }
           }
-        } else if (isMonitorGroupNode(node)) {
-          String serverId = owningServerIdForNode(node);
-          if (!serverId.isBlank()) selections.onNext(TargetRef.monitorGroup(serverId));
-        } else if (isInterceptorsGroupNode(node)) {
-          String serverId = owningServerIdForNode(node);
-          if (!serverId.isBlank()) selections.onNext(TargetRef.interceptorsGroup(serverId));
-        }
-      }
-      tree.repaint();
-    };
+          tree.repaint();
+        };
     tree.addTreeSelectionListener(tsl);
 
-    MouseAdapter hoverServerActionListener = new MouseAdapter() {
-      @Override
-      public void mouseMoved(MouseEvent e) {
-        updateHoveredServerAction(e);
-      }
+    MouseAdapter hoverServerActionListener =
+        new MouseAdapter() {
+          @Override
+          public void mouseMoved(MouseEvent e) {
+            updateHoveredServerAction(e);
+          }
 
-      @Override
-      public void mouseDragged(MouseEvent e) {
-        updateHoveredServerAction(null);
-      }
+          @Override
+          public void mouseDragged(MouseEvent e) {
+            updateHoveredServerAction(null);
+          }
 
-      @Override
-      public void mouseExited(MouseEvent e) {
-        updateHoveredServerAction(null);
-      }
+          @Override
+          public void mouseExited(MouseEvent e) {
+            updateHoveredServerAction(null);
+          }
 
-      @Override
-      public void mousePressed(MouseEvent e) {
-        if (maybeHandleHoveredServerActionClick(e)) return;
-        maybeSelectRowFromLeftClick(e);
-        updateHoveredServerAction(e);
-      }
+          @Override
+          public void mousePressed(MouseEvent e) {
+            if (maybeHandleHoveredServerActionClick(e)) return;
+            maybeSelectRowFromLeftClick(e);
+            updateHoveredServerAction(e);
+          }
 
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        updateHoveredServerAction(e);
-      }
-    };
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            updateHoveredServerAction(e);
+          }
+        };
     tree.addMouseMotionListener(hoverServerActionListener);
     tree.addMouseListener(hoverServerActionListener);
 
-    MouseAdapter popupListener = new MouseAdapter() {
-      @Override
-      public void mousePressed(MouseEvent e) {
-        maybeShowPopup(e);
-      }
+    MouseAdapter popupListener =
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowPopup(e);
+          }
 
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        maybeShowPopup(e);
-      }
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowPopup(e);
+          }
 
-      private void maybeShowPopup(MouseEvent e) {
-        if (!e.isPopupTrigger()) return;
+          private void maybeShowPopup(MouseEvent e) {
+            if (!e.isPopupTrigger()) return;
 
-        int x = e.getX();
-        int y = e.getY();
-        TreePath path = treePathForRowHit(x, y);
-        if (path == null) return;
-        suppressSelectionBroadcast = true;
-        try {
-          tree.setSelectionPath(path);
-        } finally {
-          suppressSelectionBroadcast = false;
-        }
-        nodeActions.refreshEnabledState();
+            int x = e.getX();
+            int y = e.getY();
+            TreePath path = treePathForRowHit(x, y);
+            if (path == null) return;
+            suppressSelectionBroadcast = true;
+            try {
+              tree.setSelectionPath(path);
+            } finally {
+              suppressSelectionBroadcast = false;
+            }
+            nodeActions.refreshEnabledState();
 
-        JPopupMenu menu = buildPopupMenu(path);
-        if (menu == null || menu.getComponentCount() == 0) return;
-        PopupMenuThemeSupport.prepareForDisplay(menu);
-        menu.show(tree, x, y);
-      }
-    };
+            JPopupMenu menu = buildPopupMenu(path);
+            if (menu == null || menu.getComponentCount() == 0) return;
+            PopupMenuThemeSupport.prepareForDisplay(menu);
+            menu.show(tree, x, y);
+          }
+        };
     tree.addMouseListener(popupListener);
-    MouseAdapter middleDragReorder = new MouseAdapter() {
-      private DefaultMutableTreeNode dragNode;
-      private DefaultMutableTreeNode dragParent;
-      private int dragFromIndex = -1;
-      private boolean dragging = false;
-      private boolean draggedWasSelected = false;
-      private Cursor oldCursor;
+    MouseAdapter middleDragReorder =
+        new MouseAdapter() {
+          private DefaultMutableTreeNode dragNode;
+          private DefaultMutableTreeNode dragParent;
+          private int dragFromIndex = -1;
+          private boolean dragging = false;
+          private boolean draggedWasSelected = false;
+          private Cursor oldCursor;
 
-      @Override
-      public void mousePressed(MouseEvent e) {
-        if (!SwingUtilities.isMiddleMouseButton(e)) return;
+          @Override
+          public void mousePressed(MouseEvent e) {
+            if (!SwingUtilities.isMiddleMouseButton(e)) return;
 
-        TreePath path = tree.getPathForLocation(e.getX(), e.getY());
-        if (path == null) return;
+            TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+            if (path == null) return;
 
-        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-        if (!isDraggableChannelNode(node)) return;
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+            if (!isDraggableChannelNode(node)) return;
 
-        DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
-        if (parent == null) return;
+            DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
+            if (parent == null) return;
 
-        dragNode = node;
-        dragParent = parent;
-        dragFromIndex = parent.getIndex(node);
-        dragging = true;
+            dragNode = node;
+            dragParent = parent;
+            dragFromIndex = parent.getIndex(node);
+            dragging = true;
 
-        TreePath sel = tree.getSelectionPath();
-        draggedWasSelected = sel != null && sel.getLastPathComponent() == dragNode;
+            TreePath sel = tree.getSelectionPath();
+            draggedWasSelected = sel != null && sel.getLastPathComponent() == dragNode;
 
-        oldCursor = tree.getCursor();
-        tree.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
-        updateInsertionLine(e);
-        e.consume();
-      }
-
-      @Override
-      public void mouseDragged(MouseEvent e) {
-        if (!dragging) return;
-
-        TreePath p = tree.getClosestPathForLocation(e.getX(), e.getY());
-        tree.setLeadSelectionPath(p);
-
-        int row = tree.getRowForLocation(e.getX(), e.getY());
-        if (row >= 0) tree.scrollRowToVisible(row);
-        updateInsertionLine(e);
-      }
-
-      @Override
-      public void mouseReleased(MouseEvent e) {
-        if (!dragging) return;
-        try {
-          performDrop(e);
-        } finally {
-          cleanup();
-        }
-      }
-
-      private void updateInsertionLine(MouseEvent e) {
-        ServerTreeDockable.this.setInsertionLine(computeInsertionLine(e));
-      }
-
-      private InsertionLine computeInsertionLine(MouseEvent e) {
-        if (dragNode == null || dragParent == null) return null;
-
-        TreePath targetPath = tree.getClosestPathForLocation(e.getX(), e.getY());
-        DefaultMutableTreeNode targetNode = null;
-        if (targetPath != null) {
-          Object o = targetPath.getLastPathComponent();
-          if (o instanceof DefaultMutableTreeNode n) targetNode = n;
-        }
-
-        int desiredInsertBeforeRemoval = computeDesiredInsertBeforeRemoval(e, targetPath, targetNode);
-        if (desiredInsertBeforeRemoval < 0) return null;
-
-        desiredInsertBeforeRemoval = Math.max(minInsertIndex(dragParent),
-            Math.min(maxInsertIndex(dragParent), desiredInsertBeforeRemoval));
-
-        return ServerTreeDockable.this.insertionLineForIndex(dragParent, desiredInsertBeforeRemoval);
-      }
-
-      private int computeDesiredInsertBeforeRemoval(MouseEvent e, TreePath targetPath, DefaultMutableTreeNode targetNode) {
-        if (dragNode == null || dragParent == null) return -1;
-
-        if (targetNode == null) {
-          return dragFromIndex;
-        }
-
-        if (targetNode == dragNode) {
-          return -1;
-        }
-
-        if (targetNode == dragParent) {
-          return minInsertIndex(dragParent);
-        }
-
-        DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
-        if (targetParent != dragParent) {
-          return -1;
-        }
-
-        int idx = dragParent.getIndex(targetNode);
-        Rectangle r = targetPath == null ? null : tree.getPathBounds(targetPath);
-        boolean after = r != null && e.getY() > (r.y + (r.height / 2));
-        return idx + (after ? 1 : 0);
-      }
-
-      private void cleanup() {
-        dragging = false;
-        dragNode = null;
-        dragParent = null;
-        dragFromIndex = -1;
-        draggedWasSelected = false;
-        tree.setLeadSelectionPath(null);
-        ServerTreeDockable.this.setInsertionLine(null);
-        if (oldCursor != null) tree.setCursor(oldCursor);
-        oldCursor = null;
-      }
-
-      private void performDrop(MouseEvent e) {
-        if (dragNode == null || dragParent == null) return;
-
-        TreePath targetPath = tree.getClosestPathForLocation(e.getX(), e.getY());
-        DefaultMutableTreeNode targetNode = null;
-        if (targetPath != null) {
-          Object o = targetPath.getLastPathComponent();
-          if (o instanceof DefaultMutableTreeNode n) targetNode = n;
-        }
-
-        int desiredInsertBeforeRemoval = dragFromIndex;
-
-        if (targetNode == null) {
-          desiredInsertBeforeRemoval = dragFromIndex;
-        } else if (targetNode == dragNode) {
-          return;
-        } else if (targetNode == dragParent) {
-          desiredInsertBeforeRemoval = minInsertIndex(dragParent);
-        } else {
-          DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
-          if (targetParent != dragParent) {
-            return;
+            oldCursor = tree.getCursor();
+            tree.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+            updateInsertionLine(e);
+            e.consume();
           }
 
-          int idx = dragParent.getIndex(targetNode);
-          Rectangle r = tree.getPathBounds(targetPath);
-          boolean after = r != null && e.getY() > (r.y + (r.height / 2));
-          desiredInsertBeforeRemoval = idx + (after ? 1 : 0);
-        }
-        desiredInsertBeforeRemoval = Math.max(minInsertIndex(dragParent),
-            Math.min(maxInsertIndex(dragParent), desiredInsertBeforeRemoval));
-        int desiredAfterRemoval = desiredInsertBeforeRemoval;
-        if (desiredAfterRemoval > dragFromIndex) desiredAfterRemoval--;
-        if (desiredAfterRemoval == dragFromIndex) return;
-        model.removeNodeFromParent(dragNode);
-        desiredAfterRemoval = Math.max(minInsertIndex(dragParent),
-            Math.min(maxInsertIndex(dragParent), desiredAfterRemoval));
+          @Override
+          public void mouseDragged(MouseEvent e) {
+            if (!dragging) return;
 
-        model.insertNodeInto(dragNode, dragParent, desiredAfterRemoval);
-        if (draggedWasSelected) {
-          suppressSelectionBroadcast = true;
-          try {
-            TreePath np = new TreePath(dragNode.getPath());
-            tree.setSelectionPath(np);
-          } finally {
-            suppressSelectionBroadcast = false;
+            TreePath p = tree.getClosestPathForLocation(e.getX(), e.getY());
+            tree.setLeadSelectionPath(p);
+
+            int row = tree.getRowForLocation(e.getX(), e.getY());
+            if (row >= 0) tree.scrollRowToVisible(row);
+            updateInsertionLine(e);
           }
-        }
 
-        TreePath moved = new TreePath(dragNode.getPath());
-        tree.scrollPathToVisible(moved);
-        nodeActions.refreshEnabledState();
-      }
-    };
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            if (!dragging) return;
+            try {
+              performDrop(e);
+            } finally {
+              cleanup();
+            }
+          }
+
+          private void updateInsertionLine(MouseEvent e) {
+            ServerTreeDockable.this.setInsertionLine(computeInsertionLine(e));
+          }
+
+          private InsertionLine computeInsertionLine(MouseEvent e) {
+            if (dragNode == null || dragParent == null) return null;
+
+            TreePath targetPath = tree.getClosestPathForLocation(e.getX(), e.getY());
+            DefaultMutableTreeNode targetNode = null;
+            if (targetPath != null) {
+              Object o = targetPath.getLastPathComponent();
+              if (o instanceof DefaultMutableTreeNode n) targetNode = n;
+            }
+
+            int desiredInsertBeforeRemoval =
+                computeDesiredInsertBeforeRemoval(e, targetPath, targetNode);
+            if (desiredInsertBeforeRemoval < 0) return null;
+
+            desiredInsertBeforeRemoval =
+                Math.max(
+                    minInsertIndex(dragParent),
+                    Math.min(maxInsertIndex(dragParent), desiredInsertBeforeRemoval));
+
+            return ServerTreeDockable.this.insertionLineForIndex(
+                dragParent, desiredInsertBeforeRemoval);
+          }
+
+          private int computeDesiredInsertBeforeRemoval(
+              MouseEvent e, TreePath targetPath, DefaultMutableTreeNode targetNode) {
+            if (dragNode == null || dragParent == null) return -1;
+
+            if (targetNode == null) {
+              return dragFromIndex;
+            }
+
+            if (targetNode == dragNode) {
+              return -1;
+            }
+
+            if (targetNode == dragParent) {
+              return minInsertIndex(dragParent);
+            }
+
+            DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
+            if (targetParent != dragParent) {
+              return -1;
+            }
+
+            int idx = dragParent.getIndex(targetNode);
+            Rectangle r = targetPath == null ? null : tree.getPathBounds(targetPath);
+            boolean after = r != null && e.getY() > (r.y + (r.height / 2));
+            return idx + (after ? 1 : 0);
+          }
+
+          private void cleanup() {
+            dragging = false;
+            dragNode = null;
+            dragParent = null;
+            dragFromIndex = -1;
+            draggedWasSelected = false;
+            tree.setLeadSelectionPath(null);
+            ServerTreeDockable.this.setInsertionLine(null);
+            if (oldCursor != null) tree.setCursor(oldCursor);
+            oldCursor = null;
+          }
+
+          private void performDrop(MouseEvent e) {
+            if (dragNode == null || dragParent == null) return;
+
+            TreePath targetPath = tree.getClosestPathForLocation(e.getX(), e.getY());
+            DefaultMutableTreeNode targetNode = null;
+            if (targetPath != null) {
+              Object o = targetPath.getLastPathComponent();
+              if (o instanceof DefaultMutableTreeNode n) targetNode = n;
+            }
+
+            int desiredInsertBeforeRemoval = dragFromIndex;
+
+            if (targetNode == null) {
+              desiredInsertBeforeRemoval = dragFromIndex;
+            } else if (targetNode == dragNode) {
+              return;
+            } else if (targetNode == dragParent) {
+              desiredInsertBeforeRemoval = minInsertIndex(dragParent);
+            } else {
+              DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
+              if (targetParent != dragParent) {
+                return;
+              }
+
+              int idx = dragParent.getIndex(targetNode);
+              Rectangle r = tree.getPathBounds(targetPath);
+              boolean after = r != null && e.getY() > (r.y + (r.height / 2));
+              desiredInsertBeforeRemoval = idx + (after ? 1 : 0);
+            }
+            desiredInsertBeforeRemoval =
+                Math.max(
+                    minInsertIndex(dragParent),
+                    Math.min(maxInsertIndex(dragParent), desiredInsertBeforeRemoval));
+            int desiredAfterRemoval = desiredInsertBeforeRemoval;
+            if (desiredAfterRemoval > dragFromIndex) desiredAfterRemoval--;
+            if (desiredAfterRemoval == dragFromIndex) return;
+            model.removeNodeFromParent(dragNode);
+            desiredAfterRemoval =
+                Math.max(
+                    minInsertIndex(dragParent),
+                    Math.min(maxInsertIndex(dragParent), desiredAfterRemoval));
+
+            model.insertNodeInto(dragNode, dragParent, desiredAfterRemoval);
+            if (draggedWasSelected) {
+              suppressSelectionBroadcast = true;
+              try {
+                TreePath np = new TreePath(dragNode.getPath());
+                tree.setSelectionPath(np);
+              } finally {
+                suppressSelectionBroadcast = false;
+              }
+            }
+
+            TreePath moved = new TreePath(dragNode.getPath());
+            tree.scrollPathToVisible(moved);
+            nodeActions.refreshEnabledState();
+          }
+        };
 
     tree.addMouseListener(middleDragReorder);
     tree.addMouseMotionListener(middleDragReorder);
-    SwingUtilities.invokeLater(() -> {
-      TargetRef first = servers.values().stream()
-          .findFirst()
-          .map(sn -> sn.statusRef)
-          .orElse(null);
-      if (first != null) {
-        selectTarget(first);
-      } else {
-        tree.setSelectionPath(defaultSelectionPath());
-      }
-    });
+    SwingUtilities.invokeLater(
+        () -> {
+          String firstServerId =
+              servers.values().stream().findFirst().map(sn -> sn.statusRef.serverId()).orElse("");
+          if (!firstServerId.isBlank()) {
+            selectBestFallbackForServer(firstServerId);
+          } else {
+            tree.setSelectionPath(defaultSelectionPath());
+          }
+        });
   }
 
   @Override
@@ -734,6 +756,84 @@ private static final class InsertionLine {
     treeScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
     if (treeScroll.getVerticalScrollBar() != null) {
       treeScroll.getVerticalScrollBar().setUnitIncrement(16);
+    }
+  }
+
+  private void loadPersistedBuiltInNodesVisibility() {
+    if (runtimeConfig == null) return;
+    try {
+      Map<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> persisted =
+          runtimeConfig.readServerTreeBuiltInNodesVisibility();
+      if (persisted == null || persisted.isEmpty()) return;
+      for (Map.Entry<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> entry :
+          persisted.entrySet()) {
+        String sid = normalizeServerId(entry.getKey());
+        if (sid.isEmpty()) continue;
+        RuntimeConfigStore.ServerTreeBuiltInNodesVisibility raw = entry.getValue();
+        ServerBuiltInNodesVisibility parsed =
+            (raw == null)
+                ? defaultBuiltInNodesVisibility
+                : new ServerBuiltInNodesVisibility(
+                    raw.server(),
+                    raw.notifications(),
+                    raw.logViewer(),
+                    raw.monitor(),
+                    raw.interceptors());
+        if (parsed.equals(defaultBuiltInNodesVisibility)) {
+          builtInNodesVisibilityByServer.remove(sid);
+        } else {
+          builtInNodesVisibilityByServer.put(sid, parsed);
+        }
+      }
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static String normalizeServerId(String serverId) {
+    return Objects.toString(serverId, "").trim();
+  }
+
+  private ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return defaultBuiltInNodesVisibility;
+    return builtInNodesVisibilityByServer.getOrDefault(sid, defaultBuiltInNodesVisibility);
+  }
+
+  private void applyBuiltInNodesVisibilityGlobally(
+      java.util.function.UnaryOperator<ServerBuiltInNodesVisibility> mutator) {
+    if (mutator == null) return;
+    Set<String> allServerIds = new HashSet<>(servers.keySet());
+    allServerIds.addAll(builtInNodesVisibilityByServer.keySet());
+    for (String sid : allServerIds) {
+      if (sid == null || sid.isBlank()) continue;
+      ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+      ServerBuiltInNodesVisibility next =
+          Objects.requireNonNullElse(mutator.apply(current), current);
+      applyBuiltInNodesVisibilityForServer(sid, next, true, false);
+    }
+    syncUiLeafVisibility();
+  }
+
+  private void applyBuiltInNodesVisibilityForServer(
+      String serverId, ServerBuiltInNodesVisibility next, boolean persist, boolean syncUi) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || next == null) return;
+
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    if (current.equals(next)) return;
+
+    if (next.equals(defaultBuiltInNodesVisibility)) {
+      builtInNodesVisibilityByServer.remove(sid);
+    } else {
+      builtInNodesVisibilityByServer.put(sid, next);
+    }
+
+    if (persist && runtimeConfig != null) {
+      runtimeConfig.rememberServerTreeBuiltInNodesVisibility(sid, next.toRuntimeVisibility());
+    }
+
+    if (syncUi) {
+      syncUiLeafVisibility();
     }
   }
 
@@ -756,8 +856,7 @@ private static final class InsertionLine {
 
   private static boolean canDisconnectServer(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.CONNECTED
-        || st == ConnectionState.RECONNECTING;
+    return st == ConnectionState.CONNECTED || st == ConnectionState.RECONNECTING;
   }
 
   private static String serverStateLabel(ConnectionState state) {
@@ -1082,10 +1181,11 @@ private static final class InsertionLine {
       g2.setColor(withAlpha(border, 200));
       g2.drawRoundRect(btn.x, btn.y, btn.width - 1, btn.height - 1, 8, 8);
 
-      Icon actionIcon = SvgIcons.icon(
-          serverActionIconName(state),
-          SERVER_ACTION_BUTTON_ICON_SIZE,
-          enabled ? Palette.ACTION : Palette.ACTION_DISABLED);
+      Icon actionIcon =
+          SvgIcons.icon(
+              serverActionIconName(state),
+              SERVER_ACTION_BUTTON_ICON_SIZE,
+              enabled ? Palette.ACTION : Palette.ACTION_DISABLED);
       if (actionIcon != null) {
         int ix = btn.x + (btn.width - actionIcon.getIconWidth()) / 2;
         int iy = btn.y + (btn.height - actionIcon.getIconHeight()) / 2;
@@ -1152,75 +1252,88 @@ private static final class InsertionLine {
 
       // Ephemeral servers can be promoted to persisted servers. This is especially useful for
       // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
-      boolean ephemeral = serverCatalog != null
-          && serverCatalog.findEntry(serverId).map(ServerEntry::ephemeral).orElse(false);
+      boolean ephemeral =
+          serverCatalog != null
+              && serverCatalog.findEntry(serverId).map(ServerEntry::ephemeral).orElse(false);
       if (ephemeral) {
         menu.addSeparator();
         JMenuItem save = new JMenuItem("Save \"" + pretty + "\"…");
         save.setIcon(SvgIcons.action("plus", 16));
         save.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
         save.setEnabled(serverDialogs != null);
-        save.addActionListener(ev -> {
-          if (serverDialogs == null) return;
-          Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
-          serverDialogs.openSaveEphemeralServer(w, serverId);
-        });
+        save.addActionListener(
+            ev -> {
+              if (serverDialogs == null) return;
+              Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+              serverDialogs.openSaveEphemeralServer(w, serverId);
+            });
         menu.add(save);
       }
 
-      // Only show server editing for the primary, configured server entries directly under the IRC branch.
+      // Only show server editing for the primary, configured server entries directly under the IRC
+      // branch.
       if (canReorder) {
-        boolean editable = serverDialogs != null
-            && serverCatalog != null
-            && serverCatalog.findEntry(serverId).map(se -> !se.ephemeral()).orElse(false);
+        boolean editable =
+            serverDialogs != null
+                && serverCatalog != null
+                && serverCatalog.findEntry(serverId).map(se -> !se.ephemeral()).orElse(false);
 
         menu.addSeparator();
         JMenuItem edit = new JMenuItem("Edit \"" + pretty + "\"…");
         edit.setIcon(SvgIcons.action("edit", 16));
         edit.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
         edit.setEnabled(editable);
-        edit.addActionListener(ev -> {
-          Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
-          serverDialogs.openEditServer(w, serverId);
-        });
+        edit.addActionListener(
+            ev -> {
+              Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
+              serverDialogs.openEditServer(w, serverId);
+            });
         menu.add(edit);
       }
 
       if (isSojuEphemeralServer(serverId)) {
         String originId = sojuOriginByServerId.get(serverId);
         String networkKey = serverDisplayNames.getOrDefault(serverId, serverId);
-        boolean enabled = originId != null && sojuAutoConnect != null
-            && sojuAutoConnect.isEnabled(originId, networkKey);
+        boolean enabled =
+            originId != null
+                && sojuAutoConnect != null
+                && sojuAutoConnect.isEnabled(originId, networkKey);
 
         menu.addSeparator();
-        JCheckBoxMenuItem auto = new JCheckBoxMenuItem("Auto-connect \"" + networkKey + "\" next time");
+        JCheckBoxMenuItem auto =
+            new JCheckBoxMenuItem("Auto-connect \"" + networkKey + "\" next time");
         auto.setSelected(enabled);
         auto.setEnabled(originId != null && !originId.isBlank() && sojuAutoConnect != null);
-        auto.addActionListener(ev -> {
-          if (originId == null || originId.isBlank() || sojuAutoConnect == null) return;
-          boolean en = auto.isSelected();
-          sojuAutoConnect.setEnabled(originId, networkKey, en);
-          refreshSojuAutoConnectBadges();
-        });
+        auto.addActionListener(
+            ev -> {
+              if (originId == null || originId.isBlank() || sojuAutoConnect == null) return;
+              boolean en = auto.isSelected();
+              sojuAutoConnect.setEnabled(originId, networkKey, en);
+              refreshSojuAutoConnectBadges();
+            });
         menu.add(auto);
       }
 
       if (isZncEphemeralServer(serverId)) {
         String originId = zncOriginByServerId.get(serverId);
         String networkKey = serverDisplayNames.getOrDefault(serverId, serverId);
-        boolean enabled = originId != null && zncAutoConnect != null
-            && zncAutoConnect.isEnabled(originId, networkKey);
+        boolean enabled =
+            originId != null
+                && zncAutoConnect != null
+                && zncAutoConnect.isEnabled(originId, networkKey);
 
         menu.addSeparator();
-        JCheckBoxMenuItem auto = new JCheckBoxMenuItem("Auto-connect \"" + networkKey + "\" next time");
+        JCheckBoxMenuItem auto =
+            new JCheckBoxMenuItem("Auto-connect \"" + networkKey + "\" next time");
         auto.setSelected(enabled);
         auto.setEnabled(originId != null && !originId.isBlank() && zncAutoConnect != null);
-        auto.addActionListener(ev -> {
-          if (originId == null || originId.isBlank() || zncAutoConnect == null) return;
-          boolean en = auto.isSelected();
-          zncAutoConnect.setEnabled(originId, networkKey, en);
-          refreshZncAutoConnectBadges();
-        });
+        auto.addActionListener(
+            ev -> {
+              if (originId == null || originId.isBlank() || zncAutoConnect == null) return;
+              boolean en = auto.isSelected();
+              zncAutoConnect.setEnabled(originId, networkKey, en);
+              refreshZncAutoConnectBadges();
+            });
         menu.add(auto);
       }
 
@@ -1286,9 +1399,11 @@ private static final class InsertionLine {
                   : null;
           boolean currentlyEnabled = def == null || def.enabled();
 
-          JMenuItem toggleEnabled = new JMenuItem(currentlyEnabled ? "Disable Interceptor" : "Enable Interceptor");
+          JMenuItem toggleEnabled =
+              new JMenuItem(currentlyEnabled ? "Disable Interceptor" : "Enable Interceptor");
           toggleEnabled.setIcon(SvgIcons.action(currentlyEnabled ? "pause" : "check", 16));
-          toggleEnabled.setDisabledIcon(SvgIcons.actionDisabled(currentlyEnabled ? "pause" : "check", 16));
+          toggleEnabled.setDisabledIcon(
+              SvgIcons.actionDisabled(currentlyEnabled ? "pause" : "check", 16));
           toggleEnabled.setEnabled(interceptorStore != null && def != null);
           toggleEnabled.addActionListener(ev -> setInterceptorEnabled(nd.ref, !currentlyEnabled));
           menu.add(toggleEnabled);
@@ -1323,16 +1438,17 @@ private static final class InsertionLine {
     String pretty = (label == null || label.isBlank()) ? target.target() : label;
     String scope = target.isStatus() ? "status" : "channel";
 
-    String msg = "Clear log for " + scope + " \"" + pretty + "\"?\n\n"
-        + "This will permanently delete the persisted chat history for this target.";
+    String msg =
+        "Clear log for "
+            + scope
+            + " \""
+            + pretty
+            + "\"?\n\n"
+            + "This will permanently delete the persisted chat history for this target.";
 
-    int choice = JOptionPane.showConfirmDialog(
-        w,
-        msg,
-        "Clear Log",
-        JOptionPane.YES_NO_OPTION,
-        JOptionPane.WARNING_MESSAGE
-    );
+    int choice =
+        JOptionPane.showConfirmDialog(
+            w, msg, "Clear Log", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
 
     if (choice == JOptionPane.YES_OPTION) {
       clearLogRequests.onNext(target);
@@ -1345,14 +1461,15 @@ private static final class InsertionLine {
     if (sid.isEmpty()) return;
 
     Window w = SwingUtilities.getWindowAncestor(this);
-    Object input = JOptionPane.showInputDialog(
-        w,
-        "Interceptor name:",
-        "Add Interceptor",
-        JOptionPane.PLAIN_MESSAGE,
-        null,
-        null,
-        "Interceptor");
+    Object input =
+        JOptionPane.showInputDialog(
+            w,
+            "Interceptor name:",
+            "Add Interceptor",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            "Interceptor");
     if (input == null) return;
 
     String requested = Objects.toString(input, "").trim();
@@ -1382,14 +1499,15 @@ private static final class InsertionLine {
     if (before.isEmpty()) before = interceptorStore.interceptorName(sid, iid);
     if (before.isEmpty()) before = "Interceptor";
 
-    Object input = JOptionPane.showInputDialog(
-        w,
-        "Interceptor name:",
-        "Rename Interceptor",
-        JOptionPane.PLAIN_MESSAGE,
-        null,
-        null,
-        before);
+    Object input =
+        JOptionPane.showInputDialog(
+            w,
+            "Interceptor name:",
+            "Rename Interceptor",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            before);
     if (input == null) return;
     String next = Objects.toString(input, "").trim();
     if (next.isEmpty()) return;
@@ -1430,13 +1548,13 @@ private static final class InsertionLine {
     if (pretty.isEmpty()) pretty = "Interceptor";
 
     Window w = SwingUtilities.getWindowAncestor(this);
-    int choice = JOptionPane.showConfirmDialog(
-        w,
-        "Delete interceptor \"" + pretty + "\"?",
-        "Delete Interceptor",
-        JOptionPane.YES_NO_OPTION,
-        JOptionPane.WARNING_MESSAGE
-    );
+    int choice =
+        JOptionPane.showConfirmDialog(
+            w,
+            "Delete interceptor \"" + pretty + "\"?",
+            "Delete Interceptor",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
     if (choice != JOptionPane.YES_OPTION) return;
 
     try {
@@ -1499,26 +1617,25 @@ private static final class InsertionLine {
     model.nodeChanged(sn.interceptorsNode);
   }
 
-private boolean isServerNode(DefaultMutableTreeNode node) {
-  if (node == null) return false;
-  Object uo = node.getUserObject();
-  if (!(uo instanceof String id)) return false;
-  ServerNodes sn = servers.get(id);
-  return sn != null && sn.serverNode == node;
-}
+  private boolean isServerNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String id)) return false;
+    ServerNodes sn = servers.get(id);
+    return sn != null && sn.serverNode == node;
+  }
 
-private boolean isRootServerNode(DefaultMutableTreeNode node) {
-  return node != null && node.getParent() == ircRoot && isServerNode(node);
-}
+  private boolean isRootServerNode(DefaultMutableTreeNode node) {
+    return node != null && node.getParent() == ircRoot && isServerNode(node);
+  }
 
-private boolean isIrcRootNode(DefaultMutableTreeNode node) {
-  return node != null && node == ircRoot;
-}
+  private boolean isIrcRootNode(DefaultMutableTreeNode node) {
+    return node != null && node == ircRoot;
+  }
 
-private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
-  return node != null && node == applicationRoot;
-}
-
+  private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
+    return node != null && node == applicationRoot;
+  }
 
   private boolean isDraggableChannelNode(DefaultMutableTreeNode node) {
     if (node == null) return false;
@@ -1565,70 +1682,73 @@ private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
   }
 
   private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
-    return isPrivateMessagesGroupNode(node) || isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node);
+    return isPrivateMessagesGroupNode(node)
+        || isSojuNetworksGroupNode(node)
+        || isZncNetworksGroupNode(node);
   }
 
-private void setInsertionLine(InsertionLine line) {
-  InsertionLine old = this.insertionLine;
-  this.insertionLine = line;
-  if (old != null) tree.repaint(old.repaintRect());
-  if (line != null) tree.repaint(line.repaintRect());
-}
-
-private void paintInsertionLine(Graphics g) {
-  InsertionLine line = this.insertionLine;
-  if (line == null) return;
-
-  Graphics2D g2 = (Graphics2D) g.create();
-  try {
-    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-    Color c = UIManager.getColor("Component.accentColor");
-    if (c == null) c = UIManager.getColor("Tree.selectionBorderColor");
-    if (c == null) c = UIManager.getColor("Tree.selectionForeground");
-    if (c == null) c = Color.BLACK;
-    g2.setColor(c);
-
-    g2.setStroke(new BasicStroke(2f));
-    g2.drawLine(line.x1, line.y, line.x2, line.y);
-  } finally {
-    g2.dispose();
+  private void setInsertionLine(InsertionLine line) {
+    InsertionLine old = this.insertionLine;
+    this.insertionLine = line;
+    if (old != null) tree.repaint(old.repaintRect());
+    if (line != null) tree.repaint(line.repaintRect());
   }
-}
 
-private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int insertBeforeIndex) {
-  if (parent == null) return null;
+  private void paintInsertionLine(Graphics g) {
+    InsertionLine line = this.insertionLine;
+    if (line == null) return;
 
-  int childCount = parent.getChildCount();
-  if (childCount == 0) {
-    Rectangle pr = tree.getPathBounds(new TreePath(parent.getPath()));
-    if (pr == null) return null;
-    int x1 = Math.max(0, pr.x);
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+      Color c = UIManager.getColor("Component.accentColor");
+      if (c == null) c = UIManager.getColor("Tree.selectionBorderColor");
+      if (c == null) c = UIManager.getColor("Tree.selectionForeground");
+      if (c == null) c = Color.BLACK;
+      g2.setColor(c);
+
+      g2.setStroke(new BasicStroke(2f));
+      g2.drawLine(line.x1, line.y, line.x2, line.y);
+    } finally {
+      g2.dispose();
+    }
+  }
+
+  private InsertionLine insertionLineForIndex(
+      DefaultMutableTreeNode parent, int insertBeforeIndex) {
+    if (parent == null) return null;
+
+    int childCount = parent.getChildCount();
+    if (childCount == 0) {
+      Rectangle pr = tree.getPathBounds(new TreePath(parent.getPath()));
+      if (pr == null) return null;
+      int x1 = Math.max(0, pr.x);
+      int x2 = Math.max(x1 + 1, tree.getWidth() - 4);
+      int y = pr.y + pr.height - 1;
+      return new InsertionLine(x1, y, x2);
+    }
+
+    int idx = Math.max(0, Math.min(childCount, insertBeforeIndex));
+
+    Rectangle r;
+    int y;
+    if (idx >= childCount) {
+      DefaultMutableTreeNode last = (DefaultMutableTreeNode) parent.getChildAt(childCount - 1);
+      r = tree.getPathBounds(new TreePath(last.getPath()));
+      if (r == null) return null;
+      y = r.y + r.height - 1;
+    } else {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(idx);
+      r = tree.getPathBounds(new TreePath(child.getPath()));
+      if (r == null) return null;
+      y = r.y;
+    }
+
+    int x1 = Math.max(0, r.x);
     int x2 = Math.max(x1 + 1, tree.getWidth() - 4);
-    int y = pr.y + pr.height - 1;
     return new InsertionLine(x1, y, x2);
   }
-
-  int idx = Math.max(0, Math.min(childCount, insertBeforeIndex));
-
-  Rectangle r;
-  int y;
-  if (idx >= childCount) {
-    DefaultMutableTreeNode last = (DefaultMutableTreeNode) parent.getChildAt(childCount - 1);
-    r = tree.getPathBounds(new TreePath(last.getPath()));
-    if (r == null) return null;
-    y = r.y + r.height - 1;
-  } else {
-    DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(idx);
-    r = tree.getPathBounds(new TreePath(child.getPath()));
-    if (r == null) return null;
-    y = r.y;
-  }
-
-  int x1 = Math.max(0, r.x);
-  int x2 = Math.max(x1 + 1, tree.getWidth() - 4);
-  return new InsertionLine(x1, y, x2);
-}
 
   private String owningServerIdForNode(DefaultMutableTreeNode node) {
     DefaultMutableTreeNode cur = node;
@@ -1832,7 +1952,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
   }
 
-  public void setServerConnectionDiagnostics(String serverId, String lastError, Long nextRetryEpochMs) {
+  public void setServerConnectionDiagnostics(
+      String serverId, String lastError, Long nextRetryEpochMs) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
@@ -1861,7 +1982,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     tree.repaint();
   }
 
-  public void setServerConnectedIdentity(String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
+  public void setServerConnectedIdentity(
+      String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
@@ -1885,7 +2007,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       changed = true;
     }
 
-    Instant connectedAt = at != null ? at : (meta.connectedAt == null ? Instant.now() : meta.connectedAt);
+    Instant connectedAt =
+        at != null ? at : (meta.connectedAt == null ? Instant.now() : meta.connectedAt);
     if (!Objects.equals(meta.connectedAt, connectedAt)) {
       meta.connectedAt = connectedAt;
       changed = true;
@@ -1899,7 +2022,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
   }
 
-  public void setServerIrcv3Capability(String serverId, String capability, String subcommand, boolean enabled) {
+  public void setServerIrcv3Capability(
+      String serverId, String capability, String subcommand, boolean enabled) {
     String sid = Objects.toString(serverId, "").trim();
     String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
@@ -1960,8 +2084,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       String serverName,
       String serverVersion,
       String userModes,
-      String channelModes
-  ) {
+      String channelModes) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
@@ -2017,7 +2140,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     JDialog dialog = new JDialog(owner, title, Dialog.ModalityType.APPLICATION_MODAL);
     dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
-    JPanel content = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill][]"));
+    JPanel content =
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill][]"));
     content.add(buildNetworkSummaryPanel(sid, meta), "growx");
 
     JTabbedPane tabs = new JTabbedPane();
@@ -2044,7 +2168,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private JPanel buildNetworkSummaryPanel(String serverId, ServerRuntimeMetadata meta) {
-    JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[grow,fill][right]", "[]4[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[grow,fill][right]", "[]4[]"));
     panel.setBorder(BorderFactory.createTitledBorder("Summary"));
 
     ConnectionState state = connectionStateForServer(serverId);
@@ -2061,13 +2186,21 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     String endpoint = formatConnectedEndpoint(meta.connectedHost, meta.connectedPort);
     String nick = fallbackInfoValue(meta.nick);
     panel.add(new JLabel("Network ID: " + serverId), "span 2, growx");
-    panel.add(new JLabel("Endpoint: " + endpoint + "    Nick: " + nick + "    Intent: " + serverDesiredIntentLabel(desired)),
+    panel.add(
+        new JLabel(
+            "Endpoint: "
+                + endpoint
+                + "    Nick: "
+                + nick
+                + "    Intent: "
+                + serverDesiredIntentLabel(desired)),
         "span 2, growx");
     return panel;
   }
 
   private JComponent buildOverviewTab(String serverId, ServerRuntimeMetadata meta) {
-    JPanel overview = new JPanel(new MigLayout("insets 8, fill, wrap 2", "[grow,fill]12[grow,fill]", "[top]"));
+    JPanel overview =
+        new JPanel(new MigLayout("insets 8, fill, wrap 2", "[grow,fill]12[grow,fill]", "[top]"));
     overview.add(buildConnectionInfoPanel(serverId, meta), "grow");
     overview.add(buildServerInfoPanel(meta), "grow");
     return overview;
@@ -2084,9 +2217,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     addInfoRow(panel, "Display", prettyServerLabel(serverId));
     addInfoRow(panel, "State", serverStateLabel(state));
     addInfoRow(panel, "Intent", serverDesiredIntentLabel(desired));
-    addInfoRow(panel, "Connected endpoint", formatConnectedEndpoint(meta.connectedHost, meta.connectedPort));
+    addInfoRow(
+        panel,
+        "Connected endpoint",
+        formatConnectedEndpoint(meta.connectedHost, meta.connectedPort));
     addInfoRow(panel, "Current nick", fallbackInfoValue(meta.nick));
-    addInfoRow(panel, "Connected at", meta.connectedAt == null ? "(unknown)" : SERVER_META_TIME_FMT.format(meta.connectedAt));
+    addInfoRow(
+        panel,
+        "Connected at",
+        meta.connectedAt == null ? "(unknown)" : SERVER_META_TIME_FMT.format(meta.connectedAt));
 
     String diagnostics = connectionDiagnosticsTipForServer(serverId).trim();
     if (!diagnostics.isEmpty()) {
@@ -2106,7 +2245,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private JPanel buildCapabilitiesInfoPanel(ServerRuntimeMetadata meta) {
-    JPanel panel = new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
     panel.add(buildCapabilityCountsRow(meta), "growx");
 
     if (meta.ircv3Caps.isEmpty()) {
@@ -2125,7 +2265,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       idx++;
     }
 
-    JTable table = buildReadOnlyTable(new String[] { "Capability", "State" }, rows);
+    JTable table = buildReadOnlyTable(new String[] {"Capability", "State"}, rows);
     JScrollPane scroll = new JScrollPane(table);
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     panel.add(scroll, "grow");
@@ -2133,7 +2273,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private JPanel buildIsupportInfoPanel(ServerRuntimeMetadata meta) {
-    JPanel panel = new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[grow,fill]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[grow,fill]"));
     if (meta.isupport.isEmpty()) {
       panel.add(new JLabel("No ISUPPORT tokens observed yet."), "grow");
       return panel;
@@ -2150,7 +2291,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       idx++;
     }
 
-    JTable table = buildReadOnlyTable(new String[] { "Token", "Value" }, rows);
+    JTable table = buildReadOnlyTable(new String[] {"Token", "Value"}, rows);
     JScrollPane scroll = new JScrollPane(table);
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     panel.add(scroll, "grow");
@@ -2167,9 +2308,15 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       counts.put(state, counts.getOrDefault(state, 0) + 1);
     }
 
-    JPanel row = new JPanel(new MigLayout("insets 0, fillx, wrap 4", "[grow,fill]8[grow,fill]8[grow,fill]8[grow,fill]", "[]"));
+    JPanel row =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 4",
+                "[grow,fill]8[grow,fill]8[grow,fill]8[grow,fill]",
+                "[]"));
     row.add(buildCountChip("Enabled", counts.getOrDefault(CapabilityState.ENABLED, 0)), "growx");
-    row.add(buildCountChip("Available", counts.getOrDefault(CapabilityState.AVAILABLE, 0)), "growx");
+    row.add(
+        buildCountChip("Available", counts.getOrDefault(CapabilityState.AVAILABLE, 0)), "growx");
     row.add(buildCountChip("Disabled", counts.getOrDefault(CapabilityState.DISABLED, 0)), "growx");
     row.add(buildCountChip("Removed", counts.getOrDefault(CapabilityState.REMOVED, 0)), "growx");
     return row;
@@ -2197,12 +2344,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private static JTable buildReadOnlyTable(String[] columns, Object[][] rows) {
-    DefaultTableModel model = new DefaultTableModel(rows, columns) {
-      @Override
-      public boolean isCellEditable(int row, int column) {
-        return false;
-      }
-    };
+    DefaultTableModel model =
+        new DefaultTableModel(rows, columns) {
+          @Override
+          public boolean isCellEditable(int row, int column) {
+            return false;
+          }
+        };
 
     JTable table = new JTable(model);
     table.setFillsViewportHeight(true);
@@ -2241,7 +2389,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     disconnectBtn.setToolTipText("Disconnect connected/connecting servers." + suffix);
   }
 
-  
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
     connectBtn.setEnabled(connectEnabled);
     disconnectBtn.setEnabled(disconnectEnabled);
@@ -2265,20 +2412,79 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return showDccTransfersNodes;
   }
 
+  public boolean isServerNodesVisible() {
+    return defaultBuiltInNodesVisibility.server();
+  }
+
   public boolean isLogViewerNodesVisible() {
-    return showLogViewerNodes;
+    return defaultBuiltInNodesVisibility.logViewer();
   }
 
   public boolean isNotificationsNodesVisible() {
-    return showNotificationsNodes;
+    return defaultBuiltInNodesVisibility.notifications();
   }
 
   public boolean isMonitorNodesVisible() {
-    return showMonitorNodes;
+    return defaultBuiltInNodesVisibility.monitor();
   }
 
   public boolean isInterceptorsNodesVisible() {
-    return showInterceptorsNodes;
+    return defaultBuiltInNodesVisibility.interceptors();
+  }
+
+  public boolean isServerNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).server();
+  }
+
+  public boolean isLogViewerNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).logViewer();
+  }
+
+  public boolean isNotificationsNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).notifications();
+  }
+
+  public boolean isMonitorNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).monitor();
+  }
+
+  public boolean isInterceptorsNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).interceptors();
+  }
+
+  public void setServerNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withServer(visible), true, true);
+  }
+
+  public void setLogViewerNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withLogViewer(visible), true, true);
+  }
+
+  public void setNotificationsNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withNotifications(visible), true, true);
+  }
+
+  public void setMonitorNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withMonitor(visible), true, true);
+  }
+
+  public void setInterceptorsNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withInterceptors(visible), true, true);
   }
 
   public boolean isApplicationRootVisible() {
@@ -2303,40 +2509,42 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
   }
 
+  /**
+   * Back-compat/global toggle for all current and future servers.
+   *
+   * <p>Per-server callers should use {@link #setServerNodeVisibleForServer(String, boolean)}.
+   */
+  public void setServerNodesVisible(boolean visible) {
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withServer(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withServer(visible));
+  }
+
   public void setLogViewerNodesVisible(boolean visible) {
-    boolean old = showLogViewerNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showLogViewerNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.logViewer();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withLogViewer(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withLogViewer(visible));
+    firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, visible);
   }
 
   public void setNotificationsNodesVisible(boolean visible) {
-    boolean old = showNotificationsNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showNotificationsNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_NOTIFICATIONS_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.notifications();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withNotifications(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withNotifications(visible));
+    firePropertyChange(PROP_NOTIFICATIONS_NODES_VISIBLE, old, visible);
   }
 
   public void setMonitorNodesVisible(boolean visible) {
-    boolean old = showMonitorNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showMonitorNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_MONITOR_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.monitor();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withMonitor(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withMonitor(visible));
+    firePropertyChange(PROP_MONITOR_NODES_VISIBLE, old, visible);
   }
 
   public void setInterceptorsNodesVisible(boolean visible) {
-    boolean old = showInterceptorsNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showInterceptorsNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_INTERCEPTORS_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.interceptors();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withInterceptors(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withInterceptors(visible));
+    firePropertyChange(PROP_INTERCEPTORS_NODES_VISIBLE, old, visible);
   }
 
   public void setApplicationRootVisible(boolean visible) {
@@ -2360,53 +2568,73 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
   private void installTreeKeyBindings() {
     // Legacy/alternate move bindings.
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
-        "ircafe.tree.nodeMoveUp");
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
-        "ircafe.tree.nodeMoveDown");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(
+                KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+            "ircafe.tree.nodeMoveUp");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(
+                KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+            "ircafe.tree.nodeMoveDown");
     // Primary move bindings: Alt + Up/Down.
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK),
-        "ircafe.tree.nodeMoveUp");
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK),
-        "ircafe.tree.nodeMoveDown");
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK),
-        "ircafe.tree.closeNode");
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0),
-        "ircafe.tree.closeNode");
-    tree.getInputMap(JComponent.WHEN_FOCUSED).put(
-        KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
-        "ircafe.tree.openPinnedDock");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK),
+            "ircafe.tree.nodeMoveUp");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK),
+            "ircafe.tree.nodeMoveDown");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK),
+            "ircafe.tree.closeNode");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "ircafe.tree.closeNode");
+    tree.getInputMap(JComponent.WHEN_FOCUSED)
+        .put(
+            KeyStroke.getKeyStroke(
+                KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+            "ircafe.tree.openPinnedDock");
 
-    tree.getActionMap().put("ircafe.tree.nodeMoveUp", new AbstractAction() {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        moveNodeUpAction().actionPerformed(e);
-      }
-    });
-    tree.getActionMap().put("ircafe.tree.nodeMoveDown", new AbstractAction() {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        moveNodeDownAction().actionPerformed(e);
-      }
-    });
-    tree.getActionMap().put("ircafe.tree.closeNode", new AbstractAction() {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        closeNodeAction().actionPerformed(e);
-      }
-    });
-    tree.getActionMap().put("ircafe.tree.openPinnedDock", new AbstractAction() {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        openSelectedNodeInChatDock();
-      }
-    });
+    tree.getActionMap()
+        .put(
+            "ircafe.tree.nodeMoveUp",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                moveNodeUpAction().actionPerformed(e);
+              }
+            });
+    tree.getActionMap()
+        .put(
+            "ircafe.tree.nodeMoveDown",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                moveNodeDownAction().actionPerformed(e);
+              }
+            });
+    tree.getActionMap()
+        .put(
+            "ircafe.tree.closeNode",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                closeNodeAction().actionPerformed(e);
+              }
+            });
+    tree.getActionMap()
+        .put(
+            "ircafe.tree.openPinnedDock",
+            new AbstractAction() {
+              @Override
+              public void actionPerformed(java.awt.event.ActionEvent e) {
+                openSelectedNodeInChatDock();
+              }
+            });
   }
 
   private static boolean isPrivateMessageTarget(TargetRef ref) {
@@ -2439,7 +2667,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (sid.isEmpty()) return;
 
     java.util.ArrayList<TargetRef> changed = new java.util.ArrayList<>();
-    java.util.Iterator<Map.Entry<TargetRef, Boolean>> it = privateMessageOnlineByTarget.entrySet().iterator();
+    java.util.Iterator<Map.Entry<TargetRef, Boolean>> it =
+        privateMessageOnlineByTarget.entrySet().iterator();
     while (it.hasNext()) {
       Map.Entry<TargetRef, Boolean> e = it.next();
       TargetRef ref = e.getKey();
@@ -2462,6 +2691,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     addApplicationLeaf(applicationUnhandledErrorsRef, APP_UNHANDLED_ERRORS_LABEL);
     addApplicationLeaf(applicationAssertjSwingRef, APP_ASSERTJ_SWING_LABEL);
     addApplicationLeaf(applicationJhiccupRef, APP_JHICCUP_LABEL);
+    addApplicationLeaf(applicationTerminalRef, APP_TERMINAL_LABEL);
   }
 
   private void addApplicationLeaf(TargetRef ref, String label) {
@@ -2488,10 +2718,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     TargetRef selected = selectedTargetRef();
     if (selected != null && selected.isApplicationUi()) {
-      TargetRef first = servers.values().stream()
-          .findFirst()
-          .map(sn -> sn.statusRef)
-          .orElse(null);
+      TargetRef first = servers.values().stream().findFirst().map(sn -> sn.statusRef).orElse(null);
       if (first != null) {
         selectTarget(first);
       } else {
@@ -2565,57 +2792,99 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref.isApplicationUnhandledErrors()) return APP_UNHANDLED_ERRORS_LABEL;
     if (ref.isApplicationAssertjSwing()) return APP_ASSERTJ_SWING_LABEL;
     if (ref.isApplicationJhiccup()) return APP_JHICCUP_LABEL;
+    if (ref.isApplicationTerminal()) return APP_TERMINAL_LABEL;
     return ref.target();
   }
 
   private void syncUiLeafVisibility() {
     TargetRef selected = selectedTargetRef();
-    DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+    DefaultMutableTreeNode selectedNode =
+        (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
     boolean selectedMonitorGroup = selectedNode != null && isMonitorGroupNode(selectedNode);
-    boolean selectedInterceptorsGroup = selectedNode != null && isInterceptorsGroupNode(selectedNode);
+    boolean selectedInterceptorsGroup =
+        selectedNode != null && isInterceptorsGroupNode(selectedNode);
     String selectedGroupServerId =
-        (selectedMonitorGroup || selectedInterceptorsGroup) ? owningServerIdForNode(selectedNode) : "";
+        (selectedMonitorGroup || selectedInterceptorsGroup)
+            ? owningServerIdForNode(selectedNode)
+            : "";
 
     for (ServerNodes sn : servers.values()) {
       if (sn == null || sn.serverNode == null) continue;
+      String sid = normalizeServerId(sn.statusRef.serverId());
+      ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
 
-      ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", showNotificationsNodes);
-      ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, showLogViewerNodes);
+      ensureUiLeafVisible(sn, sn.statusRef, statusLeafLabelForServer(sid), vis.server());
+      ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", vis.notifications());
+      ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
-      ensureMonitorGroupVisible(sn, showMonitorNodes);
-      ensureInterceptorsGroupVisible(sn, showInterceptorsNodes);
+      ensureMonitorGroupVisible(sn, vis.monitor());
+      ensureInterceptorsGroupVisible(sn, vis.interceptors());
     }
 
     if (selected != null) {
-      if (selected.isNotifications() && !showNotificationsNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
-      } else if (selected.isLogViewer() && !showLogViewerNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
+      String sid = normalizeServerId(selected.serverId());
+      ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
+      if (selected.isStatus() && !vis.server()) {
+        selectBestFallbackForServer(sid);
+      } else if (selected.isNotifications() && !vis.notifications()) {
+        selectBestFallbackForServer(sid);
+      } else if (selected.isLogViewer() && !vis.logViewer()) {
+        selectBestFallbackForServer(sid);
       } else if (selected.isChannelList() && !showChannelListNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
+        selectBestFallbackForServer(sid);
       } else if (selected.isDccTransfers() && !showDccTransfersNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
-      } else if ((selected.isInterceptorsGroup() || selected.isInterceptor()) && !showInterceptorsNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
+        selectBestFallbackForServer(sid);
+      } else if (selected.isMonitorGroup() && !vis.monitor()) {
+        selectBestFallbackForServer(sid);
+      } else if ((selected.isInterceptorsGroup() || selected.isInterceptor())
+          && !vis.interceptors()) {
+        selectBestFallbackForServer(sid);
       }
-    } else if (selectedMonitorGroup && !showMonitorNodes) {
+    } else if (selectedMonitorGroup && !builtInNodesVisibility(selectedGroupServerId).monitor()) {
       if (!selectedGroupServerId.isBlank()) {
-        selectTarget(new TargetRef(selectedGroupServerId, "status"));
+        selectBestFallbackForServer(selectedGroupServerId);
       }
-    } else if (selectedInterceptorsGroup && !showInterceptorsNodes) {
+    } else if (selectedInterceptorsGroup
+        && !builtInNodesVisibility(selectedGroupServerId).interceptors()) {
       if (!selectedGroupServerId.isBlank()) {
-        selectTarget(new TargetRef(selectedGroupServerId, "status"));
+        selectBestFallbackForServer(selectedGroupServerId);
       }
     }
   }
 
+  private void selectBestFallbackForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null) return;
+
+    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
+    if (vis.server() && leaves.containsKey(sn.statusRef)) {
+      selectTarget(sn.statusRef);
+      return;
+    }
+    if (vis.notifications() && leaves.containsKey(sn.notificationsRef)) {
+      selectTarget(sn.notificationsRef);
+      return;
+    }
+    if (vis.logViewer() && leaves.containsKey(sn.logViewerRef)) {
+      selectTarget(sn.logViewerRef);
+      return;
+    }
+    if (vis.monitor() && sn.monitorNode != null && sn.monitorNode.getParent() == sn.serverNode) {
+      selectTarget(TargetRef.monitorGroup(sid));
+      return;
+    }
+    if (vis.interceptors()
+        && sn.interceptorsNode != null
+        && sn.interceptorsNode.getParent() == sn.serverNode) {
+      selectTarget(TargetRef.interceptorsGroup(sid));
+    }
+  }
+
   private boolean ensureUiLeafVisible(
-      ServerNodes sn,
-      TargetRef ref,
-      String label,
-      boolean visible
-  ) {
+      ServerNodes sn, TargetRef ref, String label, boolean visible) {
     if (sn == null || ref == null) return false;
     DefaultMutableTreeNode existing = leaves.get(ref);
     if (!visible) {
@@ -2625,13 +2894,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       leaves.remove(ref);
       typingActivityNodes.remove(existing);
       if (parent != null) {
-        Object[] removed = new Object[] { existing };
+        Object[] removed = new Object[] {existing};
         if (idx < 0) {
           parent.remove(existing);
           model.nodeStructureChanged(parent);
         } else {
           parent.remove(existing);
-          model.nodesWereRemoved(parent, new int[] { idx }, removed);
+          model.nodesWereRemoved(parent, new int[] {idx}, removed);
         }
       }
       return true;
@@ -2642,7 +2911,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     leaves.put(ref, leaf);
     int idx = fixedLeafInsertIndexFor(sn, ref);
     sn.serverNode.insert(leaf, idx);
-    model.nodesWereInserted(sn.serverNode, new int[] { idx });
+    model.nodesWereInserted(sn.serverNode, new int[] {idx});
     return true;
   }
 
@@ -2656,14 +2925,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       int idx = sn.serverNode.getIndex(group);
       if (idx < 0) return false;
       sn.serverNode.remove(group);
-      model.nodesWereRemoved(sn.serverNode, new int[] { idx }, new Object[] { group });
+      model.nodesWereRemoved(sn.serverNode, new int[] {idx}, new Object[] {group});
       return true;
     }
 
     if (parent == sn.serverNode) return false;
     int idx = interceptorsGroupInsertIndex(sn);
     sn.serverNode.insert(group, idx);
-    model.nodesWereInserted(sn.serverNode, new int[] { idx });
+    model.nodesWereInserted(sn.serverNode, new int[] {idx});
     return true;
   }
 
@@ -2677,14 +2946,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       int idx = sn.serverNode.getIndex(group);
       if (idx < 0) return false;
       sn.serverNode.remove(group);
-      model.nodesWereRemoved(sn.serverNode, new int[] { idx }, new Object[] { group });
+      model.nodesWereRemoved(sn.serverNode, new int[] {idx}, new Object[] {group});
       return true;
     }
 
     if (parent == sn.serverNode) return false;
     int idx = monitorGroupInsertIndex(sn);
     sn.serverNode.insert(group, idx);
-    model.nodesWereInserted(sn.serverNode, new int[] { idx });
+    model.nodesWereInserted(sn.serverNode, new int[] {idx});
     return true;
   }
 
@@ -2772,18 +3041,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref.isDccTransfers() && !showDccTransfersNodes) {
       setDccTransfersNodesVisible(true);
     }
-    if (ref.isLogViewer() && !showLogViewerNodes) {
-      setLogViewerNodesVisible(true);
-    }
-    if (ref.isNotifications() && !showNotificationsNodes) {
-      setNotificationsNodesVisible(true);
-    }
-    if (ref.isMonitorGroup() && !showMonitorNodes) {
-      setMonitorNodesVisible(true);
-    }
-    if ((ref.isInterceptorsGroup() || ref.isInterceptor()) && !showInterceptorsNodes) {
-      setInterceptorsNodesVisible(true);
-    }
     if (ref.isMonitorGroup() || ref.isInterceptorsGroup()) {
       // This is a built-in grouping node (not a leaf/PM/channel). Selecting it should not
       // create a synthetic leaf (for example "__monitor_group__") under private messages.
@@ -2793,6 +3050,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       }
       return;
     }
+
+    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(ref.serverId());
+    if (ref.isStatus() && !vis.server()) return;
+    if (ref.isNotifications() && !vis.notifications()) return;
+    if (ref.isLogViewer() && !vis.logViewer()) return;
+    if (ref.isMonitorGroup() && !vis.monitor()) return;
+    if ((ref.isInterceptorsGroup() || ref.isInterceptor()) && !vis.interceptors()) return;
     if (leaves.containsKey(ref)) return;
 
     ServerNodes sn = servers.get(ref.serverId());
@@ -2829,7 +3093,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref.isNotifications()) {
       leafLabel = "Notifications";
     } else if (ref.isInterceptor()) {
-      String name = interceptorStore != null ? interceptorStore.interceptorName(ref.serverId(), ref.interceptorId()) : "";
+      String name =
+          interceptorStore != null
+              ? interceptorStore.interceptorName(ref.serverId(), ref.interceptorId())
+              : "";
       leafLabel = (name == null || name.isBlank()) ? "Interceptor" : name;
     } else if (ref.isLogViewer()) {
       leafLabel = LOG_VIEWER_LABEL;
@@ -2852,7 +3119,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     } else if (ref.isChannel() && parent == sn.serverNode) {
       int beforePm = sn.serverNode.getChildCount();
       while (beforePm > 0) {
-        DefaultMutableTreeNode last = (DefaultMutableTreeNode) sn.serverNode.getChildAt(beforePm - 1);
+        DefaultMutableTreeNode last =
+            (DefaultMutableTreeNode) sn.serverNode.getChildAt(beforePm - 1);
         if (isReservedServerTailNode(last)) {
           beforePm--;
           continue;
@@ -2865,7 +3133,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     }
     parent.insert(leaf, idx);
 
-    model.nodesWereInserted(parent, new int[] { idx });
+    model.nodesWereInserted(parent, new int[] {idx});
     tree.expandPath(new TreePath(parent.getPath()));
   }
 
@@ -2925,9 +3193,9 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       if (parent == null) continue;
       int idx = parent.getIndex(node);
       if (idx < 0) continue;
-      Object[] removed = new Object[] { node };
+      Object[] removed = new Object[] {node};
       parent.remove(node);
-      model.nodesWereRemoved(parent, new int[] { idx }, removed);
+      model.nodesWereRemoved(parent, new int[] {idx}, removed);
       removedAny = true;
     }
 
@@ -2960,6 +3228,7 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     nd.unread++;
     model.nodeChanged(node);
   }
+
   public void markHighlight(TargetRef ref) {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
@@ -3075,122 +3344,121 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private void syncServers(List<ServerEntry> latest) {
-  Set<String> newIds = new HashSet<>();
-  Map<String, String> nextDisplay = new HashMap<>();
-  Set<String> nextEphemeral = new HashSet<>();
-  Set<String> nextSojuBouncerControl = new HashSet<>();
-  Map<String, String> nextSojuOrigins = new HashMap<>();
-  Set<String> nextZncBouncerControl = new HashSet<>();
-  Map<String, String> nextZncOrigins = new HashMap<>();
+    Set<String> newIds = new HashSet<>();
+    Map<String, String> nextDisplay = new HashMap<>();
+    Set<String> nextEphemeral = new HashSet<>();
+    Set<String> nextSojuBouncerControl = new HashSet<>();
+    Map<String, String> nextSojuOrigins = new HashMap<>();
+    Set<String> nextZncBouncerControl = new HashSet<>();
+    Map<String, String> nextZncOrigins = new HashMap<>();
 
-  if (latest != null) {
-    for (ServerEntry e : latest) {
-      if (e == null || e.server() == null) continue;
-      String id = Objects.toString(e.server().id(), "").trim();
-      if (id.isEmpty()) continue;
-      newIds.add(id);
-      nextDisplay.put(id, computeServerDisplayName(e));
-      if (e.ephemeral()) nextEphemeral.add(id);
+    if (latest != null) {
+      for (ServerEntry e : latest) {
+        if (e == null || e.server() == null) continue;
+        String id = Objects.toString(e.server().id(), "").trim();
+        if (id.isEmpty()) continue;
+        newIds.add(id);
+        nextDisplay.put(id, computeServerDisplayName(e));
+        if (e.ephemeral()) nextEphemeral.add(id);
 
-      // If a soju network was discovered from a configured bouncer server, label that server's
-      // status tab as "Bouncer Control" for clarity.
-      if (id.startsWith("soju:")) {
-        String origin = Objects.toString(e.originId(), "").trim();
-        if (origin.isEmpty()) {
-          origin = parseOriginFromCompoundServerId(id, "soju:");
+        // If a soju network was discovered from a configured bouncer server, label that server's
+        // status tab as "Bouncer Control" for clarity.
+        if (id.startsWith("soju:")) {
+          String origin = Objects.toString(e.originId(), "").trim();
+          if (origin.isEmpty()) {
+            origin = parseOriginFromCompoundServerId(id, "soju:");
+          }
+          if (origin != null && !origin.isBlank()) {
+            nextSojuBouncerControl.add(origin);
+            nextSojuOrigins.put(id, origin);
+          }
         }
-        if (origin != null && !origin.isBlank()) {
-          nextSojuBouncerControl.add(origin);
-          nextSojuOrigins.put(id, origin);
-        }
-      }
 
-      // If a ZNC network was discovered from a configured bouncer server, label that server's
-      // status tab as "Bouncer Control" for clarity.
-      if (id.startsWith("znc:")) {
-        String origin = Objects.toString(e.originId(), "").trim();
-        if (origin.isEmpty()) {
-          origin = parseOriginFromCompoundServerId(id, "znc:");
-        }
-        if (origin != null && !origin.isBlank()) {
-          nextZncBouncerControl.add(origin);
-          nextZncOrigins.put(id, origin);
-        }
-      }
-    }
-  }
-
-  // Update origin mapping first so addServerRoot() can nest soju networks properly.
-  sojuOriginByServerId.clear();
-  sojuOriginByServerId.putAll(nextSojuOrigins);
-
-  // Update origin mapping for ZNC discovered networks.
-  zncOriginByServerId.clear();
-  zncOriginByServerId.putAll(nextZncOrigins);
-
-  // Ensure origin servers exist before adding nested soju networks.
-  for (String id : newIds) {
-    if (id.startsWith("soju:") || id.startsWith("znc:")) continue;
-    if (!servers.containsKey(id)) {
-      addServerRoot(id);
-    }
-  }
-  for (String id : newIds) {
-    if (!servers.containsKey(id)) {
-      addServerRoot(id);
-    }
-  }
-
-  for (String existing : List.copyOf(servers.keySet())) {
-    if (!newIds.contains(existing)) {
-      removeServerRoot(existing);
-      serverDisplayNames.remove(existing);
-      ephemeralServerIds.remove(existing);
-      sojuBouncerControlServerIds.remove(existing);
-      zncBouncerControlServerIds.remove(existing);
-    }
-  }
-
-  updateBouncerControlLabels(nextSojuBouncerControl, nextZncBouncerControl);
-
-  for (String id : newIds) {
-    String next = nextDisplay.getOrDefault(id, id);
-    String prev = serverDisplayNames.put(id, next);
-
-    boolean eph = nextEphemeral.contains(id);
-    boolean prevEph = ephemeralServerIds.contains(id);
-    if (eph) ephemeralServerIds.add(id); else ephemeralServerIds.remove(id);
-
-    if (!Objects.equals(prev, next) || eph != prevEph) {
-      ServerNodes sn = servers.get(id);
-      if (sn != null) model.nodeChanged(sn.serverNode);
-    }
-  }
-
-  model.reload(root);
-  SwingUtilities.invokeLater(() -> {
-    TreePath sel = tree.getSelectionPath();
-    if (sel != null) {
-      Object last = sel.getLastPathComponent();
-      if (last instanceof DefaultMutableTreeNode n1) {
-        if (n1.getPath() != null && n1.getRoot() == root) {
-          return;
+        // If a ZNC network was discovered from a configured bouncer server, label that server's
+        // status tab as "Bouncer Control" for clarity.
+        if (id.startsWith("znc:")) {
+          String origin = Objects.toString(e.originId(), "").trim();
+          if (origin.isEmpty()) {
+            origin = parseOriginFromCompoundServerId(id, "znc:");
+          }
+          if (origin != null && !origin.isBlank()) {
+            nextZncBouncerControl.add(origin);
+            nextZncOrigins.put(id, origin);
+          }
         }
       }
     }
 
-    TargetRef first = servers.values().stream()
-        .findFirst()
-        .map(sn -> sn.statusRef)
-        .orElse(null);
-    if (first != null) {
-      selectTarget(first);
-    } else {
-      tree.setSelectionPath(defaultSelectionPath());
-    }
-  });
-}
+    // Update origin mapping first so addServerRoot() can nest soju networks properly.
+    sojuOriginByServerId.clear();
+    sojuOriginByServerId.putAll(nextSojuOrigins);
 
+    // Update origin mapping for ZNC discovered networks.
+    zncOriginByServerId.clear();
+    zncOriginByServerId.putAll(nextZncOrigins);
+
+    // Ensure origin servers exist before adding nested soju networks.
+    for (String id : newIds) {
+      if (id.startsWith("soju:") || id.startsWith("znc:")) continue;
+      if (!servers.containsKey(id)) {
+        addServerRoot(id);
+      }
+    }
+    for (String id : newIds) {
+      if (!servers.containsKey(id)) {
+        addServerRoot(id);
+      }
+    }
+
+    for (String existing : List.copyOf(servers.keySet())) {
+      if (!newIds.contains(existing)) {
+        removeServerRoot(existing);
+        serverDisplayNames.remove(existing);
+        ephemeralServerIds.remove(existing);
+        sojuBouncerControlServerIds.remove(existing);
+        zncBouncerControlServerIds.remove(existing);
+      }
+    }
+
+    updateBouncerControlLabels(nextSojuBouncerControl, nextZncBouncerControl);
+
+    for (String id : newIds) {
+      String next = nextDisplay.getOrDefault(id, id);
+      String prev = serverDisplayNames.put(id, next);
+
+      boolean eph = nextEphemeral.contains(id);
+      boolean prevEph = ephemeralServerIds.contains(id);
+      if (eph) ephemeralServerIds.add(id);
+      else ephemeralServerIds.remove(id);
+
+      if (!Objects.equals(prev, next) || eph != prevEph) {
+        ServerNodes sn = servers.get(id);
+        if (sn != null) model.nodeChanged(sn.serverNode);
+      }
+    }
+
+    model.reload(root);
+    SwingUtilities.invokeLater(
+        () -> {
+          TreePath sel = tree.getSelectionPath();
+          if (sel != null) {
+            Object last = sel.getLastPathComponent();
+            if (last instanceof DefaultMutableTreeNode n1) {
+              if (n1.getPath() != null && n1.getRoot() == root) {
+                return;
+              }
+            }
+          }
+
+          TargetRef first =
+              servers.values().stream().findFirst().map(sn -> sn.statusRef).orElse(null);
+          if (first != null) {
+            selectTarget(first);
+          } else {
+            tree.setSelectionPath(defaultSelectionPath());
+          }
+        });
+  }
 
   private String computeServerDisplayName(ServerEntry e) {
     if (e == null || e.server() == null) return "";
@@ -3244,7 +3512,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return !id.isEmpty() && id.startsWith("znc:") && ephemeralServerIds.contains(id);
   }
 
-
   private DefaultMutableTreeNode getOrCreateSojuNetworksGroupNode(String originServerId) {
     String origin = Objects.toString(originServerId, "").trim();
     if (origin.isEmpty()) return null;
@@ -3257,7 +3524,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     DefaultMutableTreeNode group = new DefaultMutableTreeNode(SOJU_NETWORKS_GROUP_LABEL);
 
-    // Insert right after fixed leaves (status + notifications + optional UI-only leaves) and before PMs.
+    // Insert right after fixed leaves (status + notifications + optional UI-only leaves) and before
+    // PMs.
     int insertIdx = fixedLeafCount(originNodes);
     int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
     if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
@@ -3287,7 +3555,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     DefaultMutableTreeNode group = new DefaultMutableTreeNode(ZNC_NETWORKS_GROUP_LABEL);
 
-    // Insert right after fixed leaves (status + notifications + optional UI-only leaves) and before PMs.
+    // Insert right after fixed leaves (status + notifications + optional UI-only leaves) and before
+    // PMs.
     int insertIdx = fixedLeafCount(originNodes);
     int pmIdx = originNodes.serverNode.getIndex(originNodes.pmNode);
     if (pmIdx >= 0) insertIdx = Math.min(insertIdx, pmIdx);
@@ -3313,8 +3582,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (leaves.containsKey(originNodes.logViewerRef)) count++;
     if (leaves.containsKey(originNodes.channelListRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
-    if (originNodes.interceptorsNode != null && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
-    if (originNodes.monitorNode != null && originNodes.monitorNode.getParent() == originNodes.serverNode) count++;
+    if (originNodes.interceptorsNode != null
+        && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
+    if (originNodes.monitorNode != null
+        && originNodes.monitorNode.getParent() == originNodes.serverNode) count++;
     return count;
   }
 
@@ -3363,7 +3634,11 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       if (nd.ref.isApplicationJhiccup()) {
         return "Diagnostic buffer for jHiccup latency output.";
       }
-      if (nd.ref.isStatus() && BOUNCER_CONTROL_LABEL.equals(nd.label)
+      if (nd.ref.isApplicationTerminal()) {
+        return "In-app terminal output mirrored from System.out/System.err.";
+      }
+      if (nd.ref.isStatus()
+          && BOUNCER_CONTROL_LABEL.equals(nd.label)
           && (sojuBouncerControlServerIds.contains(nd.ref.serverId())
               || zncBouncerControlServerIds.contains(nd.ref.serverId()))) {
         return "Bouncer Control connection (used to discover bouncer networks).";
@@ -3382,7 +3657,10 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
-      boolean auto = !origin.isEmpty() && sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, display);
+      boolean auto =
+          !origin.isEmpty()
+              && sojuAutoConnect != null
+              && sojuAutoConnect.isEnabled(origin, display);
       String tip = stateTip + intentTip;
       if (!queueTip.isBlank()) tip += " " + queueTip;
       if (!diagnostics.isBlank()) tip += diagnostics;
@@ -3402,7 +3680,8 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
-      boolean auto = !origin.isEmpty() && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display);
+      boolean auto =
+          !origin.isEmpty() && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display);
       String tip = stateTip + intentTip;
       if (!queueTip.isBlank()) tip += " " + queueTip;
       if (!diagnostics.isBlank()) tip += diagnostics;
@@ -3419,8 +3698,14 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       String queueTip = serverIntentQueueTip(state, desired);
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String action = serverActionHint(state);
-      String base = "State: " + serverStateLabel(state) + ". Intent: " + serverDesiredIntentLabel(desired) + ".";
-      if (!queueTip.isBlank() && !diagnostics.isBlank()) return base + " " + queueTip + diagnostics + " " + action;
+      String base =
+          "State: "
+              + serverStateLabel(state)
+              + ". Intent: "
+              + serverDesiredIntentLabel(desired)
+              + ".";
+      if (!queueTip.isBlank() && !diagnostics.isBlank())
+        return base + " " + queueTip + diagnostics + " " + action;
       if (!queueTip.isBlank()) return base + " " + queueTip + " " + action;
       if (!diagnostics.isBlank()) return base + diagnostics + " " + action;
       return base + " " + action;
@@ -3448,59 +3733,62 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
   }
 
   private boolean shouldPersistPrivateMessageList() {
-    return runtimeConfig != null && logProps != null && Boolean.TRUE.equals(logProps.savePrivateMessageList());
+    return runtimeConfig != null
+        && logProps != null
+        && Boolean.TRUE.equals(logProps.savePrivateMessageList());
   }
 
-private void removeServerRoot(String serverId) {
-  ServerNodes sn = servers.remove(serverId);
-  if (sn == null) return;
+  private void removeServerRoot(String serverId) {
+    ServerNodes sn = servers.remove(serverId);
+    if (sn == null) return;
 
-  if (interceptorStore != null) {
-    try {
-      interceptorStore.clearServerHits(serverId);
-    } catch (Exception ignored) {
-    }
-  }
-
-  if (Objects.equals(hoveredServerActionServerId, serverId)) {
-    hoveredServerActionServerId = "";
-  }
-
-  serverStates.remove(serverId);
-  serverDesiredOnline.remove(serverId);
-  serverLastError.remove(serverId);
-  serverNextRetryAtEpochMs.remove(serverId);
-  serverRuntimeMetadata.remove(serverId);
-  clearPrivateMessageOnlineStates(serverId);
-  leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
-  typingActivityNodes.removeIf(node -> {
-    if (node == null || node.getParent() == null) return true;
-    Object uo = node.getUserObject();
-    if (!(uo instanceof NodeData nd) || nd.ref == null) return false;
-    return Objects.equals(nd.ref.serverId(), serverId);
-  });
-
-  DefaultMutableTreeNode parent = (DefaultMutableTreeNode) sn.serverNode.getParent();
-  if (parent != null) {
-    parent.remove(sn.serverNode);
-
-    if (isSojuNetworksGroupNode(parent) && parent.getChildCount() == 0) {
-      DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) parent.getParent();
-      if (originNode != null) {
-        originNode.remove(parent);
+    if (interceptorStore != null) {
+      try {
+        interceptorStore.clearServerHits(serverId);
+      } catch (Exception ignored) {
       }
-      sojuNetworksGroupByOrigin.entrySet().removeIf(e -> e.getValue() == parent);
     }
 
-    if (isZncNetworksGroupNode(parent) && parent.getChildCount() == 0) {
-      DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) parent.getParent();
-      if (originNode != null) {
-        originNode.remove(parent);
+    if (Objects.equals(hoveredServerActionServerId, serverId)) {
+      hoveredServerActionServerId = "";
+    }
+
+    serverStates.remove(serverId);
+    serverDesiredOnline.remove(serverId);
+    serverLastError.remove(serverId);
+    serverNextRetryAtEpochMs.remove(serverId);
+    serverRuntimeMetadata.remove(serverId);
+    clearPrivateMessageOnlineStates(serverId);
+    leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
+    typingActivityNodes.removeIf(
+        node -> {
+          if (node == null || node.getParent() == null) return true;
+          Object uo = node.getUserObject();
+          if (!(uo instanceof NodeData nd) || nd.ref == null) return false;
+          return Objects.equals(nd.ref.serverId(), serverId);
+        });
+
+    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) sn.serverNode.getParent();
+    if (parent != null) {
+      parent.remove(sn.serverNode);
+
+      if (isSojuNetworksGroupNode(parent) && parent.getChildCount() == 0) {
+        DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) parent.getParent();
+        if (originNode != null) {
+          originNode.remove(parent);
+        }
+        sojuNetworksGroupByOrigin.entrySet().removeIf(e -> e.getValue() == parent);
       }
-      zncNetworksGroupByOrigin.entrySet().removeIf(e -> e.getValue() == parent);
+
+      if (isZncNetworksGroupNode(parent) && parent.getChildCount() == 0) {
+        DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) parent.getParent();
+        if (originNode != null) {
+          originNode.remove(parent);
+        }
+        zncNetworksGroupByOrigin.entrySet().removeIf(e -> e.getValue() == parent);
+      }
     }
   }
-}
 
   private ServerNodes addServerRoot(String serverId) {
     String id = Objects.requireNonNull(serverId, "serverId").trim();
@@ -3541,40 +3829,47 @@ private void removeServerRoot(String serverId) {
     }
 
     parent.add(serverNode);
+    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(id);
     TargetRef statusRef = new TargetRef(id, "status");
-    DefaultMutableTreeNode statusLeaf = new DefaultMutableTreeNode(new NodeData(statusRef, statusLeafLabelForServer(id)));
-    serverNode.insert(statusLeaf, 0);
-    leaves.put(statusRef, statusLeaf);
+    int nextUiLeafIndex = 0;
+    if (vis.server()) {
+      DefaultMutableTreeNode statusLeaf =
+          new DefaultMutableTreeNode(new NodeData(statusRef, statusLeafLabelForServer(id)));
+      serverNode.insert(statusLeaf, nextUiLeafIndex++);
+      leaves.put(statusRef, statusLeaf);
+    }
 
     TargetRef notificationsRef = TargetRef.notifications(id);
     NodeData notificationsData = new NodeData(notificationsRef, "Notifications");
     if (notificationStore != null) {
       notificationsData.highlightUnread = notificationStore.count(id);
     }
-    DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
-    if (showNotificationsNodes) {
-      serverNode.insert(notificationsLeaf, 1);
+    if (vis.notifications()) {
+      DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
+      serverNode.insert(notificationsLeaf, nextUiLeafIndex++);
       leaves.put(notificationsRef, notificationsLeaf);
     }
 
     TargetRef logViewerRef = TargetRef.logViewer(id);
-    int nextUiLeafIndex = 2;
-    if (showLogViewerNodes) {
-      DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
+    if (vis.logViewer()) {
+      DefaultMutableTreeNode logViewerLeaf =
+          new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
       serverNode.insert(logViewerLeaf, nextUiLeafIndex++);
       leaves.put(logViewerRef, logViewerLeaf);
     }
 
     TargetRef channelListRef = TargetRef.channelList(id);
     if (showChannelListNodes) {
-      DefaultMutableTreeNode channelListLeaf = new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
+      DefaultMutableTreeNode channelListLeaf =
+          new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
       serverNode.insert(channelListLeaf, nextUiLeafIndex++);
       leaves.put(channelListRef, channelListLeaf);
     }
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
-      DefaultMutableTreeNode dccTransfersLeaf = new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
+      DefaultMutableTreeNode dccTransfersLeaf =
+          new DefaultMutableTreeNode(new NodeData(dccTransfersRef, DCC_TRANSFERS_LABEL));
       serverNode.insert(dccTransfersLeaf, nextUiLeafIndex++);
       leaves.put(dccTransfersRef, dccTransfersLeaf);
     }
@@ -3585,7 +3880,7 @@ private void removeServerRoot(String serverId) {
     }
     NodeData monitorData = new NodeData(null, MONITOR_GROUP_LABEL);
     DefaultMutableTreeNode monitorNode = new DefaultMutableTreeNode(monitorData);
-    if (showMonitorNodes) {
+    if (vis.monitor()) {
       serverNode.add(monitorNode);
     }
 
@@ -3607,14 +3902,16 @@ private void removeServerRoot(String serverId) {
     }
 
     serverNode.add(pmNode);
-    if (showInterceptorsNodes) {
+    if (vis.interceptors()) {
       int interceptorsIdx = serverNode.getIndex(pmNode);
       if (interceptorsIdx < 0) interceptorsIdx = serverNode.getChildCount();
       int monitorIdx = serverNode.getIndex(monitorNode);
       if (monitorIdx >= 0) {
-        interceptorsIdx = Math.max(monitorIdx + 1, Math.min(interceptorsIdx, serverNode.getChildCount()));
+        interceptorsIdx =
+            Math.max(monitorIdx + 1, Math.min(interceptorsIdx, serverNode.getChildCount()));
       }
-      serverNode.insert(interceptorsNode, Math.max(0, Math.min(interceptorsIdx, serverNode.getChildCount())));
+      serverNode.insert(
+          interceptorsNode, Math.max(0, Math.min(interceptorsIdx, serverNode.getChildCount())));
     }
 
     ServerNodes sn =
@@ -3657,7 +3954,8 @@ private void removeServerRoot(String serverId) {
         : STATUS_LABEL;
   }
 
-  private void updateBouncerControlLabels(Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl) {
+  private void updateBouncerControlLabels(
+      Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl) {
     Set<String> nextSoju = nextSojuBouncerControl == null ? Set.of() : nextSojuBouncerControl;
     Set<String> nextZnc = nextZncBouncerControl == null ? Set.of() : nextZncBouncerControl;
 
@@ -3775,6 +4073,45 @@ private void removeServerRoot(String serverId) {
     }
   }
 
+  private record ServerBuiltInNodesVisibility(
+      boolean server,
+      boolean notifications,
+      boolean logViewer,
+      boolean monitor,
+      boolean interceptors) {
+    static ServerBuiltInNodesVisibility defaults() {
+      return new ServerBuiltInNodesVisibility(true, true, true, true, true);
+    }
+
+    ServerBuiltInNodesVisibility withServer(boolean visible) {
+      return new ServerBuiltInNodesVisibility(
+          visible, notifications, logViewer, monitor, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withNotifications(boolean visible) {
+      return new ServerBuiltInNodesVisibility(server, visible, logViewer, monitor, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withLogViewer(boolean visible) {
+      return new ServerBuiltInNodesVisibility(
+          server, notifications, visible, monitor, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withMonitor(boolean visible) {
+      return new ServerBuiltInNodesVisibility(
+          server, notifications, logViewer, visible, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withInterceptors(boolean visible) {
+      return new ServerBuiltInNodesVisibility(server, notifications, logViewer, monitor, visible);
+    }
+
+    RuntimeConfigStore.ServerTreeBuiltInNodesVisibility toRuntimeVisibility() {
+      return new RuntimeConfigStore.ServerTreeBuiltInNodesVisibility(
+          server, notifications, logViewer, monitor, interceptors);
+    }
+  }
+
   private static final class ServerNodes {
     final DefaultMutableTreeNode serverNode;
     final DefaultMutableTreeNode pmNode;
@@ -3836,240 +4173,250 @@ private void removeServerRoot(String serverId) {
     final Map<String, String> isupport = new LinkedHashMap<>();
   }
 
-private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
-  private float typingIndicatorAlpha = 0f;
-  private boolean typingIndicatorSlotVisible = false;
+  private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
+    private float typingIndicatorAlpha = 0f;
+    private boolean typingIndicatorSlotVisible = false;
 
-  private void setTreeIcon(String name) {
-    Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
-    Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
-    setIcon(icon);
-    setDisabledIcon(disabled);
-  }
+    private void setTreeIcon(String name) {
+      Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
+      Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
+      setIcon(icon);
+      setDisabledIcon(disabled);
+    }
 
-  @Override
-  public java.awt.Component getTreeCellRendererComponent(
-      JTree tree,
-      Object value,
-      boolean sel,
-      boolean expanded,
-      boolean leaf,
-      int row,
-      boolean hasFocus) {
+    @Override
+    public java.awt.Component getTreeCellRendererComponent(
+        JTree tree,
+        Object value,
+        boolean sel,
+        boolean expanded,
+        boolean leaf,
+        int row,
+        boolean hasFocus) {
 
-    java.awt.Component c = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
-    Font base = UIManager.getFont("Tree.font");
-    if (base == null) base = tree.getFont();
-    if (base == null) base = getFont();
-    typingIndicatorAlpha = 0f;
-    typingIndicatorSlotVisible = false;
+      java.awt.Component c =
+          super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+      Font base = UIManager.getFont("Tree.font");
+      if (base == null) base = tree.getFont();
+      if (base == null) base = getFont();
+      typingIndicatorAlpha = 0f;
+      typingIndicatorSlotVisible = false;
 
-    if (value instanceof DefaultMutableTreeNode node) {
-      Object uo = node.getUserObject();
-      if (uo instanceof NodeData nd) {
-        setText(nd.toString());
-        if (nd.highlightUnread > 0) {
-          setFont(base.deriveFont(Font.BOLD));
-        } else {
-          setFont(base.deriveFont(Font.PLAIN));
-        }
-        if (nd.ref != null && nd.ref.isChannel()) {
-          setTreeIcon("channel");
-        } else if (isPrivateMessageTarget(nd.ref)) {
-          boolean online = Boolean.TRUE.equals(privateMessageOnlineByTarget.get(nd.ref));
-          String name = online ? "pm-online" : "pm-offline";
-          Palette pal = online ? Palette.TREE_PM_ONLINE : Palette.TREE_PM_OFFLINE;
-          Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, pal);
+      if (value instanceof DefaultMutableTreeNode node) {
+        Object uo = node.getUserObject();
+        if (uo instanceof NodeData nd) {
+          setText(nd.toString());
+          if (nd.highlightUnread > 0) {
+            setFont(base.deriveFont(Font.BOLD));
+          } else {
+            setFont(base.deriveFont(Font.PLAIN));
+          }
+          if (nd.ref != null && nd.ref.isChannel()) {
+            setTreeIcon("channel");
+          } else if (isPrivateMessageTarget(nd.ref)) {
+            boolean online = Boolean.TRUE.equals(privateMessageOnlineByTarget.get(nd.ref));
+            String name = online ? "pm-online" : "pm-offline";
+            Palette pal = online ? Palette.TREE_PM_ONLINE : Palette.TREE_PM_OFFLINE;
+            Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, pal);
+            setIcon(icon);
+            setDisabledIcon(icon);
+          } else if (nd.ref != null && nd.ref.isApplicationUnhandledErrors()) {
+            setTreeIcon("info");
+          } else if (nd.ref != null && nd.ref.isApplicationAssertjSwing()) {
+            setTreeIcon("settings");
+          } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
+            setTreeIcon("refresh");
+          } else if (nd.ref != null && nd.ref.isApplicationTerminal()) {
+            setTreeIcon("terminal");
+          } else if (nd.ref != null && nd.ref.isStatus()) {
+            setTreeIcon("terminal");
+          } else if (nd.ref != null && nd.ref.isNotifications()) {
+            setTreeIcon("info");
+          } else if (nd.ref != null && nd.ref.isLogViewer()) {
+            setTreeIcon("terminal");
+          } else if (nd.ref != null && nd.ref.isInterceptor()) {
+            setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
+          } else if (nd.ref != null && nd.ref.isChannelList()) {
+            setTreeIcon("add");
+          } else if (nd.ref != null && nd.ref.isDccTransfers()) {
+            setTreeIcon("dock-right");
+          } else if (nd.ref == null && isMonitorGroupNode(node)) {
+            setTreeIcon("eye");
+          } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
+            setTreeIcon("yin-yang");
+          }
+          if (supportsTypingActivity(nd.ref)) {
+            typingIndicatorSlotVisible = true;
+            typingIndicatorAlpha =
+                nd.typingDotAlpha(
+                    System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
+          }
+        } else if (uo instanceof String id && isServerNode(node)) {
+          setText(serverNodeDisplayLabel(id));
+          if (ephemeralServerIds.contains(id)) {
+            setFont(base.deriveFont(Font.ITALIC));
+          } else {
+            setFont(base.deriveFont(Font.PLAIN));
+          }
+          ConnectionState state = connectionStateForServer(id);
+          String iconName = serverNodeIconName(state);
+          Palette palette = serverNodeIconPalette(state);
+          Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
+          Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
           setIcon(icon);
-          setDisabledIcon(icon);
-        } else if (nd.ref != null && nd.ref.isApplicationUnhandledErrors()) {
-          setTreeIcon("info");
-        } else if (nd.ref != null && nd.ref.isApplicationAssertjSwing()) {
+          setDisabledIcon(disabled);
+        } else if (isIrcRootNode(node)) {
+          setText(IRC_ROOT_LABEL);
+          setFont(base.deriveFont(Font.PLAIN));
+          setTreeIcon("terminal");
+        } else if (isApplicationRootNode(node)) {
+          setText(APPLICATION_ROOT_LABEL);
+          setFont(base.deriveFont(Font.PLAIN));
           setTreeIcon("settings");
-        } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
-          setTreeIcon("refresh");
-        } else if (nd.ref != null && nd.ref.isStatus()) {
-          setTreeIcon("terminal");
-        } else if (nd.ref != null && nd.ref.isNotifications()) {
-          setTreeIcon("info");
-        } else if (nd.ref != null && nd.ref.isLogViewer()) {
-          setTreeIcon("terminal");
-        } else if (nd.ref != null && nd.ref.isInterceptor()) {
-          setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
-        } else if (nd.ref != null && nd.ref.isChannelList()) {
-          setTreeIcon("add");
-        } else if (nd.ref != null && nd.ref.isDccTransfers()) {
-          setTreeIcon("dock-right");
-        } else if (nd.ref == null && isMonitorGroupNode(node)) {
+        } else if (isPrivateMessagesGroupNode(node)) {
+          setFont(base.deriveFont(Font.PLAIN));
+          setTreeIcon("account-unknown");
+        } else if (isMonitorGroupNode(node)) {
+          setFont(base.deriveFont(Font.PLAIN));
           setTreeIcon("eye");
-        } else if (nd.ref == null && isInterceptorsGroupNode(node)) {
+        } else if (isInterceptorsGroupNode(node)) {
+          setFont(base.deriveFont(Font.PLAIN));
           setTreeIcon("yin-yang");
-        }
-        if (supportsTypingActivity(nd.ref)) {
-          typingIndicatorSlotVisible = true;
-          typingIndicatorAlpha =
-              nd.typingDotAlpha(System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
-        }
-      } else if (uo instanceof String id && isServerNode(node)) {
-        setText(serverNodeDisplayLabel(id));
-        if (ephemeralServerIds.contains(id)) {
-          setFont(base.deriveFont(Font.ITALIC));
+        } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
+          setFont(base.deriveFont(Font.PLAIN));
+          setTreeIcon("dock-left");
         } else {
           setFont(base.deriveFont(Font.PLAIN));
         }
-        ConnectionState state = connectionStateForServer(id);
-        String iconName = serverNodeIconName(state);
-        Palette palette = serverNodeIconPalette(state);
-        Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
-        Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
-        setIcon(icon);
-        setDisabledIcon(disabled);
-      } else if (isIrcRootNode(node)) {
-        setText(IRC_ROOT_LABEL);
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("terminal");
-      } else if (isApplicationRootNode(node)) {
-        setText(APPLICATION_ROOT_LABEL);
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("settings");
-      } else if (isPrivateMessagesGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("account-unknown");
-      } else if (isMonitorGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("eye");
-      } else if (isInterceptorsGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("yin-yang");
-      } else if (isSojuNetworksGroupNode(node) || isZncNetworksGroupNode(node)) {
-        setFont(base.deriveFont(Font.PLAIN));
-        setTreeIcon("dock-left");
       } else {
         setFont(base.deriveFont(Font.PLAIN));
       }
-    } else {
-      setFont(base.deriveFont(Font.PLAIN));
+
+      return c;
     }
 
-    return c;
-  }
+    private boolean isInterceptorEnabled(TargetRef ref) {
+      if (ref == null || !ref.isInterceptor()) return true;
+      if (interceptorStore == null) return true;
+      String sid = Objects.toString(ref.serverId(), "").trim();
+      String iid = Objects.toString(ref.interceptorId(), "").trim();
+      if (sid.isEmpty() || iid.isEmpty()) return true;
+      InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
+      return def == null || def.enabled();
+    }
 
-  private boolean isInterceptorEnabled(TargetRef ref) {
-    if (ref == null || !ref.isInterceptor()) return true;
-    if (interceptorStore == null) return true;
-    String sid = Objects.toString(ref.serverId(), "").trim();
-    String iid = Objects.toString(ref.interceptorId(), "").trim();
-    if (sid.isEmpty() || iid.isEmpty()) return true;
-    InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
-    return def == null || def.enabled();
-  }
+    @Override
+    protected void paintComponent(Graphics g) {
+      super.paintComponent(g);
+      if (!typingIndicatorSlotVisible || typingIndicatorAlpha <= 0.01f) return;
 
-  @Override
-  protected void paintComponent(Graphics g) {
-    super.paintComponent(g);
-    if (!typingIndicatorSlotVisible || typingIndicatorAlpha <= 0.01f) return;
+      Graphics2D g2 = (Graphics2D) g.create();
+      try {
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    Graphics2D g2 = (Graphics2D) g.create();
-    try {
-      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        TreeTypingIndicatorStyle style = typingIndicatorStyle;
+        int width = indicatorWidth(style);
+        int height = indicatorHeight(style);
+        java.awt.Insets insets = getInsets();
+        int leftInset = insets != null ? insets.left : 0;
+        int slotWidth = Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, width + 2);
+        int slotLeft = Math.max(0, leftInset - slotWidth - 1);
+        int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
+        int y = Math.max(0, (getHeight() - height) / 2);
+        float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
 
-      TreeTypingIndicatorStyle style = typingIndicatorStyle;
-      int width = indicatorWidth(style);
-      int height = indicatorHeight(style);
-      java.awt.Insets insets = getInsets();
-      int leftInset = insets != null ? insets.left : 0;
-      int slotWidth = Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, width + 2);
-      int slotLeft = Math.max(0, leftInset - slotWidth - 1);
-      int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
-      int y = Math.max(0, (getHeight() - height) / 2);
-      float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
-
-      switch (style) {
-        case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
-        case GLOW_DOT -> drawGlowDotIndicator(g2, x, y, width, height, alpha);
-        case DOTS -> drawDotsIndicator(g2, x, y, alpha);
+        switch (style) {
+          case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
+          case GLOW_DOT -> drawGlowDotIndicator(g2, x, y, width, height, alpha);
+          case DOTS -> drawDotsIndicator(g2, x, y, alpha);
+        }
+      } finally {
+        g2.dispose();
       }
-    } finally {
-      g2.dispose();
+    }
+
+    private static int indicatorWidth(TreeTypingIndicatorStyle style) {
+      return switch (style) {
+        case KEYBOARD -> 10;
+        case GLOW_DOT -> 8;
+        case DOTS ->
+            TYPING_ACTIVITY_DOT_COUNT * TYPING_ACTIVITY_DOT_SIZE
+                + (TYPING_ACTIVITY_DOT_COUNT - 1) * TYPING_ACTIVITY_DOT_GAP;
+      };
+    }
+
+    private static int indicatorHeight(TreeTypingIndicatorStyle style) {
+      return switch (style) {
+        case KEYBOARD -> 7;
+        case GLOW_DOT -> 8;
+        case DOTS -> TYPING_ACTIVITY_DOT_SIZE;
+      };
+    }
+
+    private void drawDotsIndicator(Graphics2D g2, int x, int y, float alpha) {
+      int dot = TYPING_ACTIVITY_DOT_SIZE;
+      int gap = TYPING_ACTIVITY_DOT_GAP;
+      int phase =
+          (int)
+              ((System.currentTimeMillis() / Math.max(80, TYPING_ACTIVITY_DOT_FRAME_MS))
+                  % TYPING_ACTIVITY_DOT_COUNT);
+      Color base = typingIndicatorColor();
+      g2.setComposite(AlphaComposite.SrcOver);
+      for (int i = 0; i < TYPING_ACTIVITY_DOT_COUNT; i++) {
+        float pulse = (i == phase) ? 1.0f : 0.42f;
+        int a = Math.max(12, Math.min(255, Math.round(255f * alpha * pulse)));
+        g2.setColor(withAlpha(base, a));
+        g2.fillOval(x + (i * (dot + gap)), y, dot, dot);
+      }
+    }
+
+    private void drawKeyboardIndicator(
+        Graphics2D g2, int x, int y, int width, int height, float alpha) {
+      Color base = typingIndicatorColor();
+      int fillA = Math.max(8, Math.min(255, Math.round(50f * alpha)));
+      int strokeA = Math.max(18, Math.min(255, Math.round(225f * alpha)));
+      int keyA = Math.max(14, Math.min(255, Math.round(165f * alpha)));
+      g2.setComposite(AlphaComposite.SrcOver);
+      g2.setColor(withAlpha(base, fillA));
+      g2.fillRoundRect(x, y, width, height, 3, 3);
+      g2.setColor(withAlpha(base, strokeA));
+      g2.drawRoundRect(x, y, width - 1, height - 1, 3, 3);
+
+      int keyY1 = y + 2;
+      int keyY2 = y + 4;
+      g2.setColor(withAlpha(base, keyA));
+      int[] top = {x + 2, x + 4, x + 6, x + 8};
+      for (int keyX : top) {
+        g2.fillRect(keyX, keyY1, 1, 1);
+      }
+      g2.fillRect(x + 3, keyY2, 4, 1);
+    }
+
+    private void drawGlowDotIndicator(
+        Graphics2D g2, int x, int y, int width, int height, float alpha) {
+      int dot = 6;
+      int halo = 4;
+      int cx = x + Math.max(0, (width - dot) / 2);
+      int cy = y + Math.max(0, (height - dot) / 2);
+      g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, alpha * 0.45f)));
+      g2.setColor(TYPING_ACTIVITY_GLOW_HALO);
+      g2.fillOval(cx - (halo / 2), cy - (halo / 2), dot + halo, dot + halo);
+
+      g2.setComposite(AlphaComposite.SrcOver.derive(alpha));
+      g2.setColor(TYPING_ACTIVITY_GLOW_DOT);
+      g2.fillOval(cx, cy, dot, dot);
+    }
+
+    private Color typingIndicatorColor() {
+      Color c = UIManager.getColor("@accentColor");
+      if (c == null) c = UIManager.getColor("Component.focusColor");
+      if (c == null) c = UIManager.getColor("Label.foreground");
+      if (c == null) c = TYPING_ACTIVITY_INDICATOR_FALLBACK;
+      return c;
     }
   }
 
-  private static int indicatorWidth(TreeTypingIndicatorStyle style) {
-    return switch (style) {
-      case KEYBOARD -> 10;
-      case GLOW_DOT -> 8;
-      case DOTS -> TYPING_ACTIVITY_DOT_COUNT * TYPING_ACTIVITY_DOT_SIZE
-          + (TYPING_ACTIVITY_DOT_COUNT - 1) * TYPING_ACTIVITY_DOT_GAP;
-    };
-  }
-
-  private static int indicatorHeight(TreeTypingIndicatorStyle style) {
-    return switch (style) {
-      case KEYBOARD -> 7;
-      case GLOW_DOT -> 8;
-      case DOTS -> TYPING_ACTIVITY_DOT_SIZE;
-    };
-  }
-
-  private void drawDotsIndicator(Graphics2D g2, int x, int y, float alpha) {
-    int dot = TYPING_ACTIVITY_DOT_SIZE;
-    int gap = TYPING_ACTIVITY_DOT_GAP;
-    int phase = (int) ((System.currentTimeMillis() / Math.max(80, TYPING_ACTIVITY_DOT_FRAME_MS)) % TYPING_ACTIVITY_DOT_COUNT);
-    Color base = typingIndicatorColor();
-    g2.setComposite(AlphaComposite.SrcOver);
-    for (int i = 0; i < TYPING_ACTIVITY_DOT_COUNT; i++) {
-      float pulse = (i == phase) ? 1.0f : 0.42f;
-      int a = Math.max(12, Math.min(255, Math.round(255f * alpha * pulse)));
-      g2.setColor(withAlpha(base, a));
-      g2.fillOval(x + (i * (dot + gap)), y, dot, dot);
-    }
-  }
-
-  private void drawKeyboardIndicator(Graphics2D g2, int x, int y, int width, int height, float alpha) {
-    Color base = typingIndicatorColor();
-    int fillA = Math.max(8, Math.min(255, Math.round(50f * alpha)));
-    int strokeA = Math.max(18, Math.min(255, Math.round(225f * alpha)));
-    int keyA = Math.max(14, Math.min(255, Math.round(165f * alpha)));
-    g2.setComposite(AlphaComposite.SrcOver);
-    g2.setColor(withAlpha(base, fillA));
-    g2.fillRoundRect(x, y, width, height, 3, 3);
-    g2.setColor(withAlpha(base, strokeA));
-    g2.drawRoundRect(x, y, width - 1, height - 1, 3, 3);
-
-    int keyY1 = y + 2;
-    int keyY2 = y + 4;
-    g2.setColor(withAlpha(base, keyA));
-    int[] top = {x + 2, x + 4, x + 6, x + 8};
-    for (int keyX : top) {
-      g2.fillRect(keyX, keyY1, 1, 1);
-    }
-    g2.fillRect(x + 3, keyY2, 4, 1);
-  }
-
-  private void drawGlowDotIndicator(Graphics2D g2, int x, int y, int width, int height, float alpha) {
-    int dot = 6;
-    int halo = 4;
-    int cx = x + Math.max(0, (width - dot) / 2);
-    int cy = y + Math.max(0, (height - dot) / 2);
-    g2.setComposite(AlphaComposite.SrcOver.derive(Math.min(0.5f, alpha * 0.45f)));
-    g2.setColor(TYPING_ACTIVITY_GLOW_HALO);
-    g2.fillOval(cx - (halo / 2), cy - (halo / 2), dot + halo, dot + halo);
-
-    g2.setComposite(AlphaComposite.SrcOver.derive(alpha));
-    g2.setColor(TYPING_ACTIVITY_GLOW_DOT);
-    g2.fillOval(cx, cy, dot, dot);
-  }
-
-  private Color typingIndicatorColor() {
-    Color c = UIManager.getColor("@accentColor");
-    if (c == null) c = UIManager.getColor("Component.focusColor");
-    if (c == null) c = UIManager.getColor("Label.foreground");
-    if (c == null) c = TYPING_ACTIVITY_INDICATOR_FALLBACK;
-    return c;
-  }
-}
-
-static final class NodeData {
+  static final class NodeData {
     final TargetRef ref;
     final String label;
     int unread = 0;
@@ -4162,7 +4509,8 @@ static final class NodeData {
 
     @Override
     public String toString() {
-      if (unread > 0 && highlightUnread > 0) return label + " (" + unread + ", " + highlightUnread + "!)";
+      if (unread > 0 && highlightUnread > 0)
+        return label + " (" + unread + ", " + highlightUnread + "!)";
       if (unread > 0) return label + " (" + unread + ")";
       if (highlightUnread > 0) return label + " (" + highlightUnread + "!)";
       return label;

@@ -1,23 +1,23 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.logging.ChatLogMaintenance;
-import cafe.woden.ircclient.model.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.model.UserListStore;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
-import java.util.Comparator;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -49,10 +49,11 @@ public class TargetCoordinator {
 
   /**
    * UI refreshes for user-list metadata (away/account/hostmask/real-name) can arrive in huge bursts
-   * (e.g., WHOX scans on big channels). Coalesce these to avoid rebuilding nick completions
-   * on the EDT thousands of times.
+   * (e.g., WHOX scans on big channels). Coalesce these to avoid rebuilding nick completions on the
+   * EDT thousands of times.
    */
   private final ScheduledExecutorService usersRefreshExec;
+
   private final AtomicBoolean usersRefreshScheduled = new AtomicBoolean(false);
 
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -73,10 +74,9 @@ public class TargetCoordinator {
       ChatHistoryService chatHistoryService,
       ChatLogMaintenance chatLogMaintenance,
       @Qualifier(ExecutorConfig.TARGET_COORDINATOR_MAINTENANCE_EXECUTOR)
-      ExecutorService maintenanceExec,
+          ExecutorService maintenanceExec,
       @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
-      ScheduledExecutorService usersRefreshExec
-  ) {
+          ScheduledExecutorService usersRefreshExec) {
     this.ui = ui;
     this.userListStore = userListStore;
     this.irc = irc;
@@ -109,13 +109,14 @@ public class TargetCoordinator {
     chatHistoryService.reset(target);
 
     // DB purge off the EDT.
-    maintenanceExec.submit(() -> {
-      try {
-        chatLogMaintenance.clearTarget(target);
-      } catch (Throwable t) {
-        log.warn("[ircafe] Clear log failed for {}", target, t);
-      }
-    });
+    maintenanceExec.submit(
+        () -> {
+          try {
+            chatLogMaintenance.clearTarget(target);
+          } catch (Throwable t) {
+            log.warn("[ircafe] Clear log failed for {}", target, t);
+          }
+        });
   }
 
   public TargetRef getActiveTarget() {
@@ -198,16 +199,17 @@ public class TargetCoordinator {
   }
 
   /**
-   * Passive hostmask capture: when we observe a user's hostmask from a server prefix, enrich
-   * the cached roster so ignore markers can reflect hostmask-based ignores even if NAMES
-   * didn't provide user@host.
+   * Passive hostmask capture: when we observe a user's hostmask from a server prefix, enrich the
+   * cached roster so ignore markers can reflect hostmask-based ignores even if NAMES didn't provide
+   * user@host.
    */
   public void onUserHostmaskObserved(String serverId, IrcEvent.UserHostmaskObserved ev) {
     if (ev == null) return;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    java.util.Set<String> changedChannels = userListStore.updateHostmaskAcrossChannels(sid, ev.nick(), ev.hostmask());
+    java.util.Set<String> changedChannels =
+        userListStore.updateHostmaskAcrossChannels(sid, ev.nick(), ev.hostmask());
     if (changedChannels.isEmpty()) return;
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
@@ -254,9 +256,14 @@ public class TargetCoordinator {
     if (sid.isEmpty()) return;
 
     String msg = ev.awayMessage();
-    java.util.Set<String> changedChannels = userListStore.updateAwayStateAcrossChannels(sid, ev.nick(), ev.awayState(), msg);
+    java.util.Set<String> changedChannels =
+        userListStore.updateAwayStateAcrossChannels(sid, ev.nick(), ev.awayState(), msg);
     if (changedChannels.isEmpty()) {
-      log.debug("Away state observed but no roster entries changed: serverId={} nick={} state={}", sid, ev.nick(), ev.awayState());
+      log.debug(
+          "Away state observed but no roster entries changed: serverId={} nick={} state={}",
+          sid,
+          ev.nick(),
+          ev.awayState());
       return;
     }
     if (activeTarget != null
@@ -272,10 +279,16 @@ public class TargetCoordinator {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
-    java.util.Set<String> changedChannels = userListStore.updateAccountAcrossChannels(sid, ev.nick(), ev.accountState(), ev.accountName());
+    java.util.Set<String> changedChannels =
+        userListStore.updateAccountAcrossChannels(
+            sid, ev.nick(), ev.accountState(), ev.accountName());
     if (changedChannels.isEmpty()) {
-      log.debug("Account state observed but no roster entries changed: serverId={} nick={} state={} account={}",
-          sid, ev.nick(), ev.accountState(), ev.accountName());
+      log.debug(
+          "Account state observed but no roster entries changed: serverId={} nick={} state={} account={}",
+          sid,
+          ev.nick(),
+          ev.accountState(),
+          ev.accountName());
       return;
     }
 
@@ -300,7 +313,8 @@ public class TargetCoordinator {
     String nick = Objects.toString(ev.nick(), "").trim();
     if (nick.isEmpty()) return false;
 
-    java.util.Set<String> changedChannels = userListStore.updateRealNameAcrossChannels(sid, nick, ev.realName());
+    java.util.Set<String> changedChannels =
+        userListStore.updateRealNameAcrossChannels(sid, nick, ev.realName());
     if (activeTarget != null
         && Objects.equals(activeTarget.serverId(), sid)
         && activeTarget.isChannel()
@@ -311,9 +325,7 @@ public class TargetCoordinator {
     return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
   }
 
-  /**
-   * Channel targets where this nick is currently present in our cached roster for the server.
-   */
+  /** Channel targets where this nick is currently present in our cached roster for the server. */
   public List<TargetRef> sharedChannelTargetsForNick(String serverId, String nick) {
     String sid = Objects.toString(serverId, "").trim();
     String n = Objects.toString(nick, "").trim();
@@ -331,7 +343,6 @@ public class TargetCoordinator {
     out.sort(Comparator.comparing(TargetRef::key));
     return List.copyOf(out);
   }
-
 
   public void refreshInputEnabledForActiveTarget() {
     if (activeTarget == null) {
@@ -375,11 +386,10 @@ public class TargetCoordinator {
 
       if (connectionCoordinator.isConnected(sid)) {
         disposables.add(
-            irc.partChannel(sid, target.target()).subscribe(
-                () -> ui.appendStatus(status, "(part)", "Left " + target.target()),
-                err -> ui.appendError(status, "(part-error)", String.valueOf(err))
-            )
-        );
+            irc.partChannel(sid, target.target())
+                .subscribe(
+                    () -> ui.appendStatus(status, "(part)", "Left " + target.target()),
+                    err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
       } else {
         ui.appendStatus(status, "(ui)", "Closed " + target.target());
       }
@@ -435,6 +445,8 @@ public class TargetCoordinator {
       statusBarChannel = "AssertJ Swing";
     } else if (target.isApplicationJhiccup()) {
       statusBarChannel = "jHiccup";
+    } else if (target.isApplicationTerminal()) {
+      statusBarChannel = "Terminal";
     } else if (target.isLogViewer()) {
       statusBarChannel = "Log Viewer";
     } else if (target.isInterceptor()) {
@@ -446,119 +458,126 @@ public class TargetCoordinator {
     if (target.isChannel()) {
       List<IrcEvent.NickInfo> cached = userListStore.get(target.serverId(), target.target());
       ui.setUsersNicks(cached);
-      ui.setStatusBarCounts(cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
+      ui.setStatusBarCounts(
+          cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
       maybeRequestMissingHostmasks(target.serverId(), target.target(), cached);
       updateEnrichmentFromRoster(target.serverId(), target.target(), cached);
       if (cached.isEmpty() && connectionCoordinator.isConnected(target.serverId())) {
         disposables.add(
-            irc.requestNames(target.serverId(), target.target()).subscribe(
-                () -> {},
-                err -> ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))
-            )
-        );
+            irc.requestNames(target.serverId(), target.target())
+                .subscribe(
+                    () -> {},
+                    err ->
+                        ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))));
       }
     } else {
       ui.setStatusBarCounts(0, 0);
       ui.setUsersNicks(List.of());
     }
-    irc.currentNick(target.serverId()).ifPresent(nick -> ui.setChatCurrentNick(target.serverId(), nick));
+    irc.currentNick(target.serverId())
+        .ifPresent(nick -> ui.setChatCurrentNick(target.serverId(), nick));
 
     ui.clearUnread(target);
     refreshInputEnabledForActiveTarget();
   }
 
+  private void updateEnrichmentFromRoster(
+      String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    userInfoEnrichmentService.setRosterSnapshot(sid, userListStore.getServerNicks(sid));
 
-  private void updateEnrichmentFromRoster(String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
-  String sid = Objects.toString(serverId, "").trim();
-  if (sid.isEmpty()) return;
-  userInfoEnrichmentService.setRosterSnapshot(sid, userListStore.getServerNicks(sid));
+    if (nicks == null || nicks.isEmpty()) return;
 
-  if (nicks == null || nicks.isEmpty()) return;
+    boolean isActiveChannel =
+        activeTarget != null
+            && Objects.equals(activeTarget.serverId(), sid)
+            && activeTarget.isChannel()
+            && activeTarget.matches(Objects.toString(channel, "").trim());
 
-  boolean isActiveChannel = activeTarget != null
-      && Objects.equals(activeTarget.serverId(), sid)
-      && activeTarget.isChannel()
-      && activeTarget.matches(Objects.toString(channel, "").trim());
+    java.util.ArrayList<String> userhostCandidates = new java.util.ArrayList<>();
+    java.util.ArrayList<String> whoisUnknownAccountCandidates = new java.util.ArrayList<>();
 
-  java.util.ArrayList<String> userhostCandidates = new java.util.ArrayList<>();
-  java.util.ArrayList<String> whoisUnknownAccountCandidates = new java.util.ArrayList<>();
+    String self = irc.currentNick(sid).orElse("");
 
-  String self = irc.currentNick(sid).orElse("");
+    for (IrcEvent.NickInfo ni : nicks) {
+      if (ni == null) continue;
+      String nick = Objects.toString(ni.nick(), "").trim();
+      if (nick.isEmpty()) continue;
+      if (!self.isBlank() && Objects.equals(self, nick)) continue;
 
-  for (IrcEvent.NickInfo ni : nicks) {
-    if (ni == null) continue;
-    String nick = Objects.toString(ni.nick(), "").trim();
-    if (nick.isEmpty()) continue;
-    if (!self.isBlank() && Objects.equals(self, nick)) continue;
+      boolean missingHostmask = !isUsefulHostmask(Objects.toString(ni.hostmask(), "").trim());
+      boolean missingAway = ni.awayState() == IrcEvent.AwayState.UNKNOWN;
+      boolean missingAccount = ni.accountState() == IrcEvent.AccountState.UNKNOWN;
 
-    boolean missingHostmask = !isUsefulHostmask(Objects.toString(ni.hostmask(), "").trim());
-    boolean missingAway = ni.awayState() == IrcEvent.AwayState.UNKNOWN;
-    boolean missingAccount = ni.accountState() == IrcEvent.AccountState.UNKNOWN;
-
-    if (missingHostmask || missingAway) {
-      userhostCandidates.add(nick);
-    }
-    if (isActiveChannel && missingAccount) {
-      whoisUnknownAccountCandidates.add(nick);
-    }
-  }
-
-  boolean whoxForAccountEnabled = isActiveChannel && userInfoEnrichmentService.shouldUseWhoxForChannelScan(sid);
-  boolean wantWhoxForAccount = whoxForAccountEnabled
-      && !whoisUnknownAccountCandidates.isEmpty()
-      && shouldWhoChannelScan(nicks.size(), whoisUnknownAccountCandidates.size());
-
-  boolean wantWhoChannelForUserhost = isActiveChannel && !userhostCandidates.isEmpty()
-      && shouldWhoChannelScan(nicks.size(), userhostCandidates.size());
-
-  if (wantWhoxForAccount || wantWhoChannelForUserhost) {
-    userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, channel);
-  } else if (!userhostCandidates.isEmpty()) {
-    userInfoEnrichmentService.enqueueUserhost(sid, userhostCandidates);
-  }
-
-  if (whoisUnknownAccountCandidates.isEmpty()) return;
-
-  if (wantWhoxForAccount) return;
-  final int MAX_WHOIS_ENQUEUE = 10;
-  final int MIN_WHOIS_TRICKLE = 2;
-  final java.time.Duration RECENT_WINDOW = java.time.Duration.ofMinutes(30);
-  java.time.Instant now = java.time.Instant.now();
-
-  java.util.HashMap<String, java.time.Instant> lastByNick = new java.util.HashMap<>();
-  java.util.ArrayList<String> recent = new java.util.ArrayList<>();
-  java.util.ArrayList<String> other = new java.util.ArrayList<>();
-
-  for (String nick : whoisUnknownAccountCandidates) {
-    java.time.Instant last = userInfoEnrichmentService.lastActiveAt(sid, nick);
-    if (last != null) {
-      lastByNick.put(nick, last);
-      if (java.time.Duration.between(last, now).compareTo(RECENT_WINDOW) <= 0) {
-        recent.add(nick);
-        continue;
+      if (missingHostmask || missingAway) {
+        userhostCandidates.add(nick);
+      }
+      if (isActiveChannel && missingAccount) {
+        whoisUnknownAccountCandidates.add(nick);
       }
     }
-    other.add(nick);
-  }
 
-  recent.sort((a, b) -> lastByNick.get(b).compareTo(lastByNick.get(a)));
+    boolean whoxForAccountEnabled =
+        isActiveChannel && userInfoEnrichmentService.shouldUseWhoxForChannelScan(sid);
+    boolean wantWhoxForAccount =
+        whoxForAccountEnabled
+            && !whoisUnknownAccountCandidates.isEmpty()
+            && shouldWhoChannelScan(nicks.size(), whoisUnknownAccountCandidates.size());
 
-  java.util.ArrayList<String> selected = new java.util.ArrayList<>(MAX_WHOIS_ENQUEUE);
-  for (String nick : recent) {
-    if (selected.size() >= MAX_WHOIS_ENQUEUE) break;
-    selected.add(nick);
-  }
-  for (String nick : other) {
-    if (selected.size() >= MAX_WHOIS_ENQUEUE) break;
-    if (selected.size() >= MIN_WHOIS_TRICKLE && !recent.isEmpty()) break;
-    selected.add(nick);
-    if (selected.size() >= MIN_WHOIS_TRICKLE && recent.isEmpty()) break;
-  }
+    boolean wantWhoChannelForUserhost =
+        isActiveChannel
+            && !userhostCandidates.isEmpty()
+            && shouldWhoChannelScan(nicks.size(), userhostCandidates.size());
 
-  if (!selected.isEmpty()) {
-    userInfoEnrichmentService.enqueueWhoisPrioritized(sid, selected);
+    if (wantWhoxForAccount || wantWhoChannelForUserhost) {
+      userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, channel);
+    } else if (!userhostCandidates.isEmpty()) {
+      userInfoEnrichmentService.enqueueUserhost(sid, userhostCandidates);
+    }
+
+    if (whoisUnknownAccountCandidates.isEmpty()) return;
+
+    if (wantWhoxForAccount) return;
+    final int MAX_WHOIS_ENQUEUE = 10;
+    final int MIN_WHOIS_TRICKLE = 2;
+    final java.time.Duration RECENT_WINDOW = java.time.Duration.ofMinutes(30);
+    java.time.Instant now = java.time.Instant.now();
+
+    java.util.HashMap<String, java.time.Instant> lastByNick = new java.util.HashMap<>();
+    java.util.ArrayList<String> recent = new java.util.ArrayList<>();
+    java.util.ArrayList<String> other = new java.util.ArrayList<>();
+
+    for (String nick : whoisUnknownAccountCandidates) {
+      java.time.Instant last = userInfoEnrichmentService.lastActiveAt(sid, nick);
+      if (last != null) {
+        lastByNick.put(nick, last);
+        if (java.time.Duration.between(last, now).compareTo(RECENT_WINDOW) <= 0) {
+          recent.add(nick);
+          continue;
+        }
+      }
+      other.add(nick);
+    }
+
+    recent.sort((a, b) -> lastByNick.get(b).compareTo(lastByNick.get(a)));
+
+    java.util.ArrayList<String> selected = new java.util.ArrayList<>(MAX_WHOIS_ENQUEUE);
+    for (String nick : recent) {
+      if (selected.size() >= MAX_WHOIS_ENQUEUE) break;
+      selected.add(nick);
+    }
+    for (String nick : other) {
+      if (selected.size() >= MAX_WHOIS_ENQUEUE) break;
+      if (selected.size() >= MIN_WHOIS_TRICKLE && !recent.isEmpty()) break;
+      selected.add(nick);
+      if (selected.size() >= MIN_WHOIS_TRICKLE && recent.isEmpty()) break;
+    }
+
+    if (!selected.isEmpty()) {
+      userInfoEnrichmentService.enqueueWhoisPrioritized(sid, selected);
+    }
   }
-}
 
   private static boolean shouldWhoChannelScan(int rosterSize, int missingCount) {
     if (rosterSize <= 0) return false;
@@ -570,10 +589,11 @@ public class TargetCoordinator {
   }
 
   /**
-   *
-   * <p>This is deliberately conservative and relies on {@link UserhostQueryService} for anti-flood behavior.
+   * This is deliberately conservative and relies on {@link UserhostQueryService} for anti-flood
+   * behavior.
    */
-  private void maybeRequestMissingHostmasks(String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
+  private void maybeRequestMissingHostmasks(
+      String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     if (!connectionCoordinator.isConnected(sid)) return;
@@ -644,27 +664,30 @@ public class TargetCoordinator {
     if (!Objects.equals(at.target(), channel)) return;
     if (!usersRefreshScheduled.compareAndSet(false, true)) return;
 
-    usersRefreshExec.schedule(() -> {
-      try {
-        TargetRef cur = activeTarget;
-        if (cur == null || !cur.isChannel()) return;
-        if (!Objects.equals(cur.serverId(), serverId)) return;
-        if (!Objects.equals(cur.target(), channel)) return;
+    usersRefreshExec.schedule(
+        () -> {
+          try {
+            TargetRef cur = activeTarget;
+            if (cur == null || !cur.isChannel()) return;
+            if (!Objects.equals(cur.serverId(), serverId)) return;
+            if (!Objects.equals(cur.target(), channel)) return;
 
-        List<IrcEvent.NickInfo> cached = userListStore.get(serverId, channel);
-        ui.setUsersNicks(cached);
+            List<IrcEvent.NickInfo> cached = userListStore.get(serverId, channel);
+            ui.setUsersNicks(cached);
 
-        int ops = 0;
-        for (IrcEvent.NickInfo n : cached) {
-          if (isOperatorLike(n)) ops++;
-        }
-        ui.setStatusBarCounts(cached.size(), ops);
-      } catch (Throwable t) {
-        log.debug("Failed to refresh users list (coalesced)", t);
-      } finally {
-        usersRefreshScheduled.set(false);
-      }
-    }, 200, TimeUnit.MILLISECONDS);
+            int ops = 0;
+            for (IrcEvent.NickInfo n : cached) {
+              if (isOperatorLike(n)) ops++;
+            }
+            ui.setStatusBarCounts(cached.size(), ops);
+          } catch (Throwable t) {
+            log.debug("Failed to refresh users list (coalesced)", t);
+          } finally {
+            usersRefreshScheduled.set(false);
+          }
+        },
+        200,
+        TimeUnit.MILLISECONDS);
   }
 
   private void ensureTargetExists(TargetRef target) {
@@ -675,9 +698,10 @@ public class TargetCoordinator {
    * Decide whether an inbound private event may auto-open a user-closed PM target.
    *
    * <p>If the user explicitly closed a PM:
+   *
    * <ul>
-   *   <li>self-authored events do <em>not</em> reopen it</li>
-   *   <li>peer-authored events do reopen it (and clear the closed flag)</li>
+   *   <li>self-authored events do <em>not</em> reopen it
+   *   <li>peer-authored events do reopen it (and clear the closed flag)
    * </ul>
    */
   public boolean allowPrivateAutoOpenFromInbound(TargetRef target, boolean fromSelf) {
@@ -710,14 +734,15 @@ public class TargetCoordinator {
     if (TargetRef.APPLICATION_SERVER_ID.equals(serverId)) {
       return "Application";
     }
-    return serverRegistry.find(serverId)
+    return serverRegistry
+        .find(serverId)
         .map(s -> serverId + "  (" + s.host() + ":" + s.port() + ")")
         .orElse(serverId);
   }
 
   /**
-   * pircbotx exposes channel privilege via a prefix (e.g. "@" op, "+" voice).
-   * We treat ops as @ (op), & (admin), ~ (owner).
+   * pircbotx exposes channel privilege via a prefix (e.g. "@" op, "+" voice). We treat ops as @
+   * (op), & (admin), ~ (owner).
    */
   private static boolean isOperatorLike(IrcEvent.NickInfo n) {
     if (n == null) return false;

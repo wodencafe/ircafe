@@ -6,9 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-/**
- * Playback cursor based on the embedded chat log DB.
- */
+/** Playback cursor based on the embedded chat log DB. */
 @Component
 @Primary
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")

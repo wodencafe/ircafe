@@ -6,18 +6,16 @@ import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import dorkbox.systemTray.MenuItem;
 import dorkbox.systemTray.SystemTray;
-import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.annotation.PreDestroy;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-import javax.swing.SwingUtilities;
 
-/**
- * System tray integration (HexChat-style options).
- */
+/** System tray integration (HexChat-style options). */
 @Component
 @Lazy
 public class TrayService {
@@ -42,8 +40,7 @@ public class TrayService {
       ObjectProvider<MainFrame> frameProvider,
       ObjectProvider<TrayNotificationService> trayNotificationServiceProvider,
       ApplicationShutdownCoordinator shutdownCoordinator,
-      RuntimeConfigStore runtimeConfigStore
-  ) {
+      RuntimeConfigStore runtimeConfigStore) {
     this.settingsBus = settingsBus;
     this.frameProvider = frameProvider;
     this.trayNotificationServiceProvider = trayNotificationServiceProvider;
@@ -94,12 +91,11 @@ public class TrayService {
     return exitRequested.get();
   }
 
-  /**
-   * Applies current tray preferences: install/remove tray and keep the app reachable.
-   */
+  /** Applies current tray preferences: install/remove tray and keep the app reachable. */
   public void applySettings() {
     if (!isEnabled()) {
-      // If the window is currently hidden (tray entry point), bring it back before removing the tray.
+      // If the window is currently hidden (tray entry point), bring it back before removing the
+      // tray.
       MainFrame frame = frameProvider.getIfAvailable();
       if (frame != null && !frame.isVisible()) {
         try {
@@ -117,9 +113,7 @@ public class TrayService {
     updateShowHideMenuItemLabel();
   }
 
-  /**
-   * Installs the tray icon once. Safe to call repeatedly.
-   */
+  /** Installs the tray icon once. Safe to call repeatedly. */
   public void installIfEnabled() {
     if (!isEnabled()) {
       return;
@@ -140,7 +134,11 @@ public class TrayService {
       tray.setImage(TrayIconFactory.createDefaultTrayIconPngStream());
 
       // Keep the menu intentionally simple (HexChat-ish)
-      showHideItem = tray.getMenu().add(new MenuItem("Show IRCafe", e -> SwingUtilities.invokeLater(this::toggleMainWindow)));
+      showHideItem =
+          tray.getMenu()
+              .add(
+                  new MenuItem(
+                      "Show IRCafe", e -> SwingUtilities.invokeLater(this::toggleMainWindow)));
       tray.getMenu().add(new MenuItem("Exit", e -> SwingUtilities.invokeLater(this::requestExit)));
       systemTray = tray;
       updateShowHideMenuItemLabel();
@@ -202,9 +200,7 @@ public class TrayService {
     }
   }
 
-  /**
-   * Called by the frame close handler when we hide-to-tray.
-   */
+  /** Called by the frame close handler when we hide-to-tray. */
   public void maybeShowCloseBalloon() {
     SystemTray tray = this.systemTray;
     if (tray == null) return;
@@ -221,7 +217,9 @@ public class TrayService {
 
     try {
       TrayNotificationService notificationService =
-          trayNotificationServiceProvider != null ? trayNotificationServiceProvider.getIfAvailable() : null;
+          trayNotificationServiceProvider != null
+              ? trayNotificationServiceProvider.getIfAvailable()
+              : null;
       if (notificationService != null) {
         notificationService.notifyCloseToTrayHint();
       }
@@ -233,15 +231,17 @@ public class TrayService {
     try {
       tray.setStatus("Still running in tray");
       java.util.Timer timer = new java.util.Timer("tray-status-clear", true);
-      timer.schedule(new java.util.TimerTask() {
-        @Override
-        public void run() {
-          try {
-            tray.setStatus(null);
-          } catch (Throwable ignored) {
-          }
-        }
-      }, 8_000L);
+      timer.schedule(
+          new java.util.TimerTask() {
+            @Override
+            public void run() {
+              try {
+                tray.setStatus(null);
+              } catch (Throwable ignored) {
+              }
+            }
+          },
+          8_000L);
     } catch (Throwable ignored) {
     }
   }

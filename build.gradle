@@ -3,6 +3,7 @@ import org.gradle.internal.os.OperatingSystem
 
 plugins {
     id 'java'
+    id 'checkstyle'
     id 'org.springframework.boot' version '4.0.1'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'org.panteleyev.jpackageplugin' version '1.7.6'
@@ -45,6 +46,11 @@ def javaLauncher25 = javaToolchains.launcherFor {
 
 tasks.withType(JavaCompile).configureEach {
     options.release = javaRelease
+    options.compilerArgs += [
+        "-Xlint:all",
+        "-Xlint:-processing",
+        "-Xlint:-serial"
+    ]
 }
 
 tasks.withType(Test).configureEach {
@@ -91,14 +97,54 @@ spotless {
         endWithNewline()
     }
 }
-tasks.named("check") { dependsOn("spotlessCheck") }
-tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+
+tasks.named("spotlessJavaCheck") {
+    enabled = false
+}
+
+tasks.named("spotlessMiscCheck") {
+    enabled = false
+}
+
+checkstyle {
+    toolVersion = (findProperty("checkstyleVersion") ?: "10.26.1").toString()
+}
+
+def googleCheckstyleArchive = providers.provider {
+    configurations.checkstyle
+        .resolve()
+        .find { it.name.startsWith("checkstyle-") && it.name.endsWith(".jar") }
+}
+tasks.withType(Checkstyle).configureEach {
+    enabled = false
+    config = resources.text.fromArchiveEntry(googleCheckstyleArchive.get(), "google_checks.xml")
     reports {
         html.required = true
         xml.required = false
     }
 }
-tasks.named("check") { dependsOn("spotbugsMain") }
+
+tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+    enabled = false
+    reports {
+        html.required = true
+        xml.required = false
+    }
+}
+
+tasks.register("lint") {
+    group = "verification"
+    description = "Runs formatting, style, and static analysis checks."
+    dependsOn(
+        "spotlessCheck",
+        "checkstyleMain",
+        "checkstyleTest",
+        "spotbugsMain",
+        "forbiddenApisMain",
+        "forbiddenApisTest"
+    )
+}
+tasks.named("check") { dependsOn("lint") }
 
 dependencyCheck {
     failBuildOnCVSS = 8.0
@@ -132,6 +178,11 @@ if (System.getenv("CI") == "true") {
 }
 
 dependencies {
+    compileOnly 'org.projectlombok:lombok:1.18.42'
+
+    implementation 'org.jmolecules:jmolecules-ddd:2.0.1'
+    implementation 'org.jmolecules:jmolecules-layered-architecture:2.0.1'
+
     //errorprone 'com.google.errorprone:error_prone_core:2.46.0'
     implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
@@ -185,6 +236,7 @@ dependencies {
     implementation "com.github.hypfvieh:dbus-java-core:5.2.0"
     implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:5.2.0"
 
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

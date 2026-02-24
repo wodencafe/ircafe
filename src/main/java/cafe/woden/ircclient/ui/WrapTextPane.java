@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import java.awt.*;
 import javax.swing.*;
 import javax.swing.SwingUtilities;
 import javax.swing.text.Caret;
@@ -9,7 +10,6 @@ import javax.swing.text.ParagraphView;
 import javax.swing.text.StyledEditorKit;
 import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
-import java.awt.*;
 
 /** JTextPane that word/line wraps when placed inside a JScrollPane. */
 public class WrapTextPane extends JTextPane {

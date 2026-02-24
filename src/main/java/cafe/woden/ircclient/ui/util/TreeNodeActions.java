@@ -12,10 +12,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
-/**
- * Reusable "node move/close" controller for a {@link JTree}.
- *
- */
+/** Reusable "node move/close" controller for a {@link JTree}. */
 public final class TreeNodeActions<T> implements AutoCloseable {
 
   private final JTree tree;
@@ -35,34 +32,37 @@ public final class TreeNodeActions<T> implements AutoCloseable {
       DefaultTreeModel model,
       TreeNodeReorderPolicy policy,
       Function<DefaultMutableTreeNode, T> closePayloadExtractor,
-      Consumer<T> closeHandler
-  ) {
+      Consumer<T> closeHandler) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.model = Objects.requireNonNull(model, "model");
     this.policy = Objects.requireNonNull(policy, "policy");
-    this.closePayloadExtractor = Objects.requireNonNull(closePayloadExtractor, "closePayloadExtractor");
+    this.closePayloadExtractor =
+        Objects.requireNonNull(closePayloadExtractor, "closePayloadExtractor");
     this.closeHandler = Objects.requireNonNull(closeHandler, "closeHandler");
 
-    this.moveUpAction = new AbstractAction("Move Node Up") {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        moveUp();
-      }
-    };
+    this.moveUpAction =
+        new AbstractAction("Move Node Up") {
+          @Override
+          public void actionPerformed(java.awt.event.ActionEvent e) {
+            moveUp();
+          }
+        };
 
-    this.moveDownAction = new AbstractAction("Move Node Down") {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        moveDown();
-      }
-    };
+    this.moveDownAction =
+        new AbstractAction("Move Node Down") {
+          @Override
+          public void actionPerformed(java.awt.event.ActionEvent e) {
+            moveDown();
+          }
+        };
 
-    this.closeAction = new AbstractAction("Close Node") {
-      @Override
-      public void actionPerformed(java.awt.event.ActionEvent e) {
-        closeSelected();
-      }
-    };
+    this.closeAction =
+        new AbstractAction("Close Node") {
+          @Override
+          public void actionPerformed(java.awt.event.ActionEvent e) {
+            closeSelected();
+          }
+        };
 
     this.selectionListener = e -> refreshEnabledState();
     this.tree.addTreeSelectionListener(selectionListener);

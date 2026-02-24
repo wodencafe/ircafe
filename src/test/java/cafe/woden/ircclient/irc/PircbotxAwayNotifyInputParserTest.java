@@ -21,7 +21,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -49,7 +50,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -67,7 +69,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -86,7 +89,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -115,7 +119,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -133,7 +138,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -152,7 +158,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -172,7 +179,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -198,7 +206,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -225,7 +234,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -253,7 +263,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -280,7 +291,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -329,7 +341,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     UserHostmask alice = source("alice");
     parser.processCommand(
@@ -382,7 +395,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircBotX bot = dummyBot();
     bot.getUserChannelDao().createChannel("#ircafe");
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            bot, "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -396,7 +410,7 @@ class PircbotxAwayNotifyInputParserTest {
         out.stream()
             .map(ServerIrcEvent::event)
             .anyMatch(
-                    e ->
+                e ->
                     e instanceof IrcEvent.UserAccountStateObserved ac
                         && "alice".equals(ac.nick())
                         && IrcEvent.AccountState.LOGGED_IN == ac.accountState()
@@ -405,7 +419,7 @@ class PircbotxAwayNotifyInputParserTest {
         out.stream()
             .map(ServerIrcEvent::event)
             .anyMatch(
-                    e ->
+                e ->
                     e instanceof IrcEvent.UserSetNameObserved sn
                         && "alice".equals(sn.nick())
                         && "Alice Liddell".equals(sn.realName())));
@@ -416,7 +430,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -475,7 +490,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -501,7 +517,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",
@@ -527,7 +544,8 @@ class PircbotxAwayNotifyInputParserTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",

@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound MODE-related slash commands (/mode, /op, /deop, /voice, /devoice, /ban, /unban).
  *
- * <p>This is extracted from {@code IrcMediator} to keep the mediator focused on wiring and inbound routing.
- * Behavior is intended to be preserved.
+ * <p>This is extracted from {@code IrcMediator} to keep the mediator focused on wiring and inbound
+ * routing. Behavior is intended to be preserved.
  */
 @Component
 public class OutboundModeCommandService {
@@ -65,16 +65,13 @@ public class OutboundModeCommandService {
       channel = at.target();
       modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
     } else {
-      ui.appendStatus(at, "(mode)",
-          "Usage: /mode <#channel> [modes] [args...]");
-      ui.appendStatus(at, "(mode)",
-          "Tip: from a channel tab you can use /mode +o nick");
+      ui.appendStatus(at, "(mode)", "Usage: /mode <#channel> [modes] [args...]");
+      ui.appendStatus(at, "(mode)", "Tip: from a channel tab you can use /mode +o nick");
       return;
     }
 
     if (channel == null || channel.isBlank()) {
-      ui.appendStatus(at, "(mode)",
-          "Usage: /mode <#channel> [modes] [args...]");
+      ui.appendStatus(at, "(mode)", "Usage: /mode <#channel> [modes] [args...]");
       return;
     }
 
@@ -83,9 +80,12 @@ public class OutboundModeCommandService {
       return;
     }
 
-    String line = "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
+    String line =
+        "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
     TargetRef out =
-        at.isChannel() ? new TargetRef(at.serverId(), channel) : new TargetRef(at.serverId(), "status");
+        at.isChannel()
+            ? new TargetRef(at.serverId(), channel)
+            : new TargetRef(at.serverId(), "status");
 
     if (modeSpec == null || modeSpec.isBlank()) {
       modeRoutingState.putPendingModeTarget(at.serverId(), channel, out);
@@ -96,37 +96,52 @@ public class OutboundModeCommandService {
     ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line()).subscribe(
-            () -> {},
-            err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))));
+        irc.sendRaw(at.serverId(), prepared.line())
+            .subscribe(
+                () -> {},
+                err ->
+                    ui.appendError(
+                        new TargetRef(at.serverId(), "status"),
+                        "(mode-error)",
+                        String.valueOf(err))));
   }
 
   public void handleOp(CompositeDisposable disposables, String channel, List<String> nicks) {
-    handleSimpleNickMode(disposables, channel, nicks, "+o", "Usage: /op [#channel] <nick> [nick...]");
+    handleSimpleNickMode(
+        disposables, channel, nicks, "+o", "Usage: /op [#channel] <nick> [nick...]");
   }
 
   public void handleDeop(CompositeDisposable disposables, String channel, List<String> nicks) {
-    handleSimpleNickMode(disposables, channel, nicks, "-o", "Usage: /deop [#channel] <nick> [nick...]");
+    handleSimpleNickMode(
+        disposables, channel, nicks, "-o", "Usage: /deop [#channel] <nick> [nick...]");
   }
 
   public void handleVoice(CompositeDisposable disposables, String channel, List<String> nicks) {
-    handleSimpleNickMode(disposables, channel, nicks, "+v", "Usage: /voice [#channel] <nick> [nick...]");
+    handleSimpleNickMode(
+        disposables, channel, nicks, "+v", "Usage: /voice [#channel] <nick> [nick...]");
   }
 
   public void handleDevoice(CompositeDisposable disposables, String channel, List<String> nicks) {
-    handleSimpleNickMode(disposables, channel, nicks, "-v", "Usage: /devoice [#channel] <nick> [nick...]");
+    handleSimpleNickMode(
+        disposables, channel, nicks, "-v", "Usage: /devoice [#channel] <nick> [nick...]");
   }
 
-  public void handleBan(CompositeDisposable disposables, String channel, List<String> masksOrNicks) {
+  public void handleBan(
+      CompositeDisposable disposables, String channel, List<String> masksOrNicks) {
     handleBanMode(disposables, channel, masksOrNicks, true);
   }
 
-  public void handleUnban(CompositeDisposable disposables, String channel, List<String> masksOrNicks) {
+  public void handleUnban(
+      CompositeDisposable disposables, String channel, List<String> masksOrNicks) {
     handleBanMode(disposables, channel, masksOrNicks, false);
   }
 
   private void handleSimpleNickMode(
-      CompositeDisposable disposables, String channel, List<String> nicks, String mode, String usage) {
+      CompositeDisposable disposables,
+      String channel,
+      List<String> nicks,
+      String mode,
+      String usage) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mode)", "Select a server first.");
@@ -140,8 +155,7 @@ public class OutboundModeCommandService {
     String ch = resolveChannelOrNull(at, channel);
     if (ch == null) {
       ui.appendStatus(at, "(mode)", usage);
-      ui.appendStatus(at, "(mode)",
-          "Tip: from a channel tab you can omit #channel.");
+      ui.appendStatus(at, "(mode)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
@@ -162,13 +176,19 @@ public class OutboundModeCommandService {
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
-          irc.sendRaw(at.serverId(), prepared.line()).subscribe(
-              () -> {},
-              err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))));
+          irc.sendRaw(at.serverId(), prepared.line())
+              .subscribe(
+                  () -> {},
+                  err ->
+                      ui.appendError(
+                          new TargetRef(at.serverId(), "status"),
+                          "(mode-error)",
+                          String.valueOf(err))));
     }
   }
 
-  private void handleBanMode(CompositeDisposable disposables, String channel, List<String> masksOrNicks, boolean add) {
+  private void handleBanMode(
+      CompositeDisposable disposables, String channel, List<String> masksOrNicks, boolean add) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mode)", "Select a server first.");
@@ -181,15 +201,18 @@ public class OutboundModeCommandService {
 
     String ch = resolveChannelOrNull(at, channel);
     if (ch == null) {
-      ui.appendStatus(at, "(mode)",
+      ui.appendStatus(
+          at,
+          "(mode)",
           "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      ui.appendStatus(at, "(mode)",
-          "Tip: from a channel tab you can omit #channel.");
+      ui.appendStatus(at, "(mode)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
     if (masksOrNicks == null || masksOrNicks.isEmpty()) {
-      ui.appendStatus(at, "(mode)",
+      ui.appendStatus(
+          at,
+          "(mode)",
           "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
       return;
     }
@@ -210,9 +233,14 @@ public class OutboundModeCommandService {
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
-          irc.sendRaw(at.serverId(), prepared.line()).subscribe(
-              () -> {},
-              err -> ui.appendError(new TargetRef(at.serverId(), "status"), "(mode-error)", String.valueOf(err))));
+          irc.sendRaw(at.serverId(), prepared.line())
+              .subscribe(
+                  () -> {},
+                  err ->
+                      ui.appendError(
+                          new TargetRef(at.serverId(), "status"),
+                          "(mode-error)",
+                          String.valueOf(err))));
     }
   }
 
@@ -223,17 +251,13 @@ public class OutboundModeCommandService {
 
     LabeledResponseRoutingState.PreparedRawLine prepared =
         labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
-    String sendLine = (prepared == null || prepared.line() == null || prepared.line().isBlank())
-        ? line
-        : prepared.line();
+    String sendLine =
+        (prepared == null || prepared.line() == null || prepared.line().isBlank())
+            ? line
+            : prepared.line();
     String label = (prepared == null) ? "" : Objects.toString(prepared.label(), "").trim();
     if (!label.isEmpty()) {
-      labeledResponseRoutingState.remember(
-          origin.serverId(),
-          label,
-          origin,
-          line,
-          Instant.now());
+      labeledResponseRoutingState.remember(origin.serverId(), label, origin, line, Instant.now());
     }
     return new PreparedRawLine(sendLine, label);
   }

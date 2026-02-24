@@ -25,8 +25,7 @@ public class ChatLinkPreviewEmbedder {
       UiSettingsBus uiSettings,
       ChatStyles styles,
       LinkPreviewFetchService fetch,
-      ImageFetchService imageFetch
-  ) {
+      ImageFetchService imageFetch) {
     this.uiSettings = uiSettings;
     this.styles = styles;
     this.fetch = fetch;
@@ -45,7 +44,13 @@ public class ChatLinkPreviewEmbedder {
     for (String url : urls) {
       if (count >= MAX_PREVIEWS_PER_MESSAGE) break;
       try {
-        ChatLinkPreviewComponent comp = new ChatLinkPreviewComponent(serverId, url, fetch, imageFetch, uiSettings.get().linkPreviewsCollapsedByDefault());
+        ChatLinkPreviewComponent comp =
+            new ChatLinkPreviewComponent(
+                serverId,
+                url,
+                fetch,
+                imageFetch,
+                uiSettings.get().linkPreviewsCollapsedByDefault());
 
         SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
         a.addAttribute(ChatStyles.ATTR_URL, url);

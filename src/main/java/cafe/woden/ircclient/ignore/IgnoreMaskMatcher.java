@@ -44,9 +44,9 @@ public final class IgnoreMaskMatcher {
   /**
    * Match a nick against any ignore mask.
    *
-   * <p>We treat masks as hostmask patterns; for nick matching we only look at the nick glob
-   * before the '!'. Host-only patterns like "*!ident@host" are ignored here so we don't
-   * accidentally mark everyone.
+   * <p>We treat masks as hostmask patterns; for nick matching we only look at the nick glob before
+   * the '!'. Host-only patterns like "*!ident@host" are ignored here so we don't accidentally mark
+   * everyone.
    */
   public static boolean nickTargetedByAny(List<String> masks, String nick) {
     if (masks == null || masks.isEmpty()) return false;

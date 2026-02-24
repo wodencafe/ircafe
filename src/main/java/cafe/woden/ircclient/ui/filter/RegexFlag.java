@@ -4,5 +4,5 @@ package cafe.woden.ircclient.ui.filter;
 public enum RegexFlag {
   I, // case-insensitive
   M, // multiline
-  S  // dotall
+  S // dotall
 }

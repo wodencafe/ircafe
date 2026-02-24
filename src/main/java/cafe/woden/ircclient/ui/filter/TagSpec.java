@@ -13,12 +13,13 @@ import java.util.regex.PatternSyntaxException;
  * WeeChat-style tag expression matcher.
  *
  * <p>This is intentionally pragmatic and UI-focused. It supports:
+ *
  * <ul>
- *   <li>OR: comma or whitespace</li>
- *   <li>AND: '+' inside a term</li>
- *   <li>Negation: '!tag'</li>
- *   <li>Glob tags: '*' and '?' wildcards</li>
- *   <li>Regex tags: 're:&lt;body&gt;' or '/&lt;body&gt;/i'</li>
+ *   <li>OR: comma or whitespace
+ *   <li>AND: '+' inside a term
+ *   <li>Negation: '!tag'
+ *   <li>Glob tags: '*' and '?' wildcards
+ *   <li>Regex tags: 're:&lt;body&gt;' or '/&lt;body&gt;/i'
  * </ul>
  *
  * <p>Matching is case-insensitive.
@@ -312,8 +313,7 @@ public final class TagSpec {
     }
   }
 
-  private record Clause(boolean negated, Matcher matcher) {
-  }
+  private record Clause(boolean negated, Matcher matcher) {}
 
   private static final class OrTerm {
     private final List<Clause> clauses;

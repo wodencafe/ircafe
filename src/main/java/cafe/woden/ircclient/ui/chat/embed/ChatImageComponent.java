@@ -5,7 +5,6 @@ import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import io.reactivex.rxjava3.disposables.Disposable;
-import java.beans.PropertyChangeListener;
 import java.awt.BorderLayout;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -14,6 +13,7 @@ import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
+import java.beans.PropertyChangeListener;
 import java.net.URI;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -58,26 +58,29 @@ final class ChatImageComponent extends JPanel {
   private Disposable sub;
 
   private boolean settingsListenerInstalled;
-  private final PropertyChangeListener settingsListener = evt -> {
-    if (evt == null) return;
-    if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
-    // Re-render when the user changes max-width, font, etc.
-    SwingUtilities.invokeLater(this::renderForCurrentWidth);
-  };
+  private final PropertyChangeListener settingsListener =
+      evt -> {
+        if (evt == null) return;
+        if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+        // Re-render when the user changes max-width, font, etc.
+        SwingUtilities.invokeLater(this::renderForCurrentWidth);
+      };
 
   private java.awt.Component resizeListeningOn;
   private boolean visibilityListenerInstalled;
-  private final java.awt.event.HierarchyListener visibilityListener = e -> {
-    if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) == 0) return;
-    SwingUtilities.invokeLater(this::syncGifPlaybackState);
-  };
-  private final java.awt.event.ComponentListener resizeListener = new java.awt.event.ComponentAdapter() {
-    @Override
-    public void componentResized(java.awt.event.ComponentEvent e) {
-      // Debounce-ish: schedule one repaint on EDT.
-      SwingUtilities.invokeLater(ChatImageComponent.this::renderForCurrentWidth);
-    }
-  };
+  private final java.awt.event.HierarchyListener visibilityListener =
+      e -> {
+        if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) == 0) return;
+        SwingUtilities.invokeLater(this::syncGifPlaybackState);
+      };
+  private final java.awt.event.ComponentListener resizeListener =
+      new java.awt.event.ComponentAdapter() {
+        @Override
+        public void componentResized(java.awt.event.ComponentEvent e) {
+          // Debounce-ish: schedule one repaint on EDT.
+          SwingUtilities.invokeLater(ChatImageComponent.this::renderForCurrentWidth);
+        }
+      };
 
   private AnimatedGifPlayer gifPlayer;
 
@@ -115,8 +118,8 @@ final class ChatImageComponent extends JPanel {
   }
 
   /**
-   * Called by {@link GifAnimationCoordinator} to enforce "only newest GIF animates".
-   * Must be invoked on the Swing EDT.
+   * Called by {@link GifAnimationCoordinator} to enforce "only newest GIF animates". Must be
+   * invoked on the Swing EDT.
    */
   void setGifAnimationAllowed(boolean allowed) {
     if (this.gifAnimationAllowed == allowed) return;
@@ -138,10 +141,10 @@ final class ChatImageComponent extends JPanel {
 
     card = new JPanel(new BorderLayout());
     card.setOpaque(true);
-    card.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(borderColor()),
-        BorderFactory.createEmptyBorder(8, 8, 8, 8)
-    ));
+    card.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(borderColor()),
+            BorderFactory.createEmptyBorder(8, 8, 8, 8)));
 
     header = buildHeader();
     body = buildBody();
@@ -168,13 +171,14 @@ final class ChatImageComponent extends JPanel {
     collapseBtn.setBorderPainted(false);
     collapseBtn.setContentAreaFilled(false);
     collapseBtn.setMargin(new Insets(0, 0, 0, 0));
-    collapseBtn.addActionListener(e -> {
-      collapsed = !collapsed;
-      applyCollapsedState();
-      if (!collapsed) {
-        renderForCurrentWidth();
-      }
-    });
+    collapseBtn.addActionListener(
+        e -> {
+          collapsed = !collapsed;
+          applyCollapsedState();
+          if (!collapsed) {
+            renderForCurrentWidth();
+          }
+        });
 
     headerTitle = new JLabel(displayTitle(url));
     headerTitle.setToolTipText(url);
@@ -198,14 +202,15 @@ final class ChatImageComponent extends JPanel {
     imageLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     imageLabel.setToolTipText(url);
 
-    imageLabel.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
-          openViewer();
-        }
-      }
-    });
+    imageLabel.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 1) {
+              openViewer();
+            }
+          }
+        });
 
     b.add(imageLabel);
     return b;
@@ -239,45 +244,47 @@ final class ChatImageComponent extends JPanel {
       return;
     }
 
-    sub = fetch.fetch(serverId, url)
-        .observeOn(SwingEdt.scheduler())
-        .subscribe(
-            b -> {
-              bytes = b;
-              try {
-                decoded = ImageDecodeUtil.decode(url, b);
+    sub =
+        fetch
+            .fetch(serverId, url)
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                b -> {
+                  bytes = b;
+                  try {
+                    decoded = ImageDecodeUtil.decode(url, b);
 
-                // Confirm/deny GIF-ness so the coordinator can enforce "only newest GIF animates".
-                if (gifCoordinator != null) {
-                  if (decoded instanceof AnimatedGifDecoded) {
-                    gifCoordinator.registerAnimatedGif(embedSeq, this);
-                  } else {
+                    // Confirm/deny GIF-ness so the coordinator can enforce "only newest GIF
+                    // animates".
+                    if (gifCoordinator != null) {
+                      if (decoded instanceof AnimatedGifDecoded) {
+                        gifCoordinator.registerAnimatedGif(embedSeq, this);
+                      } else {
+                        gifCoordinator.rejectGifHint(embedSeq);
+                      }
+                    }
+
+                    imageLabel.setText("");
+                    if (!collapsed) {
+                      renderForCurrentWidth();
+                    }
+                  } catch (Exception ex) {
+                    decoded = null;
+                    if (gifCoordinator != null) {
+                      gifCoordinator.rejectGifHint(embedSeq);
+                    }
+                    imageLabel.setText("(image decode failed)");
+                    imageLabel.setToolTipText(url + System.lineSeparator() + ex.getMessage());
+                  }
+                },
+                err -> {
+                  decoded = null;
+                  if (gifCoordinator != null) {
                     gifCoordinator.rejectGifHint(embedSeq);
                   }
-                }
-
-                imageLabel.setText("");
-                if (!collapsed) {
-                  renderForCurrentWidth();
-                }
-              } catch (Exception ex) {
-                decoded = null;
-                if (gifCoordinator != null) {
-                  gifCoordinator.rejectGifHint(embedSeq);
-                }
-                imageLabel.setText("(image decode failed)");
-                imageLabel.setToolTipText(url + System.lineSeparator() + ex.getMessage());
-              }
-            },
-            err -> {
-              decoded = null;
-              if (gifCoordinator != null) {
-                gifCoordinator.rejectGifHint(embedSeq);
-              }
-              imageLabel.setText("(image failed to load)");
-              imageLabel.setToolTipText(url + System.lineSeparator() + err.getMessage());
-            }
-        );
+                  imageLabel.setText("(image failed to load)");
+                  imageLabel.setToolTipText(url + System.lineSeparator() + err.getMessage());
+                });
   }
 
   @Override
@@ -288,7 +295,8 @@ final class ChatImageComponent extends JPanel {
     hookResizeListener();
     hookSettingsListener();
 
-    // If Swing re-adds this component during view rebuilds and scrolling, and we haven't loaded yet,
+    // If Swing re-adds this component during view rebuilds and scrolling, and we haven't loaded
+    // yet,
     // (re)start the fetch. (Do NOT cancel on removeNotify; see removeNotify below.)
     if (bytes == null || bytes.length == 0) {
       if (sub == null || sub.isDisposed()) {
@@ -346,7 +354,10 @@ final class ChatImageComponent extends JPanel {
     int maxH = (capH > 0) ? capH : 0;
 
     // Avoid re-scaling on every tiny jitter.
-    if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0 && maxH == lastMaxH && animateGifs == lastAnimateSetting) {
+    if (Math.abs(maxW - lastMaxW) < 4
+        && lastMaxW > 0
+        && maxH == lastMaxH
+        && animateGifs == lastAnimateSetting) {
       return;
     }
     lastMaxW = maxW;
@@ -407,7 +418,8 @@ final class ChatImageComponent extends JPanel {
   }
 
   private void hookResizeListener() {
-    resizeListeningOn = EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
+    resizeListeningOn =
+        EmbedHostLayoutUtil.hookResizeListener(this, resizeListener, resizeListeningOn);
   }
 
   private void hookVisibilityListener() {
@@ -466,31 +478,35 @@ final class ChatImageComponent extends JPanel {
     openBrowser.addActionListener(e -> openInBrowser());
 
     JMenuItem copyUrl = new JMenuItem("Copy URL");
-    copyUrl.addActionListener(e -> {
-      Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
-    });
+    copyUrl.addActionListener(
+        e -> {
+          Toolkit.getDefaultToolkit()
+              .getSystemClipboard()
+              .setContents(new StringSelection(url), null);
+        });
 
     menu.add(view);
     menu.add(openBrowser);
     menu.add(copyUrl);
 
-    target.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mousePressed(java.awt.event.MouseEvent e) {
-        if (e.isPopupTrigger()) {
-          PopupMenuThemeSupport.prepareForDisplay(menu);
-          menu.show(target, e.getX(), e.getY());
-        }
-      }
+    target.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mousePressed(java.awt.event.MouseEvent e) {
+            if (e.isPopupTrigger()) {
+              PopupMenuThemeSupport.prepareForDisplay(menu);
+              menu.show(target, e.getX(), e.getY());
+            }
+          }
 
-      @Override
-      public void mouseReleased(java.awt.event.MouseEvent e) {
-        if (e.isPopupTrigger()) {
-          PopupMenuThemeSupport.prepareForDisplay(menu);
-          menu.show(target, e.getX(), e.getY());
-        }
-      }
-    });
+          @Override
+          public void mouseReleased(java.awt.event.MouseEvent e) {
+            if (e.isPopupTrigger()) {
+              PopupMenuThemeSupport.prepareForDisplay(menu);
+              menu.show(target, e.getX(), e.getY());
+            }
+          }
+        });
   }
 
   private void openInBrowser() {

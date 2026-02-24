@@ -8,8 +8,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Pretty-prints IRC MODE changes into human-friendly sentences.
  *
- * <p>Input format is typically something like "+o nick", "+b mask", "+ov nick1 nick2", etc.
- * If a raw line sneaks through, we try to recover the mode section.
+ * <p>Input format is typically something like "+o nick", "+b mask", "+ov nick1 nick2", etc. If a
+ * raw line sneaks through, we try to recover the mode section.
  */
 final class ModePrettyPrinter {
 

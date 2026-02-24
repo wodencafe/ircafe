@@ -5,10 +5,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.Timer;
 
-/**
- * Lightweight Swing Timer-based player for pre-decoded GIF frames.
- *
- */
+/** Lightweight Swing Timer-based player for pre-decoded GIF frames. */
 final class AnimatedGifPlayer {
 
   private final JLabel target;
@@ -40,12 +37,15 @@ final class AnimatedGifPlayer {
     if (timer != null && timer.isRunning()) return;
 
     int d0 = delayForIndex(0);
-    timer = new Timer(d0, e -> {
-      if (frames.isEmpty()) return;
-      idx = (idx + 1) % frames.size();
-      target.setIcon(frames.get(idx));
-      timer.setDelay(delayForIndex(idx));
-    });
+    timer =
+        new Timer(
+            d0,
+            e -> {
+              if (frames.isEmpty()) return;
+              idx = (idx + 1) % frames.size();
+              target.setIcon(frames.get(idx));
+              timer.setDelay(delayForIndex(idx));
+            });
     timer.setRepeats(true);
     timer.start();
   }

@@ -9,8 +9,8 @@ import java.net.Socket;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * SSLSocketFactory that connects the underlying TCP socket through a SOCKS5 proxy
- * before layering TLS on top.
+ * SSLSocketFactory that connects the underlying TCP socket through a SOCKS5 proxy before layering
+ * TLS on top.
  */
 public final class SocksProxySslSocketFactory extends SSLSocketFactory {
 
@@ -64,7 +64,8 @@ public final class SocksProxySslSocketFactory extends SSLSocketFactory {
   }
 
   @Override
-  public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+  public Socket createSocket(String host, int port, InetAddress localHost, int localPort)
+      throws IOException {
     Socket tcp = proxiedSocket();
     tcp.bind(new InetSocketAddress(localHost, localPort));
     tcp.connect(target(host, port), (int) cfg.connectTimeoutMs());
@@ -85,7 +86,8 @@ public final class SocksProxySslSocketFactory extends SSLSocketFactory {
   }
 
   @Override
-  public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+  public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
+      throws IOException {
     Socket tcp = proxiedSocket();
     tcp.bind(new InetSocketAddress(localAddress, localPort));
     tcp.connect(new InetSocketAddress(address, port), (int) cfg.connectTimeoutMs());
@@ -96,7 +98,8 @@ public final class SocksProxySslSocketFactory extends SSLSocketFactory {
   }
 
   @Override
-  public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
+  public Socket createSocket(Socket s, String host, int port, boolean autoClose)
+      throws IOException {
     return delegate.createSocket(s, host, port, autoClose);
   }
 }

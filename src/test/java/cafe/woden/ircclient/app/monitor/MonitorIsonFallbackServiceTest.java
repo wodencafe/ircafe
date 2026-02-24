@@ -52,7 +52,8 @@ class MonitorIsonFallbackServiceTest {
   @Test
   void activatesAfterReadyAndAppliesIsonPresenceTransitions() {
     events.onNext(new ServerIrcEvent("libera", connected()));
-    events.onNext(new ServerIrcEvent("libera", serverResponse(376, ":server 376 me :End of /MOTD")));
+    events.onNext(
+        new ServerIrcEvent("libera", serverResponse(376, ":server 376 me :End of /MOTD")));
 
     service.requestImmediateRefresh("libera");
     events.onNext(new ServerIrcEvent("libera", serverResponse(303, ":server 303 me :alice")));
@@ -60,17 +61,23 @@ class MonitorIsonFallbackServiceTest {
     verify(irc, atLeastOnce()).sendRaw("libera", "ISON alice bob");
     verify(ui).setPrivateMessageOnlineState("libera", "alice", true);
     verify(ui).setPrivateMessageOnlineState("libera", "bob", false);
-    verify(ui, atLeastOnce()).appendStatusAt(eq(TargetRef.monitorGroup("libera")), any(), eq("(monitor)"), eq("Online: alice"));
-    verify(ui, atLeastOnce()).appendStatusAt(eq(TargetRef.monitorGroup("libera")), any(), eq("(monitor)"), eq("Offline: bob"));
+    verify(ui, atLeastOnce())
+        .appendStatusAt(
+            eq(TargetRef.monitorGroup("libera")), any(), eq("(monitor)"), eq("Online: alice"));
+    verify(ui, atLeastOnce())
+        .appendStatusAt(
+            eq(TargetRef.monitorGroup("libera")), any(), eq("(monitor)"), eq("Offline: bob"));
   }
 
   @Test
   void suppressHintOnlyWhileFallbackIsEligible() {
     events.onNext(new ServerIrcEvent("libera", connected()));
     // Not ready yet.
-    org.junit.jupiter.api.Assertions.assertFalse(service.shouldSuppressIsonServerResponse("libera"));
+    org.junit.jupiter.api.Assertions.assertFalse(
+        service.shouldSuppressIsonServerResponse("libera"));
 
-    events.onNext(new ServerIrcEvent("libera", serverResponse(376, ":server 376 me :End of /MOTD")));
+    events.onNext(
+        new ServerIrcEvent("libera", serverResponse(376, ":server 376 me :End of /MOTD")));
     org.junit.jupiter.api.Assertions.assertTrue(service.shouldSuppressIsonServerResponse("libera"));
   }
 

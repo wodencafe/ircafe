@@ -26,20 +26,21 @@ final class XPreviewUtil {
     return extractStatusId(uri) != null;
   }
 
-  
+  static boolean isXLikeHost(String host) {
+    if (host == null) return false;
+    String h = host.toLowerCase(Locale.ROOT);
+    if (h.endsWith("twitter.com") || h.endsWith("x.com")) return true;
+    // Common unfurl proxies (domain-swap services)
+    if (h.endsWith("fixupx.com")
+        || h.endsWith("fxtwitter.com")
+        || h.endsWith("vxtwitter.com")
+        || h.endsWith("fixvx.com")) return true;
+    // Nitter instances typically use nitter.<domain> or nitter.net
+    if (h.equals("nitter.net") || h.startsWith("nitter.")) return true;
+    return false;
+  }
 
-static boolean isXLikeHost(String host) {
-  if (host == null) return false;
-  String h = host.toLowerCase(Locale.ROOT);
-  if (h.endsWith("twitter.com") || h.endsWith("x.com")) return true;
-  // Common unfurl proxies (domain-swap services)
-  if (h.endsWith("fixupx.com") || h.endsWith("fxtwitter.com") || h.endsWith("vxtwitter.com") || h.endsWith("fixvx.com")) return true;
-  // Nitter instances typically use nitter.<domain> or nitter.net
-  if (h.equals("nitter.net") || h.startsWith("nitter.")) return true;
-  return false;
-}
-
-static String extractStatusId(String url) {
+  static String extractStatusId(String url) {
     if (url == null || url.isBlank()) return null;
     try {
       return extractStatusId(URI.create(url));
@@ -52,8 +53,10 @@ static String extractStatusId(String url) {
     if (uri == null) return null;
     String host = hostLower(uri);
     if (host == null) return null;
-    if (!(host.equals("x.com") || host.endsWith(".x.com")
-        || host.equals("twitter.com") || host.endsWith(".twitter.com"))) {
+    if (!(host.equals("x.com")
+        || host.endsWith(".x.com")
+        || host.equals("twitter.com")
+        || host.endsWith(".twitter.com"))) {
       return null;
     }
 
@@ -84,18 +87,17 @@ static String extractStatusId(String url) {
     String enc = URLEncoder.encode(statusId, StandardCharsets.UTF_8);
     String token = safeToken(statusId);
     String tEnc = URLEncoder.encode(token, StandardCharsets.UTF_8);
-    return URI.create("https://cdn.syndication.twimg.com/tweet-result?id=" + enc + "&token=" + tEnc + "&lang=en");
+    return URI.create(
+        "https://cdn.syndication.twimg.com/tweet-result?id=" + enc + "&token=" + tEnc + "&lang=en");
   }
 
-  
   static URI oEmbedApiUri(String statusId) {
     if (statusId == null || statusId.isBlank()) return null;
 
     // Use a canonical tweet URL that doesn't require knowing the handle.
     String tweetUrl = "https://x.com/i/web/status/" + statusId;
     String enc = URLEncoder.encode(tweetUrl, StandardCharsets.UTF_8);
-    return URI.create(
-        "https://publish.x.com/oembed?url=" + enc + "&omit_script=true&dnt=true");
+    return URI.create("https://publish.x.com/oembed?url=" + enc + "&omit_script=true&dnt=true");
   }
 
   /** Parse oEmbed JSON into a regular {@link LinkPreview}. */
@@ -141,6 +143,7 @@ static String extractStatusId(String url) {
       return null;
     }
   }
+
   private static String extractHandleFromAuthorUrl(String authorUrl) {
     if (authorUrl == null || authorUrl.isBlank()) return null;
     try {
@@ -160,7 +163,6 @@ static String extractStatusId(String url) {
     }
   }
 
-  
   private static String unescapeJsonString(String s) {
     if (s == null) return null;
     StringBuilder out = new StringBuilder(s.length());
@@ -241,25 +243,26 @@ static String extractStatusId(String url) {
   static LinkPreview parseSyndicationJson(String json, URI originalStatusUri) {
     if (json == null || json.isBlank()) return null;
 
-    String text = firstNonBlank(
-        MiniJson.findString(json, "text"),
-        MiniJson.findString(json, "full_text"),
-        MiniJson.findString(json, "raw_text")
-    );
+    String text =
+        firstNonBlank(
+            MiniJson.findString(json, "text"),
+            MiniJson.findString(json, "full_text"),
+            MiniJson.findString(json, "raw_text"));
 
     String userObj = MiniJson.findObject(json, "user");
     String name = userObj != null ? MiniJson.findString(userObj, "name") : null;
     String handle = userObj != null ? MiniJson.findString(userObj, "screen_name") : null;
-    String avatar = userObj != null ? firstNonBlank(
-        MiniJson.findString(userObj, "profile_image_url_https"),
-        MiniJson.findString(userObj, "profile_image_url")
-    ) : null;
+    String avatar =
+        userObj != null
+            ? firstNonBlank(
+                MiniJson.findString(userObj, "profile_image_url_https"),
+                MiniJson.findString(userObj, "profile_image_url"))
+            : null;
 
     Long likes = MiniJson.findLong(json, "favorite_count");
-    Long reposts = firstNonBlankLong(
-        MiniJson.findLong(json, "retweet_count"),
-        MiniJson.findLong(json, "repost_count")
-    );
+    Long reposts =
+        firstNonBlankLong(
+            MiniJson.findLong(json, "retweet_count"), MiniJson.findLong(json, "repost_count"));
     Long replies = MiniJson.findLong(json, "reply_count");
     Long quotes = MiniJson.findLong(json, "quote_count");
 
@@ -270,10 +273,10 @@ static String extractStatusId(String url) {
     if (photosArr != null) {
       String firstObj = MiniJson.firstObjectInArray(photosArr);
       if (firstObj != null) {
-        mediaUrl = firstNonBlank(
-            MiniJson.findString(firstObj, "url"),
-            MiniJson.findString(firstObj, "backgroundImage")
-        );
+        mediaUrl =
+            firstNonBlank(
+                MiniJson.findString(firstObj, "url"),
+                MiniJson.findString(firstObj, "backgroundImage"));
       }
     }
 
@@ -282,12 +285,12 @@ static String extractStatusId(String url) {
       if (mediaArr != null) {
         String firstObj = MiniJson.firstObjectInArray(mediaArr);
         if (firstObj != null) {
-          mediaUrl = firstNonBlank(
-              MiniJson.findString(firstObj, "media_url_https"),
-              MiniJson.findString(firstObj, "media_url"),
-              MiniJson.findString(firstObj, "url"),
-              MiniJson.findString(firstObj, "preview_url")
-          );
+          mediaUrl =
+              firstNonBlank(
+                  MiniJson.findString(firstObj, "media_url_https"),
+                  MiniJson.findString(firstObj, "media_url"),
+                  MiniJson.findString(firstObj, "url"),
+                  MiniJson.findString(firstObj, "preview_url"));
         }
       }
     }
@@ -295,10 +298,10 @@ static String extractStatusId(String url) {
     if (mediaUrl == null) {
       String videoObj = MiniJson.findObject(json, "video");
       if (videoObj != null) {
-        mediaUrl = firstNonBlank(
-            MiniJson.findString(videoObj, "poster"),
-            MiniJson.findString(videoObj, "preview_url")
-        );
+        mediaUrl =
+            firstNonBlank(
+                MiniJson.findString(videoObj, "poster"),
+                MiniJson.findString(videoObj, "preview_url"));
       }
     }
 
@@ -366,8 +369,10 @@ static String extractStatusId(String url) {
   private static String formatCount(long n) {
     if (n < 0) return null;
     // compact-ish formatting: 1234 -> 1.2K
-    if (n >= 1_000_000_000L) return String.format(Locale.ROOT, "%.1fB", n / 1_000_000_000d).replace(".0", "");
-    if (n >= 1_000_000L) return String.format(Locale.ROOT, "%.1fM", n / 1_000_000d).replace(".0", "");
+    if (n >= 1_000_000_000L)
+      return String.format(Locale.ROOT, "%.1fB", n / 1_000_000_000d).replace(".0", "");
+    if (n >= 1_000_000L)
+      return String.format(Locale.ROOT, "%.1fM", n / 1_000_000d).replace(".0", "");
     if (n >= 1_000L) return String.format(Locale.ROOT, "%.1fK", n / 1_000d).replace(".0", "");
     return NumberFormat.getIntegerInstance(Locale.ROOT).format(n);
   }
@@ -461,7 +466,8 @@ static String extractStatusId(String url) {
         if (p < 0) return null;
         p = skipWs(json, p);
         int end = p;
-        if (end < json.length() && (json.charAt(end) == '-' || Character.isDigit(json.charAt(end)))) {
+        if (end < json.length()
+            && (json.charAt(end) == '-' || Character.isDigit(json.charAt(end)))) {
           end++;
           while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
           try {
@@ -607,82 +613,77 @@ static String extractStatusId(String url) {
     }
   }
 
-static java.util.List<URI> proxyUnfurlCandidates(URI originalStatusUri) {
-  if (originalStatusUri == null) return java.util.List.of();
-  String id = extractStatusId(originalStatusUri);
-  if (id == null) return java.util.List.of();
+  static java.util.List<URI> proxyUnfurlCandidates(URI originalStatusUri) {
+    if (originalStatusUri == null) return java.util.List.of();
+    String id = extractStatusId(originalStatusUri);
+    if (id == null) return java.util.List.of();
 
-  String handle = extractHandle(originalStatusUri);
-  String preferredPath = (handle != null)
-      ? "/" + handle + "/status/" + id
-      : "/i/status/" + id;
+    String handle = extractHandle(originalStatusUri);
+    String preferredPath = (handle != null) ? "/" + handle + "/status/" + id : "/i/status/" + id;
 
-  java.util.ArrayList<URI> out = new java.util.ArrayList<>();
+    java.util.ArrayList<URI> out = new java.util.ArrayList<>();
 
-  // 1) Nitter instances (best-effort; many are intermittent).
-  // Keep list short to avoid slow fallbacks.
-  for (String base : NITTER_BASES) {
-    tryAdd(out, base + preferredPath);
-    if (handle != null) {
-      // Some instances accept /{user}/status/{id}/photo/1 formats in shared links; normalize.
-      tryAdd(out, base + "/" + handle + "/status/" + id);
-    } else {
-      tryAdd(out, base + "/i/status/" + id);
+    // 1) Nitter instances (best-effort; many are intermittent).
+    // Keep list short to avoid slow fallbacks.
+    for (String base : NITTER_BASES) {
+      tryAdd(out, base + preferredPath);
+      if (handle != null) {
+        // Some instances accept /{user}/status/{id}/photo/1 formats in shared links; normalize.
+        tryAdd(out, base + "/" + handle + "/status/" + id);
+      } else {
+        tryAdd(out, base + "/i/status/" + id);
+      }
     }
+
+    // 2) Domain-swap embed proxies (often more reliable than Nitter and provide full OG tags).
+    // These are third-party services; if unavailable, we'll just fall back to OG parsing.
+    for (String base : UNFURL_PROXY_BASES) {
+      tryAdd(out, base + preferredPath);
+      if (handle != null) tryAdd(out, base + "/" + handle + "/status/" + id);
+    }
+
+    return out;
   }
 
-  // 2) Domain-swap embed proxies (often more reliable than Nitter and provide full OG tags).
-  // These are third-party services; if unavailable, we'll just fall back to OG parsing.
-  for (String base : UNFURL_PROXY_BASES) {
-    tryAdd(out, base + preferredPath);
-    if (handle != null) tryAdd(out, base + "/" + handle + "/status/" + id);
-  }
-
-  return out;
-}
-
-private static final String[] NITTER_BASES = {
+  private static final String[] NITTER_BASES = {
     "https://nitter.net",
     "https://nitter.poast.org",
     "https://nitter.batsense.net",
     "https://nitter.blahaj.land",
     "https://nitter.cabletemple.net"
-};
+  };
 
-private static final String[] UNFURL_PROXY_BASES = {
-    "https://fixupx.com",
-    "https://fxtwitter.com",
-    "https://vxtwitter.com"
-};
+  private static final String[] UNFURL_PROXY_BASES = {
+    "https://fixupx.com", "https://fxtwitter.com", "https://vxtwitter.com"
+  };
 
-static String extractHandle(URI uri) {
-  try {
-    if (uri == null) return null;
-    String path = uri.getPath();
-    if (path == null) return null;
-    int idx = path.indexOf("/status/");
-    if (idx <= 1) return null;
-    // path like /{handle}/status/{id}
-    String before = path.substring(1, idx);
-    if (before.isBlank()) return null;
-    // guard against /i/web/status and other special routes
-    if (before.equals("i") || before.equals("intent") || before.equals("home")) return null;
-    // strip any extra segments if present
-    int slash = before.indexOf('/');
-    if (slash > 0) before = before.substring(0, slash);
-    return before;
-  } catch (Exception ignored) {
-    return null;
+  static String extractHandle(URI uri) {
+    try {
+      if (uri == null) return null;
+      String path = uri.getPath();
+      if (path == null) return null;
+      int idx = path.indexOf("/status/");
+      if (idx <= 1) return null;
+      // path like /{handle}/status/{id}
+      String before = path.substring(1, idx);
+      if (before.isBlank()) return null;
+      // guard against /i/web/status and other special routes
+      if (before.equals("i") || before.equals("intent") || before.equals("home")) return null;
+      // strip any extra segments if present
+      int slash = before.indexOf('/');
+      if (slash > 0) before = before.substring(0, slash);
+      return before;
+    } catch (Exception ignored) {
+      return null;
+    }
   }
-}
 
-private static void tryAdd(java.util.List<URI> out, String raw) {
-  try {
-    if (raw == null || raw.isBlank()) return;
-    out.add(URI.create(raw));
-  } catch (Exception ignored) {
-    // ignore bad URIs
+  private static void tryAdd(java.util.List<URI> out, String raw) {
+    try {
+      if (raw == null || raw.isBlank()) return;
+      out.add(URI.create(raw));
+    } catch (Exception ignored) {
+      // ignore bad URIs
+    }
   }
-}
-
 }

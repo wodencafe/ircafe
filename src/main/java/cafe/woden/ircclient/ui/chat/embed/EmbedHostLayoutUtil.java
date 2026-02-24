@@ -10,7 +10,8 @@ final class EmbedHostLayoutUtil {
 
   private EmbedHostLayoutUtil() {}
 
-  static int computeMaxInlineWidth(java.awt.Component embed, int fallbackMaxW, int widthMarginPx, int minWidth) {
+  static int computeMaxInlineWidth(
+      java.awt.Component embed, int fallbackMaxW, int widthMarginPx, int minWidth) {
     if (embed == null) return fallbackMaxW;
 
     JTextPane pane = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, embed);
@@ -20,7 +21,8 @@ final class EmbedHostLayoutUtil {
       if (w > 0) return Math.max(minWidth, w - widthMarginPx);
     }
 
-    JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, embed);
+    JScrollPane scroller =
+        (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, embed);
     if (scroller != null) {
       int w = scroller.getViewport().getExtentSize().width;
       if (w > 0) return Math.max(minWidth, w - widthMarginPx);
@@ -35,9 +37,11 @@ final class EmbedHostLayoutUtil {
       java.awt.Component currentTarget) {
     if (embed == null || listener == null) return currentTarget;
 
-    java.awt.Component target = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, embed);
+    java.awt.Component target =
+        (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, embed);
     if (target == null) {
-      JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, embed);
+      JScrollPane scroller =
+          (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, embed);
       if (scroller != null) target = scroller.getViewport();
     }
 
@@ -51,8 +55,7 @@ final class EmbedHostLayoutUtil {
   }
 
   static java.awt.Component unhookResizeListener(
-      java.awt.event.ComponentListener listener,
-      java.awt.Component currentTarget) {
+      java.awt.event.ComponentListener listener, java.awt.Component currentTarget) {
     if (listener == null || currentTarget == null) return null;
     try {
       currentTarget.removeComponentListener(listener);
@@ -66,19 +69,20 @@ final class EmbedHostLayoutUtil {
     JTextPane pane = (JTextPane) SwingUtilities.getAncestorOfClass(JTextPane.class, embed);
     if (pane == null) return;
 
-    SwingUtilities.invokeLater(() -> {
-      try {
-        if (pane.getUI() instanceof BasicTextUI btui) {
-          View root = btui.getRootView(pane);
-          if (root != null) {
-            root.preferenceChanged(null, true, true);
+    SwingUtilities.invokeLater(
+        () -> {
+          try {
+            if (pane.getUI() instanceof BasicTextUI btui) {
+              View root = btui.getRootView(pane);
+              if (root != null) {
+                root.preferenceChanged(null, true, true);
+              }
+            }
+          } catch (Exception ignored) {
+            // best-effort
           }
-        }
-      } catch (Exception ignored) {
-        // best-effort
-      }
-      pane.revalidate();
-      pane.repaint();
-    });
+          pane.revalidate();
+          pane.repaint();
+        });
   }
 }

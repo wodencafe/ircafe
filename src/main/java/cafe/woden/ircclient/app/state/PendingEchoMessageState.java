@@ -11,31 +11,26 @@ import java.util.UUID;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Tracks outbound chat lines awaiting IRCv3 echo-message reconciliation.
- */
+/** Tracks outbound chat lines awaiting IRCv3 echo-message reconciliation. */
 @Component
 @Lazy
 public class PendingEchoMessageState {
 
   public record PendingOutboundChat(
-      String pendingId,
-      TargetRef target,
-      String fromNick,
-      String text,
-      Instant createdAt
-  ) {}
+      String pendingId, TargetRef target, String fromNick, String text, Instant createdAt) {}
 
   private final List<PendingOutboundChat> pending = new ArrayList<>();
 
-  public synchronized PendingOutboundChat register(TargetRef target, String fromNick, String text, Instant createdAt) {
+  public synchronized PendingOutboundChat register(
+      TargetRef target, String fromNick, String text, Instant createdAt) {
     Instant at = (createdAt != null) ? createdAt : Instant.now();
-    PendingOutboundChat entry = new PendingOutboundChat(
-        UUID.randomUUID().toString(),
-        target,
-        Objects.toString(fromNick, "").trim(),
-        Objects.toString(text, "").trim(),
-        at);
+    PendingOutboundChat entry =
+        new PendingOutboundChat(
+            UUID.randomUUID().toString(),
+            target,
+            Objects.toString(fromNick, "").trim(),
+            Objects.toString(text, "").trim(),
+            at);
     pending.add(entry);
     return entry;
   }
@@ -52,7 +47,8 @@ public class PendingEchoMessageState {
     return Optional.empty();
   }
 
-  public synchronized Optional<PendingOutboundChat> consumeByTargetAndText(TargetRef target, String fromNick, String text) {
+  public synchronized Optional<PendingOutboundChat> consumeByTargetAndText(
+      TargetRef target, String fromNick, String text) {
     if (target == null) return Optional.empty();
     String textNorm = normalizeText(text);
     for (int i = 0; i < pending.size(); i++) {
@@ -65,7 +61,8 @@ public class PendingEchoMessageState {
     return Optional.empty();
   }
 
-  public synchronized Optional<PendingOutboundChat> consumePrivateFallback(String serverId, String fromNick, String text) {
+  public synchronized Optional<PendingOutboundChat> consumePrivateFallback(
+      String serverId, String fromNick, String text) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return Optional.empty();
     String textNorm = normalizeText(text);
@@ -95,10 +92,12 @@ public class PendingEchoMessageState {
     return out;
   }
 
-  public synchronized List<PendingOutboundChat> collectTimedOut(Duration timeout, int maxCount, Instant now) {
-    Duration safeTimeout = (timeout == null || timeout.isZero() || timeout.isNegative())
-        ? Duration.ofSeconds(45)
-        : timeout;
+  public synchronized List<PendingOutboundChat> collectTimedOut(
+      Duration timeout, int maxCount, Instant now) {
+    Duration safeTimeout =
+        (timeout == null || timeout.isZero() || timeout.isNegative())
+            ? Duration.ofSeconds(45)
+            : timeout;
     int cap = Math.max(1, maxCount);
     Instant anchor = (now != null) ? now : Instant.now();
     Instant cutoff = anchor.minus(safeTimeout);
@@ -106,7 +105,8 @@ public class PendingEchoMessageState {
     List<PendingOutboundChat> out = new ArrayList<>();
     for (int i = 0; i < pending.size(); i++) {
       PendingOutboundChat entry = pending.get(i);
-      Instant created = entry != null && entry.createdAt() != null ? entry.createdAt() : Instant.EPOCH;
+      Instant created =
+          entry != null && entry.createdAt() != null ? entry.createdAt() : Instant.EPOCH;
       if (created.isAfter(cutoff)) continue;
       pending.remove(i);
       i--;
@@ -133,5 +133,4 @@ public class PendingEchoMessageState {
   private static String normalizeText(String raw) {
     return Objects.toString(raw, "").trim();
   }
-
 }

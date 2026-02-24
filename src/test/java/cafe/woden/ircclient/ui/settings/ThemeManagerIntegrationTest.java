@@ -42,7 +42,8 @@ class ThemeManagerIntegrationTest {
   void applyAppearanceFromBackgroundThreadRunsOnEdtWithoutLookAndFeelInstall() throws Exception {
     Fixture fixture = createFixture();
 
-    Thread caller = new Thread(() -> fixture.manager.applyAppearance(true), "apply-appearance-caller");
+    Thread caller =
+        new Thread(() -> fixture.manager.applyAppearance(true), "apply-appearance-caller");
     caller.start();
     caller.join();
     flushEdt();
@@ -144,7 +145,8 @@ class ThemeManagerIntegrationTest {
     return new Fixture(manager, steps, onEdtByStep);
   }
 
-  private static void recordStep(String step, List<String> steps, Map<String, Boolean> onEdtByStep) {
+  private static void recordStep(
+      String step, List<String> steps, Map<String, Boolean> onEdtByStep) {
     steps.add(step);
     onEdtByStep.put(step, SwingUtilities.isEventDispatchThread());
   }
@@ -161,7 +163,5 @@ class ThemeManagerIntegrationTest {
   }
 
   private record Fixture(
-      ThemeManager manager,
-      List<String> steps,
-      Map<String, Boolean> onEdtByStep) {}
+      ThemeManager manager, List<String> steps, Map<String, Boolean> onEdtByStep) {}
 }

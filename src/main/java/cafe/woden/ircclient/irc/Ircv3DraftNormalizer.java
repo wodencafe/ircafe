@@ -7,13 +7,12 @@ import java.util.Objects;
 /**
  * Pure helpers for normalizing staged IRCv3 draft commands.
  *
- * <p>This is intentionally UI-free so it can be reused anywhere that needs to
- * keep a draft string compatible with currently negotiated capabilities.
+ * <p>This is intentionally UI-free so it can be reused anywhere that needs to keep a draft string
+ * compatible with currently negotiated capabilities.
  */
 public final class Ircv3DraftNormalizer {
 
-  private Ircv3DraftNormalizer() {
-  }
+  private Ircv3DraftNormalizer() {}
 
   /**
    * Normalizes staged IRCv3 {@code /quote @...} drafts against currently negotiated capabilities.
@@ -22,10 +21,7 @@ public final class Ircv3DraftNormalizer {
    * required capabilities are missing.
    */
   public static String normalizeIrcv3DraftForCapabilities(
-      String draft,
-      boolean replySupported,
-      boolean reactSupported
-  ) {
+      String draft, boolean replySupported, boolean reactSupported) {
     String raw = (draft == null) ? "" : draft;
     if (raw.isBlank()) return raw;
 
@@ -68,7 +64,8 @@ public final class Ircv3DraftNormalizer {
       kept.add(part);
     }
 
-    // React prefill depends on draft/reply target metadata; disabling either capability exits the mode.
+    // React prefill depends on draft/reply target metadata; disabling either capability exits the
+    // mode.
     if (sawReactTag && (!reactSupported || !replySupported)) {
       return "";
     }

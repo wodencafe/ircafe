@@ -18,7 +18,8 @@ public class AwayRoutingState {
   private final ConcurrentHashMap<String, String> awayReasonByServer = new ConcurrentHashMap<>();
 
   // Route away confirmations back to where the user initiated the /away command.
-  private final ConcurrentHashMap<String, RecentTarget> recentAwayTargets = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, RecentTarget> recentAwayTargets =
+      new ConcurrentHashMap<>();
 
   private record RecentTarget(TargetRef target, Instant at) {}
 
@@ -47,13 +48,11 @@ public class AwayRoutingState {
     }
   }
 
-  
   public void rememberOrigin(String serverId, TargetRef target) {
     if (target == null) return;
     recentAwayTargets.put(normalizeServer(serverId), new RecentTarget(target, Instant.now()));
   }
 
-  
   public TargetRef recentOriginIfFresh(String serverId, Duration maxAge) {
     Objects.requireNonNull(maxAge, "maxAge");
     RecentTarget rt = recentAwayTargets.get(normalizeServer(serverId));

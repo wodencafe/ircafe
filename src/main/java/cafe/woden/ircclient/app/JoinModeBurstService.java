@@ -5,23 +5,22 @@ import cafe.woden.ircclient.config.ExecutorConfig;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
-import java.util.Objects;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /**
  * Join-burst mode suppression.
  *
- * <p>When joining a channel, some networks send a quick burst of channel-flag MODEs
- * (e.g. {@code +nt}, {@code +r}, etc.). Rather than printing each one individually,
- * we buffer the simple flag sets and print a single summary line shortly after the
- * burst settles.
+ * <p>When joining a channel, some networks send a quick burst of channel-flag MODEs (e.g. {@code
+ * +nt}, {@code +r}, etc.). Rather than printing each one individually, we buffer the simple flag
+ * sets and print a single summary line shortly after the burst settles.
  */
 @Component
 public final class JoinModeBurstService {
@@ -34,15 +33,18 @@ public final class JoinModeBurstService {
   private final ScheduledExecutorService joinModeExec;
   private final Scheduler joinModeScheduler;
 
-  private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<ModeKey, Long> joinModeSummaryPrintedMs =
+      new ConcurrentHashMap<>();
 
-  public JoinModeBurstService(UiPort ui,
-                              ModeFormattingService modeFormattingService,
-                              @Qualifier(ExecutorConfig.JOIN_MODE_BURST_SCHEDULER)
-                              ScheduledExecutorService joinModeExec) {
+  public JoinModeBurstService(
+      UiPort ui,
+      ModeFormattingService modeFormattingService,
+      @Qualifier(ExecutorConfig.JOIN_MODE_BURST_SCHEDULER) ScheduledExecutorService joinModeExec) {
     this.ui = Objects.requireNonNull(ui, "ui");
-    this.modeFormattingService = Objects.requireNonNull(modeFormattingService, "modeFormattingService");
+    this.modeFormattingService =
+        Objects.requireNonNull(modeFormattingService, "modeFormattingService");
     this.joinModeExec = Objects.requireNonNull(joinModeExec, "joinModeExec");
     this.joinModeScheduler = Schedulers.from(joinModeExec);
   }
@@ -58,10 +60,8 @@ public final class JoinModeBurstService {
       joinModeSummaryPrintedMs.clear();
     } catch (Exception ignored) {
     }
-
   }
 
-  
   public void startJoinModeBuffer(String serverId, String channel) {
     if (channel == null || channel.isBlank()) return;
 
@@ -75,7 +75,8 @@ public final class JoinModeBurstService {
     if (prev != null) prev.dispose();
 
     // Fallback flush: if we already collected any join-burst flags, print soon after join.
-    // IMPORTANT: do NOT discard an empty buffer here; some networks delay MODE for a couple seconds.
+    // IMPORTANT: do NOT discard an empty buffer here; some networks delay MODE for a couple
+    // seconds.
     next.scheduleFallback(() -> flushJoinModesIfAny(serverId, channel, false));
 
     // Cleanup: if we never receive join-burst modes, don't keep the empty buffer forever.
@@ -83,11 +84,11 @@ public final class JoinModeBurstService {
   }
 
   /**
-   * Called on {@code ChannelModeChanged}. If the mode change is a simple join-burst flag set,
-   * this consumes it and schedules a debounced summary flush.
+   * Called on {@code ChannelModeChanged}. If the mode change is a simple join-burst flag set, this
+   * consumes it and schedules a debounced summary flush.
    *
-   * @return true if the event was consumed (caller should return early); false if the caller
-   *     should proceed with normal MODE printing.
+   * @return true if the event was consumed (caller should return early); false if the caller should
+   *     proceed with normal MODE printing.
    */
   public boolean handleChannelModeChanged(String serverId, String channel, String details) {
     if (channel == null || channel.isBlank()) return false;
@@ -106,7 +107,6 @@ public final class JoinModeBurstService {
     return false;
   }
 
-  
   public void discardJoinModeBuffer(String serverId, String channel) {
     if (channel == null || channel.isBlank()) return;
     ModeKey key = ModeKey.of(serverId, channel);
@@ -122,8 +122,8 @@ public final class JoinModeBurstService {
     joinModeSummaryPrintedMs.remove(key);
   }
 
-  
-  public boolean shouldSuppressModesListedSummary(String serverId, String channel, boolean outputIsChannel) {
+  public boolean shouldSuppressModesListedSummary(
+      String serverId, String channel, boolean outputIsChannel) {
     if (channel == null || channel.isBlank()) return false;
     ModeKey key = ModeKey.of(serverId, channel);
 
@@ -137,7 +137,6 @@ public final class JoinModeBurstService {
     return false;
   }
 
-  
   public void flushJoinModesIfAny(String serverId, String channel, boolean finalizeIfEmpty) {
     if (channel == null || channel.isBlank()) return;
 
@@ -146,7 +145,8 @@ public final class JoinModeBurstService {
     JoinModeBuffer buf = joinModeBuffers.get(key);
     if (buf == null) return;
 
-    // Don't finalize early when we haven't seen any join-burst modes yet (topic/NAMES can arrive first).
+    // Don't finalize early when we haven't seen any join-burst modes yet (topic/NAMES can arrive
+    // first).
     if (buf.isEmpty()) {
       if (finalizeIfEmpty) {
         joinModeBuffers.remove(key, buf);
@@ -208,18 +208,15 @@ public final class JoinModeBurstService {
 
     JoinModeBuffer(Scheduler scheduler) {
       // If the scheduler rejects work during shutdown, just drop it quietly.
-      this.debouncedFlush = new RestartableRxTimer(
-          scheduler,
-          err -> log.debug("[JoinModeBurst] flush timer error", err)
-      );
-      this.fallbackFlush = new RestartableRxTimer(
-          scheduler,
-          err -> log.debug("[JoinModeBurst] fallback timer error", err)
-      );
-      this.cleanupFlush = new RestartableRxTimer(
-          scheduler,
-          err -> log.debug("[JoinModeBurst] cleanup timer error", err)
-      );
+      this.debouncedFlush =
+          new RestartableRxTimer(
+              scheduler, err -> log.debug("[JoinModeBurst] flush timer error", err));
+      this.fallbackFlush =
+          new RestartableRxTimer(
+              scheduler, err -> log.debug("[JoinModeBurst] fallback timer error", err));
+      this.cleanupFlush =
+          new RestartableRxTimer(
+              scheduler, err -> log.debug("[JoinModeBurst] cleanup timer error", err));
     }
 
     void bumpFlush(Runnable flush) {
@@ -271,6 +268,5 @@ public final class JoinModeBurstService {
     boolean isEmpty() {
       return plus.isEmpty() && minus.isEmpty();
     }
-
   }
 }

@@ -2,15 +2,14 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
 import java.beans.PropertyChangeEvent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 
 @Component
 public class CommandHistoryStore {
@@ -86,7 +85,8 @@ public class CommandHistoryStore {
       case "msg":
         return isNickServIdentify(cmd.restLower);
       default:
-        return containsAny(cmd.restLower, "token=", "apikey=", "api_key=", "access_token=", "refresh_token=");
+        return containsAny(
+            cmd.restLower, "token=", "apikey=", "api_key=", "access_token=", "refresh_token=");
     }
   }
 

@@ -1,17 +1,15 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.ui.settings.NotificationRule;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.commands.UserCommandAlias;
 import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
 import cafe.woden.ircclient.app.interceptors.InterceptorRule;
 import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
-import cafe.woden.ircclient.app.commands.UserCommandAlias;
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.ui.filter.FilterRule;
-import cafe.woden.ircclient.ui.filter.TagSpec;
 import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
 import cafe.woden.ircclient.ui.filter.RegexSpec;
-import cafe.woden.ircclient.irc.soju.PircbotxSojuParsers;
-
+import cafe.woden.ircclient.ui.filter.TagSpec;
+import cafe.woden.ircclient.ui.settings.NotificationRule;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -38,16 +36,33 @@ public class RuntimeConfigStore {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
 
+  public record ServerTreeBuiltInNodesVisibility(
+      boolean server,
+      boolean notifications,
+      boolean logViewer,
+      boolean monitor,
+      boolean interceptors) {
+    public static ServerTreeBuiltInNodesVisibility defaults() {
+      return new ServerTreeBuiltInNodesVisibility(true, true, true, true, true);
+    }
+
+    public boolean isDefaultVisible() {
+      return server && notifications && logViewer && monitor && interceptors;
+    }
+  }
+
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
-  /** True if the runtime config file existed before this process started creating/initializing it. */
+
+  /**
+   * True if the runtime config file existed before this process started creating/initializing it.
+   */
   private final boolean fileExistedOnStartup;
 
   public RuntimeConfigStore(
       @Value("${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}") String filePath,
-      IrcProperties defaults
-  ) {
+      IrcProperties defaults) {
     this.file = Paths.get(Objects.requireNonNullElse(filePath, "").trim());
     this.defaults = defaults;
 
@@ -75,15 +90,16 @@ public class RuntimeConfigStore {
   /**
    * Returns true if the runtime config file already existed when IRCafe started.
    *
-   * <p>This is used for one-time migrations where we want to preserve legacy behavior for existing installs,
-   * while using new defaults for first-time installs.
+   * <p>This is used for one-time migrations where we want to preserve legacy behavior for existing
+   * installs, while using new defaults for first-time installs.
    */
   public boolean runtimeConfigFileExistedOnStartup() {
     return fileExistedOnStartup;
   }
 
   /**
-   * Reads {@code ircafe.ui.tray.closeToTray} only if it is explicitly present in the runtime config file.
+   * Reads {@code ircafe.ui.tray.closeToTray} only if it is explicitly present in the runtime config
+   * file.
    *
    * <p>If the key is absent (or the file doesn't exist), returns {@link Optional#empty()}.
    */
@@ -181,6 +197,7 @@ public class RuntimeConfigStore {
   public Path runtimeConfigPath() {
     return file;
   }
+
   public synchronized void ensureFileExistsWithServers() {
     try {
       if (file.toString().isBlank()) return;
@@ -235,60 +252,70 @@ public class RuntimeConfigStore {
   }
 
   public synchronized void rememberJoinedChannel(String serverId, String channel) {
-    updateServer(serverId, server -> {
-      String chan = Objects.toString(channel, "").trim();
-      if (chan.isEmpty()) return;
+    updateServer(
+        serverId,
+        server -> {
+          String chan = Objects.toString(channel, "").trim();
+          if (chan.isEmpty()) return;
 
-      List<String> autoJoin = getOrCreateStringList(server, "autoJoin");
-      if (autoJoin.stream().noneMatch(c -> c.equalsIgnoreCase(chan))) {
-        autoJoin.add(chan);
-      }
-    });
+          List<String> autoJoin = getOrCreateStringList(server, "autoJoin");
+          if (autoJoin.stream().noneMatch(c -> c.equalsIgnoreCase(chan))) {
+            autoJoin.add(chan);
+          }
+        });
   }
 
   public synchronized void forgetJoinedChannel(String serverId, String channel) {
-    updateServer(serverId, server -> {
-      String chan = Objects.toString(channel, "").trim();
-      if (chan.isEmpty()) return;
+    updateServer(
+        serverId,
+        server -> {
+          String chan = Objects.toString(channel, "").trim();
+          if (chan.isEmpty()) return;
 
-      Object o = server.get("autoJoin");
-      if (!(o instanceof List<?> list)) return;
-      @SuppressWarnings("unchecked")
-      List<String> autoJoin = (List<String>) list;
-      autoJoin.removeIf(c -> c != null && c.equalsIgnoreCase(chan));
-    });
+          Object o = server.get("autoJoin");
+          if (!(o instanceof List<?> list)) return;
+          @SuppressWarnings("unchecked")
+          List<String> autoJoin = (List<String>) list;
+          autoJoin.removeIf(c -> c != null && c.equalsIgnoreCase(chan));
+        });
   }
 
   public synchronized void rememberPrivateMessageTarget(String serverId, String nick) {
-    updateServer(serverId, server -> {
-      String n = Objects.toString(nick, "").trim();
-      if (n.isEmpty()) return;
+    updateServer(
+        serverId,
+        server -> {
+          String n = Objects.toString(nick, "").trim();
+          if (n.isEmpty()) return;
 
-      List<String> autoJoin = getOrCreateStringList(server, "autoJoin");
-      if (AutoJoinEntryCodec.privateMessageNicks(autoJoin).stream().anyMatch(existing -> existing.equalsIgnoreCase(n))) {
-        return;
-      }
-      String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
-      if (!encoded.isEmpty()) {
-        autoJoin.add(encoded);
-      }
-    });
+          List<String> autoJoin = getOrCreateStringList(server, "autoJoin");
+          if (AutoJoinEntryCodec.privateMessageNicks(autoJoin).stream()
+              .anyMatch(existing -> existing.equalsIgnoreCase(n))) {
+            return;
+          }
+          String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
+          if (!encoded.isEmpty()) {
+            autoJoin.add(encoded);
+          }
+        });
   }
 
   public synchronized void forgetPrivateMessageTarget(String serverId, String nick) {
-    updateServer(serverId, server -> {
-      String n = Objects.toString(nick, "").trim();
-      if (n.isEmpty()) return;
+    updateServer(
+        serverId,
+        server -> {
+          String n = Objects.toString(nick, "").trim();
+          if (n.isEmpty()) return;
 
-      Object o = server.get("autoJoin");
-      if (!(o instanceof List<?> list)) return;
-      @SuppressWarnings("unchecked")
-      List<String> autoJoin = (List<String>) list;
-      autoJoin.removeIf(entry -> {
-        String decoded = AutoJoinEntryCodec.decodePrivateMessageNick(entry);
-        return !decoded.isEmpty() && decoded.equalsIgnoreCase(n);
-      });
-    });
+          Object o = server.get("autoJoin");
+          if (!(o instanceof List<?> list)) return;
+          @SuppressWarnings("unchecked")
+          List<String> autoJoin = (List<String>) list;
+          autoJoin.removeIf(
+              entry -> {
+                String decoded = AutoJoinEntryCodec.decodePrivateMessageNick(entry);
+                return !decoded.isEmpty() && decoded.equalsIgnoreCase(n);
+              });
+        });
   }
 
   public synchronized List<String> readPrivateMessageTargets(String serverId) {
@@ -317,41 +344,47 @@ public class RuntimeConfigStore {
   }
 
   public synchronized void rememberMonitorNick(String serverId, String nick) {
-    updateServer(serverId, server -> {
-      String n = normalizeMonitorNick(nick);
-      if (n.isEmpty()) return;
+    updateServer(
+        serverId,
+        server -> {
+          String n = normalizeMonitorNick(nick);
+          if (n.isEmpty()) return;
 
-      List<String> monitorNicks = sanitizeMonitorNickList(server.get("monitorNicks"));
-      if (containsIgnoreCase(monitorNicks, n)) return;
-      monitorNicks.add(n);
-      server.put("monitorNicks", monitorNicks);
-    });
+          List<String> monitorNicks = sanitizeMonitorNickList(server.get("monitorNicks"));
+          if (containsIgnoreCase(monitorNicks, n)) return;
+          monitorNicks.add(n);
+          server.put("monitorNicks", monitorNicks);
+        });
   }
 
   public synchronized void forgetMonitorNick(String serverId, String nick) {
-    updateServer(serverId, server -> {
-      String n = normalizeMonitorNick(nick);
-      if (n.isEmpty()) return;
+    updateServer(
+        serverId,
+        server -> {
+          String n = normalizeMonitorNick(nick);
+          if (n.isEmpty()) return;
 
-      List<String> monitorNicks = sanitizeMonitorNickList(server.get("monitorNicks"));
-      monitorNicks.removeIf(existing -> existing != null && existing.equalsIgnoreCase(n));
-      if (monitorNicks.isEmpty()) {
-        server.remove("monitorNicks");
-      } else {
-        server.put("monitorNicks", monitorNicks);
-      }
-    });
+          List<String> monitorNicks = sanitizeMonitorNickList(server.get("monitorNicks"));
+          monitorNicks.removeIf(existing -> existing != null && existing.equalsIgnoreCase(n));
+          if (monitorNicks.isEmpty()) {
+            server.remove("monitorNicks");
+          } else {
+            server.put("monitorNicks", monitorNicks);
+          }
+        });
   }
 
   public synchronized void replaceMonitorNicks(String serverId, List<String> nicks) {
-    updateServer(serverId, server -> {
-      List<String> monitorNicks = sanitizeMonitorNickList(nicks);
-      if (monitorNicks.isEmpty()) {
-        server.remove("monitorNicks");
-      } else {
-        server.put("monitorNicks", monitorNicks);
-      }
-    });
+    updateServer(
+        serverId,
+        server -> {
+          List<String> monitorNicks = sanitizeMonitorNickList(nicks);
+          if (monitorNicks.isEmpty()) {
+            server.remove("monitorNicks");
+          } else {
+            server.put("monitorNicks", monitorNicks);
+          }
+        });
   }
 
   public synchronized List<String> readMonitorNicks(String serverId) {
@@ -375,13 +408,16 @@ public class RuntimeConfigStore {
   }
 
   public synchronized void rememberNick(String serverId, String nick) {
-    updateServer(serverId, server -> {
-      String n = Objects.toString(nick, "").trim();
-      if (!n.isEmpty()) server.put("nick", n);
-    });
+    updateServer(
+        serverId,
+        server -> {
+          String n = Objects.toString(nick, "").trim();
+          if (!n.isEmpty()) server.put("nick", n);
+        });
   }
 
-  public synchronized void rememberUiSettings(String theme, String chatFontFamily, int chatFontSize) {
+  public synchronized void rememberUiSettings(
+      String theme, String chatFontFamily, int chatFontSize) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -390,12 +426,106 @@ public class RuntimeConfigStore {
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
       if (theme != null && !theme.isBlank()) ui.put("theme", theme);
-      if (chatFontFamily != null && !chatFontFamily.isBlank()) ui.put("chatFontFamily", chatFontFamily);
+      if (chatFontFamily != null && !chatFontFamily.isBlank())
+        ui.put("chatFontFamily", chatFontFamily);
       if (chatFontSize > 0) ui.put("chatFontSize", chatFontSize);
 
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist UI config to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Reads persisted per-server visibility for built-in server tree nodes.
+   *
+   * <p>Stored under {@code ircafe.ui.serverTree.builtInNodesByServer.<serverId>}.
+   */
+  public synchronized Map<String, ServerTreeBuiltInNodesVisibility>
+      readServerTreeBuiltInNodesVisibility() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object serverTreeObj = ui.get("serverTree");
+      if (!(serverTreeObj instanceof Map<?, ?> serverTree)) return Map.of();
+
+      Object byServerObj = serverTree.get("builtInNodesByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, ServerTreeBuiltInNodesVisibility> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        if (!(entry.getValue() instanceof Map<?, ?> raw)) continue;
+
+        ServerTreeBuiltInNodesVisibility d = ServerTreeBuiltInNodesVisibility.defaults();
+        boolean server = asBoolean(raw.get("server")).orElse(d.server());
+        boolean notifications = asBoolean(raw.get("notifications")).orElse(d.notifications());
+        boolean logViewer = asBoolean(raw.get("logViewer")).orElse(d.logViewer());
+        boolean monitor = asBoolean(raw.get("monitor")).orElse(d.monitor());
+        boolean interceptors = asBoolean(raw.get("interceptors")).orElse(d.interceptors());
+
+        out.put(
+            sid,
+            new ServerTreeBuiltInNodesVisibility(
+                server, notifications, logViewer, monitor, interceptors));
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree built-in node visibility from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists per-server visibility for built-in server tree nodes.
+   *
+   * <p>When all flags are {@code true}, the server entry is removed to keep config compact.
+   */
+  public synchronized void rememberServerTreeBuiltInNodesVisibility(
+      String serverId, ServerTreeBuiltInNodesVisibility visibility) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeBuiltInNodesVisibility v =
+          visibility != null ? visibility : ServerTreeBuiltInNodesVisibility.defaults();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> byServer = getOrCreateMap(serverTree, "builtInNodesByServer");
+
+      if (v.isDefaultVisible()) {
+        byServer.remove(sid);
+      } else {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("server", v.server());
+        out.put("notifications", v.notifications());
+        out.put("logViewer", v.logViewer());
+        out.put("monitor", v.monitor());
+        out.put("interceptors", v.interceptors());
+        byServer.put(sid, out);
+      }
+
+      if (byServer.isEmpty()) serverTree.remove("builtInNodesByServer");
+      if (serverTree.isEmpty()) ui.remove("serverTree");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree built-in node visibility to '{}'", file, e);
     }
   }
 
@@ -407,7 +537,8 @@ public class RuntimeConfigStore {
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
-      // Persist "disabled" explicitly as an empty string so app defaults don't re-enable the accent on restart.
+      // Persist "disabled" explicitly as an empty string so app defaults don't re-enable the accent
+      // on restart.
       // (UiProperties treats blank as "no override".)
       String c = accentColor != null ? accentColor.trim() : "";
       ui.put("accentColor", c);
@@ -440,7 +571,8 @@ public class RuntimeConfigStore {
    *
    * <p>Stored under {@code ircafe.ui.layout}.
    */
-  public synchronized void rememberDockLayoutWidths(Integer serverDockWidthPx, Integer userDockWidthPx) {
+  public synchronized void rememberDockLayoutWidths(
+      Integer serverDockWidthPx, Integer userDockWidthPx) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -481,7 +613,10 @@ public class RuntimeConfigStore {
       String d = density != null ? density.trim().toLowerCase(java.util.Locale.ROOT) : "";
       if (d.isEmpty()) {
         ui.remove("density");
-      } else if (d.equals("auto") || d.equals("compact") || d.equals("cozy") || d.equals("spacious")) {
+      } else if (d.equals("auto")
+          || d.equals("compact")
+          || d.equals("cozy")
+          || d.equals("spacious")) {
         ui.put("density", d);
       } else {
         ui.put("density", "auto");
@@ -635,7 +770,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
   public synchronized void rememberAutoConnectOnStart(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -668,7 +802,6 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist invites.autoJoinOnInvite setting to '{}'", file, e);
     }
   }
-
 
   public synchronized void rememberTrayEnabled(boolean enabled) {
     try {
@@ -836,7 +969,10 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist tray.notifyOnlyWhenMinimizedOrHidden setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist tray.notifyOnlyWhenMinimizedOrHidden setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -853,7 +989,10 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist tray.notifySuppressWhenTargetActive setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist tray.notifySuppressWhenTargetActive setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -907,7 +1046,8 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist tray.notificationSoundsEnabled setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist tray.notificationSoundsEnabled setting to '{}'", file, e);
     }
   }
 
@@ -944,7 +1084,8 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist tray.notificationSoundUseCustom setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist tray.notificationSoundUseCustom setting to '{}'", file, e);
     }
   }
 
@@ -967,7 +1108,67 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist tray.notificationSoundCustomPath setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist tray.notificationSoundCustomPath setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberPushySettings(PushyProperties settings) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      PushyProperties safe =
+          settings != null
+              ? settings
+              : new PushyProperties(false, null, null, null, null, null, null, null);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> pushy = getOrCreateMap(ircafe, "pushy");
+
+      pushy.put("enabled", safe.enabled());
+
+      String endpoint = Objects.toString(safe.endpoint(), "").trim();
+      if (endpoint.isEmpty() || "https://api.pushy.me/push".equals(endpoint)) {
+        pushy.remove("endpoint");
+      } else {
+        pushy.put("endpoint", endpoint);
+      }
+
+      String apiKey = Objects.toString(safe.apiKey(), "").trim();
+      if (apiKey.isEmpty()) {
+        pushy.remove("apiKey");
+      } else {
+        pushy.put("apiKey", apiKey);
+      }
+
+      String deviceToken = Objects.toString(safe.deviceToken(), "").trim();
+      if (deviceToken.isEmpty()) {
+        pushy.remove("deviceToken");
+      } else {
+        pushy.put("deviceToken", deviceToken);
+      }
+
+      String topic = Objects.toString(safe.topic(), "").trim();
+      if (topic.isEmpty()) {
+        pushy.remove("topic");
+      } else {
+        pushy.put("topic", topic);
+      }
+
+      String titlePrefix = Objects.toString(safe.titlePrefix(), "").trim();
+      if (titlePrefix.isEmpty() || "IRCafe".equals(titlePrefix)) {
+        pushy.remove("titlePrefix");
+      } else {
+        pushy.put("titlePrefix", titlePrefix);
+      }
+
+      pushy.put("connectTimeoutSeconds", safe.connectTimeoutSeconds());
+      pushy.put("readTimeoutSeconds", safe.readTimeoutSeconds());
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist pushy settings to '{}'", file, e);
     }
   }
 
@@ -986,7 +1187,8 @@ public class RuntimeConfigStore {
       ui.put("notificationRuleCooldownSeconds", v);
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist notificationRuleCooldownSeconds setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist notificationRuleCooldownSeconds setting to '{}'", file, e);
     }
   }
 
@@ -1083,7 +1285,8 @@ public class RuntimeConfigStore {
     return readAppDiagnosticsAssertjSwingBoolean("enabled", defaultValue);
   }
 
-  public synchronized boolean readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(boolean defaultValue) {
+  public synchronized boolean readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(
+      boolean defaultValue) {
     return readAppDiagnosticsAssertjSwingBoolean("edtFreezeWatchdogEnabled", defaultValue);
   }
 
@@ -1094,21 +1297,29 @@ public class RuntimeConfigStore {
 
       Map<String, Object> doc = loadFile();
       Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjFreezeThresholdMs(defaultValue);
+      if (!(ircafeObj instanceof Map<?, ?> ircafe))
+        return clampAssertjFreezeThresholdMs(defaultValue);
 
       Object uiObj = ircafe.get("ui");
       if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjFreezeThresholdMs(defaultValue);
 
       Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjFreezeThresholdMs(defaultValue);
+      if (!(appObj instanceof Map<?, ?> appDiagnostics))
+        return clampAssertjFreezeThresholdMs(defaultValue);
 
       Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return clampAssertjFreezeThresholdMs(defaultValue);
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing))
+        return clampAssertjFreezeThresholdMs(defaultValue);
 
-      if (!assertjSwing.containsKey("edtFreezeThresholdMs")) return clampAssertjFreezeThresholdMs(defaultValue);
-      return clampAssertjFreezeThresholdMs(asInt(assertjSwing.get("edtFreezeThresholdMs")).orElse(defaultValue));
+      if (!assertjSwing.containsKey("edtFreezeThresholdMs"))
+        return clampAssertjFreezeThresholdMs(defaultValue);
+      return clampAssertjFreezeThresholdMs(
+          asInt(assertjSwing.get("edtFreezeThresholdMs")).orElse(defaultValue));
     } catch (Exception e) {
-      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs from '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs from '{}'",
+          file,
+          e);
       return clampAssertjFreezeThresholdMs(defaultValue);
     }
   }
@@ -1126,17 +1337,71 @@ public class RuntimeConfigStore {
       if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjWatchdogPollMs(defaultValue);
 
       Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjWatchdogPollMs(defaultValue);
+      if (!(appObj instanceof Map<?, ?> appDiagnostics))
+        return clampAssertjWatchdogPollMs(defaultValue);
 
       Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return clampAssertjWatchdogPollMs(defaultValue);
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing))
+        return clampAssertjWatchdogPollMs(defaultValue);
 
-      if (!assertjSwing.containsKey("edtWatchdogPollMs")) return clampAssertjWatchdogPollMs(defaultValue);
-      return clampAssertjWatchdogPollMs(asInt(assertjSwing.get("edtWatchdogPollMs")).orElse(defaultValue));
+      if (!assertjSwing.containsKey("edtWatchdogPollMs"))
+        return clampAssertjWatchdogPollMs(defaultValue);
+      return clampAssertjWatchdogPollMs(
+          asInt(assertjSwing.get("edtWatchdogPollMs")).orElse(defaultValue));
     } catch (Exception e) {
-      log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtWatchdogPollMs from '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtWatchdogPollMs from '{}'",
+          file,
+          e);
       return clampAssertjWatchdogPollMs(defaultValue);
     }
+  }
+
+  public synchronized int readAppDiagnosticsAssertjSwingFallbackViolationReportMs(
+      int defaultValue) {
+    try {
+      if (file.toString().isBlank()) return clampAssertjFallbackViolationReportMs(defaultValue);
+      if (!Files.exists(file)) return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe))
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui))
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics))
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) {
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+      }
+
+      if (!assertjSwing.containsKey("edtFallbackViolationReportMs")) {
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+      }
+      return clampAssertjFallbackViolationReportMs(
+          asInt(assertjSwing.get("edtFallbackViolationReportMs")).orElse(defaultValue));
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFallbackViolationReportMs from '{}'",
+          file,
+          e);
+      return clampAssertjFallbackViolationReportMs(defaultValue);
+    }
+  }
+
+  public synchronized boolean readAppDiagnosticsAssertjSwingIssuePlaySound(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("onIssuePlaySound", defaultValue);
+  }
+
+  public synchronized boolean readAppDiagnosticsAssertjSwingIssueShowNotification(
+      boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("onIssueShowNotification", defaultValue);
   }
 
   public synchronized boolean readAppDiagnosticsJhiccupEnabled(boolean defaultValue) {
@@ -1172,16 +1437,19 @@ public class RuntimeConfigStore {
 
       Map<String, Object> doc = loadFile();
       Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Objects.toString(defaultValue, "").trim();
+      if (!(ircafeObj instanceof Map<?, ?> ircafe))
+        return Objects.toString(defaultValue, "").trim();
 
       Object uiObj = ircafe.get("ui");
       if (!(uiObj instanceof Map<?, ?> ui)) return Objects.toString(defaultValue, "").trim();
 
       Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return Objects.toString(defaultValue, "").trim();
+      if (!(appObj instanceof Map<?, ?> appDiagnostics))
+        return Objects.toString(defaultValue, "").trim();
 
       Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return Objects.toString(defaultValue, "").trim();
+      if (!(jhiccupObj instanceof Map<?, ?> jhiccup))
+        return Objects.toString(defaultValue, "").trim();
 
       if (!jhiccup.containsKey("jarPath")) return Objects.toString(defaultValue, "").trim();
       String raw = Objects.toString(jhiccup.get("jarPath"), "").trim();
@@ -1294,6 +1562,12 @@ public class RuntimeConfigStore {
     return value;
   }
 
+  private static int clampAssertjFallbackViolationReportMs(int value) {
+    if (value < 250) return 250;
+    if (value > 120_000) return 120_000;
+    return value;
+  }
+
   private static List<String> sanitizeArgs(List<String> args) {
     if (args == null || args.isEmpty()) return List.of();
     List<String> out = new ArrayList<>();
@@ -1389,7 +1663,8 @@ public class RuntimeConfigStore {
     rememberAppDiagnosticsAssertjSwingBoolean("enabled", enabled, "enabled");
   }
 
-  public synchronized void rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(boolean enabled) {
+  public synchronized void rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(
+      boolean enabled) {
     rememberAppDiagnosticsAssertjSwingBoolean(
         "edtFreezeWatchdogEnabled", enabled, "edtFreezeWatchdogEnabled");
   }
@@ -1410,7 +1685,10 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs to '{}'",
+          file,
+          e);
     }
   }
 
@@ -1430,8 +1708,44 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtWatchdogPollMs to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtWatchdogPollMs to '{}'",
+          file,
+          e);
     }
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingFallbackViolationReportMs(int ms) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampAssertjFallbackViolationReportMs(ms);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put("edtFallbackViolationReportMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtFallbackViolationReportMs to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingIssuePlaySound(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean("onIssuePlaySound", enabled, "onIssuePlaySound");
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingIssueShowNotification(
+      boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean(
+        "onIssueShowNotification", enabled, "onIssueShowNotification");
   }
 
   public synchronized void rememberAppDiagnosticsJhiccupEnabled(boolean enabled) {
@@ -1538,7 +1852,8 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.{} to '{}'", label, file, e);
+      log.warn(
+          "[ircafe] Could not persist ui.appDiagnostics.assertjSwing.{} to '{}'", label, file, e);
     }
   }
 
@@ -1568,14 +1883,20 @@ public class RuntimeConfigStore {
 
           m.put("toastEnabled", r.toastEnabled());
           IrcEventNotificationRule.FocusScope focusScope =
-              r.focusScope() != null ? r.focusScope() : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+              r.focusScope() != null
+                  ? r.focusScope()
+                  : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
           m.put("focusScope", focusScope.name());
           // Legacy compatibility for older builds that only understand toastWhenFocused.
-          m.put("toastWhenFocused", focusScope != IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
+          m.put(
+              "toastWhenFocused",
+              focusScope != IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
           m.put("statusBarEnabled", r.statusBarEnabled());
           m.put("notificationsNodeEnabled", r.notificationsNodeEnabled());
           m.put("soundEnabled", r.soundEnabled());
-          m.put("soundId", Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());
+          m.put(
+              "soundId",
+              Objects.toString(r.soundId(), "").trim().isEmpty() ? "NOTIF_1" : r.soundId().trim());
           m.put("soundUseCustom", r.soundUseCustom());
 
           String custom = Objects.toString(r.soundCustomPath(), "").trim();
@@ -1587,7 +1908,8 @@ public class RuntimeConfigStore {
           String scriptArgs = Objects.toString(r.scriptArgs(), "").trim();
           if (!scriptArgs.isEmpty()) m.put("scriptArgs", scriptArgs);
           String scriptWorkingDirectory = Objects.toString(r.scriptWorkingDirectory(), "").trim();
-          if (!scriptWorkingDirectory.isEmpty()) m.put("scriptWorkingDirectory", scriptWorkingDirectory);
+          if (!scriptWorkingDirectory.isEmpty())
+            m.put("scriptWorkingDirectory", scriptWorkingDirectory);
 
           out.add(m);
         }
@@ -1622,7 +1944,8 @@ public class RuntimeConfigStore {
       for (Map.Entry<?, ?> entry : servers.entrySet()) {
         String sid = Objects.toString(entry.getKey(), "").trim();
         if (sid.isEmpty()) continue;
-        List<InterceptorDefinition> defs = parseInterceptorDefinitionsForServer(entry.getValue(), sid);
+        List<InterceptorDefinition> defs =
+            parseInterceptorDefinitionsForServer(entry.getValue(), sid);
         if (!defs.isEmpty()) {
           out.put(sid, defs);
         }
@@ -1636,7 +1959,8 @@ public class RuntimeConfigStore {
     }
   }
 
-  public synchronized void rememberInterceptorDefinitions(Map<String, List<InterceptorDefinition>> defsByServer) {
+  public synchronized void rememberInterceptorDefinitions(
+      Map<String, List<InterceptorDefinition>> defsByServer) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -1668,13 +1992,19 @@ public class RuntimeConfigStore {
               // Keep this key even when blank so "any server" survives round-trip.
               m.put("scopeServerId", scopeServerId);
 
-              m.put("channelIncludeMode",
-                  def.channelIncludeMode() != null ? def.channelIncludeMode().name() : InterceptorRuleMode.GLOB.name());
+              m.put(
+                  "channelIncludeMode",
+                  def.channelIncludeMode() != null
+                      ? def.channelIncludeMode().name()
+                      : InterceptorRuleMode.GLOB.name());
               String channelIncludes = Objects.toString(def.channelIncludes(), "").trim();
               if (!channelIncludes.isEmpty()) m.put("channelIncludes", channelIncludes);
 
-              m.put("channelExcludeMode",
-                  def.channelExcludeMode() != null ? def.channelExcludeMode().name() : InterceptorRuleMode.GLOB.name());
+              m.put(
+                  "channelExcludeMode",
+                  def.channelExcludeMode() != null
+                      ? def.channelExcludeMode().name()
+                      : InterceptorRuleMode.GLOB.name());
               String channelExcludes = Objects.toString(def.channelExcludes(), "").trim();
               if (!channelExcludes.isEmpty()) m.put("channelExcludes", channelExcludes);
 
@@ -1692,8 +2022,10 @@ public class RuntimeConfigStore {
               if (!scriptPath.isEmpty()) m.put("actionScriptPath", scriptPath);
               String scriptArgs = Objects.toString(def.actionScriptArgs(), "").trim();
               if (!scriptArgs.isEmpty()) m.put("actionScriptArgs", scriptArgs);
-              String scriptWorkingDirectory = Objects.toString(def.actionScriptWorkingDirectory(), "").trim();
-              if (!scriptWorkingDirectory.isEmpty()) m.put("actionScriptWorkingDirectory", scriptWorkingDirectory);
+              String scriptWorkingDirectory =
+                  Objects.toString(def.actionScriptWorkingDirectory(), "").trim();
+              if (!scriptWorkingDirectory.isEmpty())
+                m.put("actionScriptWorkingDirectory", scriptWorkingDirectory);
 
               List<Map<String, Object>> rulesOut = new ArrayList<>();
               if (def.rules() != null) {
@@ -1705,18 +2037,27 @@ public class RuntimeConfigStore {
                   String eventTypesCsv = Objects.toString(rule.eventTypesCsv(), "").trim();
                   if (!eventTypesCsv.isEmpty()) rm.put("eventTypesCsv", eventTypesCsv);
 
-                  rm.put("messageMode",
-                      rule.messageMode() != null ? rule.messageMode().name() : InterceptorRuleMode.LIKE.name());
+                  rm.put(
+                      "messageMode",
+                      rule.messageMode() != null
+                          ? rule.messageMode().name()
+                          : InterceptorRuleMode.LIKE.name());
                   String messagePattern = Objects.toString(rule.messagePattern(), "").trim();
                   if (!messagePattern.isEmpty()) rm.put("messagePattern", messagePattern);
 
-                  rm.put("nickMode",
-                      rule.nickMode() != null ? rule.nickMode().name() : InterceptorRuleMode.LIKE.name());
+                  rm.put(
+                      "nickMode",
+                      rule.nickMode() != null
+                          ? rule.nickMode().name()
+                          : InterceptorRuleMode.LIKE.name());
                   String nickPattern = Objects.toString(rule.nickPattern(), "").trim();
                   if (!nickPattern.isEmpty()) rm.put("nickPattern", nickPattern);
 
-                  rm.put("hostmaskMode",
-                      rule.hostmaskMode() != null ? rule.hostmaskMode().name() : InterceptorRuleMode.GLOB.name());
+                  rm.put(
+                      "hostmaskMode",
+                      rule.hostmaskMode() != null
+                          ? rule.hostmaskMode().name()
+                          : InterceptorRuleMode.GLOB.name());
                   String hostmaskPattern = Objects.toString(rule.hostmaskPattern(), "").trim();
                   if (!hostmaskPattern.isEmpty()) rm.put("hostmaskPattern", hostmaskPattern);
                   rulesOut.add(rm);
@@ -1885,7 +2226,6 @@ public class RuntimeConfigStore {
     }
   }
 
-
   public synchronized void rememberImageEmbedsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -1901,8 +2241,6 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist image embed setting to '{}'", file, e);
     }
   }
-
-  
 
   public synchronized void rememberImageEmbedsCollapsedByDefault(boolean collapsed) {
     try {
@@ -1984,8 +2322,6 @@ public class RuntimeConfigStore {
     }
   }
 
-  
-
   public synchronized void rememberLinkPreviewsCollapsedByDefault(boolean collapsed) {
     try {
       if (file.toString().isBlank()) return;
@@ -2001,7 +2337,6 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not persist link preview collapse setting to '{}'", file, e);
     }
   }
-
 
   public synchronized void rememberPresenceFoldsEnabled(boolean enabled) {
     try {
@@ -2118,16 +2453,13 @@ public class RuntimeConfigStore {
     }
   }
 
-  /**
-   * Persisted IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}.
-   */
+  /** Persisted IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
   public record Ircv3StsPolicySnapshot(
       long expiresAtEpochMs,
       Integer port,
       boolean preload,
       long durationSeconds,
-      String rawValue
-  ) {}
+      String rawValue) {}
 
   /**
    * Reads persisted IRCv3 STS policy snapshots under {@code ircafe.ircv3.stsPolicies}.
@@ -2166,12 +2498,9 @@ public class RuntimeConfigStore {
         boolean preload = asBoolean(rawPolicy.get("preload")).orElse(false);
         String rawValue = Objects.toString(rawPolicy.get("rawValue"), "").trim();
 
-        out.put(host, new Ircv3StsPolicySnapshot(
-            expiresAtEpochMs,
-            port,
-            preload,
-            durationSeconds,
-            rawValue));
+        out.put(
+            host,
+            new Ircv3StsPolicySnapshot(expiresAtEpochMs, port, preload, durationSeconds, rawValue));
       }
       return out;
     } catch (Exception e) {
@@ -2180,17 +2509,14 @@ public class RuntimeConfigStore {
     }
   }
 
-  /**
-   * Persists one IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}.
-   */
+  /** Persists one IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
   public synchronized void rememberIrcv3StsPolicy(
       String host,
       long expiresAtEpochMs,
       Integer port,
       boolean preload,
       long durationSeconds,
-      String rawValue
-  ) {
+      String rawValue) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -2232,9 +2558,7 @@ public class RuntimeConfigStore {
     }
   }
 
-  /**
-   * Removes a persisted IRCv3 STS policy snapshot from {@code ircafe.ircv3.stsPolicies}.
-   */
+  /** Removes a persisted IRCv3 STS policy snapshot from {@code ircafe.ircv3.stsPolicies}. */
   public synchronized void forgetIrcv3StsPolicy(String host) {
     try {
       if (file.toString().isBlank()) return;
@@ -2318,8 +2642,8 @@ public class RuntimeConfigStore {
   }
 
   /**
-   * Returns whether a given IRCv3 capability should be requested, falling back to {@code defaultEnabled}
-   * when no explicit override is present.
+   * Returns whether a given IRCv3 capability should be requested, falling back to {@code
+   * defaultEnabled} when no explicit override is present.
    */
   public synchronized boolean isIrcv3CapabilityEnabled(String capability, boolean defaultEnabled) {
     String key = normalizeCapabilityKey(capability);
@@ -2356,7 +2680,8 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist IRCv3 capability '{}' setting to '{}'", capability, file, e);
+      log.warn(
+          "[ircafe] Could not persist IRCv3 capability '{}' setting to '{}'", capability, file, e);
     }
   }
 
@@ -2392,7 +2717,10 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist filters placeholdersEnabledByDefault setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist filters placeholdersEnabledByDefault setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -2409,7 +2737,10 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist filters placeholdersCollapsedByDefault setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist filters placeholdersCollapsedByDefault setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -2430,90 +2761,98 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist filters placeholderMaxPreviewLines setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist filters placeholderMaxPreviewLines setting to '{}'", file, e);
     }
   }
 
-public synchronized void rememberFilterPlaceholderMaxLinesPerRun(int maxLines) {
-  try {
-    if (file.toString().isBlank()) return;
+  public synchronized void rememberFilterPlaceholderMaxLinesPerRun(int maxLines) {
+    try {
+      if (file.toString().isBlank()) return;
 
-    int v = maxLines;
-    if (v < 0) v = 0;
-    if (v > 50_000) v = 50_000;
+      int v = maxLines;
+      if (v < 0) v = 0;
+      if (v > 50_000) v = 50_000;
 
-    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
 
-    filters.put("placeholderMaxLinesPerRun", v);
+      filters.put("placeholderMaxLinesPerRun", v);
 
-    writeFile(doc);
-  } catch (Exception e) {
-    log.warn("[ircafe] Could not persist filters placeholderMaxLinesPerRun setting to '{}'", file, e);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist filters placeholderMaxLinesPerRun setting to '{}'", file, e);
+    }
   }
-}
 
-public synchronized void rememberFilterPlaceholderTooltipMaxTags(int maxTags) {
-  try {
-    if (file.toString().isBlank()) return;
+  public synchronized void rememberFilterPlaceholderTooltipMaxTags(int maxTags) {
+    try {
+      if (file.toString().isBlank()) return;
 
-    int v = maxTags;
-    if (v < 0) v = 0;
-    if (v > 500) v = 500;
+      int v = maxTags;
+      if (v < 0) v = 0;
+      if (v > 500) v = 500;
 
-    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
 
-    filters.put("placeholderTooltipMaxTags", v);
+      filters.put("placeholderTooltipMaxTags", v);
 
-    writeFile(doc);
-  } catch (Exception e) {
-    log.warn("[ircafe] Could not persist filters placeholderTooltipMaxTags setting to '{}'", file, e);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist filters placeholderTooltipMaxTags setting to '{}'", file, e);
+    }
   }
-}
 
-public synchronized void rememberFilterHistoryPlaceholderMaxRunsPerBatch(int maxRuns) {
-  try {
-    if (file.toString().isBlank()) return;
+  public synchronized void rememberFilterHistoryPlaceholderMaxRunsPerBatch(int maxRuns) {
+    try {
+      if (file.toString().isBlank()) return;
 
-    int v = maxRuns;
-    if (v < 0) v = 0;
-    if (v > 5_000) v = 5_000;
+      int v = maxRuns;
+      if (v < 0) v = 0;
+      if (v > 5_000) v = 5_000;
 
-    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
 
-    filters.put("historyPlaceholderMaxRunsPerBatch", v);
+      filters.put("historyPlaceholderMaxRunsPerBatch", v);
 
-    writeFile(doc);
-  } catch (Exception e) {
-    log.warn("[ircafe] Could not persist filters historyPlaceholderMaxRunsPerBatch setting to '{}'", file, e);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist filters historyPlaceholderMaxRunsPerBatch setting to '{}'",
+          file,
+          e);
+    }
   }
-}
 
-public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boolean enabled) {
-  try {
-    if (file.toString().isBlank()) return;
+  public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
 
-    Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-    Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-    Map<String, Object> filters = getOrCreateMap(ui, "filters");
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> filters = getOrCreateMap(ui, "filters");
 
-    filters.put("historyPlaceholdersEnabledByDefault", enabled);
+      filters.put("historyPlaceholdersEnabledByDefault", enabled);
 
-    writeFile(doc);
-  } catch (Exception e) {
-    log.warn("[ircafe] Could not persist filters historyPlaceholdersEnabledByDefault setting to '{}'", file, e);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist filters historyPlaceholdersEnabledByDefault setting to '{}'",
+          file,
+          e);
+    }
   }
-}
-
 
   public synchronized void rememberFilterRules(List<FilterRule> rules) {
     try {
@@ -2539,11 +2878,13 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
             m.put("kinds", r.kinds().stream().filter(Objects::nonNull).map(Enum::name).toList());
           }
           if (r.fromNickGlobs() != null && !r.fromNickGlobs().isEmpty()) {
-            m.put("from", r.fromNickGlobs().stream()
-                .filter(Objects::nonNull)
-                .map(s -> Objects.toString(s, "").trim())
-                .filter(s -> !s.isEmpty())
-                .toList());
+            m.put(
+                "from",
+                r.fromNickGlobs().stream()
+                    .filter(Objects::nonNull)
+                    .map(s -> Objects.toString(s, "").trim())
+                    .filter(s -> !s.isEmpty())
+                    .toList());
           }
 
           TagSpec tags = r.tags();
@@ -2559,7 +2900,12 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
             Map<String, Object> tm = new LinkedHashMap<>();
             tm.put("pattern", re.pattern());
             if (re.flags() != null && !re.flags().isEmpty()) {
-              String flags = re.flags().stream().map(Enum::name).map(String::toLowerCase).sorted().reduce("", (a, b) -> a + b);
+              String flags =
+                  re.flags().stream()
+                      .map(Enum::name)
+                      .map(String::toLowerCase)
+                      .sorted()
+                      .reduce("", (a, b) -> a + b);
               tm.put("flags", flags);
             }
             m.put("text", tm);
@@ -2575,8 +2921,6 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       log.warn("[ircafe] Could not persist filter rules to '{}'", file, e);
     }
   }
-
-
 
   public synchronized void rememberFilterOverrides(List<FilterScopeOverride> overrides) {
     try {
@@ -2594,8 +2938,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
           Map<String, Object> m = new LinkedHashMap<>();
           m.put("scope", Objects.toString(o.scopePattern(), "*").trim());
           if (o.filtersEnabled() != null) m.put("filtersEnabled", o.filtersEnabled());
-          if (o.placeholdersEnabled() != null) m.put("placeholdersEnabled", o.placeholdersEnabled());
-          if (o.placeholdersCollapsed() != null) m.put("placeholdersCollapsed", o.placeholdersCollapsed());
+          if (o.placeholdersEnabled() != null)
+            m.put("placeholdersEnabled", o.placeholdersEnabled());
+          if (o.placeholdersCollapsed() != null)
+            m.put("placeholdersCollapsed", o.placeholdersCollapsed());
           out.add(m);
         }
       }
@@ -2606,8 +2952,6 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       log.warn("[ircafe] Could not persist filter overrides to '{}'", file, e);
     }
   }
-
-
 
   public synchronized void rememberNickColoringEnabled(boolean enabled) {
     try {
@@ -2702,7 +3046,8 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     }
   }
 
-  public synchronized void rememberTimestampsIncludePresenceMessages(boolean includePresenceMessages) {
+  public synchronized void rememberTimestampsIncludePresenceMessages(
+      boolean includePresenceMessages) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -2791,7 +3136,8 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist outgoing message color enabled setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist outgoing message color enabled setting to '{}'", file, e);
     }
   }
 
@@ -2911,10 +3257,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist monitor fallback ISON interval setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist monitor fallback ISON interval setting to '{}'", file, e);
     }
   }
-
 
   // --- User info enrichment fallback (ircafe.ui.userInfoEnrichment.*) ---
 
@@ -2948,7 +3294,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment WHOIS fallback enabled setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment WHOIS fallback enabled setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -2965,11 +3314,15 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment USERHOST min interval setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment USERHOST min interval setting to '{}'",
+          file,
+          e);
     }
   }
 
-  public synchronized void rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(int maxPerMinute) {
+  public synchronized void rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(
+      int maxPerMinute) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -2982,7 +3335,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment USERHOST max commands/min setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment USERHOST max commands/min setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -2999,7 +3355,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment USERHOST nick cooldown setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment USERHOST nick cooldown setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -3017,7 +3376,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment USERHOST max nicks/command setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment USERHOST max nicks/command setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -3034,7 +3396,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment WHOIS min interval setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment WHOIS min interval setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -3051,7 +3416,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment WHOIS nick cooldown setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment WHOIS nick cooldown setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -3068,7 +3436,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment periodic refresh enabled setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment periodic refresh enabled setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -3085,7 +3456,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment periodic refresh interval setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment periodic refresh interval setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -3103,10 +3477,12 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist user info enrichment periodic refresh nicks/tick setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist user info enrichment periodic refresh nicks/tick setting to '{}'",
+          file,
+          e);
     }
   }
-
 
   public synchronized void rememberClientTlsTrustAllCertificates(boolean trustAllCertificates) {
     try {
@@ -3129,9 +3505,8 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     try {
       if (file.toString().isBlank()) return;
 
-      IrcProperties.Heartbeat hb = (heartbeat != null)
-          ? heartbeat
-          : new IrcProperties.Heartbeat(true, 15_000, 360_000);
+      IrcProperties.Heartbeat hb =
+          (heartbeat != null) ? heartbeat : new IrcProperties.Heartbeat(true, 15_000, 360_000);
 
       Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
       Map<String, Object> irc = getOrCreateMap(doc, "irc");
@@ -3152,7 +3527,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     try {
       if (file.toString().isBlank()) return;
 
-      IrcProperties.Proxy p = (proxy != null) ? proxy : new IrcProperties.Proxy(false, "", 0, "", "", true, 20_000, 30_000);
+      IrcProperties.Proxy p =
+          (proxy != null)
+              ? proxy
+              : new IrcProperties.Proxy(false, "", 0, "", "", true, 20_000, 30_000);
 
       Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
       Map<String, Object> irc = getOrCreateMap(doc, "irc");
@@ -3188,7 +3566,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       Map<String, Object> servers = getOrCreateMap(ignore, "servers");
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> server = (servers.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
       servers.put(sid, server);
 
       List<String> masks = getOrCreateStringList(server, "masks");
@@ -3246,6 +3627,7 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       log.warn("[ircafe] Could not remove ignore mask from '{}'", file, e);
     }
   }
+
   public synchronized void rememberSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -3260,7 +3642,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       Map<String, Object> servers = getOrCreateMap(ignore, "servers");
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> server = (servers.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
       servers.put(sid, server);
 
       List<String> masks = getOrCreateStringList(server, "softMasks");
@@ -3335,7 +3720,6 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     }
   }
 
-
   public synchronized void rememberSoftIgnoreIncludesCtcp(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -3351,6 +3735,7 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       log.warn("[ircafe] Could not persist soft-ignore CTCP setting to '{}'", file, e);
     }
   }
+
   public synchronized void rememberNickColorOverrides(Map<String, String> overrides) {
     try {
       if (file.toString().isBlank()) return;
@@ -3378,9 +3763,8 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     }
   }
 
-
-
-  public synchronized void rememberSojuAutoConnectNetwork(String bouncerServerId, String networkName, boolean enabled) {
+  public synchronized void rememberSojuAutoConnectNetwork(
+      String bouncerServerId, String networkName, boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -3394,7 +3778,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       Map<String, Object> autoConnect = getOrCreateMap(soju, "autoConnect");
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> nets = (autoConnect.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      Map<String, Object> nets =
+          (autoConnect.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
 
       if (enabled) {
         nets.put(net, true);
@@ -3426,9 +3813,8 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     }
   }
 
-
-
-  public synchronized void rememberZncAutoConnectNetwork(String bouncerServerId, String networkName, boolean enabled) {
+  public synchronized void rememberZncAutoConnectNetwork(
+      String bouncerServerId, String networkName, boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
 
@@ -3442,7 +3828,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       Map<String, Object> autoConnect = getOrCreateMap(znc, "autoConnect");
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> nets = (autoConnect.get(sid) instanceof Map<?, ?> mm) ? (Map<String, Object>) mm : new LinkedHashMap<>();
+      Map<String, Object> nets =
+          (autoConnect.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
 
       if (enabled) {
         nets.put(net, true);
@@ -3600,8 +3989,10 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     if (s.nick() != null) m.put("nick", s.nick());
     if (s.login() != null && !s.login().isBlank()) m.put("login", s.login());
     if (s.realName() != null && !s.realName().isBlank()) m.put("realName", s.realName());
-    if (s.autoJoin() != null && !s.autoJoin().isEmpty()) m.put("autoJoin", new ArrayList<>(s.autoJoin()));
-    if (s.perform() != null && !s.perform().isEmpty()) m.put("perform", new ArrayList<>(s.perform()));
+    if (s.autoJoin() != null && !s.autoJoin().isEmpty())
+      m.put("autoJoin", new ArrayList<>(s.autoJoin()));
+    if (s.perform() != null && !s.perform().isEmpty())
+      m.put("perform", new ArrayList<>(s.perform()));
     if (s.sasl() != null && s.sasl().enabled()) {
       Map<String, Object> sasl = new LinkedHashMap<>();
       sasl.put("enabled", true);
@@ -3648,7 +4039,8 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
     return created;
   }
 
-  private static List<InterceptorDefinition> parseInterceptorDefinitionsForServer(Object rawList, String ownerServerId) {
+  private static List<InterceptorDefinition> parseInterceptorDefinitionsForServer(
+      Object rawList, String ownerServerId) {
     String owner = Objects.toString(ownerServerId, "").trim();
     if (!(rawList instanceof List<?> list) || owner.isEmpty()) return List.of();
 
@@ -3667,18 +4059,21 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
         scopeServerId = owner;
       }
 
-      InterceptorRuleMode channelIncludeMode = asRuleMode(m.get("channelIncludeMode"), InterceptorRuleMode.GLOB);
+      InterceptorRuleMode channelIncludeMode =
+          asRuleMode(m.get("channelIncludeMode"), InterceptorRuleMode.GLOB);
       String channelIncludes = Objects.toString(m.get("channelIncludes"), "").trim();
       if (channelIncludes.isEmpty()) {
         // Backward compatibility with the old "channelsCsv" shape.
         channelIncludes = Objects.toString(m.get("channelsCsv"), "").trim();
       }
 
-      InterceptorRuleMode channelExcludeMode = asRuleMode(m.get("channelExcludeMode"), InterceptorRuleMode.GLOB);
+      InterceptorRuleMode channelExcludeMode =
+          asRuleMode(m.get("channelExcludeMode"), InterceptorRuleMode.GLOB);
       String channelExcludes = Objects.toString(m.get("channelExcludes"), "").trim();
 
       boolean actionSoundEnabled = asBoolean(m.get("actionSoundEnabled")).orElse(Boolean.FALSE);
-      boolean actionStatusBarEnabled = asBoolean(m.get("actionStatusBarEnabled")).orElse(Boolean.FALSE);
+      boolean actionStatusBarEnabled =
+          asBoolean(m.get("actionStatusBarEnabled")).orElse(Boolean.FALSE);
       boolean actionToastEnabled = asBoolean(m.get("actionToastEnabled")).orElse(Boolean.FALSE);
       String actionSoundId = Objects.toString(m.get("actionSoundId"), "").trim();
       if (actionSoundId.isEmpty()) actionSoundId = "NOTIF_1";
@@ -3688,43 +4083,47 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
       boolean actionScriptEnabled = asBoolean(m.get("actionScriptEnabled")).orElse(Boolean.FALSE);
       String actionScriptPath = Objects.toString(m.get("actionScriptPath"), "").trim();
       String actionScriptArgs = Objects.toString(m.get("actionScriptArgs"), "").trim();
-      String actionScriptWorkingDirectory = Objects.toString(m.get("actionScriptWorkingDirectory"), "").trim();
+      String actionScriptWorkingDirectory =
+          Objects.toString(m.get("actionScriptWorkingDirectory"), "").trim();
 
       List<InterceptorRule> rules = parseInterceptorRules(m.get("rules"));
       if (rules.isEmpty()) {
         // Backward compatibility with the old single-dimension rule shape.
-        rules = List.of(new InterceptorRule(
-            true,
-            "Rule 1",
-            "message,action",
-            asRuleMode(m.get("mode"), InterceptorRuleMode.LIKE),
-            Objects.toString(m.get("pattern"), "").trim(),
-            InterceptorRuleMode.LIKE,
-            "",
-            InterceptorRuleMode.GLOB,
-            ""));
+        rules =
+            List.of(
+                new InterceptorRule(
+                    true,
+                    "Rule 1",
+                    "message,action",
+                    asRuleMode(m.get("mode"), InterceptorRuleMode.LIKE),
+                    Objects.toString(m.get("pattern"), "").trim(),
+                    InterceptorRuleMode.LIKE,
+                    "",
+                    InterceptorRuleMode.GLOB,
+                    ""));
       }
 
-      out.add(new InterceptorDefinition(
-          id,
-          name,
-          enabled,
-          scopeServerId,
-          channelIncludeMode,
-          channelIncludes,
-          channelExcludeMode,
-          channelExcludes,
-          actionSoundEnabled,
-          actionStatusBarEnabled,
-          actionToastEnabled,
-          actionSoundId,
-          actionSoundUseCustom,
-          actionSoundCustomPath,
-          actionScriptEnabled,
-          actionScriptPath,
-          actionScriptArgs,
-          actionScriptWorkingDirectory,
-          rules));
+      out.add(
+          new InterceptorDefinition(
+              id,
+              name,
+              enabled,
+              scopeServerId,
+              channelIncludeMode,
+              channelIncludes,
+              channelExcludeMode,
+              channelExcludes,
+              actionSoundEnabled,
+              actionStatusBarEnabled,
+              actionToastEnabled,
+              actionSoundId,
+              actionSoundUseCustom,
+              actionSoundCustomPath,
+              actionScriptEnabled,
+              actionScriptPath,
+              actionScriptArgs,
+              actionScriptWorkingDirectory,
+              rules));
     }
     return List.copyOf(out);
   }
@@ -3744,29 +4143,33 @@ public synchronized void rememberFilterHistoryPlaceholdersEnabledByDefault(boole
         eventTypesCsv = Objects.toString(m.get("eventTypes"), "").trim();
       }
 
-      InterceptorRuleMode messageMode = asRuleMode(
-          m.containsKey("messageMode") ? m.get("messageMode") : m.get("mode"),
-          InterceptorRuleMode.LIKE);
-      String messagePattern = Objects.toString(
-          m.containsKey("messagePattern") ? m.get("messagePattern") : m.get("pattern"),
-          "").trim();
+      InterceptorRuleMode messageMode =
+          asRuleMode(
+              m.containsKey("messageMode") ? m.get("messageMode") : m.get("mode"),
+              InterceptorRuleMode.LIKE);
+      String messagePattern =
+          Objects.toString(
+                  m.containsKey("messagePattern") ? m.get("messagePattern") : m.get("pattern"), "")
+              .trim();
 
       InterceptorRuleMode nickMode = asRuleMode(m.get("nickMode"), InterceptorRuleMode.LIKE);
       String nickPattern = Objects.toString(m.get("nickPattern"), "").trim();
 
-      InterceptorRuleMode hostmaskMode = asRuleMode(m.get("hostmaskMode"), InterceptorRuleMode.GLOB);
+      InterceptorRuleMode hostmaskMode =
+          asRuleMode(m.get("hostmaskMode"), InterceptorRuleMode.GLOB);
       String hostmaskPattern = Objects.toString(m.get("hostmaskPattern"), "").trim();
 
-      out.add(new InterceptorRule(
-          enabled,
-          label,
-          eventTypesCsv,
-          messageMode,
-          messagePattern,
-          nickMode,
-          nickPattern,
-          hostmaskMode,
-          hostmaskPattern));
+      out.add(
+          new InterceptorRule(
+              enabled,
+              label,
+              eventTypesCsv,
+              messageMode,
+              messagePattern,
+              nickMode,
+              nickPattern,
+              hostmaskMode,
+              hostmaskPattern));
     }
     return List.copyOf(out);
   }

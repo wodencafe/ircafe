@@ -14,35 +14,28 @@ final class LinkPreviewParser {
       return new LinkPreview(requestedUrl, null, null, hostOf(requestedUrl), null, 0);
     }
 
-    String baseUrl = firstNonBlank(
-        meta(doc, "property", "og:url"),
-        canonical(doc),
-        requestedUrl
-    );
+    String baseUrl = firstNonBlank(meta(doc, "property", "og:url"), canonical(doc), requestedUrl);
 
-    String title = firstNonBlank(
-        meta(doc, "property", "og:title"),
-        meta(doc, "name", "twitter:title"),
-        safe(doc.title())
-    );
+    String title =
+        firstNonBlank(
+            meta(doc, "property", "og:title"),
+            meta(doc, "name", "twitter:title"),
+            safe(doc.title()));
 
-    String description = firstNonBlank(
-        meta(doc, "property", "og:description"),
-        meta(doc, "name", "twitter:description"),
-        meta(doc, "name", "description")
-    );
+    String description =
+        firstNonBlank(
+            meta(doc, "property", "og:description"),
+            meta(doc, "name", "twitter:description"),
+            meta(doc, "name", "description"));
 
-    String siteName = firstNonBlank(
-        meta(doc, "property", "og:site_name"),
-        hostOf(baseUrl)
-    );
+    String siteName = firstNonBlank(meta(doc, "property", "og:site_name"), hostOf(baseUrl));
 
-    String image = firstNonBlank(
-        meta(doc, "property", "og:image:secure_url"),
-        meta(doc, "property", "og:image"),
-        meta(doc, "name", "twitter:image"),
-        meta(doc, "name", "twitter:image:src")
-    );
+    String image =
+        firstNonBlank(
+            meta(doc, "property", "og:image:secure_url"),
+            meta(doc, "property", "og:image"),
+            meta(doc, "name", "twitter:image"),
+            meta(doc, "name", "twitter:image:src"));
     image = resolveAgainst(baseUrl, image);
 
     int mediaCount = (image != null && !image.isBlank()) ? 1 : 0;

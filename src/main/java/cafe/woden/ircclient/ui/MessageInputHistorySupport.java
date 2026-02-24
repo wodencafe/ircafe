@@ -1,24 +1,22 @@
 package cafe.woden.ircclient.ui;
 
-import org.fife.ui.autocomplete.AutoCompletion;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
+import javax.swing.*;
+import org.fife.ui.autocomplete.AutoCompletion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handles command-history browsing in the message input.
  *
- * Responsibilities:
- *  - Maintain browsing state (offset, scratch draft, search prefix)
- *  - Install keybindings for history navigation (Up/Down + alternatives)
- *  - Route Up/Down to the completion popup if it is visible
+ * <p>Responsibilities: - Maintain browsing state (offset, scratch draft, search prefix) - Install
+ * keybindings for history navigation (Up/Down + alternatives) - Route Up/Down to the completion
+ * popup if it is visible
  *
- * This class intentionally does not own non-history shortcuts (e.g. global filter toggles).
+ * <p>This class intentionally does not own non-history shortcuts (e.g. global filter toggles).
  */
 final class MessageInputHistorySupport {
 
@@ -55,8 +53,7 @@ final class MessageInputHistorySupport {
       CommandHistoryStore historyStore,
       AutoCompletion autoCompletion,
       MessageInputUndoSupport undoSupport,
-      MessageInputUiHooks hooks
-  ) {
+      MessageInputUiHooks hooks) {
     this.input = input;
     this.historyStore = historyStore;
     this.autoCompletion = autoCompletion;
@@ -75,39 +72,52 @@ final class MessageInputHistorySupport {
     InputMap im = historyInputMap;
     ActionMap am = input.getActionMap();
 
-    am.put("ircafe.historyPrev", new AbstractAction() {
-      @Override public void actionPerformed(ActionEvent e) {
-        browsePrev();
-      }
-    });
-    am.put("ircafe.historyNext", new AbstractAction() {
-      @Override public void actionPerformed(ActionEvent e) {
-        browseNext();
-      }
-    });
-    am.put("ircafe.historyCancel", new AbstractAction() {
-      @Override public void actionPerformed(ActionEvent e) {
-        if (historyOffset < 0) {
-          Toolkit.getDefaultToolkit().beep();
-          return;
-        }
-        exitBrowse(true);
-      }
-    });
-    am.put("ircafe.clearInput", new AbstractAction() {
-      @Override public void actionPerformed(ActionEvent e) {
-        if (!input.isEnabled() || !input.isEditable()) return;
-        // Exit history-browse mode first so draft tracking stays sane.
-        clearBrowseState();
-        input.setText("");
-      }
-    });
+    am.put(
+        "ircafe.historyPrev",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            browsePrev();
+          }
+        });
+    am.put(
+        "ircafe.historyNext",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            browseNext();
+          }
+        });
+    am.put(
+        "ircafe.historyCancel",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            if (historyOffset < 0) {
+              Toolkit.getDefaultToolkit().beep();
+              return;
+            }
+            exitBrowse(true);
+          }
+        });
+    am.put(
+        "ircafe.clearInput",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            if (!input.isEnabled() || !input.isEditable()) return;
+            // Exit history-browse mode first so draft tracking stays sane.
+            clearBrowseState();
+            input.setText("");
+          }
+        });
 
     // Primary: Up/Down (classic IRC client behavior).
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "ircafe.historyPrev");
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "ircafe.historyNext");
 
-    // Shell-style alternatives that don't collide with common app shortcuts (Cmd+P is Print on macOS).
+    // Shell-style alternatives that don't collide with common app shortcuts (Cmd+P is Print on
+    // macOS).
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyPrev");
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_N, KeyEvent.CTRL_DOWN_MASK), "ircafe.historyNext");
     im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, KeyEvent.ALT_DOWN_MASK), "ircafe.historyPrev");
@@ -318,13 +328,13 @@ final class MessageInputHistorySupport {
     if (actionKey == null || actionKey.isBlank()) return false;
     Action a = input.getActionMap().get(actionKey);
     if (a == null || !a.isEnabled()) return false;
-    a.actionPerformed(new ActionEvent(
-        input,
-        ActionEvent.ACTION_PERFORMED,
-        actionKey,
-        EventQueue.getMostRecentEventTime(),
-        0
-    ));
+    a.actionPerformed(
+        new ActionEvent(
+            input,
+            ActionEvent.ACTION_PERFORMED,
+            actionKey,
+            EventQueue.getMostRecentEventTime(),
+            0));
     return true;
   }
 
@@ -340,13 +350,13 @@ final class MessageInputHistorySupport {
     if (binding == null) return false;
     Action a = input.getActionMap().get(binding);
     if (a == null || !a.isEnabled()) return false;
-    a.actionPerformed(new ActionEvent(
-        input,
-        ActionEvent.ACTION_PERFORMED,
-        String.valueOf(binding),
-        EventQueue.getMostRecentEventTime(),
-        0
-    ));
+    a.actionPerformed(
+        new ActionEvent(
+            input,
+            ActionEvent.ACTION_PERFORMED,
+            String.valueOf(binding),
+            EventQueue.getMostRecentEventTime(),
+            0));
     return true;
   }
 }

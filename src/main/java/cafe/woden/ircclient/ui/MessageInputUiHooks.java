@@ -3,8 +3,8 @@ package cafe.woden.ircclient.ui;
 /**
  * Small mediator-style hook surface used by message-input support classes.
  *
- * <p>This keeps support constructors from taking a pile of loosely-related callbacks.
- * It is intentionally small and UI-focused.</p>
+ * <p>This keeps support constructors from taking a pile of loosely-related callbacks. It is
+ * intentionally small and UI-focused.
  */
 public interface MessageInputUiHooks {
 

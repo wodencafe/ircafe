@@ -95,10 +95,7 @@ public class OutboundMonitorCommandService {
   }
 
   private void handleList(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef monitorTarget,
-      TargetRef status) {
+      CompositeDisposable disposables, String serverId, TargetRef monitorTarget, TargetRef status) {
     List<String> local = monitorListService.listNicks(serverId);
     if (local.isEmpty()) {
       ui.appendStatus(monitorTarget, "(monitor)", "Monitored nicks: (none)");
@@ -116,15 +113,14 @@ public class OutboundMonitorCommandService {
   }
 
   private void handleClear(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef monitorTarget,
-      TargetRef status) {
+      CompositeDisposable disposables, String serverId, TargetRef monitorTarget, TargetRef status) {
     int removed = monitorListService.clearNicks(serverId);
     ui.appendStatus(
         monitorTarget,
         "(monitor)",
-        removed <= 0 ? "Cleared monitor list (already empty)." : ("Cleared monitor list (" + removed + " removed)."));
+        removed <= 0
+            ? "Cleared monitor list (already empty)."
+            : ("Cleared monitor list (" + removed + " removed)."));
     if (monitorIsonFallbackService.isFallbackActive(serverId)) {
       requestFallbackRefresh(serverId, status, false);
       return;
@@ -155,14 +151,24 @@ public class OutboundMonitorCommandService {
           "(monitor)",
           changed <= 0
               ? "No monitor nicks added."
-              : ("Added " + changed + " monitor nick" + (changed == 1 ? "" : "s") + ": " + String.join(", ", nicks)));
+              : ("Added "
+                  + changed
+                  + " monitor nick"
+                  + (changed == 1 ? "" : "s")
+                  + ": "
+                  + String.join(", ", nicks)));
     } else {
       ui.appendStatus(
           monitorTarget,
           "(monitor)",
           changed <= 0
               ? "No monitor nicks removed."
-              : ("Removed " + changed + " monitor nick" + (changed == 1 ? "" : "s") + ": " + String.join(", ", nicks)));
+              : ("Removed "
+                  + changed
+                  + " monitor nick"
+                  + (changed == 1 ? "" : "s")
+                  + ": "
+                  + String.join(", ", nicks)));
     }
 
     int chunkSize = irc.negotiatedMonitorLimit(serverId);
@@ -206,11 +212,11 @@ public class OutboundMonitorCommandService {
     disposables.add(
         irc.sendRaw(sid, rawLine)
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(monitor-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(monitor-error)", String.valueOf(err))));
   }
 
-  private void requestFallbackRefresh(String serverId, TargetRef status, boolean requireConnection) {
+  private void requestFallbackRefresh(
+      String serverId, TargetRef status, boolean requireConnection) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     if (!connectionCoordinator.isConnected(sid)) {
@@ -224,8 +230,10 @@ public class OutboundMonitorCommandService {
 
   private void appendUsage(TargetRef out) {
     ui.appendStatus(out, "(monitor)", "Usage: /monitor <+|-|list|status|clear> [nicks]");
-    ui.appendStatus(out, "(monitor)", "Aliases: /mon, /monitor +nick1 nick2, /monitor -nick1,nick2");
-    ui.appendStatus(out, "(monitor)", "Examples: /monitor +alice,bob  |  /monitor list  |  /monitor clear");
+    ui.appendStatus(
+        out, "(monitor)", "Aliases: /mon, /monitor +nick1 nick2, /monitor -nick1,nick2");
+    ui.appendStatus(
+        out, "(monitor)", "Examples: /monitor +alice,bob  |  /monitor list  |  /monitor clear");
   }
 
   private static char extractSigil(String op) {

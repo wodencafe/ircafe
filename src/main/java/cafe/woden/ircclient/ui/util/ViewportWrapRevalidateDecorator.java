@@ -24,22 +24,24 @@ public final class ViewportWrapRevalidateDecorator implements AutoCloseable {
   private ViewportWrapRevalidateDecorator(JViewport viewport, JComponent target) {
     this.viewport = viewport;
     this.target = target;
-    this.listener = new ComponentAdapter() {
-      @Override
-      public void componentResized(ComponentEvent e) {
-        if (closed) return;
-        int width = viewport.getWidth();
-        if (width <= 0) return;
-        if (width == lastAppliedViewportWidth) return;
-        pendingViewportWidth = width;
+    this.listener =
+        new ComponentAdapter() {
+          @Override
+          public void componentResized(ComponentEvent e) {
+            if (closed) return;
+            int width = viewport.getWidth();
+            if (width <= 0) return;
+            if (width == lastAppliedViewportWidth) return;
+            pendingViewportWidth = width;
 
-        // Calling revalidate() directly inside componentResized() can cause re-entrant layout
-        // and an event storm (or even a hang) on startup or during docking transitions.
-        // Coalesce to a single invokeLater() per resize burst.
-        if (!scheduled.compareAndSet(false, true)) return;
-        SwingUtilities.invokeLater(ViewportWrapRevalidateDecorator.this::applyPendingViewportWidth);
-      }
-    };
+            // Calling revalidate() directly inside componentResized() can cause re-entrant layout
+            // and an event storm (or even a hang) on startup or during docking transitions.
+            // Coalesce to a single invokeLater() per resize burst.
+            if (!scheduled.compareAndSet(false, true)) return;
+            SwingUtilities.invokeLater(
+                ViewportWrapRevalidateDecorator.this::applyPendingViewportWidth);
+          }
+        };
 
     this.viewport.addComponentListener(listener);
   }

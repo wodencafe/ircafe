@@ -7,16 +7,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
 /**
- * Tracks pending WHOIS requests so inbound WHOIS numerics can be routed to the tab
- * where the request originated.
+ * Tracks pending WHOIS requests so inbound WHOIS numerics can be routed to the tab where the
+ * request originated.
  *
- * <p>This is intentionally a small state-holder to keep {@code IrcMediator} from
- * accumulating more correlation maps.
+ * <p>This is intentionally a small state-holder to keep {@code IrcMediator} from accumulating more
+ * correlation maps.
  */
 @Component
 public class WhoisRoutingState {
 
-  private final ConcurrentHashMap<WhoisKey, TargetRef> pendingWhoisTargets = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<WhoisKey, TargetRef> pendingWhoisTargets =
+      new ConcurrentHashMap<>();
 
   /** Record a pending WHOIS for {@code nick}, routing the reply to {@code target}. */
   public void put(String serverId, String nick, TargetRef target) {

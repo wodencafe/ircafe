@@ -1,13 +1,11 @@
 package cafe.woden.ircclient.ui;
+
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
@@ -23,7 +21,11 @@ import java.beans.PropertyChangeListener;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javax.swing.*;
 import javax.swing.text.BadLocationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
   public static final String ID = "input";
@@ -40,78 +42,81 @@ public class MessageInputPanel extends JPanel {
   private final MessageInputContextMenuSupport contextMenuSupport;
   private final MessageInputComposeSupport composeSupport;
   private boolean programmaticEdit;
-  private final FlowableProcessor<String> outbound = PublishProcessor.<String>create().toSerialized();
+  private final FlowableProcessor<String> outbound =
+      PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
   private final MessageInputTypingSupport typingSupport;
   private final UiSettingsBus settingsBus;
   private final MessageInputHistorySupport historySupport;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
+
   public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
     super(new BorderLayout(8, 0));
     this.settingsBus = settingsBus;
 
     this.undoSupport = new MessageInputUndoSupport(input, () -> programmaticEdit);
-    this.nickCompletionSupport = new MessageInputNickCompletionSupport(this, input, this.undoSupport);
-    this.hintPopupSupport = new MessageInputHintPopupSupport(this, input, nickCompletionSupport::firstNickStartingWith);
+    this.nickCompletionSupport =
+        new MessageInputNickCompletionSupport(this, input, this.undoSupport);
+    this.hintPopupSupport =
+        new MessageInputHintPopupSupport(this, input, nickCompletionSupport::firstNickStartingWith);
 
-    MessageInputUiHooks hooks = new MessageInputUiHooks() {
-      @Override public void updateHint() {
-        hintPopupSupport.updateHint();
-      }
+    MessageInputUiHooks hooks =
+        new MessageInputUiHooks() {
+          @Override
+          public void updateHint() {
+            hintPopupSupport.updateHint();
+          }
 
-      @Override public void markCompletionUiDirty() {
-        nickCompletionSupport.markUiDirty();
-      }
+          @Override
+          public void markCompletionUiDirty() {
+            nickCompletionSupport.markUiDirty();
+          }
 
-      @Override public void runProgrammaticEdit(Runnable r) {
-        MessageInputPanel.this.runProgrammaticEdit(r);
-      }
+          @Override
+          public void runProgrammaticEdit(Runnable r) {
+            MessageInputPanel.this.runProgrammaticEdit(r);
+          }
 
-      @Override public void focusInput() {
-        MessageInputPanel.this.focusInput();
-      }
+          @Override
+          public void focusInput() {
+            MessageInputPanel.this.focusInput();
+          }
 
-      @Override public void flushTypingDone() {
-        MessageInputPanel.this.flushTypingDone();
-      }
+          @Override
+          public void flushTypingDone() {
+            MessageInputPanel.this.flushTypingDone();
+          }
 
-      @Override public void fireDraftChanged() {
-        MessageInputPanel.this.fireDraftChanged();
-      }
+          @Override
+          public void fireDraftChanged() {
+            MessageInputPanel.this.fireDraftChanged();
+          }
 
-      @Override public void sendOutbound(String line) {
-        if (line == null || line.isBlank()) return;
-        outbound.onNext(line);
-      }
-    };
+          @Override
+          public void sendOutbound(String line) {
+            if (line == null || line.isBlank()) return;
+            outbound.onNext(line);
+          }
+        };
 
-    this.typingSupport = new MessageInputTypingSupport(
-        input,
-        typingBanner,
-        typingBannerLabel,
-        typingDotsIndicator,
-        typingSignalIndicator,
-        settingsBus::get,
-        hooks
-    );
-    this.historySupport = new MessageInputHistorySupport(
-        input,
-        historyStore,
-        nickCompletionSupport.getAutoCompletion(),
-        undoSupport,
-        hooks
-    );
+    this.typingSupport =
+        new MessageInputTypingSupport(
+            input,
+            typingBanner,
+            typingBannerLabel,
+            typingDotsIndicator,
+            typingSignalIndicator,
+            settingsBus::get,
+            hooks);
+    this.historySupport =
+        new MessageInputHistorySupport(
+            input, historyStore, nickCompletionSupport.getAutoCompletion(), undoSupport, hooks);
 
-    this.contextMenuSupport = new MessageInputContextMenuSupport(input, undoSupport, historySupport);
+    this.contextMenuSupport =
+        new MessageInputContextMenuSupport(input, undoSupport, historySupport);
 
-    this.composeSupport = new MessageInputComposeSupport(
-        this,
-        this,
-        input,
-        send,
-        hooks
-    );
+    this.composeSupport = new MessageInputComposeSupport(this, this, input, send, hooks);
 
     buildLayout();
     installSupports();
@@ -124,7 +129,6 @@ public class MessageInputPanel extends JPanel {
     UiSettings initial = settingsBus.get();
     applySettings(initial);
   }
-
 
   private void buildLayout() {
     JPanel right = new JPanel(new BorderLayout(0, 0));
@@ -150,6 +154,7 @@ public class MessageInputPanel extends JPanel {
     add(center, BorderLayout.CENTER);
     add(right, BorderLayout.EAST);
   }
+
   private void configureTypingBanner() {
     typingBanner.setOpaque(false);
     typingBanner.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
@@ -184,11 +189,25 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void installDraftListeners() {
-    input.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-      @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
-      @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
-      @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { onDraftDocumentChanged(); }
-    });
+    input
+        .getDocument()
+        .addDocumentListener(
+            new javax.swing.event.DocumentListener() {
+              @Override
+              public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                onDraftDocumentChanged();
+              }
+
+              @Override
+              public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                onDraftDocumentChanged();
+              }
+
+              @Override
+              public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                onDraftDocumentChanged();
+              }
+            });
 
     input.getDocument().addUndoableEditListener(e -> undoSupport.handleUndoableEdit(e.getEdit()));
   }
@@ -200,70 +219,86 @@ public class MessageInputPanel extends JPanel {
 
   private void installActivationListeners() {
     // Mark this input surface as "active" when the user interacts with it.
-    FocusAdapter focusAdapter = new FocusAdapter() {
-      @Override public void focusGained(FocusEvent e) {
-        fireActivated();
-        hintPopupSupport.updateHint();
-        nickCompletionSupport.markUiDirty();
-      }
-      @Override public void focusLost(FocusEvent e) {
-        undoSupport.endCompoundEdit();
-        flushTypingDone();
-        hintPopupSupport.updateHint();
-        nickCompletionSupport.markUiDirty();
-      }
-    };
+    FocusAdapter focusAdapter =
+        new FocusAdapter() {
+          @Override
+          public void focusGained(FocusEvent e) {
+            fireActivated();
+            hintPopupSupport.updateHint();
+            nickCompletionSupport.markUiDirty();
+          }
+
+          @Override
+          public void focusLost(FocusEvent e) {
+            undoSupport.endCompoundEdit();
+            flushTypingDone();
+            hintPopupSupport.updateHint();
+            nickCompletionSupport.markUiDirty();
+          }
+        };
     input.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
 
-    MouseAdapter mouseAdapter = new MouseAdapter() {
-      @Override public void mousePressed(MouseEvent e) { undoSupport.endCompoundEdit(); fireActivated(); }
-    };
+    MouseAdapter mouseAdapter =
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            undoSupport.endCompoundEdit();
+            fireActivated();
+          }
+        };
     input.addMouseListener(mouseAdapter);
     send.addMouseListener(mouseAdapter);
     addMouseListener(mouseAdapter);
   }
 
-  
-private void installEscapeHandler() {
-  // Swing key bindings (InputMap/ActionMap) instead of a KeyListener:
-  //  - end the current undo group when the user navigates the caret (left/right/home/end)
-  //  - ESC cancels history-browse mode (but otherwise falls through to other handlers like AutoCompletion)
-  ActionMap am = input.getActionMap();
-  InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
+  private void installEscapeHandler() {
+    // Swing key bindings (InputMap/ActionMap) instead of a KeyListener:
+    //  - end the current undo group when the user navigates the caret (left/right/home/end)
+    //  - ESC cancels history-browse mode (but otherwise falls through to other handlers like
+    // AutoCompletion)
+    ActionMap am = input.getActionMap();
+    InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
 
-  am.put("ircafe.endUndoGroup", new AbstractAction() {
-    @Override public void actionPerformed(ActionEvent e) {
-      undoSupport.endCompoundEdit();
-    }
-  });
+    am.put(
+        "ircafe.endUndoGroup",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            undoSupport.endCompoundEdit();
+          }
+        });
 
-  // Bind on KEY RELEASE so we don't steal the normal caret-navigation actions from the text field.
-  int[] navKeys = { KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_HOME, KeyEvent.VK_END };
-  int[] mods = {
+    // Bind on KEY RELEASE so we don't steal the normal caret-navigation actions from the text
+    // field.
+    int[] navKeys = {KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_HOME, KeyEvent.VK_END};
+    int[] mods = {
       0,
       java.awt.event.InputEvent.SHIFT_DOWN_MASK,
       java.awt.event.InputEvent.CTRL_DOWN_MASK,
       java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK,
       java.awt.event.InputEvent.ALT_DOWN_MASK,
       java.awt.event.InputEvent.ALT_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK
-  };
-  for (int key : navKeys) {
-    for (int mod : mods) {
-      im.put(KeyStroke.getKeyStroke(key, mod, true), "ircafe.endUndoGroup");
+    };
+    for (int key : navKeys) {
+      for (int mod : mods) {
+        im.put(KeyStroke.getKeyStroke(key, mod, true), "ircafe.endUndoGroup");
+      }
     }
+
+    am.put(
+        "ircafe.cancelHistoryBrowse",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            if (!historySupport.isBrowsing()) return;
+            historySupport.exitBrowse(true);
+          }
+        });
+    // Also bind on release so other ESC handlers (e.g. completion popup dismissal) still run when
+    // not browsing.
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, true), "ircafe.cancelHistoryBrowse");
   }
-
-  am.put("ircafe.cancelHistoryBrowse", new AbstractAction() {
-    @Override public void actionPerformed(ActionEvent e) {
-      if (!historySupport.isBrowsing()) return;
-      historySupport.exitBrowse(true);
-    }
-  });
-  // Also bind on release so other ESC handlers (e.g. completion popup dismissal) still run when not browsing.
-  im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0, true), "ircafe.cancelHistoryBrowse");
-}
-
 
   private void runProgrammaticEdit(Runnable r) {
     boolean prev = programmaticEdit;
@@ -283,24 +318,35 @@ private void installEscapeHandler() {
     //  - Alt+- toggles filtering for current buffer (/filter toggle @)
     ActionMap am = input.getActionMap();
     InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
-    am.put("ircafe.filterToggleGlobal", new AbstractAction() {
-      @Override public void actionPerformed(ActionEvent e) {
-        outbound.onNext("/filter toggle");
-      }
-    });
-    am.put("ircafe.filterToggleBuffer", new AbstractAction() {
-      @Override public void actionPerformed(ActionEvent e) {
-        outbound.onNext("/filter toggle @");
-      }
-    });
+    am.put(
+        "ircafe.filterToggleGlobal",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            outbound.onNext("/filter toggle");
+          }
+        });
+    am.put(
+        "ircafe.filterToggleBuffer",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            outbound.onNext("/filter toggle @");
+          }
+        });
 
     // On US keyboards, the "+=" key is VK_EQUALS (with Shift producing '+').
-    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK), "ircafe.filterToggleGlobal");
-    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK), "ircafe.filterToggleGlobal");
-    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK), "ircafe.filterToggleBuffer");
+    im.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK),
+        "ircafe.filterToggleGlobal");
+    im.put(
+        KeyStroke.getKeyStroke(
+            KeyEvent.VK_EQUALS, KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
+        "ircafe.filterToggleGlobal");
+    im.put(
+        KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, KeyEvent.ALT_DOWN_MASK),
+        "ircafe.filterToggleBuffer");
   }
-
-
 
   @Override
   public void addNotify() {
@@ -309,6 +355,7 @@ private void installEscapeHandler() {
     hintPopupSupport.updateHint();
     nickCompletionSupport.onAddNotify();
   }
+
   @Override
   public void removeNotify() {
     hintPopupSupport.hide();
@@ -316,7 +363,6 @@ private void installEscapeHandler() {
     if (settingsBus != null) settingsBus.removeListener(settingsListener);
     super.removeNotify();
   }
-
 
   private void onSettingsChanged(PropertyChangeEvent evt) {
     if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
@@ -361,55 +407,51 @@ private void installEscapeHandler() {
     }
   }
 
-
-
   public Flowable<String> outboundMessages() {
     return outbound.onBackpressureBuffer();
   }
-private void emit() {
-  String msg = input.getText().trim();
-  if (msg.isEmpty()) return;
 
-  MessageInputComposeSupport.TransformResult tr = composeSupport.transformOutgoing(msg);
-  String outboundLine = tr.outboundLine();
-  boolean consumeReplyCompose = tr.consumeReplyCompose();
+  private void emit() {
+    String msg = input.getText().trim();
+    if (msg.isEmpty()) return;
 
-  flushTypingDone();
-  historySupport.addToHistory(msg);
-  // Leaving history-browse mode before clearing ensures draft persistence isn't polluted.
-  historySupport.clearBrowseState();
+    MessageInputComposeSupport.TransformResult tr = composeSupport.transformOutgoing(msg);
+    String outboundLine = tr.outboundLine();
+    boolean consumeReplyCompose = tr.consumeReplyCompose();
 
-  programmaticEdit = true;
-  try {
-    input.setText("");
-  } finally {
-    programmaticEdit = false;
+    flushTypingDone();
+    historySupport.addToHistory(msg);
+    // Leaving history-browse mode before clearing ensures draft persistence isn't polluted.
+    historySupport.clearBrowseState();
+
+    programmaticEdit = true;
+    try {
+      input.setText("");
+    } finally {
+      programmaticEdit = false;
+    }
+    undoSupport.discardAllEdits();
+
+    outbound.onNext(outboundLine);
+
+    if (consumeReplyCompose) {
+      composeSupport.clearReplyComposeInternal(false, false);
+    }
   }
-  undoSupport.discardAllEdits();
 
-  outbound.onNext(outboundLine);
-
-  if (consumeReplyCompose) {
-    composeSupport.clearReplyComposeInternal(false, false);
+  public void beginReplyCompose(String ircTarget, String messageId) {
+    composeSupport.beginReplyCompose(ircTarget, messageId);
   }
-}
 
-public void beginReplyCompose(String ircTarget, String messageId) {
-  composeSupport.beginReplyCompose(ircTarget, messageId);
-}
+  public void clearReplyCompose() {
+    composeSupport.clearReplyCompose();
+  }
 
-public void clearReplyCompose() {
-  composeSupport.clearReplyCompose();
-}
+  public void openQuickReactionPicker(String ircTarget, String messageId) {
+    composeSupport.openQuickReactionPicker(ircTarget, messageId);
+  }
 
-public void openQuickReactionPicker(String ircTarget, String messageId) {
-  composeSupport.openQuickReactionPicker(ircTarget, messageId);
-}
-
-
-  /**
-   * Called when this input becomes the active typing surface (focus or click).
-   */
+  /** Called when this input becomes the active typing surface (focus or click). */
   public void setOnActivated(Runnable onActivated) {
     this.onActivated = onActivated == null ? () -> {} : onActivated;
   }
@@ -445,8 +487,6 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
       log.warn("[MessageInputPanel] remove LAF listener failed", ex);
     }
   }
-
-
 
   public boolean showRemoteTypingIndicator(String nick, String state) {
     int beforeHeight = inputAreaHeightPx();
@@ -502,10 +542,13 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
    *
    * @return true when the draft text changed.
    */
-  public boolean normalizeIrcv3DraftForCapabilities(boolean replySupported, boolean reactSupported) {
+  public boolean normalizeIrcv3DraftForCapabilities(
+      boolean replySupported, boolean reactSupported) {
     boolean changed = false;
     String before = getDraftText();
-    String after = Ircv3DraftNormalizer.normalizeIrcv3DraftForCapabilities(before, replySupported, reactSupported);
+    String after =
+        Ircv3DraftNormalizer.normalizeIrcv3DraftForCapabilities(
+            before, replySupported, reactSupported);
     if (!Objects.equals(before, after)) {
       setDraftText(after);
       changed = true;
@@ -517,8 +560,10 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
     return changed;
   }
 
-  public static String normalizeIrcv3DraftForCapabilities(String draft, boolean replySupported, boolean reactSupported) {
-    return Ircv3DraftNormalizer.normalizeIrcv3DraftForCapabilities(draft, replySupported, reactSupported);
+  public static String normalizeIrcv3DraftForCapabilities(
+      String draft, boolean replySupported, boolean reactSupported) {
+    return Ircv3DraftNormalizer.normalizeIrcv3DraftForCapabilities(
+        draft, replySupported, reactSupported);
   }
 
   public void setInputEnabled(boolean enabled) {
@@ -533,6 +578,7 @@ public void openQuickReactionPicker(String ircTarget, String messageId) {
     hintPopupSupport.updateHint();
     nickCompletionSupport.markUiDirty();
   }
+
   public String getDraftText() {
     return historySupport.getDraftText();
   }

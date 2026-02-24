@@ -18,64 +18,64 @@ import org.springframework.stereotype.Component;
 class ThemeAppearanceService {
 
   private static final String[] COMMON_TWEAK_OVERRIDE_KEYS = {
-      "Component.arc",
-      "Button.arc",
-      "TextComponent.arc",
-      "ProgressBar.arc",
-      "ScrollPane.arc",
-      "Tree.rowHeight",
-      "Table.rowHeight",
-      "List.cellHeight",
-      "Button.margin",
-      "ToggleButton.margin",
-      "RadioButton.margin",
-      "CheckBox.margin",
-      "TextComponent.margin",
-      "TextField.margin",
-      "PasswordField.margin",
-      "TextArea.margin",
-      "ComboBox.padding"
+    "Component.arc",
+    "Button.arc",
+    "TextComponent.arc",
+    "ProgressBar.arc",
+    "ScrollPane.arc",
+    "Tree.rowHeight",
+    "Table.rowHeight",
+    "List.cellHeight",
+    "Button.margin",
+    "ToggleButton.margin",
+    "RadioButton.margin",
+    "CheckBox.margin",
+    "TextComponent.margin",
+    "TextField.margin",
+    "PasswordField.margin",
+    "TextArea.margin",
+    "ComboBox.padding"
   };
 
   private static final String[] ACCENT_OVERRIDE_KEYS = {
-      "@accentColor",
-      "@accentBaseColor",
-      "@accentBase2Color",
-      "Component.focusColor",
-      "Component.linkColor",
-      "TextComponent.selectionBackground",
-      "TextComponent.selectionForeground",
-      "List.selectionBackground",
-      "List.selectionForeground",
-      "Table.selectionBackground",
-      "Table.selectionForeground",
-      "Tree.selectionBackground",
-      "Tree.selectionForeground"
+    "@accentColor",
+    "@accentBaseColor",
+    "@accentBase2Color",
+    "Component.focusColor",
+    "Component.linkColor",
+    "TextComponent.selectionBackground",
+    "TextComponent.selectionForeground",
+    "List.selectionBackground",
+    "List.selectionForeground",
+    "Table.selectionBackground",
+    "Table.selectionForeground",
+    "Tree.selectionBackground",
+    "Tree.selectionForeground"
   };
 
   private static final Object NULL_SENTINEL = new Object();
   private static final String[] UI_FONT_PRIORITY_KEYS = {
-      "defaultFont",
-      "Label.font",
-      "Button.font",
-      "Table.font",
-      "TableHeader.font",
-      "TextField.font",
-      "TextArea.font",
-      "CheckBox.font",
-      "ComboBox.font",
-      "Tree.font",
-      "TabbedPane.font",
-      "TitledBorder.font",
-      "MenuBar.font",
-      "Menu.font",
-      "MenuItem.font",
-      "CheckBoxMenuItem.font",
-      "RadioButtonMenuItem.font",
-      "PopupMenu.font",
-      "MenuItem.acceleratorFont",
-      "CheckBoxMenuItem.acceleratorFont",
-      "RadioButtonMenuItem.acceleratorFont"
+    "defaultFont",
+    "Label.font",
+    "Button.font",
+    "Table.font",
+    "TableHeader.font",
+    "TextField.font",
+    "TextArea.font",
+    "CheckBox.font",
+    "ComboBox.font",
+    "Tree.font",
+    "TabbedPane.font",
+    "TitledBorder.font",
+    "MenuBar.font",
+    "Menu.font",
+    "MenuItem.font",
+    "CheckBoxMenuItem.font",
+    "RadioButtonMenuItem.font",
+    "PopupMenu.font",
+    "MenuItem.acceleratorFont",
+    "CheckBoxMenuItem.acceleratorFont",
+    "RadioButtonMenuItem.acceleratorFont"
   };
 
   private final Map<String, Object> accentBaselineValues = new HashMap<>();
@@ -197,8 +197,10 @@ class ThemeAppearanceService {
     if (panelBg == null) panelBg = UIManager.getColor("control");
 
     boolean dark = ThemeColorUtils.isDark(panelBg);
-    Color focus = dark ? ThemeColorUtils.lighten(blended, 0.20) : ThemeColorUtils.darken(blended, 0.10);
-    Color link = dark ? ThemeColorUtils.lighten(blended, 0.28) : ThemeColorUtils.darken(blended, 0.12);
+    Color focus =
+        dark ? ThemeColorUtils.lighten(blended, 0.20) : ThemeColorUtils.darken(blended, 0.10);
+    Color link =
+        dark ? ThemeColorUtils.lighten(blended, 0.28) : ThemeColorUtils.darken(blended, 0.12);
 
     if (!isFlatLafActive() && panelBg != null) {
       focus = ThemeColorUtils.ensureContrastAgainstBackground(focus, panelBg, 1.25);
@@ -255,9 +257,7 @@ class ThemeAppearanceService {
     }
 
     for (Map.Entry<String, Object> entry : accentBaselineValues.entrySet()) {
-      UIManager.put(
-          entry.getKey(),
-          entry.getValue() == NULL_SENTINEL ? null : entry.getValue());
+      UIManager.put(entry.getKey(), entry.getValue() == NULL_SENTINEL ? null : entry.getValue());
     }
 
     accentBaselineValues.clear();

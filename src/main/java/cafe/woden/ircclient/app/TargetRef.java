@@ -2,16 +2,18 @@ package cafe.woden.ircclient.app;
 
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /**
  * Identifies a chat "target" within a server.
  *
- * <p>IRC targets (channels + nicks) are case-insensitive for identity purposes.
- * To avoid accidental duplicates (e.g. "##Llamas" vs "##llamas"), equality and
- * hashing are performed using a folded (lowercased) key.
+ * <p>IRC targets (channels + nicks) are case-insensitive for identity purposes. To avoid accidental
+ * duplicates (e.g. "##Llamas" vs "##llamas"), equality and hashing are performed using a folded
+ * (lowercased) key.
  *
  * <p>The original {@link #target()} is preserved for display/persistence.
  */
+@ValueObject
 public final class TargetRef {
 
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
@@ -24,6 +26,7 @@ public final class TargetRef {
   public static final String APPLICATION_UNHANDLED_ERRORS_TARGET = "__app_unhandled_errors__";
   public static final String APPLICATION_ASSERTJ_SWING_TARGET = "__app_assertj_swing__";
   public static final String APPLICATION_JHICCUP_TARGET = "__app_jhiccup__";
+  public static final String APPLICATION_TERMINAL_TARGET = "__app_terminal__";
   public static final String LOG_VIEWER_TARGET = "__log_viewer__";
 
   private final String serverId;
@@ -76,6 +79,10 @@ public final class TargetRef {
     return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_JHICCUP_TARGET);
   }
 
+  public static TargetRef applicationTerminal() {
+    return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_TERMINAL_TARGET);
+  }
+
   public static TargetRef logViewer(String serverId) {
     return new TargetRef(serverId, LOG_VIEWER_TARGET);
   }
@@ -87,8 +94,8 @@ public final class TargetRef {
   /**
    * Display/persistence target string.
    *
-   * <p>Do not use this for identity comparisons. Use {@link #matches(String)} or
-   * rely on {@link #equals(Object)}.
+   * <p>Do not use this for identity comparisons. Use {@link #matches(String)} or rely on {@link
+   * #equals(Object)}.
    */
   public String target() {
     return target;
@@ -153,9 +160,16 @@ public final class TargetRef {
     return APPLICATION_JHICCUP_TARGET.equals(key);
   }
 
+  public boolean isApplicationTerminal() {
+    return APPLICATION_TERMINAL_TARGET.equals(key);
+  }
+
   public boolean isApplicationUi() {
     if (!isApplicationServer()) return false;
-    return isApplicationUnhandledErrors() || isApplicationAssertjSwing() || isApplicationJhiccup();
+    return isApplicationUnhandledErrors()
+        || isApplicationAssertjSwing()
+        || isApplicationJhiccup()
+        || isApplicationTerminal();
   }
 
   public boolean isLogViewer() {
@@ -202,6 +216,7 @@ public final class TargetRef {
     if (APPLICATION_UNHANDLED_ERRORS_TARGET.equals(t)) return APPLICATION_UNHANDLED_ERRORS_TARGET;
     if (APPLICATION_ASSERTJ_SWING_TARGET.equals(t)) return APPLICATION_ASSERTJ_SWING_TARGET;
     if (APPLICATION_JHICCUP_TARGET.equals(t)) return APPLICATION_JHICCUP_TARGET;
+    if (APPLICATION_TERMINAL_TARGET.equals(t)) return APPLICATION_TERMINAL_TARGET;
     if (LOG_VIEWER_TARGET.equals(t)) return LOG_VIEWER_TARGET;
     return t.toLowerCase(Locale.ROOT);
   }

@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.ui.chat.fold;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 /**
  * Tiny hint row shown when filtered lines are being suppressed but placeholders are disabled.
@@ -54,22 +54,19 @@ public class FilteredHintComponent extends JPanel {
     repaint();
   }
 
-/**
- * Limits how many tags are listed in the tooltip tag summary.
- *
- * <p>0 disables tag listing entirely.
- */
-public void setMaxTagsInTooltip(int max) {
-  if (max < 0) max = 0;
-  if (max > 500) max = 500;
-  this.maxTagsInTooltip = max;
-  refreshTooltip();
-}
-
-
   /**
-   * Provides extra tooltip context: which rule filtered this run and which tags were present.
+   * Limits how many tags are listed in the tooltip tag summary.
+   *
+   * <p>0 disables tag listing entirely.
    */
+  public void setMaxTagsInTooltip(int max) {
+    if (max < 0) max = 0;
+    if (max > 500) max = 500;
+    this.maxTagsInTooltip = max;
+    refreshTooltip();
+  }
+
+  /** Provides extra tooltip context: which rule filtered this run and which tags were present. */
   public void setFilterDetails(String ruleLabel, boolean multiple, Collection<String> tags) {
     this.filterRuleLabel = (ruleLabel == null || ruleLabel.isBlank()) ? null : ruleLabel;
     this.multipleRules = multiple;
@@ -101,10 +98,12 @@ public void setMaxTagsInTooltip(int max) {
   }
 
   private void refreshTooltip() {
-    setToolTipText(buildTooltipHtml(count, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
+    setToolTipText(
+        buildTooltipHtml(count, filterRuleLabel, multipleRules, unionTags, maxTagsInTooltip));
   }
 
-  private static String buildTooltipHtml(int count, String ruleLabel, boolean multiple, List<String> tags, int maxTags) {
+  private static String buildTooltipHtml(
+      int count, String ruleLabel, boolean multiple, List<String> tags, int maxTags) {
     if (count <= 0) return null;
 
     StringBuilder sb = new StringBuilder();
@@ -182,9 +181,8 @@ public void setMaxTagsInTooltip(int max) {
     int w = p.getWidth();
     if (w <= 0) return -1;
 
-    Insets insets = (p instanceof JComponent)
-        ? ((JComponent) p).getInsets()
-        : new Insets(0, 0, 0, 0);
+    Insets insets =
+        (p instanceof JComponent) ? ((JComponent) p).getInsets() : new Insets(0, 0, 0, 0);
 
     w = w - insets.left - insets.right;
     return Math.max(0, w);
@@ -192,8 +190,7 @@ public void setMaxTagsInTooltip(int max) {
 
   private static String escapeHtml(String s) {
     if (s == null) return "";
-    return s
-        .replace("&", "&amp;")
+    return s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;");

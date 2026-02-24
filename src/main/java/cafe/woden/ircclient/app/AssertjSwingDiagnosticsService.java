@@ -1,8 +1,11 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
-import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -33,12 +36,11 @@ import javax.swing.RepaintManager;
 import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-/**
- * Optional AssertJ Swing integration + EDT responsiveness watchdog.
- */
+/** Optional AssertJ Swing integration + EDT responsiveness watchdog. */
 @Component
 public class AssertjSwingDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(AssertjSwingDiagnosticsService.class);
@@ -50,12 +52,17 @@ public class AssertjSwingDiagnosticsService {
   private final ApplicationDiagnosticsService diagnostics;
   private final UiProperties uiProps;
   private final RuntimeConfigStore runtimeConfig;
+  private final ObjectProvider<NotificationSoundService> soundServiceProvider;
+  private final ObjectProvider<TrayNotificationService> trayNotificationServiceProvider;
 
   private final ScheduledExecutorService watchdogExec;
 
   private volatile ScheduledFuture<?> watchdogTask;
   private volatile int freezeThresholdMs;
   private volatile int watchdogPollMs;
+  private volatile int fallbackViolationReportMs;
+  private volatile boolean onIssuePlaySound;
+  private volatile boolean onIssueShowNotification;
 
   private final AtomicBoolean enabled = new AtomicBoolean(false);
   private final AtomicBoolean freezeWatchdogEnabled = new AtomicBoolean(false);
@@ -70,11 +77,14 @@ public class AssertjSwingDiagnosticsService {
       ApplicationDiagnosticsService diagnostics,
       UiProperties uiProps,
       RuntimeConfigStore runtimeConfig,
-      @Qualifier(ExecutorConfig.ASSERTJ_WATCHDOG_SCHEDULER)
-      ScheduledExecutorService watchdogExec) {
+      ObjectProvider<NotificationSoundService> soundServiceProvider,
+      ObjectProvider<TrayNotificationService> trayNotificationServiceProvider,
+      @Qualifier(ExecutorConfig.ASSERTJ_WATCHDOG_SCHEDULER) ScheduledExecutorService watchdogExec) {
     this.diagnostics = diagnostics;
     this.uiProps = uiProps;
     this.runtimeConfig = runtimeConfig;
+    this.soundServiceProvider = soundServiceProvider;
+    this.trayNotificationServiceProvider = trayNotificationServiceProvider;
     this.watchdogExec = watchdogExec;
   }
 
@@ -82,7 +92,7 @@ public class AssertjSwingDiagnosticsService {
   void start() {
     UiProperties.AssertjSwing cfg = resolveSettings();
     if (cfg == null) {
-      cfg = new UiProperties.AssertjSwing(null, null, null, null);
+      cfg = new UiProperties.AssertjSwing(null, null, null, null, null, null, null);
     }
     boolean on = cfg == null || Boolean.TRUE.equals(cfg.enabled());
     if (!on) {
@@ -93,20 +103,35 @@ public class AssertjSwingDiagnosticsService {
 
     freezeThresholdMs = cfg.edtFreezeThresholdMs() == null ? 2500 : cfg.edtFreezeThresholdMs();
     watchdogPollMs = cfg.edtWatchdogPollMs() == null ? 500 : cfg.edtWatchdogPollMs();
+    fallbackViolationReportMs =
+        cfg.edtFallbackViolationReportMs() == null ? 5000 : cfg.edtFallbackViolationReportMs();
+    onIssuePlaySound = cfg.onIssuePlaySound() != null && cfg.onIssuePlaySound();
+    onIssueShowNotification =
+        cfg.onIssueShowNotification() != null && cfg.onIssueShowNotification();
     if (watchdogPollMs > freezeThresholdMs) {
       watchdogPollMs = Math.max(100, freezeThresholdMs / 2);
     }
 
-    boolean installed = installFailOnThreadViolationRepaintManager();
-    if (installed) {
+    ViolationDetectorMode detectorMode = installFailOnThreadViolationRepaintManager();
+    if (detectorMode == ViolationDetectorMode.ASSERTJ_SWING) {
       diagnostics.appendAssertjSwingStatus("Installed FailOnThreadViolationRepaintManager.");
-    } else {
+    } else if (detectorMode == ViolationDetectorMode.FALLBACK) {
       diagnostics.appendAssertjSwingStatus(
-          "AssertJ Swing not found on classpath; violation checks are unavailable.");
+          "AssertJ Swing not found on classpath; built-in fallback EDT violation detector is active.");
+    } else {
+      diagnostics.appendAssertjSwingStatus("No EDT violation detector is active.");
     }
 
+    diagnostics.appendAssertjSwingStatus(
+        "Issue actions: sound="
+            + (onIssuePlaySound ? "on" : "off")
+            + ", notification="
+            + (onIssueShowNotification ? "on" : "off")
+            + ".");
+
     boolean watchdogOn =
-        cfg.edtFreezeWatchdogEnabled() == null || Boolean.TRUE.equals(cfg.edtFreezeWatchdogEnabled());
+        cfg.edtFreezeWatchdogEnabled() == null
+            || Boolean.TRUE.equals(cfg.edtFreezeWatchdogEnabled());
     if (!watchdogOn) {
       diagnostics.appendAssertjSwingStatus("EDT freeze watchdog disabled by configuration.");
       return;
@@ -139,33 +164,37 @@ public class AssertjSwingDiagnosticsService {
     return d != null ? d.assertjSwing() : null;
   }
 
-  private boolean installFailOnThreadViolationRepaintManager() {
+  private ViolationDetectorMode installFailOnThreadViolationRepaintManager() {
     try {
       Class<?> clazz = Class.forName("org.assertj.swing.edt.FailOnThreadViolationRepaintManager");
       Method install = clazz.getMethod("install");
       install.invoke(null);
-      return true;
+      return ViolationDetectorMode.ASSERTJ_SWING;
     } catch (ClassNotFoundException e) {
-      installFallbackViolationDetector();
-      return false;
+      return installFallbackViolationDetector()
+          ? ViolationDetectorMode.FALLBACK
+          : ViolationDetectorMode.NONE;
     } catch (Throwable t) {
       diagnostics.appendAssertjSwingStatus(
           "Failed to install FailOnThreadViolationRepaintManager: " + summarize(t));
-      installFallbackViolationDetector();
-      return false;
+      return installFallbackViolationDetector()
+          ? ViolationDetectorMode.FALLBACK
+          : ViolationDetectorMode.NONE;
     }
   }
 
-  private void installFallbackViolationDetector() {
+  private boolean installFallbackViolationDetector() {
     try {
       RepaintManager cur = RepaintManager.currentManager(null);
-      if (cur instanceof FallbackViolationRepaintManager) return;
-      RepaintManager.setCurrentManager(new FallbackViolationRepaintManager(diagnostics));
-      diagnostics.appendAssertjSwingStatus(
-          "Installed fallback EDT violation detector (AssertJ Swing class not found).");
+      if (cur instanceof FallbackViolationRepaintManager) return true;
+      RepaintManager.setCurrentManager(
+          new FallbackViolationRepaintManager(
+              diagnostics, fallbackViolationReportMs, this::onFallbackViolationDetected));
+      return true;
     } catch (Throwable t) {
       diagnostics.appendAssertjSwingStatus(
           "Could not install fallback EDT violation detector: " + summarize(t));
+      return false;
     }
   }
 
@@ -216,6 +245,7 @@ public class AssertjSwingDiagnosticsService {
     freezeSinceAtMs.set(now);
     nextFreezeProgressAtMs.set(now + 10_000L);
     diagnostics.appendAssertjSwingError("EDT freeze detected (~" + lagMs + "ms).");
+    triggerIssueActions("EDT freeze detected", "EDT lag reached ~" + lagMs + "ms.");
     scheduleAutoCapture(now, lagMs);
     log.warn("[ircafe] EDT freeze detected (~{}ms)", lagMs);
   }
@@ -230,8 +260,7 @@ public class AssertjSwingDiagnosticsService {
     }
     final String stamp = CAPTURE_STAMP_FMT.format(Instant.ofEpochMilli(detectedAtMs));
     VirtualThreads.start(
-        "ircafe-edt-auto-capture",
-        () -> runAutoCapture(detectedAtMs, lagMs, stamp));
+        "ircafe-edt-auto-capture", () -> runAutoCapture(detectedAtMs, lagMs, stamp));
   }
 
   private boolean acquireAutoCaptureWindow(long nowMs) {
@@ -322,7 +351,9 @@ public class AssertjSwingDiagnosticsService {
     for (ThreadInfo ti : infos) {
       if (ti != null) sorted.add(ti);
     }
-    sorted.sort(Comparator.comparing(t -> Objects.toString(t.getThreadName(), ""), String.CASE_INSENSITIVE_ORDER));
+    sorted.sort(
+        Comparator.comparing(
+            t -> Objects.toString(t.getThreadName(), ""), String.CASE_INSENSITIVE_ORDER));
 
     for (ThreadInfo ti : sorted) {
       sb.append('"')
@@ -335,9 +366,14 @@ public class AssertjSwingDiagnosticsService {
           .append('\n');
       if (ti.isSuspended()) sb.append("  (suspended)").append('\n');
       if (ti.isInNative()) sb.append("  (in native)").append('\n');
-      if (ti.getLockName() != null) sb.append("  waiting on ").append(ti.getLockName()).append('\n');
+      if (ti.getLockName() != null)
+        sb.append("  waiting on ").append(ti.getLockName()).append('\n');
       if (ti.getLockOwnerName() != null) {
-        sb.append("  lock owner ").append(ti.getLockOwnerName()).append(" Id=").append(ti.getLockOwnerId()).append('\n');
+        sb.append("  lock owner ")
+            .append(ti.getLockOwnerName())
+            .append(" Id=")
+            .append(ti.getLockOwnerId())
+            .append('\n');
       }
 
       StackTraceElement[] stack = ti.getStackTrace();
@@ -350,7 +386,11 @@ public class AssertjSwingDiagnosticsService {
       MonitorInfo[] monitors = ti.getLockedMonitors();
       if (monitors != null && monitors.length > 0) {
         for (MonitorInfo mi : monitors) {
-          sb.append("    - locked ").append(mi).append(" at depth ").append(mi.getLockedStackDepth()).append('\n');
+          sb.append("    - locked ")
+              .append(mi)
+              .append(" at depth ")
+              .append(mi.getLockedStackDepth())
+              .append('\n');
         }
       }
 
@@ -384,7 +424,8 @@ public class AssertjSwingDiagnosticsService {
       }
       return;
     }
-    diagnostics.appendAssertjSwingStatus("EDT snapshot unavailable (AWT-EventQueue thread not found).");
+    diagnostics.appendAssertjSwingStatus(
+        "EDT snapshot unavailable (AWT-EventQueue thread not found).");
   }
 
   private void captureJfrSnapshot(Path outPath, String captureId) {
@@ -418,7 +459,8 @@ public class AssertjSwingDiagnosticsService {
       diagnostics.appendAssertjSwingStatus(
           "Captured JFR snapshot (" + JFR_CAPTURE_DURATION_MS + "ms): " + outPath);
     } catch (ClassNotFoundException e) {
-      diagnostics.appendAssertjSwingStatus("JFR classes unavailable on this runtime; skipping JFR capture.");
+      diagnostics.appendAssertjSwingStatus(
+          "JFR classes unavailable on this runtime; skipping JFR capture.");
     } catch (Throwable t) {
       diagnostics.appendAssertjSwingError("Failed to capture JFR snapshot: " + summarize(t));
     } finally {
@@ -432,6 +474,68 @@ public class AssertjSwingDiagnosticsService {
       recording.getClass().getMethod("close").invoke(recording);
     } catch (Throwable ignored) {
     }
+  }
+
+  private void onFallbackViolationDetected(String threadName, String sourceName) {
+    triggerIssueActions(
+        "EDT thread violation detected",
+        "Off-EDT Swing access on thread="
+            + Objects.toString(threadName, "(unknown)")
+            + ", source="
+            + Objects.toString(sourceName, "(unknown)")
+            + ".");
+  }
+
+  private void triggerIssueActions(String title, String body) {
+    if (!onIssuePlaySound && !onIssueShowNotification) return;
+
+    if (onIssuePlaySound) {
+      NotificationSoundService soundService =
+          soundServiceProvider != null ? soundServiceProvider.getIfAvailable() : null;
+      if (soundService != null) {
+        try {
+          soundService.play();
+        } catch (Throwable t) {
+          diagnostics.appendAssertjSwingStatus("Issue-action sound failed: " + summarize(t));
+        }
+      }
+    }
+
+    if (onIssueShowNotification) {
+      TrayNotificationService tray =
+          trayNotificationServiceProvider != null
+              ? trayNotificationServiceProvider.getIfAvailable()
+              : null;
+      if (tray != null) {
+        try {
+          tray.notifyCustom(
+              TargetRef.APPLICATION_SERVER_ID,
+              TargetRef.APPLICATION_ASSERTJ_SWING_TARGET,
+              title,
+              body,
+              true,
+              false,
+              IrcEventNotificationRule.FocusScope.ANY,
+              false,
+              null,
+              false,
+              null);
+        } catch (Throwable t) {
+          diagnostics.appendAssertjSwingStatus("Issue-action notification failed: " + summarize(t));
+        }
+      }
+    }
+  }
+
+  private enum ViolationDetectorMode {
+    ASSERTJ_SWING,
+    FALLBACK,
+    NONE
+  }
+
+  @FunctionalInterface
+  private interface ViolationCallback {
+    void onViolation(String threadName, String sourceName);
   }
 
   private static String summarize(Throwable t) {
@@ -450,10 +554,17 @@ public class AssertjSwingDiagnosticsService {
 
   private static final class FallbackViolationRepaintManager extends RepaintManager {
     private final ApplicationDiagnosticsService diagnostics;
+    private final long reportIntervalMs;
+    private final ViolationCallback violationCallback;
     private final AtomicLong nextReportAtMs = new AtomicLong(0L);
 
-    FallbackViolationRepaintManager(ApplicationDiagnosticsService diagnostics) {
+    FallbackViolationRepaintManager(
+        ApplicationDiagnosticsService diagnostics,
+        long reportIntervalMs,
+        ViolationCallback violationCallback) {
       this.diagnostics = diagnostics;
+      this.reportIntervalMs = Math.max(250L, reportIntervalMs);
+      this.violationCallback = violationCallback;
     }
 
     @Override
@@ -486,11 +597,10 @@ public class AssertjSwingDiagnosticsService {
       long now = System.currentTimeMillis();
       long next = nextReportAtMs.get();
       if (next != 0L && now < next) return;
-      nextReportAtMs.set(now + 5000L);
+      nextReportAtMs.set(now + reportIntervalMs);
 
       String threadName = Thread.currentThread().getName();
-      String sourceName =
-          source == null ? "(unknown)" : source.getClass().getName();
+      String sourceName = source == null ? "(unknown)" : source.getClass().getName();
       diagnostics.appendAssertjSwingError(
           "EDT violation (fallback detector): thread=" + threadName + ", source=" + sourceName);
 
@@ -498,6 +608,12 @@ public class AssertjSwingDiagnosticsService {
       int max = Math.min(12, stack == null ? 0 : stack.length);
       for (int i = 0; i < max; i++) {
         diagnostics.appendAssertjSwingStatus("(stack) " + stack[i]);
+      }
+      if (violationCallback != null) {
+        try {
+          violationCallback.onViolation(threadName, sourceName);
+        } catch (Throwable ignored) {
+        }
       }
     }
   }

@@ -9,9 +9,7 @@ import javax.swing.text.StyledDocument;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-/**
- * Appends inline image previews to a transcript {@link StyledDocument}.
- */
+/** Appends inline image previews to a transcript {@link StyledDocument}. */
 @Component
 @Lazy
 public class ChatImageEmbedder {
@@ -59,14 +57,15 @@ public class ChatImageEmbedder {
         }
 
         // Insert a component as a single "character" in the styled document.
-        ChatImageComponent comp = new ChatImageComponent(
-            serverId,
-            url,
-            fetch,
-            uiSettings.get().imageEmbedsCollapsedByDefault(),
-            uiSettings,
-            st.gifCoordinator,
-            seq);
+        ChatImageComponent comp =
+            new ChatImageComponent(
+                serverId,
+                url,
+                fetch,
+                uiSettings.get().imageEmbedsCollapsedByDefault(),
+                uiSettings,
+                st.gifCoordinator,
+                seq);
 
         SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
         a.addAttribute(ChatStyles.ATTR_URL, url);

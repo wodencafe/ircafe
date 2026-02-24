@@ -20,10 +20,11 @@ import org.springframework.stereotype.Component;
  * Pure planner for rate-limited user info enrichment.
  *
  * <p>This class does not send IRC commands. It only:
+ *
  * <ul>
- *   <li>tracks per-server queues (USERHOST / WHOIS)</li>
- *   <li>applies per-kind rate limits (min interval + cmds/min) and per-nick cooldown</li>
- *   <li>returns the next command that would be safe to run</li>
+ *   <li>tracks per-server queues (USERHOST / WHOIS)
+ *   <li>applies per-kind rate limits (min interval + cmds/min) and per-nick cooldown
+ *   <li>returns the next command that would be safe to run
  * </ul>
  *
  * <p>Execution (sending IRC commands and handling replies) is handled elsewhere.
@@ -57,8 +58,7 @@ public final class UserInfoEnrichmentPlanner {
       Duration whoisNickCooldown,
       boolean periodicRefreshEnabled,
       Duration periodicRefreshInterval,
-      int periodicRefreshNicksPerTick
-  ) {
+      int periodicRefreshNicksPerTick) {
     public Settings {
       Objects.requireNonNull(userhostMinCmdInterval, "userhostMinCmdInterval");
       Objects.requireNonNull(userhostNickCooldown, "userhostNickCooldown");
@@ -150,46 +150,45 @@ public final class UserInfoEnrichmentPlanner {
     enqueuePrioritized(sid, java.util.List.of(ch), ProbeKind.WHO_CHANNEL);
   }
 
-
-/**
- * Enqueue probes, treating the provided nick order as high priority.
- *
- * <p>This will promote the given nicks to the front of the queue (stable order), so recently
- * active users can be enriched sooner without increasing overall traffic.
- */
-public void enqueueUserhostPrioritized(String serverId, List<String> nicks) {
-  enqueuePrioritized(serverId, nicks, ProbeKind.USERHOST);
-}
-
-/** Enqueue WHOIS probes as high priority (see {@link #enqueueUserhostPrioritized}). */
-public void enqueueWhoisPrioritized(String serverId, List<String> nicks) {
-  enqueuePrioritized(serverId, nicks, ProbeKind.WHOIS);
-}
-
-public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind kind) {
-  String sid = norm(serverId);
-  if (sid.isEmpty() || nicks == null || nicks.isEmpty() || kind == null) return;
-
-  ServerState st = stateByServer.computeIfAbsent(sid, k -> new ServerState());
-  synchronized (st) {
-    ProbeState ps = st.state(kind);
-
-    // Build a new ordered set: preferred nicks first, then the existing queue.
-    LinkedHashSet<String> newQueue = new LinkedHashSet<>();
-    for (String n : nicks) {
-      String nick = Objects.toString(n, "").trim();
-      if (nick.isEmpty()) continue;
-      newQueue.add(nick);
-    }
-    for (String existing : ps.queue) {
-      if (existing == null || existing.isBlank()) continue;
-      newQueue.add(existing);
-    }
-
-    ps.queue.clear();
-    ps.queue.addAll(newQueue);
+  /**
+   * Enqueue probes, treating the provided nick order as high priority.
+   *
+   * <p>This will promote the given nicks to the front of the queue (stable order), so recently
+   * active users can be enriched sooner without increasing overall traffic.
+   */
+  public void enqueueUserhostPrioritized(String serverId, List<String> nicks) {
+    enqueuePrioritized(serverId, nicks, ProbeKind.USERHOST);
   }
-}
+
+  /** Enqueue WHOIS probes as high priority (see {@link #enqueueUserhostPrioritized}). */
+  public void enqueueWhoisPrioritized(String serverId, List<String> nicks) {
+    enqueuePrioritized(serverId, nicks, ProbeKind.WHOIS);
+  }
+
+  public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind kind) {
+    String sid = norm(serverId);
+    if (sid.isEmpty() || nicks == null || nicks.isEmpty() || kind == null) return;
+
+    ServerState st = stateByServer.computeIfAbsent(sid, k -> new ServerState());
+    synchronized (st) {
+      ProbeState ps = st.state(kind);
+
+      // Build a new ordered set: preferred nicks first, then the existing queue.
+      LinkedHashSet<String> newQueue = new LinkedHashSet<>();
+      for (String n : nicks) {
+        String nick = Objects.toString(n, "").trim();
+        if (nick.isEmpty()) continue;
+        newQueue.add(nick);
+      }
+      for (String existing : ps.queue) {
+        if (existing == null || existing.isBlank()) continue;
+        newQueue.add(existing);
+      }
+
+      ps.queue.clear();
+      ps.queue.addAll(newQueue);
+    }
+  }
 
   public void enqueue(String serverId, Collection<String> nicks, ProbeKind kind) {
     String sid = norm(serverId);
@@ -205,11 +204,12 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
       }
     }
   }
+
   /**
    * Records completion of a WHOIS probe, allowing the planner to apply staleness/backoff.
    *
-   * <p>This is used to avoid repeatedly WHOIS'ing the same nick forever when account
-   * details appear unavailable (e.g. no IRCv3 and no reliable WHOIS account numeric).
+   * <p>This is used to avoid repeatedly WHOIS'ing the same nick forever when account details appear
+   * unavailable (e.g. no IRCv3 and no reliable WHOIS account numeric).
    */
   public void noteWhoisProbeCompleted(
       String serverId,
@@ -217,8 +217,7 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
       Instant at,
       boolean sawAccount,
       boolean accountNumericSupported,
-      Settings cfg
-  ) {
+      Settings cfg) {
     String sid = norm(serverId);
     String nk = norm(nick);
     if (sid.isEmpty() || nk.isEmpty() || at == null || cfg == null) return;
@@ -262,7 +261,6 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
       ps.snoozeUntilByNickLower.put(key, at.plus(backoff));
     }
   }
-
 
   /**
    * Returns the next safe command to run for a specific server.
@@ -337,31 +335,37 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
       cleanupWindow(st.whois, now);
 
       long nextDelayMs = NO_WAKE_NEEDED_MS;
-      nextDelayMs = Math.min(nextDelayMs, computeProbeNextDelayMs(
-          st.whoChannel,
-          now,
-          WHO_CHANNEL_MIN_CMD_INTERVAL,
-          WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE,
-          WHO_CHANNEL_TARGET_COOLDOWN,
-          null
-      ));
-      nextDelayMs = Math.min(nextDelayMs, computeProbeNextDelayMs(
-          st.userhost,
-          now,
-          cfg.userhostMinCmdInterval,
-          cfg.userhostMaxCommandsPerMinute,
-          cfg.userhostNickCooldown,
-          null
-      ));
+      nextDelayMs =
+          Math.min(
+              nextDelayMs,
+              computeProbeNextDelayMs(
+                  st.whoChannel,
+                  now,
+                  WHO_CHANNEL_MIN_CMD_INTERVAL,
+                  WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE,
+                  WHO_CHANNEL_TARGET_COOLDOWN,
+                  null));
+      nextDelayMs =
+          Math.min(
+              nextDelayMs,
+              computeProbeNextDelayMs(
+                  st.userhost,
+                  now,
+                  cfg.userhostMinCmdInterval,
+                  cfg.userhostMaxCommandsPerMinute,
+                  cfg.userhostNickCooldown,
+                  null));
       if (cfg.whoisFallbackEnabled) {
-        nextDelayMs = Math.min(nextDelayMs, computeProbeNextDelayMs(
-            st.whois,
-            now,
-            cfg.whoisMinCmdInterval,
-            cfg.whoisMaxCommandsPerMinuteHint(),
-            cfg.whoisNickCooldown,
-            st.whois.snoozeUntilByNickLower
-        ));
+        nextDelayMs =
+            Math.min(
+                nextDelayMs,
+                computeProbeNextDelayMs(
+                    st.whois,
+                    now,
+                    cfg.whoisMinCmdInterval,
+                    cfg.whoisMaxCommandsPerMinuteHint(),
+                    cfg.whoisNickCooldown,
+                    st.whois.snoozeUntilByNickLower));
       }
       return nextDelayMs;
     }
@@ -372,7 +376,11 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
    */
   public long nextPeriodicRefreshDelayMs(String serverId, Instant now, Settings cfg) {
     String sid = norm(serverId);
-    if (sid.isEmpty() || cfg == null || now == null || !cfg.enabled || !cfg.periodicRefreshEnabled) {
+    if (sid.isEmpty()
+        || cfg == null
+        || now == null
+        || !cfg.enabled
+        || !cfg.periodicRefreshEnabled) {
       return NO_WAKE_NEEDED_MS;
     }
     ServerState st = stateByServer.get(sid);
@@ -386,12 +394,13 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
     }
   }
 
-
-  private Optional<PlannedCommand> pollWhoChannel(String serverId, ServerState st, Instant now, Settings cfg) {
+  private Optional<PlannedCommand> pollWhoChannel(
+      String serverId, ServerState st, Instant now, Settings cfg) {
     synchronized (st) {
       ProbeState ps = st.whoChannel;
       cleanupWindow(ps, now);
-      if (!canSend(ps, now, WHO_CHANNEL_MIN_CMD_INTERVAL, WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE)) return Optional.empty();
+      if (!canSend(ps, now, WHO_CHANNEL_MIN_CMD_INTERVAL, WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE))
+        return Optional.empty();
       if (ps.queue.isEmpty()) return Optional.empty();
 
       var it = ps.queue.iterator();
@@ -399,25 +408,29 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
         String channel = it.next();
         String key = channel.toLowerCase(Locale.ROOT);
         Instant last = ps.lastNickRequestAt.get(key);
-        if (last != null && Duration.between(last, now).compareTo(WHO_CHANNEL_TARGET_COOLDOWN) < 0) {
+        if (last != null
+            && Duration.between(last, now).compareTo(WHO_CHANNEL_TARGET_COOLDOWN) < 0) {
           continue;
         }
         it.remove();
         ps.lastNickRequestAt.put(key, now);
         noteSent(ps, now);
-        return Optional.of(new PlannedCommand(ProbeKind.WHO_CHANNEL, serverId, java.util.List.of(channel)));
+        return Optional.of(
+            new PlannedCommand(ProbeKind.WHO_CHANNEL, serverId, java.util.List.of(channel)));
       }
 
       return Optional.empty();
     }
   }
 
-  private Optional<PlannedCommand> pollUserhost(String serverId, ServerState st, Instant now, Settings cfg) {
+  private Optional<PlannedCommand> pollUserhost(
+      String serverId, ServerState st, Instant now, Settings cfg) {
     List<String> batch;
     synchronized (st) {
       ProbeState ps = st.userhost;
       cleanupWindow(ps, now);
-      if (!canSend(ps, now, cfg.userhostMinCmdInterval, cfg.userhostMaxCommandsPerMinute)) return Optional.empty();
+      if (!canSend(ps, now, cfg.userhostMinCmdInterval, cfg.userhostMaxCommandsPerMinute))
+        return Optional.empty();
       if (ps.queue.isEmpty()) return Optional.empty();
 
       batch = new ArrayList<>(cfg.userhostMaxNicksPerCommand);
@@ -440,13 +453,15 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
     return Optional.of(new PlannedCommand(ProbeKind.USERHOST, serverId, List.copyOf(batch)));
   }
 
-  private Optional<PlannedCommand> pollWhois(String serverId, ServerState st, Instant now, Settings cfg) {
+  private Optional<PlannedCommand> pollWhois(
+      String serverId, ServerState st, Instant now, Settings cfg) {
     List<String> chosen;
     synchronized (st) {
       ProbeState ps = st.whois;
       cleanupWindow(ps, now);
       // WHOIS is intentionally constrained: min interval + derived cmds/min hint.
-      if (!canSend(ps, now, cfg.whoisMinCmdInterval, cfg.whoisMaxCommandsPerMinuteHint())) return Optional.empty();
+      if (!canSend(ps, now, cfg.whoisMinCmdInterval, cfg.whoisMaxCommandsPerMinuteHint()))
+        return Optional.empty();
       if (ps.queue.isEmpty()) return Optional.empty();
 
       chosen = new ArrayList<>(1);
@@ -474,12 +489,14 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
   }
 
   private static void cleanupWindow(ProbeState ps, Instant now) {
-    while (!ps.cmdTimes.isEmpty() && Duration.between(ps.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
+    while (!ps.cmdTimes.isEmpty()
+        && Duration.between(ps.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
       ps.cmdTimes.removeFirst();
     }
   }
 
-  private static boolean canSend(ProbeState ps, Instant now, Duration minInterval, int maxPerMinute) {
+  private static boolean canSend(
+      ProbeState ps, Instant now, Duration minInterval, int maxPerMinute) {
     if (ps.cmdTimes.size() >= maxPerMinute) return false;
     return ps.lastCmdAt == null || Duration.between(ps.lastCmdAt, now).compareTo(minInterval) >= 0;
   }
@@ -490,8 +507,7 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
       Duration minInterval,
       int maxPerMinute,
       Duration targetCooldown,
-      Map<String, Instant> notBeforeByNickLower
-  ) {
+      Map<String, Instant> notBeforeByNickLower) {
     if (ps.queue.isEmpty()) return NO_WAKE_NEEDED_MS;
 
     Instant nextRateAllowedAt = now;
@@ -538,7 +554,10 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
 
     if (earliestTargetReadyAt == null) return NO_WAKE_NEEDED_MS;
 
-    Instant wakeAt = nextRateAllowedAt.isAfter(earliestTargetReadyAt) ? nextRateAllowedAt : earliestTargetReadyAt;
+    Instant wakeAt =
+        nextRateAllowedAt.isAfter(earliestTargetReadyAt)
+            ? nextRateAllowedAt
+            : earliestTargetReadyAt;
     long delayMs = Duration.between(now, wakeAt).toMillis();
     return Math.max(0L, delayMs);
   }
@@ -571,7 +590,8 @@ public void enqueuePrioritized(String serverId, List<String> nicks, ProbeKind ki
   private static final class ProbeState {
     final Set<String> queue = new LinkedHashSet<>();
     final Map<String, Instant> lastNickRequestAt = new ConcurrentHashMap<>();
-    // When WHOIS account information is ambiguous (e.g., no 330 ever seen), apply a soft snooze so we
+    // When WHOIS account information is ambiguous (e.g., no 330 ever seen), apply a soft snooze so
+    // we
     // do not hammer WHOIS forever for the same nick. Keys are lowercase nick.
     final Map<String, Instant> snoozeUntilByNickLower = new ConcurrentHashMap<>();
     final Map<String, Integer> ambiguousWhoisMissCountByNickLower = new ConcurrentHashMap<>();

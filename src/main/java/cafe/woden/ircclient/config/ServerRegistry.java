@@ -13,9 +13,9 @@ import org.springframework.stereotype.Component;
 /**
  * Live, mutable server registry.
  *
- * <p>This is intended to be the source-of-truth at runtime for the currently configured
- * {@code irc.servers} list. UI can add/edit/remove servers and the rest of the application
- * (server tree, mediator, IRC service) can react.
+ * <p>This is intended to be the source-of-truth at runtime for the currently configured {@code
+ * irc.servers} list. UI can add/edit/remove servers and the rest of the application (server tree,
+ * mediator, IRC service) can react.
  */
 @Component
 public class ServerRegistry {
@@ -57,7 +57,8 @@ public class ServerRegistry {
   }
 
   public synchronized IrcProperties.Server require(String serverId) {
-    return find(serverId).orElseThrow(() -> new IllegalArgumentException("Unknown server id: " + serverId));
+    return find(serverId)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown server id: " + serverId));
   }
 
   public synchronized boolean containsId(String serverId) {

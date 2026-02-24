@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
@@ -32,7 +32,8 @@ public class ThemeManager {
     INTELLIJ
   }
 
-  public record ThemeOption(String id, String label, ThemeTone tone, ThemePack pack, boolean featured) {
+  public record ThemeOption(
+      String id, String label, ThemeTone tone, ThemePack pack, boolean featured) {
     public boolean isDark() {
       return tone == ThemeTone.DARK;
     }
@@ -149,8 +150,8 @@ public class ThemeManager {
   }
 
   /**
-   * Apply accent/tweak UI defaults without changing the current Look & Feel.
-   * Used for live preview (e.g. accent slider/color) to avoid the heavier LAF reset.
+   * Apply accent/tweak UI defaults without changing the current Look & Feel. Used for live preview
+   * (e.g. accent slider/color) to avoid the heavier LAF reset.
    */
   public void applyAppearance(boolean animate) {
     runOnEdt(
@@ -176,7 +177,8 @@ public class ThemeManager {
 
   private void applyAppearanceOverrides() {
     appearanceService.applyCommonTweaks(tweakSettingsBus != null ? tweakSettingsBus.get() : null);
-    appearanceService.applyAccentOverrides(accentSettingsBus != null ? accentSettingsBus.get() : null);
+    appearanceService.applyAccentOverrides(
+        accentSettingsBus != null ? accentSettingsBus.get() : null);
     SvgIcons.clearCache();
   }
 
@@ -192,9 +194,10 @@ public class ThemeManager {
           });
     }
 
-    safeRun(() -> {
-      if (settingsBus != null) settingsBus.refresh();
-    });
+    safeRun(
+        () -> {
+          if (settingsBus != null) settingsBus.refresh();
+        });
 
     safeRun(textComponentPaletteSyncService::syncAllWindows);
 
@@ -214,7 +217,8 @@ public class ThemeManager {
     safeRun(transcripts::restyleAllDocumentsCoalesced);
   }
 
-  private static void runWithFlatAnimation(boolean animateFlat, boolean stopWhenNoSnapshot, Runnable work) {
+  private static void runWithFlatAnimation(
+      boolean animateFlat, boolean stopWhenNoSnapshot, Runnable work) {
     boolean snap = false;
 
     if (animateFlat || stopWhenNoSnapshot) {

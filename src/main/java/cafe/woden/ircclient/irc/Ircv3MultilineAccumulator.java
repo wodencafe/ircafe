@@ -9,17 +9,19 @@ import java.util.Objects;
 /**
  * Reassembles IRCv3 multiline message chunks into one logical payload.
  *
- * <p>Chunks are associated by {@code @batch=} and the sender/target tuple. Lines carrying
- * {@code multiline-concat} (or {@code draft/multiline-concat}) are buffered; the first subsequent
- * line without concat finalizes and emits the joined message.
+ * <p>Chunks are associated by {@code @batch=} and the sender/target tuple. Lines carrying {@code
+ * multiline-concat} (or {@code draft/multiline-concat}) are buffered; the first subsequent line
+ * without concat finalizes and emits the joined message.
  */
 final class Ircv3MultilineAccumulator {
 
   private static final int MAX_BUFFERS = 512;
   private static final long BUFFER_TTL_MS = 60_000L;
 
-  record FoldResult(boolean suppressed, Instant at, String text, String messageId, Map<String, String> tags) {
-    static FoldResult passThrough(Instant at, String text, String messageId, Map<String, String> tags) {
+  record FoldResult(
+      boolean suppressed, Instant at, String text, String messageId, Map<String, String> tags) {
+    static FoldResult passThrough(
+        Instant at, String text, String messageId, Map<String, String> tags) {
       return new FoldResult(false, at, text, messageId, tags == null ? Map.of() : tags);
     }
 
@@ -44,7 +46,8 @@ final class Ircv3MultilineAccumulator {
       append(textPart, nowMs);
     }
 
-    void merge(Instant at, String messageId, Map<String, String> tags, String textPart, long nowMs) {
+    void merge(
+        Instant at, String messageId, Map<String, String> tags, String textPart, long nowMs) {
       if (this.at == null && at != null) this.at = at;
       String msgId = Objects.toString(messageId, "").trim();
       if (this.messageId == null || this.messageId.isBlank()) {
@@ -71,8 +74,7 @@ final class Ircv3MultilineAccumulator {
       Instant at,
       String text,
       String messageId,
-      Map<String, String> tags
-  ) {
+      Map<String, String> tags) {
     long now = System.currentTimeMillis();
     pruneExpired(now);
 
@@ -84,11 +86,7 @@ final class Ircv3MultilineAccumulator {
     }
 
     boolean concat = hasConcatTag(safeTags);
-    Key key = new Key(
-        batchId,
-        normalizeToken(kind),
-        normalizeToken(from),
-        normalizeToken(target));
+    Key key = new Key(batchId, normalizeToken(kind), normalizeToken(from), normalizeToken(target));
 
     Buffer buf = buffers.get(key);
     if (buf == null && !concat) {
@@ -124,11 +122,14 @@ final class Ircv3MultilineAccumulator {
 
   private void pruneExpired(long nowMs) {
     if (buffers.isEmpty()) return;
-    buffers.entrySet().removeIf(e -> {
-      Buffer b = e.getValue();
-      long touched = (b == null) ? 0L : b.lastTouchedAtMs;
-      return touched <= 0L || touched + BUFFER_TTL_MS < nowMs;
-    });
+    buffers
+        .entrySet()
+        .removeIf(
+            e -> {
+              Buffer b = e.getValue();
+              long touched = (b == null) ? 0L : b.lastTouchedAtMs;
+              return touched <= 0L || touched + BUFFER_TTL_MS < nowMs;
+            });
   }
 
   private static boolean hasConcatTag(Map<String, String> tags) {

@@ -2,9 +2,6 @@ package cafe.woden.ircclient.ui.chat.fold;
 
 import cafe.woden.ircclient.app.PresenceEvent;
 import cafe.woden.ircclient.app.PresenceKind;
-
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -12,10 +9,12 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 
 /**
- * Embedded Swing component that shows a single collapsible summary line (collapsed by default)
- * for a run of join/part/quit/nick events.
+ * Embedded Swing component that shows a single collapsible summary line (collapsed by default) for
+ * a run of join/part/quit/nick events.
  */
 public class PresenceFoldComponent extends JPanel {
 
@@ -47,12 +46,13 @@ public class PresenceFoldComponent extends JPanel {
     details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
     details.setBorder(new EmptyBorder(2, 18, 2, 0));
 
-    summary.addMouseListener(new MouseAdapter() {
-      @Override
-      public void mouseClicked(MouseEvent e) {
-        toggle();
-      }
-    });
+    summary.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            toggle();
+          }
+        });
 
     rebuildDetails();
     updateSummaryText();
@@ -87,15 +87,13 @@ public class PresenceFoldComponent extends JPanel {
     int w = p.getWidth();
     if (w <= 0) return -1;
 
-    Insets insets = (p instanceof JComponent)
-        ? ((JComponent) p).getInsets()
-        : new Insets(0, 0, 0, 0);
+    Insets insets =
+        (p instanceof JComponent) ? ((JComponent) p).getInsets() : new Insets(0, 0, 0, 0);
 
     w = w - insets.left - insets.right;
     return Math.max(0, w);
   }
 
-  
   public void addEntry(Entry e) {
     if (e == null || e.event() == null) return;
     entries.add(e);
@@ -107,7 +105,6 @@ public class PresenceFoldComponent extends JPanel {
     repaint();
   }
 
-  
   public void setEntries(List<Entry> newEntries) {
     entries.clear();
     if (newEntries != null) entries.addAll(newEntries);
@@ -125,9 +122,10 @@ public class PresenceFoldComponent extends JPanel {
     for (Entry entry : entries) {
       if (entry == null || entry.event() == null) continue;
       String prefix = safe(entry.timestampPrefix());
-      String line = prefix.isBlank()
-          ? ("• " + safe(entry.event().displayText()))
-          : ("• " + prefix + safe(entry.event().displayText()));
+      String line =
+          prefix.isBlank()
+              ? ("• " + safe(entry.event().displayText()))
+              : ("• " + prefix + safe(entry.event().displayText()));
       JLabel l = new JLabel(line);
       l.setOpaque(false);
 
@@ -225,8 +223,7 @@ public class PresenceFoldComponent extends JPanel {
 
   private static String escapeHtml(String s) {
     if (s == null) return "";
-    return s
-        .replace("&", "&amp;")
+    return s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;");

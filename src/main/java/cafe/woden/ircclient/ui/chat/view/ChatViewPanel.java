@@ -1,25 +1,27 @@
 package cafe.woden.ircclient.ui.chat.view;
 
+import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.ui.WrapTextPane;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.NickColorService;
-import cafe.woden.ircclient.ui.util.ChatFindBarDecorator;
+import cafe.woden.ircclient.ui.settings.UiSettings;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.ChatAutoLoadOlderScrollDecorator;
+import cafe.woden.ircclient.ui.util.ChatFindBarDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptContextMenuDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptMouseDecorator;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
 import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.util.VirtualThreads;
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Desktop;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Point;
-import java.awt.BorderLayout;
+import java.awt.Rectangle;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
@@ -29,20 +31,18 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.swing.ScrollPaneConstants;
-import javax.swing.Scrollable;
-import java.awt.Rectangle;
-import java.awt.Dimension;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
-import javax.swing.JPopupMenu;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
+import javax.swing.text.Element;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.Utilities;
-import javax.swing.text.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,54 +88,57 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       chat.setFont(defaultMonospaceChatFont());
     }
     this.findBar = decorators.add(ChatFindBarDecorator.install(this, chat, () -> currentDocument));
-    this.transcriptMenu = decorators.add(ChatTranscriptContextMenuDecorator.decorate(
-        chat,
-        this::urlAt,
-        this::nickAt,
-        this::nickContextMenuFor,
-        this::openUrl,
-        this::openFindBar,
-        this::currentProxyPlan,
-        this::loadNewerHistoryContextActionVisible,
-        this::loadAroundMessageContextActionVisible,
-        this::onLoadNewerHistoryRequested,
-        this::onLoadContextAroundMessageRequested,
-        this::replyContextActionVisible,
-        this::reactContextActionVisible,
-        this::onReplyToMessageRequested,
-        this::onReactToMessageRequested,
-        this::editContextActionVisible,
-        this::redactContextActionVisible,
-        this::onEditMessageRequested,
-        this::onRedactMessageRequested
-    ));
-    this.followTailScroll = decorators.add(new FollowTailScrollDecorator(
-        scroll,
-        this::isFollowTail,
-        this::setFollowTail,
-        this::getSavedScrollValue,
-        this::setSavedScrollValue
-    ));
+    this.transcriptMenu =
+        decorators.add(
+            ChatTranscriptContextMenuDecorator.decorate(
+                chat,
+                this::urlAt,
+                this::nickAt,
+                this::nickContextMenuFor,
+                this::openUrl,
+                this::openFindBar,
+                this::currentProxyPlan,
+                this::loadNewerHistoryContextActionVisible,
+                this::loadAroundMessageContextActionVisible,
+                this::onLoadNewerHistoryRequested,
+                this::onLoadContextAroundMessageRequested,
+                this::replyContextActionVisible,
+                this::reactContextActionVisible,
+                this::onReplyToMessageRequested,
+                this::onReactToMessageRequested,
+                this::editContextActionVisible,
+                this::redactContextActionVisible,
+                this::onEditMessageRequested,
+                this::onRedactMessageRequested));
+    this.followTailScroll =
+        decorators.add(
+            new FollowTailScrollDecorator(
+                scroll,
+                this::isFollowTail,
+                this::setFollowTail,
+                this::getSavedScrollValue,
+                this::setSavedScrollValue));
 
     // "Infinite scroll" helper: if the user tries to wheel-scroll up past the very top,
     // trigger the embedded "Load older messages…" control (if present).
     decorators.add(ChatAutoLoadOlderScrollDecorator.decorate(scroll, chat));
 
     add(scroll, BorderLayout.CENTER);
-    this.transcriptMouse = decorators.add(ChatTranscriptMouseDecorator.decorate(
-        chat,
-        handCursor,
-        textCursor,
-        this::urlAt,
-        this::channelAt,
-        this::nickAt,
-        this::messageReferenceAt,
-        this::openUrl,
-        this::onChannelClicked,
-        this::onNickClicked,
-        this::onMessageReferenceClicked,
-        this::onTranscriptClicked
-    ));
+    this.transcriptMouse =
+        decorators.add(
+            ChatTranscriptMouseDecorator.decorate(
+                chat,
+                handCursor,
+                textCursor,
+                this::urlAt,
+                this::channelAt,
+                this::nickAt,
+                this::messageReferenceAt,
+                this::openUrl,
+                this::onChannelClicked,
+                this::onNickClicked,
+                this::onMessageReferenceClicked,
+                this::onTranscriptClicked));
   }
 
   @Override
@@ -196,7 +199,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     findBar.findPrevious();
   }
 
-  protected void setTranscriptContextMenuActions(Runnable clearAction, Runnable reloadRecentAction) {
+  protected void setTranscriptContextMenuActions(
+      Runnable clearAction, Runnable reloadRecentAction) {
     try {
       if (transcriptMenu != null) {
         transcriptMenu.setClearAction(clearAction);
@@ -265,17 +269,17 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   /**
-   * Optional hook: if provided, this menu is shown when the user right-clicks a nick token
-   * in the transcript. Return {@code null} (or an empty menu) to fall back to the default
-   * transcript context menu.
+   * Optional hook: if provided, this menu is shown when the user right-clicks a nick token in the
+   * transcript. Return {@code null} (or an empty menu) to fall back to the default transcript
+   * context menu.
    */
   protected JPopupMenu nickContextMenuFor(String nick) {
     return null;
   }
 
   /**
-   * Optional hook: return the proxy plan for network operations initiated from this view
-   * (e.g., "Save Link As...").
+   * Optional hook: return the proxy plan for network operations initiated from this view (e.g.,
+   * "Save Link As...").
    *
    * <p>Return {@code null} to fall back to the global proxy settings.
    */
@@ -359,8 +363,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   /**
    * Build a prefilled raw-line draft for reacting to an IRCv3 message by msgid.
    *
-   * <p>Returned text is intended for the input field and should be sent with {@code /quote}.
-   * The default reaction token is {@code :+1:}; users can edit it before sending.
+   * <p>Returned text is intended for the input field and should be sent with {@code /quote}. The
+   * default reaction token is {@code :+1:}; users can edit it before sending.
    */
   protected static String buildReactPrefillDraft(String ircTarget, String messageId) {
     String target = Objects.toString(ircTarget, "").trim();
@@ -463,16 +467,19 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   /**
-   * Close any installed decorators/listeners owned by this view.
-   * Subclasses should call this from their lifecycle shutdown (@PreDestroy).
+   * Close any installed decorators/listeners owned by this view. Subclasses should call this from
+   * their lifecycle shutdown (@PreDestroy).
    */
   protected void closeDecorators() {
     decorators.closeQuietly();
   }
 
   protected abstract boolean isFollowTail();
+
   protected abstract void setFollowTail(boolean followTail);
+
   protected abstract int getSavedScrollValue();
+
   protected abstract void setSavedScrollValue(int value);
 
   private String urlAt(Point p) {
@@ -583,22 +590,32 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   // Keep in sync with ChatRichTextRenderer#isNickChar.
   private static boolean isNickChar(char c) {
     return Character.isLetterOrDigit(c)
-        || c == '[' || c == ']' || c == '\\' || c == '`'
-        || c == '_' || c == '^' || c == '{' || c == '|' || c == '}'
+        || c == '['
+        || c == ']'
+        || c == '\\'
+        || c == '`'
+        || c == '_'
+        || c == '^'
+        || c == '{'
+        || c == '|'
+        || c == '}'
         || c == '-';
   }
+
   private void openUrl(String url) {
     String raw = sanitizeUrlForBrowser(url);
     if (raw == null || raw.isBlank()) return;
 
-    VirtualThreads.start("ircafe-open-url", () -> {
-      // On Linux, prefer explicit browser executables before Desktop/xdg handlers.
-      // Some desktop MIME associations can route URLs to non-browser apps.
-      if (isLinux() && tryPlatformOpen(raw)) return;
-      if (tryDesktopBrowse(raw)) return;
-      if (!isLinux() && tryPlatformOpen(raw)) return;
-      log.warn("[ircafe] Could not open URL in browser: {}", raw);
-    });
+    VirtualThreads.start(
+        "ircafe-open-url",
+        () -> {
+          // On Linux, prefer explicit browser executables before Desktop/xdg handlers.
+          // Some desktop MIME associations can route URLs to non-browser apps.
+          if (isLinux() && tryPlatformOpen(raw)) return;
+          if (tryDesktopBrowse(raw)) return;
+          if (!isLinux() && tryPlatformOpen(raw)) return;
+          log.warn("[ircafe] Could not open URL in browser: {}", raw);
+        });
   }
 
   private static boolean tryDesktopBrowse(String url) {
@@ -637,17 +654,18 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   }
 
   private static boolean tryKnownLinuxBrowser(String url) {
-    List<String> browsers = List.of(
-        "librewolf",
-        "zen-browser",
-        "firefox",
-        "google-chrome",
-        "chromium",
-        "chromium-browser",
-        "brave-browser",
-        "microsoft-edge",
-        "opera",
-        "vivaldi");
+    List<String> browsers =
+        List.of(
+            "librewolf",
+            "zen-browser",
+            "firefox",
+            "google-chrome",
+            "chromium",
+            "chromium-browser",
+            "brave-browser",
+            "microsoft-edge",
+            "opera",
+            "vivaldi");
     for (String browser : browsers) {
       if (tryStart(browser, url)) return true;
     }
@@ -662,9 +680,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private static boolean tryStart(String... cmd) {
     if (cmd == null || cmd.length == 0) return false;
     try {
-      Process process = new ProcessBuilder(cmd)
-          .redirectErrorStream(true)
-          .start();
+      Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
       if (process == null) return false;
 
       // If the command exits immediately with a non-zero status, treat it as a failure
@@ -710,18 +726,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     // Trim common trailing punctuation introduced by prose.
     while (!s.isEmpty()) {
       char c = s.charAt(s.length() - 1);
-      if (c == '.'
-          || c == ','
-          || c == ')'
-          || c == ']'
-          || c == '}'
-          || c == '>'
-          || c == '!'
-          || c == '?'
-          || c == ';'
-          || c == ':'
-          || c == '\''
-          || c == '"') {
+      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '>' || c == '!'
+          || c == '?' || c == ';' || c == ':' || c == '\'' || c == '"') {
         s = s.substring(0, s.length() - 1).trim();
         continue;
       }
@@ -783,8 +789,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return -1;
   }
 
-  // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of scrollbars.
-  // This panel contains its own internal JScrollPane (the transcript), so always track any outer viewport.
+  // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of
+  // scrollbars.
+  // This panel contains its own internal JScrollPane (the transcript), so always track any outer
+  // viewport.
   @Override
   public Dimension getPreferredScrollableViewportSize() {
     // Reasonable default to avoid "infinite preferred height" from the transcript content.
@@ -810,5 +818,4 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   public boolean getScrollableTracksViewportHeight() {
     return true;
   }
-
 }

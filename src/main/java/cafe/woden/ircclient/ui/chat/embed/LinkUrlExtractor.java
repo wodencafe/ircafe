@@ -75,18 +75,8 @@ final class LinkUrlExtractor {
     while (end > 0) {
       char c = raw.charAt(end - 1);
       // Common in chat: https://example.com), https://example.com\" , <https://example.com>
-      if (c == '.'
-          || c == ','
-          || c == ')'
-          || c == ']'
-          || c == '}'
-          || c == '>'
-          || c == '!'
-          || c == '?'
-          || c == ';'
-          || c == ':'
-          || c == '\''
-          || c == '"') {
+      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '>' || c == '!'
+          || c == '?' || c == ';' || c == ':' || c == '\'' || c == '"') {
         end--;
       } else {
         break;

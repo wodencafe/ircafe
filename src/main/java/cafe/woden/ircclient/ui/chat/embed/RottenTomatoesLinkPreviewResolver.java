@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.charset.StandardCharsets;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,41 +18,31 @@ import org.slf4j.LoggerFactory;
 
 final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
 
-  private static final Logger log = LoggerFactory.getLogger(RottenTomatoesLinkPreviewResolver.class);
+  private static final Logger log =
+      LoggerFactory.getLogger(RottenTomatoesLinkPreviewResolver.class);
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  
   private static final int MAX_BYTES = 2 * 1024 * 1024; // 2 MiB
 
   // JSON-LD "@type" values we accept.
-  private static final List<String> SUPPORTED_TYPES = List.of(
-      "Movie",
-      "TVSeries",
-      "TVSeason",
-      "TVEpisode"
-  );
+  private static final List<String> SUPPORTED_TYPES =
+      List.of("Movie", "TVSeries", "TVSeason", "TVEpisode");
 
-  private static final Pattern TOMATOMETER_ATTR = Pattern.compile(
-      "tomatometerscore\\s*=\\s*\"(\\d{1,3})\"",
-      Pattern.CASE_INSENSITIVE);
-  private static final Pattern AUDIENCE_ATTR = Pattern.compile(
-      "audiencescore\\s*=\\s*\"(\\d{1,3})\"",
-      Pattern.CASE_INSENSITIVE);
+  private static final Pattern TOMATOMETER_ATTR =
+      Pattern.compile("tomatometerscore\\s*=\\s*\"(\\d{1,3})\"", Pattern.CASE_INSENSITIVE);
+  private static final Pattern AUDIENCE_ATTR =
+      Pattern.compile("audiencescore\\s*=\\s*\"(\\d{1,3})\"", Pattern.CASE_INSENSITIVE);
 
-  private static final Pattern TOMATOMETER_TEXT = Pattern.compile(
-      "\\b(\\d{1,3})%\\s*Tomatometer\\b",
-      Pattern.CASE_INSENSITIVE);
-  private static final Pattern POPCORN_TEXT = Pattern.compile(
-      "\\b(\\d{1,3})%\\s*Popcornmeter\\b",
-      Pattern.CASE_INSENSITIVE);
+  private static final Pattern TOMATOMETER_TEXT =
+      Pattern.compile("\\b(\\d{1,3})%\\s*Tomatometer\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern POPCORN_TEXT =
+      Pattern.compile("\\b(\\d{1,3})%\\s*Popcornmeter\\b", Pattern.CASE_INSENSITIVE);
 
-  private static final Pattern RUNTIME = Pattern.compile(
-      "\\b(\\d{1,2})h\\s*(\\d{1,2})m\\b",
-      Pattern.CASE_INSENSITIVE);
-  private static final Pattern RUNTIME_MIN = Pattern.compile(
-      "\\b(\\d{1,3})m\\b",
-      Pattern.CASE_INSENSITIVE);
+  private static final Pattern RUNTIME =
+      Pattern.compile("\\b(\\d{1,2})h\\s*(\\d{1,2})m\\b", Pattern.CASE_INSENSITIVE);
+  private static final Pattern RUNTIME_MIN =
+      Pattern.compile("\\b(\\d{1,3})m\\b", Pattern.CASE_INSENSITIVE);
 
   @Override
   public LinkPreview tryResolve(URI uri, String originalUrl, PreviewHttp http) {
@@ -96,11 +86,9 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
 
       String name = (titleNode != null) ? text(titleNode, "name") : null;
       if (name == null || name.isBlank()) {
-        name = firstNonBlank(
-            meta(doc, "property", "og:title"),
-            meta(doc, "name", "twitter:title"),
-            doc.title()
-        );
+        name =
+            firstNonBlank(
+                meta(doc, "property", "og:title"), meta(doc, "name", "twitter:title"), doc.title());
         // og:title often looks like "Steve (2025) - Rotten Tomatoes"; trim suffix.
         if (name != null) {
           name = name.replace("| Rotten Tomatoes", "").replace("- Rotten Tomatoes", "").strip();
@@ -128,17 +116,18 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
         }
         cast = joinPeople(titleNode.get("actor"), 6);
       }
-      // Prefer the "Synopsis" from the Movie/Series Info section (much better than meta/marketing copy).
-      String synopsis = firstNonBlank(
-          textOf(doc.selectFirst("[data-qa=movie-info-synopsis]")),
-          textOf(doc.selectFirst("#movieSynopsis")),
-          textOf(doc.selectFirst("[data-qa=series-info-synopsis]")),
-          textOf(doc.selectFirst("#seriesSynopsis")),
-          extractSynopsisFromVisibleText(visible)
-      );
+      // Prefer the "Synopsis" from the Movie/Series Info section (much better than meta/marketing
+      // copy).
+      String synopsis =
+          firstNonBlank(
+              textOf(doc.selectFirst("[data-qa=movie-info-synopsis]")),
+              textOf(doc.selectFirst("#movieSynopsis")),
+              textOf(doc.selectFirst("[data-qa=series-info-synopsis]")),
+              textOf(doc.selectFirst("#seriesSynopsis")),
+              extractSynopsisFromVisibleText(visible));
       if (synopsis != null && !synopsis.isBlank()) summary = synopsis;
 
-// Runtime fallback: parse "1h 33m" from visible header text.
+      // Runtime fallback: parse "1h 33m" from visible header text.
       if (runtime == null) runtime = parseRuntime(visible);
 
       // Poster image.
@@ -150,25 +139,27 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
         }
       }
       if (imageUrl == null) {
-        imageUrl = normalizeImageUrl(target,
-            firstNonBlank(
-                meta(doc, "property", "og:image"),
-                meta(doc, "property", "og:image:url"),
-                meta(doc, "property", "og:image:secure_url"),
-                meta(doc, "name", "twitter:image"),
-                meta(doc, "name", "twitter:image:src")
-            ));
+        imageUrl =
+            normalizeImageUrl(
+                target,
+                firstNonBlank(
+                    meta(doc, "property", "og:image"),
+                    meta(doc, "property", "og:image:url"),
+                    meta(doc, "property", "og:image:secure_url"),
+                    meta(doc, "name", "twitter:image"),
+                    meta(doc, "name", "twitter:image:src")));
       }
 
       // Compose the description in the same multi-line format as IMDb so the UI can render it
       // with a bold meta line + credits + full synopsis.
-      String details = joinDot(" • ",
-          blankToNull(year),
-          blankToNull(rating),
-          blankToNull(runtime),
-          (tomato != null) ? ("Tomatometer " + tomato + "%") : null,
-          (popcorn != null) ? ("Popcornmeter " + popcorn + "%") : null
-      );
+      String details =
+          joinDot(
+              " • ",
+              blankToNull(year),
+              blankToNull(rating),
+              blankToNull(runtime),
+              (tomato != null) ? ("Tomatometer " + tomato + "%") : null,
+              (popcorn != null) ? ("Popcornmeter " + popcorn + "%") : null);
 
       StringBuilder desc = new StringBuilder();
       if (details != null && !details.isBlank()) desc.append(details);
@@ -193,8 +184,7 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
           finalDesc,
           "Rotten Tomatoes",
           imageUrl,
-          (imageUrl != null && !imageUrl.isBlank()) ? 1 : 0
-      );
+          (imageUrl != null && !imageUrl.isBlank()) ? 1 : 0);
     } catch (Exception ex) {
       log.warn("Rotten Tomatoes preview resolve failed for {}: {}", originalUrl, ex.toString());
       return null;
@@ -409,8 +399,11 @@ final class RottenTomatoesLinkPreviewResolver implements LinkPreviewResolver {
     return sb.isEmpty() ? null : sb.toString();
   }
 
-  /** Rotten Tomatoes pages sometimes put the real synopsis only in the rendered "Movie Info"/"Series Info" section, while meta/JSON-LD descrip… */
-private static String extractSynopsisFromVisibleText(String visible) {
+  /**
+   * Rotten Tomatoes pages sometimes put the real synopsis only in the rendered "Movie Info"/"Series
+   * Info" section, while meta/JSON-LD descrip…
+   */
+  private static String extractSynopsisFromVisibleText(String visible) {
     String t = blankToNull(visible);
     if (t == null) return null;
 
@@ -418,11 +411,11 @@ private static String extractSynopsisFromVisibleText(String visible) {
     t = t.replace('\u00a0', ' ').replaceAll("\\s+", " ").strip();
 
     String[] anchors = {
-        "Movie Info Synopsis",
-        "Series Info Synopsis",
-        "Tv Info Synopsis",
-        "TV Info Synopsis",
-        "Show Info Synopsis"
+      "Movie Info Synopsis",
+      "Series Info Synopsis",
+      "Tv Info Synopsis",
+      "TV Info Synopsis",
+      "Show Info Synopsis"
     };
 
     for (String anchor : anchors) {
@@ -436,12 +429,13 @@ private static String extractSynopsisFromVisibleText(String visible) {
       }
     }
 
-    // Fallback: synopsis sometimes appears right under the score section (after Tomatometer/Popcornmeter).
+    // Fallback: synopsis sometimes appears right under the score section (after
+    // Tomatometer/Popcornmeter).
     // Try to capture the block before obvious navigation headers.
-    java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-        "\\bPopcornmeter\\b.*?\\bRatings\\b\\s+(.*?)(?=\\bWatch on\\b|\\bWhere to Watch\\b|\\bWhat to Know\\b|\\bReviews\\b|\\bCast & Crew\\b)",
-        java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL
-    );
+    java.util.regex.Pattern p =
+        java.util.regex.Pattern.compile(
+            "\\bPopcornmeter\\b.*?\\bRatings\\b\\s+(.*?)(?=\\bWatch on\\b|\\bWhere to Watch\\b|\\bWhat to Know\\b|\\bReviews\\b|\\bCast & Crew\\b)",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
     java.util.regex.Matcher m = p.matcher(t);
     if (m.find()) {
       String syn = blankToNull(m.group(1));
@@ -453,21 +447,21 @@ private static String extractSynopsisFromVisibleText(String visible) {
 
   private static int findSynopsisEnd(String text, int from) {
     String[] stops = {
-        " Director ",
-        " Creator ",
-        " Producer ",
-        " Network ",
-        " Distributor ",
-        " Production Co ",
-        " Rating ",
-        " Genre ",
-        " Original Language ",
-        " Release Date ",
-        " Runtime ",
-        " Where to Watch ",
-        " What to Know ",
-        " Reviews ",
-        " Cast & Crew "
+      " Director ",
+      " Creator ",
+      " Producer ",
+      " Network ",
+      " Distributor ",
+      " Production Co ",
+      " Rating ",
+      " Genre ",
+      " Original Language ",
+      " Release Date ",
+      " Runtime ",
+      " Where to Watch ",
+      " What to Know ",
+      " Reviews ",
+      " Cast & Crew "
     };
     int end = -1;
     for (String s : stops) {

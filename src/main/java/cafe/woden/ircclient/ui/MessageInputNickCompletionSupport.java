@@ -1,16 +1,5 @@
 package cafe.woden.ircclient.ui;
 
-import org.fife.ui.autocomplete.AutoCompletion;
-import org.fife.ui.autocomplete.BasicCompletion;
-import org.fife.ui.autocomplete.Completion;
-import org.fife.ui.autocomplete.DefaultCompletionProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.text.Document;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
@@ -22,91 +11,100 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.text.Document;
+import org.fife.ui.autocomplete.AutoCompletion;
+import org.fife.ui.autocomplete.BasicCompletion;
+import org.fife.ui.autocomplete.Completion;
+import org.fife.ui.autocomplete.DefaultCompletionProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handles message-input auto-completion (nicks + slash commands).
  *
- * Responsibilities:
- *  - Own AutoCompletion + its CompletionProvider
- *  - Efficient bulk rebuild of completion items (avoid O(n^2) sorting)
- *  - IRC-style addressing suffix behavior for first-word completion ("nick: ")
- *  - Best-effort refresh of AutoCompletion popup UI on theme/LAF changes
+ * <p>Responsibilities: - Own AutoCompletion + its CompletionProvider - Efficient bulk rebuild of
+ * completion items (avoid O(n^2) sorting) - IRC-style addressing suffix behavior for first-word
+ * completion ("nick: ") - Best-effort refresh of AutoCompletion popup UI on theme/LAF changes
  */
 final class MessageInputNickCompletionSupport {
 
-  private static final Logger log = LoggerFactory.getLogger(MessageInputNickCompletionSupport.class);
+  private static final Logger log =
+      LoggerFactory.getLogger(MessageInputNickCompletionSupport.class);
 
   private static final int PENDING_NICK_SUFFIX_TIMEOUT_MS = 5000;
-  private static final List<SlashCommand> SLASH_COMMANDS = List.of(
-      new SlashCommand("/join", "Join channel"),
-      new SlashCommand("/j", "Alias: /join"),
-      new SlashCommand("/part", "Leave channel"),
-      new SlashCommand("/leave", "Alias: /part"),
-      new SlashCommand("/connect", "Connect server/all"),
-      new SlashCommand("/disconnect", "Disconnect server/all"),
-      new SlashCommand("/reconnect", "Reconnect server/all"),
-      new SlashCommand("/quit", "Disconnect all and quit"),
-      new SlashCommand("/nick", "Change nickname"),
-      new SlashCommand("/away", "Set/remove away status"),
-      new SlashCommand("/query", "Open private message"),
-      new SlashCommand("/whois", "WHOIS lookup"),
-      new SlashCommand("/wi", "Alias: /whois"),
-      new SlashCommand("/whowas", "WHOWAS lookup"),
-      new SlashCommand("/msg", "Send private message"),
-      new SlashCommand("/notice", "Send notice"),
-      new SlashCommand("/me", "Send action"),
-      new SlashCommand("/topic", "View/change topic"),
-      new SlashCommand("/kick", "Kick user"),
-      new SlashCommand("/invite", "Invite user"),
-      new SlashCommand("/invites", "List pending invites"),
-      new SlashCommand("/invjoin", "Join pending invite"),
-      new SlashCommand("/invitejoin", "Alias: /invjoin"),
-      new SlashCommand("/invignore", "Ignore pending invite"),
-      new SlashCommand("/inviteignore", "Alias: /invignore"),
-      new SlashCommand("/invwhois", "WHOIS inviter from invite"),
-      new SlashCommand("/invitewhois", "Alias: /invwhois"),
-      new SlashCommand("/invblock", "Block inviter nick"),
-      new SlashCommand("/inviteblock", "Alias: /invblock"),
-      new SlashCommand("/inviteautojoin", "Toggle invite auto-join"),
-      new SlashCommand("/invautojoin", "Alias: /inviteautojoin"),
-      new SlashCommand("/ajinvite", "Alias: /inviteautojoin (toggle)"),
-      new SlashCommand("/names", "Request NAMES"),
-      new SlashCommand("/who", "Request WHO"),
-      new SlashCommand("/list", "Request LIST"),
-      new SlashCommand("/mode", "Set/query mode"),
-      new SlashCommand("/op", "Grant op"),
-      new SlashCommand("/deop", "Remove op"),
-      new SlashCommand("/voice", "Grant voice"),
-      new SlashCommand("/devoice", "Remove voice"),
-      new SlashCommand("/ban", "Set ban"),
-      new SlashCommand("/unban", "Remove ban"),
-      new SlashCommand("/ignore", "Add hard ignore"),
-      new SlashCommand("/unignore", "Remove hard ignore"),
-      new SlashCommand("/ignorelist", "Show hard ignores"),
-      new SlashCommand("/ignores", "Alias: /ignorelist"),
-      new SlashCommand("/softignore", "Add soft ignore"),
-      new SlashCommand("/unsoftignore", "Remove soft ignore"),
-      new SlashCommand("/softignorelist", "Show soft ignores"),
-      new SlashCommand("/softignores", "Alias: /softignorelist"),
-      new SlashCommand("/version", "CTCP VERSION"),
-      new SlashCommand("/ping", "CTCP PING"),
-      new SlashCommand("/time", "CTCP TIME"),
-      new SlashCommand("/ctcp", "Send CTCP"),
-      new SlashCommand("/dcc", "DCC command"),
-      new SlashCommand("/dccmsg", "DCC message"),
-      new SlashCommand("/chathistory", "IRCv3 CHATHISTORY"),
-      new SlashCommand("/history", "Alias: /chathistory"),
-      new SlashCommand("/help", "Show command help"),
-      new SlashCommand("/commands", "Alias: /help"),
-      new SlashCommand("/reply", "Reply to message-id"),
-      new SlashCommand("/react", "React to message-id"),
-      new SlashCommand("/edit", "Edit message-id"),
-      new SlashCommand("/redact", "Redact message-id"),
-      new SlashCommand("/delete", "Alias: /redact"),
-      new SlashCommand("/filter", "Local filtering controls"),
-      new SlashCommand("/quote", "Send raw IRC line"),
-      new SlashCommand("/raw", "Alias: /quote")
-  );
+  private static final List<SlashCommand> SLASH_COMMANDS =
+      List.of(
+          new SlashCommand("/join", "Join channel"),
+          new SlashCommand("/j", "Alias: /join"),
+          new SlashCommand("/part", "Leave channel"),
+          new SlashCommand("/leave", "Alias: /part"),
+          new SlashCommand("/connect", "Connect server/all"),
+          new SlashCommand("/disconnect", "Disconnect server/all"),
+          new SlashCommand("/reconnect", "Reconnect server/all"),
+          new SlashCommand("/quit", "Disconnect all and quit"),
+          new SlashCommand("/nick", "Change nickname"),
+          new SlashCommand("/away", "Set/remove away status"),
+          new SlashCommand("/query", "Open private message"),
+          new SlashCommand("/whois", "WHOIS lookup"),
+          new SlashCommand("/wi", "Alias: /whois"),
+          new SlashCommand("/whowas", "WHOWAS lookup"),
+          new SlashCommand("/msg", "Send private message"),
+          new SlashCommand("/notice", "Send notice"),
+          new SlashCommand("/me", "Send action"),
+          new SlashCommand("/topic", "View/change topic"),
+          new SlashCommand("/kick", "Kick user"),
+          new SlashCommand("/invite", "Invite user"),
+          new SlashCommand("/invites", "List pending invites"),
+          new SlashCommand("/invjoin", "Join pending invite"),
+          new SlashCommand("/invitejoin", "Alias: /invjoin"),
+          new SlashCommand("/invignore", "Ignore pending invite"),
+          new SlashCommand("/inviteignore", "Alias: /invignore"),
+          new SlashCommand("/invwhois", "WHOIS inviter from invite"),
+          new SlashCommand("/invitewhois", "Alias: /invwhois"),
+          new SlashCommand("/invblock", "Block inviter nick"),
+          new SlashCommand("/inviteblock", "Alias: /invblock"),
+          new SlashCommand("/inviteautojoin", "Toggle invite auto-join"),
+          new SlashCommand("/invautojoin", "Alias: /inviteautojoin"),
+          new SlashCommand("/ajinvite", "Alias: /inviteautojoin (toggle)"),
+          new SlashCommand("/names", "Request NAMES"),
+          new SlashCommand("/who", "Request WHO"),
+          new SlashCommand("/list", "Request LIST"),
+          new SlashCommand("/mode", "Set/query mode"),
+          new SlashCommand("/op", "Grant op"),
+          new SlashCommand("/deop", "Remove op"),
+          new SlashCommand("/voice", "Grant voice"),
+          new SlashCommand("/devoice", "Remove voice"),
+          new SlashCommand("/ban", "Set ban"),
+          new SlashCommand("/unban", "Remove ban"),
+          new SlashCommand("/ignore", "Add hard ignore"),
+          new SlashCommand("/unignore", "Remove hard ignore"),
+          new SlashCommand("/ignorelist", "Show hard ignores"),
+          new SlashCommand("/ignores", "Alias: /ignorelist"),
+          new SlashCommand("/softignore", "Add soft ignore"),
+          new SlashCommand("/unsoftignore", "Remove soft ignore"),
+          new SlashCommand("/softignorelist", "Show soft ignores"),
+          new SlashCommand("/softignores", "Alias: /softignorelist"),
+          new SlashCommand("/version", "CTCP VERSION"),
+          new SlashCommand("/ping", "CTCP PING"),
+          new SlashCommand("/time", "CTCP TIME"),
+          new SlashCommand("/ctcp", "Send CTCP"),
+          new SlashCommand("/dcc", "DCC command"),
+          new SlashCommand("/dccmsg", "DCC message"),
+          new SlashCommand("/chathistory", "IRCv3 CHATHISTORY"),
+          new SlashCommand("/history", "Alias: /chathistory"),
+          new SlashCommand("/help", "Show command help"),
+          new SlashCommand("/commands", "Alias: /help"),
+          new SlashCommand("/reply", "Reply to message-id"),
+          new SlashCommand("/react", "React to message-id"),
+          new SlashCommand("/edit", "Edit message-id"),
+          new SlashCommand("/redact", "Redact message-id"),
+          new SlashCommand("/delete", "Alias: /redact"),
+          new SlashCommand("/filter", "Local filtering controls"),
+          new SlashCommand("/quote", "Send raw IRC line"),
+          new SlashCommand("/raw", "Alias: /quote"));
 
   private final JComponent owner;
   private final JTextField input;
@@ -117,10 +115,12 @@ final class MessageInputNickCompletionSupport {
    * catastrophically slow when we rebuild completions for large channels.
    */
   private final FastCompletionProvider completionProvider = new FastCompletionProvider();
+
   private final AutoCompletion autoCompletion = new AutoCompletion(completionProvider);
   private final List<Completion> slashCommandCompletions;
 
-  // AutoCompletion popups are lazily created and may cache UI defaults; mark dirty on theme changes.
+  // AutoCompletion popups are lazily created and may cache UI defaults; mark dirty on theme
+  // changes.
   private volatile boolean autoCompletionUiDirty = true;
 
   // When TAB shows a multi-choice completion popup, the actual completion text is inserted later
@@ -136,13 +136,15 @@ final class MessageInputNickCompletionSupport {
   private boolean installed;
   private boolean pendingSuffixListenerInstalled;
 
-  private final PropertyChangeListener lafListener = evt -> {
-    if (!"lookAndFeel".equals(evt.getPropertyName())) return;
-    markUiDirty();
-    SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
-  };
+  private final PropertyChangeListener lafListener =
+      evt -> {
+        if (!"lookAndFeel".equals(evt.getPropertyName())) return;
+        markUiDirty();
+        SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
+      };
 
-  MessageInputNickCompletionSupport(JComponent owner, JTextField input, MessageInputUndoSupport undoSupport) {
+  MessageInputNickCompletionSupport(
+      JComponent owner, JTextField input, MessageInputUndoSupport undoSupport) {
     this.owner = owner;
     this.input = input;
     this.undoSupport = undoSupport;
@@ -206,7 +208,8 @@ final class MessageInputNickCompletionSupport {
 
   private void rebuildCompletionModel(List<String> nicks) {
     List<String> cleaned = (nicks == null) ? List.of() : nicks;
-    ArrayList<Completion> completions = new ArrayList<>(slashCommandCompletions.size() + cleaned.size());
+    ArrayList<Completion> completions =
+        new ArrayList<>(slashCommandCompletions.size() + cleaned.size());
     completions.addAll(slashCommandCompletions);
     for (String nick : cleaned) {
       completions.add(new BasicCompletion(completionProvider, nick, "IRC nick"));
@@ -256,45 +259,55 @@ final class MessageInputNickCompletionSupport {
 
       // Wrap the AutoCompletion trigger action so we can apply IRC-style "nick: " addressing
       // when the completion occurs as the first word in the line.
-      am.put(key, new AbstractAction() {
-        @Override public void actionPerformed(ActionEvent e) {
-          String beforeText = input.getText();
-          int beforeCaret = input.getCaretPosition();
-          delegate.actionPerformed(e);
+      am.put(
+          key,
+          new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+              String beforeText = input.getText();
+              int beforeCaret = input.getCaretPosition();
+              delegate.actionPerformed(e);
 
-          SwingUtilities.invokeLater(() -> {
-            // Refresh the completion popup UI only when needed (first creation or after a theme change).
-            // Doing this on every TAB causes visible flicker because it can touch the owner window.
-            if (autoCompletionUiDirty) {
-              if (refreshAutoCompletionUiIfPresent(false)) {
-                autoCompletionUiDirty = false;
-              }
-            }
+              SwingUtilities.invokeLater(
+                  () -> {
+                    // Refresh the completion popup UI only when needed (first creation or after a
+                    // theme change).
+                    // Doing this on every TAB causes visible flicker because it can touch the owner
+                    // window.
+                    if (autoCompletionUiDirty) {
+                      if (refreshAutoCompletionUiIfPresent(false)) {
+                        autoCompletionUiDirty = false;
+                      }
+                    }
 
-            boolean appended = maybeAppendNickAddressSuffix(beforeText, beforeCaret);
-            if (!appended) {
-              String afterText = input.getText();
-              int afterCaret = input.getCaretPosition();
-              boolean completionOccurred = !(Objects.equals(afterText, beforeText) && afterCaret == beforeCaret);
+                    boolean appended = maybeAppendNickAddressSuffix(beforeText, beforeCaret);
+                    if (!appended) {
+                      String afterText = input.getText();
+                      int afterCaret = input.getCaretPosition();
+                      boolean completionOccurred =
+                          !(Objects.equals(afterText, beforeText) && afterCaret == beforeCaret);
 
-              // If TAB only opened a multi-choice completion popup, the completion text is inserted later.
-              // Arm a one-shot suffix append so the chosen nick becomes "nick: " when it's the first word.
-              pendingNickAddressSuffix = false;
-              if (!completionOccurred && isEligibleForNickAddressSuffix(beforeText, beforeCaret)) {
-                String prefix = firstWordPrefix(beforeText);
-                if (hasNickPrefixMatch(prefix)) {
-                  pendingNickAddressSuffix = true;
-                  pendingNickAddressBeforeText = beforeText;
-                  pendingNickAddressBeforeCaret = beforeCaret;
-                  pendingNickAddressSetAtMs = System.currentTimeMillis();
-                }
-              }
-            } else {
-              pendingNickAddressSuffix = false;
+                      // If TAB only opened a multi-choice completion popup, the completion text is
+                      // inserted later.
+                      // Arm a one-shot suffix append so the chosen nick becomes "nick: " when it's
+                      // the first word.
+                      pendingNickAddressSuffix = false;
+                      if (!completionOccurred
+                          && isEligibleForNickAddressSuffix(beforeText, beforeCaret)) {
+                        String prefix = firstWordPrefix(beforeText);
+                        if (hasNickPrefixMatch(prefix)) {
+                          pendingNickAddressSuffix = true;
+                          pendingNickAddressBeforeText = beforeText;
+                          pendingNickAddressBeforeCaret = beforeCaret;
+                          pendingNickAddressSetAtMs = System.currentTimeMillis();
+                        }
+                      }
+                    } else {
+                      pendingNickAddressSuffix = false;
+                    }
+                  });
             }
           });
-        }
-      });
 
       installPendingNickAddressSuffixListener();
 
@@ -306,28 +319,46 @@ final class MessageInputNickCompletionSupport {
     if (pendingSuffixListenerInstalled) return;
     pendingSuffixListenerInstalled = true;
     try {
-      input.getDocument().addDocumentListener(new DocumentListener() {
-        @Override public void insertUpdate(DocumentEvent e) { maybeAppendPendingNickSuffixAsync(); }
-        @Override public void removeUpdate(DocumentEvent e) { maybeAppendPendingNickSuffixAsync(); }
-        @Override public void changedUpdate(DocumentEvent e) { maybeAppendPendingNickSuffixAsync(); }
-      });
+      input
+          .getDocument()
+          .addDocumentListener(
+              new DocumentListener() {
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                  maybeAppendPendingNickSuffixAsync();
+                }
+
+                @Override
+                public void removeUpdate(DocumentEvent e) {
+                  maybeAppendPendingNickSuffixAsync();
+                }
+
+                @Override
+                public void changedUpdate(DocumentEvent e) {
+                  maybeAppendPendingNickSuffixAsync();
+                }
+              });
     } catch (Exception ignored) {
     }
   }
 
   private void installSlashCommandAutoPopup() {
     try {
-      input.getDocument().addDocumentListener(new DocumentListener() {
-        @Override public void insertUpdate(DocumentEvent e) {
-          maybeShowSlashCommandPopup(e);
-        }
+      input
+          .getDocument()
+          .addDocumentListener(
+              new DocumentListener() {
+                @Override
+                public void insertUpdate(DocumentEvent e) {
+                  maybeShowSlashCommandPopup(e);
+                }
 
-        @Override public void removeUpdate(DocumentEvent e) {
-        }
+                @Override
+                public void removeUpdate(DocumentEvent e) {}
 
-        @Override public void changedUpdate(DocumentEvent e) {
-        }
-      });
+                @Override
+                public void changedUpdate(DocumentEvent e) {}
+              });
     } catch (Exception ignored) {
     }
   }
@@ -345,10 +376,11 @@ final class MessageInputNickCompletionSupport {
       return;
     }
 
-    SwingUtilities.invokeLater(() -> {
-      if (!shouldShowSlashCommandCompletion()) return;
-      autoCompletion.doCompletion();
-    });
+    SwingUtilities.invokeLater(
+        () -> {
+          if (!shouldShowSlashCommandCompletion()) return;
+          autoCompletion.doCompletion();
+        });
   }
 
   private boolean shouldShowSlashCommandCompletion() {
@@ -395,13 +427,16 @@ final class MessageInputNickCompletionSupport {
       return;
     }
 
-    SwingUtilities.invokeLater(() -> {
-      if (!pendingNickAddressSuffix) return;
-      boolean appended = maybeAppendNickAddressSuffix(pendingNickAddressBeforeText, pendingNickAddressBeforeCaret);
-      if (appended) {
-        pendingNickAddressSuffix = false;
-      }
-    });
+    SwingUtilities.invokeLater(
+        () -> {
+          if (!pendingNickAddressSuffix) return;
+          boolean appended =
+              maybeAppendNickAddressSuffix(
+                  pendingNickAddressBeforeText, pendingNickAddressBeforeCaret);
+          if (appended) {
+            pendingNickAddressSuffix = false;
+          }
+        });
   }
 
   private boolean maybeAppendNickAddressSuffix(String beforeText, int beforeCaret) {
@@ -418,7 +453,8 @@ final class MessageInputNickCompletionSupport {
       if (afterText == null) afterText = "";
       int afterCaret = input.getCaretPosition();
 
-      if (afterText.equals(beforeText) && afterCaret == beforeCaret) return false; // no change -> no completion
+      if (afterText.equals(beforeText) && afterCaret == beforeCaret)
+        return false; // no change -> no completion
 
       // Don't do this for slash-commands.
       String trimmed = afterText.stripLeading();
@@ -440,7 +476,8 @@ final class MessageInputNickCompletionSupport {
       if (end < afterText.length()) {
         char ch = afterText.charAt(end);
         if (ch == ':' || ch == ',') return false;
-        if (!Character.isWhitespace(ch)) return false; // only add when nick is followed by whitespace
+        if (!Character.isWhitespace(ch))
+          return false; // only add when nick is followed by whitespace
       }
 
       // Normalize whitespace after the nick into exactly ": ".
@@ -527,16 +564,17 @@ final class MessageInputNickCompletionSupport {
     }
 
     // Remove listener when the owner component is disposed.
-    owner.addHierarchyListener(evt -> {
-      long flags = evt.getChangeFlags();
-      if ((flags & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
-      if (owner.isDisplayable()) return;
-      try {
-        UIManager.removePropertyChangeListener(lafListener);
-      } catch (Exception ex) {
-        log.warn("[MessageInputNickCompletionSupport] remove LAF listener failed", ex);
-      }
-    });
+    owner.addHierarchyListener(
+        evt -> {
+          long flags = evt.getChangeFlags();
+          if ((flags & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
+          if (owner.isDisplayable()) return;
+          try {
+            UIManager.removePropertyChangeListener(lafListener);
+          } catch (Exception ex) {
+            log.warn("[MessageInputNickCompletionSupport] remove LAF listener failed", ex);
+          }
+        });
   }
 
   private void refreshAutoCompletionUi() {
@@ -602,8 +640,8 @@ final class MessageInputNickCompletionSupport {
   /**
    * Fast-ish completion provider that supports bulk replace.
    *
-   * The upstream provider sorts on every insertion; we instead replace the internal
-   * list in one shot and sort once.
+   * <p>The upstream provider sorts on every insertion; we instead replace the internal list in one
+   * shot and sort once.
    */
   private static final class FastCompletionProvider extends DefaultCompletionProvider {
     private static final Field COMPLETIONS_FIELD = findCompletionsField();

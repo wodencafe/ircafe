@@ -34,5 +34,5 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build + tests
-        run: ./gradlew --no-daemon clean test bootJar
+      - name: Lint + build + tests
+        run: ./gradlew --no-daemon clean lint test bootJar

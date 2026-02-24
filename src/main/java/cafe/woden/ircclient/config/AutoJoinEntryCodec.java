@@ -9,8 +9,8 @@ import java.util.Objects;
 /**
  * Encodes/decodes extra non-channel entries stored in {@code irc.servers[].autoJoin}.
  *
- * <p>We keep PM auto-open entries in the same list using a stable prefix so existing config
- * wiring remains unchanged.
+ * <p>We keep PM auto-open entries in the same list using a stable prefix so existing config wiring
+ * remains unchanged.
  */
 public final class AutoJoinEntryCodec {
 
@@ -36,7 +36,9 @@ public final class AutoJoinEntryCodec {
     return PM_PREFIX + n;
   }
 
-  /** Return channel (non-PM) auto-join entries, preserving order and case-insensitive uniqueness. */
+  /**
+   * Return channel (non-PM) auto-join entries, preserving order and case-insensitive uniqueness.
+   */
   public static List<String> channelEntries(List<String> entries) {
     LinkedHashMap<String, String> out = new LinkedHashMap<>();
     if (entries != null) {

@@ -12,8 +12,8 @@ import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -28,8 +28,8 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query,
- * /msg, /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote.
+ * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
+ * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -43,8 +43,7 @@ public class OutboundChatCommandService {
   }
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-          .withZone(ZoneOffset.UTC);
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -112,12 +111,18 @@ public class OutboundChatCommandService {
     joinRoutingState.rememberOrigin(at.serverId(), chan, joinOrigin);
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected (join queued in config only)");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(conn)",
+          "Not connected (join queued in config only)");
       return;
     }
 
     if (containsCrlf(chan) || containsCrlf(joinKey)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(join)", "Refusing to send multi-line /join input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(join)",
+          "Refusing to send multi-line /join input.");
       return;
     }
 
@@ -127,7 +132,11 @@ public class OutboundChatCommandService {
           irc.sendRaw(at.serverId(), line)
               .subscribe(
                   () -> {},
-                  err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(join-error)", String.valueOf(err))));
+                  err ->
+                      ui.appendError(
+                          targetCoordinator.safeStatusTarget(),
+                          "(join-error)",
+                          String.valueOf(err))));
       return;
     }
 
@@ -135,7 +144,11 @@ public class OutboundChatCommandService {
         irc.joinChannel(at.serverId(), chan)
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(join-error)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(join-error)",
+                        String.valueOf(err))));
   }
 
   public void handlePart(CompositeDisposable disposables, String channel, String reason) {
@@ -154,7 +167,8 @@ public class OutboundChatCommandService {
     TargetRef target;
     if (chan.isEmpty()) {
       if (!at.isChannel()) {
-        ui.appendStatus(at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
+        ui.appendStatus(
+            at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
         return;
       }
       target = at;
@@ -193,7 +207,8 @@ public class OutboundChatCommandService {
   public void handleConnect(String target) {
     ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
     if (cmd == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(connect)", "Usage: /connect [serverId|all]");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(connect)", "Usage: /connect [serverId|all]");
       return;
     }
     if (cmd.all()) {
@@ -206,7 +221,10 @@ public class OutboundChatCommandService {
   public void handleDisconnect(String target) {
     ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
     if (cmd == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(disconnect)", "Usage: /disconnect [serverId|all]");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(),
+          "(disconnect)",
+          "Usage: /disconnect [serverId|all]");
       return;
     }
     if (cmd.all()) {
@@ -219,7 +237,8 @@ public class OutboundChatCommandService {
   public void handleReconnect(String target) {
     ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
     if (cmd == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(reconnect)", "Usage: /reconnect [serverId|all]");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(reconnect)", "Usage: /reconnect [serverId|all]");
       return;
     }
     if (cmd.all()) {
@@ -232,7 +251,10 @@ public class OutboundChatCommandService {
   public void handleQuit(String reason) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef status = targetCoordinator.safeStatusTarget();
-    String sid = (at != null && at.serverId() != null && !at.serverId().isBlank()) ? at.serverId() : status.serverId();
+    String sid =
+        (at != null && at.serverId() != null && !at.serverId().isBlank())
+            ? at.serverId()
+            : status.serverId();
     if (sid == null || sid.isBlank()) {
       ui.appendStatus(status, "(quit)", "No server selected.");
       return;
@@ -240,7 +262,8 @@ public class OutboundChatCommandService {
 
     String msg = reason == null ? "" : reason.trim();
     if (containsCrlf(msg)) {
-      ui.appendStatus(new TargetRef(sid, "status"), "(quit)", "Refusing to send multi-line /quit reason.");
+      ui.appendStatus(
+          new TargetRef(sid, "status"), "(quit)", "Refusing to send multi-line /quit reason.");
       return;
     }
 
@@ -271,8 +294,16 @@ public class OutboundChatCommandService {
     disposables.add(
         irc.changeNick(at.serverId(), nick)
             .subscribe(
-                () -> ui.appendStatus(new TargetRef(at.serverId(), "status"), "(nick)", "Requested nick change to " + nick),
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(nick-error)", String.valueOf(err))));
+                () ->
+                    ui.appendStatus(
+                        new TargetRef(at.serverId(), "status"),
+                        "(nick)",
+                        "Requested nick change to " + nick),
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(nick-error)",
+                        String.valueOf(err))));
   }
 
   public void handleAway(CompositeDisposable disposables, String message) {
@@ -286,7 +317,8 @@ public class OutboundChatCommandService {
 
     String msg = message == null ? "" : message.trim();
 
-    boolean explicitClear = "-".equals(msg) || "off".equalsIgnoreCase(msg) || "clear".equalsIgnoreCase(msg);
+    boolean explicitClear =
+        "-".equals(msg) || "off".equalsIgnoreCase(msg) || "clear".equalsIgnoreCase(msg);
 
     boolean clear;
     String toSend;
@@ -330,7 +362,8 @@ public class OutboundChatCommandService {
             .subscribe(
                 () -> {
                   awayRoutingState.setAway(at.serverId(), !clear);
-                  ui.appendStatus(status, "(away)", clear ? "Away cleared" : ("Away set: " + toSend));
+                  ui.appendStatus(
+                      status, "(away)", clear ? "Away cleared" : ("Away set: " + toSend));
                 },
                 err -> {
                   awayRoutingState.setLastReason(at.serverId(), prevReason);
@@ -376,7 +409,6 @@ public class OutboundChatCommandService {
     sendMessage(disposables, pm, m);
   }
 
-  
   public void handleNotice(CompositeDisposable disposables, String target, String body) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
@@ -394,7 +426,7 @@ public class OutboundChatCommandService {
     sendNotice(disposables, at, t, m);
   }
 
-public void handleMe(CompositeDisposable disposables, String action) {
+  public void handleMe(CompositeDisposable disposables, String action) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(me)", "Select a server first.");
@@ -408,7 +440,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(me)", "Select a channel or PM first.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(me)", "Select a channel or PM first.");
       return;
     }
 
@@ -426,7 +459,11 @@ public void handleMe(CompositeDisposable disposables, String action) {
         irc.sendAction(at.serverId(), at.target(), a)
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(send-error)",
+                        String.valueOf(err))));
   }
 
   public void handleTopic(CompositeDisposable disposables, String first, String rest) {
@@ -463,7 +500,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (containsCrlf(channel) || containsCrlf(topicText)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(topic)", "Refusing to send multi-line /topic input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(topic)",
+          "Refusing to send multi-line /topic input.");
       return;
     }
 
@@ -477,11 +517,11 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(topic-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(topic-error)", String.valueOf(err))));
   }
 
-  public void handleKick(CompositeDisposable disposables, String channel, String nick, String reason) {
+  public void handleKick(
+      CompositeDisposable disposables, String channel, String nick, String reason) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(kick)", "Select a server first.");
@@ -504,7 +544,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (containsCrlf(ch) || containsCrlf(n) || containsCrlf(rsn)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(kick)", "Refusing to send multi-line /kick input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(kick)",
+          "Refusing to send multi-line /kick input.");
       return;
     }
 
@@ -518,8 +561,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(kick-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(kick-error)", String.valueOf(err))));
   }
 
   public void handleInvite(CompositeDisposable disposables, String nick, String channel) {
@@ -544,7 +586,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (containsCrlf(ch) || containsCrlf(n)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(invite)", "Refusing to send multi-line /invite input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(invite)",
+          "Refusing to send multi-line /invite input.");
       return;
     }
 
@@ -558,8 +603,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(invite-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(invite-error)", String.valueOf(err))));
   }
 
   public void handleInviteList(String serverId) {
@@ -585,15 +629,16 @@ public void handleMe(CompositeDisposable disposables, String action) {
       if (invite == null) continue;
       String from = invite.inviterNick().isBlank() ? "server" : invite.inviterNick();
       String invitee = invite.inviteeNick().isBlank() ? "you" : invite.inviteeNick();
-      StringBuilder line = new StringBuilder()
-          .append("  #")
-          .append(invite.id())
-          .append(" ")
-          .append(from)
-          .append(" invited ")
-          .append(invitee)
-          .append(" to ")
-          .append(invite.channel());
+      StringBuilder line =
+          new StringBuilder()
+              .append("  #")
+              .append(invite.id())
+              .append(" ")
+              .append(from)
+              .append(" invited ")
+              .append(invitee)
+              .append(" to ")
+              .append(invite.channel());
       if (invite.repeatCount() > 1) line.append(" (x").append(invite.repeatCount()).append(")");
       if (!invite.reason().isBlank()) line.append(" - ").append(invite.reason());
       ui.appendStatus(status, "(invite)", line.toString());
@@ -607,7 +652,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
   public void handleInviteJoin(CompositeDisposable disposables, String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite = resolveInviteByToken(inviteToken, fallback, "(invite)");
+    PendingInviteState.PendingInvite invite =
+        resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
     TargetRef status = new TargetRef(invite.serverId(), "status");
@@ -621,7 +667,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     runtimeConfig.rememberJoinedChannel(invite.serverId(), invite.channel());
-    ui.appendStatus(status, "(invite)", "Joining " + invite.channel() + " from invite #" + invite.id() + "...");
+    ui.appendStatus(
+        status, "(invite)", "Joining " + invite.channel() + " from invite #" + invite.id() + "...");
 
     disposables.add(
         irc.joinChannel(invite.serverId(), invite.channel())
@@ -633,25 +680,31 @@ public void handleMe(CompositeDisposable disposables, String action) {
   public void handleInviteIgnore(String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite = resolveInviteByToken(inviteToken, fallback, "(invite)");
+    PendingInviteState.PendingInvite invite =
+        resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
     pendingInviteState.remove(invite.id());
     TargetRef status = new TargetRef(invite.serverId(), "status");
     String from = invite.inviterNick().isBlank() ? "server" : invite.inviterNick();
-    ui.appendStatus(status, "(invite)", "Ignored invite #" + invite.id() + " from " + from + " to " + invite.channel() + ".");
+    ui.appendStatus(
+        status,
+        "(invite)",
+        "Ignored invite #" + invite.id() + " from " + from + " to " + invite.channel() + ".");
   }
 
   public void handleInviteWhois(CompositeDisposable disposables, String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite = resolveInviteByToken(inviteToken, fallback, "(invite)");
+    PendingInviteState.PendingInvite invite =
+        resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
     TargetRef status = new TargetRef(invite.serverId(), "status");
     String nick = Objects.toString(invite.inviterNick(), "").trim();
     if (nick.isEmpty() || "server".equalsIgnoreCase(nick)) {
-      ui.appendStatus(status, "(invite)", "No inviter nick available for invite #" + invite.id() + ".");
+      ui.appendStatus(
+          status, "(invite)", "No inviter nick available for invite #" + invite.id() + ".");
       return;
     }
     if (!connectionCoordinator.isConnected(invite.serverId())) {
@@ -660,24 +713,25 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     whoisRoutingState.put(invite.serverId(), nick, status);
-    ui.appendStatus(status, "(whois)", "Requesting WHOIS for " + nick + " (invite #" + invite.id() + ")...");
+    ui.appendStatus(
+        status, "(whois)", "Requesting WHOIS for " + nick + " (invite #" + invite.id() + ")...");
     disposables.add(
         irc.whois(invite.serverId(), nick)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(whois)", String.valueOf(err))));
+            .subscribe(() -> {}, err -> ui.appendError(status, "(whois)", String.valueOf(err))));
   }
 
   public void handleInviteBlock(String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite = resolveInviteByToken(inviteToken, fallback, "(invite)");
+    PendingInviteState.PendingInvite invite =
+        resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
     TargetRef status = new TargetRef(invite.serverId(), "status");
     String nick = Objects.toString(invite.inviterNick(), "").trim();
     if (nick.isEmpty() || "server".equalsIgnoreCase(nick)) {
-      ui.appendStatus(status, "(invite)", "No inviter nick available for invite #" + invite.id() + ".");
+      ui.appendStatus(
+          status, "(invite)", "No inviter nick available for invite #" + invite.id() + ".");
       return;
     }
 
@@ -700,25 +754,33 @@ public void handleMe(CompositeDisposable disposables, String action) {
       boolean enabled = !pendingInviteState.inviteAutoJoinEnabled();
       pendingInviteState.setInviteAutoJoinEnabled(enabled);
       runtimeConfig.rememberInviteAutoJoinEnabled(enabled);
-      ui.appendStatus(out, "(invite)", "Invite auto-join is now " + (enabled ? "enabled." : "disabled."));
+      ui.appendStatus(
+          out, "(invite)", "Invite auto-join is now " + (enabled ? "enabled." : "disabled."));
       return;
     }
     if (raw.isEmpty() || "status".equals(raw)) {
-      ui.appendStatus(out, "(invite)", "Invite auto-join is "
-          + (pendingInviteState.inviteAutoJoinEnabled() ? "enabled" : "disabled")
-          + ". Use /inviteautojoin on|off or /ajinvite.");
+      ui.appendStatus(
+          out,
+          "(invite)",
+          "Invite auto-join is "
+              + (pendingInviteState.inviteAutoJoinEnabled() ? "enabled" : "disabled")
+              + ". Use /inviteautojoin on|off or /ajinvite.");
       return;
     }
 
     Boolean enabled = parseOnOff(raw);
     if (enabled == null) {
-      ui.appendStatus(out, "(invite)", "Usage: /inviteautojoin [on|off|status] (alias: /ajinvite [on|off|status|toggle])");
+      ui.appendStatus(
+          out,
+          "(invite)",
+          "Usage: /inviteautojoin [on|off|status] (alias: /ajinvite [on|off|status|toggle])");
       return;
     }
 
     pendingInviteState.setInviteAutoJoinEnabled(enabled);
     runtimeConfig.rememberInviteAutoJoinEnabled(enabled);
-    ui.appendStatus(out, "(invite)", "Invite auto-join is now " + (enabled ? "enabled." : "disabled."));
+    ui.appendStatus(
+        out, "(invite)", "Invite auto-join is now " + (enabled ? "enabled." : "disabled."));
   }
 
   public void handleNames(CompositeDisposable disposables, String channel) {
@@ -741,7 +803,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (containsCrlf(ch)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(names)", "Refusing to send multi-line /names input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(names)",
+          "Refusing to send multi-line /names input.");
       return;
     }
 
@@ -753,8 +818,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.requestNames(at.serverId(), ch)
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(names-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(names-error)", String.valueOf(err))));
   }
 
   public void handleWho(CompositeDisposable disposables, String args) {
@@ -781,7 +845,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (containsCrlf(a)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(who)", "Refusing to send multi-line /who input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(who)",
+          "Refusing to send multi-line /who input.");
       return;
     }
 
@@ -790,9 +857,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     int sp = firstToken.indexOf(' ');
     if (sp >= 0) firstToken = firstToken.substring(0, sp).trim();
 
-    TargetRef out = (firstToken.startsWith("#") || firstToken.startsWith("&"))
-        ? new TargetRef(at.serverId(), firstToken)
-        : new TargetRef(at.serverId(), "status");
+    TargetRef out =
+        (firstToken.startsWith("#") || firstToken.startsWith("&"))
+            ? new TargetRef(at.serverId(), firstToken)
+            : new TargetRef(at.serverId(), "status");
     TargetRef status = new TargetRef(at.serverId(), "status");
     PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
     ui.ensureTargetExists(out);
@@ -801,8 +869,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(who-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(who-error)", String.valueOf(err))));
   }
 
   public void handleList(CompositeDisposable disposables, String args) {
@@ -819,7 +886,10 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (containsCrlf(a)) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(list)", "Refusing to send multi-line /list input.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(list)",
+          "Refusing to send multi-line /list input.");
       return;
     }
 
@@ -839,8 +909,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-            () -> {},
-            err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
   }
 
   public void handleHelp(String topic) {
@@ -861,7 +930,9 @@ public void handleMe(CompositeDisposable disposables, String action) {
           appendDccHelp(out);
           return;
         }
-        default -> ui.appendStatus(out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
+        default ->
+            ui.appendStatus(
+                out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
       }
     }
 
@@ -874,7 +945,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
         "(help)",
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
     ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
-    ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
+    ui.appendStatus(
+        out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
     appendEditHelp(out);
     appendRedactHelp(out);
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
@@ -924,19 +996,24 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(reply)", "Select a channel or PM first.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(reply)", "Select a channel or PM first.");
       return;
     }
 
     if (!irc.isDraftReplyAvailable(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(reply)", "draft/reply is not negotiated on this server.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(reply)",
+          "draft/reply is not negotiated on this server.");
       return;
     }
 
     sendReplyMessage(disposables, at, msgId, text);
   }
 
-  public void handleReactMessage(CompositeDisposable disposables, String messageId, String reaction) {
+  public void handleReactMessage(
+      CompositeDisposable disposables, String messageId, String reaction) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(react)", "Select a server first.");
@@ -951,12 +1028,16 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(react)", "Select a channel or PM first.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(react)", "Select a channel or PM first.");
       return;
     }
 
     if (!irc.isDraftReplyAvailable(at.serverId()) || !irc.isDraftReactAvailable(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(react)", "draft/react is not negotiated on this server.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(react)",
+          "draft/react is not negotiated on this server.");
       return;
     }
 
@@ -978,7 +1059,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(edit)", "Select a channel or PM first.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(edit)", "Select a channel or PM first.");
       return;
     }
 
@@ -998,7 +1080,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     sendEditMessage(disposables, at, msgId, text);
   }
 
-  public void handleRedactMessage(CompositeDisposable disposables, String messageId, String reason) {
+  public void handleRedactMessage(
+      CompositeDisposable disposables, String messageId, String reason) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(redact)", "Select a server first.");
@@ -1018,7 +1101,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     if (at.isStatus()) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(redact)", "Select a channel or PM first.");
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(redact)", "Select a channel or PM first.");
       return;
     }
 
@@ -1062,13 +1146,13 @@ public void handleMe(CompositeDisposable disposables, String action) {
     PreparedRawLine prepared = prepareCorrelatedRawLine(status, line);
 
     // Echo a safe preview of what we are sending (avoid leaking secrets).
-    ui.appendStatus(status, "(raw)", "→ " + withLabelHint(redactIfSensitive(line), prepared.label()));
+    ui.appendStatus(
+        status, "(raw)", "→ " + withLabelHint(redactIfSensitive(line), prepared.label()));
 
     disposables.add(
         irc.sendRaw(sid, prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
   }
 
   public void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
@@ -1191,7 +1275,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     String preview = "CHATHISTORY AROUND " + at.target() + " " + selectorToken + " " + lim;
-    ui.appendStatus(at, "(chathistory)", "Requesting message context around selector… limit=" + lim);
+    ui.appendStatus(
+        at, "(chathistory)", "Requesting message context around selector… limit=" + lim);
     ui.appendStatus(at, "(chathistory)", "→ " + preview);
 
     final String selectorFinal = selectorToken;
@@ -1212,11 +1297,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
   }
 
   public void handleChatHistoryBetween(
-      CompositeDisposable disposables,
-      String startSelector,
-      String endSelector,
-      int limit
-  ) {
+      CompositeDisposable disposables, String startSelector, String endSelector, int limit) {
     TargetRef at = resolveChatHistoryTargetOrNull();
     if (at == null) return;
     TargetRef status = new TargetRef(at.serverId(), "status");
@@ -1231,7 +1312,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     String startToken = normalizeChatHistorySelectorOrWildcard(startSelector);
     String endToken = normalizeChatHistorySelectorOrWildcard(endSelector);
     if (startToken.isEmpty() || endToken.isEmpty()) {
-      ui.appendStatus(at, "(chathistory)", "Between selectors must be * or msgid=... or timestamp=...");
+      ui.appendStatus(
+          at, "(chathistory)", "Between selectors must be * or msgid=... or timestamp=...");
       return;
     }
 
@@ -1240,7 +1322,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    String preview = "CHATHISTORY BETWEEN " + at.target() + " " + startToken + " " + endToken + " " + lim;
+    String preview =
+        "CHATHISTORY BETWEEN " + at.target() + " " + startToken + " " + endToken + " " + lim;
     ui.appendStatus(at, "(chathistory)", "Requesting bounded history window… limit=" + lim);
     ui.appendStatus(at, "(chathistory)", "→ " + preview);
 
@@ -1301,8 +1384,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
     disposables.add(
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(quote-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(quote-error)", String.valueOf(err))));
   }
 
   private void sendMessage(CompositeDisposable disposables, TargetRef target, String message) {
@@ -1341,7 +1423,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
       pendingEntry = null;
     } else {
       pendingEntry = pendingEchoMessageState.register(target, me, m, Instant.now());
-      ui.appendPendingOutgoingChat(target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
+      ui.appendPendingOutgoingChat(
+          target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
     }
 
     disposables.add(
@@ -1359,7 +1442,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
                         pendingEntry.text(),
                         String.valueOf(err));
                   }
-                  ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err));
+                  ui.appendError(
+                      targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err));
                 }));
 
     if (useLocalEcho) {
@@ -1368,11 +1452,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
   }
 
   private void sendReplyMessage(
-      CompositeDisposable disposables,
-      TargetRef target,
-      String replyToMessageId,
-      String message
-  ) {
+      CompositeDisposable disposables, TargetRef target, String replyToMessageId, String message) {
     if (target == null) return;
     String msgId = normalizeIrcv3Token(replyToMessageId);
     String m = message == null ? "" : message.trim();
@@ -1394,7 +1474,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
       pendingEntry = null;
     } else {
       pendingEntry = pendingEchoMessageState.register(target, me, m, Instant.now());
-      ui.appendPendingOutgoingChat(target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
+      ui.appendPendingOutgoingChat(
+          target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
     }
 
     String rawLine =
@@ -1416,7 +1497,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
                         pendingEntry.text(),
                         String.valueOf(err));
                   }
-                  ui.appendError(targetCoordinator.safeStatusTarget(), "(reply-error)", String.valueOf(err));
+                  ui.appendError(
+                      targetCoordinator.safeStatusTarget(), "(reply-error)", String.valueOf(err));
                 }));
 
     if (useLocalEcho) {
@@ -1425,11 +1507,7 @@ public void handleMe(CompositeDisposable disposables, String action) {
   }
 
   private void sendReactionTag(
-      CompositeDisposable disposables,
-      TargetRef target,
-      String replyToMessageId,
-      String reaction
-  ) {
+      CompositeDisposable disposables, TargetRef target, String replyToMessageId, String reaction) {
     if (target == null) return;
     String msgId = normalizeIrcv3Token(replyToMessageId);
     String react = normalizeReactionToken(reaction);
@@ -1444,12 +1522,13 @@ public void handleMe(CompositeDisposable disposables, String action) {
       return;
     }
 
-    String rawLine = "@+draft/react="
-        + escapeIrcv3TagValue(react)
-        + ";+draft/reply="
-        + escapeIrcv3TagValue(msgId)
-        + " TAGMSG "
-        + target.target();
+    String rawLine =
+        "@+draft/react="
+            + escapeIrcv3TagValue(react)
+            + ";+draft/reply="
+            + escapeIrcv3TagValue(msgId)
+            + " TAGMSG "
+            + target.target();
     PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
 
     String me = irc.currentNick(target.serverId()).orElse("me");
@@ -1462,15 +1541,18 @@ public void handleMe(CompositeDisposable disposables, String action) {
         irc.sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(react-error)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(react-error)",
+                        String.valueOf(err))));
   }
 
   private void sendEditMessage(
       CompositeDisposable disposables,
       TargetRef target,
       String targetMessageId,
-      String editedText
-  ) {
+      String editedText) {
     if (target == null) return;
     String msgId = normalizeIrcv3Token(targetMessageId);
     String text = editedText == null ? "" : editedText.trim();
@@ -1492,29 +1574,22 @@ public void handleMe(CompositeDisposable disposables, String action) {
     String me = irc.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
-      ui.applyMessageEdit(
-          target,
-          now,
-          me,
-          msgId,
-          text,
-          "",
-          java.util.Map.of("draft/edit", msgId));
+      ui.applyMessageEdit(target, now, me, msgId, text, "", java.util.Map.of("draft/edit", msgId));
     }
 
     disposables.add(
         irc.sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(edit-error)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(edit-error)",
+                        String.valueOf(err))));
   }
 
   private void sendRedactionTag(
-      CompositeDisposable disposables,
-      TargetRef target,
-      String targetMessageId,
-      String reason
-  ) {
+      CompositeDisposable disposables, TargetRef target, String targetMessageId, String reason) {
     if (target == null) return;
     String msgId = normalizeIrcv3Token(targetMessageId);
     if (msgId.isEmpty()) return;
@@ -1529,31 +1604,31 @@ public void handleMe(CompositeDisposable disposables, String action) {
     }
 
     String why = Objects.toString(reason, "").trim();
-    String rawLine = why.isEmpty()
-        ? ("REDACT " + target.target() + " " + msgId)
-        : ("REDACT " + target.target() + " " + msgId + " :" + why);
+    String rawLine =
+        why.isEmpty()
+            ? ("REDACT " + target.target() + " " + msgId)
+            : ("REDACT " + target.target() + " " + msgId + " :" + why);
     PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
 
     String me = irc.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
-      ui.applyMessageRedaction(
-          target,
-          now,
-          me,
-          msgId,
-          "",
-          java.util.Map.of("draft/delete", msgId));
+      ui.applyMessageRedaction(target, now, me, msgId, "", java.util.Map.of("draft/delete", msgId));
     }
 
     disposables.add(
         irc.sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(redact-error)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(redact-error)",
+                        String.valueOf(err))));
   }
 
-  private void sendNotice(CompositeDisposable disposables, TargetRef echoTarget, String target, String message) {
+  private void sendNotice(
+      CompositeDisposable disposables, TargetRef echoTarget, String target, String message) {
     if (echoTarget == null) return;
     String t = target == null ? "" : target.trim();
     String m = message == null ? "" : message.trim();
@@ -1587,7 +1662,11 @@ public void handleMe(CompositeDisposable disposables, String action) {
         irc.sendNotice(echoTarget.serverId(), t, m)
             .subscribe(
                 () -> {},
-                err -> ui.appendError(targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err))));
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(send-error)",
+                        String.valueOf(err))));
 
     if (shouldUseLocalEcho(echoTarget.serverId())) {
       String me = irc.currentNick(echoTarget.serverId()).orElse("me");
@@ -1596,17 +1675,15 @@ public void handleMe(CompositeDisposable disposables, String action) {
   }
 
   private MultilineSendDecision resolveMultilineSendDecision(
-      TargetRef target,
-      List<String> lines,
-      String statusPrefix
-  ) {
+      TargetRef target, List<String> lines, String statusPrefix) {
     if (target == null || lines == null || lines.size() <= 1) {
       return MultilineSendDecision.SEND_AS_MULTILINE;
     }
 
     int lineCount = lines.size();
     long payloadUtf8Bytes = multilinePayloadUtf8Bytes(lines);
-    String reason = multilineUnavailableOrLimitReason(target.serverId(), lineCount, payloadUtf8Bytes);
+    String reason =
+        multilineUnavailableOrLimitReason(target.serverId(), lineCount, payloadUtf8Bytes);
     if (reason.isBlank()) {
       return MultilineSendDecision.SEND_AS_MULTILINE;
     }
@@ -1627,19 +1704,28 @@ public void handleMe(CompositeDisposable disposables, String action) {
     return MultilineSendDecision.SEND_AS_SPLIT_LINES;
   }
 
-  private String multilineUnavailableOrLimitReason(String serverId, int lineCount, long payloadUtf8Bytes) {
+  private String multilineUnavailableOrLimitReason(
+      String serverId, int lineCount, long payloadUtf8Bytes) {
     if (!irc.isMultilineAvailable(serverId)) {
       return "IRCv3 multiline is not negotiated on this server.";
     }
 
     int maxLines = irc.negotiatedMultilineMaxLines(serverId);
     if (maxLines > 0 && lineCount > maxLines) {
-      return "Message has " + lineCount + " lines; negotiated multiline max-lines is " + maxLines + ".";
+      return "Message has "
+          + lineCount
+          + " lines; negotiated multiline max-lines is "
+          + maxLines
+          + ".";
     }
 
     long maxBytes = irc.negotiatedMultilineMaxBytes(serverId);
     if (maxBytes > 0L && payloadUtf8Bytes > maxBytes) {
-      return "Message is " + payloadUtf8Bytes + " UTF-8 bytes; negotiated multiline max-bytes is " + maxBytes + ".";
+      return "Message is "
+          + payloadUtf8Bytes
+          + " UTF-8 bytes; negotiated multiline max-bytes is "
+          + maxBytes
+          + ".";
     }
 
     return "";
@@ -1691,17 +1777,14 @@ public void handleMe(CompositeDisposable disposables, String action) {
 
     LabeledResponseRoutingState.PreparedRawLine prepared =
         labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
-    String sendLine = (prepared == null || prepared.line() == null || prepared.line().isBlank())
-        ? line
-        : prepared.line();
+    String sendLine =
+        (prepared == null || prepared.line() == null || prepared.line().isBlank())
+            ? line
+            : prepared.line();
     String label = (prepared == null) ? "" : Objects.toString(prepared.label(), "").trim();
     if (!label.isEmpty()) {
       labeledResponseRoutingState.remember(
-          origin.serverId(),
-          label,
-          origin,
-          redactIfSensitive(line),
-          Instant.now());
+          origin.serverId(), label, origin, redactIfSensitive(line), Instant.now());
     }
     return new PreparedRawLine(sendLine, label);
   }
@@ -1744,8 +1827,6 @@ public void handleMe(CompositeDisposable disposables, String action) {
 
   private record PreparedRawLine(String line, String label) {}
 
-
-
   private static String redactIfSensitive(String raw) {
     String s = raw == null ? "" : raw.trim();
     if (s.isEmpty()) return s;
@@ -1759,7 +1840,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
     return s;
   }
 
-  private PendingInviteState.PendingInvite resolveInviteByToken(String rawToken, TargetRef fallback, String statusTag) {
+  private PendingInviteState.PendingInvite resolveInviteByToken(
+      String rawToken, TargetRef fallback, String statusTag) {
     TargetRef out = fallback != null ? fallback : targetCoordinator.safeStatusTarget();
     String token = Objects.toString(rawToken, "").trim();
     if (token.isEmpty() || "last".equalsIgnoreCase(token)) {
@@ -1868,7 +1950,8 @@ public void handleMe(CompositeDisposable disposables, String action) {
   private TargetRef resolveChatHistoryTargetOrNull() {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(chathistory)", "Select a server first.");
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(chathistory)", "Select a server first.");
       return null;
     }
 
@@ -1886,9 +1969,12 @@ public void handleMe(CompositeDisposable disposables, String action) {
 
   private void appendChatHistoryUsage(TargetRef at) {
     ui.appendStatus(at, "(chathistory)", "Usage: /chathistory [limit]");
-    ui.appendStatus(at, "(chathistory)", "Usage: /chathistory before <msgid=...|timestamp=...> [limit]");
-    ui.appendStatus(at, "(chathistory)", "Usage: /chathistory latest [*|msgid=...|timestamp=...] [limit]");
-    ui.appendStatus(at, "(chathistory)", "Usage: /chathistory around <msgid=...|timestamp=...> [limit]");
+    ui.appendStatus(
+        at, "(chathistory)", "Usage: /chathistory before <msgid=...|timestamp=...> [limit]");
+    ui.appendStatus(
+        at, "(chathistory)", "Usage: /chathistory latest [*|msgid=...|timestamp=...] [limit]");
+    ui.appendStatus(
+        at, "(chathistory)", "Usage: /chathistory around <msgid=...|timestamp=...> [limit]");
     ui.appendStatus(at, "(chathistory)", "Usage: /chathistory between <start> <end> [limit]");
   }
 
@@ -1901,9 +1987,9 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(
         out,
         "(help)",
-        "/edit <msgid> <message>" + availabilitySuffix(
-            available,
-            "requires negotiated draft/message-edit or message-edit"));
+        "/edit <msgid> <message>"
+            + availabilitySuffix(
+                available, "requires negotiated draft/message-edit or message-edit"));
   }
 
   private void appendRedactHelp(TargetRef out) {
@@ -1911,9 +1997,9 @@ public void handleMe(CompositeDisposable disposables, String action) {
     ui.appendStatus(
         out,
         "(help)",
-        "/redact <msgid> [reason] (alias: /delete)" + availabilitySuffix(
-            available,
-            "requires negotiated draft/message-redaction or message-redaction"));
+        "/redact <msgid> [reason] (alias: /delete)"
+            + availabilitySuffix(
+                available, "requires negotiated draft/message-redaction or message-redaction"));
   }
 
   private boolean isMessageEditSupportedForServer(TargetRef target) {

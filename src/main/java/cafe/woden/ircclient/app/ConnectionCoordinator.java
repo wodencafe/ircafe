@@ -17,11 +17,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
+@ApplicationLayer
 public class ConnectionCoordinator {
   public enum ConnectivityChange {
     NONE,
@@ -58,8 +60,7 @@ public class ConnectionCoordinator {
       ServerCatalog serverCatalog,
       RuntimeConfigStore runtimeConfig,
       LogProperties logProps,
-      TrayNotificationService trayNotificationService
-  ) {
+      TrayNotificationService trayNotificationService) {
     this.irc = irc;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
@@ -179,9 +180,7 @@ public class ConnectionCoordinator {
     updateConnectionUi();
 
     io.reactivex.rxjava3.core.Completable reconnect =
-        irc.disconnect(sid)
-            .onErrorComplete()
-            .andThen(irc.connect(sid));
+        irc.disconnect(sid).onErrorComplete().andThen(irc.connect(sid));
 
     disposables.add(
         reconnect
@@ -193,9 +192,7 @@ public class ConnectionCoordinator {
                   setLastError(sid, String.valueOf(err));
                   setState(sid, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
-                }
-            )
-    );
+                }));
   }
 
   private String normalizedKnownServerId(String serverId, String tag) {
@@ -251,9 +248,7 @@ public class ConnectionCoordinator {
                   setLastError(id, String.valueOf(err));
                   setState(id, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
-                }
-            )
-    );
+                }));
 
     if (refreshUiNow) updateConnectionUi();
   }
@@ -288,9 +283,7 @@ public class ConnectionCoordinator {
                 err -> {
                   ui.appendError(status, "(disc-error)", String.valueOf(err));
                   setLastError(id, String.valueOf(err));
-                }
-            )
-    );
+                }));
 
     updateConnectionUi();
   }
@@ -332,10 +325,7 @@ public class ConnectionCoordinator {
             irc.disconnect(sid)
                 .observeOn(SwingEdt.scheduler())
                 .subscribe(
-                    () -> {},
-                    err -> ui.appendError(status, "(disc-error)", String.valueOf(err))
-                )
-        );
+                    () -> {}, err -> ui.appendError(status, "(disc-error)", String.valueOf(err))));
       }
 
       states.remove(sid);
@@ -353,7 +343,8 @@ public class ConnectionCoordinator {
     updateConnectionUi();
   }
 
-  public ConnectivityChange handleConnectivityEvent(String sid, IrcEvent e, TargetRef activeTarget) {
+  public ConnectivityChange handleConnectivityEvent(
+      String sid, IrcEvent e, TargetRef activeTarget) {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty() || e == null) return ConnectivityChange.NONE;
 
@@ -378,7 +369,9 @@ public class ConnectionCoordinator {
         String msg = "Connecting to " + ev.serverHost() + ":" + ev.serverPort();
         if (ev.nick() != null && !ev.nick().isBlank()) msg += " as " + ev.nick();
         ui.appendStatus(status, "(conn)", msg);
-        if (activeTarget != null && Objects.equals(activeTarget.serverId(), id) && !activeTarget.isStatus()) {
+        if (activeTarget != null
+            && Objects.equals(activeTarget.serverId(), id)
+            && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
 
@@ -437,7 +430,9 @@ public class ConnectionCoordinator {
           msg += " — " + ev.reason();
         }
         ui.appendStatus(status, "(conn)", msg);
-        if (activeTarget != null && Objects.equals(activeTarget.serverId(), id) && !activeTarget.isStatus()) {
+        if (activeTarget != null
+            && Objects.equals(activeTarget.serverId(), id)
+            && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
 
@@ -453,7 +448,9 @@ public class ConnectionCoordinator {
         setState(id, ConnectionState.DISCONNECTED);
         String msg = "Disconnected: " + ev.reason();
         ui.appendStatus(status, "(conn)", msg);
-        if (activeTarget != null && Objects.equals(activeTarget.serverId(), id) && !activeTarget.isStatus()) {
+        if (activeTarget != null
+            && Objects.equals(activeTarget.serverId(), id)
+            && !activeTarget.isStatus()) {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
         ui.setChatCurrentNick(id, "");
@@ -503,12 +500,15 @@ public class ConnectionCoordinator {
     if (sid == null) return;
     boolean old = desiredOnline.contains(sid);
     if (desired == old) return;
-    if (desired) desiredOnline.add(sid); else desiredOnline.remove(sid);
+    if (desired) desiredOnline.add(sid);
+    else desiredOnline.remove(sid);
     ui.setServerDesiredOnline(sid, desired);
   }
 
   private void restorePrivateMessageTargets(String serverId) {
-    if (runtimeConfig == null || logProps == null || !Boolean.TRUE.equals(logProps.savePrivateMessageList())) {
+    if (runtimeConfig == null
+        || logProps == null
+        || !Boolean.TRUE.equals(logProps.savePrivateMessageList())) {
       return;
     }
     for (String nick : runtimeConfig.readPrivateMessageTargets(serverId)) {
@@ -577,7 +577,8 @@ public class ConnectionCoordinator {
   private void publishConnectionDiagnostics(String sid) {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty()) return;
-    ui.setServerConnectionDiagnostics(id, lastErrorByServer.getOrDefault(id, ""), nextRetryAtByServer.get(id));
+    ui.setServerConnectionDiagnostics(
+        id, lastErrorByServer.getOrDefault(id, ""), nextRetryAtByServer.get(id));
   }
 
   private void updateConnectionUi() {
@@ -604,8 +605,7 @@ public class ConnectionCoordinator {
         case CONNECTING -> connecting++;
         case RECONNECTING -> reconnecting++;
         case DISCONNECTING -> disconnecting++;
-        case DISCONNECTED -> {
-        }
+        case DISCONNECTED -> {}
       }
     }
 
@@ -616,7 +616,8 @@ public class ConnectionCoordinator {
 
     String text;
     if (disconnecting > 0) {
-      text = total <= 1 ? "Disconnecting…" : ("Disconnecting (" + disconnecting + "/" + total + ")…");
+      text =
+          total <= 1 ? "Disconnecting…" : ("Disconnecting (" + disconnecting + "/" + total + ")…");
     } else if (connecting > 0 && connected == 0 && reconnecting == 0) {
       text = total <= 1 ? "Connecting…" : ("Connecting (" + connecting + "/" + total + ")…");
     } else if (reconnecting > 0 && connected == 0 && connecting == 0) {

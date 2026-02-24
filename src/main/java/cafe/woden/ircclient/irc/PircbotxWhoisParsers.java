@@ -3,8 +3,8 @@ package cafe.woden.ircclient.irc;
 /**
  * Parsers for WHOIS/WHOWAS related numerics.
  *
- * <p>This class intentionally contains only pure parsing helpers extracted from
- * {@link PircbotxIrcClientService} during refactor step B2.3.
+ * <p>This class intentionally contains only pure parsing helpers extracted from {@link
+ * PircbotxIrcClientService} during refactor step B2.3.
  */
 final class PircbotxWhoisParsers {
   private PircbotxWhoisParsers() {}
@@ -34,7 +34,12 @@ final class PircbotxWhoisParsers {
     String nick = toks[2];
     String user = toks[3];
     String host = toks[4];
-    if (nick == null || nick.isBlank() || user == null || user.isBlank() || host == null || host.isBlank()) return null;
+    if (nick == null
+        || nick.isBlank()
+        || user == null
+        || user.isBlank()
+        || host == null
+        || host.isBlank()) return null;
     return new ParsedWhoisUser(nick, user, host);
   }
 
@@ -57,7 +62,12 @@ final class PircbotxWhoisParsers {
     String nick = toks[2];
     String user = toks[3];
     String host = toks[4];
-    if (nick == null || nick.isBlank() || user == null || user.isBlank() || host == null || host.isBlank()) return null;
+    if (nick == null
+        || nick.isBlank()
+        || user == null
+        || user.isBlank()
+        || host == null
+        || host.isBlank()) return null;
     return new ParsedWhoisUser(nick, user, host);
   }
 

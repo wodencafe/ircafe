@@ -40,11 +40,13 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-/**
- * Remote-only chat history paging (IRCv3 CHATHISTORY), used when DB logging is disabled.
- */
+/** Remote-only chat history paging (IRCv3 CHATHISTORY), used when DB logging is disabled. */
 @Component
-@ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(
+    prefix = "ircafe.logging",
+    name = "enabled",
+    havingValue = "false",
+    matchIfMissing = true)
 public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
   private static final Logger log = LoggerFactory.getLogger(RemoteOnlyChatHistoryService.class);
@@ -64,7 +66,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private final ConcurrentHashMap<TargetRef, Boolean> noMoreOlder = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<TargetRef, Boolean> inFlight = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<TargetRef, Boolean> handlerInstalled = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<TargetRef, DocumentListener> docListeners = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<TargetRef, DocumentListener> docListeners =
+      new ConcurrentHashMap<>();
 
   public RemoteOnlyChatHistoryService(
       IrcClientService irc,
@@ -72,8 +75,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       ZncPlaybackBus zncPlaybackBus,
       ChatTranscriptStore transcripts,
       UiSettingsBus settingsBus,
-      @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec
-  ) {
+      @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
     this.zncPlaybackBus = zncPlaybackBus;
@@ -86,57 +88,62 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   public void onTargetSelected(TargetRef target) {
     if (!shouldOfferPaging(target)) return;
 
-    SwingUtilities.invokeLater(() -> {
-      StyledDocument doc = transcripts.document(target);
-      if (doc == null) return;
+    SwingUtilities.invokeLater(
+        () -> {
+          StyledDocument doc = transcripts.document(target);
+          if (doc == null) return;
 
-      if (doc.getLength() > 0) {
-        ensureLoadOlderControlAndHandler(target);
-        return;
-      }
-
-      // Don’t show “Load older” on an empty transcript. Arm it for when local messages arrive.
-      docListeners.computeIfAbsent(target, t -> {
-        DocumentListener l = new DocumentListener() {
-          @Override
-          public void insertUpdate(DocumentEvent e) {
-            arm();
+          if (doc.getLength() > 0) {
+            ensureLoadOlderControlAndHandler(target);
+            return;
           }
 
-          @Override
-          public void removeUpdate(DocumentEvent e) {
-            // ignore
-          }
+          // Don’t show “Load older” on an empty transcript. Arm it for when local messages arrive.
+          docListeners.computeIfAbsent(
+              target,
+              t -> {
+                DocumentListener l =
+                    new DocumentListener() {
+                      @Override
+                      public void insertUpdate(DocumentEvent e) {
+                        arm();
+                      }
 
-          @Override
-          public void changedUpdate(DocumentEvent e) {
-            // ignore
-          }
+                      @Override
+                      public void removeUpdate(DocumentEvent e) {
+                        // ignore
+                      }
 
-          private void arm() {
-            SwingUtilities.invokeLater(() -> {
-              StyledDocument d = transcripts.document(target);
-              if (d == null || d.getLength() == 0) return;
+                      @Override
+                      public void changedUpdate(DocumentEvent e) {
+                        // ignore
+                      }
 
-              ensureLoadOlderControlAndHandler(target);
+                      private void arm() {
+                        SwingUtilities.invokeLater(
+                            () -> {
+                              StyledDocument d = transcripts.document(target);
+                              if (d == null || d.getLength() == 0) return;
 
-              DocumentListener existing = docListeners.remove(target);
-              if (existing != null) {
+                              ensureLoadOlderControlAndHandler(target);
+
+                              DocumentListener existing = docListeners.remove(target);
+                              if (existing != null) {
+                                try {
+                                  d.removeDocumentListener(existing);
+                                } catch (Exception ignored) {
+                                }
+                              }
+                            });
+                      }
+                    };
                 try {
-                  d.removeDocumentListener(existing);
+                  doc.addDocumentListener(l);
                 } catch (Exception ignored) {
                 }
-              }
-            });
-          }
-        };
-        try {
-          doc.addDocumentListener(l);
-        } catch (Exception ignored) {
-        }
-        return l;
-      });
-    });
+                return l;
+              });
+        });
   }
 
   @Override
@@ -172,7 +179,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     if (target == null) return false;
     if (!shouldOfferPaging(target)) return false;
     // Allow reload even when transcript is empty.
-    return irc.isChatHistoryAvailable(target.serverId()) || irc.isZncPlaybackAvailable(target.serverId());
+    return irc.isChatHistoryAvailable(target.serverId())
+        || irc.isZncPlaybackAvailable(target.serverId());
   }
 
   @Override
@@ -197,69 +205,74 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
     if (Boolean.TRUE.equals(inFlight.putIfAbsent(target, Boolean.TRUE))) return;
 
-    exec.execute(() -> {
-      try {
-        LoadOlderResult res = fetchRemote(target, limitFinal);
-        if (res != null) {
+    exec.execute(
+        () -> {
           try {
-            oldestCursor.put(target, res.newOldestCursor());
-            if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
-          } catch (Exception ignored) {
-          }
-        }
-
-        SwingUtilities.invokeLater(() -> {
-          try {
-            if (res == null) return;
-            List<LogLine> lines = res.linesOldestFirst();
-            if (lines == null || lines.isEmpty()) return;
-
-            // Explicit batch boundary so filtered placeholders/hints don't "bridge" across separate loads.
-            transcripts.beginHistoryInsertBatch(target);
-
-            // Now that we have something to show, enable the paging control (if available).
-            try {
-              ensureLoadOlderControlAndHandler(target);
-            } catch (Exception ignored) {
-            }
-
-            int insertAt = 0;
-            try {
-              insertAt = transcripts.loadOlderInsertOffset(target);
-            } catch (Exception ignored) {
-              insertAt = 0;
-            }
-            int pos = insertAt;
-            int inserted = 0;
-            for (LogLine line : lines) {
-              pos = insertLineFromHistoryAt(target, pos, line);
-              inserted++;
-            }
-
-            if (inserted > 0) {
+            LoadOlderResult res = fetchRemote(target, limitFinal);
+            if (res != null) {
               try {
-                transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
+                oldestCursor.put(target, res.newOldestCursor());
+                if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
               } catch (Exception ignored) {
               }
             }
 
-            try {
-              transcripts.setLoadOlderMessagesControlState(
-                  target, res.hasMore() ? LoadOlderMessagesComponent.State.READY : LoadOlderMessagesComponent.State.EXHAUSTED
-              );
-            } catch (Exception ignored) {
-            }
+            SwingUtilities.invokeLater(
+                () -> {
+                  try {
+                    if (res == null) return;
+                    List<LogLine> lines = res.linesOldestFirst();
+                    if (lines == null || lines.isEmpty()) return;
+
+                    // Explicit batch boundary so filtered placeholders/hints don't "bridge" across
+                    // separate loads.
+                    transcripts.beginHistoryInsertBatch(target);
+
+                    // Now that we have something to show, enable the paging control (if available).
+                    try {
+                      ensureLoadOlderControlAndHandler(target);
+                    } catch (Exception ignored) {
+                    }
+
+                    int insertAt = 0;
+                    try {
+                      insertAt = transcripts.loadOlderInsertOffset(target);
+                    } catch (Exception ignored) {
+                      insertAt = 0;
+                    }
+                    int pos = insertAt;
+                    int inserted = 0;
+                    for (LogLine line : lines) {
+                      pos = insertLineFromHistoryAt(target, pos, line);
+                      inserted++;
+                    }
+
+                    if (inserted > 0) {
+                      try {
+                        transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
+                      } catch (Exception ignored) {
+                      }
+                    }
+
+                    try {
+                      transcripts.setLoadOlderMessagesControlState(
+                          target,
+                          res.hasMore()
+                              ? LoadOlderMessagesComponent.State.READY
+                              : LoadOlderMessagesComponent.State.EXHAUSTED);
+                    } catch (Exception ignored) {
+                    }
+                  } finally {
+                    try {
+                      transcripts.endHistoryInsertBatch(target);
+                    } catch (Exception ignored) {
+                    }
+                  }
+                });
           } finally {
-            try {
-              transcripts.endHistoryInsertBatch(target);
-            } catch (Exception ignored) {
-            }
+            inFlight.remove(target);
           }
         });
-      } finally {
-        inFlight.remove(target);
-      }
-    });
   }
 
   @Override
@@ -280,53 +293,61 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   }
 
   @Override
-  public void loadOlder(TargetRef target, int limit, java.util.function.Consumer<LoadOlderResult> callback) {
+  public void loadOlder(
+      TargetRef target, int limit, java.util.function.Consumer<LoadOlderResult> callback) {
     if (callback == null) return;
     if (target == null) {
       callback.accept(new LoadOlderResult(List.of(), new LogCursor(0, 0), false));
       return;
     }
     if (!shouldOfferPaging(target)) {
-      callback.accept(new LoadOlderResult(List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), false));
+      callback.accept(
+          new LoadOlderResult(
+              List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), false));
       return;
     }
 
     final int pageSize = Math.max(1, limit);
     if (Boolean.TRUE.equals(inFlight.putIfAbsent(target, Boolean.TRUE))) {
-      callback.accept(new LoadOlderResult(List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), true));
+      callback.accept(
+          new LoadOlderResult(
+              List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), true));
       return;
     }
 
-    exec.execute(() -> {
-      try {
-        LoadOlderResult res = fetchRemote(target, pageSize);
+    exec.execute(
+        () -> {
+          try {
+            LoadOlderResult res = fetchRemote(target, pageSize);
 
-        try {
-          if (res != null) {
-            oldestCursor.put(target, res.newOldestCursor());
-            if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
+            try {
+              if (res != null) {
+                oldestCursor.put(target, res.newOldestCursor());
+                if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
+              }
+            } catch (Exception ignored) {
+            }
+
+            SwingUtilities.invokeLater(() -> callback.accept(res));
+          } finally {
+            inFlight.remove(target);
           }
-        } catch (Exception ignored) {
-        }
-
-        SwingUtilities.invokeLater(() -> callback.accept(res));
-      } finally {
-        inFlight.remove(target);
-      }
-    });
+        });
   }
 
   private void ensureLoadOlderControlAndHandler(TargetRef target) {
     final LoadOlderMessagesComponent control = transcripts.ensureLoadOlderMessagesControl(target);
 
     if (Boolean.TRUE.equals(noMoreOlder.getOrDefault(target, false))) {
-      transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.EXHAUSTED);
+      transcripts.setLoadOlderMessagesControlState(
+          target, LoadOlderMessagesComponent.State.EXHAUSTED);
       return;
     }
 
     if (!irc.isChatHistoryAvailable(target.serverId())
         && !irc.isZncPlaybackAvailable(target.serverId())) {
-      transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.UNAVAILABLE);
+      transcripts.setLoadOlderMessagesControlState(
+          target, LoadOlderMessagesComponent.State.UNAVAILABLE);
       return;
     }
 
@@ -337,61 +358,71 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       return;
     }
 
-    transcripts.setLoadOlderMessagesControlHandler(target, () -> {
-      if (!canLoadOlder(target)) return false;
+    transcripts.setLoadOlderMessagesControlHandler(
+        target,
+        () -> {
+          if (!canLoadOlder(target)) return false;
 
-      transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.LOADING);
-      final ScrollAnchor anchor = ScrollAnchor.capture(control);
+          transcripts.setLoadOlderMessagesControlState(
+              target, LoadOlderMessagesComponent.State.LOADING);
+          final ScrollAnchor anchor = ScrollAnchor.capture(control);
 
-      int pageSize = DEFAULT_PAGE_SIZE;
-      try {
-        if (settingsBus != null) pageSize = settingsBus.get().chatHistoryPageSize();
-      } catch (Exception ignored) {
-        pageSize = DEFAULT_PAGE_SIZE;
-      }
-      final int limit = Math.max(1, pageSize);
-
-      loadOlder(target, limit, res -> {
-        try {
-          // Explicit batch boundary so filtered placeholders/hints don't "bridge" across separate paging operations.
-          transcripts.beginHistoryInsertBatch(target);
-
-          int insertAt = transcripts.loadOlderInsertOffset(target);
-          int pos = insertAt;
-          int inserted = 0;
-          for (LogLine line : res.linesOldestFirst()) {
-            pos = insertLineFromHistoryAt(target, pos, line);
-            inserted++;
-          }
-
-          if (inserted > 0) {
-            try {
-              transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
-            } catch (Exception ignored) {
-            }
-          }
-
-          if (res.hasMore()) {
-            transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
-          } else {
-            transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.EXHAUSTED);
-          }
-        } catch (Exception e) {
-          // Fail open: allow retry.
-          transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
-        } finally {
+          int pageSize = DEFAULT_PAGE_SIZE;
           try {
-            transcripts.endHistoryInsertBatch(target);
+            if (settingsBus != null) pageSize = settingsBus.get().chatHistoryPageSize();
           } catch (Exception ignored) {
+            pageSize = DEFAULT_PAGE_SIZE;
           }
-          if (anchor != null) {
-            SwingUtilities.invokeLater(anchor::restoreIfNeeded);
-          }
-        }
-      });
+          final int limit = Math.max(1, pageSize);
 
-      return true;
-    });
+          loadOlder(
+              target,
+              limit,
+              res -> {
+                try {
+                  // Explicit batch boundary so filtered placeholders/hints don't "bridge" across
+                  // separate paging operations.
+                  transcripts.beginHistoryInsertBatch(target);
+
+                  int insertAt = transcripts.loadOlderInsertOffset(target);
+                  int pos = insertAt;
+                  int inserted = 0;
+                  for (LogLine line : res.linesOldestFirst()) {
+                    pos = insertLineFromHistoryAt(target, pos, line);
+                    inserted++;
+                  }
+
+                  if (inserted > 0) {
+                    try {
+                      transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
+                    } catch (Exception ignored) {
+                    }
+                  }
+
+                  if (res.hasMore()) {
+                    transcripts.setLoadOlderMessagesControlState(
+                        target, LoadOlderMessagesComponent.State.READY);
+                  } else {
+                    transcripts.setLoadOlderMessagesControlState(
+                        target, LoadOlderMessagesComponent.State.EXHAUSTED);
+                  }
+                } catch (Exception e) {
+                  // Fail open: allow retry.
+                  transcripts.setLoadOlderMessagesControlState(
+                      target, LoadOlderMessagesComponent.State.READY);
+                } finally {
+                  try {
+                    transcripts.endHistoryInsertBatch(target);
+                  } catch (Exception ignored) {
+                  }
+                  if (anchor != null) {
+                    SwingUtilities.invokeLater(anchor::restoreIfNeeded);
+                  }
+                }
+              });
+
+          return true;
+        });
   }
 
   private long seedCursorEpochMs(TargetRef target) {
@@ -410,9 +441,12 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       return new LoadOlderResult(List.of(), new LogCursor(0, 0), false);
     }
 
-    LogCursor cur = oldestCursor.computeIfAbsent(target, t -> new LogCursor(seedCursorEpochMs(t), 0));
+    LogCursor cur =
+        oldestCursor.computeIfAbsent(target, t -> new LogCursor(seedCursorEpochMs(t), 0));
     OptionalLong earliestLocal = transcripts.earliestTimestampEpochMs(target);
-    if (cur.id() == 0 && earliestLocal.isPresent() && earliestLocal.getAsLong() > 0
+    if (cur.id() == 0
+        && earliestLocal.isPresent()
+        && earliestLocal.getAsLong() > 0
         && earliestLocal.getAsLong() < cur.tsEpochMs()) {
       cur = new LogCursor(earliestLocal.getAsLong(), 0);
       oldestCursor.put(target, cur);
@@ -466,32 +500,33 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         String txt = safe(entry.text());
         boolean outgoing = !myNick.isBlank() && from.equalsIgnoreCase(myNick);
 
-        LogKind kind = switch (entry.kind()) {
-          case ACTION -> LogKind.ACTION;
-          case NOTICE -> LogKind.NOTICE;
-          case PRIVMSG -> LogKind.CHAT;
-        };
+        LogKind kind =
+            switch (entry.kind()) {
+              case ACTION -> LogKind.ACTION;
+              case NOTICE -> LogKind.NOTICE;
+              case PRIVMSG -> LogKind.CHAT;
+            };
         LogDirection dir = outgoing ? LogDirection.OUT : LogDirection.IN;
 
-        lines.add(new LogLine(
-            sid,
-            tgt,
-            ts,
-            dir,
-            kind,
-            from,
-            txt,
-            outgoing,
-            false,
-            metaJson("chathistory", ev.batchId())
-        ));
+        lines.add(
+            new LogLine(
+                sid,
+                tgt,
+                ts,
+                dir,
+                kind,
+                from,
+                txt,
+                outgoing,
+                false,
+                metaJson("chathistory", ev.batchId())));
       }
 
-      lines.sort(Comparator
-          .comparingLong(LogLine::tsEpochMs)
-          .thenComparing(LogLine::target)
-          .thenComparing(l -> safe(l.fromNick()))
-          .thenComparing(LogLine::text));
+      lines.sort(
+          Comparator.comparingLong(LogLine::tsEpochMs)
+              .thenComparing(LogLine::target)
+              .thenComparing(l -> safe(l.fromNick()))
+              .thenComparing(LogLine::text));
 
       long earliest = lines.get(0).tsEpochMs();
       long nextBefore = earliest > 0 ? Math.max(0, earliest - 1) : 0;
@@ -553,35 +588,39 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         String txt = safe(entry.text());
         boolean outgoing = !myNick.isBlank() && from.equalsIgnoreCase(myNick);
 
-        LogKind kind = switch (entry.kind()) {
-          case ACTION -> LogKind.ACTION;
-          case NOTICE -> LogKind.NOTICE;
-          case PRIVMSG -> LogKind.CHAT;
-        };
+        LogKind kind =
+            switch (entry.kind()) {
+              case ACTION -> LogKind.ACTION;
+              case NOTICE -> LogKind.NOTICE;
+              case PRIVMSG -> LogKind.CHAT;
+            };
         LogDirection dir = outgoing ? LogDirection.OUT : LogDirection.IN;
 
-        lines.add(new LogLine(
-            sid,
-            tgt,
-            ts,
-            dir,
-            kind,
-            from,
-            txt,
-            outgoing,
-            false,
-            metaJson("znc-playback", null)
-        ));
+        lines.add(
+            new LogLine(
+                sid,
+                tgt,
+                ts,
+                dir,
+                kind,
+                from,
+                txt,
+                outgoing,
+                false,
+                metaJson("znc-playback", null)));
       }
 
-      lines.sort(Comparator
-          .comparingLong(LogLine::tsEpochMs)
-          .thenComparing(LogLine::target)
-          .thenComparing(l -> safe(l.fromNick()))
-          .thenComparing(LogLine::text));
+      lines.sort(
+          Comparator.comparingLong(LogLine::tsEpochMs)
+              .thenComparing(LogLine::target)
+              .thenComparing(l -> safe(l.fromNick()))
+              .thenComparing(LogLine::text));
 
       long earliest = lines.get(0).tsEpochMs();
-      long nextBefore = earliest > 0 ? Math.max(0, earliest - 1) : Math.max(0L, beforeExclusive - window.toMillis());
+      long nextBefore =
+          earliest > 0
+              ? Math.max(0, earliest - 1)
+              : Math.max(0L, beforeExclusive - window.toMillis());
 
       // We don't know if more exists; if we got any lines, allow more.
       return new LoadOlderResult(lines, new LogCursor(nextBefore, 0), nextBefore > 0);
@@ -589,7 +628,6 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
     // Neither CHATHISTORY nor ZNC playback is available.
     return new LoadOlderResult(List.of(), cur, false);
-
   }
 
   private boolean shouldOfferPaging(TargetRef target) {
@@ -605,30 +643,29 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     boolean outgoing = line.outgoingLocalEcho() || line.direction() == LogDirection.OUT;
     LogKind kind = line.kind() == null ? LogKind.STATUS : line.kind();
     return switch (kind) {
-      case CHAT -> transcripts.insertChatFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), outgoing, line.tsEpochMs()
-      );
-      case ACTION -> transcripts.insertActionFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), outgoing, line.tsEpochMs()
-      );
-      case NOTICE -> transcripts.insertNoticeFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), line.tsEpochMs()
-      );
-      case STATUS -> transcripts.insertStatusFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), line.tsEpochMs()
-      );
-      case ERROR -> transcripts.insertErrorFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), line.tsEpochMs()
-      );
-      case PRESENCE -> transcripts.insertPresenceFromHistoryAt(
-          target, insertAt, line.text(), line.tsEpochMs()
-      );
-      case SPOILER -> transcripts.insertSpoilerChatFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), line.tsEpochMs()
-      );
-      default -> transcripts.insertStatusFromHistoryAt(
-          target, insertAt, line.fromNick(), line.text(), line.tsEpochMs()
-      );
+      case CHAT ->
+          transcripts.insertChatFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), outgoing, line.tsEpochMs());
+      case ACTION ->
+          transcripts.insertActionFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), outgoing, line.tsEpochMs());
+      case NOTICE ->
+          transcripts.insertNoticeFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
+      case STATUS ->
+          transcripts.insertStatusFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
+      case ERROR ->
+          transcripts.insertErrorFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
+      case PRESENCE ->
+          transcripts.insertPresenceFromHistoryAt(target, insertAt, line.text(), line.tsEpochMs());
+      case SPOILER ->
+          transcripts.insertSpoilerChatFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
+      default ->
+          transcripts.insertStatusFromHistoryAt(
+              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
     };
   }
 
@@ -669,7 +706,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     private final Position anchor;
     private final int intraLineDeltaY;
 
-    private ScrollAnchor(JViewport viewport, Point beforePos, Position anchor, int intraLineDeltaY) {
+    private ScrollAnchor(
+        JViewport viewport, Point beforePos, Position anchor, int intraLineDeltaY) {
       this.viewport = viewport;
       this.beforePos = beforePos;
       this.anchor = anchor;

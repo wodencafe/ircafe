@@ -1,121 +1,124 @@
 package cafe.woden.ircclient.ui.settings;
 
-import cafe.woden.ircclient.ui.icons.SvgIcons;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.UiProperties;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
+import cafe.woden.ircclient.app.TargetCoordinator;
+import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
 import cafe.woden.ircclient.app.commands.UserCommandAlias;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.PushyProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.net.NetHeartbeatContext;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
-import cafe.woden.ircclient.net.NetHeartbeatContext;
-import cafe.woden.ircclient.ui.chat.NickColorService;
-import cafe.woden.ircclient.ui.chat.NickColorSettings;
-import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
-import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
-import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
-import cafe.woden.ircclient.ui.filter.FilterRule;
-import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
-import cafe.woden.ircclient.ui.filter.FilterSettings;
-import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
-import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
-import cafe.woden.ircclient.ui.util.CloseableScope;
-import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
-import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
-import cafe.woden.ircclient.ui.tray.TrayService;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
-import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
-import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
+import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
 import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
+import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.chat.NickColorSettings;
+import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
+import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
+import cafe.woden.ircclient.ui.filter.FilterRule;
+import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
+import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
+import cafe.woden.ircclient.ui.filter.FilterSettings;
+import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
+import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
+import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
+import cafe.woden.ircclient.ui.util.CloseableScope;
+import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
+import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
-import java.beans.PropertyChangeListener;
+import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
-import java.io.File;
+import java.awt.Graphics;
+import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
+import java.awt.LayoutManager;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
-import java.time.format.DateTimeFormatter;
+import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import javax.swing.BorderFactory;
-import javax.swing.JComponent;
-import javax.swing.DropMode;
-import javax.swing.Icon;
-import javax.swing.JColorChooser;
-import javax.swing.JFileChooser;
-import javax.swing.JTextField;
-import javax.swing.TransferHandler;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.GraphicsEnvironment;
-import java.awt.Graphics;
-import java.awt.Insets;
-import java.awt.Point;
-import java.awt.Toolkit;
-import java.awt.LayoutManager;
-import java.awt.Rectangle;
-import java.awt.Window;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultCellEditor;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DropMode;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JColorChooser;
 import javax.swing.JComboBox;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.DefaultCellEditor;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
-import javax.swing.JList;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
-import javax.swing.ListCellRenderer;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
-import javax.swing.Scrollable;
-import javax.swing.ScrollPaneConstants;
 import javax.swing.JSeparator;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.ListCellRenderer;
+import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.TransferHandler;
 import javax.swing.UIManager;
-import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import javax.swing.ListSelectionModel;
-import javax.swing.JOptionPane;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
@@ -131,8 +134,7 @@ public class PreferencesDialog {
       "Changes the overall UI spacing / row height. Changes preview live; Apply/OK saves.";
   private static final String CORNER_RADIUS_TOOLTIP =
       "Controls rounded corner radius for buttons/fields/etc. Changes preview live; Apply/OK saves.";
-  private static final String FLAT_ONLY_TOOLTIP =
-      "Available for FlatLaf-based themes only.";
+  private static final String FLAT_ONLY_TOOLTIP = "Available for FlatLaf-based themes only.";
   private static final String UI_FONT_OVERRIDE_TOOLTIP =
       "Overrides the global Swing UI font family and size for controls, menus, tabs, and dialogs.";
 
@@ -154,6 +156,8 @@ public class PreferencesDialog {
   private final TrayNotificationService trayNotificationService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
+  private final PushySettingsBus pushySettingsBus;
+  private final PushyNotificationService pushyNotificationService;
   private final IrcEventNotificationRulesBus ircEventNotificationRulesBus;
   private final UserCommandAliasesBus userCommandAliasesBus;
   private final NotificationSoundService notificationSoundService;
@@ -161,28 +165,31 @@ public class PreferencesDialog {
 
   private JDialog dialog;
 
-  public PreferencesDialog(UiSettingsBus settingsBus,
-                           ThemeManager themeManager,
-                           ThemeAccentSettingsBus accentSettingsBus,
-                           ThemeTweakSettingsBus tweakSettingsBus,
-                           ChatThemeSettingsBus chatThemeSettingsBus,
-                           RuntimeConfigStore runtimeConfig,
-                           LogProperties logProps,
-                           NickColorSettingsBus nickColorSettingsBus,
-                           NickColorService nickColorService,
-                           NickColorOverridesDialog nickColorOverridesDialog,
-                           PircbotxIrcClientService ircClientService,
-                           FilterSettingsBus filterSettingsBus,
-                           TranscriptRebuildService transcriptRebuildService,
-                           TargetCoordinator targetCoordinator,
-                           TrayService trayService,
-                           TrayNotificationService trayNotificationService,
-                           GnomeDbusNotificationBackend gnomeDbusBackend,
-                           NotificationSoundSettingsBus notificationSoundSettingsBus,
-                           IrcEventNotificationRulesBus ircEventNotificationRulesBus,
-                           UserCommandAliasesBus userCommandAliasesBus,
-                           NotificationSoundService notificationSoundService,
-                           ServerDialogs serverDialogs) {
+  public PreferencesDialog(
+      UiSettingsBus settingsBus,
+      ThemeManager themeManager,
+      ThemeAccentSettingsBus accentSettingsBus,
+      ThemeTweakSettingsBus tweakSettingsBus,
+      ChatThemeSettingsBus chatThemeSettingsBus,
+      RuntimeConfigStore runtimeConfig,
+      LogProperties logProps,
+      NickColorSettingsBus nickColorSettingsBus,
+      NickColorService nickColorService,
+      NickColorOverridesDialog nickColorOverridesDialog,
+      PircbotxIrcClientService ircClientService,
+      FilterSettingsBus filterSettingsBus,
+      TranscriptRebuildService transcriptRebuildService,
+      TargetCoordinator targetCoordinator,
+      TrayService trayService,
+      TrayNotificationService trayNotificationService,
+      GnomeDbusNotificationBackend gnomeDbusBackend,
+      NotificationSoundSettingsBus notificationSoundSettingsBus,
+      PushySettingsBus pushySettingsBus,
+      PushyNotificationService pushyNotificationService,
+      IrcEventNotificationRulesBus ircEventNotificationRulesBus,
+      UserCommandAliasesBus userCommandAliasesBus,
+      NotificationSoundService notificationSoundService,
+      ServerDialogs serverDialogs) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
@@ -201,6 +208,8 @@ public class PreferencesDialog {
     this.trayNotificationService = trayNotificationService;
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
+    this.pushySettingsBus = pushySettingsBus;
+    this.pushyNotificationService = pushyNotificationService;
     this.ircEventNotificationRulesBus = ircEventNotificationRulesBus;
     this.userCommandAliasesBus = userCommandAliasesBus;
     this.notificationSoundService = notificationSoundService;
@@ -227,272 +236,350 @@ public class PreferencesDialog {
 
     ThemeControls theme = buildThemeControls(current, themeLabelById);
     FontControls fonts = buildFontControls(current, closeables);
-    ThemeAccentSettings initialAccent = accentSettingsBus != null
-        ? accentSettingsBus.get()
-        : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
+    ThemeAccentSettings initialAccent =
+        accentSettingsBus != null
+            ? accentSettingsBus.get()
+            : new ThemeAccentSettings(
+                UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
     AccentControls accent = buildAccentControls(initialAccent);
-    ThemeTweakSettings initialTweaks = tweakSettingsBus != null ? tweakSettingsBus.get() : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
+    ThemeTweakSettings initialTweaks =
+        tweakSettingsBus != null
+            ? tweakSettingsBus.get()
+            : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
     TweakControls tweaks = buildTweakControls(initialTweaks, closeables);
 
-    ChatThemeSettings initialChatTheme = chatThemeSettingsBus != null
-        ? chatThemeSettingsBus.get()
-        : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+    ChatThemeSettings initialChatTheme =
+        chatThemeSettingsBus != null
+            ? chatThemeSettingsBus.get()
+            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
     ChatThemeControls chatTheme = buildChatThemeControls(initialChatTheme);
 
     // Allow mousewheel selection cycling for Appearance-tab combos.
-    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(theme.combo)); } catch (Exception ignored) {}
-    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(chatTheme.preset)); } catch (Exception ignored) {}
-    try { closeables.add(MouseWheelDecorator.decorateComboBoxSelection(tweaks.density)); } catch (Exception ignored) {}
+    try {
+      closeables.add(MouseWheelDecorator.decorateComboBoxSelection(theme.combo));
+    } catch (Exception ignored) {
+    }
+    try {
+      closeables.add(MouseWheelDecorator.decorateComboBoxSelection(chatTheme.preset));
+    } catch (Exception ignored) {
+    }
+    try {
+      closeables.add(MouseWheelDecorator.decorateComboBoxSelection(tweaks.density));
+    } catch (Exception ignored) {
+    }
 
     // Live preview snapshot: used to rollback any preview-only changes on Cancel / window close.
-    final java.util.concurrent.atomic.AtomicReference<String> committedThemeId = new java.util.concurrent.atomic.AtomicReference<>(
-        normalizeThemeIdInternal(current != null ? current.theme() : null));
-    final java.util.concurrent.atomic.AtomicReference<String> lastPreviewThemeId = new java.util.concurrent.atomic.AtomicReference<>(committedThemeId.get());
-    final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings = new java.util.concurrent.atomic.AtomicReference<>(current);
-    final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings = new java.util.concurrent.atomic.AtomicReference<>(
-        initialAccent != null
-            ? initialAccent
-            : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
-    final java.util.concurrent.atomic.AtomicReference<ThemeTweakSettings> committedTweakSettings = new java.util.concurrent.atomic.AtomicReference<>(
-        initialTweaks != null ? initialTweaks : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
-    final java.util.concurrent.atomic.AtomicReference<ChatThemeSettings> committedChatThemeSettings = new java.util.concurrent.atomic.AtomicReference<>(
-        initialChatTheme != null
-            ? initialChatTheme
-            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+    final java.util.concurrent.atomic.AtomicReference<String> committedThemeId =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            normalizeThemeIdInternal(current != null ? current.theme() : null));
+    final java.util.concurrent.atomic.AtomicReference<String> lastPreviewThemeId =
+        new java.util.concurrent.atomic.AtomicReference<>(committedThemeId.get());
+    final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings =
+        new java.util.concurrent.atomic.AtomicReference<>(current);
+    final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            initialAccent != null
+                ? initialAccent
+                : new ThemeAccentSettings(
+                    UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
+    final java.util.concurrent.atomic.AtomicReference<ThemeTweakSettings> committedTweakSettings =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            initialTweaks != null
+                ? initialTweaks
+                : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
+    final java.util.concurrent.atomic.AtomicReference<ChatThemeSettings>
+        committedChatThemeSettings =
+            new java.util.concurrent.atomic.AtomicReference<>(
+                initialChatTheme != null
+                    ? initialChatTheme
+                    : new ChatThemeSettings(
+                        ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
 
-    final java.util.concurrent.atomic.AtomicBoolean suppressLivePreview = new java.util.concurrent.atomic.AtomicBoolean(false);
+    final java.util.concurrent.atomic.AtomicBoolean suppressLivePreview =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
 
-    final java.util.concurrent.atomic.AtomicReference<String> lastValidAccentHex = new java.util.concurrent.atomic.AtomicReference<>(
-        committedAccentSettings.get() != null ? committedAccentSettings.get().accentColor() : null);
-    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatTimestampHex = new java.util.concurrent.atomic.AtomicReference<>(
-        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().timestampColor() : null);
-    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatSystemHex = new java.util.concurrent.atomic.AtomicReference<>(
-        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().systemColor() : null);
-    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatMentionHex = new java.util.concurrent.atomic.AtomicReference<>(
-        committedChatThemeSettings.get() != null ? committedChatThemeSettings.get().mentionBgColor() : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidAccentHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedAccentSettings.get() != null
+                ? committedAccentSettings.get().accentColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatTimestampHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().timestampColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatSystemHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().systemColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatMentionHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().mentionBgColor()
+                : null);
 
     // Debounced live preview to avoid spamming full UI refreshes while sliders are dragged.
     final javax.swing.Timer lafPreviewTimer = new javax.swing.Timer(140, null);
     lafPreviewTimer.setRepeats(false);
-    final Runnable applyLafPreview = () -> {
-      if (suppressLivePreview.get()) return;
-      if (themeManager == null) return;
+    final Runnable applyLafPreview =
+        () -> {
+          if (suppressLivePreview.get()) return;
+          if (themeManager == null) return;
 
-      String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
-      if (sel.isBlank()) return;
+          String sel = normalizeThemeIdInternal(String.valueOf(theme.combo.getSelectedItem()));
+          if (sel.isBlank()) return;
 
-      if (tweakSettingsBus != null) {
-        DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
-        String densityId = opt != null ? opt.id() : "auto";
-        String uiFontFamily = Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
-        if (uiFontFamily.isBlank()) uiFontFamily = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
-        ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
-            ThemeTweakSettings.ThemeDensity.from(densityId),
-            tweaks.cornerRadius.getValue(),
-            tweaks.uiFontOverrideEnabled.isSelected(),
-            uiFontFamily,
-            ((Number) tweaks.uiFontSize.getValue()).intValue()
-        );
-        tweakSettingsBus.set(nextTweaks);
-      }
-
-      if (accentSettingsBus != null) {
-        String hex = null;
-        if (accent.enabled.isSelected()) {
-          String raw = accent.hex.getText();
-          raw = raw != null ? raw.trim() : "";
-
-          if (raw.isBlank()) {
-            lastValidAccentHex.set(null);
-            hex = null;
-          } else {
-            Color c = parseHexColorLenient(raw);
-            if (c != null) {
-              hex = toHex(c);
-              lastValidAccentHex.set(hex);
-            } else {
-              // If the user is mid-typing an invalid value, keep the last valid color.
-              hex = lastValidAccentHex.get();
-            }
+          if (tweakSettingsBus != null) {
+            DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
+            String densityId = opt != null ? opt.id() : "auto";
+            String uiFontFamily =
+                Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
+            if (uiFontFamily.isBlank()) uiFontFamily = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
+            ThemeTweakSettings nextTweaks =
+                new ThemeTweakSettings(
+                    ThemeTweakSettings.ThemeDensity.from(densityId),
+                    tweaks.cornerRadius.getValue(),
+                    tweaks.uiFontOverrideEnabled.isSelected(),
+                    uiFontFamily,
+                    ((Number) tweaks.uiFontSize.getValue()).intValue());
+            tweakSettingsBus.set(nextTweaks);
           }
-        }
 
-        ThemeAccentSettings nextAccent = new ThemeAccentSettings(hex, accent.strength.getValue());
-        accentSettingsBus.set(nextAccent);
-      }
+          if (accentSettingsBus != null) {
+            String hex = null;
+            if (accent.enabled.isSelected()) {
+              String raw = accent.hex.getText();
+              raw = raw != null ? raw.trim() : "";
 
-      if (!java.util.Objects.equals(sel, lastPreviewThemeId.get())) {
-        themeManager.applyTheme(sel);
-        lastPreviewThemeId.set(sel);
-      } else {
-        themeManager.applyAppearance(true);
-      }
+              if (raw.isBlank()) {
+                lastValidAccentHex.set(null);
+                hex = null;
+              } else {
+                Color c = parseHexColorLenient(raw);
+                if (c != null) {
+                  hex = toHex(c);
+                  lastValidAccentHex.set(hex);
+                } else {
+                  // If the user is mid-typing an invalid value, keep the last valid color.
+                  hex = lastValidAccentHex.get();
+                }
+              }
+            }
 
-      // Theme switches can change the "Theme" accent color; refresh the preview pill.
-      try { accent.updateChip.run(); } catch (Exception ignored) {}
-    };
+            ThemeAccentSettings nextAccent =
+                new ThemeAccentSettings(hex, accent.strength.getValue());
+            accentSettingsBus.set(nextAccent);
+          }
+
+          if (!java.util.Objects.equals(sel, lastPreviewThemeId.get())) {
+            themeManager.applyTheme(sel);
+            lastPreviewThemeId.set(sel);
+          } else {
+            themeManager.applyAppearance(true);
+          }
+
+          // Theme switches can change the "Theme" accent color; refresh the preview pill.
+          try {
+            accent.updateChip.run();
+          } catch (Exception ignored) {
+          }
+        };
     lafPreviewTimer.addActionListener(e -> applyLafPreview.run());
-    final Runnable scheduleLafPreview = () -> {
-      if (suppressLivePreview.get()) return;
-      lafPreviewTimer.restart();
-    };
+    final Runnable scheduleLafPreview =
+        () -> {
+          if (suppressLivePreview.get()) return;
+          lafPreviewTimer.restart();
+        };
 
     final javax.swing.Timer chatPreviewTimer = new javax.swing.Timer(120, null);
     chatPreviewTimer.setRepeats(false);
-    final java.util.function.BiFunction<JTextField, java.util.concurrent.atomic.AtomicReference<String>, String> parseOptionalHex = (field, lastRef) -> {
-      String raw = field != null ? field.getText() : null;
-      raw = raw != null ? raw.trim() : "";
-      if (raw.isBlank()) {
-        lastRef.set(null);
-        return null;
-      }
-      Color c = parseHexColorLenient(raw);
-      if (c == null) {
-        return lastRef.get();
-      }
-      String hex = toHex(c);
-      lastRef.set(hex);
-      return hex;
-    };
-    final Runnable applyChatPreview = () -> {
-      if (suppressLivePreview.get()) return;
-      if (themeManager == null) return;
-      if (chatThemeSettingsBus == null) return;
+    final java.util.function.BiFunction<
+            JTextField, java.util.concurrent.atomic.AtomicReference<String>, String>
+        parseOptionalHex =
+            (field, lastRef) -> {
+              String raw = field != null ? field.getText() : null;
+              raw = raw != null ? raw.trim() : "";
+              if (raw.isBlank()) {
+                lastRef.set(null);
+                return null;
+              }
+              Color c = parseHexColorLenient(raw);
+              if (c == null) {
+                return lastRef.get();
+              }
+              String hex = toHex(c);
+              lastRef.set(hex);
+              return hex;
+            };
+    final Runnable applyChatPreview =
+        () -> {
+          if (suppressLivePreview.get()) return;
+          if (themeManager == null) return;
+          if (chatThemeSettingsBus == null) return;
 
-      ChatThemeSettings.Preset presetV = (chatTheme.preset.getSelectedItem() instanceof ChatThemeSettings.Preset p)
-          ? p
-          : ChatThemeSettings.Preset.DEFAULT;
+          ChatThemeSettings.Preset presetV =
+              (chatTheme.preset.getSelectedItem() instanceof ChatThemeSettings.Preset p)
+                  ? p
+                  : ChatThemeSettings.Preset.DEFAULT;
 
-      String tsHexV = parseOptionalHex.apply(chatTheme.timestamp.hex, lastValidChatTimestampHex);
-      String sysHexV = parseOptionalHex.apply(chatTheme.system.hex, lastValidChatSystemHex);
-      String menHexV = parseOptionalHex.apply(chatTheme.mention.hex, lastValidChatMentionHex);
-      int mentionStrengthV = chatTheme.mentionStrength.getValue();
+          String tsHexV =
+              parseOptionalHex.apply(chatTheme.timestamp.hex, lastValidChatTimestampHex);
+          String sysHexV = parseOptionalHex.apply(chatTheme.system.hex, lastValidChatSystemHex);
+          String menHexV = parseOptionalHex.apply(chatTheme.mention.hex, lastValidChatMentionHex);
+          int mentionStrengthV = chatTheme.mentionStrength.getValue();
 
-      ChatThemeSettings nextChatTheme = new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
-      chatThemeSettingsBus.set(nextChatTheme);
-      themeManager.refreshChatStyles();
-    };
+          ChatThemeSettings nextChatTheme =
+              new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+          chatThemeSettingsBus.set(nextChatTheme);
+          themeManager.refreshChatStyles();
+        };
     chatPreviewTimer.addActionListener(e -> applyChatPreview.run());
-    final Runnable scheduleChatPreview = () -> {
-      if (suppressLivePreview.get()) return;
-      chatPreviewTimer.restart();
-    };
+    final Runnable scheduleChatPreview =
+        () -> {
+          if (suppressLivePreview.get()) return;
+          chatPreviewTimer.restart();
+        };
 
     final javax.swing.Timer fontPreviewTimer = new javax.swing.Timer(120, null);
     fontPreviewTimer.setRepeats(false);
-    final Runnable applyFontPreview = () -> {
-      if (suppressLivePreview.get()) return;
-      UiSettings base = settingsBus != null ? settingsBus.get() : null;
-      if (base == null) return;
+    final Runnable applyFontPreview =
+        () -> {
+          if (suppressLivePreview.get()) return;
+          UiSettings base = settingsBus != null ? settingsBus.get() : null;
+          if (base == null) return;
 
-      String fam = java.util.Objects.toString(fonts.fontFamily.getSelectedItem(), "").trim();
-      if (fam.isBlank()) fam = "Monospaced";
-      int size = ((Number) fonts.fontSize.getValue()).intValue();
-      if (size < 8) size = 8;
-      if (size > 48) size = 48;
+          String fam = java.util.Objects.toString(fonts.fontFamily.getSelectedItem(), "").trim();
+          if (fam.isBlank()) fam = "Monospaced";
+          int size = ((Number) fonts.fontSize.getValue()).intValue();
+          if (size < 8) size = 8;
+          if (size > 48) size = 48;
 
-      settingsBus.set(base.withChatFontFamily(fam).withChatFontSize(size));
-    };
+          settingsBus.set(base.withChatFontFamily(fam).withChatFontSize(size));
+        };
     fontPreviewTimer.addActionListener(e -> applyFontPreview.run());
-    final Runnable scheduleFontPreview = () -> {
-      if (suppressLivePreview.get()) return;
-      fontPreviewTimer.restart();
-    };
+    final Runnable scheduleFontPreview =
+        () -> {
+          if (suppressLivePreview.get()) return;
+          fontPreviewTimer.restart();
+        };
 
-    closeables.add(() -> {
-      lafPreviewTimer.stop();
-      chatPreviewTimer.stop();
-      fontPreviewTimer.stop();
-    });
+    closeables.add(
+        () -> {
+          lafPreviewTimer.stop();
+          chatPreviewTimer.stop();
+          fontPreviewTimer.stop();
+        });
 
-    final Runnable restoreCommittedAppearance = () -> {
-      if (themeManager == null) return;
-      suppressLivePreview.set(true);
-      try {
-        lafPreviewTimer.stop();
-        chatPreviewTimer.stop();
-        fontPreviewTimer.stop();
+    final Runnable restoreCommittedAppearance =
+        () -> {
+          if (themeManager == null) return;
+          suppressLivePreview.set(true);
+          try {
+            lafPreviewTimer.stop();
+            chatPreviewTimer.stop();
+            fontPreviewTimer.stop();
 
-        UiSettings ui = committedUiSettings.get();
-        if (ui != null) {
-          settingsBus.set(ui);
-        }
-        if (accentSettingsBus != null) {
-          ThemeAccentSettings a = committedAccentSettings.get();
-          accentSettingsBus.set(a != null
-              ? a
-              : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
-        }
-        if (tweakSettingsBus != null) {
-          ThemeTweakSettings tw = committedTweakSettings.get();
-          tweakSettingsBus.set(tw != null ? tw : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
-        }
-        if (chatThemeSettingsBus != null) {
-          ChatThemeSettings ct = committedChatThemeSettings.get();
-          chatThemeSettingsBus.set(ct != null ? ct : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
-        }
+            UiSettings ui = committedUiSettings.get();
+            if (ui != null) {
+              settingsBus.set(ui);
+            }
+            if (accentSettingsBus != null) {
+              ThemeAccentSettings a = committedAccentSettings.get();
+              accentSettingsBus.set(
+                  a != null
+                      ? a
+                      : new ThemeAccentSettings(
+                          UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
+            }
+            if (tweakSettingsBus != null) {
+              ThemeTweakSettings tw = committedTweakSettings.get();
+              tweakSettingsBus.set(
+                  tw != null
+                      ? tw
+                      : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
+            }
+            if (chatThemeSettingsBus != null) {
+              ChatThemeSettings ct = committedChatThemeSettings.get();
+              chatThemeSettingsBus.set(
+                  ct != null
+                      ? ct
+                      : new ChatThemeSettings(
+                          ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+            }
 
-        String committed = committedThemeId.get();
-        if (java.util.Objects.equals(committed, lastPreviewThemeId.get())) {
-          themeManager.applyAppearance(true);
-        } else {
-          themeManager.applyTheme(committed);
-          lastPreviewThemeId.set(committed);
-        }
-      } finally {
-        suppressLivePreview.set(false);
-      }
-    };
+            String committed = committedThemeId.get();
+            if (java.util.Objects.equals(committed, lastPreviewThemeId.get())) {
+              themeManager.applyAppearance(true);
+            } else {
+              themeManager.applyTheme(committed);
+              lastPreviewThemeId.set(committed);
+            }
+          } finally {
+            suppressLivePreview.set(false);
+          }
+        };
 
-    final Runnable updateFlatTweakCapabilityUi = () -> {
-      Object selectedTheme = theme.combo.getSelectedItem();
-      String selectedThemeId = selectedTheme != null ? selectedTheme.toString() : "";
-      boolean flatTweakCapable = supportsFlatLafTweaksInternal(selectedThemeId);
-      tweaks.density.setEnabled(flatTweakCapable);
-      tweaks.cornerRadius.setEnabled(flatTweakCapable);
-      tweaks.density.setToolTipText(flatTweakCapable ? DENSITY_TOOLTIP : FLAT_ONLY_TOOLTIP);
-      tweaks.cornerRadius.setToolTipText(flatTweakCapable ? CORNER_RADIUS_TOOLTIP : FLAT_ONLY_TOOLTIP);
-    };
+    final Runnable updateFlatTweakCapabilityUi =
+        () -> {
+          Object selectedTheme = theme.combo.getSelectedItem();
+          String selectedThemeId = selectedTheme != null ? selectedTheme.toString() : "";
+          boolean flatTweakCapable = supportsFlatLafTweaksInternal(selectedThemeId);
+          tweaks.density.setEnabled(flatTweakCapable);
+          tweaks.cornerRadius.setEnabled(flatTweakCapable);
+          tweaks.density.setToolTipText(flatTweakCapable ? DENSITY_TOOLTIP : FLAT_ONLY_TOOLTIP);
+          tweaks.cornerRadius.setToolTipText(
+              flatTweakCapable ? CORNER_RADIUS_TOOLTIP : FLAT_ONLY_TOOLTIP);
+        };
     updateFlatTweakCapabilityUi.run();
 
-    final boolean[] ignoreThemeComboEvents = new boolean[] { true };
-    theme.combo.addActionListener(e -> {
-      if (ignoreThemeComboEvents[0]) return;
-      updateFlatTweakCapabilityUi.run();
-      scheduleLafPreview.run();
-    });
+    final boolean[] ignoreThemeComboEvents = new boolean[] {true};
+    theme.combo.addActionListener(
+        e -> {
+          if (ignoreThemeComboEvents[0]) return;
+          updateFlatTweakCapabilityUi.run();
+          scheduleLafPreview.run();
+        });
     ignoreThemeComboEvents[0] = false;
 
     // LAF + accent/tweak preview
     accent.enabled.addActionListener(e -> scheduleLafPreview.run());
     accent.preset.addActionListener(e -> scheduleLafPreview.run());
     accent.strength.addChangeListener(e -> scheduleLafPreview.run());
-    accent.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
-      String raw = accent.hex.getText();
-      raw = raw != null ? raw.trim() : "";
-      if (raw.isBlank()) {
-        lastValidAccentHex.set(null);
-      } else {
-        Color c = parseHexColorLenient(raw);
-        if (c != null) lastValidAccentHex.set(toHex(c));
-      }
-      scheduleLafPreview.run();
-    }));
+    accent
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = accent.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidAccentHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidAccentHex.set(toHex(c));
+                  }
+                  scheduleLafPreview.run();
+                }));
     tweaks.density.addActionListener(e -> scheduleLafPreview.run());
     tweaks.cornerRadius.addChangeListener(e -> scheduleLafPreview.run());
-    tweaks.uiFontOverrideEnabled.addActionListener(e -> {
-      tweaks.applyUiFontEnabledState.run();
-      scheduleLafPreview.run();
-    });
+    tweaks.uiFontOverrideEnabled.addActionListener(
+        e -> {
+          tweaks.applyUiFontEnabledState.run();
+          scheduleLafPreview.run();
+        });
     tweaks.uiFontFamily.addActionListener(e -> scheduleLafPreview.run());
-    tweaks.uiFontFamily.addItemListener(e -> {
-      if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
-        scheduleLafPreview.run();
-      }
-    });
-    java.awt.Component uiFontFamilyEditor = tweaks.uiFontFamily.getEditor() != null
-        ? tweaks.uiFontFamily.getEditor().getEditorComponent()
-        : null;
+    tweaks.uiFontFamily.addItemListener(
+        e -> {
+          if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+            scheduleLafPreview.run();
+          }
+        });
+    java.awt.Component uiFontFamilyEditor =
+        tweaks.uiFontFamily.getEditor() != null
+            ? tweaks.uiFontFamily.getEditor().getEditorComponent()
+            : null;
     if (uiFontFamilyEditor instanceof JTextField tf) {
       tf.getDocument().addDocumentListener(new SimpleDocListener(scheduleLafPreview));
     }
@@ -501,59 +588,85 @@ public class PreferencesDialog {
     // Chat theme preview (transcript-only)
     chatTheme.preset.addActionListener(e -> scheduleChatPreview.run());
     chatTheme.mentionStrength.addChangeListener(e -> scheduleChatPreview.run());
-    chatTheme.timestamp.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
-      String raw = chatTheme.timestamp.hex.getText();
-      raw = raw != null ? raw.trim() : "";
-      if (raw.isBlank()) {
-        lastValidChatTimestampHex.set(null);
-      } else {
-        Color c = parseHexColorLenient(raw);
-        if (c != null) lastValidChatTimestampHex.set(toHex(c));
-      }
-      scheduleChatPreview.run();
-    }));
-    chatTheme.system.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
-      String raw = chatTheme.system.hex.getText();
-      raw = raw != null ? raw.trim() : "";
-      if (raw.isBlank()) {
-        lastValidChatSystemHex.set(null);
-      } else {
-        Color c = parseHexColorLenient(raw);
-        if (c != null) lastValidChatSystemHex.set(toHex(c));
-      }
-      scheduleChatPreview.run();
-    }));
-    chatTheme.mention.hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
-      String raw = chatTheme.mention.hex.getText();
-      raw = raw != null ? raw.trim() : "";
-      if (raw.isBlank()) {
-        lastValidChatMentionHex.set(null);
-      } else {
-        Color c = parseHexColorLenient(raw);
-        if (c != null) lastValidChatMentionHex.set(toHex(c));
-      }
-      scheduleChatPreview.run();
-    }));
+    chatTheme
+        .timestamp
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.timestamp.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatTimestampHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatTimestampHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .system
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.system.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatSystemHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatSystemHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .mention
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.mention.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatMentionHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatMentionHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
 
     // Chat font preview
     fonts.fontFamily.addActionListener(e -> scheduleFontPreview.run());
-    fonts.fontFamily.addItemListener(e -> {
-      if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
-        scheduleFontPreview.run();
-      }
-    });
-    java.awt.Component ffEditor = fonts.fontFamily.getEditor() != null
-        ? fonts.fontFamily.getEditor().getEditorComponent()
-        : null;
+    fonts.fontFamily.addItemListener(
+        e -> {
+          if (e != null && e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+            scheduleFontPreview.run();
+          }
+        });
+    java.awt.Component ffEditor =
+        fonts.fontFamily.getEditor() != null
+            ? fonts.fontFamily.getEditor().getEditorComponent()
+            : null;
     if (ffEditor instanceof JTextField tf) {
       tf.getDocument().addDocumentListener(new SimpleDocListener(scheduleFontPreview));
     }
     fonts.fontSize.addChangeListener(e -> scheduleFontPreview.run());
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
-    NotificationSoundSettings soundSettings = notificationSoundSettingsBus != null
-        ? notificationSoundSettingsBus.get()
-        : new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
-    TrayControls trayControls = buildTrayControls(current, soundSettings);
+    NotificationSoundSettings soundSettings =
+        notificationSoundSettingsBus != null
+            ? notificationSoundSettingsBus.get()
+            : new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
+    PushyProperties pushySettings =
+        pushySettingsBus != null
+            ? pushySettingsBus.get()
+            : new PushyProperties(false, null, null, null, null, null, null, null);
+    TrayControls trayControls =
+        buildTrayControls(current, soundSettings, pushySettings, closeables);
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
@@ -585,10 +698,11 @@ public class PreferencesDialog {
     JPanel userLookupsPanel = network.userLookupsPanel;
 
     NotificationRulesControls notifications = buildNotificationRulesControls(current, closeables);
-    IrcEventNotificationControls ircEventNotifications = buildIrcEventNotificationControls(
-        ircEventNotificationRulesBus != null
-            ? ircEventNotificationRulesBus.get()
-            : IrcEventNotificationRule.defaults());
+    IrcEventNotificationControls ircEventNotifications =
+        buildIrcEventNotificationControls(
+            ircEventNotificationRulesBus != null
+                ? ircEventNotificationRulesBus.get()
+                : IrcEventNotificationRule.defaults());
 
     FilterControls filters = buildFilterControls(filterSettingsBus.get(), closeables);
     UserCommandAliasesControls userCommands =
@@ -602,13 +716,15 @@ public class PreferencesDialog {
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
-    JPanel chatPanel = buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
+    JPanel chatPanel =
+        buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
     JPanel ctcpRepliesPanel = buildCtcpRepliesPanel(ctcpAutoReplies);
-    JPanel ircv3Panel = buildIrcv3CapabilitiesPanel(
-        typingIndicatorsSendEnabled,
-        typingIndicatorsReceiveEnabled,
-        typingTreeIndicatorStyle,
-        ircv3Capabilities);
+    JPanel ircv3Panel =
+        buildIrcv3CapabilitiesPanel(
+            typingIndicatorsSendEnabled,
+            typingIndicatorsReceiveEnabled,
+            typingTreeIndicatorStyle,
+            ircv3Capabilities);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications, ircEventNotifications);
@@ -629,622 +745,785 @@ public class PreferencesDialog {
 
     attachNotificationRuleValidation(notifications, apply, ok);
 
-    Runnable doApply = () -> {
-      String t = String.valueOf(theme.combo.getSelectedItem());
-      String fam = String.valueOf(fonts.fontFamily.getSelectedItem());
-      int size = ((Number) fonts.fontSize.getValue()).intValue();
+    Runnable doApply =
+        () -> {
+          String t = String.valueOf(theme.combo.getSelectedItem());
+          String fam = String.valueOf(fonts.fontFamily.getSelectedItem());
+          int size = ((Number) fonts.fontSize.getValue()).intValue();
 
-      ThemeTweakSettings prevTweaks = tweakSettingsBus != null
-          ? tweakSettingsBus.get()
-          : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
-      DensityOption densityOpt = (DensityOption) tweaks.density.getSelectedItem();
-      String densityIdV = densityOpt != null ? densityOpt.id() : "auto";
-      int cornerRadiusV = tweaks.cornerRadius.getValue();
-      String uiFontFamilyV = Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
-      if (uiFontFamilyV.isBlank()) uiFontFamilyV = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
-      int uiFontSizeV = ((Number) tweaks.uiFontSize.getValue()).intValue();
-      ThemeTweakSettings nextTweaks = new ThemeTweakSettings(
-          ThemeTweakSettings.ThemeDensity.from(densityIdV),
-          cornerRadiusV,
-          tweaks.uiFontOverrideEnabled.isSelected(),
-          uiFontFamilyV,
-          uiFontSizeV
-      );
-      boolean tweaksChanged = !java.util.Objects.equals(prevTweaks, nextTweaks);
+          ThemeTweakSettings prevTweaks =
+              tweakSettingsBus != null
+                  ? tweakSettingsBus.get()
+                  : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
+          DensityOption densityOpt = (DensityOption) tweaks.density.getSelectedItem();
+          String densityIdV = densityOpt != null ? densityOpt.id() : "auto";
+          int cornerRadiusV = tweaks.cornerRadius.getValue();
+          String uiFontFamilyV = Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
+          if (uiFontFamilyV.isBlank()) uiFontFamilyV = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
+          int uiFontSizeV = ((Number) tweaks.uiFontSize.getValue()).intValue();
+          ThemeTweakSettings nextTweaks =
+              new ThemeTweakSettings(
+                  ThemeTweakSettings.ThemeDensity.from(densityIdV),
+                  cornerRadiusV,
+                  tweaks.uiFontOverrideEnabled.isSelected(),
+                  uiFontFamilyV,
+                  uiFontSizeV);
+          boolean tweaksChanged = !java.util.Objects.equals(prevTweaks, nextTweaks);
 
-      ThemeAccentSettings prevAccent = accentSettingsBus != null
-          ? accentSettingsBus.get()
-          : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
-      boolean accentOverrideEnabledV = accent.enabled.isSelected();
-      int accentStrengthV = accent.strength.getValue();
-      String accentHexV = null;
-      if (accentOverrideEnabledV) {
-        Color parsed = parseHexColorLenient(accent.hex.getText());
-        if (parsed == null) {
-          JOptionPane.showMessageDialog(dialog,
-              "Accent color must be a hex value like #RRGGBB.",
-              "Invalid accent color",
-              JOptionPane.ERROR_MESSAGE);
-          return;
-        }
-        accentHexV = toHex(parsed);
-      }
-      ThemeAccentSettings nextAccent = new ThemeAccentSettings(accentHexV, accentStrengthV);
-      boolean accentChanged = !java.util.Objects.equals(prevAccent, nextAccent);
+          ThemeAccentSettings prevAccent =
+              accentSettingsBus != null
+                  ? accentSettingsBus.get()
+                  : new ThemeAccentSettings(
+                      UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
+          boolean accentOverrideEnabledV = accent.enabled.isSelected();
+          int accentStrengthV = accent.strength.getValue();
+          String accentHexV = null;
+          if (accentOverrideEnabledV) {
+            Color parsed = parseHexColorLenient(accent.hex.getText());
+            if (parsed == null) {
+              JOptionPane.showMessageDialog(
+                  dialog,
+                  "Accent color must be a hex value like #RRGGBB.",
+                  "Invalid accent color",
+                  JOptionPane.ERROR_MESSAGE);
+              return;
+            }
+            accentHexV = toHex(parsed);
+          }
+          ThemeAccentSettings nextAccent = new ThemeAccentSettings(accentHexV, accentStrengthV);
+          boolean accentChanged = !java.util.Objects.equals(prevAccent, nextAccent);
 
-      ChatThemeSettings prevChatTheme = chatThemeSettingsBus != null
-          ? chatThemeSettingsBus.get()
-          : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+          ChatThemeSettings prevChatTheme =
+              chatThemeSettingsBus != null
+                  ? chatThemeSettingsBus.get()
+                  : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
 
-      ChatThemeSettings.Preset presetV = (ChatThemeSettings.Preset) chatTheme.preset.getSelectedItem();
-      if (presetV == null) presetV = ChatThemeSettings.Preset.DEFAULT;
+          ChatThemeSettings.Preset presetV =
+              (ChatThemeSettings.Preset) chatTheme.preset.getSelectedItem();
+          if (presetV == null) presetV = ChatThemeSettings.Preset.DEFAULT;
 
-      String tsHexV = chatTheme.timestamp.hex.getText();
-      tsHexV = tsHexV != null ? tsHexV.trim() : "";
-      if (tsHexV.isBlank()) tsHexV = null;
-      if (tsHexV != null) {
-        Color c = parseHexColorLenient(tsHexV);
-        if (c == null) {
-          JOptionPane.showMessageDialog(dialog,
-              "Chat timestamp color must be a hex value like #RRGGBB (or blank for default).",
-              "Invalid chat timestamp color",
-              JOptionPane.ERROR_MESSAGE);
-          return;
-        }
-        tsHexV = toHex(c);
-      }
+          String tsHexV = chatTheme.timestamp.hex.getText();
+          tsHexV = tsHexV != null ? tsHexV.trim() : "";
+          if (tsHexV.isBlank()) tsHexV = null;
+          if (tsHexV != null) {
+            Color c = parseHexColorLenient(tsHexV);
+            if (c == null) {
+              JOptionPane.showMessageDialog(
+                  dialog,
+                  "Chat timestamp color must be a hex value like #RRGGBB (or blank for default).",
+                  "Invalid chat timestamp color",
+                  JOptionPane.ERROR_MESSAGE);
+              return;
+            }
+            tsHexV = toHex(c);
+          }
 
-      String sysHexV = chatTheme.system.hex.getText();
-      sysHexV = sysHexV != null ? sysHexV.trim() : "";
-      if (sysHexV.isBlank()) sysHexV = null;
-      if (sysHexV != null) {
-        Color c = parseHexColorLenient(sysHexV);
-        if (c == null) {
-          JOptionPane.showMessageDialog(dialog,
-              "Chat system color must be a hex value like #RRGGBB (or blank for default).",
-              "Invalid chat system color",
-              JOptionPane.ERROR_MESSAGE);
-          return;
-        }
-        sysHexV = toHex(c);
-      }
+          String sysHexV = chatTheme.system.hex.getText();
+          sysHexV = sysHexV != null ? sysHexV.trim() : "";
+          if (sysHexV.isBlank()) sysHexV = null;
+          if (sysHexV != null) {
+            Color c = parseHexColorLenient(sysHexV);
+            if (c == null) {
+              JOptionPane.showMessageDialog(
+                  dialog,
+                  "Chat system color must be a hex value like #RRGGBB (or blank for default).",
+                  "Invalid chat system color",
+                  JOptionPane.ERROR_MESSAGE);
+              return;
+            }
+            sysHexV = toHex(c);
+          }
 
-      String menHexV = chatTheme.mention.hex.getText();
-      menHexV = menHexV != null ? menHexV.trim() : "";
-      if (menHexV.isBlank()) menHexV = null;
-      if (menHexV != null) {
-        Color c = parseHexColorLenient(menHexV);
-        if (c == null) {
-          JOptionPane.showMessageDialog(dialog,
-              "Mention highlight color must be a hex value like #RRGGBB (or blank for default).",
-              "Invalid mention highlight color",
-              JOptionPane.ERROR_MESSAGE);
-          return;
-        }
-        menHexV = toHex(c);
-      }
+          String menHexV = chatTheme.mention.hex.getText();
+          menHexV = menHexV != null ? menHexV.trim() : "";
+          if (menHexV.isBlank()) menHexV = null;
+          if (menHexV != null) {
+            Color c = parseHexColorLenient(menHexV);
+            if (c == null) {
+              JOptionPane.showMessageDialog(
+                  dialog,
+                  "Mention highlight color must be a hex value like #RRGGBB (or blank for default).",
+                  "Invalid mention highlight color",
+                  JOptionPane.ERROR_MESSAGE);
+              return;
+            }
+            menHexV = toHex(c);
+          }
 
-      int mentionStrengthV = chatTheme.mentionStrength.getValue();
-      ChatThemeSettings nextChatTheme = new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
-      boolean chatThemeChanged = !java.util.Objects.equals(prevChatTheme, nextChatTheme);
+          int mentionStrengthV = chatTheme.mentionStrength.getValue();
+          ChatThemeSettings nextChatTheme =
+              new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+          boolean chatThemeChanged = !java.util.Objects.equals(prevChatTheme, nextChatTheme);
 
-      boolean autoConnectV = autoConnectOnStart.isSelected();
+          boolean autoConnectV = autoConnectOnStart.isSelected();
 
-      boolean trayEnabledV = trayControls.enabled.isSelected();
-      boolean trayCloseToTrayV = trayEnabledV && trayControls.closeToTray.isSelected();
-      boolean trayMinimizeToTrayV = trayEnabledV && trayControls.minimizeToTray.isSelected();
-      boolean trayStartMinimizedV = trayEnabledV && trayControls.startMinimized.isSelected();
+          boolean trayEnabledV = trayControls.enabled.isSelected();
+          boolean trayCloseToTrayV = trayEnabledV && trayControls.closeToTray.isSelected();
+          boolean trayMinimizeToTrayV = trayEnabledV && trayControls.minimizeToTray.isSelected();
+          boolean trayStartMinimizedV = trayEnabledV && trayControls.startMinimized.isSelected();
 
-      boolean trayNotifyHighlightsV = trayEnabledV && trayControls.notifyHighlights.isSelected();
-      boolean trayNotifyPrivateMessagesV = trayEnabledV && trayControls.notifyPrivateMessages.isSelected();
-      boolean trayNotifyConnectionStateV = trayEnabledV && trayControls.notifyConnectionState.isSelected();
+          boolean trayNotifyHighlightsV =
+              trayEnabledV && trayControls.notifyHighlights.isSelected();
+          boolean trayNotifyPrivateMessagesV =
+              trayEnabledV && trayControls.notifyPrivateMessages.isSelected();
+          boolean trayNotifyConnectionStateV =
+              trayEnabledV && trayControls.notifyConnectionState.isSelected();
 
-      boolean trayNotifyOnlyWhenUnfocusedV = trayEnabledV && trayControls.notifyOnlyWhenUnfocused.isSelected();
-      boolean trayNotifyOnlyWhenMinimizedOrHiddenV = trayEnabledV && trayControls.notifyOnlyWhenMinimizedOrHidden.isSelected();
-      boolean trayNotifySuppressWhenTargetActiveV = trayEnabledV && trayControls.notifySuppressWhenTargetActive.isSelected();
+          boolean trayNotifyOnlyWhenUnfocusedV =
+              trayEnabledV && trayControls.notifyOnlyWhenUnfocused.isSelected();
+          boolean trayNotifyOnlyWhenMinimizedOrHiddenV =
+              trayEnabledV && trayControls.notifyOnlyWhenMinimizedOrHidden.isSelected();
+          boolean trayNotifySuppressWhenTargetActiveV =
+              trayEnabledV && trayControls.notifySuppressWhenTargetActive.isSelected();
 
-      boolean trayLinuxDbusActionsEnabledV = trayEnabledV && trayControls.linuxDbusActions.isSelected();
-      NotificationBackendMode trayNotificationBackendModeV =
-          trayControls.notificationBackend.getSelectedItem() instanceof NotificationBackendMode mode
-              ? mode
-              : NotificationBackendMode.AUTO;
+          boolean trayLinuxDbusActionsEnabledV =
+              trayEnabledV && trayControls.linuxDbusActions.isSelected();
+          NotificationBackendMode trayNotificationBackendModeV =
+              trayControls.notificationBackend.getSelectedItem()
+                      instanceof NotificationBackendMode mode
+                  ? mode
+                  : NotificationBackendMode.AUTO;
 
-      boolean trayNotificationSoundsEnabledV = trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
-      BuiltInSound selectedSoundV = (BuiltInSound) trayControls.notificationSound.getSelectedItem();
-      String trayNotificationSoundIdV = selectedSoundV != null ? selectedSoundV.name() : BuiltInSound.NOTIF_1.name();
+          boolean trayNotificationSoundsEnabledV =
+              trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
+          BuiltInSound selectedSoundV =
+              (BuiltInSound) trayControls.notificationSound.getSelectedItem();
+          String trayNotificationSoundIdV =
+              selectedSoundV != null ? selectedSoundV.name() : BuiltInSound.NOTIF_1.name();
 
-      boolean trayNotificationSoundUseCustomV = trayControls.notificationSoundUseCustom.isSelected();
-      String trayNotificationSoundCustomPathV = trayControls.notificationSoundCustomPath.getText();
-      trayNotificationSoundCustomPathV = trayNotificationSoundCustomPathV != null ? trayNotificationSoundCustomPathV.trim() : "";
-      if (trayNotificationSoundCustomPathV.isBlank()) trayNotificationSoundCustomPathV = null;
-      if (trayNotificationSoundUseCustomV && trayNotificationSoundCustomPathV == null) {
-        trayNotificationSoundUseCustomV = false;
-      }
+          boolean trayNotificationSoundUseCustomV =
+              trayControls.notificationSoundUseCustom.isSelected();
+          String trayNotificationSoundCustomPathV =
+              trayControls.notificationSoundCustomPath.getText();
+          trayNotificationSoundCustomPathV =
+              trayNotificationSoundCustomPathV != null
+                  ? trayNotificationSoundCustomPathV.trim()
+                  : "";
+          if (trayNotificationSoundCustomPathV.isBlank()) trayNotificationSoundCustomPathV = null;
+          if (trayNotificationSoundUseCustomV && trayNotificationSoundCustomPathV == null) {
+            trayNotificationSoundUseCustomV = false;
+          }
 
-      boolean timestampsEnabledV = timestamps.enabled.isSelected();
-      boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
-      boolean timestampsIncludePresenceMessagesV = timestamps.includePresenceMessages.isSelected();
-      String timestampFormatV = timestamps.format.getText() != null ? timestamps.format.getText().trim() : "";
-      if (timestampFormatV.isBlank()) timestampFormatV = "HH:mm:ss";
-      try {
-        DateTimeFormatter.ofPattern(timestampFormatV);
-      } catch (Exception ex) {
-        javax.swing.JOptionPane.showMessageDialog(dialog,
-            "Invalid timestamp format: " + timestampFormatV + "\n\nUse a java.time DateTimeFormatter pattern (e.g. HH:mm:ss)",
-            "Invalid timestamp format",
-            javax.swing.JOptionPane.ERROR_MESSAGE);
-        return;
-      }
-      timestamps.format.setText(timestampFormatV);
+          boolean pushyEnabledV = trayControls.pushyEnabled.isSelected();
+          String pushyEndpointV = Objects.toString(trayControls.pushyEndpoint.getText(), "").trim();
+          String pushyApiKeyV = new String(trayControls.pushyApiKey.getPassword()).trim();
+          PushyTargetMode pushyTargetModeV =
+              trayControls.pushyTargetMode.getSelectedItem() instanceof PushyTargetMode mode
+                  ? mode
+                  : PushyTargetMode.DEVICE_TOKEN;
+          String pushyTargetValueV =
+              Objects.toString(trayControls.pushyTargetValue.getText(), "").trim();
+          String pushyTitlePrefixV =
+              Objects.toString(trayControls.pushyTitlePrefix.getText(), "").trim();
+          int pushyConnectTimeoutSecondsV =
+              ((Number) trayControls.pushyConnectTimeoutSeconds.getValue()).intValue();
+          int pushyReadTimeoutSecondsV =
+              ((Number) trayControls.pushyReadTimeoutSeconds.getValue()).intValue();
 
-      boolean presenceFoldsV = presenceFolds.isSelected();
-      boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
-      boolean ctcpAutoRepliesEnabledV = ctcpAutoReplies.enabled.isSelected();
-      boolean ctcpAutoReplyVersionEnabledV = ctcpAutoReplies.version.isSelected();
-      boolean ctcpAutoReplyPingEnabledV = ctcpAutoReplies.ping.isSelected();
-      boolean ctcpAutoReplyTimeEnabledV = ctcpAutoReplies.time.isSelected();
-      boolean typingIndicatorsSendEnabledV = typingIndicatorsSendEnabled.isSelected();
-      boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
-      String typingIndicatorsTreeStyleV = typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
-      Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
+          String pushyValidationErrorV =
+              validatePushyInputs(
+                  pushyEnabledV, pushyEndpointV, pushyApiKeyV, pushyTargetModeV, pushyTargetValueV);
+          if (pushyValidationErrorV != null) {
+            JOptionPane.showMessageDialog(
+                dialog, pushyValidationErrorV, "Invalid Pushy settings", JOptionPane.ERROR_MESSAGE);
+            return;
+          }
 
-      boolean nickColoringEnabledV = nickColors.enabled.isSelected();
-      double nickColorMinContrastV = ((Number) nickColors.minContrast.getValue()).doubleValue();
-      if (nickColorMinContrastV <= 0) nickColorMinContrastV = 3.0;
+          String pushyDeviceTokenV =
+              pushyTargetModeV == PushyTargetMode.DEVICE_TOKEN && !pushyTargetValueV.isBlank()
+                  ? pushyTargetValueV
+                  : null;
+          String pushyTopicV =
+              pushyTargetModeV == PushyTargetMode.TOPIC && !pushyTargetValueV.isBlank()
+                  ? pushyTargetValueV
+                  : null;
 
-      int maxImageW = ((Number) imageEmbeds.maxWidth.getValue()).intValue();
-      int maxImageH = ((Number) imageEmbeds.maxHeight.getValue()).intValue();
+          PushyProperties pushyNext =
+              new PushyProperties(
+                  pushyEnabledV,
+                  pushyEndpointV.isBlank() ? null : pushyEndpointV,
+                  pushyApiKeyV.isBlank() ? null : pushyApiKeyV,
+                  pushyDeviceTokenV,
+                  pushyTopicV,
+                  pushyTitlePrefixV.isBlank() ? null : pushyTitlePrefixV,
+                  pushyConnectTimeoutSecondsV,
+                  pushyReadTimeoutSecondsV);
 
-      int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
-      int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
-      int commandHistoryMaxSizeV = ((Number) history.commandHistoryMaxSize.getValue()).intValue();
-      IrcProperties.Proxy proxyCfg;
-      try {
-        boolean proxyEnabledV = proxy.enabled.isSelected();
-        String proxyHostV = proxy.host.getText() != null ? proxy.host.getText().trim() : "";
-        int proxyPortV = ((Number) proxy.port.getValue()).intValue();
-        String proxyUserV = proxy.username.getText() != null ? proxy.username.getText().trim() : "";
-        String proxyPassV = new String(proxy.password.getPassword());
-        boolean proxyRemoteDnsV = proxy.remoteDns.isSelected();
+          boolean timestampsEnabledV = timestamps.enabled.isSelected();
+          boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
+          boolean timestampsIncludePresenceMessagesV =
+              timestamps.includePresenceMessages.isSelected();
+          String timestampFormatV =
+              timestamps.format.getText() != null ? timestamps.format.getText().trim() : "";
+          if (timestampFormatV.isBlank()) timestampFormatV = "HH:mm:ss";
+          try {
+            DateTimeFormatter.ofPattern(timestampFormatV);
+          } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(
+                dialog,
+                "Invalid timestamp format: "
+                    + timestampFormatV
+                    + "\n\nUse a java.time DateTimeFormatter pattern (e.g. HH:mm:ss)",
+                "Invalid timestamp format",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+          }
+          timestamps.format.setText(timestampFormatV);
 
-        int connectTimeoutSecondsV = ((Number) proxy.connectTimeoutSeconds.getValue()).intValue();
-        int readTimeoutSecondsV = ((Number) proxy.readTimeoutSeconds.getValue()).intValue();
+          boolean presenceFoldsV = presenceFolds.isSelected();
+          boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
+          boolean ctcpAutoRepliesEnabledV = ctcpAutoReplies.enabled.isSelected();
+          boolean ctcpAutoReplyVersionEnabledV = ctcpAutoReplies.version.isSelected();
+          boolean ctcpAutoReplyPingEnabledV = ctcpAutoReplies.ping.isSelected();
+          boolean ctcpAutoReplyTimeEnabledV = ctcpAutoReplies.time.isSelected();
+          boolean typingIndicatorsSendEnabledV = typingIndicatorsSendEnabled.isSelected();
+          boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
+          String typingIndicatorsTreeStyleV =
+              typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+          Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
 
-        if (proxyEnabledV) {
-          if (proxyHostV.isBlank()) throw new IllegalArgumentException("Proxy host is required when proxy is enabled.");
-          if (proxyPortV <= 0 || proxyPortV > 65535) throw new IllegalArgumentException("Proxy port must be 1..65535.");
-        }
+          boolean nickColoringEnabledV = nickColors.enabled.isSelected();
+          double nickColorMinContrastV = ((Number) nickColors.minContrast.getValue()).doubleValue();
+          if (nickColorMinContrastV <= 0) nickColorMinContrastV = 3.0;
 
-        proxyCfg = new IrcProperties.Proxy(
-            proxyEnabledV,
-            proxyHostV,
-            proxyPortV,
-            proxyUserV,
-            proxyPassV,
-            proxyRemoteDnsV,
-            Math.max(1L, connectTimeoutSecondsV) * 1000L,
-            Math.max(1L, readTimeoutSecondsV) * 1000L
-        );
-      } catch (Exception ex) {
-        javax.swing.JOptionPane.showMessageDialog(dialog,
-            "Invalid SOCKS proxy settings:\n\n" + ex.getMessage(),
-            "Invalid proxy settings",
-            javax.swing.JOptionPane.ERROR_MESSAGE);
-        return;
-      }
-      IrcProperties.Heartbeat heartbeatCfg;
-      try {
-        boolean hbEnabledV = heartbeat.enabled.isSelected();
-        int hbCheckSecondsV = ((Number) heartbeat.checkPeriodSeconds.getValue()).intValue();
-        int hbTimeoutSecondsV = ((Number) heartbeat.timeoutSeconds.getValue()).intValue();
+          int maxImageW = ((Number) imageEmbeds.maxWidth.getValue()).intValue();
+          int maxImageH = ((Number) imageEmbeds.maxHeight.getValue()).intValue();
 
-        hbCheckSecondsV = Math.max(1, hbCheckSecondsV);
-        hbTimeoutSecondsV = Math.max(1, hbTimeoutSecondsV);
-        if (hbEnabledV && hbTimeoutSecondsV <= hbCheckSecondsV) {
-          throw new IllegalArgumentException("Timeout must be greater than check period.");
-        }
+          int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
+          int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
+          int commandHistoryMaxSizeV =
+              ((Number) history.commandHistoryMaxSize.getValue()).intValue();
+          IrcProperties.Proxy proxyCfg;
+          try {
+            boolean proxyEnabledV = proxy.enabled.isSelected();
+            String proxyHostV = proxy.host.getText() != null ? proxy.host.getText().trim() : "";
+            int proxyPortV = ((Number) proxy.port.getValue()).intValue();
+            String proxyUserV =
+                proxy.username.getText() != null ? proxy.username.getText().trim() : "";
+            String proxyPassV = new String(proxy.password.getPassword());
+            boolean proxyRemoteDnsV = proxy.remoteDns.isSelected();
 
-        heartbeatCfg = new IrcProperties.Heartbeat(
-            hbEnabledV,
-            hbCheckSecondsV * 1000L,
-            hbTimeoutSecondsV * 1000L
-        );
-      } catch (Exception ex) {
-        javax.swing.JOptionPane.showMessageDialog(dialog,
-            "Invalid heartbeat settings:\n\n" + ex.getMessage(),
-            "Invalid heartbeat settings",
-            javax.swing.JOptionPane.ERROR_MESSAGE);
-        return;
-      }
+            int connectTimeoutSecondsV =
+                ((Number) proxy.connectTimeoutSeconds.getValue()).intValue();
+            int readTimeoutSecondsV = ((Number) proxy.readTimeoutSeconds.getValue()).intValue();
 
-      boolean userhostEnabledV = userhost.enabled.isSelected();
-      int userhostMinIntervalV = ((Number) userhost.minIntervalSeconds.getValue()).intValue();
-      int userhostMaxPerMinuteV = ((Number) userhost.maxPerMinute.getValue()).intValue();
-      int userhostNickCooldownV = ((Number) userhost.nickCooldownMinutes.getValue()).intValue();
-      int userhostMaxNicksV = ((Number) userhost.maxNicksPerCommand.getValue()).intValue();
+            if (proxyEnabledV) {
+              if (proxyHostV.isBlank())
+                throw new IllegalArgumentException("Proxy host is required when proxy is enabled.");
+              if (proxyPortV <= 0 || proxyPortV > 65535)
+                throw new IllegalArgumentException("Proxy port must be 1..65535.");
+            }
 
-      boolean userInfoEnrichmentEnabledV = enrichment.enabled.isSelected();
-      int uieUserhostMinIntervalV = ((Number) enrichment.userhostMinIntervalSeconds.getValue()).intValue();
-      int uieUserhostMaxPerMinuteV = ((Number) enrichment.userhostMaxPerMinute.getValue()).intValue();
-      int uieUserhostNickCooldownV = ((Number) enrichment.userhostNickCooldownMinutes.getValue()).intValue();
-      int uieUserhostMaxNicksV = ((Number) enrichment.userhostMaxNicksPerCommand.getValue()).intValue();
+            proxyCfg =
+                new IrcProperties.Proxy(
+                    proxyEnabledV,
+                    proxyHostV,
+                    proxyPortV,
+                    proxyUserV,
+                    proxyPassV,
+                    proxyRemoteDnsV,
+                    Math.max(1L, connectTimeoutSecondsV) * 1000L,
+                    Math.max(1L, readTimeoutSecondsV) * 1000L);
+          } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(
+                dialog,
+                "Invalid SOCKS proxy settings:\n\n" + ex.getMessage(),
+                "Invalid proxy settings",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+          }
+          IrcProperties.Heartbeat heartbeatCfg;
+          try {
+            boolean hbEnabledV = heartbeat.enabled.isSelected();
+            int hbCheckSecondsV = ((Number) heartbeat.checkPeriodSeconds.getValue()).intValue();
+            int hbTimeoutSecondsV = ((Number) heartbeat.timeoutSeconds.getValue()).intValue();
 
-      boolean uieWhoisFallbackEnabledRawV = enrichment.whoisFallbackEnabled.isSelected();
-      int uieWhoisMinIntervalV = ((Number) enrichment.whoisMinIntervalSeconds.getValue()).intValue();
-      int uieWhoisNickCooldownV = ((Number) enrichment.whoisNickCooldownMinutes.getValue()).intValue();
+            hbCheckSecondsV = Math.max(1, hbCheckSecondsV);
+            hbTimeoutSecondsV = Math.max(1, hbTimeoutSecondsV);
+            if (hbEnabledV && hbTimeoutSecondsV <= hbCheckSecondsV) {
+              throw new IllegalArgumentException("Timeout must be greater than check period.");
+            }
 
-      boolean uiePeriodicRefreshEnabledRawV = enrichment.periodicRefreshEnabled.isSelected();
-      int uiePeriodicRefreshIntervalV = ((Number) enrichment.periodicRefreshIntervalSeconds.getValue()).intValue();
-      int uiePeriodicRefreshNicksPerTickV = ((Number) enrichment.periodicRefreshNicksPerTick.getValue()).intValue();
-      boolean uieWhoisFallbackEnabledV = userInfoEnrichmentEnabledV && uieWhoisFallbackEnabledRawV;
-      boolean uiePeriodicRefreshEnabledV = userInfoEnrichmentEnabledV && uiePeriodicRefreshEnabledRawV;
-      int monitorIsonPollIntervalSecondsV = ((Number) monitorIsonPollIntervalSeconds.getValue()).intValue();
-      if (monitorIsonPollIntervalSecondsV < 5) monitorIsonPollIntervalSecondsV = 5;
-      if (monitorIsonPollIntervalSecondsV > 600) monitorIsonPollIntervalSecondsV = 600;
+            heartbeatCfg =
+                new IrcProperties.Heartbeat(
+                    hbEnabledV, hbCheckSecondsV * 1000L, hbTimeoutSecondsV * 1000L);
+          } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(
+                dialog,
+                "Invalid heartbeat settings:\n\n" + ex.getMessage(),
+                "Invalid heartbeat settings",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+          }
 
-      UiSettings prev = settingsBus.get();
-      boolean outgoingColorEnabledV = outgoing.enabled.isSelected();
-      String outgoingHexV = UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
-      outgoing.hex.setText(outgoingHexV);
+          boolean userhostEnabledV = userhost.enabled.isSelected();
+          int userhostMinIntervalV = ((Number) userhost.minIntervalSeconds.getValue()).intValue();
+          int userhostMaxPerMinuteV = ((Number) userhost.maxPerMinute.getValue()).intValue();
+          int userhostNickCooldownV = ((Number) userhost.nickCooldownMinutes.getValue()).intValue();
+          int userhostMaxNicksV = ((Number) userhost.maxNicksPerCommand.getValue()).intValue();
 
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      if (ircEventNotifications.table.isEditing()) {
-        try {
-          ircEventNotifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      if (userCommands.table.isEditing()) {
-        try {
-          userCommands.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+          boolean userInfoEnrichmentEnabledV = enrichment.enabled.isSelected();
+          int uieUserhostMinIntervalV =
+              ((Number) enrichment.userhostMinIntervalSeconds.getValue()).intValue();
+          int uieUserhostMaxPerMinuteV =
+              ((Number) enrichment.userhostMaxPerMinute.getValue()).intValue();
+          int uieUserhostNickCooldownV =
+              ((Number) enrichment.userhostNickCooldownMinutes.getValue()).intValue();
+          int uieUserhostMaxNicksV =
+              ((Number) enrichment.userhostMaxNicksPerCommand.getValue()).intValue();
 
-      ValidationError notifErr = notifications.model.firstValidationError();
-      if (notifErr != null) {
-        refreshNotificationRuleValidation(notifications);
-        JOptionPane.showMessageDialog(dialog,
-            notifErr.formatForDialog(),
-            "Invalid notification rule",
-            JOptionPane.ERROR_MESSAGE);
-        return;
-      }
+          boolean uieWhoisFallbackEnabledRawV = enrichment.whoisFallbackEnabled.isSelected();
+          int uieWhoisMinIntervalV =
+              ((Number) enrichment.whoisMinIntervalSeconds.getValue()).intValue();
+          int uieWhoisNickCooldownV =
+              ((Number) enrichment.whoisNickCooldownMinutes.getValue()).intValue();
 
-      UserCommandAliasValidationError aliasErr = userCommands.model.firstValidationError();
-      if (aliasErr != null) {
-        JOptionPane.showMessageDialog(
-            dialog,
-            aliasErr.formatForDialog(),
-            "Invalid command alias",
-            JOptionPane.ERROR_MESSAGE);
-        return;
-      }
+          boolean uiePeriodicRefreshEnabledRawV = enrichment.periodicRefreshEnabled.isSelected();
+          int uiePeriodicRefreshIntervalV =
+              ((Number) enrichment.periodicRefreshIntervalSeconds.getValue()).intValue();
+          int uiePeriodicRefreshNicksPerTickV =
+              ((Number) enrichment.periodicRefreshNicksPerTick.getValue()).intValue();
+          boolean uieWhoisFallbackEnabledV =
+              userInfoEnrichmentEnabledV && uieWhoisFallbackEnabledRawV;
+          boolean uiePeriodicRefreshEnabledV =
+              userInfoEnrichmentEnabledV && uiePeriodicRefreshEnabledRawV;
+          int monitorIsonPollIntervalSecondsV =
+              ((Number) monitorIsonPollIntervalSeconds.getValue()).intValue();
+          if (monitorIsonPollIntervalSecondsV < 5) monitorIsonPollIntervalSecondsV = 5;
+          if (monitorIsonPollIntervalSecondsV > 600) monitorIsonPollIntervalSecondsV = 600;
 
-      int notificationRuleCooldownSecondsV = ((Number) notifications.cooldownSeconds.getValue()).intValue();
-      if (notificationRuleCooldownSecondsV < 0) notificationRuleCooldownSecondsV = 15;
-      if (notificationRuleCooldownSecondsV > 3600) notificationRuleCooldownSecondsV = 3600;
-      List<NotificationRule> notificationRulesV = notifications.model.snapshot();
-      List<IrcEventNotificationRule> ircEventNotificationRulesV = ircEventNotifications.model.snapshot();
-      List<UserCommandAlias> userCommandAliasesV = userCommands.model.snapshot();
-      boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw.isSelected();
-      boolean diagnosticsAssertjSwingEnabledV = diagnostics.assertjSwingEnabled.isSelected();
-      boolean diagnosticsAssertjSwingFreezeWatchdogEnabledV =
-          diagnostics.assertjSwingFreezeWatchdogEnabled.isSelected();
-      int diagnosticsAssertjSwingFreezeThresholdMsV =
-          ((Number) diagnostics.assertjSwingFreezeThresholdMs.getValue()).intValue();
-      if (diagnosticsAssertjSwingFreezeThresholdMsV < 500) diagnosticsAssertjSwingFreezeThresholdMsV = 500;
-      if (diagnosticsAssertjSwingFreezeThresholdMsV > 120_000) diagnosticsAssertjSwingFreezeThresholdMsV = 120_000;
-      int diagnosticsAssertjSwingWatchdogPollMsV =
-          ((Number) diagnostics.assertjSwingWatchdogPollMs.getValue()).intValue();
-      if (diagnosticsAssertjSwingWatchdogPollMsV < 100) diagnosticsAssertjSwingWatchdogPollMsV = 100;
-      if (diagnosticsAssertjSwingWatchdogPollMsV > 10_000) diagnosticsAssertjSwingWatchdogPollMsV = 10_000;
-      boolean diagnosticsJhiccupEnabledV = diagnostics.jhiccupEnabled.isSelected();
-      String diagnosticsJhiccupJarPathV =
-          Objects.toString(diagnostics.jhiccupJarPath.getText(), "").trim();
-      String diagnosticsJhiccupJavaCommandRawV =
-          Objects.toString(diagnostics.jhiccupJavaCommand.getText(), "").trim();
-      String diagnosticsJhiccupJavaCommandEffectiveV =
-          diagnosticsJhiccupJavaCommandRawV.isEmpty() ? "java" : diagnosticsJhiccupJavaCommandRawV;
-      List<String> diagnosticsJhiccupArgsV = parseMultiLineArgs(diagnostics.jhiccupArgs.getText());
+          UiSettings prev = settingsBus.get();
+          boolean outgoingColorEnabledV = outgoing.enabled.isSelected();
+          String outgoingHexV =
+              UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
+          outgoing.hex.setText(outgoingHexV);
 
-      boolean diagnosticsChangedV =
-          runtimeConfig.readAppDiagnosticsAssertjSwingEnabled(true) != diagnosticsAssertjSwingEnabledV
-              || runtimeConfig.readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(true)
-                  != diagnosticsAssertjSwingFreezeWatchdogEnabledV
-              || runtimeConfig.readAppDiagnosticsAssertjSwingFreezeThresholdMs(2500)
-                  != diagnosticsAssertjSwingFreezeThresholdMsV
-              || runtimeConfig.readAppDiagnosticsAssertjSwingWatchdogPollMs(500)
-                  != diagnosticsAssertjSwingWatchdogPollMsV
-              || runtimeConfig.readAppDiagnosticsJhiccupEnabled(false) != diagnosticsJhiccupEnabledV
-              || !Objects.equals(
-                  runtimeConfig.readAppDiagnosticsJhiccupJarPath(""), diagnosticsJhiccupJarPathV)
-              || !Objects.equals(
-                  runtimeConfig.readAppDiagnosticsJhiccupJavaCommand("java"),
-                  diagnosticsJhiccupJavaCommandEffectiveV)
-              || !Objects.equals(
-                  runtimeConfig.readAppDiagnosticsJhiccupArgs(List.of()), diagnosticsJhiccupArgsV);
+          if (notifications.table.isEditing()) {
+            try {
+              notifications.table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          if (ircEventNotifications.table.isEditing()) {
+            try {
+              ircEventNotifications.table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          if (userCommands.table.isEditing()) {
+            try {
+              userCommands.table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
 
-      UiSettings next = new UiSettings(
-          t,
-          fam,
-          size,
-          autoConnectV,
-          trayEnabledV,
-          trayCloseToTrayV,
-          trayMinimizeToTrayV,
-          trayStartMinimizedV,
-          trayNotifyHighlightsV,
-          trayNotifyPrivateMessagesV,
-          trayNotifyConnectionStateV,
+          ValidationError notifErr = notifications.model.firstValidationError();
+          if (notifErr != null) {
+            refreshNotificationRuleValidation(notifications);
+            JOptionPane.showMessageDialog(
+                dialog,
+                notifErr.formatForDialog(),
+                "Invalid notification rule",
+                JOptionPane.ERROR_MESSAGE);
+            return;
+          }
 
-          trayNotifyOnlyWhenUnfocusedV,
-          trayNotifyOnlyWhenMinimizedOrHiddenV,
-          trayNotifySuppressWhenTargetActiveV,
+          UserCommandAliasValidationError aliasErr = userCommands.model.firstValidationError();
+          if (aliasErr != null) {
+            JOptionPane.showMessageDialog(
+                dialog,
+                aliasErr.formatForDialog(),
+                "Invalid command alias",
+                JOptionPane.ERROR_MESSAGE);
+            return;
+          }
 
-          trayLinuxDbusActionsEnabledV,
-          trayNotificationBackendModeV,
-          imageEmbeds.enabled.isSelected(),
-          imageEmbeds.collapsed.isSelected(),
-          maxImageW,
-          maxImageH,
-          imageEmbeds.animateGifs.isSelected(),
-          linkPreviews.enabled.isSelected(),
-          linkPreviews.collapsed.isSelected(),
-          presenceFoldsV,
-          ctcpRequestsInActiveTargetV,
-          typingIndicatorsSendEnabledV,
-          typingIndicatorsReceiveEnabledV,
-          typingIndicatorsTreeStyleV,
-          timestampsEnabledV,
-          timestampFormatV,
-          timestampsIncludeChatMessagesV,
-          timestampsIncludePresenceMessagesV,
-          historyInitialLoadV,
-          historyPageSizeV,
-          commandHistoryMaxSizeV,
-          outgoingColorEnabledV,
-          outgoingHexV,
-          userhostEnabledV,
-          userhostMinIntervalV,
-          userhostMaxPerMinuteV,
-          userhostNickCooldownV,
-          userhostMaxNicksV,
-          userInfoEnrichmentEnabledV,
-          uieUserhostMinIntervalV,
-          uieUserhostMaxPerMinuteV,
-          uieUserhostNickCooldownV,
-          uieUserhostMaxNicksV,
-          uieWhoisFallbackEnabledV,
-          uieWhoisMinIntervalV,
-          uieWhoisNickCooldownV,
-          uiePeriodicRefreshEnabledV,
-          uiePeriodicRefreshIntervalV,
-          uiePeriodicRefreshNicksPerTickV,
-          monitorIsonPollIntervalSecondsV,
+          int notificationRuleCooldownSecondsV =
+              ((Number) notifications.cooldownSeconds.getValue()).intValue();
+          if (notificationRuleCooldownSecondsV < 0) notificationRuleCooldownSecondsV = 15;
+          if (notificationRuleCooldownSecondsV > 3600) notificationRuleCooldownSecondsV = 3600;
+          List<NotificationRule> notificationRulesV = notifications.model.snapshot();
+          List<IrcEventNotificationRule> ircEventNotificationRulesV =
+              ircEventNotifications.model.snapshot();
+          List<UserCommandAlias> userCommandAliasesV = userCommands.model.snapshot();
+          boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw.isSelected();
+          boolean diagnosticsAssertjSwingEnabledV = diagnostics.assertjSwingEnabled.isSelected();
+          boolean diagnosticsAssertjSwingFreezeWatchdogEnabledV =
+              diagnostics.assertjSwingFreezeWatchdogEnabled.isSelected();
+          int diagnosticsAssertjSwingFreezeThresholdMsV =
+              ((Number) diagnostics.assertjSwingFreezeThresholdMs.getValue()).intValue();
+          if (diagnosticsAssertjSwingFreezeThresholdMsV < 500)
+            diagnosticsAssertjSwingFreezeThresholdMsV = 500;
+          if (diagnosticsAssertjSwingFreezeThresholdMsV > 120_000)
+            diagnosticsAssertjSwingFreezeThresholdMsV = 120_000;
+          int diagnosticsAssertjSwingWatchdogPollMsV =
+              ((Number) diagnostics.assertjSwingWatchdogPollMs.getValue()).intValue();
+          if (diagnosticsAssertjSwingWatchdogPollMsV < 100)
+            diagnosticsAssertjSwingWatchdogPollMsV = 100;
+          if (diagnosticsAssertjSwingWatchdogPollMsV > 10_000)
+            diagnosticsAssertjSwingWatchdogPollMsV = 10_000;
+          int diagnosticsAssertjSwingFallbackViolationReportMsV =
+              ((Number) diagnostics.assertjSwingFallbackViolationReportMs.getValue()).intValue();
+          if (diagnosticsAssertjSwingFallbackViolationReportMsV < 250) {
+            diagnosticsAssertjSwingFallbackViolationReportMsV = 250;
+          }
+          if (diagnosticsAssertjSwingFallbackViolationReportMsV > 120_000) {
+            diagnosticsAssertjSwingFallbackViolationReportMsV = 120_000;
+          }
+          boolean diagnosticsAssertjSwingOnIssuePlaySoundV =
+              diagnostics.assertjSwingOnIssuePlaySound.isSelected();
+          boolean diagnosticsAssertjSwingOnIssueShowNotificationV =
+              diagnostics.assertjSwingOnIssueShowNotification.isSelected();
+          boolean diagnosticsJhiccupEnabledV = diagnostics.jhiccupEnabled.isSelected();
+          String diagnosticsJhiccupJarPathV =
+              Objects.toString(diagnostics.jhiccupJarPath.getText(), "").trim();
+          String diagnosticsJhiccupJavaCommandRawV =
+              Objects.toString(diagnostics.jhiccupJavaCommand.getText(), "").trim();
+          String diagnosticsJhiccupJavaCommandEffectiveV =
+              diagnosticsJhiccupJavaCommandRawV.isEmpty()
+                  ? "java"
+                  : diagnosticsJhiccupJavaCommandRawV;
+          List<String> diagnosticsJhiccupArgsV =
+              parseMultiLineArgs(diagnostics.jhiccupArgs.getText());
 
-          notificationRuleCooldownSecondsV,
-          notificationRulesV
-      );
+          boolean diagnosticsChangedV =
+              runtimeConfig.readAppDiagnosticsAssertjSwingEnabled(true)
+                      != diagnosticsAssertjSwingEnabledV
+                  || runtimeConfig.readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(true)
+                      != diagnosticsAssertjSwingFreezeWatchdogEnabledV
+                  || runtimeConfig.readAppDiagnosticsAssertjSwingFreezeThresholdMs(2500)
+                      != diagnosticsAssertjSwingFreezeThresholdMsV
+                  || runtimeConfig.readAppDiagnosticsAssertjSwingWatchdogPollMs(500)
+                      != diagnosticsAssertjSwingWatchdogPollMsV
+                  || runtimeConfig.readAppDiagnosticsAssertjSwingFallbackViolationReportMs(5000)
+                      != diagnosticsAssertjSwingFallbackViolationReportMsV
+                  || runtimeConfig.readAppDiagnosticsAssertjSwingIssuePlaySound(false)
+                      != diagnosticsAssertjSwingOnIssuePlaySoundV
+                  || runtimeConfig.readAppDiagnosticsAssertjSwingIssueShowNotification(false)
+                      != diagnosticsAssertjSwingOnIssueShowNotificationV
+                  || runtimeConfig.readAppDiagnosticsJhiccupEnabled(false)
+                      != diagnosticsJhiccupEnabledV
+                  || !Objects.equals(
+                      runtimeConfig.readAppDiagnosticsJhiccupJarPath(""),
+                      diagnosticsJhiccupJarPathV)
+                  || !Objects.equals(
+                      runtimeConfig.readAppDiagnosticsJhiccupJavaCommand("java"),
+                      diagnosticsJhiccupJavaCommandEffectiveV)
+                  || !Objects.equals(
+                      runtimeConfig.readAppDiagnosticsJhiccupArgs(List.of()),
+                      diagnosticsJhiccupArgsV);
 
-      boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
+          UiSettings next =
+              new UiSettings(
+                  t,
+                  fam,
+                  size,
+                  autoConnectV,
+                  trayEnabledV,
+                  trayCloseToTrayV,
+                  trayMinimizeToTrayV,
+                  trayStartMinimizedV,
+                  trayNotifyHighlightsV,
+                  trayNotifyPrivateMessagesV,
+                  trayNotifyConnectionStateV,
+                  trayNotifyOnlyWhenUnfocusedV,
+                  trayNotifyOnlyWhenMinimizedOrHiddenV,
+                  trayNotifySuppressWhenTargetActiveV,
+                  trayLinuxDbusActionsEnabledV,
+                  trayNotificationBackendModeV,
+                  imageEmbeds.enabled.isSelected(),
+                  imageEmbeds.collapsed.isSelected(),
+                  maxImageW,
+                  maxImageH,
+                  imageEmbeds.animateGifs.isSelected(),
+                  linkPreviews.enabled.isSelected(),
+                  linkPreviews.collapsed.isSelected(),
+                  presenceFoldsV,
+                  ctcpRequestsInActiveTargetV,
+                  typingIndicatorsSendEnabledV,
+                  typingIndicatorsReceiveEnabledV,
+                  typingIndicatorsTreeStyleV,
+                  timestampsEnabledV,
+                  timestampFormatV,
+                  timestampsIncludeChatMessagesV,
+                  timestampsIncludePresenceMessagesV,
+                  historyInitialLoadV,
+                  historyPageSizeV,
+                  commandHistoryMaxSizeV,
+                  outgoingColorEnabledV,
+                  outgoingHexV,
+                  userhostEnabledV,
+                  userhostMinIntervalV,
+                  userhostMaxPerMinuteV,
+                  userhostNickCooldownV,
+                  userhostMaxNicksV,
+                  userInfoEnrichmentEnabledV,
+                  uieUserhostMinIntervalV,
+                  uieUserhostMaxPerMinuteV,
+                  uieUserhostNickCooldownV,
+                  uieUserhostMaxNicksV,
+                  uieWhoisFallbackEnabledV,
+                  uieWhoisMinIntervalV,
+                  uieWhoisNickCooldownV,
+                  uiePeriodicRefreshEnabledV,
+                  uiePeriodicRefreshIntervalV,
+                  uiePeriodicRefreshNicksPerTickV,
+                  monitorIsonPollIntervalSecondsV,
+                  notificationRuleCooldownSecondsV,
+                  notificationRulesV);
 
-      settingsBus.set(next);
+          boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
-      if (accentSettingsBus != null) {
-        accentSettingsBus.set(nextAccent);
-      }
-      runtimeConfig.rememberAccentColor(nextAccent.accentColor());
-      runtimeConfig.rememberAccentStrength(nextAccent.strength());
+          settingsBus.set(next);
 
-      if (tweakSettingsBus != null) {
-        tweakSettingsBus.set(nextTweaks);
-      }
+          if (accentSettingsBus != null) {
+            accentSettingsBus.set(nextAccent);
+          }
+          runtimeConfig.rememberAccentColor(nextAccent.accentColor());
+          runtimeConfig.rememberAccentStrength(nextAccent.strength());
 
-      if (chatThemeSettingsBus != null && chatThemeChanged) {
-        chatThemeSettingsBus.set(nextChatTheme);
-      }
-      runtimeConfig.rememberUiDensity(nextTweaks.densityId());
-      runtimeConfig.rememberCornerRadius(nextTweaks.cornerRadius());
-      runtimeConfig.rememberUiFontOverrideEnabled(nextTweaks.uiFontOverrideEnabled());
-      runtimeConfig.rememberUiFontFamily(nextTweaks.uiFontFamily());
-      runtimeConfig.rememberUiFontSize(nextTweaks.uiFontSize());
+          if (tweakSettingsBus != null) {
+            tweakSettingsBus.set(nextTweaks);
+          }
 
-      runtimeConfig.rememberUiSettings(next.theme(), next.chatFontFamily(), next.chatFontSize());
-      // Chat theme (transcript-only palette)
-      runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
-      runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
-      runtimeConfig.rememberChatSystemColor(nextChatTheme.systemColor());
-      runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
-      runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
-      runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
-      runtimeConfig.rememberTrayEnabled(next.trayEnabled());
-      runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
-      runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
-      runtimeConfig.rememberTrayStartMinimized(next.trayStartMinimized());
-      runtimeConfig.rememberTrayNotifyHighlights(next.trayNotifyHighlights());
-      runtimeConfig.rememberTrayNotifyPrivateMessages(next.trayNotifyPrivateMessages());
-      runtimeConfig.rememberTrayNotifyConnectionState(next.trayNotifyConnectionState());
-      runtimeConfig.rememberTrayNotifyOnlyWhenUnfocused(next.trayNotifyOnlyWhenUnfocused());
-      runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(next.trayNotifyOnlyWhenMinimizedOrHidden());
-      runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(next.trayNotifySuppressWhenTargetActive());
-      runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
-      runtimeConfig.rememberTrayNotificationBackend(next.trayNotificationBackendMode().token());
+          if (chatThemeSettingsBus != null && chatThemeChanged) {
+            chatThemeSettingsBus.set(nextChatTheme);
+          }
+          runtimeConfig.rememberUiDensity(nextTweaks.densityId());
+          runtimeConfig.rememberCornerRadius(nextTweaks.cornerRadius());
+          runtimeConfig.rememberUiFontOverrideEnabled(nextTweaks.uiFontOverrideEnabled());
+          runtimeConfig.rememberUiFontFamily(nextTweaks.uiFontFamily());
+          runtimeConfig.rememberUiFontSize(nextTweaks.uiFontSize());
 
-      if (notificationSoundSettingsBus != null) {
-        notificationSoundSettingsBus.set(new NotificationSoundSettings(
-            trayNotificationSoundsEnabledV,
-            trayNotificationSoundIdV,
-            trayNotificationSoundUseCustomV,
-            trayNotificationSoundCustomPathV
-        ));
-      }
-      runtimeConfig.rememberTrayNotificationSoundsEnabled(trayNotificationSoundsEnabledV);
-      runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
-      runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
-      runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+          runtimeConfig.rememberUiSettings(
+              next.theme(), next.chatFontFamily(), next.chatFontSize());
+          // Chat theme (transcript-only palette)
+          runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
+          runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
+          runtimeConfig.rememberChatSystemColor(nextChatTheme.systemColor());
+          runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
+          runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
+          runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
+          runtimeConfig.rememberTrayEnabled(next.trayEnabled());
+          runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
+          runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
+          runtimeConfig.rememberTrayStartMinimized(next.trayStartMinimized());
+          runtimeConfig.rememberTrayNotifyHighlights(next.trayNotifyHighlights());
+          runtimeConfig.rememberTrayNotifyPrivateMessages(next.trayNotifyPrivateMessages());
+          runtimeConfig.rememberTrayNotifyConnectionState(next.trayNotifyConnectionState());
+          runtimeConfig.rememberTrayNotifyOnlyWhenUnfocused(next.trayNotifyOnlyWhenUnfocused());
+          runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(
+              next.trayNotifyOnlyWhenMinimizedOrHidden());
+          runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(
+              next.trayNotifySuppressWhenTargetActive());
+          runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
+          runtimeConfig.rememberTrayNotificationBackend(next.trayNotificationBackendMode().token());
 
-      if (trayService != null) {
-        trayService.applySettings();
-      }
-      runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
-      runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
-      runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
-      runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
-      runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
-      runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
-      runtimeConfig.rememberLinkPreviewsCollapsedByDefault(next.linkPreviewsCollapsedByDefault());
-      runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
-      runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(next.ctcpRequestsInActiveTargetEnabled());
-      runtimeConfig.rememberCtcpAutoRepliesEnabled(ctcpAutoRepliesEnabledV);
-      runtimeConfig.rememberCtcpAutoReplyVersionEnabled(ctcpAutoReplyVersionEnabledV);
-      runtimeConfig.rememberCtcpAutoReplyPingEnabled(ctcpAutoReplyPingEnabledV);
-      runtimeConfig.rememberCtcpAutoReplyTimeEnabled(ctcpAutoReplyTimeEnabledV);
-      runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
-      runtimeConfig.rememberTypingIndicatorsReceiveEnabled(next.typingIndicatorsReceiveEnabled());
-      runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
-      persistIrcv3Capabilities(ircv3CapabilitiesV);
+          if (notificationSoundSettingsBus != null) {
+            notificationSoundSettingsBus.set(
+                new NotificationSoundSettings(
+                    trayNotificationSoundsEnabledV,
+                    trayNotificationSoundIdV,
+                    trayNotificationSoundUseCustomV,
+                    trayNotificationSoundCustomPathV));
+          }
+          runtimeConfig.rememberTrayNotificationSoundsEnabled(trayNotificationSoundsEnabledV);
+          runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
+          runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
+          runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+          if (pushySettingsBus != null) {
+            pushySettingsBus.set(pushyNext);
+          }
+          runtimeConfig.rememberPushySettings(pushyNext);
 
-      if (nickColorSettingsBus != null) {
-        nickColorSettingsBus.set(new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
-      }
-      runtimeConfig.rememberNickColoringEnabled(nickColoringEnabledV);
-      runtimeConfig.rememberNickColorMinContrast(nickColorMinContrastV);
-      runtimeConfig.rememberTimestampsEnabled(next.timestampsEnabled());
-      runtimeConfig.rememberTimestampFormat(next.timestampFormat());
-      runtimeConfig.rememberTimestampsIncludeChatMessages(next.timestampsIncludeChatMessages());
-      runtimeConfig.rememberTimestampsIncludePresenceMessages(next.timestampsIncludePresenceMessages());
+          if (trayService != null) {
+            trayService.applySettings();
+          }
+          runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
+          runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
+          runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
+          runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
+          runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
+          runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
+          runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
+              next.linkPreviewsCollapsedByDefault());
+          runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
+          runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(
+              next.ctcpRequestsInActiveTargetEnabled());
+          runtimeConfig.rememberCtcpAutoRepliesEnabled(ctcpAutoRepliesEnabledV);
+          runtimeConfig.rememberCtcpAutoReplyVersionEnabled(ctcpAutoReplyVersionEnabledV);
+          runtimeConfig.rememberCtcpAutoReplyPingEnabled(ctcpAutoReplyPingEnabledV);
+          runtimeConfig.rememberCtcpAutoReplyTimeEnabled(ctcpAutoReplyTimeEnabledV);
+          runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
+          runtimeConfig.rememberTypingIndicatorsReceiveEnabled(
+              next.typingIndicatorsReceiveEnabled());
+          runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
+          persistIrcv3Capabilities(ircv3CapabilitiesV);
 
-      runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
-      runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
-      runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
+          if (nickColorSettingsBus != null) {
+            nickColorSettingsBus.set(
+                new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
+          }
+          runtimeConfig.rememberNickColoringEnabled(nickColoringEnabledV);
+          runtimeConfig.rememberNickColorMinContrast(nickColorMinContrastV);
+          runtimeConfig.rememberTimestampsEnabled(next.timestampsEnabled());
+          runtimeConfig.rememberTimestampFormat(next.timestampFormat());
+          runtimeConfig.rememberTimestampsIncludeChatMessages(next.timestampsIncludeChatMessages());
+          runtimeConfig.rememberTimestampsIncludePresenceMessages(
+              next.timestampsIncludePresenceMessages());
 
-      applyFilterSettingsFromUi(filters);
-      runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
-      runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
-      runtimeConfig.rememberChatLoggingLogPrivateMessages(logging.logPrivateMessages.isSelected());
-      runtimeConfig.rememberChatLoggingSavePrivateMessageList(logging.savePrivateMessageList.isSelected());
-      runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
-      runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(logging.dbNextToConfig.isSelected());
+          runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
+          runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
+          runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
 
-      runtimeConfig.rememberChatLoggingKeepForever(logging.keepForever.isSelected());
-      runtimeConfig.rememberChatLoggingRetentionDays(((Number) logging.retentionDays.getValue()).intValue());
+          applyFilterSettingsFromUi(filters);
+          runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
+          runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
+          runtimeConfig.rememberChatLoggingLogPrivateMessages(
+              logging.logPrivateMessages.isSelected());
+          runtimeConfig.rememberChatLoggingSavePrivateMessageList(
+              logging.savePrivateMessageList.isSelected());
+          runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
+          runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(
+              logging.dbNextToConfig.isSelected());
 
-      runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
-      runtimeConfig.rememberClientLineColor(next.clientLineColor());
+          runtimeConfig.rememberChatLoggingKeepForever(logging.keepForever.isSelected());
+          runtimeConfig.rememberChatLoggingRetentionDays(
+              ((Number) logging.retentionDays.getValue()).intValue());
 
-      runtimeConfig.rememberNotificationRuleCooldownSeconds(next.notificationRuleCooldownSeconds());
-      runtimeConfig.rememberNotificationRules(notificationRulesV);
-      runtimeConfig.rememberIrcEventNotificationRules(ircEventNotificationRulesV);
-      if (ircEventNotificationRulesBus != null) {
-        ircEventNotificationRulesBus.set(ircEventNotificationRulesV);
-      }
-      runtimeConfig.rememberUserCommandAliases(userCommandAliasesV);
-      runtimeConfig.rememberUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
-      if (userCommandAliasesBus != null) {
-        userCommandAliasesBus.set(userCommandAliasesV);
-        userCommandAliasesBus.setUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
-      }
-      runtimeConfig.rememberAppDiagnosticsAssertjSwingEnabled(diagnosticsAssertjSwingEnabledV);
-      runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(
-          diagnosticsAssertjSwingFreezeWatchdogEnabledV);
-      runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeThresholdMs(
-          diagnosticsAssertjSwingFreezeThresholdMsV);
-      runtimeConfig.rememberAppDiagnosticsAssertjSwingWatchdogPollMs(
-          diagnosticsAssertjSwingWatchdogPollMsV);
-      runtimeConfig.rememberAppDiagnosticsJhiccupEnabled(diagnosticsJhiccupEnabledV);
-      runtimeConfig.rememberAppDiagnosticsJhiccupJarPath(diagnosticsJhiccupJarPathV);
-      runtimeConfig.rememberAppDiagnosticsJhiccupJavaCommand(diagnosticsJhiccupJavaCommandRawV);
-      runtimeConfig.rememberAppDiagnosticsJhiccupArgs(diagnosticsJhiccupArgsV);
-      if (diagnosticsChangedV) {
-        JOptionPane.showMessageDialog(
-            dialog,
-            "Diagnostics settings were saved.\nRestart IRCafe to apply AssertJ Swing / jHiccup startup changes.",
-            "Restart required",
-            JOptionPane.INFORMATION_MESSAGE);
-      }
+          runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
+          runtimeConfig.rememberClientLineColor(next.clientLineColor());
 
-      runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
-      runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
-      runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
-      runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
-      runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
-      runtimeConfig.rememberUserInfoEnrichmentEnabled(next.userInfoEnrichmentEnabled());
-      runtimeConfig.rememberUserInfoEnrichmentWhoisFallbackEnabled(next.userInfoEnrichmentWhoisFallbackEnabled());
+          runtimeConfig.rememberNotificationRuleCooldownSeconds(
+              next.notificationRuleCooldownSeconds());
+          runtimeConfig.rememberNotificationRules(notificationRulesV);
+          runtimeConfig.rememberIrcEventNotificationRules(ircEventNotificationRulesV);
+          if (ircEventNotificationRulesBus != null) {
+            ircEventNotificationRulesBus.set(ircEventNotificationRulesV);
+          }
+          runtimeConfig.rememberUserCommandAliases(userCommandAliasesV);
+          runtimeConfig.rememberUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
+          if (userCommandAliasesBus != null) {
+            userCommandAliasesBus.set(userCommandAliasesV);
+            userCommandAliasesBus.setUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
+          }
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingEnabled(diagnosticsAssertjSwingEnabledV);
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(
+              diagnosticsAssertjSwingFreezeWatchdogEnabledV);
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeThresholdMs(
+              diagnosticsAssertjSwingFreezeThresholdMsV);
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingWatchdogPollMs(
+              diagnosticsAssertjSwingWatchdogPollMsV);
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingFallbackViolationReportMs(
+              diagnosticsAssertjSwingFallbackViolationReportMsV);
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingIssuePlaySound(
+              diagnosticsAssertjSwingOnIssuePlaySoundV);
+          runtimeConfig.rememberAppDiagnosticsAssertjSwingIssueShowNotification(
+              diagnosticsAssertjSwingOnIssueShowNotificationV);
+          runtimeConfig.rememberAppDiagnosticsJhiccupEnabled(diagnosticsJhiccupEnabledV);
+          runtimeConfig.rememberAppDiagnosticsJhiccupJarPath(diagnosticsJhiccupJarPathV);
+          runtimeConfig.rememberAppDiagnosticsJhiccupJavaCommand(diagnosticsJhiccupJavaCommandRawV);
+          runtimeConfig.rememberAppDiagnosticsJhiccupArgs(diagnosticsJhiccupArgsV);
+          if (diagnosticsChangedV) {
+            JOptionPane.showMessageDialog(
+                dialog,
+                "Diagnostics settings were saved.\nRestart IRCafe to apply AssertJ Swing / jHiccup startup changes.",
+                "Restart required",
+                JOptionPane.INFORMATION_MESSAGE);
+          }
 
-      runtimeConfig.rememberUserInfoEnrichmentUserhostMinIntervalSeconds(next.userInfoEnrichmentUserhostMinIntervalSeconds());
-      runtimeConfig.rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(next.userInfoEnrichmentUserhostMaxCommandsPerMinute());
-      runtimeConfig.rememberUserInfoEnrichmentUserhostNickCooldownMinutes(next.userInfoEnrichmentUserhostNickCooldownMinutes());
-      runtimeConfig.rememberUserInfoEnrichmentUserhostMaxNicksPerCommand(next.userInfoEnrichmentUserhostMaxNicksPerCommand());
+          runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
+          runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
+          runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
+          runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
+          runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
+          runtimeConfig.rememberUserInfoEnrichmentEnabled(next.userInfoEnrichmentEnabled());
+          runtimeConfig.rememberUserInfoEnrichmentWhoisFallbackEnabled(
+              next.userInfoEnrichmentWhoisFallbackEnabled());
 
-      runtimeConfig.rememberUserInfoEnrichmentWhoisMinIntervalSeconds(next.userInfoEnrichmentWhoisMinIntervalSeconds());
-      runtimeConfig.rememberUserInfoEnrichmentWhoisNickCooldownMinutes(next.userInfoEnrichmentWhoisNickCooldownMinutes());
+          runtimeConfig.rememberUserInfoEnrichmentUserhostMinIntervalSeconds(
+              next.userInfoEnrichmentUserhostMinIntervalSeconds());
+          runtimeConfig.rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(
+              next.userInfoEnrichmentUserhostMaxCommandsPerMinute());
+          runtimeConfig.rememberUserInfoEnrichmentUserhostNickCooldownMinutes(
+              next.userInfoEnrichmentUserhostNickCooldownMinutes());
+          runtimeConfig.rememberUserInfoEnrichmentUserhostMaxNicksPerCommand(
+              next.userInfoEnrichmentUserhostMaxNicksPerCommand());
 
-      runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(next.userInfoEnrichmentPeriodicRefreshEnabled());
-      runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
-      runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
-      runtimeConfig.rememberMonitorIsonPollIntervalSeconds(next.monitorIsonFallbackPollIntervalSeconds());
-      runtimeConfig.rememberClientProxy(proxyCfg);
-      NetProxyContext.configure(proxyCfg);
-      runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
-      NetHeartbeatContext.configure(heartbeatCfg);
-      if (ircClientService != null) {
-        ircClientService.rescheduleActiveHeartbeats();
-      }
-      boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
-      runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
-      NetTlsContext.configure(trustAllTlsV);
+          runtimeConfig.rememberUserInfoEnrichmentWhoisMinIntervalSeconds(
+              next.userInfoEnrichmentWhoisMinIntervalSeconds());
+          runtimeConfig.rememberUserInfoEnrichmentWhoisNickCooldownMinutes(
+              next.userInfoEnrichmentWhoisNickCooldownMinutes());
 
-      if (themeManager != null) {
-        if (themeChanged || accentChanged || tweaksChanged) {
-          // Full UI refresh (also triggers a chat restyle)
-          themeManager.applyTheme(next.theme());
-        } else if (chatThemeChanged) {
-          // Only the transcript palette changed
-          themeManager.refreshChatStyles();
-        }
-      }
+          runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(
+              next.userInfoEnrichmentPeriodicRefreshEnabled());
+          runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(
+              next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
+          runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(
+              next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
+          runtimeConfig.rememberMonitorIsonPollIntervalSeconds(
+              next.monitorIsonFallbackPollIntervalSeconds());
+          runtimeConfig.rememberClientProxy(proxyCfg);
+          NetProxyContext.configure(proxyCfg);
+          runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
+          NetHeartbeatContext.configure(heartbeatCfg);
+          if (ircClientService != null) {
+            ircClientService.rescheduleActiveHeartbeats();
+          }
+          boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
+          runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
+          NetTlsContext.configure(trustAllTlsV);
 
-      // Update committed snapshot for live preview rollback (Cancel/window close).
-      committedThemeId.set(normalizeThemeIdInternal(next.theme()));
-      committedUiSettings.set(next);
-      committedAccentSettings.set(nextAccent);
-      committedTweakSettings.set(nextTweaks);
-      committedChatThemeSettings.set(nextChatTheme);
-      lastValidAccentHex.set(nextAccent.accentColor());
-      lastValidChatTimestampHex.set(nextChatTheme.timestampColor());
-      lastValidChatSystemHex.set(nextChatTheme.systemColor());
-      lastValidChatMentionHex.set(nextChatTheme.mentionBgColor());
-    };
+          if (themeManager != null) {
+            if (themeChanged || accentChanged || tweaksChanged) {
+              // Full UI refresh (also triggers a chat restyle)
+              themeManager.applyTheme(next.theme());
+            } else if (chatThemeChanged) {
+              // Only the transcript palette changed
+              themeManager.refreshChatStyles();
+            }
+          }
+
+          // Update committed snapshot for live preview rollback (Cancel/window close).
+          committedThemeId.set(normalizeThemeIdInternal(next.theme()));
+          committedUiSettings.set(next);
+          committedAccentSettings.set(nextAccent);
+          committedTweakSettings.set(nextTweaks);
+          committedChatThemeSettings.set(nextChatTheme);
+          lastValidAccentHex.set(nextAccent.accentColor());
+          lastValidChatTimestampHex.set(nextChatTheme.timestampColor());
+          lastValidChatSystemHex.set(nextChatTheme.systemColor());
+          lastValidChatMentionHex.set(nextChatTheme.mentionBgColor());
+        };
 
     apply.addActionListener(e -> doApply.run());
     final JDialog d = createDialog(owner);
     this.dialog = d;
-    d.addWindowListener(new java.awt.event.WindowAdapter() {
-      @Override public void windowClosing(java.awt.event.WindowEvent e) {
-        restoreCommittedAppearance.run();
-      }
-    });
+    d.addWindowListener(
+        new java.awt.event.WindowAdapter() {
+          @Override
+          public void windowClosing(java.awt.event.WindowEvent e) {
+            restoreCommittedAppearance.run();
+          }
+        });
 
     final CloseableScope scope = DialogCloseableScopeDecorator.install(d);
     closeables.forEach(scope::add);
-    scope.addCleanup(() -> {
-      if (this.dialog == d) this.dialog = null;
-    });
+    scope.addCleanup(
+        () -> {
+          if (this.dialog == d) this.dialog = null;
+        });
 
-    ok.addActionListener(e -> {
-      doApply.run();
-      d.dispose();
-    });
-    cancel.addActionListener(e -> {
-      restoreCommittedAppearance.run();
-      d.dispose();
-    });
+    ok.addActionListener(
+        e -> {
+          doApply.run();
+          d.dispose();
+        });
+    cancel.addActionListener(
+        e -> {
+          restoreCommittedAppearance.run();
+          d.dispose();
+        });
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
     buttons.setBorder(BorderFactory.createEmptyBorder(8, 12, 12, 12));
@@ -1271,8 +1550,10 @@ public class PreferencesDialog {
     d.setLayout(new BorderLayout());
     d.add(tabs, BorderLayout.CENTER);
     d.add(buttons, BorderLayout.SOUTH);
-    // A tiny minimum size makes "dynamic tab sizing" feel jarring (some tabs would shrink the whole dialog
-    // to near-nothing). Keep a comfortable baseline so tabs like Network don't open comically short.
+    // A tiny minimum size makes "dynamic tab sizing" feel jarring (some tabs would shrink the whole
+    // dialog
+    // to near-nothing). Keep a comfortable baseline so tabs like Network don't open comically
+    // short.
     d.setMinimumSize(new Dimension(680, 540));
     installDynamicTabSizing(d, tabs, owner);
     d.setLocationRelativeTo(owner);
@@ -1280,13 +1561,12 @@ public class PreferencesDialog {
   }
 
   /**
-   * JTabbedPane's preferred size is normally the max of all tabs.
-   * That works for fixed-size tab UIs, but for settings screens it often
-   * causes the dialog to open at the size of the "largest" tab (even if
-   * the user never visits it).
+   * JTabbedPane's preferred size is normally the max of all tabs. That works for fixed-size tab
+   * UIs, but for settings screens it often causes the dialog to open at the size of the "largest"
+   * tab (even if the user never visits it).
    *
-   * <p>This variant prefers the currently-selected tab, so the dialog can
-   * pack smaller for simple pages and grow for larger ones.
+   * <p>This variant prefers the currently-selected tab, so the dialog can pack smaller for simple
+   * pages and grow for larger ones.
    */
   private static final class DynamicTabbedPane extends JTabbedPane {
     @Override
@@ -1319,7 +1599,8 @@ public class PreferencesDialog {
       Dimension sel = preferred ? selected.getPreferredSize() : selected.getMinimumSize();
       if (sel == null) return base;
 
-      // base already includes tabs/header/insets; swap the "max tab" content for the selected tab content.
+      // base already includes tabs/header/insets; swap the "max tab" content for the selected tab
+      // content.
       int w = base.width - maxW + sel.width;
       int h = base.height - maxH + sel.height;
       return new Dimension(Math.max(0, w), Math.max(0, h));
@@ -1424,17 +1705,15 @@ public class PreferencesDialog {
 
   private static Rectangle usableBounds(Window owner, Window fallback) {
     try {
-      var gc = owner != null ? owner.getGraphicsConfiguration() : fallback.getGraphicsConfiguration();
-      if (gc == null) return GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+      var gc =
+          owner != null ? owner.getGraphicsConfiguration() : fallback.getGraphicsConfiguration();
+      if (gc == null)
+        return GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
 
       Rectangle b = gc.getBounds();
       Insets in = Toolkit.getDefaultToolkit().getScreenInsets(gc);
       return new Rectangle(
-          b.x + in.left,
-          b.y + in.top,
-          b.width - in.left - in.right,
-          b.height - in.top - in.bottom
-      );
+          b.x + in.left, b.y + in.top, b.width - in.left - in.right, b.height - in.top - in.bottom);
     } catch (Exception ignored) {
       return GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
     }
@@ -1451,20 +1730,20 @@ public class PreferencesDialog {
   /**
    * Wrap a settings tab inside a scroll pane.
    *
-   * <p>Important: we use a Scrollable wrapper that tracks the viewport width.
-   * Without this, when the dialog is resized larger and then smaller again,
-   * Swing can keep the tab view at the larger width (no horizontal scrollbar),
-   * making controls appear to "stick" expanded instead of shrinking.
+   * <p>Important: we use a Scrollable wrapper that tracks the viewport width. Without this, when
+   * the dialog is resized larger and then smaller again, Swing can keep the tab view at the larger
+   * width (no horizontal scrollbar), making controls appear to "stick" expanded instead of
+   * shrinking.
    */
   private static JScrollPane wrapTab(JPanel panel) {
     ScrollableViewportWidthPanel wrapper = new ScrollableViewportWidthPanel(new BorderLayout());
     wrapper.add(panel, BorderLayout.NORTH);
 
-    JScrollPane scroll = new JScrollPane(
-        wrapper,
-        ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
-        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
-    );
+    JScrollPane scroll =
+        new JScrollPane(
+            wrapper,
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     scroll.setBorder(null);
     scroll.setViewportBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     scroll.getVerticalScrollBar().setUnitIncrement(16);
@@ -1480,14 +1759,14 @@ public class PreferencesDialog {
   }
 
   /**
-   * A lightweight view wrapper for JScrollPane that always tracks viewport width.
-   * This prevents "expanded" components from not shrinking back down when the
-   * parent dialog is resized smaller.
+   * A lightweight view wrapper for JScrollPane that always tracks viewport width. This prevents
+   * "expanded" components from not shrinking back down when the parent dialog is resized smaller.
    */
   private static final class ScrollableViewportWidthPanel extends JPanel implements Scrollable {
     private ScrollableViewportWidthPanel(LayoutManager layout) {
       super(layout);
     }
+
     @Override
     public Dimension getMinimumSize() {
       Dimension d = super.getMinimumSize();
@@ -1557,8 +1836,7 @@ public class PreferencesDialog {
       int top,
       int left,
       int bottom,
-      int right
-  ) {
+      int right) {
     JPanel panel = new JPanel(new MigLayout(layout, columns, rows));
     panel.setOpaque(false);
     panel.setBorder(
@@ -1583,71 +1861,72 @@ public class PreferencesDialog {
     return t;
   }
 
-private static JTextArea subtleInfoText() {
-  JTextArea t = new JTextArea();
-  t.setEditable(false);
-  t.setLineWrap(true);
-  t.setWrapStyleWord(true);
-  t.setOpaque(false);
-  t.setFocusable(false);
-  t.setBorder(null);
+  private static JTextArea subtleInfoText() {
+    JTextArea t = new JTextArea();
+    t.setEditable(false);
+    t.setLineWrap(true);
+    t.setWrapStyleWord(true);
+    t.setOpaque(false);
+    t.setFocusable(false);
+    t.setBorder(null);
 
-  Font f = UIManager.getFont("Label.font");
-  if (f != null) {
-    t.setFont(f.deriveFont(Font.ITALIC));
-  } else {
-    t.setFont(t.getFont().deriveFont(Font.ITALIC));
+    Font f = UIManager.getFont("Label.font");
+    if (f != null) {
+      t.setFont(f.deriveFont(Font.ITALIC));
+    } else {
+      t.setFont(t.getFont().deriveFont(Font.ITALIC));
+    }
+
+    Color hintColor = UIManager.getColor("Label.disabledForeground");
+    if (hintColor != null) t.setForeground(hintColor);
+
+    Dimension pref = t.getPreferredSize();
+    t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
+    return t;
   }
 
-  Color hintColor = UIManager.getColor("Label.disabledForeground");
-  if (hintColor != null) t.setForeground(hintColor);
+  private static JTextArea buttonWrapText(String text) {
+    JTextArea t = new JTextArea(text);
+    t.setEditable(false);
+    t.setLineWrap(true);
+    t.setWrapStyleWord(true);
+    t.setOpaque(false);
+    t.setFocusable(false);
+    t.setBorder(null);
 
-  Dimension pref = t.getPreferredSize();
-  t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
-  return t;
-}
+    Font f = UIManager.getFont("CheckBox.font");
+    if (f == null) f = UIManager.getFont("Button.font");
+    if (f == null) f = UIManager.getFont("Label.font");
+    if (f != null) t.setFont(f);
 
-private static JTextArea buttonWrapText(String text) {
-  JTextArea t = new JTextArea(text);
-  t.setEditable(false);
-  t.setLineWrap(true);
-  t.setWrapStyleWord(true);
-  t.setOpaque(false);
-  t.setFocusable(false);
-  t.setBorder(null);
+    Color c = UIManager.getColor("CheckBox.foreground");
+    if (c == null) c = UIManager.getColor("Label.foreground");
+    if (c != null) t.setForeground(c);
 
-  Font f = UIManager.getFont("CheckBox.font");
-  if (f == null) f = UIManager.getFont("Button.font");
-  if (f == null) f = UIManager.getFont("Label.font");
-  if (f != null) t.setFont(f);
+    Dimension pref = t.getPreferredSize();
+    t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
+    return t;
+  }
 
-  Color c = UIManager.getColor("CheckBox.foreground");
-  if (c == null) c = UIManager.getColor("Label.foreground");
-  if (c != null) t.setForeground(c);
+  private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
+    box.setText("");
+    JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[]6[grow,fill]", "[]"));
+    row.setOpaque(false);
 
-  Dimension pref = t.getPreferredSize();
-  t.setMinimumSize(new Dimension(0, pref != null ? pref.height : 0));
-  return t;
-}
+    JTextArea label = buttonWrapText(labelText);
+    label.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+    label.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (box.isEnabled()) box.doClick();
+          }
+        });
 
-private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
-  box.setText("");
-  JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[]6[grow,fill]", "[]"));
-  row.setOpaque(false);
-
-  JTextArea label = buttonWrapText(labelText);
-  label.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-  label.addMouseListener(new java.awt.event.MouseAdapter() {
-    @Override
-    public void mouseClicked(java.awt.event.MouseEvent e) {
-      if (box.isEnabled()) box.doClick();
-    }
-  });
-
-  row.add(box, "aligny top");
-  row.add(label, "growx, pushx, wmin 0");
-  return row;
-}
+    row.add(box, "aligny top");
+    row.add(label, "growx, pushx, wmin 0");
+    return row;
+  }
 
   private static JLabel subtleInfoLabel() {
     JLabel l = new JLabel();
@@ -1670,7 +1949,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     scroll.setBorder(BorderFactory.createEmptyBorder());
     scroll.setPreferredSize(new Dimension(460, 240));
 
-    javax.swing.JOptionPane.showMessageDialog(parent, scroll, title, javax.swing.JOptionPane.INFORMATION_MESSAGE);
+    javax.swing.JOptionPane.showMessageDialog(
+        parent, scroll, title, javax.swing.JOptionPane.INFORMATION_MESSAGE);
   }
 
   private static JButton whyHelpButton(String title, String message) {
@@ -1689,8 +1969,9 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JLabel header = new JLabel(title);
     header.putClientProperty(FlatClientProperties.STYLE, "font:+4");
 
-    JTextArea body = new JTextArea(message + "\n\n" +
-        "This tab is a placeholder. Controls will move here later.");
+    JTextArea body =
+        new JTextArea(
+            message + "\n\n" + "This tab is a placeholder. Controls will move here later.");
     body.setLineWrap(true);
     body.setWrapStyleWord(true);
     body.setEditable(false);
@@ -1730,50 +2011,59 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     final Map<String, String> labelMap = map;
 
     JComboBox<String> theme = new JComboBox<>(labelMap.keySet().toArray(String[]::new));
-    theme.setRenderer((list, value, index, isSelected, cellHasFocus) -> {
-      String key = value != null ? value : "";
-      JLabel l = new JLabel(labelMap.getOrDefault(key, key));
-      l.setOpaque(true);
-      if (isSelected) {
-        l.setBackground(list.getSelectionBackground());
-        l.setForeground(list.getSelectionForeground());
-      } else {
-        l.setBackground(list.getBackground());
-        l.setForeground(list.getForeground());
-      }
-      l.setBorder(null);
-      return l;
-    });
+    theme.setRenderer(
+        (list, value, index, isSelected, cellHasFocus) -> {
+          String key = value != null ? value : "";
+          JLabel l = new JLabel(labelMap.getOrDefault(key, key));
+          l.setOpaque(true);
+          if (isSelected) {
+            l.setBackground(list.getSelectionBackground());
+            l.setForeground(list.getSelectionForeground());
+          } else {
+            l.setBackground(list.getBackground());
+            l.setForeground(list.getForeground());
+          }
+          l.setBorder(null);
+          return l;
+        });
     theme.setSelectedItem(matchKey != null ? matchKey : curTheme);
     return new ThemeControls(theme);
   }
 
   private AccentControls buildAccentControls(ThemeAccentSettings current) {
-    ThemeAccentSettings cur = current != null
-        ? current
-        : new ThemeAccentSettings(UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
+    ThemeAccentSettings cur =
+        current != null
+            ? current
+            : new ThemeAccentSettings(
+                UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
 
     JCheckBox enabled = new JCheckBox("Override theme accent");
-    enabled.setToolTipText("If enabled, your chosen accent is blended into the current theme. Changes preview live; Apply/OK saves.");
+    enabled.setToolTipText(
+        "If enabled, your chosen accent is blended into the current theme. Changes preview live; Apply/OK saves.");
     enabled.setSelected(cur.enabled());
 
     // Presets keep this easy for normal users, but we still expose a hex field for power users.
     JComboBox<AccentPreset> preset = new JComboBox<>(AccentPreset.values());
-    preset.setRenderer(new DefaultListCellRenderer() {
-      @Override
-      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-        JLabel c = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-        AccentPreset p = (value instanceof AccentPreset ap) ? ap : AccentPreset.THEME_DEFAULT;
-        c.setText(p.label);
-        Color col = p.colorOrNull();
-        if (col != null) {
-          c.setIcon(new ColorSwatch(col, 12, 12));
-        } else {
-          c.setIcon(null);
-        }
-        return c;
-      }
-    });
+    preset.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel c =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            AccentPreset p = (value instanceof AccentPreset ap) ? ap : AccentPreset.THEME_DEFAULT;
+            c.setText(p.label);
+            Color col = p.colorOrNull();
+            if (col != null) {
+              c.setIcon(new ColorSwatch(col, 12, 12));
+            } else {
+              c.setIcon(null);
+            }
+            return c;
+          }
+        });
     preset.setToolTipText("Quick accent presets. 'Custom…' opens a color picker.");
 
     JTextField hex = new JTextField(cur.accentColor() != null ? cur.accentColor() : "", 10);
@@ -1797,93 +2087,104 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     // Use a single 'border:' style entry (insets, color, thickness, arc) to get a rounded pill.
     chip.putClientProperty(
         FlatClientProperties.STYLE,
-        "border: 2,8,2,8, $Component.borderColor, 1, 999; background: $Panel.background;"
-    );
+        "border: 2,8,2,8, $Component.borderColor, 1, 999; background: $Panel.background;");
 
-    Runnable updatePickIcon = () -> {
-      Color c = parseHexColorLenient(hex.getText());
-      if (c != null) {
-        pick.setIcon(new ColorSwatch(c, 14, 14));
-        pick.setText("");
-        pick.setToolTipText(toHex(c));
-      } else {
-        pick.setIcon(null);
-        pick.setText("Pick…");
-        pick.setToolTipText("Pick an accent color");
-      }
-    };
-
-    Runnable updateChip = () -> {
-      boolean en = enabled.isSelected();
-
-      // What color should we show?
-      Color bg;
-      String text;
-      String tip;
-
-      if (!en) {
-        // Try to show the current theme’s accent color when override is off.
-        bg = UIManager.getColor("Component.accentColor");
-        if (bg == null) bg = UIManager.getColor("Component.focusColor");
-        if (bg == null) bg = UIManager.getColor("Focus.color");
-        if (bg == null) bg = UIManager.getColor("Actions.Blue");
-        if (bg == null) bg = UIManager.getColor("Button.default.focusColor");
-        if (bg == null) bg = parseHexColorLenient(UiProperties.DEFAULT_ACCENT_COLOR);
-        if (bg == null) bg = new Color(0x2D6BFF);
-        text = "Theme";
-        tip = "Theme accent • " + strength.getValue() + "%";
-      } else {
-        String raw = hex.getText();
-        raw = raw != null ? raw.trim() : "";
-        Color chosen = parseHexColorLenient(raw);
-        bg = chosen != null ? chosen : parseHexColorLenient(UiProperties.DEFAULT_ACCENT_COLOR);
-        if (bg == null) bg = new Color(0x2D6BFF);
-
-        AccentPreset p = (AccentPreset) preset.getSelectedItem();
-        if (p == null) p = AccentPreset.fromHexOrCustom(ThemeAccentSettings.normalizeHexOrNull(raw));
-
-        text = switch (p) {
-          case IRCAFE_COBALT -> "Cobalt";
-          case INDIGO -> "Indigo";
-          case VIOLET -> "Violet";
-          case CUSTOM -> "Custom";
-          case THEME_DEFAULT -> "Theme";
+    Runnable updatePickIcon =
+        () -> {
+          Color c = parseHexColorLenient(hex.getText());
+          if (c != null) {
+            pick.setIcon(new ColorSwatch(c, 14, 14));
+            pick.setText("");
+            pick.setToolTipText(toHex(c));
+          } else {
+            pick.setIcon(null);
+            pick.setText("Pick…");
+            pick.setToolTipText("Pick an accent color");
+          }
         };
-        tip = "Accent override: " + (chosen != null ? toHex(chosen) : "(invalid)") + " • " + strength.getValue() + "%";
-      }
 
-      chip.setText(text);
-      chip.setBackground(bg);
-      chip.setForeground(contrastTextColor(bg));
-      chip.setToolTipText(tip);
-    };
+    Runnable updateChip =
+        () -> {
+          boolean en = enabled.isSelected();
 
-    java.util.concurrent.atomic.AtomicBoolean adjusting = new java.util.concurrent.atomic.AtomicBoolean(false);
-    java.util.concurrent.atomic.AtomicReference<AccentPreset> lastPreset = new java.util.concurrent.atomic.AtomicReference<>();
+          // What color should we show?
+          Color bg;
+          String text;
+          String tip;
 
-    Runnable syncPresetFromHex = () -> {
-      if (adjusting.get()) return;
-      if (!enabled.isSelected()) {
-        adjusting.set(true);
-        try {
-          preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
-        } finally {
-          adjusting.set(false);
-        }
-        lastPreset.set(AccentPreset.THEME_DEFAULT);
-        return;
-      }
+          if (!en) {
+            // Try to show the current theme’s accent color when override is off.
+            bg = UIManager.getColor("Component.accentColor");
+            if (bg == null) bg = UIManager.getColor("Component.focusColor");
+            if (bg == null) bg = UIManager.getColor("Focus.color");
+            if (bg == null) bg = UIManager.getColor("Actions.Blue");
+            if (bg == null) bg = UIManager.getColor("Button.default.focusColor");
+            if (bg == null) bg = parseHexColorLenient(UiProperties.DEFAULT_ACCENT_COLOR);
+            if (bg == null) bg = new Color(0x2D6BFF);
+            text = "Theme";
+            tip = "Theme accent • " + strength.getValue() + "%";
+          } else {
+            String raw = hex.getText();
+            raw = raw != null ? raw.trim() : "";
+            Color chosen = parseHexColorLenient(raw);
+            bg = chosen != null ? chosen : parseHexColorLenient(UiProperties.DEFAULT_ACCENT_COLOR);
+            if (bg == null) bg = new Color(0x2D6BFF);
 
-      String norm = ThemeAccentSettings.normalizeHexOrNull(hex.getText());
-      AccentPreset next = AccentPreset.fromHexOrCustom(norm);
-      adjusting.set(true);
-      try {
-        preset.setSelectedItem(next);
-      } finally {
-        adjusting.set(false);
-      }
-      lastPreset.set(next);
-    };
+            AccentPreset p = (AccentPreset) preset.getSelectedItem();
+            if (p == null)
+              p = AccentPreset.fromHexOrCustom(ThemeAccentSettings.normalizeHexOrNull(raw));
+
+            text =
+                switch (p) {
+                  case IRCAFE_COBALT -> "Cobalt";
+                  case INDIGO -> "Indigo";
+                  case VIOLET -> "Violet";
+                  case CUSTOM -> "Custom";
+                  case THEME_DEFAULT -> "Theme";
+                };
+            tip =
+                "Accent override: "
+                    + (chosen != null ? toHex(chosen) : "(invalid)")
+                    + " • "
+                    + strength.getValue()
+                    + "%";
+          }
+
+          chip.setText(text);
+          chip.setBackground(bg);
+          chip.setForeground(contrastTextColor(bg));
+          chip.setToolTipText(tip);
+        };
+
+    java.util.concurrent.atomic.AtomicBoolean adjusting =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+    java.util.concurrent.atomic.AtomicReference<AccentPreset> lastPreset =
+        new java.util.concurrent.atomic.AtomicReference<>();
+
+    Runnable syncPresetFromHex =
+        () -> {
+          if (adjusting.get()) return;
+          if (!enabled.isSelected()) {
+            adjusting.set(true);
+            try {
+              preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
+            } finally {
+              adjusting.set(false);
+            }
+            lastPreset.set(AccentPreset.THEME_DEFAULT);
+            return;
+          }
+
+          String norm = ThemeAccentSettings.normalizeHexOrNull(hex.getText());
+          AccentPreset next = AccentPreset.fromHexOrCustom(norm);
+          adjusting.set(true);
+          try {
+            preset.setSelectedItem(next);
+          } finally {
+            adjusting.set(false);
+          }
+          lastPreset.set(next);
+        };
 
     // Initialize preset based on current value.
     if (!cur.enabled()) {
@@ -1896,118 +2197,130 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       lastPreset.set(init);
     }
 
-    Runnable applyEnabledState = () -> {
-      boolean en = enabled.isSelected();
-      hex.setEnabled(en);
-      pick.setEnabled(en);
-      clear.setEnabled(en);
-      strength.setEnabled(en);
-      if (!en) {
-        pick.setIcon(null);
-        pick.setText("Pick…");
-      } else {
-        updatePickIcon.run();
-      }
-      updateChip.run();
-    };
-
-    pick.addActionListener(e -> {
-      Color initial = parseHexColorLenient(hex.getText());
-      Color chosen = showColorPickerDialog(SwingUtilities.getWindowAncestor(pick),
-          "Choose Accent Color",
-          initial,
-          preferredPreviewBackground());
-      if (chosen != null) {
-        hex.setText(toHex(chosen));
-        updatePickIcon.run();
-        syncPresetFromHex.run();
-        updateChip.run();
-      }
-    });
-
-    clear.addActionListener(e -> {
-      adjusting.set(true);
-      try {
-        enabled.setSelected(false);
-        preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
-        hex.setText("");
-      } finally {
-        adjusting.set(false);
-      }
-      updatePickIcon.run();
-      applyEnabledState.run();
-      updateChip.run();
-    });
-
-    preset.addActionListener(e -> {
-      if (adjusting.get()) return;
-      AccentPreset p = (AccentPreset) preset.getSelectedItem();
-      if (p == null) return;
-
-      // Preserve prior preset to revert if user cancels "Custom…".
-      AccentPreset prev = lastPreset.get() != null ? lastPreset.get() : AccentPreset.THEME_DEFAULT;
-      boolean prevEnabled = enabled.isSelected();
-      String prevHex = hex.getText();
-
-      adjusting.set(true);
-      try {
-        if (p == AccentPreset.THEME_DEFAULT) {
-          enabled.setSelected(false);
-          // Keep hex around for convenience, but we won't apply it while disabled.
-        } else if (p == AccentPreset.CUSTOM) {
-          enabled.setSelected(true);
-        } else {
-          enabled.setSelected(true);
-          if (p.hex != null) {
-            hex.setText(p.hex);
+    Runnable applyEnabledState =
+        () -> {
+          boolean en = enabled.isSelected();
+          hex.setEnabled(en);
+          pick.setEnabled(en);
+          clear.setEnabled(en);
+          strength.setEnabled(en);
+          if (!en) {
+            pick.setIcon(null);
+            pick.setText("Pick…");
+          } else {
+            updatePickIcon.run();
           }
-        }
-      } finally {
-        adjusting.set(false);
-      }
+          updateChip.run();
+        };
 
-      applyEnabledState.run();
+    pick.addActionListener(
+        e -> {
+          Color initial = parseHexColorLenient(hex.getText());
+          Color chosen =
+              showColorPickerDialog(
+                  SwingUtilities.getWindowAncestor(pick),
+                  "Choose Accent Color",
+                  initial,
+                  preferredPreviewBackground());
+          if (chosen != null) {
+            hex.setText(toHex(chosen));
+            updatePickIcon.run();
+            syncPresetFromHex.run();
+            updateChip.run();
+          }
+        });
 
-      if (p == AccentPreset.CUSTOM) {
-        Color initial = parseHexColorLenient(hex.getText());
-        Color chosen = showColorPickerDialog(SwingUtilities.getWindowAncestor(preset),
-            "Choose Accent Color",
-            initial,
-            preferredPreviewBackground());
-        if (chosen == null) {
-          // Revert selection if canceled.
+    clear.addActionListener(
+        e -> {
           adjusting.set(true);
           try {
-            preset.setSelectedItem(prev);
-            enabled.setSelected(prevEnabled);
-            hex.setText(prevHex);
+            enabled.setSelected(false);
+            preset.setSelectedItem(AccentPreset.THEME_DEFAULT);
+            hex.setText("");
           } finally {
             adjusting.set(false);
           }
-          lastPreset.set(prev);
+          updatePickIcon.run();
           applyEnabledState.run();
           updateChip.run();
-          return;
-        }
-        hex.setText(toHex(chosen));
-        updatePickIcon.run();
-        syncPresetFromHex.run();
-        updateChip.run();
-      } else {
-        // Keep "last" in sync for cancel logic.
-        lastPreset.set(p);
-        updateChip.run();
-      }
-    });
+        });
+
+    preset.addActionListener(
+        e -> {
+          if (adjusting.get()) return;
+          AccentPreset p = (AccentPreset) preset.getSelectedItem();
+          if (p == null) return;
+
+          // Preserve prior preset to revert if user cancels "Custom…".
+          AccentPreset prev =
+              lastPreset.get() != null ? lastPreset.get() : AccentPreset.THEME_DEFAULT;
+          boolean prevEnabled = enabled.isSelected();
+          String prevHex = hex.getText();
+
+          adjusting.set(true);
+          try {
+            if (p == AccentPreset.THEME_DEFAULT) {
+              enabled.setSelected(false);
+              // Keep hex around for convenience, but we won't apply it while disabled.
+            } else if (p == AccentPreset.CUSTOM) {
+              enabled.setSelected(true);
+            } else {
+              enabled.setSelected(true);
+              if (p.hex != null) {
+                hex.setText(p.hex);
+              }
+            }
+          } finally {
+            adjusting.set(false);
+          }
+
+          applyEnabledState.run();
+
+          if (p == AccentPreset.CUSTOM) {
+            Color initial = parseHexColorLenient(hex.getText());
+            Color chosen =
+                showColorPickerDialog(
+                    SwingUtilities.getWindowAncestor(preset),
+                    "Choose Accent Color",
+                    initial,
+                    preferredPreviewBackground());
+            if (chosen == null) {
+              // Revert selection if canceled.
+              adjusting.set(true);
+              try {
+                preset.setSelectedItem(prev);
+                enabled.setSelected(prevEnabled);
+                hex.setText(prevHex);
+              } finally {
+                adjusting.set(false);
+              }
+              lastPreset.set(prev);
+              applyEnabledState.run();
+              updateChip.run();
+              return;
+            }
+            hex.setText(toHex(chosen));
+            updatePickIcon.run();
+            syncPresetFromHex.run();
+            updateChip.run();
+          } else {
+            // Keep "last" in sync for cancel logic.
+            lastPreset.set(p);
+            updateChip.run();
+          }
+        });
 
     enabled.addActionListener(e -> applyEnabledState.run());
     enabled.addActionListener(e -> syncPresetFromHex.run());
     enabled.addActionListener(e -> updateChip.run());
-    hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
-      updatePickIcon.run();
-      syncPresetFromHex.run();
-      updateChip.run();
-    }));
+    hex.getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  updatePickIcon.run();
+                  syncPresetFromHex.run();
+                  updateChip.run();
+                }));
     strength.addChangeListener(e -> updateChip.run());
 
     JPanel row = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]"));
@@ -2029,30 +2342,56 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     applyEnabledState.run();
     updateChip.run();
 
-    return new AccentControls(enabled, preset, hex, pick, clear, strength, chip, row, applyEnabledState, syncPresetFromHex, updateChip);
+    return new AccentControls(
+        enabled,
+        preset,
+        hex,
+        pick,
+        clear,
+        strength,
+        chip,
+        row,
+        applyEnabledState,
+        syncPresetFromHex,
+        updateChip);
   }
 
   private ChatThemeControls buildChatThemeControls(ChatThemeSettings current) {
     JComboBox<ChatThemeSettings.Preset> preset = new JComboBox<>(ChatThemeSettings.Preset.values());
-    preset.setRenderer(new DefaultListCellRenderer() {
-      @Override
-      public java.awt.Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-        JLabel c = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-        ChatThemeSettings.Preset p = (value instanceof ChatThemeSettings.Preset pr) ? pr : ChatThemeSettings.Preset.DEFAULT;
-        c.setText(switch (p) {
-          case DEFAULT -> "Default (follow theme)";
-          case SOFT -> "Soft";
-          case ACCENTED -> "Accented";
-          case HIGH_CONTRAST -> "High contrast";
+    preset.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel c =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            ChatThemeSettings.Preset p =
+                (value instanceof ChatThemeSettings.Preset pr)
+                    ? pr
+                    : ChatThemeSettings.Preset.DEFAULT;
+            c.setText(
+                switch (p) {
+                  case DEFAULT -> "Default (follow theme)";
+                  case SOFT -> "Soft";
+                  case ACCENTED -> "Accented";
+                  case HIGH_CONTRAST -> "High contrast";
+                });
+            return c;
+          }
         });
-        return c;
-      }
-    });
     preset.setSelectedItem(current != null ? current.preset() : ChatThemeSettings.Preset.DEFAULT);
 
-    ColorField timestamp = buildOptionalColorField(current != null ? current.timestampColor() : null, "Pick a timestamp color");
-    ColorField system = buildOptionalColorField(current != null ? current.systemColor() : null, "Pick a system/status color");
-    ColorField mention = buildOptionalColorField(current != null ? current.mentionBgColor() : null, "Pick a mention highlight color");
+    ColorField timestamp =
+        buildOptionalColorField(
+            current != null ? current.timestampColor() : null, "Pick a timestamp color");
+    ColorField system =
+        buildOptionalColorField(
+            current != null ? current.systemColor() : null, "Pick a system/status color");
+    ColorField mention =
+        buildOptionalColorField(
+            current != null ? current.mentionBgColor() : null, "Pick a mention highlight color");
 
     int ms = current != null ? current.mentionStrength() : 35;
     JSlider mentionStrength = new JSlider(0, 100, Math.max(0, Math.min(100, ms)));
@@ -2061,7 +2400,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     mentionStrength.setMinorTickSpacing(5);
     mentionStrength.setPaintTicks(false);
     mentionStrength.setPaintLabels(false);
-    mentionStrength.setToolTipText("How strong the mention highlight is when using the preset highlight (0-100). Defaults to 35.");
+    mentionStrength.setToolTipText(
+        "How strong the mention highlight is when using the preset highlight (0-100). Defaults to 35.");
 
     return new ChatThemeControls(preset, timestamp, system, mention, mentionStrength);
   }
@@ -2077,39 +2417,60 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     JButton pick = new JButton("Pick");
     JButton clear = new JButton("Clear");
 
-    Runnable updateIcon = () -> {
-      Color c = parseHexColorLenient(hex.getText());
-      if (c == null) {
-        pick.setIcon(null);
-        pick.setText("Pick");
-      } else {
-        pick.setText("");
-        pick.setIcon(createColorSwatchIcon(c, 14, 14, preferredPreviewBackground()));
-      }
-    };
+    Runnable updateIcon =
+        () -> {
+          Color c = parseHexColorLenient(hex.getText());
+          if (c == null) {
+            pick.setIcon(null);
+            pick.setText("Pick");
+          } else {
+            pick.setText("");
+            pick.setIcon(createColorSwatchIcon(c, 14, 14, preferredPreviewBackground()));
+          }
+        };
 
-    pick.addActionListener(e -> {
-      Color initial = parseHexColorLenient(hex.getText());
-      if (initial == null) {
-        initial = UIManager.getColor("Label.foreground");
-      }
-      Color chosen = showColorPickerDialog(SwingUtilities.getWindowAncestor(pick), pickerTitle, initial, preferredPreviewBackground());
-      if (chosen != null) {
-        hex.setText(toHex(chosen));
-        updateIcon.run();
-      }
-    });
+    pick.addActionListener(
+        e -> {
+          Color initial = parseHexColorLenient(hex.getText());
+          if (initial == null) {
+            initial = UIManager.getColor("Label.foreground");
+          }
+          Color chosen =
+              showColorPickerDialog(
+                  SwingUtilities.getWindowAncestor(pick),
+                  pickerTitle,
+                  initial,
+                  preferredPreviewBackground());
+          if (chosen != null) {
+            hex.setText(toHex(chosen));
+            updateIcon.run();
+          }
+        });
 
-    clear.addActionListener(e -> {
-      hex.setText("");
-      updateIcon.run();
-    });
+    clear.addActionListener(
+        e -> {
+          hex.setText("");
+          updateIcon.run();
+        });
 
-    hex.getDocument().addDocumentListener(new DocumentListener() {
-      @Override public void insertUpdate(DocumentEvent e) { updateIcon.run(); }
-      @Override public void removeUpdate(DocumentEvent e) { updateIcon.run(); }
-      @Override public void changedUpdate(DocumentEvent e) { updateIcon.run(); }
-    });
+    hex.getDocument()
+        .addDocumentListener(
+            new DocumentListener() {
+              @Override
+              public void insertUpdate(DocumentEvent e) {
+                updateIcon.run();
+              }
+
+              @Override
+              public void removeUpdate(DocumentEvent e) {
+                updateIcon.run();
+              }
+
+              @Override
+              public void changedUpdate(DocumentEvent e) {
+                updateIcon.run();
+              }
+            });
 
     JPanel panel = new JPanel(new MigLayout("insets 0, fillx", "[grow]6[]6[]"));
     panel.add(hex, "growx");
@@ -2120,18 +2481,20 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return new ColorField(hex, pick, clear, panel, updateIcon);
   }
 
+  private TweakControls buildTweakControls(
+      ThemeTweakSettings current, List<AutoCloseable> closeables) {
+    ThemeTweakSettings cur =
+        current != null
+            ? current
+            : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
 
-
-
-  private TweakControls buildTweakControls(ThemeTweakSettings current, List<AutoCloseable> closeables) {
-    ThemeTweakSettings cur = current != null ? current : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
-
-    DensityOption[] opts = new DensityOption[] {
-        new DensityOption("auto", "Auto (theme default)"),
-        new DensityOption("compact", "Compact"),
-        new DensityOption("cozy", "Cozy"),
-        new DensityOption("spacious", "Spacious")
-    };
+    DensityOption[] opts =
+        new DensityOption[] {
+          new DensityOption("auto", "Auto (theme default)"),
+          new DensityOption("compact", "Compact"),
+          new DensityOption("cozy", "Cozy"),
+          new DensityOption("spacious", "Spacious")
+        };
 
     JComboBox<DensityOption> density = new JComboBox<>(opts);
     density.setToolTipText(DENSITY_TOOLTIP);
@@ -2154,7 +2517,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     uiFontFamily.setSelectedItem(cur.uiFontFamily());
     uiFontFamily.setToolTipText(UI_FONT_OVERRIDE_TOOLTIP);
     applyEditableComboEditorPalette(uiFontFamily);
-    uiFontFamily.addPropertyChangeListener("UI", e -> applyEditableComboEditorPalette(uiFontFamily));
+    uiFontFamily.addPropertyChangeListener(
+        "UI", e -> applyEditableComboEditorPalette(uiFontFamily));
     if (closeables != null) {
       try {
         closeables.add(MouseWheelDecorator.decorateComboBoxSelection(uiFontFamily));
@@ -2169,11 +2533,12 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     uiFontOverrideEnabled.setSelected(cur.uiFontOverrideEnabled());
     uiFontOverrideEnabled.setToolTipText(UI_FONT_OVERRIDE_TOOLTIP);
 
-    Runnable applyUiFontEnabledState = () -> {
-      boolean enabled = uiFontOverrideEnabled.isSelected();
-      uiFontFamily.setEnabled(enabled);
-      uiFontSize.setEnabled(enabled);
-    };
+    Runnable applyUiFontEnabledState =
+        () -> {
+          boolean enabled = uiFontOverrideEnabled.isSelected();
+          uiFontFamily.setEnabled(enabled);
+          uiFontSize.setEnabled(enabled);
+        };
     applyUiFontEnabledState.run();
 
     return new TweakControls(
@@ -2212,66 +2577,74 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     //   Right = short sample rendered in that family (when possible)
     Font baseFont = fontFamily.getFont();
     final String sampleText = "AaBbYyZz 0123";
-    fontFamily.setRenderer(new ListCellRenderer<>() {
-      private final JPanel panel = new JPanel(new BorderLayout(8, 0));
-      private final JLabel left = new JLabel();
-      private final JLabel right = new JLabel();
+    fontFamily.setRenderer(
+        new ListCellRenderer<>() {
+          private final JPanel panel = new JPanel(new BorderLayout(8, 0));
+          private final JLabel left = new JLabel();
+          private final JLabel right = new JLabel();
 
-      {
-        panel.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
-        left.setOpaque(false);
-        right.setOpaque(false);
-        right.setHorizontalAlignment(SwingConstants.RIGHT);
-        panel.add(left, BorderLayout.WEST);
-        panel.add(right, BorderLayout.EAST);
-        panel.setOpaque(true);
-      }
-
-      @Override
-      public java.awt.Component getListCellRendererComponent(JList<? extends String> list, String value, int index, boolean isSelected, boolean cellHasFocus) {
-        String family = value != null ? value : "";
-
-        // Colors
-        Color bg;
-        Color fg;
-        if (list != null) {
-          bg = isSelected ? list.getSelectionBackground() : list.getBackground();
-          fg = isSelected ? list.getSelectionForeground() : list.getForeground();
-        } else {
-          bg = UIManager.getColor("ComboBox.background");
-          fg = UIManager.getColor("ComboBox.foreground");
-        }
-        panel.setBackground(bg);
-        left.setForeground(fg);
-        right.setForeground(fg);
-
-        // Left column: always readable
-        left.setText(family);
-        left.setFont(baseFont);
-
-        // Right column: sample preview (only if the family can actually render it)
-        String preview = "";
-        Font previewFont = baseFont;
-        if (!family.isBlank()) {
-          Font candidate = new Font(family, baseFont.getStyle(), baseFont.getSize());
-          // If the requested font isn't available (editable entry), keep the UI default.
-          if (candidate != null && (candidate.getFamily().equalsIgnoreCase(family) || candidate.getName().equalsIgnoreCase(family))) {
-            if (candidate.canDisplayUpTo(sampleText) == -1) {
-              preview = sampleText;
-              previewFont = candidate;
-            } else {
-              // If it can't render even the basic sample, don't show tofu squares.
-              preview = "";
-              previewFont = baseFont;
-            }
+          {
+            panel.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+            left.setOpaque(false);
+            right.setOpaque(false);
+            right.setHorizontalAlignment(SwingConstants.RIGHT);
+            panel.add(left, BorderLayout.WEST);
+            panel.add(right, BorderLayout.EAST);
+            panel.setOpaque(true);
           }
-        }
-        right.setText(preview);
-        right.setFont(previewFont);
 
-        return panel;
-      }
-    });
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<? extends String> list,
+              String value,
+              int index,
+              boolean isSelected,
+              boolean cellHasFocus) {
+            String family = value != null ? value : "";
+
+            // Colors
+            Color bg;
+            Color fg;
+            if (list != null) {
+              bg = isSelected ? list.getSelectionBackground() : list.getBackground();
+              fg = isSelected ? list.getSelectionForeground() : list.getForeground();
+            } else {
+              bg = UIManager.getColor("ComboBox.background");
+              fg = UIManager.getColor("ComboBox.foreground");
+            }
+            panel.setBackground(bg);
+            left.setForeground(fg);
+            right.setForeground(fg);
+
+            // Left column: always readable
+            left.setText(family);
+            left.setFont(baseFont);
+
+            // Right column: sample preview (only if the family can actually render it)
+            String preview = "";
+            Font previewFont = baseFont;
+            if (!family.isBlank()) {
+              Font candidate = new Font(family, baseFont.getStyle(), baseFont.getSize());
+              // If the requested font isn't available (editable entry), keep the UI default.
+              if (candidate != null
+                  && (candidate.getFamily().equalsIgnoreCase(family)
+                      || candidate.getName().equalsIgnoreCase(family))) {
+                if (candidate.canDisplayUpTo(sampleText) == -1) {
+                  preview = sampleText;
+                  previewFont = candidate;
+                } else {
+                  // If it can't render even the basic sample, don't show tofu squares.
+                  preview = "";
+                  previewFont = baseFont;
+                }
+              }
+            }
+            right.setText(preview);
+            right.setFont(previewFont);
+
+            return panel;
+          }
+        });
 
     JSpinner fontSize = numberSpinner(current.chatFontSize(), 8, 48, 1, closeables);
 
@@ -2279,7 +2652,8 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
   private static String[] availableFontFamiliesSorted() {
-    String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+    String[] families =
+        GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
     Arrays.sort(families, String.CASE_INSENSITIVE_ORDER);
     return families;
   }
@@ -2292,10 +2666,19 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     java.awt.Component editorComponent = editor.getEditorComponent();
     if (!(editorComponent instanceof JTextField field)) return;
 
-    Color bg = firstUiColor("ComboBox.background", "TextField.background", "TextComponent.background");
+    Color bg =
+        firstUiColor("ComboBox.background", "TextField.background", "TextComponent.background");
     Color fg = firstUiColor("ComboBox.foreground", "TextField.foreground", "Label.foreground");
-    Color selBg = firstUiColor("ComboBox.selectionBackground", "TextComponent.selectionBackground", "List.selectionBackground");
-    Color selFg = firstUiColor("ComboBox.selectionForeground", "TextComponent.selectionForeground", "List.selectionForeground");
+    Color selBg =
+        firstUiColor(
+            "ComboBox.selectionBackground",
+            "TextComponent.selectionBackground",
+            "List.selectionBackground");
+    Color selFg =
+        firstUiColor(
+            "ComboBox.selectionForeground",
+            "TextComponent.selectionForeground",
+            "List.selectionForeground");
 
     if (bg != null) field.setBackground(asUiResource(bg));
     if (fg != null) {
@@ -2325,8 +2708,9 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   private JCheckBox buildAutoConnectCheckbox(UiSettings current) {
     JCheckBox autoConnectOnStart = new JCheckBox("Auto-connect to servers on startup");
     autoConnectOnStart.setSelected(current.autoConnectOnStart());
-    autoConnectOnStart.setToolTipText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads.\n" +
-        "If disabled, IRCafe starts disconnected and you can connect manually using the Connect button.");
+    autoConnectOnStart.setToolTipText(
+        "If enabled, IRCafe will connect to all configured servers automatically after the UI loads.\n"
+            + "If disabled, IRCafe starts disconnected and you can connect manually using the Connect button.");
     return autoConnectOnStart;
   }
 
@@ -2378,32 +2762,44 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     return "sounds/" + dest.getFileName();
   }
 
-
-  private TrayControls buildTrayControls(UiSettings current, NotificationSoundSettings soundSettings) {
+  private TrayControls buildTrayControls(
+      UiSettings current,
+      NotificationSoundSettings soundSettings,
+      PushyProperties pushySettings,
+      List<AutoCloseable> closeables) {
     if (soundSettings == null) {
       soundSettings = new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
     }
+    if (pushySettings == null) {
+      pushySettings = new PushyProperties(false, null, null, null, null, null, null, null);
+    }
     JCheckBox enabled = new JCheckBox("Enable system tray icon", current.trayEnabled());
-    JCheckBox closeToTray = new JCheckBox("Close button hides to tray instead of exiting", current.trayCloseToTray());
-    JCheckBox minimizeToTray = new JCheckBox("Minimize button hides to tray", current.trayMinimizeToTray());
-    JCheckBox startMinimized = new JCheckBox("Start minimized to tray", current.trayStartMinimized());
+    JCheckBox closeToTray =
+        new JCheckBox("Close button hides to tray instead of exiting", current.trayCloseToTray());
+    JCheckBox minimizeToTray =
+        new JCheckBox("Minimize button hides to tray", current.trayMinimizeToTray());
+    JCheckBox startMinimized =
+        new JCheckBox("Start minimized to tray", current.trayStartMinimized());
 
-    JCheckBox notifyHighlights = new JCheckBox("Desktop notifications for highlights", current.trayNotifyHighlights());
-    JCheckBox notifyPrivateMessages = new JCheckBox("Desktop notifications for private messages", current.trayNotifyPrivateMessages());
-    JCheckBox notifyConnectionState = new JCheckBox("Desktop notifications for connection state", current.trayNotifyConnectionState());
+    JCheckBox notifyHighlights =
+        new JCheckBox("Desktop notifications for highlights", current.trayNotifyHighlights());
+    JCheckBox notifyPrivateMessages =
+        new JCheckBox(
+            "Desktop notifications for private messages", current.trayNotifyPrivateMessages());
+    JCheckBox notifyConnectionState =
+        new JCheckBox(
+            "Desktop notifications for connection state", current.trayNotifyConnectionState());
 
-    JCheckBox notifyOnlyWhenUnfocused = new JCheckBox(
-        "Only notify when IRCafe is not focused",
-        current.trayNotifyOnlyWhenUnfocused()
-    );
-    JCheckBox notifyOnlyWhenMinimizedOrHidden = new JCheckBox(
-        "Only notify when minimized or hidden to tray",
-        current.trayNotifyOnlyWhenMinimizedOrHidden()
-    );
-    JCheckBox notifySuppressWhenTargetActive = new JCheckBox(
-        "Don't notify for the active buffer",
-        current.trayNotifySuppressWhenTargetActive()
-    );
+    JCheckBox notifyOnlyWhenUnfocused =
+        new JCheckBox(
+            "Only notify when IRCafe is not focused", current.trayNotifyOnlyWhenUnfocused());
+    JCheckBox notifyOnlyWhenMinimizedOrHidden =
+        new JCheckBox(
+            "Only notify when minimized or hidden to tray",
+            current.trayNotifyOnlyWhenMinimizedOrHidden());
+    JCheckBox notifySuppressWhenTargetActive =
+        new JCheckBox(
+            "Don't notify for the active buffer", current.trayNotifySuppressWhenTargetActive());
 
     boolean linuxTmp = false;
     boolean linuxActionsSupportedTmp = false;
@@ -2419,15 +2815,16 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     final boolean linux = linuxTmp;
     final boolean linuxActionsSupported = linuxActionsSupportedTmp;
 
-    JCheckBox linuxDbusActions = new JCheckBox(
-        "Use Linux D-Bus notifications (click-to-open)",
-        linux && linuxActionsSupported && current.trayLinuxDbusActionsEnabled()
-    );
-    linuxDbusActions.setToolTipText(linux
-        ? (linuxActionsSupported
-            ? "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."
-            : "Click actions aren't available in this session (no D-Bus notification actions support detected).")
-        : "Linux only.");
+    JCheckBox linuxDbusActions =
+        new JCheckBox(
+            "Use Linux D-Bus notifications (click-to-open)",
+            linux && linuxActionsSupported && current.trayLinuxDbusActionsEnabled());
+    linuxDbusActions.setToolTipText(
+        linux
+            ? (linuxActionsSupported
+                ? "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."
+                : "Click actions aren't available in this session (no D-Bus notification actions support detected).")
+            : "Linux only.");
 
     JComboBox<NotificationBackendMode> notificationBackend =
         new JComboBox<>(NotificationBackendMode.values());
@@ -2436,42 +2833,50 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
         "Select how desktop notifications are delivered: native backends, two-slices fallback, or two-slices only.");
 
     JButton testNotification = new JButton("Test notification");
-    testNotification.setToolTipText("Send a test desktop notification (click to open IRCafe).\n" +
-        "This does not require highlight/PM notifications to be enabled.");
-    testNotification.addActionListener(e -> {
-      try {
-        if (trayNotificationService != null) {
-          trayNotificationService.notifyTest();
-        }
-      } catch (Throwable ignored) {
-      }
-    });
+    testNotification.setToolTipText(
+        "Send a test desktop notification (click to open IRCafe).\n"
+            + "This does not require highlight/PM notifications to be enabled.");
+    testNotification.addActionListener(
+        e -> {
+          try {
+            if (trayNotificationService != null) {
+              trayNotificationService.notifyTest();
+            }
+          } catch (Throwable ignored) {
+          }
+        });
 
-    notifyHighlights.setToolTipText("Show a desktop notification when someone mentions your nick in a channel.");
-    notifyPrivateMessages.setToolTipText("Show a desktop notification when you receive a private message.");
-    notifyConnectionState.setToolTipText("Show a desktop notification when connecting/disconnecting.");
+    notifyHighlights.setToolTipText(
+        "Show a desktop notification when someone mentions your nick in a channel.");
+    notifyPrivateMessages.setToolTipText(
+        "Show a desktop notification when you receive a private message.");
+    notifyConnectionState.setToolTipText(
+        "Show a desktop notification when connecting/disconnecting.");
 
-    notifyOnlyWhenUnfocused.setToolTipText("Common HexChat behavior: only notify when IRCafe isn't the active window.");
-    notifyOnlyWhenMinimizedOrHidden.setToolTipText("Only notify when IRCafe is minimized or hidden to tray.");
-    notifySuppressWhenTargetActive.setToolTipText("If the message is in the currently selected buffer, suppress the notification.");
+    notifyOnlyWhenUnfocused.setToolTipText(
+        "Common HexChat behavior: only notify when IRCafe isn't the active window.");
+    notifyOnlyWhenMinimizedOrHidden.setToolTipText(
+        "Only notify when IRCafe is minimized or hidden to tray.");
+    notifySuppressWhenTargetActive.setToolTipText(
+        "If the message is in the currently selected buffer, suppress the notification.");
 
-    JCheckBox notificationSoundsEnabled = new JCheckBox(
-        "Play sound with desktop notifications",
-        soundSettings.enabled()
-    );
-    notificationSoundsEnabled.setToolTipText("Plays a short sound whenever IRCafe shows a desktop notification.");
+    JCheckBox notificationSoundsEnabled =
+        new JCheckBox("Play sound with desktop notifications", soundSettings.enabled());
+    notificationSoundsEnabled.setToolTipText(
+        "Plays a short sound whenever IRCafe shows a desktop notification.");
 
-    JCheckBox notificationSoundUseCustom = new JCheckBox(
-        "Use custom sound file",
-        soundSettings.useCustom()
-    );
-    notificationSoundUseCustom.setToolTipText("If enabled, IRCafe will play a custom file stored next to your runtime config.\n" +
-        "Supported formats: MP3, WAV.");
+    JCheckBox notificationSoundUseCustom =
+        new JCheckBox("Use custom sound file", soundSettings.useCustom());
+    notificationSoundUseCustom.setToolTipText(
+        "If enabled, IRCafe will play a custom file stored next to your runtime config.\n"
+            + "Supported formats: MP3, WAV.");
 
-    JTextField notificationSoundCustomPath = new JTextField(Objects.toString(soundSettings.customPath(), ""));
+    JTextField notificationSoundCustomPath =
+        new JTextField(Objects.toString(soundSettings.customPath(), ""));
     notificationSoundCustomPath.setEditable(false);
-    notificationSoundCustomPath.setToolTipText("Custom sound path (relative to the runtime config directory).\n" +
-        "Click Browse... to import a file.");
+    notificationSoundCustomPath.setToolTipText(
+        "Custom sound path (relative to the runtime config directory).\n"
+            + "Click Browse... to import a file.");
 
     JComboBox<BuiltInSound> notificationSound = new JComboBox<>(BuiltInSound.valuesForUi());
     configureBuiltInSoundCombo(notificationSound);
@@ -2479,299 +2884,586 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     notificationSound.setToolTipText("Choose which bundled sound to use for notifications.");
 
     JButton browseCustomSound = new JButton("Browse...");
-    browseCustomSound.setToolTipText("Choose an MP3 or WAV file and copy it into IRCafe's runtime config directory.");
-    browseCustomSound.addActionListener(e -> {
-      try {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
-        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-        chooser.setAcceptAllFileFilterUsed(true);
-        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
-        int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustomSound));
-        if (result != JFileChooser.APPROVE_OPTION) return;
+    browseCustomSound.setToolTipText(
+        "Choose an MP3 or WAV file and copy it into IRCafe's runtime config directory.");
+    browseCustomSound.addActionListener(
+        e -> {
+          try {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            chooser.setAcceptAllFileFilterUsed(true);
+            chooser.addChoosableFileFilter(
+                new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+            int result =
+                chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustomSound));
+            if (result != JFileChooser.APPROVE_OPTION) return;
 
-        File f = chooser.getSelectedFile();
-        if (f == null) return;
-        String rel = importNotificationSoundFileToRuntimeDir(f);
-        if (rel != null && !rel.isBlank()) {
-          notificationSoundCustomPath.setText(rel);
-          notificationSoundUseCustom.setSelected(true);
-        }
-      } catch (Exception ex) {
-        javax.swing.JOptionPane.showMessageDialog(
-            SwingUtilities.getWindowAncestor(browseCustomSound),
-            "Could not import sound file.\n\n" + ex.getMessage(),
-            "Import failed",
-            javax.swing.JOptionPane.ERROR_MESSAGE
-        );
-      }
-    });
+            File f = chooser.getSelectedFile();
+            if (f == null) return;
+            String rel = importNotificationSoundFileToRuntimeDir(f);
+            if (rel != null && !rel.isBlank()) {
+              notificationSoundCustomPath.setText(rel);
+              notificationSoundUseCustom.setSelected(true);
+            }
+          } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(
+                SwingUtilities.getWindowAncestor(browseCustomSound),
+                "Could not import sound file.\n\n" + ex.getMessage(),
+                "Import failed",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+          }
+        });
 
     JButton clearCustomSound = new JButton("Clear");
     clearCustomSound.setToolTipText("Stop using a custom file and revert to bundled sounds.");
-    clearCustomSound.addActionListener(e -> {
-      notificationSoundUseCustom.setSelected(false);
-      notificationSoundCustomPath.setText("");
-    });
+    clearCustomSound.addActionListener(
+        e -> {
+          notificationSoundUseCustom.setSelected(false);
+          notificationSoundCustomPath.setText("");
+        });
 
     JButton testSound = new JButton("Test sound");
     testSound.setToolTipText("Play the selected sound.");
-    testSound.addActionListener(e -> {
-      try {
-        if (notificationSoundService != null) {
-          if (notificationSoundUseCustom.isSelected()) {
-            String rel = notificationSoundCustomPath.getText();
-            rel = rel != null ? rel.trim() : "";
-            if (!rel.isBlank()) {
-              notificationSoundService.previewCustom(rel);
+    testSound.addActionListener(
+        e -> {
+          try {
+            if (notificationSoundService != null) {
+              if (notificationSoundUseCustom.isSelected()) {
+                String rel = notificationSoundCustomPath.getText();
+                rel = rel != null ? rel.trim() : "";
+                if (!rel.isBlank()) {
+                  notificationSoundService.previewCustom(rel);
+                }
+              } else {
+                BuiltInSound s = (BuiltInSound) notificationSound.getSelectedItem();
+                notificationSoundService.preview(s);
+              }
             }
-          } else {
-            BuiltInSound s = (BuiltInSound) notificationSound.getSelectedItem();
-            notificationSoundService.preview(s);
+          } catch (Throwable ignored) {
           }
-        }
-      } catch (Throwable ignored) {
-      }
-    });
+        });
 
-    Runnable refreshEnabled = () -> {
-      boolean en = enabled.isSelected();
-      closeToTray.setEnabled(en);
-      minimizeToTray.setEnabled(en);
-      startMinimized.setEnabled(en);
-      notifyHighlights.setEnabled(en);
-      notifyPrivateMessages.setEnabled(en);
-      notifyConnectionState.setEnabled(en);
+    JCheckBox pushyEnabled =
+        new JCheckBox(
+            "Forward matched IRC event notifications to Pushy",
+            Boolean.TRUE.equals(pushySettings.enabled()));
+    pushyEnabled.setToolTipText(
+        "Sends notifications for matching IRC event rules to Pushy (device token or topic).");
 
-      notifyOnlyWhenUnfocused.setEnabled(en);
-      notifyOnlyWhenMinimizedOrHidden.setEnabled(en);
-      notifySuppressWhenTargetActive.setEnabled(en);
+    JTextField pushyEndpoint =
+        new JTextField(Objects.toString(pushySettings.endpoint(), "https://api.pushy.me/push"));
+    pushyEndpoint.setToolTipText("Pushy API endpoint URL.");
 
-      linuxDbusActions.setEnabled(en && linux && linuxActionsSupported);
-      notificationBackend.setEnabled(en);
-      testNotification.setEnabled(en);
+    JPasswordField pushyApiKey = new JPasswordField(Objects.toString(pushySettings.apiKey(), ""));
+    pushyApiKey.setToolTipText("Pushy Secret API key.");
 
-      notificationSoundsEnabled.setEnabled(en);
+    PushyTargetMode pushyInitialTargetMode =
+        pushySettings.deviceToken() != null && !pushySettings.deviceToken().isBlank()
+            ? PushyTargetMode.DEVICE_TOKEN
+            : PushyTargetMode.TOPIC;
+    String pushyInitialTargetValue =
+        pushyInitialTargetMode == PushyTargetMode.DEVICE_TOKEN
+            ? Objects.toString(pushySettings.deviceToken(), "")
+            : Objects.toString(pushySettings.topic(), "");
 
-      boolean snd = en && notificationSoundsEnabled.isSelected();
-      notificationSoundUseCustom.setEnabled(snd);
+    JComboBox<PushyTargetMode> pushyTargetMode = new JComboBox<>(PushyTargetMode.values());
+    pushyTargetMode.setSelectedItem(pushyInitialTargetMode);
+    pushyTargetMode.setToolTipText("Choose destination type for Pushy notifications.");
 
-      boolean useCustom = snd && notificationSoundUseCustom.isSelected();
-      notificationSoundCustomPath.setEnabled(snd);
-      browseCustomSound.setEnabled(snd);
+    JTextField pushyTargetValue = new JTextField(pushyInitialTargetValue);
+    pushyTargetValue.setToolTipText("Destination value for selected target mode.");
 
-      String rel = notificationSoundCustomPath.getText();
-      rel = rel != null ? rel.trim() : "";
-      clearCustomSound.setEnabled(snd && !rel.isBlank());
+    JTextField pushyTitlePrefix =
+        new JTextField(Objects.toString(pushySettings.titlePrefix(), "IRCafe"));
+    pushyTitlePrefix.setToolTipText("Prefix prepended to Pushy notification titles.");
 
-      notificationSound.setEnabled(snd && !useCustom);
-      testSound.setEnabled(snd);
+    JSpinner pushyConnectTimeoutSeconds =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Integer.valueOf(pushySettings.connectTimeoutSeconds()),
+                Integer.valueOf(1),
+                Integer.valueOf(30),
+                Integer.valueOf(1)));
+    JSpinner pushyReadTimeoutSeconds =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Integer.valueOf(pushySettings.readTimeoutSeconds()),
+                Integer.valueOf(1),
+                Integer.valueOf(60),
+                Integer.valueOf(1)));
 
-      if (!en) {
-        closeToTray.setSelected(false);
-        minimizeToTray.setSelected(false);
-        startMinimized.setSelected(false);
-        notifyHighlights.setSelected(false);
-        notifyPrivateMessages.setSelected(false);
-        notifyConnectionState.setSelected(false);
+    JButton pushyTest = new JButton("Test Pushy");
+    pushyTest.setToolTipText("Send a real test notification to the configured Pushy destination.");
+    JLabel pushyValidationLabel = new JLabel(" ");
+    pushyValidationLabel.setForeground(errorForeground());
+    JLabel pushyTestStatus = new JLabel(" ");
 
-        notifyOnlyWhenUnfocused.setSelected(false);
-        notifyOnlyWhenMinimizedOrHidden.setSelected(false);
-        notifySuppressWhenTargetActive.setSelected(false);
+    Runnable refreshPushyValidation =
+        () -> {
+          PushyTargetMode mode =
+              pushyTargetMode.getSelectedItem() instanceof PushyTargetMode m
+                  ? m
+                  : PushyTargetMode.DEVICE_TOKEN;
+          String endpoint = Objects.toString(pushyEndpoint.getText(), "").trim();
+          String apiKey = new String(pushyApiKey.getPassword()).trim();
+          String target = Objects.toString(pushyTargetValue.getText(), "").trim();
+          String err =
+              validatePushyInputs(pushyEnabled.isSelected(), endpoint, apiKey, mode, target);
+          if (err == null) {
+            pushyValidationLabel.setText(" ");
+            pushyValidationLabel.setVisible(false);
+            pushyTest.setEnabled(pushyEnabled.isSelected());
+          } else {
+            pushyValidationLabel.setText(err);
+            pushyValidationLabel.setVisible(true);
+            pushyTest.setEnabled(false);
+          }
+        };
 
-        linuxDbusActions.setSelected(false);
+    ExecutorService pushyTestExec = VirtualThreads.newSingleThreadExecutor("ircafe-pushy-test");
+    closeables.add(() -> pushyTestExec.shutdownNow());
+    pushyTest.addActionListener(
+        e -> {
+          PushyTargetMode mode =
+              pushyTargetMode.getSelectedItem() instanceof PushyTargetMode m
+                  ? m
+                  : PushyTargetMode.DEVICE_TOKEN;
+          String endpoint = Objects.toString(pushyEndpoint.getText(), "").trim();
+          String apiKey = new String(pushyApiKey.getPassword()).trim();
+          String target = Objects.toString(pushyTargetValue.getText(), "").trim();
+          String titlePrefix = Objects.toString(pushyTitlePrefix.getText(), "").trim();
+          int connectSeconds = ((Number) pushyConnectTimeoutSeconds.getValue()).intValue();
+          int readSeconds = ((Number) pushyReadTimeoutSeconds.getValue()).intValue();
 
-        notificationSoundsEnabled.setSelected(false);
-      }
+          String err =
+              validatePushyInputs(pushyEnabled.isSelected(), endpoint, apiKey, mode, target);
+          if (err != null) {
+            pushyTestStatus.setText(err);
+            pushyTestStatus.setForeground(errorForeground());
+            return;
+          }
 
-      if (!(linux && linuxActionsSupported)) {
-        linuxDbusActions.setSelected(false);
-      }
-    };
+          String deviceToken = mode == PushyTargetMode.DEVICE_TOKEN ? target : null;
+          String topic = mode == PushyTargetMode.TOPIC ? target : null;
+          PushyProperties draft =
+              new PushyProperties(
+                  pushyEnabled.isSelected(),
+                  endpoint.isBlank() ? null : endpoint,
+                  apiKey.isBlank() ? null : apiKey,
+                  deviceToken,
+                  topic,
+                  titlePrefix.isBlank() ? null : titlePrefix,
+                  connectSeconds,
+                  readSeconds);
+
+          pushyTest.setEnabled(false);
+          pushyTestStatus.setText("Sending test push…");
+          pushyTestStatus.setForeground(UIManager.getColor("Label.foreground"));
+
+          pushyTestExec.submit(
+              () -> {
+                PushyNotificationService.PushResult result =
+                    pushyNotificationService != null
+                        ? pushyNotificationService.sendTestNotification(
+                            draft, "IRCafe Test", "This is a Pushy test notification from IRCafe.")
+                        : PushyNotificationService.PushResult.failed(
+                            "Pushy service is unavailable.");
+                SwingUtilities.invokeLater(
+                    () -> {
+                      pushyTestStatus.setText(
+                          result.message() == null || result.message().isBlank()
+                              ? (result.success() ? "Push sent." : "Push failed.")
+                              : result.message());
+                      pushyTestStatus.setForeground(
+                          result.success()
+                              ? UIManager.getColor("Label.foreground")
+                              : errorForeground());
+                      refreshPushyValidation.run();
+                    });
+              });
+        });
+
+    Runnable refreshPushyDestinationState =
+        () -> {
+          PushyTargetMode mode =
+              pushyTargetMode.getSelectedItem() instanceof PushyTargetMode m
+                  ? m
+                  : PushyTargetMode.DEVICE_TOKEN;
+          if (mode == PushyTargetMode.DEVICE_TOKEN) {
+            pushyTargetValue.setToolTipText("Single-device destination token.");
+          } else {
+            pushyTargetValue.setToolTipText("Topic destination for fan-out delivery.");
+          }
+        };
+
+    Runnable refreshPushyState =
+        () -> {
+          boolean en = pushyEnabled.isSelected();
+          pushyEndpoint.setEnabled(en);
+          pushyApiKey.setEnabled(en);
+          pushyTargetMode.setEnabled(en);
+          pushyTargetValue.setEnabled(en);
+          pushyTitlePrefix.setEnabled(en);
+          pushyConnectTimeoutSeconds.setEnabled(en);
+          pushyReadTimeoutSeconds.setEnabled(en);
+          refreshPushyDestinationState.run();
+          refreshPushyValidation.run();
+        };
+    pushyEnabled.addActionListener(e -> refreshPushyState.run());
+    pushyTargetMode.addActionListener(e -> refreshPushyState.run());
+    pushyEndpoint.getDocument().addDocumentListener(new SimpleDocListener(refreshPushyValidation));
+    pushyApiKey.getDocument().addDocumentListener(new SimpleDocListener(refreshPushyValidation));
+    pushyTargetValue
+        .getDocument()
+        .addDocumentListener(new SimpleDocListener(refreshPushyValidation));
+    refreshPushyState.run();
+
+    Runnable refreshEnabled =
+        () -> {
+          boolean en = enabled.isSelected();
+          closeToTray.setEnabled(en);
+          minimizeToTray.setEnabled(en);
+          startMinimized.setEnabled(en);
+          notifyHighlights.setEnabled(en);
+          notifyPrivateMessages.setEnabled(en);
+          notifyConnectionState.setEnabled(en);
+
+          notifyOnlyWhenUnfocused.setEnabled(en);
+          notifyOnlyWhenMinimizedOrHidden.setEnabled(en);
+          notifySuppressWhenTargetActive.setEnabled(en);
+
+          linuxDbusActions.setEnabled(en && linux && linuxActionsSupported);
+          notificationBackend.setEnabled(en);
+          testNotification.setEnabled(en);
+
+          notificationSoundsEnabled.setEnabled(en);
+
+          boolean snd = en && notificationSoundsEnabled.isSelected();
+          notificationSoundUseCustom.setEnabled(snd);
+
+          boolean useCustom = snd && notificationSoundUseCustom.isSelected();
+          notificationSoundCustomPath.setEnabled(snd);
+          browseCustomSound.setEnabled(snd);
+
+          String rel = notificationSoundCustomPath.getText();
+          rel = rel != null ? rel.trim() : "";
+          clearCustomSound.setEnabled(snd && !rel.isBlank());
+
+          notificationSound.setEnabled(snd && !useCustom);
+          testSound.setEnabled(snd);
+
+          if (!en) {
+            closeToTray.setSelected(false);
+            minimizeToTray.setSelected(false);
+            startMinimized.setSelected(false);
+            notifyHighlights.setSelected(false);
+            notifyPrivateMessages.setSelected(false);
+            notifyConnectionState.setSelected(false);
+
+            notifyOnlyWhenUnfocused.setSelected(false);
+            notifyOnlyWhenMinimizedOrHidden.setSelected(false);
+            notifySuppressWhenTargetActive.setSelected(false);
+
+            linuxDbusActions.setSelected(false);
+
+            notificationSoundsEnabled.setSelected(false);
+          }
+
+          if (!(linux && linuxActionsSupported)) {
+            linuxDbusActions.setSelected(false);
+          }
+        };
 
     enabled.addActionListener(e -> refreshEnabled.run());
     notificationSoundsEnabled.addActionListener(e -> refreshEnabled.run());
     notificationSoundUseCustom.addActionListener(e -> refreshEnabled.run());
     refreshEnabled.run();
 
-JPanel trayTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-trayTab.setOpaque(false);
-JPanel trayBehavior = captionPanel("Tray behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-trayBehavior.add(enabled, "growx");
-trayBehavior.add(closeToTray, "growx");
-trayBehavior.add(minimizeToTray, "growx");
-trayBehavior.add(startMinimized, "growx, wrap");
-trayTab.add(trayBehavior, "growx, wmin 0, wrap");
-trayTab.add(
-    helpText(
-        "Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."),
-    "growx");
+    JPanel trayTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    trayTab.setOpaque(false);
+    JPanel trayBehavior =
+        captionPanel("Tray behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    trayBehavior.add(enabled, "growx");
+    trayBehavior.add(closeToTray, "growx");
+    trayBehavior.add(minimizeToTray, "growx");
+    trayBehavior.add(startMinimized, "growx, wrap");
+    trayTab.add(trayBehavior, "growx, wmin 0, wrap");
+    trayTab.add(
+        helpText(
+            "Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."),
+        "growx");
 
-JPanel notificationsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-notificationsTab.setOpaque(false);
-JPanel notificationEvents = captionPanel("Notification events", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-notificationEvents.add(notifyHighlights, "growx");
-notificationEvents.add(notifyPrivateMessages, "growx");
-notificationEvents.add(notifyConnectionState, "growx");
-notificationsTab.add(notificationEvents, "growx, wmin 0, wrap");
-JPanel notificationBackendGroup = captionPanel(
-    "Delivery backend",
-    "insets 0, fillx, wrap 2",
-    "[right]8[grow,fill]",
-    "[]");
-notificationBackendGroup.add(new JLabel("Mode:"));
-notificationBackendGroup.add(notificationBackend, "w 260!, wrap");
-notificationBackendGroup.add(
-    helpText(
-        "Auto tries native OS notifications first and falls back to two-slices.\n"
-            + "Native only disables fallback. Two-slices only bypasses OS-native backends."),
-    "span 2, growx");
-notificationsTab.add(notificationBackendGroup, "growx, wmin 0, wrap");
-JPanel notificationVisibility = captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
-notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
-notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
-notificationVisibility.add(new JSeparator(), "growx, gaptop 4");
-notificationVisibility.add(testNotification, "w 180!");
-notificationsTab.add(notificationVisibility, "growx, wmin 0, wrap");
-notificationsTab.add(
-    helpText(
-        "Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."),
-    "growx");
+    JPanel notificationsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    notificationsTab.setOpaque(false);
+    JPanel notificationEvents =
+        captionPanel("Notification events", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    notificationEvents.add(notifyHighlights, "growx");
+    notificationEvents.add(notifyPrivateMessages, "growx");
+    notificationEvents.add(notifyConnectionState, "growx");
+    notificationsTab.add(notificationEvents, "growx, wmin 0, wrap");
+    JPanel notificationBackendGroup =
+        captionPanel("Delivery backend", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "[]");
+    notificationBackendGroup.add(new JLabel("Mode:"));
+    notificationBackendGroup.add(notificationBackend, "w 260!, wrap");
+    notificationBackendGroup.add(
+        helpText(
+            "Auto tries native OS notifications first and falls back to two-slices.\n"
+                + "Native only disables fallback. Two-slices only bypasses OS-native backends."),
+        "span 2, growx");
+    notificationsTab.add(notificationBackendGroup, "growx, wmin 0, wrap");
+    JPanel notificationVisibility =
+        captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
+    notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
+    notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
+    notificationVisibility.add(new JSeparator(), "growx, gaptop 4");
+    notificationVisibility.add(testNotification, "w 180!");
+    notificationsTab.add(notificationVisibility, "growx, wmin 0, wrap");
+    notificationsTab.add(
+        helpText(
+            "Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."),
+        "growx");
 
-JPanel soundsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-soundsTab.setOpaque(false);
-JPanel soundsBehavior = captionPanel("Sound behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-soundsBehavior.add(notificationSoundsEnabled, "growx");
-soundsBehavior.add(notificationSoundUseCustom, "growx, wrap");
-soundsTab.add(soundsBehavior, "growx, wmin 0, wrap");
-JPanel customSound = captionPanel(
-    "Custom sound file",
-    "insets 0, fillx, wrap 4",
-    "[right]8[grow,fill]8[]8[]",
-    "[]");
-customSound.add(new JLabel("File:"));
-customSound.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
-customSound.add(browseCustomSound, "w 110!");
-customSound.add(clearCustomSound, "w 80!, wrap");
-soundsTab.add(customSound, "growx, wmin 0, wrap");
-JPanel builtInSound = captionPanel("Built-in sound", "insets 0, fillx, wrap 3", "[right]8[grow,fill]8[]", "[]");
-builtInSound.add(new JLabel("Preset:"));
-builtInSound.add(notificationSound, "w 240!");
-builtInSound.add(testSound, "w 120!, wrap");
-soundsTab.add(builtInSound, "growx, wmin 0, wrap");
+    JPanel soundsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    soundsTab.setOpaque(false);
+    JPanel soundsBehavior =
+        captionPanel("Sound behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    soundsBehavior.add(notificationSoundsEnabled, "growx");
+    soundsBehavior.add(notificationSoundUseCustom, "growx, wrap");
+    soundsTab.add(soundsBehavior, "growx, wmin 0, wrap");
+    JPanel customSound =
+        captionPanel(
+            "Custom sound file", "insets 0, fillx, wrap 4", "[right]8[grow,fill]8[]8[]", "[]");
+    customSound.add(new JLabel("File:"));
+    customSound.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
+    customSound.add(browseCustomSound, "w 110!");
+    customSound.add(clearCustomSound, "w 80!, wrap");
+    soundsTab.add(customSound, "growx, wmin 0, wrap");
+    JPanel builtInSound =
+        captionPanel("Built-in sound", "insets 0, fillx, wrap 3", "[right]8[grow,fill]8[]", "[]");
+    builtInSound.add(new JLabel("Preset:"));
+    builtInSound.add(notificationSound, "w 240!");
+    builtInSound.add(testSound, "w 120!, wrap");
+    soundsTab.add(builtInSound, "growx, wmin 0, wrap");
 
-Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
-Path base = cfg != null ? cfg.getParent() : null;
-if (base != null) {
-  soundsTab.add(
-      helpText(
-          "Custom sounds are copied to: "
-              + base.resolve("sounds")
-              + "\nTip: Use small files (short MP3/WAV) for snappy notifications."),
-      "growx");
-}
+    Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
+    Path base = cfg != null ? cfg.getParent() : null;
+    if (base != null) {
+      soundsTab.add(
+          helpText(
+              "Custom sounds are copied to: "
+                  + base.resolve("sounds")
+                  + "\nTip: Use small files (short MP3/WAV) for snappy notifications."),
+          "growx");
+    }
 
-JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-linuxTab.setOpaque(false);
-JPanel linuxGroup = captionPanel("Linux integration", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-linuxGroup.add(linuxDbusActions, "growx, wrap");
-if (!linux) {
-  linuxGroup.add(helpText("Linux only."), "growx");
-} else if (!linuxActionsSupported) {
-  linuxGroup.add(
-      helpText(
-          "Linux notification actions were not detected for this session.\n"
-              + "IRCafe will fall back to notify-send."),
-      "growx");
-} else {
-  linuxGroup.add(
-      helpText(
-          "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."),
-      "growx");
-}
-linuxTab.add(linuxGroup, "growx, wmin 0");
+    JPanel pushyTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    pushyTab.setOpaque(false);
 
-JTabbedPane subTabs = new JTabbedPane();
-subTabs.addTab("Tray", padSubTab(trayTab));
-subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
-subTabs.addTab("Sounds", padSubTab(soundsTab));
-subTabs.addTab("Linux / Advanced", padSubTab(linuxTab));
+    JPanel pushyBasics =
+        captionPanel("Pushy integration", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "[]");
+    pushyBasics.add(pushyEnabled, "span 2, growx, wrap");
+    pushyBasics.add(new JLabel("Endpoint:"));
+    pushyBasics.add(pushyEndpoint, "growx, pushx, wmin 0, wrap");
+    pushyBasics.add(new JLabel("API key:"));
+    pushyBasics.add(pushyApiKey, "growx, pushx, wmin 0, wrap");
+    pushyBasics.add(new JLabel("Title prefix:"));
+    pushyBasics.add(pushyTitlePrefix, "growx, pushx, wmin 0, wrap");
+    pushyTab.add(pushyBasics, "growx, wmin 0, wrap");
 
-JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-panel.setOpaque(false);
+    JPanel pushyDestination =
+        captionPanel("Destination", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "[]");
+    pushyDestination.add(new JLabel("Target mode:"));
+    pushyDestination.add(pushyTargetMode, "w 180!, wrap");
+    pushyDestination.add(new JLabel("Target value:"));
+    pushyDestination.add(pushyTargetValue, "growx, pushx, wmin 0, wrap");
+    pushyDestination.add(
+        helpText("Choose a destination type and enter the corresponding value."), "span 2, growx");
+    pushyTab.add(pushyDestination, "growx, wmin 0, wrap");
+
+    JPanel pushyTimeouts =
+        captionPanel("Network timeouts", "insets 0, fillx, wrap 4", "[right]8[]20[right]8[]", "[]");
+    pushyTimeouts.add(new JLabel("Connect (s):"));
+    pushyTimeouts.add(pushyConnectTimeoutSeconds, "w 90!");
+    pushyTimeouts.add(new JLabel("Read (s):"));
+    pushyTimeouts.add(pushyReadTimeoutSeconds, "w 90!, wrap");
+    pushyTab.add(pushyTimeouts, "growx, wmin 0, wrap");
+    JPanel pushyActions =
+        captionPanel("Validation & testing", "insets 0, fillx, wrap 2", "[]12[grow,fill]", "[]");
+    pushyActions.add(pushyTest, "w 150!");
+    pushyActions.add(pushyTestStatus, "growx, wmin 0, wrap");
+    pushyActions.add(new JLabel(""));
+    pushyActions.add(pushyValidationLabel, "growx, wmin 0");
+    pushyTab.add(pushyActions, "growx, wmin 0, wrap");
+    pushyTab.add(
+        helpText(
+            "Pushy notifications are triggered by matching IRC event rules in Notifications -> IRC Event Rules."),
+        "growx");
+
+    JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    linuxTab.setOpaque(false);
+    JPanel linuxGroup =
+        captionPanel("Linux integration", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    linuxGroup.add(linuxDbusActions, "growx, wrap");
+    if (!linux) {
+      linuxGroup.add(helpText("Linux only."), "growx");
+    } else if (!linuxActionsSupported) {
+      linuxGroup.add(
+          helpText(
+              "Linux notification actions were not detected for this session.\n"
+                  + "IRCafe will fall back to notify-send."),
+          "growx");
+    } else {
+      linuxGroup.add(
+          helpText(
+              "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."),
+          "growx");
+    }
+    linuxTab.add(linuxGroup, "growx, wmin 0");
+
+    JTabbedPane subTabs = new JTabbedPane();
+    subTabs.addTab("Tray", padSubTab(trayTab));
+    subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
+    subTabs.addTab("Sounds", padSubTab(soundsTab));
+    subTabs.addTab("Pushy", padSubTab(pushyTab));
+    subTabs.addTab("Linux / Advanced", padSubTab(linuxTab));
+
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+    panel.setOpaque(false);
     panel.add(subTabs, "growx, wmin 0");
-    return new TrayControls(enabled, closeToTray, minimizeToTray, startMinimized,
-        notifyHighlights, notifyPrivateMessages, notifyConnectionState,
-        notifyOnlyWhenUnfocused, notifyOnlyWhenMinimizedOrHidden, notifySuppressWhenTargetActive,
-        linuxDbusActions, notificationBackend, testNotification,
-        notificationSoundsEnabled, notificationSoundUseCustom, notificationSoundCustomPath, browseCustomSound, clearCustomSound,
-        notificationSound, testSound,
+    return new TrayControls(
+        enabled,
+        closeToTray,
+        minimizeToTray,
+        startMinimized,
+        notifyHighlights,
+        notifyPrivateMessages,
+        notifyConnectionState,
+        notifyOnlyWhenUnfocused,
+        notifyOnlyWhenMinimizedOrHidden,
+        notifySuppressWhenTargetActive,
+        linuxDbusActions,
+        notificationBackend,
+        testNotification,
+        notificationSoundsEnabled,
+        notificationSoundUseCustom,
+        notificationSoundCustomPath,
+        browseCustomSound,
+        clearCustomSound,
+        notificationSound,
+        testSound,
+        pushyEnabled,
+        pushyEndpoint,
+        pushyApiKey,
+        pushyTargetMode,
+        pushyTargetValue,
+        pushyTitlePrefix,
+        pushyConnectTimeoutSeconds,
+        pushyReadTimeoutSeconds,
+        pushyValidationLabel,
+        pushyTest,
+        pushyTestStatus,
         panel);
   }
 
+  private static String validatePushyInputs(
+      boolean enabled,
+      String endpoint,
+      String apiKey,
+      PushyTargetMode targetMode,
+      String targetValue) {
+    if (!enabled) return null;
+
+    String key = Objects.toString(apiKey, "").trim();
+    if (key.isEmpty()) return "Pushy API key is required.";
+
+    String target = Objects.toString(targetValue, "").trim();
+    if (target.isEmpty()) {
+      return switch (targetMode) {
+        case TOPIC -> "Pushy topic is required.";
+        case DEVICE_TOKEN -> "Pushy device token is required.";
+      };
+    }
+
+    String ep = Objects.toString(endpoint, "").trim();
+    if (!ep.isEmpty() && !isValidPushyEndpoint(ep)) {
+      return "Pushy endpoint must be a valid http(s) URL.";
+    }
+
+    return null;
+  }
+
+  private static boolean isValidPushyEndpoint(String endpoint) {
+    try {
+      URI uri = URI.create(Objects.toString(endpoint, "").trim());
+      String scheme = Objects.toString(uri.getScheme(), "").trim().toLowerCase(Locale.ROOT);
+      String host = Objects.toString(uri.getHost(), "").trim();
+      return ("https".equals(scheme) || "http".equals(scheme)) && !host.isBlank();
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
 
   private JCheckBox buildPresenceFoldsCheckbox(UiSettings current) {
     JCheckBox presenceFolds = new JCheckBox("Fold join/part/quit spam into a compact block");
     presenceFolds.setSelected(current.presenceFoldsEnabled());
-    presenceFolds.setToolTipText("When enabled, runs of join/part/quit/nick-change events are folded into a single expandable block.\n" +
-        "When disabled, each event is shown as its own status line.");
+    presenceFolds.setToolTipText(
+        "When enabled, runs of join/part/quit/nick-change events are folded into a single expandable block.\n"
+            + "When disabled, each event is shown as its own status line.");
     return presenceFolds;
   }
 
   private JCheckBox buildCtcpRequestsInActiveTargetCheckbox(UiSettings current) {
     JCheckBox ctcp = new JCheckBox("Show inbound CTCP requests in the currently active chat tab");
     ctcp.setSelected(current.ctcpRequestsInActiveTargetEnabled());
-    ctcp.setToolTipText("When enabled, inbound CTCP requests (e.g. VERSION, PING) are announced in the currently active chat tab.\n" +
-        "When disabled, CTCP requests are routed to the target they came from (channel or PM).");
+    ctcp.setToolTipText(
+        "When enabled, inbound CTCP requests (e.g. VERSION, PING) are announced in the currently active chat tab.\n"
+            + "When disabled, CTCP requests are routed to the target they came from (channel or PM).");
     return ctcp;
   }
 
   private JCheckBox buildTypingIndicatorsSendCheckbox(UiSettings current) {
     JCheckBox cb = new JCheckBox("Send typing indicators (IRCv3)");
     cb.setSelected(current.typingIndicatorsEnabled());
-    cb.setToolTipText("When enabled, IRCafe will send your IRCv3 typing state (active/paused/done) when the server supports it.");
+    cb.setToolTipText(
+        "When enabled, IRCafe will send your IRCv3 typing state (active/paused/done) when the server supports it.");
     return cb;
   }
 
   private JCheckBox buildTypingIndicatorsReceiveCheckbox(UiSettings current) {
     JCheckBox cb = new JCheckBox("Display incoming typing indicators (IRCv3)");
     cb.setSelected(current.typingIndicatorsReceiveEnabled());
-    cb.setToolTipText("When enabled, IRCafe will display incoming IRCv3 typing indicators from other users.");
+    cb.setToolTipText(
+        "When enabled, IRCafe will display incoming IRCv3 typing indicators from other users.");
     return cb;
   }
 
   private JComboBox<TypingTreeIndicatorStyleOption> buildTypingTreeIndicatorStyleCombo(
-      UiSettings current
-  ) {
-    TypingTreeIndicatorStyleOption[] options = new TypingTreeIndicatorStyleOption[] {
-        new TypingTreeIndicatorStyleOption("dots", "3 dots (ellipsis)"),
-        new TypingTreeIndicatorStyleOption("keyboard", "Keyboard glyph"),
-        new TypingTreeIndicatorStyleOption("glow-dot", "Glowing green dot")
-    };
+      UiSettings current) {
+    TypingTreeIndicatorStyleOption[] options =
+        new TypingTreeIndicatorStyleOption[] {
+          new TypingTreeIndicatorStyleOption("dots", "3 dots (ellipsis)"),
+          new TypingTreeIndicatorStyleOption("keyboard", "Keyboard glyph"),
+          new TypingTreeIndicatorStyleOption("glow-dot", "Glowing green dot")
+        };
     JComboBox<TypingTreeIndicatorStyleOption> combo = new JComboBox<>(options);
     combo.setToolTipText("Choose how typing activity appears in the server tree for channels.");
-    combo.setRenderer(new DefaultListCellRenderer() {
-      @Override
-      public java.awt.Component getListCellRendererComponent(
-          JList<?> list,
-          Object value,
-          int index,
-          boolean isSelected,
-          boolean cellHasFocus
-      ) {
-        JLabel c = (JLabel) super.getListCellRendererComponent(
-            list,
-            value,
-            index,
-            isSelected,
-            cellHasFocus);
-        if (value instanceof TypingTreeIndicatorStyleOption o) {
-          c.setText(o.label());
-        }
-        return c;
-      }
-    });
+    combo.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel c =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            if (value instanceof TypingTreeIndicatorStyleOption o) {
+              c.setText(o.label());
+            }
+            return c;
+          }
+        });
 
     String configured = current != null ? current.typingIndicatorsTreeStyle() : null;
     String normalized = UiSettings.normalizeTypingTreeIndicatorStyle(configured);
@@ -2790,12 +3482,7 @@ panel.setOpaque(false);
         new DefaultListCellRenderer() {
           @Override
           public java.awt.Component getListCellRendererComponent(
-              JList<?> list,
-              Object value,
-              int index,
-              boolean isSelected,
-              boolean cellHasFocus
-          ) {
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
             super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
             if (value instanceof BuiltInSound sound) {
               setText(sound.displayNameForUi());
@@ -2806,8 +3493,7 @@ panel.setOpaque(false);
   }
 
   private static String typingTreeIndicatorStyleValue(
-      JComboBox<TypingTreeIndicatorStyleOption> combo
-  ) {
+      JComboBox<TypingTreeIndicatorStyleOption> combo) {
     Object selected = combo != null ? combo.getSelectedItem() : null;
     if (selected instanceof TypingTreeIndicatorStyleOption o) {
       return UiSettings.normalizeTypingTreeIndicatorStyle(o.id());
@@ -2819,7 +3505,8 @@ panel.setOpaque(false);
     Map<String, Boolean> persisted = runtimeConfig.readIrcv3Capabilities();
 
     LinkedHashMap<String, JCheckBox> checkboxes = new LinkedHashMap<>();
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
     panel.setOpaque(false);
 
     LinkedHashMap<String, List<String>> grouped = new LinkedHashMap<>();
@@ -2833,18 +3520,24 @@ panel.setOpaque(false);
       List<String> caps = group.getValue();
       if (caps == null || caps.isEmpty()) continue;
       List<String> orderedCaps = new ArrayList<>(caps);
-      orderedCaps.sort((a, b) -> {
-        int oa = capabilitySortOrder(a);
-        int ob = capabilitySortOrder(b);
-        if (oa != ob) return Integer.compare(oa, ob);
-        return capabilityDisplayLabel(a).compareToIgnoreCase(capabilityDisplayLabel(b));
-      });
+      orderedCaps.sort(
+          (a, b) -> {
+            int oa = capabilitySortOrder(a);
+            int ob = capabilitySortOrder(b);
+            if (oa != ob) return Integer.compare(oa, ob);
+            return capabilityDisplayLabel(a).compareToIgnoreCase(capabilityDisplayLabel(b));
+          });
 
-      JPanel groupPanel = new JPanel(new MigLayout("insets 6 8 8 8, fillx, wrap 2, hidemode 3", "[grow,fill]12[grow,fill]", "[]2[]"));
-      groupPanel.setBorder(BorderFactory.createCompoundBorder(
-          BorderFactory.createTitledBorder(capabilityGroupTitle(group.getKey())),
-          BorderFactory.createEmptyBorder(4, 6, 4, 6)
-      ));
+      JPanel groupPanel =
+          new JPanel(
+              new MigLayout(
+                  "insets 6 8 8 8, fillx, wrap 2, hidemode 3",
+                  "[grow,fill]12[grow,fill]",
+                  "[]2[]"));
+      groupPanel.setBorder(
+          BorderFactory.createCompoundBorder(
+              BorderFactory.createTitledBorder(capabilityGroupTitle(group.getKey())),
+              BorderFactory.createEmptyBorder(4, 6, 4, 6)));
       groupPanel.setOpaque(false);
 
       for (String key : orderedCaps) {
@@ -2878,44 +3571,53 @@ panel.setOpaque(false);
 
     JCheckBox enabled = new JCheckBox("Color nicknames (channels and PMs)");
     enabled.setSelected(enabledSeed);
-    enabled.setToolTipText("When enabled, IRCafe renders nicknames in deterministic colors (per nick),\n" +
-        "adjusted to meet a minimum contrast ratio against the chat background.");
+    enabled.setToolTipText(
+        "When enabled, IRCafe renders nicknames in deterministic colors (per nick),\n"
+            + "adjusted to meet a minimum contrast ratio against the chat background.");
 
     JSpinner minContrast = doubleSpinner(minContrastSeed, 1.0, 21.0, 0.5, closeables);
-    minContrast.setToolTipText("Minimum contrast ratio against the chat background (WCAG-style).\n" +
-        "Higher values are safer for readability but may push colors toward lighter/darker extremes.");
+    minContrast.setToolTipText(
+        "Minimum contrast ratio against the chat background (WCAG-style).\n"
+            + "Higher values are safer for readability but may push colors toward lighter/darker extremes.");
 
     JButton overrides = new JButton("Edit overrides...");
-    overrides.setToolTipText("Open the per-nick override editor. Overrides take precedence over the palette.");
+    overrides.setToolTipText(
+        "Open the per-nick override editor. Overrides take precedence over the palette.");
 
     NickColorPreviewPanel preview = new NickColorPreviewPanel(nickColorService);
 
-    Runnable updatePreview = () -> {
-      boolean en = enabled.isSelected();
-      double mc = ((Number) minContrast.getValue()).doubleValue();
-      if (mc <= 0) mc = 3.0;
-      minContrast.setEnabled(en);
-      preview.updatePreview(en, mc);
-    };
+    Runnable updatePreview =
+        () -> {
+          boolean en = enabled.isSelected();
+          double mc = ((Number) minContrast.getValue()).doubleValue();
+          if (mc <= 0) mc = 3.0;
+          minContrast.setEnabled(en);
+          preview.updatePreview(en, mc);
+        };
 
     enabled.addActionListener(e -> updatePreview.run());
     minContrast.addChangeListener(e -> updatePreview.run());
 
-    overrides.addActionListener(e -> {
-      if (nickColorOverridesDialog != null) {
-        nickColorOverridesDialog.open(owner);
-      }
-      updatePreview.run();
-    });
+    overrides.addActionListener(
+        e -> {
+          if (nickColorOverridesDialog != null) {
+            nickColorOverridesDialog.open(owner);
+          }
+          updatePreview.run();
+        });
 
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]8[nogrid]", "[]6[]6[]6[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]8[nogrid]", "[]6[]6[]6[]"));
     panel.setOpaque(false);
     panel.add(enabled, "span 2, wrap");
     panel.add(new JLabel("Minimum contrast ratio:"));
     panel.add(minContrast, "w 110!, wrap");
     panel.add(overrides, "span 2, alignx left, wrap");
-    panel.add(helpText("Tip: If nick colors look too similar to the background, increase the contrast ratio.\n" +
-        "Overrides always win over the palette."), "span 2, growx, wmin 0, wrap");
+    panel.add(
+        helpText(
+            "Tip: If nick colors look too similar to the background, increase the contrast ratio.\n"
+                + "Overrides always win over the palette."),
+        "span 2, growx, wmin 0, wrap");
     panel.add(new JLabel("Preview:"), "span 2, wrap");
     panel.add(preview, "span 2, growx");
     updatePreview.run();
@@ -2923,22 +3625,29 @@ panel.setOpaque(false);
     return new NickColorControls(enabled, minContrast, overrides, preview, panel);
   }
 
-  private ImageEmbedControls buildImageEmbedControls(UiSettings current, List<AutoCloseable> closeables) {
+  private ImageEmbedControls buildImageEmbedControls(
+      UiSettings current, List<AutoCloseable> closeables) {
     JCheckBox imageEmbeds = new JCheckBox("Enable inline image embeds (direct links)");
     imageEmbeds.setSelected(current.imageEmbedsEnabled());
-    imageEmbeds.setToolTipText("If enabled, IRCafe will download and render images from direct image URLs in chat.");
+    imageEmbeds.setToolTipText(
+        "If enabled, IRCafe will download and render images from direct image URLs in chat.");
 
     JCheckBox imageEmbedsCollapsed = new JCheckBox("Collapse inline images by default");
     imageEmbedsCollapsed.setSelected(current.imageEmbedsCollapsedByDefault());
-    imageEmbedsCollapsed.setToolTipText("If enabled, newly inserted inline images start collapsed (header shown; click to expand).");
+    imageEmbedsCollapsed.setToolTipText(
+        "If enabled, newly inserted inline images start collapsed (header shown; click to expand).");
     imageEmbedsCollapsed.setEnabled(imageEmbeds.isSelected());
-    JSpinner imageMaxWidth = numberSpinner(current.imageEmbedsMaxWidthPx(), 0, 4096, 10, closeables);
-    imageMaxWidth.setToolTipText("Maximum width for inline images (pixels).\n" +
-        "If 0, IRCafe will only scale images down to fit the chat viewport.");
+    JSpinner imageMaxWidth =
+        numberSpinner(current.imageEmbedsMaxWidthPx(), 0, 4096, 10, closeables);
+    imageMaxWidth.setToolTipText(
+        "Maximum width for inline images (pixels).\n"
+            + "If 0, IRCafe will only scale images down to fit the chat viewport.");
     imageMaxWidth.setEnabled(imageEmbeds.isSelected());
-    JSpinner imageMaxHeight = numberSpinner(current.imageEmbedsMaxHeightPx(), 0, 4096, 10, closeables);
-    imageMaxHeight.setToolTipText("Maximum height for inline images (pixels).\n" +
-        "If 0, IRCafe will only scale images down based on viewport width (and max width cap, if set).");
+    JSpinner imageMaxHeight =
+        numberSpinner(current.imageEmbedsMaxHeightPx(), 0, 4096, 10, closeables);
+    imageMaxHeight.setToolTipText(
+        "Maximum height for inline images (pixels).\n"
+            + "If 0, IRCafe will only scale images down based on viewport width (and max width cap, if set).");
     imageMaxHeight.setEnabled(imageEmbeds.isSelected());
 
     JCheckBox animateGifs = new JCheckBox("Animate GIFs");
@@ -2946,15 +3655,18 @@ panel.setOpaque(false);
     animateGifs.setToolTipText("If disabled, animated GIFs render as a still image (first frame).");
     animateGifs.setEnabled(imageEmbeds.isSelected());
 
-    imageEmbeds.addActionListener(e -> {
-      boolean enabled = imageEmbeds.isSelected();
-      imageEmbedsCollapsed.setEnabled(enabled);
-      imageMaxWidth.setEnabled(enabled);
-      imageMaxHeight.setEnabled(enabled);
-      animateGifs.setEnabled(enabled);
-    });
+    imageEmbeds.addActionListener(
+        e -> {
+          boolean enabled = imageEmbeds.isSelected();
+          imageEmbedsCollapsed.setEnabled(enabled);
+          imageMaxWidth.setEnabled(enabled);
+          imageMaxHeight.setEnabled(enabled);
+          animateGifs.setEnabled(enabled);
+        });
 
-    JPanel imagePanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]8[nogrid]", "[]4[]4[]4[]4[]"));
+    JPanel imagePanel =
+        new JPanel(
+            new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]8[nogrid]", "[]4[]4[]4[]4[]"));
     imagePanel.setOpaque(false);
     imagePanel.add(imageEmbeds, "span 2, wrap");
     imagePanel.add(imageEmbedsCollapsed, "span 2, wrap");
@@ -2964,20 +3676,24 @@ panel.setOpaque(false);
     imagePanel.add(imageMaxHeight, "w 110!");
     imagePanel.add(animateGifs, "span 2, wrap");
 
-    return new ImageEmbedControls(imageEmbeds, imageEmbedsCollapsed, imageMaxWidth, imageMaxHeight, animateGifs, imagePanel);
+    return new ImageEmbedControls(
+        imageEmbeds, imageEmbedsCollapsed, imageMaxWidth, imageMaxHeight, animateGifs, imagePanel);
   }
 
   private LinkPreviewControls buildLinkPreviewControls(UiSettings current) {
     JCheckBox linkPreviews = new JCheckBox("Enable link previews (OpenGraph cards)");
     linkPreviews.setSelected(current.linkPreviewsEnabled());
-    linkPreviews.setToolTipText("If enabled, IRCafe will fetch page metadata (title/description/image) and show a preview card under messages.\n" +
-        "Note: this makes network requests to the linked sites.");
+    linkPreviews.setToolTipText(
+        "If enabled, IRCafe will fetch page metadata (title/description/image) and show a preview card under messages.\n"
+            + "Note: this makes network requests to the linked sites.");
 
     JCheckBox linkPreviewsCollapsed = new JCheckBox("Collapse link previews by default");
     linkPreviewsCollapsed.setSelected(current.linkPreviewsCollapsedByDefault());
-    linkPreviewsCollapsed.setToolTipText("If enabled, newly inserted link previews start collapsed (header shown; click to expand).");
+    linkPreviewsCollapsed.setToolTipText(
+        "If enabled, newly inserted link previews start collapsed (header shown; click to expand).");
     linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected());
-    linkPreviews.addActionListener(e -> linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected()));
+    linkPreviews.addActionListener(
+        e -> linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected()));
 
     JPanel linkPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]"));
     linkPanel.setOpaque(false);
@@ -2997,22 +3713,26 @@ panel.setOpaque(false);
 
     JCheckBox includeChatMessages = new JCheckBox("Include regular chat messages");
     includeChatMessages.setSelected(current.timestampsIncludeChatMessages());
-    includeChatMessages.setToolTipText("When enabled, timestamps are also shown on normal chat messages (not just status lines).");
+    includeChatMessages.setToolTipText(
+        "When enabled, timestamps are also shown on normal chat messages (not just status lines).");
 
     JCheckBox includePresenceMessages = new JCheckBox("Include presence / folded messages");
     includePresenceMessages.setSelected(current.timestampsIncludePresenceMessages());
-    includePresenceMessages.setToolTipText("When enabled, timestamps are shown for join/part/quit/nick presence lines and expanded fold details.");
+    includePresenceMessages.setToolTipText(
+        "When enabled, timestamps are shown for join/part/quit/nick presence lines and expanded fold details.");
 
-    Runnable syncEnabled = () -> {
-      boolean on = enabled.isSelected();
-      format.setEnabled(on);
-      includeChatMessages.setEnabled(on);
-      includePresenceMessages.setEnabled(on);
-    };
+    Runnable syncEnabled =
+        () -> {
+          boolean on = enabled.isSelected();
+          format.setEnabled(on);
+          includeChatMessages.setEnabled(on);
+          includePresenceMessages.setEnabled(on);
+        };
     enabled.addItemListener(e -> syncEnabled.run());
     syncEnabled.run();
 
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]6[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]6[]6[]"));
     panel.setOpaque(false);
     panel.add(enabled);
     JPanel fmtRow = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[][grow,fill]", "[]"));
@@ -3023,25 +3743,32 @@ panel.setOpaque(false);
     panel.add(includeChatMessages);
     panel.add(includePresenceMessages);
 
-    return new TimestampControls(enabled, format, includeChatMessages, includePresenceMessages, panel);
+    return new TimestampControls(
+        enabled, format, includeChatMessages, includePresenceMessages, panel);
   }
 
   private HistoryControls buildHistoryControls(UiSettings current, List<AutoCloseable> closeables) {
-    JSpinner historyInitialLoadLines = numberSpinner(current.chatHistoryInitialLoadLines(), 0, 10_000, 50, closeables);
-    historyInitialLoadLines.setToolTipText("How many logged lines to prefill into a transcript when you select a channel/query.\n" +
-        "Set to 0 to disable history prefill.");
+    JSpinner historyInitialLoadLines =
+        numberSpinner(current.chatHistoryInitialLoadLines(), 0, 10_000, 50, closeables);
+    historyInitialLoadLines.setToolTipText(
+        "How many logged lines to prefill into a transcript when you select a channel/query.\n"
+            + "Set to 0 to disable history prefill.");
 
-    JSpinner historyPageSize = numberSpinner(current.chatHistoryPageSize(), 50, 10_000, 50, closeables);
-    historyPageSize.setToolTipText("How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
+    JSpinner historyPageSize =
+        numberSpinner(current.chatHistoryPageSize(), 50, 10_000, 50, closeables);
+    historyPageSize.setToolTipText(
+        "How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
 
-    JSpinner commandHistoryMaxSize = numberSpinner(current.commandHistoryMaxSize(), 1, 500, 25, closeables);
-    commandHistoryMaxSize.setToolTipText("Max entries kept for Up/Down command history in the input bar.\n" +
-        "This history is in-memory only; it does not persist across restarts.");
+    JSpinner commandHistoryMaxSize =
+        numberSpinner(current.commandHistoryMaxSize(), 1, 500, 25, closeables);
+    commandHistoryMaxSize.setToolTipText(
+        "Max entries kept for Up/Down command history in the input bar.\n"
+            + "This history is in-memory only; it does not persist across restarts.");
 
-    JTextArea historyInfo = new JTextArea(
-        "Chat history settings (requires chat logging to be enabled).\n" +
-            "These affect how many messages are pulled from the database when opening a transcript or paging older history."
-    );
+    JTextArea historyInfo =
+        new JTextArea(
+            "Chat history settings (requires chat logging to be enabled).\n"
+                + "These affect how many messages are pulled from the database when opening a transcript or paging older history.");
     historyInfo.setEditable(false);
     historyInfo.setLineWrap(true);
     historyInfo.setWrapStyleWord(true);
@@ -3052,7 +3779,8 @@ panel.setOpaque(false);
     historyInfo.setForeground(UIManager.getColor("Label.foreground"));
     historyInfo.setColumns(48);
 
-    JPanel historyPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
+    JPanel historyPanel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
     historyPanel.setOpaque(false);
     historyPanel.add(historyInfo, "span 2, growx, wmin 0, wrap");
     historyPanel.add(new JLabel("Initial load (lines):"));
@@ -3062,69 +3790,91 @@ panel.setOpaque(false);
     historyPanel.add(new JLabel("Input command history (max):"));
     historyPanel.add(commandHistoryMaxSize, "w 110!");
 
-    return new HistoryControls(historyInitialLoadLines, historyPageSize, commandHistoryMaxSize, historyPanel);
+    return new HistoryControls(
+        historyInitialLoadLines, historyPageSize, commandHistoryMaxSize, historyPanel);
   }
 
-  private LoggingControls buildLoggingControls(LogProperties logProps, List<AutoCloseable> closeables) {
+  private LoggingControls buildLoggingControls(
+      LogProperties logProps, List<AutoCloseable> closeables) {
     boolean loggingEnabledCurrent = logProps != null && Boolean.TRUE.equals(logProps.enabled());
-    boolean logSoftIgnoredCurrent = logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
-    boolean logPrivateMessagesCurrent = logProps == null || Boolean.TRUE.equals(logProps.logPrivateMessages());
-    boolean savePrivateMessageListCurrent = logProps == null || Boolean.TRUE.equals(logProps.savePrivateMessageList());
+    boolean logSoftIgnoredCurrent =
+        logProps == null || Boolean.TRUE.equals(logProps.logSoftIgnoredLines());
+    boolean logPrivateMessagesCurrent =
+        logProps == null || Boolean.TRUE.equals(logProps.logPrivateMessages());
+    boolean savePrivateMessageListCurrent =
+        logProps == null || Boolean.TRUE.equals(logProps.savePrivateMessageList());
 
     JCheckBox loggingEnabled = new JCheckBox("Enable chat logging (store messages to local DB)");
     loggingEnabled.setSelected(loggingEnabledCurrent);
-    loggingEnabled.setToolTipText("When enabled, IRCafe will persist chat messages to an embedded local database for history loading.\n" +
-        "Privacy-first: this is OFF by default.\n\n" +
-        "Note: enabling/disabling requires restarting IRCafe to take effect.");
+    loggingEnabled.setToolTipText(
+        "When enabled, IRCafe will persist chat messages to an embedded local database for history loading.\n"
+            + "Privacy-first: this is OFF by default.\n\n"
+            + "Note: enabling/disabling requires restarting IRCafe to take effect.");
 
     JCheckBox loggingSoftIgnore = new JCheckBox("Log soft-ignored (spoiler) lines");
     loggingSoftIgnore.setSelected(logSoftIgnoredCurrent);
-    loggingSoftIgnore.setToolTipText("If enabled, messages that are soft-ignored (spoiler-covered) are still stored,\n" +
-        "and will re-load as spoiler-covered lines in history.");
+    loggingSoftIgnore.setToolTipText(
+        "If enabled, messages that are soft-ignored (spoiler-covered) are still stored,\n"
+            + "and will re-load as spoiler-covered lines in history.");
     loggingSoftIgnore.setEnabled(loggingEnabled.isSelected());
 
     JCheckBox loggingPrivateMessages = new JCheckBox("Save private-message history");
     loggingPrivateMessages.setSelected(logPrivateMessagesCurrent);
-    loggingPrivateMessages.setToolTipText("If enabled, PM/query messages are stored in the local history database.\n" +
-        "If disabled, only non-PM targets are persisted.");
+    loggingPrivateMessages.setToolTipText(
+        "If enabled, PM/query messages are stored in the local history database.\n"
+            + "If disabled, only non-PM targets are persisted.");
     loggingPrivateMessages.setEnabled(loggingEnabled.isSelected());
 
     JCheckBox savePrivateMessageList = new JCheckBox("Save private-message chat list");
     savePrivateMessageList.setSelected(savePrivateMessageListCurrent);
-    savePrivateMessageList.setToolTipText("If enabled, PM/query targets are remembered and re-opened after reconnect/restart.\n" +
-        "The per-server PM list is managed in Servers -> Edit -> Auto-Join.");
+    savePrivateMessageList.setToolTipText(
+        "If enabled, PM/query targets are remembered and re-opened after reconnect/restart.\n"
+            + "The per-server PM list is managed in Servers -> Edit -> Auto-Join.");
 
     boolean keepForeverCurrent = logProps == null || Boolean.TRUE.equals(logProps.keepForever());
-    int retentionDaysCurrent = (logProps != null && logProps.retentionDays() != null) ? Math.max(0, logProps.retentionDays()) : 0;
+    int retentionDaysCurrent =
+        (logProps != null && logProps.retentionDays() != null)
+            ? Math.max(0, logProps.retentionDays())
+            : 0;
 
     JCheckBox keepForever = new JCheckBox("Keep chat history forever (no retention pruning)");
     keepForever.setSelected(keepForeverCurrent);
-    keepForever.setToolTipText("If enabled, IRCafe will never automatically delete old chat history.\n" +
-        "If disabled, you can set a retention window in days to prune older rows.\n\n" +
-        "Note: retention pruning runs only when logging is enabled and takes effect after restart.");
+    keepForever.setToolTipText(
+        "If enabled, IRCafe will never automatically delete old chat history.\n"
+            + "If disabled, you can set a retention window in days to prune older rows.\n\n"
+            + "Note: retention pruning runs only when logging is enabled and takes effect after restart.");
 
     JSpinner retentionDays = numberSpinner(retentionDaysCurrent, 0, 10_000, 1, closeables);
-    retentionDays.setToolTipText("Retention window in days (0 disables retention).\n" +
-        "Only used when Keep forever is unchecked.\n\n" +
-        "Note: applied on next restart.");
+    retentionDays.setToolTipText(
+        "Retention window in days (0 disables retention).\n"
+            + "Only used when Keep forever is unchecked.\n\n"
+            + "Note: applied on next restart.");
 
-    String dbBaseNameCurrent = (logProps != null && logProps.hsqldb() != null) ? logProps.hsqldb().fileBaseName() : "ircafe-chatlog";
-    boolean dbNextToConfigCurrent = logProps == null || (logProps.hsqldb() != null && Boolean.TRUE.equals(logProps.hsqldb().nextToRuntimeConfig()));
+    String dbBaseNameCurrent =
+        (logProps != null && logProps.hsqldb() != null)
+            ? logProps.hsqldb().fileBaseName()
+            : "ircafe-chatlog";
+    boolean dbNextToConfigCurrent =
+        logProps == null
+            || (logProps.hsqldb() != null
+                && Boolean.TRUE.equals(logProps.hsqldb().nextToRuntimeConfig()));
 
     JTextField dbBaseName = new JTextField(dbBaseNameCurrent, 18);
     dbBaseName.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "ircafe-chatlog");
-    dbBaseName.setToolTipText("Base filename for HSQLDB (no extension).\n" +
-        "HSQLDB will create multiple files like .data/.script/.properties.");
+    dbBaseName.setToolTipText(
+        "Base filename for HSQLDB (no extension).\n"
+            + "HSQLDB will create multiple files like .data/.script/.properties.");
 
     JCheckBox dbNextToConfig = new JCheckBox("Store DB next to runtime config file");
     dbNextToConfig.setSelected(dbNextToConfigCurrent);
-    dbNextToConfig.setToolTipText("If enabled, the DB files are stored alongside your runtime YAML config (recommended).\n" +
-        "If disabled, IRCafe uses the default ~/.config/ircafe directory.");
+    dbNextToConfig.setToolTipText(
+        "If enabled, the DB files are stored alongside your runtime YAML config (recommended).\n"
+            + "If disabled, IRCafe uses the default ~/.config/ircafe directory.");
 
-    JTextArea loggingInfo = new JTextArea(
-        "Logging settings are applied on the next restart.\n" +
-            "Tip: You can enable logging first, restart, then history controls (Load older messages…) will appear when data exists."
-    );
+    JTextArea loggingInfo =
+        new JTextArea(
+            "Logging settings are applied on the next restart.\n"
+                + "Tip: You can enable logging first, restart, then history controls (Load older messages…) will appear when data exists.");
     loggingInfo.setEditable(false);
     loggingInfo.setLineWrap(true);
     loggingInfo.setWrapStyleWord(true);
@@ -3134,19 +3884,21 @@ panel.setOpaque(false);
     loggingInfo.setFont(UIManager.getFont("Label.font"));
     loggingInfo.setForeground(UIManager.getColor("Label.foreground"));
     loggingInfo.setColumns(48);
-    Runnable updateRetentionUi = () -> {
-      retentionDays.setEnabled(!keepForever.isSelected());
-    };
+    Runnable updateRetentionUi =
+        () -> {
+          retentionDays.setEnabled(!keepForever.isSelected());
+        };
     keepForever.addActionListener(e -> updateRetentionUi.run());
 
-    Runnable updateLoggingEnabledState = () -> {
-      boolean en = loggingEnabled.isSelected();
-      loggingSoftIgnore.setEnabled(en);
-      loggingPrivateMessages.setEnabled(en);
-      dbBaseName.setEnabled(true);
-      dbNextToConfig.setEnabled(true);
-      updateRetentionUi.run();
-    };
+    Runnable updateLoggingEnabledState =
+        () -> {
+          boolean en = loggingEnabled.isSelected();
+          loggingSoftIgnore.setEnabled(en);
+          loggingPrivateMessages.setEnabled(en);
+          dbBaseName.setEnabled(true);
+          dbNextToConfig.setEnabled(true);
+          updateRetentionUi.run();
+        };
     loggingEnabled.addActionListener(e -> updateLoggingEnabledState.run());
     updateLoggingEnabledState.run();
 
@@ -3154,11 +3906,12 @@ panel.setOpaque(false);
     managePmList.setIcon(SvgIcons.action("settings", 16));
     managePmList.setDisabledIcon(SvgIcons.actionDisabled("settings", 16));
     managePmList.setEnabled(serverDialogs != null);
-    managePmList.addActionListener(e -> {
-      if (serverDialogs == null) return;
-      Window owner = dialog != null ? dialog : SwingUtilities.getWindowAncestor(managePmList);
-      serverDialogs.openManageServers(owner);
-    });
+    managePmList.addActionListener(
+        e -> {
+          if (serverDialogs == null) return;
+          Window owner = dialog != null ? dialog : SwingUtilities.getWindowAncestor(managePmList);
+          serverDialogs.openManageServers(owner);
+        });
 
     return new LoggingControls(
         loggingEnabled,
@@ -3176,9 +3929,11 @@ panel.setOpaque(false);
   private OutgoingColorControls buildOutgoingColorControls(UiSettings current) {
     JCheckBox outgoingColorEnabled = new JCheckBox("Use custom color for my outgoing messages");
     outgoingColorEnabled.setSelected(current.clientLineColorEnabled());
-    outgoingColorEnabled.setToolTipText("If enabled, IRCafe will render lines you send (locally echoed into chat) using a custom color.");
+    outgoingColorEnabled.setToolTipText(
+        "If enabled, IRCafe will render lines you send (locally echoed into chat) using a custom color.");
 
-    JTextField outgoingColorHex = new JTextField(UiSettings.normalizeHexOrDefault(current.clientLineColor(), "#6AA2FF"), 10);
+    JTextField outgoingColorHex =
+        new JTextField(UiSettings.normalizeHexOrDefault(current.clientLineColor(), "#6AA2FF"), 10);
     outgoingColorHex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#RRGGBB");
 
     JLabel outgoingPreview = new JLabel();
@@ -3187,82 +3942,98 @@ panel.setOpaque(false);
     outgoingPreview.setPreferredSize(new Dimension(120, 24));
 
     JButton outgoingPick = new JButton("Pick...");
-    outgoingPick.addActionListener(e -> {
-      Color currentColor = parseHexColor(outgoingColorHex.getText());
-      if (currentColor == null) currentColor = parseHexColor(current.clientLineColor());
-      if (currentColor == null) currentColor = UIManager.getColor("Label.foreground");
-      if (currentColor == null) currentColor = Color.WHITE;
+    outgoingPick.addActionListener(
+        e -> {
+          Color currentColor = parseHexColor(outgoingColorHex.getText());
+          if (currentColor == null) currentColor = parseHexColor(current.clientLineColor());
+          if (currentColor == null) currentColor = UIManager.getColor("Label.foreground");
+          if (currentColor == null) currentColor = Color.WHITE;
 
-      Color chosen = showColorPickerDialog(dialog, "Choose Outgoing Message Color", currentColor, preferredPreviewBackground());
-      if (chosen != null) {
-        outgoingColorHex.setText(toHex(chosen));
-      }
-    });
+          Color chosen =
+              showColorPickerDialog(
+                  dialog,
+                  "Choose Outgoing Message Color",
+                  currentColor,
+                  preferredPreviewBackground());
+          if (chosen != null) {
+            outgoingColorHex.setText(toHex(chosen));
+          }
+        });
 
-    JPanel outgoingColorPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]8[nogrid]8[nogrid]", "[]4[]"));
+    JPanel outgoingColorPanel =
+        new JPanel(
+            new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]8[nogrid]8[nogrid]", "[]4[]"));
     outgoingColorPanel.setOpaque(false);
     outgoingColorPanel.add(outgoingColorEnabled, "span 3, wrap");
     outgoingColorPanel.add(outgoingColorHex, "w 110!");
     outgoingColorPanel.add(outgoingPick);
     outgoingColorPanel.add(outgoingPreview);
 
-    Runnable updateOutgoingColorUi = () -> {
-      boolean enabled = outgoingColorEnabled.isSelected();
-      outgoingColorHex.setEnabled(enabled);
-      outgoingPick.setEnabled(enabled);
+    Runnable updateOutgoingColorUi =
+        () -> {
+          boolean enabled = outgoingColorEnabled.isSelected();
+          outgoingColorHex.setEnabled(enabled);
+          outgoingPick.setEnabled(enabled);
 
-      if (!enabled) {
-        outgoingPreview.setOpaque(false);
-        outgoingPreview.setText("");
-        outgoingPreview.repaint();
-        return;
-      }
+          if (!enabled) {
+            outgoingPreview.setOpaque(false);
+            outgoingPreview.setText("");
+            outgoingPreview.repaint();
+            return;
+          }
 
-      Color c = parseHexColor(outgoingColorHex.getText());
-      if (c != null) {
-        outgoingPreview.setOpaque(true);
-        outgoingPreview.setBackground(c);
-        outgoingPreview.setText(toHex(c));
-      } else {
-        outgoingPreview.setOpaque(false);
-        outgoingPreview.setText("Invalid");
-      }
-      outgoingPreview.repaint();
-    };
+          Color c = parseHexColor(outgoingColorHex.getText());
+          if (c != null) {
+            outgoingPreview.setOpaque(true);
+            outgoingPreview.setBackground(c);
+            outgoingPreview.setText(toHex(c));
+          } else {
+            outgoingPreview.setOpaque(false);
+            outgoingPreview.setText("Invalid");
+          }
+          outgoingPreview.repaint();
+        };
 
     outgoingColorEnabled.addActionListener(e -> updateOutgoingColorUi.run());
-    outgoingColorHex.getDocument().addDocumentListener(new SimpleDocListener(updateOutgoingColorUi));
+    outgoingColorHex
+        .getDocument()
+        .addDocumentListener(new SimpleDocListener(updateOutgoingColorUi));
     updateOutgoingColorUi.run();
 
-    return new OutgoingColorControls(outgoingColorEnabled, outgoingColorHex, outgoingPreview, outgoingColorPanel);
+    return new OutgoingColorControls(
+        outgoingColorEnabled, outgoingColorHex, outgoingPreview, outgoingColorPanel);
   }
 
-  
-  
-  private NetworkAdvancedControls buildNetworkAdvancedControls(UiSettings current, List<AutoCloseable> closeables) {
+  private NetworkAdvancedControls buildNetworkAdvancedControls(
+      UiSettings current, List<AutoCloseable> closeables) {
     IrcProperties.Proxy p = NetProxyContext.settings();
     if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
     // Network grew vertically as we added options. Keep it compact by splitting into sub-tabs.
     // Let the inner sub-tabs consume vertical space so this tab doesn't feel "short".
-    JPanel networkPanel = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]0[grow,fill]"));
-    JPanel userLookupsPanel = new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
+    JPanel networkPanel =
+        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]0[grow,fill]"));
+    JPanel userLookupsPanel =
+        new JPanel(new MigLayout("insets 12, fillx, wrap 1, hidemode 3", "[grow,fill]", ""));
 
     // ---- Proxy tab ----
-    JPanel proxyTab = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    JPanel proxyTab =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
     proxyTab.setOpaque(false);
 
     JPanel proxyHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     proxyHeader.setOpaque(false);
     proxyHeader.add(sectionTitle("SOCKS5 proxy"), "growx, wmin 0");
-    proxyHeader.add(whyHelpButton(
-        "SOCKS5 proxy",
-        "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n" +
-            "Heads up: proxy credentials are stored in your runtime config file in plain text."
-    ), "align right");
+    proxyHeader.add(
+        whyHelpButton(
+            "SOCKS5 proxy",
+            "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n"
+                + "Heads up: proxy credentials are stored in your runtime config file in plain text."),
+        "align right");
     proxyTab.add(proxyHeader, "span 2, growx, wmin 0, wrap");
 
     JTextArea proxyBlurb = subtleInfoText();
-    proxyBlurb.setText("Routes IRC + embeds through SOCKS5. Use remote DNS if local DNS is blocked.");
+    proxyBlurb.setText(
+        "Routes IRC + embeds through SOCKS5. Use remote DNS if local DNS is blocked.");
     proxyTab.add(proxyBlurb, "span 2, growx, wmin 0, wrap");
 
     JCheckBox proxyEnabled = new JCheckBox("Use SOCKS5 proxy");
@@ -3276,7 +4047,8 @@ panel.setOpaque(false);
 
     JCheckBox proxyRemoteDns = new JCheckBox();
     proxyRemoteDns.setSelected(p.remoteDns());
-    proxyRemoteDns.setToolTipText("When enabled, IRCafe asks the proxy to resolve hostnames. Useful if local DNS is blocked.");
+    proxyRemoteDns.setToolTipText(
+        "When enabled, IRCafe asks the proxy to resolve hostnames. Useful if local DNS is blocked.");
     JComponent proxyRemoteDnsRow = wrapCheckBox(proxyRemoteDns, "Proxy resolves DNS (remote DNS)");
 
     JTextField proxyUsername = new JTextField(Objects.toString(p.username(), ""));
@@ -3301,47 +4073,50 @@ panel.setOpaque(false);
     passwordRow.add(proxyPassword, "growx, pushx, wmin 0");
     passwordRow.add(clearPassword);
 
-    Runnable updateProxyEnabledState = () -> {
-      boolean enabled = proxyEnabled.isSelected();
-      proxyHost.setEnabled(enabled);
-      proxyPort.setEnabled(enabled);
-      proxyRemoteDns.setEnabled(enabled);
-      proxyUsername.setEnabled(enabled);
-      proxyPassword.setEnabled(enabled);
-      clearPassword.setEnabled(enabled);
-      connectTimeoutSeconds.setEnabled(enabled);
-      readTimeoutSeconds.setEnabled(enabled);
-    };
+    Runnable updateProxyEnabledState =
+        () -> {
+          boolean enabled = proxyEnabled.isSelected();
+          proxyHost.setEnabled(enabled);
+          proxyPort.setEnabled(enabled);
+          proxyRemoteDns.setEnabled(enabled);
+          proxyUsername.setEnabled(enabled);
+          proxyPassword.setEnabled(enabled);
+          clearPassword.setEnabled(enabled);
+          connectTimeoutSeconds.setEnabled(enabled);
+          readTimeoutSeconds.setEnabled(enabled);
+        };
 
-    Runnable validateProxyInputs = () -> {
-      // FlatLaf outlines: highlight invalid fields without adding noisy labels.
-      if (!proxyEnabled.isSelected()) {
-        proxyHost.putClientProperty("JComponent.outline", null);
-        proxyUsername.putClientProperty("JComponent.outline", null);
-        proxyPassword.putClientProperty("JComponent.outline", null);
-        return;
-      }
+    Runnable validateProxyInputs =
+        () -> {
+          // FlatLaf outlines: highlight invalid fields without adding noisy labels.
+          if (!proxyEnabled.isSelected()) {
+            proxyHost.putClientProperty("JComponent.outline", null);
+            proxyUsername.putClientProperty("JComponent.outline", null);
+            proxyPassword.putClientProperty("JComponent.outline", null);
+            return;
+          }
 
-      String host = Objects.toString(proxyHost.getText(), "").trim();
-      proxyHost.putClientProperty("JComponent.outline", host.isBlank() ? "error" : null);
+          String host = Objects.toString(proxyHost.getText(), "").trim();
+          proxyHost.putClientProperty("JComponent.outline", host.isBlank() ? "error" : null);
 
-      String user = Objects.toString(proxyUsername.getText(), "").trim();
-      String pass = new String(proxyPassword.getPassword()).trim();
+          String user = Objects.toString(proxyUsername.getText(), "").trim();
+          String pass = new String(proxyPassword.getPassword()).trim();
 
-      // SOCKS5 auth is username+password. If only one is provided, warn.
-      boolean hasUser = !user.isBlank();
-      boolean hasPass = !pass.isBlank();
-      boolean mismatch = hasUser ^ hasPass;
+          // SOCKS5 auth is username+password. If only one is provided, warn.
+          boolean hasUser = !user.isBlank();
+          boolean hasPass = !pass.isBlank();
+          boolean mismatch = hasUser ^ hasPass;
 
-      Object outline = mismatch ? "warning" : null;
-      proxyUsername.putClientProperty("JComponent.outline", outline);
-      proxyPassword.putClientProperty("JComponent.outline", outline);
-    };
+          Object outline = mismatch ? "warning" : null;
+          proxyUsername.putClientProperty("JComponent.outline", outline);
+          proxyPassword.putClientProperty("JComponent.outline", outline);
+        };
 
-    proxyEnabled.addActionListener(e -> {
-      updateProxyEnabledState.run();
-      validateProxyInputs.run();
-    });
+    proxyEnabled.addActionListener(
+        e -> {
+          updateProxyEnabledState.run();
+          validateProxyInputs.run();
+        });
     updateProxyEnabledState.run();
 
     proxyHost.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
@@ -3371,40 +4146,46 @@ panel.setOpaque(false);
     JPanel tlsHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     tlsHeader.setOpaque(false);
     tlsHeader.add(sectionTitle("TLS / SSL"), "growx, wmin 0");
-    tlsHeader.add(whyHelpButton(
-        "TLS / SSL (Trust all certificates)",
-        "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n" +
-            "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n" +
-            "Only enable this if you understand the risk (MITM becomes trivial)."
-    ), "align right");
+    tlsHeader.add(
+        whyHelpButton(
+            "TLS / SSL (Trust all certificates)",
+            "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n"
+                + "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n"
+                + "Only enable this if you understand the risk (MITM becomes trivial)."),
+        "align right");
     tlsTab.add(tlsHeader, "growx, wmin 0, wrap");
 
     JTextArea tlsBlurb = subtleInfoText();
-    tlsBlurb.setText("If enabled, certificate validation is skipped (insecure). Only use for debugging.");
+    tlsBlurb.setText(
+        "If enabled, certificate validation is skipped (insecure). Only use for debugging.");
     tlsTab.add(tlsBlurb, "growx, wmin 0, wrap");
 
     JCheckBox trustAllTlsCertificates = new JCheckBox();
     trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
-    JComponent trustAllTlsRow = wrapCheckBox(trustAllTlsCertificates, "Trust all TLS/SSL certificates (insecure)");
+    JComponent trustAllTlsRow =
+        wrapCheckBox(trustAllTlsCertificates, "Trust all TLS/SSL certificates (insecure)");
     tlsTab.add(trustAllTlsRow, "growx, wmin 0, wrap");
 
     // ---- Heartbeat tab ----
-    JPanel heartbeatTab = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    JPanel heartbeatTab =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
     heartbeatTab.setOpaque(false);
     JPanel heartbeatHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     heartbeatHeader.setOpaque(false);
     heartbeatHeader.add(sectionTitle("Connection heartbeat"), "growx, wmin 0");
-    heartbeatHeader.add(whyHelpButton(
-        "Connection heartbeat",
-        "IRCafe can detect 'silent' disconnects by monitoring inbound traffic.\n" +
-            "If no IRC messages are received for the configured timeout, IRCafe will close the socket\n" +
-            "and let the reconnect logic take over (if enabled).\n\n" +
-            "Tip: If your network is very quiet, increase the timeout."
-    ), "align right");
+    heartbeatHeader.add(
+        whyHelpButton(
+            "Connection heartbeat",
+            "IRCafe can detect 'silent' disconnects by monitoring inbound traffic.\n"
+                + "If no IRC messages are received for the configured timeout, IRCafe will close the socket\n"
+                + "and let the reconnect logic take over (if enabled).\n\n"
+                + "Tip: If your network is very quiet, increase the timeout."),
+        "align right");
     heartbeatTab.add(heartbeatHeader, "span 2, growx, wmin 0, wrap");
 
     JTextArea heartbeatBlurb = subtleInfoText();
-    heartbeatBlurb.setText("Detects silent disconnects by closing idle sockets so reconnect can kick in.");
+    heartbeatBlurb.setText(
+        "Detects silent disconnects by closing idle sockets so reconnect can kick in.");
     heartbeatTab.add(heartbeatBlurb, "span 2, growx, wmin 0, wrap");
 
     IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
@@ -3412,18 +4193,20 @@ panel.setOpaque(false);
 
     JCheckBox heartbeatEnabled = new JCheckBox();
     heartbeatEnabled.setSelected(hb.enabled());
-    JComponent heartbeatEnabledRow = wrapCheckBox(heartbeatEnabled, "Enable heartbeat / idle timeout detection");
+    JComponent heartbeatEnabledRow =
+        wrapCheckBox(heartbeatEnabled, "Enable heartbeat / idle timeout detection");
 
     int hbCheckSec = (int) Math.max(1, hb.checkPeriodMs() / 1000L);
     int hbTimeoutSec = (int) Math.max(1, hb.timeoutMs() / 1000L);
     JSpinner heartbeatCheckPeriodSeconds = numberSpinner(hbCheckSec, 1, 600, 1, closeables);
     JSpinner heartbeatTimeoutSeconds = numberSpinner(hbTimeoutSec, 5, 7200, 5, closeables);
 
-    Runnable updateHeartbeatEnabledState = () -> {
-      boolean enabled = heartbeatEnabled.isSelected();
-      heartbeatCheckPeriodSeconds.setEnabled(enabled);
-      heartbeatTimeoutSeconds.setEnabled(enabled);
-    };
+    Runnable updateHeartbeatEnabledState =
+        () -> {
+          boolean enabled = heartbeatEnabled.isSelected();
+          heartbeatCheckPeriodSeconds.setEnabled(enabled);
+          heartbeatTimeoutSeconds.setEnabled(enabled);
+        };
     heartbeatEnabled.addActionListener(e -> updateHeartbeatEnabledState.run());
     updateHeartbeatEnabledState.run();
 
@@ -3438,51 +4221,52 @@ panel.setOpaque(false);
     networkTabs.addTab("TLS", padSubTab(tlsTab));
     networkTabs.addTab("Heartbeat", padSubTab(heartbeatTab));
 
-    JPanel networkIntro = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]6[]", "[]"));
+    JPanel networkIntro =
+        new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]6[]", "[]"));
     networkIntro.setOpaque(false);
     networkIntro.add(tabTitle("Network"), "growx, wmin 0");
-    networkIntro.add(whyHelpButton(
-        "Network settings",
-        "These settings affect how IRCafe connects to networks and fetches external content (link previews, embedded images, etc).\n\n" +
-            "Tip: Most users only touch Proxy. Leave TLS trust-all off unless you're debugging."
-    ), "align right");
+    networkIntro.add(
+        whyHelpButton(
+            "Network settings",
+            "These settings affect how IRCafe connects to networks and fetches external content (link previews, embedded images, etc).\n\n"
+                + "Tip: Most users only touch Proxy. Leave TLS trust-all off unless you're debugging."),
+        "align right");
 
     networkPanel.add(networkIntro, "growx, wmin 0, wrap");
     networkPanel.add(networkTabs, "grow, push, wmin 0");
 
-    ProxyControls proxyControls = new ProxyControls(
-        proxyEnabled,
-        proxyHost,
-        proxyPort,
-        proxyRemoteDns,
-        proxyUsername,
-        proxyPassword,
-        clearPassword,
-        connectTimeoutSeconds,
-        readTimeoutSeconds
-    );
+    ProxyControls proxyControls =
+        new ProxyControls(
+            proxyEnabled,
+            proxyHost,
+            proxyPort,
+            proxyRemoteDns,
+            proxyUsername,
+            proxyPassword,
+            clearPassword,
+            connectTimeoutSeconds,
+            readTimeoutSeconds);
 
-    HeartbeatControls heartbeatControls = new HeartbeatControls(
-        heartbeatEnabled,
-        heartbeatCheckPeriodSeconds,
-        heartbeatTimeoutSeconds
-    );
+    HeartbeatControls heartbeatControls =
+        new HeartbeatControls(
+            heartbeatEnabled, heartbeatCheckPeriodSeconds, heartbeatTimeoutSeconds);
     userLookupsPanel.add(tabTitle("User lookups"), "growx, wrap");
 
     JPanel userLookupsIntro = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     userLookupsIntro.setOpaque(false);
-    JTextArea userLookupsBlurb = helpText(
-        "Optional fallbacks for account/away/host info (USERHOST / WHOIS), with conservative rate limits."
-    );
-    JButton userLookupsHelp = whyHelpButton(
-        "Why do I need user lookups?",
-        "Most modern IRC networks provide account and presence information via IRCv3 (e.g., account-tag, account-notify, away-notify, extended-join).\n\n" +
-            "However, some networks (or some pieces of data) still require fallback lookups. IRCafe can optionally use USERHOST and (as a last resort) WHOIS to fill missing metadata.\n\n" +
-            "If you're on an IRCv3-capable network and don't use hostmask-based ignore rules, you can usually leave these disabled."
-    );
+    JTextArea userLookupsBlurb =
+        helpText(
+            "Optional fallbacks for account/away/host info (USERHOST / WHOIS), with conservative rate limits.");
+    JButton userLookupsHelp =
+        whyHelpButton(
+            "Why do I need user lookups?",
+            "Most modern IRC networks provide account and presence information via IRCv3 (e.g., account-tag, account-notify, away-notify, extended-join).\n\n"
+                + "However, some networks (or some pieces of data) still require fallback lookups. IRCafe can optionally use USERHOST and (as a last resort) WHOIS to fill missing metadata.\n\n"
+                + "If you're on an IRCv3-capable network and don't use hostmask-based ignore rules, you can usually leave these disabled.");
     userLookupsIntro.add(userLookupsBlurb, "growx, wmin 0");
     userLookupsIntro.add(userLookupsHelp, "align right");
-    JPanel lookupPresetPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    JPanel lookupPresetPanel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
     lookupPresetPanel.setOpaque(false);
 
     JComboBox<LookupRatePreset> lookupPreset = new JComboBox<>(LookupRatePreset.values());
@@ -3490,22 +4274,23 @@ panel.setOpaque(false);
 
     JTextArea lookupPresetHint = subtleInfoText();
 
-    Runnable updateLookupPresetHint = () -> {
-      LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
-      if (psel == null) psel = LookupRatePreset.CUSTOM;
+    Runnable updateLookupPresetHint =
+        () -> {
+          LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
+          if (psel == null) psel = LookupRatePreset.CUSTOM;
 
-      String msg;
-      if (psel == LookupRatePreset.CONSERVATIVE) {
-        msg = "Lowest traffic. Best for huge channels or strict networks.";
-      } else if (psel == LookupRatePreset.BALANCED) {
-        msg = "Recommended default. Good fill-in speed with low risk.";
-      } else if (psel == LookupRatePreset.RAPID) {
-        msg = "Faster fill-in. More commands on the wire (use with caution).";
-      } else {
-        msg = "Custom shows the tuning controls below.";
-      }
-      lookupPresetHint.setText(msg);
-    };
+          String msg;
+          if (psel == LookupRatePreset.CONSERVATIVE) {
+            msg = "Lowest traffic. Best for huge channels or strict networks.";
+          } else if (psel == LookupRatePreset.BALANCED) {
+            msg = "Recommended default. Good fill-in speed with low risk.";
+          } else if (psel == LookupRatePreset.RAPID) {
+            msg = "Faster fill-in. More commands on the wire (use with caution).";
+          } else {
+            msg = "Custom shows the tuning controls below.";
+          }
+          lookupPresetHint.setText(msg);
+        };
     updateLookupPresetHint.run();
 
     lookupPresetPanel.add(new JLabel("Rate limit preset:"));
@@ -3519,41 +4304,53 @@ panel.setOpaque(false);
     lookupPresetPanel.add(new JLabel("MONITOR fallback poll (sec):"));
     lookupPresetPanel.add(monitorIsonPollIntervalSeconds, "w 110!, wrap");
 
-    JPanel hostmaskPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
-    hostmaskPanel.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createTitledBorder("Hostmask discovery"),
-        BorderFactory.createEmptyBorder(6, 6, 6, 6)
-    ));
+    JPanel hostmaskPanel =
+        new JPanel(
+            new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
+    hostmaskPanel.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder("Hostmask discovery"),
+            BorderFactory.createEmptyBorder(6, 6, 6, 6)));
     hostmaskPanel.setOpaque(false);
 
-    JCheckBox userhostEnabled = new JCheckBox("Fill missing hostmasks using USERHOST (rate-limited)");
+    JCheckBox userhostEnabled =
+        new JCheckBox("Fill missing hostmasks using USERHOST (rate-limited)");
     userhostEnabled.setSelected(current.userhostDiscoveryEnabled());
-    userhostEnabled.setToolTipText("When enabled, IRCafe may send USERHOST only when hostmask-based ignore rules exist and some nicks are missing hostmasks.");
+    userhostEnabled.setToolTipText(
+        "When enabled, IRCafe may send USERHOST only when hostmask-based ignore rules exist and some nicks are missing hostmasks.");
 
-    JButton hostmaskHelp = whyHelpButton(
-        "Why do I need hostmask discovery?",
-        "Some ignore rules rely on hostmasks (nick!user@host).\n\n" +
-            "On many networks, the full hostmask isn't included in NAMES and might not be available until additional lookups happen.\n\n" +
-            "If you use hostmask-based ignore rules and some users show up without hostmasks, IRCafe can send rate-limited USERHOST commands to fill them in.\n\n" +
-            "If you don't use hostmask-based ignores, you can usually leave this off."
-    );
+    JButton hostmaskHelp =
+        whyHelpButton(
+            "Why do I need hostmask discovery?",
+            "Some ignore rules rely on hostmasks (nick!user@host).\n\n"
+                + "On many networks, the full hostmask isn't included in NAMES and might not be available until additional lookups happen.\n\n"
+                + "If you use hostmask-based ignore rules and some users show up without hostmasks, IRCafe can send rate-limited USERHOST commands to fill them in.\n\n"
+                + "If you don't use hostmask-based ignores, you can usually leave this off.");
 
     JTextArea hostmaskSummary = subtleInfoText();
     hostmaskSummary.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
 
-    JSpinner userhostMinIntervalSeconds = numberSpinner(current.userhostMinIntervalSeconds(), 1, 60, 1, closeables);
-    userhostMinIntervalSeconds.setToolTipText("Minimum seconds between USERHOST commands per server.");
+    JSpinner userhostMinIntervalSeconds =
+        numberSpinner(current.userhostMinIntervalSeconds(), 1, 60, 1, closeables);
+    userhostMinIntervalSeconds.setToolTipText(
+        "Minimum seconds between USERHOST commands per server.");
 
-    JSpinner userhostMaxPerMinute = numberSpinner(current.userhostMaxCommandsPerMinute(), 1, 60, 1, closeables);
+    JSpinner userhostMaxPerMinute =
+        numberSpinner(current.userhostMaxCommandsPerMinute(), 1, 60, 1, closeables);
     userhostMaxPerMinute.setToolTipText("Maximum USERHOST commands per minute per server.");
 
-    JSpinner userhostNickCooldownMinutes = numberSpinner(current.userhostNickCooldownMinutes(), 1, 240, 1, closeables);
-    userhostNickCooldownMinutes.setToolTipText("Cooldown in minutes before re-querying the same nick.");
+    JSpinner userhostNickCooldownMinutes =
+        numberSpinner(current.userhostNickCooldownMinutes(), 1, 240, 1, closeables);
+    userhostNickCooldownMinutes.setToolTipText(
+        "Cooldown in minutes before re-querying the same nick.");
 
-    JSpinner userhostMaxNicksPerCommand = numberSpinner(current.userhostMaxNicksPerCommand(), 1, 5, 1, closeables);
-    userhostMaxNicksPerCommand.setToolTipText("How many nicks to include per USERHOST command (servers typically allow up to 5).");
+    JSpinner userhostMaxNicksPerCommand =
+        numberSpinner(current.userhostMaxNicksPerCommand(), 1, 5, 1, closeables);
+    userhostMaxNicksPerCommand.setToolTipText(
+        "How many nicks to include per USERHOST command (servers typically allow up to 5).");
 
-    JPanel hostmaskAdvanced = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
+    JPanel hostmaskAdvanced =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
     hostmaskAdvanced.setOpaque(false);
     hostmaskAdvanced.add(new JLabel("Min interval (sec):"));
     hostmaskAdvanced.add(userhostMinIntervalSeconds, "w 110!");
@@ -3563,80 +4360,114 @@ panel.setOpaque(false);
     hostmaskAdvanced.add(userhostNickCooldownMinutes, "w 110!");
     hostmaskAdvanced.add(new JLabel("Max nicks/command:"));
     hostmaskAdvanced.add(userhostMaxNicksPerCommand, "w 110!");
-    JPanel enrichmentPanel = new JPanel(new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
-    enrichmentPanel.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createTitledBorder("Roster enrichment (fallback)"),
-        BorderFactory.createEmptyBorder(6, 6, 6, 6)
-    ));
+    JPanel enrichmentPanel =
+        new JPanel(
+            new MigLayout("insets 8, fillx, wrap 2, hidemode 3", "[right]12[grow,fill]", ""));
+    enrichmentPanel.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder("Roster enrichment (fallback)"),
+            BorderFactory.createEmptyBorder(6, 6, 6, 6)));
     enrichmentPanel.setOpaque(false);
 
-    JCheckBox enrichmentEnabled = new JCheckBox("Best-effort roster enrichment using USERHOST (rate-limited)");
+    JCheckBox enrichmentEnabled =
+        new JCheckBox("Best-effort roster enrichment using USERHOST (rate-limited)");
     enrichmentEnabled.setSelected(current.userInfoEnrichmentEnabled());
-    enrichmentEnabled.setToolTipText("When enabled, IRCafe may send USERHOST occasionally to enrich user info even when you don't have hostmask-based ignore rules.\n" +
-        "This is a best-effort fallback for older networks.");
+    enrichmentEnabled.setToolTipText(
+        "When enabled, IRCafe may send USERHOST occasionally to enrich user info even when you don't have hostmask-based ignore rules.\n"
+            + "This is a best-effort fallback for older networks.");
 
-    JCheckBox enrichmentWhoisFallbackEnabled = new JCheckBox("Also use WHOIS fallback for account info (very slow)");
+    JCheckBox enrichmentWhoisFallbackEnabled =
+        new JCheckBox("Also use WHOIS fallback for account info (very slow)");
     enrichmentWhoisFallbackEnabled.setSelected(current.userInfoEnrichmentWhoisFallbackEnabled());
-    enrichmentWhoisFallbackEnabled.setToolTipText("When enabled, IRCafe may occasionally send WHOIS to learn account login state/name and away message.\n" +
-        "This is slower and more likely to hit server rate limits. Recommended OFF by default.");
+    enrichmentWhoisFallbackEnabled.setToolTipText(
+        "When enabled, IRCafe may occasionally send WHOIS to learn account login state/name and away message.\n"
+            + "This is slower and more likely to hit server rate limits. Recommended OFF by default.");
 
-    JCheckBox enrichmentPeriodicRefreshEnabled = new JCheckBox("Periodic background refresh (slow scan)");
-    enrichmentPeriodicRefreshEnabled.setSelected(current.userInfoEnrichmentPeriodicRefreshEnabled());
-    enrichmentPeriodicRefreshEnabled.setToolTipText("When enabled, IRCafe will periodically re-check a small number of nicks to detect changes.\n" +
-        "Use conservative intervals to avoid extra network load.");
+    JCheckBox enrichmentPeriodicRefreshEnabled =
+        new JCheckBox("Periodic background refresh (slow scan)");
+    enrichmentPeriodicRefreshEnabled.setSelected(
+        current.userInfoEnrichmentPeriodicRefreshEnabled());
+    enrichmentPeriodicRefreshEnabled.setToolTipText(
+        "When enabled, IRCafe will periodically re-check a small number of nicks to detect changes.\n"
+            + "Use conservative intervals to avoid extra network load.");
 
-    JButton enrichmentHelp = whyHelpButton(
-        "Why do I need roster enrichment?",
-        "This is a best-effort fallback for older networks or edge cases where IRCv3 metadata isn't available.\n\n" +
-            "IRCafe can use rate-limited USERHOST to fill missing user info. Optionally it can also use WHOIS (much slower) to learn account/away details.\n\n" +
-            "On modern IRCv3 networks, you typically don't need this. Leave it OFF unless you have a specific reason."
-    );
+    JButton enrichmentHelp =
+        whyHelpButton(
+            "Why do I need roster enrichment?",
+            "This is a best-effort fallback for older networks or edge cases where IRCv3 metadata isn't available.\n\n"
+                + "IRCafe can use rate-limited USERHOST to fill missing user info. Optionally it can also use WHOIS (much slower) to learn account/away details.\n\n"
+                + "On modern IRCv3 networks, you typically don't need this. Leave it OFF unless you have a specific reason.");
 
-    JButton whoisHelp = whyHelpButton(
-        "WHOIS fallback",
-        "WHOIS is the slowest and noisiest fallback. It can provide account and away information when IRCv3 isn't available, but it is easy to hit server throttles.\n\n" +
-            "Keep this OFF unless you're on a network that doesn't provide account info via IRCv3."
-    );
+    JButton whoisHelp =
+        whyHelpButton(
+            "WHOIS fallback",
+            "WHOIS is the slowest and noisiest fallback. It can provide account and away information when IRCv3 isn't available, but it is easy to hit server throttles.\n\n"
+                + "Keep this OFF unless you're on a network that doesn't provide account info via IRCv3.");
 
-    JButton refreshHelp = whyHelpButton(
-        "Periodic background refresh",
-        "This periodically re-probes a small number of users to detect changes (e.g., account/away state) on networks that don't push updates.\n\n" +
-            "It's a slow scan by design: use high intervals and small batch sizes to avoid extra network load."
-    );
+    JButton refreshHelp =
+        whyHelpButton(
+            "Periodic background refresh",
+            "This periodically re-probes a small number of users to detect changes (e.g., account/away state) on networks that don't push updates.\n\n"
+                + "It's a slow scan by design: use high intervals and small batch sizes to avoid extra network load.");
 
     JTextArea enrichmentSummary = subtleInfoText();
     enrichmentSummary.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
 
-    JSpinner enrichmentUserhostMinIntervalSeconds = numberSpinner(current.userInfoEnrichmentUserhostMinIntervalSeconds(), 1, 300, 1, closeables);
-    enrichmentUserhostMinIntervalSeconds.setToolTipText("Minimum seconds between USERHOST commands per server for enrichment.");
+    JSpinner enrichmentUserhostMinIntervalSeconds =
+        numberSpinner(
+            current.userInfoEnrichmentUserhostMinIntervalSeconds(), 1, 300, 1, closeables);
+    enrichmentUserhostMinIntervalSeconds.setToolTipText(
+        "Minimum seconds between USERHOST commands per server for enrichment.");
 
-    JSpinner enrichmentUserhostMaxPerMinute = numberSpinner(current.userInfoEnrichmentUserhostMaxCommandsPerMinute(), 1, 60, 1, closeables);
-    enrichmentUserhostMaxPerMinute.setToolTipText("Maximum USERHOST commands per minute per server for enrichment.");
+    JSpinner enrichmentUserhostMaxPerMinute =
+        numberSpinner(
+            current.userInfoEnrichmentUserhostMaxCommandsPerMinute(), 1, 60, 1, closeables);
+    enrichmentUserhostMaxPerMinute.setToolTipText(
+        "Maximum USERHOST commands per minute per server for enrichment.");
 
-    JSpinner enrichmentUserhostNickCooldownMinutes = numberSpinner(current.userInfoEnrichmentUserhostNickCooldownMinutes(), 1, 1440, 1, closeables);
-    enrichmentUserhostNickCooldownMinutes.setToolTipText("Cooldown in minutes before re-querying the same nick via USERHOST (enrichment).\n" +
-        "Higher values reduce network load.");
+    JSpinner enrichmentUserhostNickCooldownMinutes =
+        numberSpinner(
+            current.userInfoEnrichmentUserhostNickCooldownMinutes(), 1, 1440, 1, closeables);
+    enrichmentUserhostNickCooldownMinutes.setToolTipText(
+        "Cooldown in minutes before re-querying the same nick via USERHOST (enrichment).\n"
+            + "Higher values reduce network load.");
 
-    JSpinner enrichmentUserhostMaxNicksPerCommand = numberSpinner(current.userInfoEnrichmentUserhostMaxNicksPerCommand(), 1, 5, 1, closeables);
-    enrichmentUserhostMaxNicksPerCommand.setToolTipText("How many nicks to include per USERHOST command (servers typically allow up to 5).\n" +
-        "This applies to enrichment mode, separate from hostmask discovery.");
+    JSpinner enrichmentUserhostMaxNicksPerCommand =
+        numberSpinner(current.userInfoEnrichmentUserhostMaxNicksPerCommand(), 1, 5, 1, closeables);
+    enrichmentUserhostMaxNicksPerCommand.setToolTipText(
+        "How many nicks to include per USERHOST command (servers typically allow up to 5).\n"
+            + "This applies to enrichment mode, separate from hostmask discovery.");
 
-    JSpinner enrichmentWhoisMinIntervalSeconds = numberSpinner(current.userInfoEnrichmentWhoisMinIntervalSeconds(), 5, 600, 5, closeables);
-    enrichmentWhoisMinIntervalSeconds.setToolTipText("Minimum seconds between WHOIS commands per server (enrichment).\n" +
-        "Keep this high to avoid throttling.");
+    JSpinner enrichmentWhoisMinIntervalSeconds =
+        numberSpinner(current.userInfoEnrichmentWhoisMinIntervalSeconds(), 5, 600, 5, closeables);
+    enrichmentWhoisMinIntervalSeconds.setToolTipText(
+        "Minimum seconds between WHOIS commands per server (enrichment).\n"
+            + "Keep this high to avoid throttling.");
 
-    JSpinner enrichmentWhoisNickCooldownMinutes = numberSpinner(current.userInfoEnrichmentWhoisNickCooldownMinutes(), 1, 1440, 1, closeables);
-    enrichmentWhoisNickCooldownMinutes.setToolTipText("Cooldown in minutes before re-WHOIS'ing the same nick.");
+    JSpinner enrichmentWhoisNickCooldownMinutes =
+        numberSpinner(current.userInfoEnrichmentWhoisNickCooldownMinutes(), 1, 1440, 1, closeables);
+    enrichmentWhoisNickCooldownMinutes.setToolTipText(
+        "Cooldown in minutes before re-WHOIS'ing the same nick.");
 
-    JSpinner enrichmentPeriodicRefreshIntervalSeconds = numberSpinner(current.userInfoEnrichmentPeriodicRefreshIntervalSeconds(), 30, 3600, 30, closeables);
-    enrichmentPeriodicRefreshIntervalSeconds.setToolTipText("How often to run a slow scan tick (seconds).\n" +
-        "Higher values are safer. Example: 300 seconds (5 minutes).");
+    JSpinner enrichmentPeriodicRefreshIntervalSeconds =
+        numberSpinner(
+            current.userInfoEnrichmentPeriodicRefreshIntervalSeconds(), 30, 3600, 30, closeables);
+    enrichmentPeriodicRefreshIntervalSeconds.setToolTipText(
+        "How often to run a slow scan tick (seconds).\n"
+            + "Higher values are safer. Example: 300 seconds (5 minutes).");
 
-    JSpinner enrichmentPeriodicRefreshNicksPerTick = numberSpinner(current.userInfoEnrichmentPeriodicRefreshNicksPerTick(), 1, 20, 1, closeables);
-    enrichmentPeriodicRefreshNicksPerTick.setToolTipText("How many nicks to probe per periodic tick.\n" +
-        "Keep this small (e.g., 1-3).");
+    JSpinner enrichmentPeriodicRefreshNicksPerTick =
+        numberSpinner(
+            current.userInfoEnrichmentPeriodicRefreshNicksPerTick(), 1, 20, 1, closeables);
+    enrichmentPeriodicRefreshNicksPerTick.setToolTipText(
+        "How many nicks to probe per periodic tick.\n" + "Keep this small (e.g., 1-3).");
 
-    JPanel enrichmentAdvanced = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]10[]6[]6[]10[]6[]6[]"));
+    JPanel enrichmentAdvanced =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2",
+                "[right]12[grow,fill]",
+                "[]6[]6[]6[]10[]6[]6[]10[]6[]6[]"));
     enrichmentAdvanced.setOpaque(false);
     JLabel userhostHdr = new JLabel("USERHOST tuning");
     userhostHdr.setFont(userhostHdr.getFont().deriveFont(Font.BOLD));
@@ -3663,192 +4494,209 @@ panel.setOpaque(false);
     enrichmentAdvanced.add(enrichmentPeriodicRefreshIntervalSeconds, "w 110!");
     enrichmentAdvanced.add(new JLabel("Nicks per tick:"));
     enrichmentAdvanced.add(enrichmentPeriodicRefreshNicksPerTick, "w 110!");
-    Consumer<LookupRatePreset> applyLookupPreset = preset -> {
-      if (preset == null || preset == LookupRatePreset.CUSTOM) return;
+    Consumer<LookupRatePreset> applyLookupPreset =
+        preset -> {
+          if (preset == null || preset == LookupRatePreset.CUSTOM) return;
 
-      switch (preset) {
-        case CONSERVATIVE -> {
-          userhostMinIntervalSeconds.setValue(10);
-          userhostMaxPerMinute.setValue(2);
-          userhostNickCooldownMinutes.setValue(60);
-          userhostMaxNicksPerCommand.setValue(5);
-          enrichmentUserhostMinIntervalSeconds.setValue(30);
-          enrichmentUserhostMaxPerMinute.setValue(2);
-          enrichmentUserhostNickCooldownMinutes.setValue(180);
-          enrichmentUserhostMaxNicksPerCommand.setValue(5);
-          enrichmentWhoisMinIntervalSeconds.setValue(120);
-          enrichmentWhoisNickCooldownMinutes.setValue(240);
-          enrichmentPeriodicRefreshIntervalSeconds.setValue(600);
-          enrichmentPeriodicRefreshNicksPerTick.setValue(1);
-        }
-        case BALANCED -> {
-          userhostMinIntervalSeconds.setValue(5);
-          userhostMaxPerMinute.setValue(6);
-          userhostNickCooldownMinutes.setValue(30);
-          userhostMaxNicksPerCommand.setValue(5);
-          enrichmentUserhostMinIntervalSeconds.setValue(15);
-          enrichmentUserhostMaxPerMinute.setValue(4);
-          enrichmentUserhostNickCooldownMinutes.setValue(60);
-          enrichmentUserhostMaxNicksPerCommand.setValue(5);
-          enrichmentWhoisMinIntervalSeconds.setValue(60);
-          enrichmentWhoisNickCooldownMinutes.setValue(120);
-          enrichmentPeriodicRefreshIntervalSeconds.setValue(300);
-          enrichmentPeriodicRefreshNicksPerTick.setValue(2);
-        }
-        case RAPID -> {
-          userhostMinIntervalSeconds.setValue(2);
-          userhostMaxPerMinute.setValue(15);
-          userhostNickCooldownMinutes.setValue(10);
-          userhostMaxNicksPerCommand.setValue(5);
-          enrichmentUserhostMinIntervalSeconds.setValue(5);
-          enrichmentUserhostMaxPerMinute.setValue(10);
-          enrichmentUserhostNickCooldownMinutes.setValue(15);
-          enrichmentUserhostMaxNicksPerCommand.setValue(5);
-          enrichmentWhoisMinIntervalSeconds.setValue(15);
-          enrichmentWhoisNickCooldownMinutes.setValue(30);
-          enrichmentPeriodicRefreshIntervalSeconds.setValue(60);
-          enrichmentPeriodicRefreshNicksPerTick.setValue(3);
-        }
-        default -> { /* no-op */ }
-      }
-    };
-    Runnable updateHostmaskSummary = () -> {
-      if (!userhostEnabled.isSelected()) {
-        hostmaskSummary.setText("Disabled");
-        return;
-      }
-      int minI = ((Number) userhostMinIntervalSeconds.getValue()).intValue();
-      int maxM = ((Number) userhostMaxPerMinute.getValue()).intValue();
-      int cdM = ((Number) userhostNickCooldownMinutes.getValue()).intValue();
-      int maxN = ((Number) userhostMaxNicksPerCommand.getValue()).intValue();
-      hostmaskSummary.setText(String.format("USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd", maxM, minI, cdM, maxN));
-    };
+          switch (preset) {
+            case CONSERVATIVE -> {
+              userhostMinIntervalSeconds.setValue(10);
+              userhostMaxPerMinute.setValue(2);
+              userhostNickCooldownMinutes.setValue(60);
+              userhostMaxNicksPerCommand.setValue(5);
+              enrichmentUserhostMinIntervalSeconds.setValue(30);
+              enrichmentUserhostMaxPerMinute.setValue(2);
+              enrichmentUserhostNickCooldownMinutes.setValue(180);
+              enrichmentUserhostMaxNicksPerCommand.setValue(5);
+              enrichmentWhoisMinIntervalSeconds.setValue(120);
+              enrichmentWhoisNickCooldownMinutes.setValue(240);
+              enrichmentPeriodicRefreshIntervalSeconds.setValue(600);
+              enrichmentPeriodicRefreshNicksPerTick.setValue(1);
+            }
+            case BALANCED -> {
+              userhostMinIntervalSeconds.setValue(5);
+              userhostMaxPerMinute.setValue(6);
+              userhostNickCooldownMinutes.setValue(30);
+              userhostMaxNicksPerCommand.setValue(5);
+              enrichmentUserhostMinIntervalSeconds.setValue(15);
+              enrichmentUserhostMaxPerMinute.setValue(4);
+              enrichmentUserhostNickCooldownMinutes.setValue(60);
+              enrichmentUserhostMaxNicksPerCommand.setValue(5);
+              enrichmentWhoisMinIntervalSeconds.setValue(60);
+              enrichmentWhoisNickCooldownMinutes.setValue(120);
+              enrichmentPeriodicRefreshIntervalSeconds.setValue(300);
+              enrichmentPeriodicRefreshNicksPerTick.setValue(2);
+            }
+            case RAPID -> {
+              userhostMinIntervalSeconds.setValue(2);
+              userhostMaxPerMinute.setValue(15);
+              userhostNickCooldownMinutes.setValue(10);
+              userhostMaxNicksPerCommand.setValue(5);
+              enrichmentUserhostMinIntervalSeconds.setValue(5);
+              enrichmentUserhostMaxPerMinute.setValue(10);
+              enrichmentUserhostNickCooldownMinutes.setValue(15);
+              enrichmentUserhostMaxNicksPerCommand.setValue(5);
+              enrichmentWhoisMinIntervalSeconds.setValue(15);
+              enrichmentWhoisNickCooldownMinutes.setValue(30);
+              enrichmentPeriodicRefreshIntervalSeconds.setValue(60);
+              enrichmentPeriodicRefreshNicksPerTick.setValue(3);
+            }
+            default -> {
+              /* no-op */
+            }
+          }
+        };
+    Runnable updateHostmaskSummary =
+        () -> {
+          if (!userhostEnabled.isSelected()) {
+            hostmaskSummary.setText("Disabled");
+            return;
+          }
+          int minI = ((Number) userhostMinIntervalSeconds.getValue()).intValue();
+          int maxM = ((Number) userhostMaxPerMinute.getValue()).intValue();
+          int cdM = ((Number) userhostNickCooldownMinutes.getValue()).intValue();
+          int maxN = ((Number) userhostMaxNicksPerCommand.getValue()).intValue();
+          hostmaskSummary.setText(
+              String.format(
+                  "USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd",
+                  maxM, minI, cdM, maxN));
+        };
 
-    Runnable updateEnrichmentSummary = () -> {
-      if (!enrichmentEnabled.isSelected()) {
-        enrichmentSummary.setText("Disabled");
-        return;
-      }
+    Runnable updateEnrichmentSummary =
+        () -> {
+          if (!enrichmentEnabled.isSelected()) {
+            enrichmentSummary.setText("Disabled");
+            return;
+          }
 
-      int minI = ((Number) enrichmentUserhostMinIntervalSeconds.getValue()).intValue();
-      int maxM = ((Number) enrichmentUserhostMaxPerMinute.getValue()).intValue();
-      int cdM = ((Number) enrichmentUserhostNickCooldownMinutes.getValue()).intValue();
-      int maxN = ((Number) enrichmentUserhostMaxNicksPerCommand.getValue()).intValue();
+          int minI = ((Number) enrichmentUserhostMinIntervalSeconds.getValue()).intValue();
+          int maxM = ((Number) enrichmentUserhostMaxPerMinute.getValue()).intValue();
+          int cdM = ((Number) enrichmentUserhostNickCooldownMinutes.getValue()).intValue();
+          int maxN = ((Number) enrichmentUserhostMaxNicksPerCommand.getValue()).intValue();
 
-      String whois;
-      if (enrichmentWhoisFallbackEnabled.isSelected()) {
-        int whoisMin = ((Number) enrichmentWhoisMinIntervalSeconds.getValue()).intValue();
-        int whoisCd = ((Number) enrichmentWhoisNickCooldownMinutes.getValue()).intValue();
-        whois = String.format("WHOIS min %ds, cooldown %dm", whoisMin, whoisCd);
-      } else {
-        whois = "WHOIS off";
-      }
+          String whois;
+          if (enrichmentWhoisFallbackEnabled.isSelected()) {
+            int whoisMin = ((Number) enrichmentWhoisMinIntervalSeconds.getValue()).intValue();
+            int whoisCd = ((Number) enrichmentWhoisNickCooldownMinutes.getValue()).intValue();
+            whois = String.format("WHOIS min %ds, cooldown %dm", whoisMin, whoisCd);
+          } else {
+            whois = "WHOIS off";
+          }
 
-      String refresh;
-      if (enrichmentPeriodicRefreshEnabled.isSelected()) {
-        int interval = ((Number) enrichmentPeriodicRefreshIntervalSeconds.getValue()).intValue();
-        int nicks = ((Number) enrichmentPeriodicRefreshNicksPerTick.getValue()).intValue();
-        refresh = String.format("Refresh %ds ×%d", interval, nicks);
-      } else {
-        refresh = "Refresh off";
-      }
+          String refresh;
+          if (enrichmentPeriodicRefreshEnabled.isSelected()) {
+            int interval =
+                ((Number) enrichmentPeriodicRefreshIntervalSeconds.getValue()).intValue();
+            int nicks = ((Number) enrichmentPeriodicRefreshNicksPerTick.getValue()).intValue();
+            refresh = String.format("Refresh %ds ×%d", interval, nicks);
+          } else {
+            refresh = "Refresh off";
+          }
 
-      enrichmentSummary.setText(
-          String.format("USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd\n%s • %s",
-              maxM, minI, cdM, maxN, whois, refresh)
-      );
-    };
+          enrichmentSummary.setText(
+              String.format(
+                  "USERHOST ≤%d/min • min %ds • cooldown %dm • up to %d nicks/cmd\n%s • %s",
+                  maxM, minI, cdM, maxN, whois, refresh));
+        };
 
-    Runnable updateAllSummaries = () -> {
-      updateHostmaskSummary.run();
-      updateEnrichmentSummary.run();
-    };
+    Runnable updateAllSummaries =
+        () -> {
+          updateHostmaskSummary.run();
+          updateEnrichmentSummary.run();
+        };
 
-    Runnable updateHostmaskState = () -> {
-      boolean enabled = userhostEnabled.isSelected();
-      LookupRatePreset preset = (LookupRatePreset) lookupPreset.getSelectedItem();
-      boolean custom = preset == LookupRatePreset.CUSTOM;
+    Runnable updateHostmaskState =
+        () -> {
+          boolean enabled = userhostEnabled.isSelected();
+          LookupRatePreset preset = (LookupRatePreset) lookupPreset.getSelectedItem();
+          boolean custom = preset == LookupRatePreset.CUSTOM;
 
-      boolean show = enabled && custom;
-      hostmaskAdvanced.setVisible(show);
+          boolean show = enabled && custom;
+          hostmaskAdvanced.setVisible(show);
 
-      userhostMinIntervalSeconds.setEnabled(show);
-      userhostMaxPerMinute.setEnabled(show);
-      userhostNickCooldownMinutes.setEnabled(show);
-      userhostMaxNicksPerCommand.setEnabled(show);
+          userhostMinIntervalSeconds.setEnabled(show);
+          userhostMaxPerMinute.setEnabled(show);
+          userhostNickCooldownMinutes.setEnabled(show);
+          userhostMaxNicksPerCommand.setEnabled(show);
 
-      updateHostmaskSummary.run();
-    };
+          updateHostmaskSummary.run();
+        };
 
-    Runnable updateEnrichmentState = () -> {
-      boolean enabled = enrichmentEnabled.isSelected();
-      LookupRatePreset preset = (LookupRatePreset) lookupPreset.getSelectedItem();
-      boolean custom = preset == LookupRatePreset.CUSTOM;
+    Runnable updateEnrichmentState =
+        () -> {
+          boolean enabled = enrichmentEnabled.isSelected();
+          LookupRatePreset preset = (LookupRatePreset) lookupPreset.getSelectedItem();
+          boolean custom = preset == LookupRatePreset.CUSTOM;
 
-      enrichmentWhoisFallbackEnabled.setEnabled(enabled);
-      enrichmentPeriodicRefreshEnabled.setEnabled(enabled);
+          enrichmentWhoisFallbackEnabled.setEnabled(enabled);
+          enrichmentPeriodicRefreshEnabled.setEnabled(enabled);
 
-      boolean showAdv = enabled && custom;
-      enrichmentAdvanced.setVisible(showAdv);
+          boolean showAdv = enabled && custom;
+          enrichmentAdvanced.setVisible(showAdv);
 
-      enrichmentUserhostMinIntervalSeconds.setEnabled(showAdv);
-      enrichmentUserhostMaxPerMinute.setEnabled(showAdv);
-      enrichmentUserhostNickCooldownMinutes.setEnabled(showAdv);
-      enrichmentUserhostMaxNicksPerCommand.setEnabled(showAdv);
+          enrichmentUserhostMinIntervalSeconds.setEnabled(showAdv);
+          enrichmentUserhostMaxPerMinute.setEnabled(showAdv);
+          enrichmentUserhostNickCooldownMinutes.setEnabled(showAdv);
+          enrichmentUserhostMaxNicksPerCommand.setEnabled(showAdv);
 
-      boolean whoisEnabled = showAdv && enrichmentWhoisFallbackEnabled.isSelected();
-      enrichmentWhoisMinIntervalSeconds.setEnabled(whoisEnabled);
-      enrichmentWhoisNickCooldownMinutes.setEnabled(whoisEnabled);
+          boolean whoisEnabled = showAdv && enrichmentWhoisFallbackEnabled.isSelected();
+          enrichmentWhoisMinIntervalSeconds.setEnabled(whoisEnabled);
+          enrichmentWhoisNickCooldownMinutes.setEnabled(whoisEnabled);
 
-      boolean periodicEnabled = showAdv && enrichmentPeriodicRefreshEnabled.isSelected();
-      enrichmentPeriodicRefreshIntervalSeconds.setEnabled(periodicEnabled);
-      enrichmentPeriodicRefreshNicksPerTick.setEnabled(periodicEnabled);
+          boolean periodicEnabled = showAdv && enrichmentPeriodicRefreshEnabled.isSelected();
+          enrichmentPeriodicRefreshIntervalSeconds.setEnabled(periodicEnabled);
+          enrichmentPeriodicRefreshNicksPerTick.setEnabled(periodicEnabled);
 
-      updateEnrichmentSummary.run();
-    };
-    userhostEnabled.addActionListener(e -> {
-      updateHostmaskState.run();
-      updateAllSummaries.run();
-      hostmaskPanel.revalidate();
-      hostmaskPanel.repaint();
-      userLookupsPanel.revalidate();
-      userLookupsPanel.repaint();
-    });
+          updateEnrichmentSummary.run();
+        };
+    userhostEnabled.addActionListener(
+        e -> {
+          updateHostmaskState.run();
+          updateAllSummaries.run();
+          hostmaskPanel.revalidate();
+          hostmaskPanel.repaint();
+          userLookupsPanel.revalidate();
+          userLookupsPanel.repaint();
+        });
 
-    enrichmentEnabled.addActionListener(e -> {
-      updateEnrichmentState.run();
-      updateAllSummaries.run();
-      enrichmentPanel.revalidate();
-      enrichmentPanel.repaint();
-      userLookupsPanel.revalidate();
-      userLookupsPanel.repaint();
-    });
+    enrichmentEnabled.addActionListener(
+        e -> {
+          updateEnrichmentState.run();
+          updateAllSummaries.run();
+          enrichmentPanel.revalidate();
+          enrichmentPanel.repaint();
+          userLookupsPanel.revalidate();
+          userLookupsPanel.repaint();
+        });
 
-    enrichmentWhoisFallbackEnabled.addActionListener(e -> {
-      updateEnrichmentState.run();
-      updateAllSummaries.run();
-    });
-    enrichmentPeriodicRefreshEnabled.addActionListener(e -> {
-      updateEnrichmentState.run();
-      updateAllSummaries.run();
-    });
+    enrichmentWhoisFallbackEnabled.addActionListener(
+        e -> {
+          updateEnrichmentState.run();
+          updateAllSummaries.run();
+        });
+    enrichmentPeriodicRefreshEnabled.addActionListener(
+        e -> {
+          updateEnrichmentState.run();
+          updateAllSummaries.run();
+        });
 
-    lookupPreset.addActionListener(e -> {
-      LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
-      if (psel != null && psel != LookupRatePreset.CUSTOM) {
-        applyLookupPreset.accept(psel);
-      }
-      updateLookupPresetHint.run();
-      updateHostmaskState.run();
-      updateEnrichmentState.run();
-      updateAllSummaries.run();
-      hostmaskPanel.revalidate();
-      hostmaskPanel.repaint();
-      enrichmentPanel.revalidate();
-      enrichmentPanel.repaint();
-      userLookupsPanel.revalidate();
-      userLookupsPanel.repaint();
-    });
+    lookupPreset.addActionListener(
+        e -> {
+          LookupRatePreset psel = (LookupRatePreset) lookupPreset.getSelectedItem();
+          if (psel != null && psel != LookupRatePreset.CUSTOM) {
+            applyLookupPreset.accept(psel);
+          }
+          updateLookupPresetHint.run();
+          updateHostmaskState.run();
+          updateEnrichmentState.run();
+          updateAllSummaries.run();
+          hostmaskPanel.revalidate();
+          hostmaskPanel.repaint();
+          enrichmentPanel.revalidate();
+          enrichmentPanel.repaint();
+          userLookupsPanel.revalidate();
+          userLookupsPanel.repaint();
+        });
 
     javax.swing.event.ChangeListener summaryChange = e -> updateAllSummaries.run();
     userhostMinIntervalSeconds.addChangeListener(summaryChange);
@@ -3863,12 +4711,14 @@ panel.setOpaque(false);
     enrichmentWhoisNickCooldownMinutes.addChangeListener(summaryChange);
     enrichmentPeriodicRefreshIntervalSeconds.addChangeListener(summaryChange);
     enrichmentPeriodicRefreshNicksPerTick.addChangeListener(summaryChange);
-    JPanel enrichmentWhoisRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    JPanel enrichmentWhoisRow =
+        new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     enrichmentWhoisRow.setOpaque(false);
     enrichmentWhoisRow.add(enrichmentWhoisFallbackEnabled, "growx");
     enrichmentWhoisRow.add(whoisHelp, "align right");
 
-    JPanel enrichmentRefreshRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    JPanel enrichmentRefreshRow =
+        new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
     enrichmentRefreshRow.setOpaque(false);
     enrichmentRefreshRow.add(enrichmentPeriodicRefreshEnabled, "growx");
     enrichmentRefreshRow.add(refreshHelp, "align right");
@@ -3889,7 +4739,8 @@ panel.setOpaque(false);
     updateEnrichmentState.run();
 
     JTabbedPane lookupsTabs = new JTabbedPane();
-    JPanel lookupsOverview = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]10[]"));
+    JPanel lookupsOverview =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]10[]"));
     lookupsOverview.setOpaque(false);
     lookupsOverview.add(userLookupsIntro, "growx, wmin 0, wrap");
     lookupsOverview.add(lookupPresetPanel, "growx, wmin 0, wrap");
@@ -3900,27 +4751,27 @@ panel.setOpaque(false);
 
     userLookupsPanel.add(lookupsTabs, "growx, wmin 0, wrap");
 
-    UserhostControls userhostControls = new UserhostControls(
-        userhostEnabled,
-        userhostMinIntervalSeconds,
-        userhostMaxPerMinute,
-        userhostNickCooldownMinutes,
-        userhostMaxNicksPerCommand
-    );
+    UserhostControls userhostControls =
+        new UserhostControls(
+            userhostEnabled,
+            userhostMinIntervalSeconds,
+            userhostMaxPerMinute,
+            userhostNickCooldownMinutes,
+            userhostMaxNicksPerCommand);
 
-    UserInfoEnrichmentControls enrichmentControls = new UserInfoEnrichmentControls(
-        enrichmentEnabled,
-        enrichmentUserhostMinIntervalSeconds,
-        enrichmentUserhostMaxPerMinute,
-        enrichmentUserhostNickCooldownMinutes,
-        enrichmentUserhostMaxNicksPerCommand,
-        enrichmentWhoisFallbackEnabled,
-        enrichmentWhoisMinIntervalSeconds,
-        enrichmentWhoisNickCooldownMinutes,
-        enrichmentPeriodicRefreshEnabled,
-        enrichmentPeriodicRefreshIntervalSeconds,
-        enrichmentPeriodicRefreshNicksPerTick
-    );
+    UserInfoEnrichmentControls enrichmentControls =
+        new UserInfoEnrichmentControls(
+            enrichmentEnabled,
+            enrichmentUserhostMinIntervalSeconds,
+            enrichmentUserhostMaxPerMinute,
+            enrichmentUserhostNickCooldownMinutes,
+            enrichmentUserhostMaxNicksPerCommand,
+            enrichmentWhoisFallbackEnabled,
+            enrichmentWhoisMinIntervalSeconds,
+            enrichmentWhoisNickCooldownMinutes,
+            enrichmentPeriodicRefreshEnabled,
+            enrichmentPeriodicRefreshIntervalSeconds,
+            enrichmentPeriodicRefreshNicksPerTick);
 
     return new NetworkAdvancedControls(
         proxyControls,
@@ -3933,8 +4784,16 @@ panel.setOpaque(false);
         userLookupsPanel);
   }
 
-  private JPanel buildAppearancePanel(ThemeControls theme, AccentControls accent, ChatThemeControls chatTheme, FontControls fonts, TweakControls tweaks) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
+  private JPanel buildAppearancePanel(
+      ThemeControls theme,
+      AccentControls accent,
+      ChatThemeControls chatTheme,
+      FontControls fonts,
+      TweakControls tweaks) {
+    JPanel form =
+        new JPanel(
+            new MigLayout(
+                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
 
     form.add(tabTitle("Appearance"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
@@ -3986,47 +4845,50 @@ panel.setOpaque(false);
     form.add(tweaks.uiFontSize, "w 110!");
 
     JTextArea uiFontHint = subtleInfoText();
-    uiFontHint.setText("Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
+    uiFontHint.setText(
+        "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
     form.add(new JLabel(""));
     form.add(uiFontHint, "growx, wmin 0");
 
     JButton reset = new JButton("Reset to defaults");
-    reset.setToolTipText("Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
-    reset.addActionListener(e -> {
-      theme.combo.setSelectedItem("darcula");
-      fonts.fontFamily.setSelectedItem("Monospaced");
-      fonts.fontSize.setValue(12);
-      accent.preset.setSelectedItem(AccentPreset.IRCAFE_COBALT);
-      accent.enabled.setSelected(true);
-      accent.hex.setText(UiProperties.DEFAULT_ACCENT_COLOR);
-      accent.strength.setValue(UiProperties.DEFAULT_ACCENT_STRENGTH);
-      // LAF tweak defaults
-      for (int i = 0; i < tweaks.density.getItemCount(); i++) {
-        DensityOption o = tweaks.density.getItemAt(i);
-        if (o != null && "auto".equalsIgnoreCase(o.id())) {
-          tweaks.density.setSelectedIndex(i);
-          break;
-        }
-      }
-      tweaks.cornerRadius.setValue(10);
-      tweaks.uiFontOverrideEnabled.setSelected(false);
-      tweaks.uiFontFamily.setSelectedItem(ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY);
-      tweaks.uiFontSize.setValue(ThemeTweakSettings.DEFAULT_UI_FONT_SIZE);
+    reset.setToolTipText(
+        "Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
+    reset.addActionListener(
+        e -> {
+          theme.combo.setSelectedItem("darcula");
+          fonts.fontFamily.setSelectedItem("Monospaced");
+          fonts.fontSize.setValue(12);
+          accent.preset.setSelectedItem(AccentPreset.IRCAFE_COBALT);
+          accent.enabled.setSelected(true);
+          accent.hex.setText(UiProperties.DEFAULT_ACCENT_COLOR);
+          accent.strength.setValue(UiProperties.DEFAULT_ACCENT_STRENGTH);
+          // LAF tweak defaults
+          for (int i = 0; i < tweaks.density.getItemCount(); i++) {
+            DensityOption o = tweaks.density.getItemAt(i);
+            if (o != null && "auto".equalsIgnoreCase(o.id())) {
+              tweaks.density.setSelectedIndex(i);
+              break;
+            }
+          }
+          tweaks.cornerRadius.setValue(10);
+          tweaks.uiFontOverrideEnabled.setSelected(false);
+          tweaks.uiFontFamily.setSelectedItem(ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY);
+          tweaks.uiFontSize.setValue(ThemeTweakSettings.DEFAULT_UI_FONT_SIZE);
 
-      // Chat theme
-      chatTheme.preset.setSelectedItem(ChatThemeSettings.Preset.DEFAULT);
-      chatTheme.timestamp.hex.setText("");
-      chatTheme.system.hex.setText("");
-      chatTheme.mention.hex.setText("");
-      chatTheme.mentionStrength.setValue(35);
-      chatTheme.timestamp.updateIcon.run();
-      chatTheme.system.updateIcon.run();
-      chatTheme.mention.updateIcon.run();
+          // Chat theme
+          chatTheme.preset.setSelectedItem(ChatThemeSettings.Preset.DEFAULT);
+          chatTheme.timestamp.hex.setText("");
+          chatTheme.system.hex.setText("");
+          chatTheme.mention.hex.setText("");
+          chatTheme.mentionStrength.setValue(35);
+          chatTheme.timestamp.updateIcon.run();
+          chatTheme.system.updateIcon.run();
+          chatTheme.mention.updateIcon.run();
 
-      accent.applyEnabledState.run();
-      accent.syncPresetFromHex.run();
-      tweaks.applyUiFontEnabledState.run();
-    });
+          accent.applyEnabledState.run();
+          accent.syncPresetFromHex.run();
+          tweaks.applyUiFontEnabledState.run();
+        });
     form.add(new JLabel(""));
     form.add(reset, "alignx left");
 
@@ -4045,13 +4907,17 @@ panel.setOpaque(false);
 
     form.add(sectionTitle("On launch"), "growx, wrap");
     form.add(autoConnectOnStart, "growx, wrap");
-    form.add(helpText("If enabled, IRCafe will connect to all configured servers automatically after the UI loads."), "growx, wrap");
+    form.add(
+        helpText(
+            "If enabled, IRCafe will connect to all configured servers automatically after the UI loads."),
+        "growx, wrap");
 
     return form;
   }
 
   private JPanel buildTrayNotificationsPanel(TrayControls trayControls) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[]6[grow,fill]"));
+    JPanel form =
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[]6[grow,fill]"));
     form.add(tabTitle("Tray & Notifications"), "growx, wrap");
     form.add(sectionTitle("Categories"), "growx, wmin 0, wrap");
     form.add(
@@ -4062,13 +4928,15 @@ panel.setOpaque(false);
     return form;
   }
 
-
-  private JPanel buildChatPanel(JCheckBox presenceFolds,
-                               JCheckBox ctcpRequestsInActiveTarget,
-                               NickColorControls nickColors,
-                               TimestampControls timestamps,
-                               OutgoingColorControls outgoing) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
+  private JPanel buildChatPanel(
+      JCheckBox presenceFolds,
+      JCheckBox ctcpRequestsInActiveTarget,
+      NickColorControls nickColors,
+      TimestampControls timestamps,
+      OutgoingColorControls outgoing) {
+    JPanel form =
+        new JPanel(
+            new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
 
     form.add(tabTitle("Chat"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Display"), "span 2, growx, wmin 0, wrap");
@@ -4109,12 +4977,13 @@ panel.setOpaque(false);
     time.setSelected(runtimeConfig.readCtcpAutoReplyTimeEnabled(true));
     time.setToolTipText("Respond with your current local timestamp.");
 
-    Runnable syncEnabled = () -> {
-      boolean on = enabled.isSelected();
-      version.setEnabled(on);
-      ping.setEnabled(on);
-      time.setEnabled(on);
-    };
+    Runnable syncEnabled =
+        () -> {
+          boolean on = enabled.isSelected();
+          version.setEnabled(on);
+          ping.setEnabled(on);
+          time.setEnabled(on);
+        };
     enabled.addActionListener(e -> syncEnabled.run());
     syncEnabled.run();
 
@@ -4132,12 +5001,13 @@ panel.setOpaque(false);
         "growx, wmin 0, wrap");
     form.add(controls.enabled, "growx, wrap");
 
-    JPanel perCommand = new JPanel(new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]2[]2[]"));
+    JPanel perCommand =
+        new JPanel(new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]2[]2[]"));
     perCommand.setOpaque(false);
-    perCommand.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createTitledBorder("Per-command replies"),
-        BorderFactory.createEmptyBorder(4, 8, 6, 8)
-    ));
+    perCommand.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder("Per-command replies"),
+            BorderFactory.createEmptyBorder(4, 8, 6, 8)));
     perCommand.add(controls.version, "growx, wmin 0, gapleft 8, wrap");
     perCommand.add(controls.ping, "growx, wmin 0, gapleft 8, wrap");
     perCommand.add(controls.time, "growx, wmin 0, gapleft 8, wrap");
@@ -4145,21 +5015,23 @@ panel.setOpaque(false);
 
     JButton enableDefaults = new JButton("Enable defaults");
     enableDefaults.setToolTipText("Enable automatic replies and turn on VERSION, PING, and TIME.");
-    enableDefaults.addActionListener(e -> {
-      controls.enabled.setSelected(true);
-      controls.version.setSelected(true);
-      controls.ping.setSelected(true);
-      controls.time.setSelected(true);
-    });
+    enableDefaults.addActionListener(
+        e -> {
+          controls.enabled.setSelected(true);
+          controls.version.setSelected(true);
+          controls.ping.setSelected(true);
+          controls.time.setSelected(true);
+        });
 
     JButton disableAll = new JButton("Disable all");
     disableAll.setToolTipText("Disable all automatic CTCP replies.");
-    disableAll.addActionListener(e -> {
-      controls.enabled.setSelected(false);
-      controls.version.setSelected(false);
-      controls.ping.setSelected(false);
-      controls.time.setSelected(false);
-    });
+    disableAll.addActionListener(
+        e -> {
+          controls.enabled.setSelected(false);
+          controls.version.setSelected(false);
+          controls.ping.setSelected(false);
+          controls.time.setSelected(false);
+        });
 
     JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
     actions.setOpaque(false);
@@ -4167,7 +5039,8 @@ panel.setOpaque(false);
     actions.add(disableAll);
     form.add(actions, "growx, wmin 0, wrap");
 
-    form.add(helpText("If the top toggle is off, IRCafe will not send any automatic CTCP replies."),
+    form.add(
+        helpText("If the top toggle is off, IRCafe will not send any automatic CTCP replies."),
         "growx, wmin 0, wrap");
     return form;
   }
@@ -4177,31 +5050,36 @@ panel.setOpaque(false);
       JCheckBox typingIndicatorsReceiveEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
       Ircv3CapabilitiesControls ircv3Capabilities) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fill, wrap 1, hidemode 3", "[grow,fill]", "[]8[]8[grow,fill]"));
+    JPanel form =
+        new JPanel(
+            new MigLayout(
+                "insets 12, fill, wrap 1, hidemode 3", "[grow,fill]", "[]8[]8[grow,fill]"));
 
     form.add(tabTitle("IRCv3"), "growx, wmin 0, wrap");
     form.add(
-        subtleInfoTextWith("Typing and capability settings for modern IRCv3 features. Capability changes apply on reconnect."),
+        subtleInfoTextWith(
+            "Typing and capability settings for modern IRCv3 features. Capability changes apply on reconnect."),
         "growx, wmin 0, wrap");
 
-    JButton typingHelp = whyHelpButton(
-        "Typing indicators",
-        "What it is:\n" +
-            "Typing indicators show when someone is actively typing or has paused.\n\n" +
-            "Impact in IRCafe:\n" +
-            "- Send: broadcasts your typing state to peers when supported.\n" +
-            "- Display: shows incoming typing state in the active UI.\n\n" +
-            "If disabled:\n" +
-            "- Send disabled: IRCafe won't broadcast your typing state.\n" +
-            "- Display disabled: IRCafe won't render incoming typing indicators."
-    );
+    JButton typingHelp =
+        whyHelpButton(
+            "Typing indicators",
+            "What it is:\n"
+                + "Typing indicators show when someone is actively typing or has paused.\n\n"
+                + "Impact in IRCafe:\n"
+                + "- Send: broadcasts your typing state to peers when supported.\n"
+                + "- Display: shows incoming typing state in the active UI.\n\n"
+                + "If disabled:\n"
+                + "- Send disabled: IRCafe won't broadcast your typing state.\n"
+                + "- Display disabled: IRCafe won't render incoming typing indicators.");
     typingHelp.setToolTipText("How typing indicators affect IRCafe");
-    JPanel typingRow = new JPanel(
-        new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]6[]", "[]2[]2[]"));
-    typingRow.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createTitledBorder("Typing indicators"),
-        BorderFactory.createEmptyBorder(4, 6, 4, 6)
-    ));
+    JPanel typingRow =
+        new JPanel(
+            new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]6[]", "[]2[]2[]"));
+    typingRow.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder("Typing indicators"),
+            BorderFactory.createEmptyBorder(4, 6, 4, 6)));
     typingRow.setOpaque(false);
     typingRow.add(typingIndicatorsSendEnabled, "growx, wmin 0, split 2");
     typingRow.add(typingHelp, "aligny center");
@@ -4216,35 +5094,39 @@ panel.setOpaque(false);
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
             + "Server tree marker style controls the channel typing activity indicator.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
-    JPanel typingTab = new JPanel(new MigLayout("insets 6, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
+    JPanel typingTab =
+        new JPanel(new MigLayout("insets 6, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
     typingTab.setOpaque(false);
     typingTab.add(typingRow, "growx, wmin 0, wrap");
     typingTab.add(typingImpact, "growx, wmin 0, wrap");
 
-    JPanel capabilityBlock = new JPanel(new MigLayout("insets 8, fill, wrap 1, hidemode 3", "[grow,fill]", "[]6[grow,fill]"));
-    capabilityBlock.setBorder(BorderFactory.createCompoundBorder(
-        BorderFactory.createTitledBorder("Requested capabilities"),
-        BorderFactory.createEmptyBorder(4, 6, 6, 6)
-    ));
+    JPanel capabilityBlock =
+        new JPanel(
+            new MigLayout("insets 8, fill, wrap 1, hidemode 3", "[grow,fill]", "[]6[grow,fill]"));
+    capabilityBlock.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder("Requested capabilities"),
+            BorderFactory.createEmptyBorder(4, 6, 6, 6)));
     capabilityBlock.setOpaque(false);
     capabilityBlock.add(
         subtleInfoTextWith(
-                "These capabilities are requested during CAP negotiation.\n" +
-                "Changes apply on new connections or reconnect."
-        ),
-        "growx, wmin 0, wrap"
-    );
-    JScrollPane capabilityScroll = new JScrollPane(
-        ircv3Capabilities.panel(),
-        ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
-        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+            "These capabilities are requested during CAP negotiation.\n"
+                + "Changes apply on new connections or reconnect."),
+        "growx, wmin 0, wrap");
+    JScrollPane capabilityScroll =
+        new JScrollPane(
+            ircv3Capabilities.panel(),
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     capabilityScroll.setBorder(BorderFactory.createEmptyBorder());
     capabilityScroll.setViewportBorder(null);
     capabilityScroll.getVerticalScrollBar().setUnitIncrement(16);
     capabilityScroll.setPreferredSize(new Dimension(1, 320));
     capabilityBlock.add(capabilityScroll, "grow, push, wmin 0, hmin 180");
 
-    JPanel capabilitiesTab = new JPanel(new MigLayout("insets 6, fill, wrap 1, hidemode 3", "[grow,fill]", "[grow,fill]"));
+    JPanel capabilitiesTab =
+        new JPanel(
+            new MigLayout("insets 6, fill, wrap 1, hidemode 3", "[grow,fill]", "[grow,fill]"));
     capabilitiesTab.setOpaque(false);
     capabilitiesTab.add(capabilityBlock, "grow, push, wmin 0");
 
@@ -4260,31 +5142,35 @@ panel.setOpaque(false);
     capabilitiesHeader.setMargin(new Insets(6, 10, 6, 10));
     capabilitiesHeader.setToolTipText("Show requested IRCv3 capabilities");
 
-    final boolean[] typingExpanded = new boolean[] { true };
-    final boolean[] capabilitiesExpanded = new boolean[] { false };
+    final boolean[] typingExpanded = new boolean[] {true};
+    final boolean[] capabilitiesExpanded = new boolean[] {false};
 
-    Runnable refreshAccordion = () -> {
-      typingHeader.setText((typingExpanded[0] ? "▾ " : "▸ ") + "Typing indicators");
-      capabilitiesHeader.setText((capabilitiesExpanded[0] ? "▾ " : "▸ ") + "Requested capabilities");
-      typingTab.setVisible(typingExpanded[0]);
-      capabilitiesTab.setVisible(capabilitiesExpanded[0]);
-      form.revalidate();
-      form.repaint();
-    };
+    Runnable refreshAccordion =
+        () -> {
+          typingHeader.setText((typingExpanded[0] ? "▾ " : "▸ ") + "Typing indicators");
+          capabilitiesHeader.setText(
+              (capabilitiesExpanded[0] ? "▾ " : "▸ ") + "Requested capabilities");
+          typingTab.setVisible(typingExpanded[0]);
+          capabilitiesTab.setVisible(capabilitiesExpanded[0]);
+          form.revalidate();
+          form.repaint();
+        };
 
-    typingHeader.addActionListener(e -> {
-      if (typingExpanded[0]) return;
-      typingExpanded[0] = true;
-      capabilitiesExpanded[0] = false;
-      refreshAccordion.run();
-    });
+    typingHeader.addActionListener(
+        e -> {
+          if (typingExpanded[0]) return;
+          typingExpanded[0] = true;
+          capabilitiesExpanded[0] = false;
+          refreshAccordion.run();
+        });
 
-    capabilitiesHeader.addActionListener(e -> {
-      if (capabilitiesExpanded[0]) return;
-      capabilitiesExpanded[0] = true;
-      typingExpanded[0] = false;
-      refreshAccordion.run();
-    });
+    capabilitiesHeader.addActionListener(
+        e -> {
+          if (capabilitiesExpanded[0]) return;
+          capabilitiesExpanded[0] = true;
+          typingExpanded[0] = false;
+          refreshAccordion.run();
+        });
 
     form.add(typingHeader, "growx, wmin 0, wrap");
     form.add(typingTab, "growx, wmin 0, wrap, hidemode 3");
@@ -4352,16 +5238,34 @@ panel.setOpaque(false);
 
   private static String capabilityGroupKey(String capability) {
     return switch (capability) {
-      case "multi-prefix", "cap-notify", "away-notify", "account-notify", "extended-join",
-           "setname", "chghost", "message-tags", "sts", "server-time", "standard-replies",
-           "echo-message", "labeled-response", "account-tag", "userhost-in-names"
-          -> "core";
-      case "draft/reply", "draft/react", "draft/message-edit", "message-edit",
-           "draft/message-redaction", "message-redaction", "typing", "read-marker",
-           "multiline", "draft/multiline"
-          -> "conversation";
-      case "batch", "chathistory", "draft/chathistory", "znc.in/playback"
-          -> "history";
+      case "multi-prefix",
+          "cap-notify",
+          "away-notify",
+          "account-notify",
+          "extended-join",
+          "setname",
+          "chghost",
+          "message-tags",
+          "sts",
+          "server-time",
+          "standard-replies",
+          "echo-message",
+          "labeled-response",
+          "account-tag",
+          "userhost-in-names" ->
+          "core";
+      case "draft/reply",
+          "draft/react",
+          "draft/message-edit",
+          "message-edit",
+          "draft/message-redaction",
+          "message-redaction",
+          "typing",
+          "read-marker",
+          "multiline",
+          "draft/multiline" ->
+          "conversation";
+      case "batch", "chathistory", "draft/chathistory", "znc.in/playback" -> "history";
       default -> "other";
     };
   }
@@ -4418,24 +5322,34 @@ panel.setOpaque(false);
 
   private static String capabilityImpactSummary(String capability) {
     return switch (capability) {
-      case "message-tags" -> "Foundation for many IRCv3 features: carries structured metadata on messages.";
-      case "sts" -> "Learns strict transport policy and upgrades future connects for this host to TLS.";
-      case "server-time" -> "Uses server-provided timestamps to improve ordering and replay accuracy.";
-      case "echo-message" -> "Server echoes your outbound messages, improving multi-client/bouncer consistency.";
+      case "message-tags" ->
+          "Foundation for many IRCv3 features: carries structured metadata on messages.";
+      case "sts" ->
+          "Learns strict transport policy and upgrades future connects for this host to TLS.";
+      case "server-time" ->
+          "Uses server-provided timestamps to improve ordering and replay accuracy.";
+      case "echo-message" ->
+          "Server echoes your outbound messages, improving multi-client/bouncer consistency.";
       case "account-tag" -> "Attaches account metadata to messages for richer identity info.";
-      case "userhost-in-names" -> "May provide richer host/user identity details during names lists.";
-      case "multiline", "draft/multiline" -> "Allows sending and receiving multiline messages as a single logical message.";
+      case "userhost-in-names" ->
+          "May provide richer host/user identity details during names lists.";
+      case "multiline", "draft/multiline" ->
+          "Allows sending and receiving multiline messages as a single logical message.";
       case "typing" -> "Transport for typing indicators; required to send/receive typing events.";
       case "read-marker" -> "Enables read-position markers on servers that support them.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
       case "draft/react" -> "Carries reaction metadata where servers/clients support it.";
-      case "draft/message-edit", "message-edit" -> "Allows edit updates for previously sent messages.";
-      case "draft/message-redaction", "message-redaction" -> "Allows delete/redaction updates for messages.";
-      case "chathistory", "draft/chathistory" -> "Enables server-side history retrieval and backfill features.";
+      case "draft/message-edit", "message-edit" ->
+          "Allows edit updates for previously sent messages.";
+      case "draft/message-redaction", "message-redaction" ->
+          "Allows delete/redaction updates for messages.";
+      case "chathistory", "draft/chathistory" ->
+          "Enables server-side history retrieval and backfill features.";
       case "znc.in/playback" -> "Requests playback support from ZNC bouncers when available.";
       case "labeled-response" -> "Correlates command responses with requests more reliably.";
       case "standard-replies" -> "Provides structured success/error replies from the server.";
-      case "multi-prefix" -> "Preserves all nick privilege prefixes (not just the highest) in user data.";
+      case "multi-prefix" ->
+          "Preserves all nick privilege prefixes (not just the highest) in user data.";
       case "cap-notify" -> "Allows capability change notifications after initial connection.";
       case "away-notify" -> "Tracks away/back state transitions for users.";
       case "account-notify" -> "Tracks account login/logout changes for users.";
@@ -4453,9 +5367,12 @@ panel.setOpaque(false);
 
   private static String capabilityHelpMessage(String capability) {
     return "What it is:\n"
-        + "Requests IRCv3 capability \"" + capability + "\" during CAP negotiation.\n\n"
+        + "Requests IRCv3 capability \""
+        + capability
+        + "\" during CAP negotiation.\n\n"
         + "Impact in IRCafe:\n"
-        + capabilityImpactSummary(capability) + "\n\n"
+        + capabilityImpactSummary(capability)
+        + "\n\n"
         + "If disabled:\n"
         + "IRCafe will not request this capability on new connections; related features may be unavailable.";
   }
@@ -4466,9 +5383,10 @@ panel.setOpaque(false);
     return k;
   }
 
-  private JPanel buildEmbedsAndPreviewsPanel(ImageEmbedControls image,
-                                            LinkPreviewControls links) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
+  private JPanel buildEmbedsAndPreviewsPanel(ImageEmbedControls image, LinkPreviewControls links) {
+    JPanel form =
+        new JPanel(
+            new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
 
     form.add(tabTitle("Embeds & Previews"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Inline images"), "span 2, growx, wmin 0, wrap");
@@ -4483,7 +5401,10 @@ panel.setOpaque(false);
   }
 
   private JPanel buildHistoryAndStoragePanel(LoggingControls logging, HistoryControls history) {
-    JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]6[]6[]10[]6[]"));
+    JPanel panel =
+        new JPanel(
+            new MigLayout(
+                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]6[]6[]10[]6[]"));
 
     panel.add(tabTitle("History & Storage"), "span 2, growx, wmin 0, wrap");
 
@@ -4509,41 +5430,46 @@ panel.setOpaque(false);
     return panel;
   }
 
-  private NotificationRulesControls buildNotificationRulesControls(UiSettings current, List<AutoCloseable> closeables) {
+  private NotificationRulesControls buildNotificationRulesControls(
+      UiSettings current, List<AutoCloseable> closeables) {
     int cooldown = current != null ? current.notificationRuleCooldownSeconds() : 15;
     JSpinner cooldownSeconds = numberSpinner(cooldown, 0, 3600, 1, closeables);
 
-    NotificationRulesTableModel model = new NotificationRulesTableModel(current != null ? current.notificationRules() : List.of());
+    NotificationRulesTableModel model =
+        new NotificationRulesTableModel(current != null ? current.notificationRules() : List.of());
     JTable table = new JTable(model);
     table.setFillsViewportHeight(true);
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     table.setRowHeight(Math.max(22, table.getRowHeight()));
-
-    // Editors
-    JComboBox<NotificationRule.Type> typeCombo = new JComboBox<>(NotificationRule.Type.values());
-    table.getColumnModel().getColumn(NotificationRulesTableModel.COL_TYPE).setCellEditor(new DefaultCellEditor(typeCombo));
+    table.setShowHorizontalLines(false);
+    table.setShowVerticalLines(false);
+    table.getTableHeader().setReorderingAllowed(false);
+    // Force dialog-only editing flow (no inline cell editor).
+    table.setDefaultEditor(Object.class, null);
+    table.setDefaultEditor(Boolean.class, null);
+    table.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
 
     // Column sizing
-    TableColumn enabledCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_ENABLED);
+    TableColumn enabledCol =
+        table.getColumnModel().getColumn(NotificationRulesTableModel.COL_ENABLED);
     enabledCol.setMaxWidth(80);
     enabledCol.setPreferredWidth(70);
 
-    TableColumn typeCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_TYPE);
-    typeCol.setMaxWidth(110);
-    typeCol.setPreferredWidth(90);
+    TableColumn labelCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_LABEL);
+    labelCol.setPreferredWidth(190);
+
+    TableColumn matchCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_MATCH);
+    matchCol.setPreferredWidth(380);
+
+    TableColumn optionsCol =
+        table.getColumnModel().getColumn(NotificationRulesTableModel.COL_OPTIONS);
+    optionsCol.setMaxWidth(220);
+    optionsCol.setPreferredWidth(190);
 
     TableColumn colorCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_COLOR);
     colorCol.setMaxWidth(130);
     colorCol.setPreferredWidth(110);
     colorCol.setCellRenderer(new RuleColorCellRenderer());
-
-    TableColumn caseCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_CASE);
-    caseCol.setMaxWidth(90);
-    caseCol.setPreferredWidth(80);
-
-    TableColumn wholeCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_WHOLE);
-    wholeCol.setMaxWidth(110);
-    wholeCol.setPreferredWidth(90);
 
     JLabel validationLabel = new JLabel();
     validationLabel.setVisible(false);
@@ -4563,578 +5489,69 @@ panel.setOpaque(false);
     RuleTestRunner testRunner = new RuleTestRunner();
     closeables.add(testRunner);
 
-    return new NotificationRulesControls(cooldownSeconds, table, model, validationLabel, testInput, testOutput, testStatus, testRunner);
+    return new NotificationRulesControls(
+        cooldownSeconds,
+        table,
+        model,
+        validationLabel,
+        testInput,
+        testOutput,
+        testStatus,
+        testRunner);
   }
 
-  private IrcEventNotificationControls buildIrcEventNotificationControls(List<IrcEventNotificationRule> initialRules) {
+  private IrcEventNotificationControls buildIrcEventNotificationControls(
+      List<IrcEventNotificationRule> initialRules) {
     IrcEventNotificationTableModel model = new IrcEventNotificationTableModel(initialRules);
     JTable table = new JTable(model);
     table.setFillsViewportHeight(true);
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     table.setRowHeight(Math.max(22, table.getRowHeight()));
+    table.setShowHorizontalLines(false);
+    table.setShowVerticalLines(false);
+    table.getTableHeader().setReorderingAllowed(false);
+    // Force dialog-only editing flow (no inline cell editor).
+    table.setDefaultEditor(Object.class, null);
+    table.setDefaultEditor(Boolean.class, null);
+    table.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
 
-    JComboBox<IrcEventNotificationRule.EventType> eventCombo = new JComboBox<>(IrcEventNotificationRule.EventType.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT).setCellEditor(new DefaultCellEditor(eventCombo));
-
-    JComboBox<IrcEventNotificationRule.SourceMode> sourceCombo = new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE).setCellEditor(new DefaultCellEditor(sourceCombo));
-
-    JComboBox<IrcEventNotificationRule.ChannelScope> channelScopeCombo =
-        new JComboBox<>(IrcEventNotificationRule.ChannelScope.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_SCOPE).setCellEditor(new DefaultCellEditor(channelScopeCombo));
-
-    JComboBox<IrcEventNotificationRule.FocusScope> focusScopeCombo =
-        new JComboBox<>(IrcEventNotificationRule.FocusScope.values());
-    table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_FOCUS_SCOPE).setCellEditor(new DefaultCellEditor(focusScopeCombo));
-
-    TableColumn enabledCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_ENABLED);
+    TableColumn enabledCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_ENABLED);
     enabledCol.setMaxWidth(80);
     enabledCol.setPreferredWidth(70);
 
-    TableColumn eventCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT);
-    eventCol.setPreferredWidth(140);
+    TableColumn eventCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_EVENT);
+    eventCol.setPreferredWidth(220);
 
-    TableColumn sourceCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE);
-    sourceCol.setPreferredWidth(120);
+    TableColumn sourceCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE_SUMMARY);
+    sourceCol.setPreferredWidth(300);
 
-    TableColumn sourcePatternCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOURCE_PATTERN);
-    sourcePatternCol.setPreferredWidth(160);
-    sourcePatternCol.setCellRenderer(new DefaultTableCellRenderer() {
-      @Override
-      public java.awt.Component getTableCellRendererComponent(
-          JTable table,
-          Object value,
-          boolean isSelected,
-          boolean hasFocus,
-          int row,
-          int column
-      ) {
-        JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-        int modelRow = row;
-        int modelCol = column;
-        try {
-          modelRow = table.convertRowIndexToModel(row);
-          modelCol = table.convertColumnIndexToModel(column);
-        } catch (Exception ignored) {
-        }
-        boolean applicable = true;
-        if (table.getModel() instanceof IrcEventNotificationTableModel tm) {
-          applicable = IrcEventNotificationTableModel.sourcePatternAllowed(tm.sourceModeAt(modelRow));
-        }
-        Font base = table != null ? table.getFont() : c.getFont();
-        if (base != null) {
-          c.setFont(applicable ? base : base.deriveFont(Font.ITALIC));
-        }
-        c.setEnabled(applicable);
+    TableColumn channelCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_SUMMARY);
+    channelCol.setPreferredWidth(240);
 
-        if (!applicable) {
-          String text = Objects.toString(value, "").trim();
-          c.setText(text.isEmpty() ? "N/A" : text);
+    TableColumn actionsCol =
+        table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_ACTIONS_SUMMARY);
+    actionsCol.setPreferredWidth(300);
 
-          Color disabled = UIManager.getColor("Label.disabledForeground");
-          if (disabled == null) disabled = UIManager.getColor("Component.disabledText");
-          if (disabled != null) c.setForeground(disabled);
-
-          if (!isSelected) {
-            Color mutedBg = UIManager.getColor("Panel.background");
-            if (mutedBg != null) c.setBackground(mutedBg);
-            c.setOpaque(true);
-          }
-          c.setToolTipText("Only used for Specific nicks, Nick glob, or Nick regex");
-        } else {
-          c.setToolTipText(null);
-        }
-        return c;
-      }
-    });
-
-    TableColumn toastCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_TOAST);
-    toastCol.setMaxWidth(80);
-    toastCol.setPreferredWidth(70);
-
-    TableColumn statusBarCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_STATUS_BAR);
-    statusBarCol.setMaxWidth(95);
-    statusBarCol.setPreferredWidth(85);
-
-    TableColumn focusCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_FOCUS_SCOPE);
-    focusCol.setPreferredWidth(130);
-
-    TableColumn nodeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
-    nodeCol.setMaxWidth(90);
-    nodeCol.setPreferredWidth(80);
-
-    TableColumn soundCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_SOUND);
-    soundCol.setMaxWidth(80);
-    soundCol.setPreferredWidth(70);
-
-    TableColumn channelScopeCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_SCOPE);
-    channelScopeCol.setPreferredWidth(155);
-    TableColumn channelPatternsCol = table.getColumnModel().getColumn(IrcEventNotificationTableModel.COL_CHANNEL_PATTERNS);
-    channelPatternsCol.setPreferredWidth(170);
-    channelPatternsCol.setCellRenderer(new DefaultTableCellRenderer() {
-      @Override
-      public java.awt.Component getTableCellRendererComponent(
-          JTable table,
-          Object value,
-          boolean isSelected,
-          boolean hasFocus,
-          int row,
-          int column
-      ) {
-        JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-        int modelRow = row;
-        int modelCol = column;
-        try {
-          modelRow = table.convertRowIndexToModel(row);
-          modelCol = table.convertColumnIndexToModel(column);
-        } catch (Exception ignored) {
-        }
-        boolean applicable = true;
-        if (table.getModel() instanceof IrcEventNotificationTableModel tm) {
-          applicable = IrcEventNotificationTableModel.channelPatternAllowed(tm.channelScopeAt(modelRow));
-        }
-        Font base = table != null ? table.getFont() : c.getFont();
-        if (base != null) {
-          c.setFont(applicable ? base : base.deriveFont(Font.ITALIC));
-        }
-        c.setEnabled(applicable);
-
-        if (!applicable) {
-          String text = Objects.toString(value, "").trim();
-          c.setText(text.isEmpty() ? "N/A" : text);
-
-          Color disabled = UIManager.getColor("Label.disabledForeground");
-          if (disabled == null) disabled = UIManager.getColor("Component.disabledText");
-          if (disabled != null) c.setForeground(disabled);
-
-          if (!isSelected) {
-            Color mutedBg = UIManager.getColor("Panel.background");
-            if (mutedBg != null) c.setBackground(mutedBg);
-            c.setOpaque(true);
-          }
-          c.setToolTipText("Only used for Only matching / All except matching scopes");
-        } else {
-          c.setToolTipText(null);
-        }
-        return c;
-      }
-    });
-
-    JComboBox<BuiltInSound> sound = new JComboBox<>(BuiltInSound.valuesForUi());
-    configureBuiltInSoundCombo(sound);
-    JCheckBox useCustom = new JCheckBox("Use custom file");
-    JTextField customPath = new JTextField();
-    customPath.setEditable(false);
-    JButton browseCustom = new JButton("Browse...");
-    JButton clearCustom = new JButton("Clear");
-    JButton testSound = new JButton("Test sound");
-    JCheckBox runScript = new JCheckBox("Run external script");
-    JTextField scriptPath = new JTextField();
-    scriptPath.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "/path/to/script.sh");
-    JTextField scriptArgs = new JTextField();
-    scriptArgs.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "--arg \"value with spaces\"");
-    JTextField scriptWorkingDirectory = new JTextField();
-    scriptWorkingDirectory.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "/path/to/working/dir");
-    JButton browseScript = new JButton("Browse...");
-    JButton clearScript = new JButton("Clear");
-    JButton browseScriptWorkingDirectory = new JButton("Browse...");
-    JButton clearScriptWorkingDirectory = new JButton("Clear");
-    configureIconOnlyButton(browseCustom, "plus", "Choose custom notification sound file");
-    configureIconOnlyButton(clearCustom, "close", "Clear custom sound file");
-    configureIconOnlyButton(testSound, "play", "Test selected sound");
-    configureIconOnlyButton(browseScript, "terminal", "Choose external script");
-    configureIconOnlyButton(clearScript, "close", "Clear script path");
-    configureIconOnlyButton(
-        browseScriptWorkingDirectory, "settings", "Choose script working directory");
-    configureIconOnlyButton(clearScriptWorkingDirectory, "close", "Clear script working directory");
-    JCheckBox detailEnabled = new JCheckBox("Rule enabled");
-    JComboBox<IrcEventNotificationRule.EventType> detailEvent = new JComboBox<>(IrcEventNotificationRule.EventType.values());
-    JComboBox<IrcEventNotificationRule.SourceMode> detailSource = new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
-    JTextField detailSourcePattern = new JTextField();
-    detailSourcePattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "nicks, glob, or regex");
-    JComboBox<IrcEventNotificationRule.ChannelScope> detailChannelScope = new JComboBox<>(IrcEventNotificationRule.ChannelScope.values());
-    JTextField detailChannelPatterns = new JTextField();
-    detailChannelPatterns.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#ops* #staff*");
-    JComboBox<IrcEventNotificationRule.FocusScope> detailFocus = new JComboBox<>(IrcEventNotificationRule.FocusScope.values());
-    JCheckBox detailToast = new JCheckBox("Toast");
-    JCheckBox detailStatusBar = new JCheckBox("Status Bar");
-    JCheckBox detailNode = new JCheckBox("Notifications Node");
-    JCheckBox detailSound = new JCheckBox("Sound");
-    JLabel selectionHint = new JLabel("Select a rule row to edit details.");
-
-    final boolean[] syncing = new boolean[] { false };
-
-    Runnable loadSelectedRuleActions = () -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-
-      syncing[0] = true;
-      if (row < 0) {
-        detailEnabled.setSelected(false);
-        detailEvent.setSelectedItem(IrcEventNotificationRule.EventType.INVITE_RECEIVED);
-        detailSource.setSelectedItem(IrcEventNotificationRule.SourceMode.ANY);
-        detailSourcePattern.setText("");
-        detailChannelScope.setSelectedItem(IrcEventNotificationRule.ChannelScope.ALL);
-        detailChannelPatterns.setText("");
-        detailFocus.setSelectedItem(IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
-        detailToast.setSelected(false);
-        detailStatusBar.setSelected(false);
-        detailNode.setSelected(false);
-        detailSound.setSelected(false);
-        sound.setSelectedItem(BuiltInSound.NOTIF_1);
-        useCustom.setSelected(false);
-        customPath.setText("");
-        runScript.setSelected(false);
-        scriptPath.setText("");
-        scriptArgs.setText("");
-        scriptWorkingDirectory.setText("");
-      } else {
-        detailEnabled.setSelected(model.enabledAt(row));
-        detailEvent.setSelectedItem(model.eventTypeAt(row));
-        detailSource.setSelectedItem(model.sourceModeAt(row));
-        detailSourcePattern.setText(Objects.toString(model.sourcePatternAt(row), ""));
-        detailChannelScope.setSelectedItem(model.channelScopeAt(row));
-        detailChannelPatterns.setText(Objects.toString(model.channelPatternsAt(row), ""));
-        detailFocus.setSelectedItem(model.focusScopeAt(row));
-        detailToast.setSelected(model.toastEnabledAt(row));
-        detailStatusBar.setSelected(model.statusBarEnabledAt(row));
-        detailNode.setSelected(model.notificationsNodeEnabledAt(row));
-        detailSound.setSelected(model.soundEnabledAt(row));
-        sound.setSelectedItem(BuiltInSound.fromId(model.soundIdAt(row)));
-        useCustom.setSelected(model.soundUseCustomAt(row));
-        customPath.setText(Objects.toString(model.soundCustomPathAt(row), ""));
-        runScript.setSelected(model.scriptEnabledAt(row));
-        scriptPath.setText(Objects.toString(model.scriptPathAt(row), ""));
-        scriptArgs.setText(Objects.toString(model.scriptArgsAt(row), ""));
-        scriptWorkingDirectory.setText(Objects.toString(model.scriptWorkingDirectoryAt(row), ""));
-      }
-      syncing[0] = false;
-
-      boolean selected = row >= 0;
-      detailEnabled.setEnabled(selected);
-      detailEvent.setEnabled(selected);
-      detailSource.setEnabled(selected);
-      detailSourcePattern.setEnabled(
-          selected && IrcEventNotificationTableModel.sourcePatternAllowed((IrcEventNotificationRule.SourceMode) detailSource.getSelectedItem()));
-      detailChannelScope.setEnabled(selected);
-      detailChannelPatterns.setEnabled(
-          selected && IrcEventNotificationTableModel.channelPatternAllowed((IrcEventNotificationRule.ChannelScope) detailChannelScope.getSelectedItem()));
-      detailFocus.setEnabled(selected);
-      detailToast.setEnabled(selected);
-      detailStatusBar.setEnabled(selected);
-      detailNode.setEnabled(selected);
-      detailSound.setEnabled(selected);
-
-      boolean soundEnabledForRule = selected && model.soundEnabledAt(row);
-      boolean customSoundSelectedForRule = soundEnabledForRule && useCustom.isSelected();
-      browseCustom.setEnabled(soundEnabledForRule);
-      sound.setEnabled(soundEnabledForRule && !customSoundSelectedForRule);
-      useCustom.setEnabled(soundEnabledForRule);
-      customPath.setEnabled(soundEnabledForRule);
-      testSound.setEnabled(soundEnabledForRule);
-      runScript.setEnabled(selected);
-      scriptPath.setEnabled(selected);
-      scriptArgs.setEnabled(selected);
-      scriptWorkingDirectory.setEnabled(selected);
-      browseScript.setEnabled(selected);
-      browseScriptWorkingDirectory.setEnabled(selected);
-
-      String rel = customPath.getText() != null ? customPath.getText().trim() : "";
-      clearCustom.setEnabled(soundEnabledForRule && !rel.isBlank());
-      String script = scriptPath.getText() != null ? scriptPath.getText().trim() : "";
-      clearScript.setEnabled(selected && !script.isBlank());
-      String scriptCwd = scriptWorkingDirectory.getText() != null ? scriptWorkingDirectory.getText().trim() : "";
-      clearScriptWorkingDirectory.setEnabled(selected && !scriptCwd.isBlank());
-
-      if (!selected) {
-        selectionHint.setText("Select a rule row to edit details.");
-      } else if (!soundEnabledForRule) {
-        selectionHint.setText("Sound controls are disabled for this rule until Sound is enabled.");
-      } else {
-        selectionHint.setText("Selected rule details are editable below.");
-      }
-    };
-
-    Runnable persistSelectedRuleActions = () -> {
-      if (syncing[0]) return;
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      syncing[0] = true;
-      try {
-        BuiltInSound selectedSound = (BuiltInSound) sound.getSelectedItem();
-        String soundId = selectedSound != null ? selectedSound.name() : BuiltInSound.NOTIF_1.name();
-        boolean custom = useCustom.isSelected();
-        String rel = customPath.getText() != null ? customPath.getText().trim() : "";
-        if (rel.isBlank()) rel = null;
-        model.setSoundConfig(row, soundId, custom, rel);
-
-        clearCustom.setEnabled(rel != null);
-
-        String script = scriptPath.getText() != null ? scriptPath.getText().trim() : "";
-        if (script.isBlank()) script = null;
-        String args = scriptArgs.getText() != null ? scriptArgs.getText().trim() : "";
-        if (args.isBlank()) args = null;
-        String cwd = scriptWorkingDirectory.getText() != null ? scriptWorkingDirectory.getText().trim() : "";
-        if (cwd.isBlank()) cwd = null;
-        model.setScriptConfig(row, runScript.isSelected(), script, args, cwd);
-        clearScript.setEnabled(script != null);
-        clearScriptWorkingDirectory.setEnabled(cwd != null);
-      } finally {
-        syncing[0] = false;
-      }
-      loadSelectedRuleActions.run();
-    };
-
-    Runnable persistSelectedRuleCore = () -> {
-      if (syncing[0]) return;
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      syncing[0] = true;
-      try {
-        model.setValueAt(detailEnabled.isSelected(), row, IrcEventNotificationTableModel.COL_ENABLED);
-        model.setValueAt(detailEvent.getSelectedItem(), row, IrcEventNotificationTableModel.COL_EVENT);
-        model.setValueAt(detailSource.getSelectedItem(), row, IrcEventNotificationTableModel.COL_SOURCE);
-        model.setValueAt(detailSourcePattern.getText(), row, IrcEventNotificationTableModel.COL_SOURCE_PATTERN);
-        model.setValueAt(detailChannelScope.getSelectedItem(), row, IrcEventNotificationTableModel.COL_CHANNEL_SCOPE);
-        model.setValueAt(detailChannelPatterns.getText(), row, IrcEventNotificationTableModel.COL_CHANNEL_PATTERNS);
-        model.setValueAt(detailFocus.getSelectedItem(), row, IrcEventNotificationTableModel.COL_FOCUS_SCOPE);
-        model.setValueAt(detailToast.isSelected(), row, IrcEventNotificationTableModel.COL_TOAST);
-        model.setValueAt(detailStatusBar.isSelected(), row, IrcEventNotificationTableModel.COL_STATUS_BAR);
-        model.setValueAt(detailNode.isSelected(), row, IrcEventNotificationTableModel.COL_NOTIFICATIONS_NODE);
-        model.setValueAt(detailSound.isSelected(), row, IrcEventNotificationTableModel.COL_SOUND);
-      } finally {
-        syncing[0] = false;
-      }
-      loadSelectedRuleActions.run();
-    };
-
-    table.getSelectionModel().addListSelectionListener(e -> {
-      if (e != null && e.getValueIsAdjusting()) return;
-      loadSelectedRuleActions.run();
-    });
-
-    model.addTableModelListener(e -> {
-      if (syncing[0]) return;
-      loadSelectedRuleActions.run();
-    });
-
-    sound.addActionListener(e -> persistSelectedRuleActions.run());
-    useCustom.addActionListener(e -> persistSelectedRuleActions.run());
-    runScript.addActionListener(e -> persistSelectedRuleActions.run());
-    scriptPath.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleActions));
-    scriptArgs.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleActions));
-    scriptWorkingDirectory.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleActions));
-    detailEnabled.addActionListener(e -> persistSelectedRuleCore.run());
-    detailEvent.addActionListener(e -> persistSelectedRuleCore.run());
-    detailSource.addActionListener(e -> persistSelectedRuleCore.run());
-    detailChannelScope.addActionListener(e -> persistSelectedRuleCore.run());
-    detailFocus.addActionListener(e -> persistSelectedRuleCore.run());
-    detailToast.addActionListener(e -> persistSelectedRuleCore.run());
-    detailStatusBar.addActionListener(e -> persistSelectedRuleCore.run());
-    detailNode.addActionListener(e -> persistSelectedRuleCore.run());
-    detailSound.addActionListener(e -> persistSelectedRuleCore.run());
-    detailSourcePattern.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleCore));
-    detailChannelPatterns.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedRuleCore));
-
-    browseCustom.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-      try {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
-        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-        chooser.setAcceptAllFileFilterUsed(true);
-        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
-        int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseCustom));
-        if (result != JFileChooser.APPROVE_OPTION) return;
-
-        File f = chooser.getSelectedFile();
-        if (f == null) return;
-        String rel = importNotificationSoundFileToRuntimeDir(f);
-        if (rel == null || rel.isBlank()) return;
-
-        customPath.setText(rel);
-        useCustom.setSelected(true);
-        persistSelectedRuleActions.run();
-        loadSelectedRuleActions.run();
-      } catch (Exception ex) {
-        JOptionPane.showMessageDialog(
-            SwingUtilities.getWindowAncestor(browseCustom),
-            "Could not import sound file.\n\n" + ex.getMessage(),
-            "Import failed",
-            JOptionPane.ERROR_MESSAGE
-        );
-      }
-    });
-
-    clearCustom.addActionListener(e -> {
-      customPath.setText("");
-      useCustom.setSelected(false);
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    browseScript.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      JFileChooser chooser = new JFileChooser();
-      chooser.setDialogTitle("Choose external script");
-      chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-      chooser.setAcceptAllFileFilterUsed(true);
-      int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseScript));
-      if (result != JFileChooser.APPROVE_OPTION) return;
-
-      File f = chooser.getSelectedFile();
-      if (f == null) return;
-      scriptPath.setText(f.getAbsolutePath());
-      runScript.setSelected(true);
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    clearScript.addActionListener(e -> {
-      scriptPath.setText("");
-      runScript.setSelected(false);
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    browseScriptWorkingDirectory.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0) return;
-
-      JFileChooser chooser = new JFileChooser();
-      chooser.setDialogTitle("Choose script working directory");
-      chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-      chooser.setAcceptAllFileFilterUsed(false);
-      int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(browseScriptWorkingDirectory));
-      if (result != JFileChooser.APPROVE_OPTION) return;
-
-      File f = chooser.getSelectedFile();
-      if (f == null) return;
-      scriptWorkingDirectory.setText(f.getAbsolutePath());
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    clearScriptWorkingDirectory.addActionListener(e -> {
-      scriptWorkingDirectory.setText("");
-      persistSelectedRuleActions.run();
-      loadSelectedRuleActions.run();
-    });
-
-    testSound.addActionListener(e -> {
-      int viewRow = table.getSelectedRow();
-      int row = viewRow >= 0 ? table.convertRowIndexToModel(viewRow) : -1;
-      if (row < 0 || notificationSoundService == null) return;
-      try {
-        String rel = model.soundCustomPathAt(row);
-        if (model.soundUseCustomAt(row) && rel != null && !rel.isBlank()) {
-          notificationSoundService.previewCustom(rel);
-          return;
-        }
-        notificationSoundService.preview(BuiltInSound.fromId(model.soundIdAt(row)));
-      } catch (Exception ignored) {
-      }
-    });
-
-    loadSelectedRuleActions.run();
-    return new IrcEventNotificationControls(
-        table,
-        model,
-        detailEnabled,
-        detailEvent,
-        detailSource,
-        detailSourcePattern,
-        detailChannelScope,
-        detailChannelPatterns,
-        detailFocus,
-        detailToast,
-        detailStatusBar,
-        detailNode,
-        detailSound,
-        sound,
-        useCustom,
-        customPath,
-        browseCustom,
-        clearCustom,
-        testSound,
-        runScript,
-        scriptPath,
-        scriptArgs,
-        scriptWorkingDirectory,
-        browseScript,
-        clearScript,
-        browseScriptWorkingDirectory,
-        clearScriptWorkingDirectory,
-        selectionHint);
+    return new IrcEventNotificationControls(table, model);
   }
 
   private JPanel buildIrcEventNotificationsTab(IrcEventNotificationControls controls) {
-    JPanel tab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]6[]6[grow,fill]"));
+    JPanel tab =
+        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]"));
     tab.setOpaque(false);
 
-    JComboBox<IrcEventNotificationPreset> defaultsPreset = new JComboBox<>(IrcEventNotificationPreset.values());
+    JComboBox<IrcEventNotificationPreset> defaultsPreset =
+        new JComboBox<>(IrcEventNotificationPreset.values());
     JButton applyDefaults = new JButton("Apply defaults");
     JButton resetToIrcafeDefaults = new JButton("Reset to IRCafe defaults");
     configureIconOnlyButton(
         applyDefaults, "check", "Apply preset defaults to matching IRC event types");
     configureIconOnlyButton(
         resetToIrcafeDefaults, "refresh", "Replace all IRC event rules with IRCafe defaults");
-
-    applyDefaults.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      IrcEventNotificationPreset preset = (IrcEventNotificationPreset) defaultsPreset.getSelectedItem();
-      if (preset == null) return;
-      List<IrcEventNotificationRule> rules = buildIrcEventDefaultPreset(preset);
-      if (rules.isEmpty()) return;
-
-      controls.model.applyPreset(rules);
-      if (controls.table.getRowCount() > 0) {
-        int row = controls.model.firstRowForEvent(rules.get(0).eventType());
-        if (row < 0) row = 0;
-        controls.table.getSelectionModel().setSelectionInterval(row, row);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(row, 0, true));
-      }
-    });
-
-    resetToIrcafeDefaults.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int confirm = JOptionPane.showConfirmDialog(
-          dialog,
-          "Replace all IRC event rules with IRCafe defaults?",
-          "Reset IRC event rules",
-          JOptionPane.OK_CANCEL_OPTION);
-      if (confirm != JOptionPane.OK_OPTION) return;
-
-      List<IrcEventNotificationRule> defaults = IrcEventNotificationRule.defaults();
-      if (defaults.isEmpty()) return;
-      controls.model.replaceAll(defaults);
-      if (controls.table.getRowCount() > 0) {
-        controls.table.getSelectionModel().setSelectionInterval(0, 0);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(0, 0, true));
-      }
-    });
 
     JPanel defaultsRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]8[]8[]", "[]"));
     defaultsRow.setOpaque(false);
@@ -5144,11 +5561,17 @@ panel.setOpaque(false);
     defaultsRow.add(resetToIrcafeDefaults, "w 36!, h 28!");
 
     JButton add = new JButton("Add");
+    JButton edit = new JButton("Edit");
+    JButton enableRule = new JButton("Enable");
+    JButton disableRule = new JButton("Disable");
     JButton duplicate = new JButton("Duplicate");
     JButton remove = new JButton("Remove");
     JButton up = new JButton("Up");
     JButton down = new JButton("Down");
     configureIconOnlyButton(add, "plus", "Add IRC event rule");
+    configureIconOnlyButton(edit, "edit", "Edit selected IRC event rule");
+    configureIconOnlyButton(enableRule, "check", "Enable selected IRC event rule");
+    configureIconOnlyButton(disableRule, "pause", "Disable selected IRC event rule");
     configureIconOnlyButton(duplicate, "copy", "Duplicate selected IRC event rule");
     configureIconOnlyButton(remove, "trash", "Remove selected IRC event rule");
     configureIconOnlyButton(up, "arrow-up", "Move selected IRC event rule up");
@@ -5156,195 +5579,234 @@ panel.setOpaque(false);
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
+    buttons.add(edit);
+    buttons.add(enableRule);
+    buttons.add(disableRule);
     buttons.add(duplicate);
     buttons.add(remove);
     buttons.add(up);
     buttons.add(down);
 
-    add.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+    Runnable refreshRuleButtons =
+        () -> {
+          int viewRow = controls.table.getSelectedRow();
+          boolean hasSelection = viewRow >= 0;
+          int modelRow = hasSelection ? controls.table.convertRowIndexToModel(viewRow) : -1;
+          IrcEventNotificationRule selectedRule =
+              modelRow >= 0 ? controls.model.ruleAt(modelRow) : null;
+          boolean selectedEnabled = selectedRule != null && selectedRule.enabled();
+          edit.setEnabled(hasSelection);
+          enableRule.setEnabled(hasSelection && !selectedEnabled);
+          disableRule.setEnabled(hasSelection && selectedEnabled);
+          duplicate.setEnabled(hasSelection);
+          remove.setEnabled(hasSelection);
+          up.setEnabled(hasSelection && modelRow > 0);
+          down.setEnabled(
+              hasSelection && modelRow >= 0 && modelRow < (controls.model.getRowCount() - 1));
+        };
 
-      int row = controls.model.addRule(new IrcEventNotificationRule(
-          false,
-          IrcEventNotificationRule.EventType.INVITE_RECEIVED,
-          IrcEventNotificationRule.SourceMode.ANY,
-          null,
-          IrcEventNotificationRule.ChannelScope.ALL,
-          null,
-          true,
-          IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
-          true,
-          true,
-          false,
-          BuiltInSound.NOTIF_1.name(),
-          false,
-          null,
-          false,
-          null,
-          null,
-          null));
-      if (row < 0) return;
-      controls.table.getSelectionModel().setSelectionInterval(row, row);
-      controls.table.scrollRectToVisible(controls.table.getCellRect(row, 0, true));
-      controls.table.requestFocusInWindow();
-    });
+    Runnable openEditRuleDialog =
+        () -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          IrcEventNotificationRule seed = controls.model.ruleAt(modelRow);
+          if (seed == null) return;
+          IrcEventNotificationRule edited =
+              promptIrcEventNotificationRuleDialog("Edit IRC Event Rule", seed);
+          if (edited == null) return;
+          controls.model.setRule(modelRow, edited);
+          int nextView = controls.table.convertRowIndexToView(modelRow);
+          if (nextView >= 0) {
+            controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+            controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+          }
+          refreshRuleButtons.run();
+        };
 
-    duplicate.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+    add.addActionListener(
+        e -> {
+          IrcEventNotificationRule created =
+              promptIrcEventNotificationRuleDialog("Add IRC Event Rule", null);
+          if (created == null) return;
+          int row = controls.model.addRule(created);
+          if (row >= 0) {
+            int viewRow = controls.table.convertRowIndexToView(row);
+            if (viewRow >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(viewRow, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
 
-      int row = controls.table.getSelectedRow();
-      if (row < 0) return;
-      int dup = controls.model.duplicateRow(row);
-      if (dup >= 0) {
-        controls.table.getSelectionModel().setSelectionInterval(dup, dup);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(dup, 0, true));
-      }
-    });
+    edit.addActionListener(e -> openEditRuleDialog.run());
 
-    remove.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
+    enableRule.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          controls.model.setEnabledAt(modelRow, true);
+          refreshRuleButtons.run();
+        });
 
-      int row = controls.table.getSelectedRow();
-      if (row < 0) return;
-      int res = JOptionPane.showConfirmDialog(dialog, "Remove selected IRC event rule?", "Remove rule", JOptionPane.OK_CANCEL_OPTION);
-      if (res != JOptionPane.OK_OPTION) return;
-      controls.model.removeRow(row);
-    });
+    disableRule.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          controls.model.setEnabledAt(modelRow, false);
+          refreshRuleButtons.run();
+        });
 
-    up.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      int row = controls.table.getSelectedRow();
-      if (row <= 0) return;
-      int next = controls.model.moveRow(row, row - 1);
-      if (next >= 0) {
-        controls.table.getSelectionModel().setSelectionInterval(next, next);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(next, 0, true));
-      }
-    });
+    duplicate.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          int dup = controls.model.duplicateRow(modelRow);
+          if (dup >= 0) {
+            int dupView = controls.table.convertRowIndexToView(dup);
+            if (dupView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(dupView, dupView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(dupView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
 
-    down.addActionListener(e -> {
-      if (controls.table.isEditing()) {
-        try {
-          controls.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      int row = controls.table.getSelectedRow();
-      if (row < 0) return;
-      int next = controls.model.moveRow(row, row + 1);
-      if (next >= 0) {
-        controls.table.getSelectionModel().setSelectionInterval(next, next);
-        controls.table.scrollRectToVisible(controls.table.getCellRect(next, 0, true));
-      }
-    });
+    remove.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          IrcEventNotificationRule rule = controls.model.ruleAt(modelRow);
+          String label = IrcEventNotificationTableModel.effectiveRuleLabel(rule);
+          int res =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove IRC event rule \"" + label + "\"?",
+                  "Remove IRC Event Rule",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (res != JOptionPane.OK_OPTION) return;
+          controls.model.removeRow(modelRow);
+          int nextModelRow = Math.min(modelRow, controls.model.getRowCount() - 1);
+          if (nextModelRow >= 0) {
+            int nextView = controls.table.convertRowIndexToView(nextModelRow);
+            if (nextView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+            }
+          } else {
+            controls.table.clearSelection();
+          }
+          refreshRuleButtons.run();
+        });
+
+    up.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          int next = controls.model.moveRow(modelRow, modelRow - 1);
+          if (next >= 0) {
+            int nextView = controls.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    down.addActionListener(
+        e -> {
+          int viewRow = controls.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = controls.table.convertRowIndexToModel(viewRow);
+          int next = controls.model.moveRow(modelRow, modelRow + 1);
+          if (next >= 0) {
+            int nextView = controls.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    applyDefaults.addActionListener(
+        e -> {
+          IrcEventNotificationPreset preset =
+              (IrcEventNotificationPreset) defaultsPreset.getSelectedItem();
+          if (preset == null) return;
+          List<IrcEventNotificationRule> rules = buildIrcEventDefaultPreset(preset);
+          if (rules.isEmpty()) return;
+          controls.model.applyPreset(rules);
+          int row = controls.model.firstRowForEvent(rules.get(0).eventType());
+          if (row < 0) row = 0;
+          int viewRow = controls.table.convertRowIndexToView(row);
+          if (viewRow >= 0) {
+            controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+            controls.table.scrollRectToVisible(controls.table.getCellRect(viewRow, 0, true));
+          }
+          refreshRuleButtons.run();
+        });
+
+    resetToIrcafeDefaults.addActionListener(
+        e -> {
+          int confirm =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Replace all IRC event rules with IRCafe defaults?",
+                  "Reset IRC event rules",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (confirm != JOptionPane.OK_OPTION) return;
+
+          List<IrcEventNotificationRule> defaults = IrcEventNotificationRule.defaults();
+          if (defaults.isEmpty()) return;
+          controls.model.replaceAll(defaults);
+          if (controls.table.getRowCount() > 0) {
+            controls.table.getSelectionModel().setSelectionInterval(0, 0);
+            controls.table.scrollRectToVisible(controls.table.getCellRect(0, 0, true));
+          } else {
+            controls.table.clearSelection();
+          }
+          refreshRuleButtons.run();
+        });
+
+    controls
+        .table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (e != null && e.getValueIsAdjusting()) return;
+              refreshRuleButtons.run();
+            });
+
+    controls.table.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e == null) return;
+            if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
+            if (e.getClickCount() != 2) return;
+            int viewRow = controls.table.rowAtPoint(e.getPoint());
+            if (viewRow < 0) return;
+            controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+            openEditRuleDialog.run();
+          }
+        });
+    refreshRuleButtons.run();
 
     JScrollPane scroll = new JScrollPane(controls.table);
     scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-
-    JPanel selectedRuleFilters = captionPanelWithPadding(
-        "Selected rule filters",
-        "insets 0, fillx, wrap 4",
-        "[right]8[grow,fill]8[right]8[grow,fill]",
-        "[]6[]6[]6[]",
-        10, 10, 10, 10);
-    selectedRuleFilters.add(new JLabel("Rule"));
-    selectedRuleFilters.add(controls.detailEnabled, "span 3, growx, wrap");
-    selectedRuleFilters.add(new JLabel("Event"));
-    selectedRuleFilters.add(controls.detailEvent, "growx, wmin 180");
-    selectedRuleFilters.add(new JLabel("Focus"));
-    selectedRuleFilters.add(controls.detailFocus, "growx, wmin 160, wrap");
-    selectedRuleFilters.add(new JLabel("Source"));
-    selectedRuleFilters.add(controls.detailSource, "growx");
-    selectedRuleFilters.add(new JLabel("Source match"));
-    selectedRuleFilters.add(controls.detailSourcePattern, "growx, wrap");
-    selectedRuleFilters.add(new JLabel("Channel scope"));
-    selectedRuleFilters.add(controls.detailChannelScope, "growx");
-    selectedRuleFilters.add(new JLabel("Channels"));
-    selectedRuleFilters.add(controls.detailChannelPatterns, "growx, wrap");
-    selectedRuleFilters.add(
-        helpText("Active channel only means the event target must match the currently selected channel on the same server."),
-        "span 4, growx, wmin 0, wrap");
-
-    JPanel selectedRuleActions = captionPanelWithPadding(
-        "Selected rule actions",
-        "insets 0, fillx, wrap 4",
-        "[grow,fill]8[grow,fill]8[grow,fill]8[grow,fill]",
-        "[]4[]",
-        10, 10, 10, 10);
-    selectedRuleActions.add(controls.detailToast, "growx");
-    selectedRuleActions.add(controls.detailStatusBar, "growx");
-    selectedRuleActions.add(controls.detailNode, "growx");
-    selectedRuleActions.add(controls.detailSound, "growx, wrap");
-    selectedRuleActions.add(
-        helpText("Tip: combine multiple rules for the same event to split foreground/background behavior."),
-        "span 4, growx, wmin 0, wrap");
-
-    JPanel soundPanel = captionPanelWithPadding(
-        "Selected rule sound",
-        "insets 0, fillx, wrap 4",
-        "[right]8[grow,fill]8[]8[]",
-        "[]6[]6[]4[]",
-        10, 10, 10, 10);
-    soundPanel.add(new JLabel("Built-in"));
-    soundPanel.add(controls.sound, "growx, wmin 160");
-    soundPanel.add(controls.testSound, "w 36!, h 28!");
-    soundPanel.add(controls.useCustom, "wrap");
-    soundPanel.add(new JLabel("Custom file"));
-    soundPanel.add(controls.customPath, "growx, pushx, wmin 0");
-    soundPanel.add(controls.browseCustom, "w 36!, h 28!");
-    soundPanel.add(controls.clearCustom, "w 36!, h 28!");
-    soundPanel.add(controls.selectionHint, "span 4, growx, wmin 0, wrap");
-    soundPanel.add(helpText("When Sound is disabled on a rule, no sound is played for that event."),
-        "span 4, growx, wmin 0, wrap");
-
-    JPanel scriptPanel = captionPanelWithPadding(
-        "Selected rule script",
-        "insets 0, fillx, wrap 4",
-        "[right]8[grow,fill]8[]8[]",
-        "[]6[]4[]",
-        10, 10, 10, 10);
-    scriptPanel.add(new JLabel("Action"));
-    scriptPanel.add(controls.runScript, "span 3, growx, wrap");
-    scriptPanel.add(new JLabel("Script path"));
-    scriptPanel.add(controls.scriptPath, "growx, pushx, wmin 0");
-    scriptPanel.add(controls.browseScript, "w 36!, h 28!");
-    scriptPanel.add(controls.clearScript, "w 36!, h 28!");
-    scriptPanel.add(new JLabel("Arguments"));
-    scriptPanel.add(controls.scriptArgs, "span 3, growx, wmin 0, wrap");
-    scriptPanel.add(new JLabel("Working dir"));
-    scriptPanel.add(controls.scriptWorkingDirectory, "growx, pushx, wmin 0");
-    scriptPanel.add(controls.browseScriptWorkingDirectory, "w 36!, h 28!");
-    scriptPanel.add(controls.clearScriptWorkingDirectory, "w 36!, h 28!");
-    scriptPanel.add(helpText(
-            "If enabled, IRCafe executes the script and sets env vars:\n"
-                + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
-                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY, IRCAFE_TIMESTAMP_MS.\n"
-                + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
-        "span 4, growx, wmin 0, wrap");
+    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
     JPanel presetsPanel =
-        captionPanelWithPadding("Presets", "insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]", 10, 10, 10, 10);
+        captionPanelWithPadding(
+            "Presets", "insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]", 10, 10, 10, 10);
     presetsPanel.add(defaultsRow, "growx, wmin 0, wrap");
     presetsPanel.add(
         helpText(
@@ -5355,61 +5817,604 @@ panel.setOpaque(false);
     tab.add(presetsPanel, "growx, wmin 0, wrap");
 
     JPanel rulesPanel =
-        captionPanelWithPadding("Rules", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]", 10, 10, 10, 10);
+        captionPanelWithPadding(
+            "Rules", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]4[]", 10, 10, 10, 10);
     rulesPanel.add(buttons, "growx, wmin 0, wrap");
-    scroll.setPreferredSize(new Dimension(400, 210));
+    scroll.setPreferredSize(new Dimension(400, 260));
     rulesPanel.add(scroll, "grow, push, wmin 0, wrap");
+    rulesPanel.add(helpText("Tip: Double-click a rule to edit it."), "growx, wmin 0, wrap");
     tab.add(rulesPanel, "grow, push, wmin 0, wrap");
-
-    JTabbedPane detailTabs = new JTabbedPane();
-    detailTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-    detailTabs.addTab("Filters", selectedRuleFilters);
-    detailTabs.addTab("Actions", selectedRuleActions);
-    detailTabs.addTab("Sound", soundPanel);
-    detailTabs.addTab("Script", scriptPanel);
-    detailTabs.setPreferredSize(new Dimension(400, 255));
-
-    JPanel selectedRulePanel =
-        captionPanelWithPadding("Selected rule", "insets 0, fill, wrap 1", "[grow,fill]", "[grow,fill]", 10, 10, 10, 10);
-    selectedRulePanel.add(detailTabs, "grow, push, wmin 0");
-    tab.add(selectedRulePanel, "growx, wmin 0, wrap");
 
     return tab;
   }
 
-  private List<IrcEventNotificationRule> buildIrcEventDefaultPreset(IrcEventNotificationPreset preset) {
+  private IrcEventNotificationRule promptIrcEventNotificationRuleDialog(
+      String title, IrcEventNotificationRule seed) {
+    IrcEventNotificationRule base =
+        seed != null
+            ? seed
+            : new IrcEventNotificationRule(
+                false,
+                IrcEventNotificationRule.EventType.INVITE_RECEIVED,
+                IrcEventNotificationRule.SourceMode.ANY,
+                null,
+                IrcEventNotificationRule.ChannelScope.ALL,
+                null,
+                true,
+                IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+                true,
+                true,
+                false,
+                defaultBuiltInSoundForIrcEventRule(
+                        IrcEventNotificationRule.EventType.INVITE_RECEIVED)
+                    .name(),
+                false,
+                null,
+                false,
+                null,
+                null,
+                null);
+
+    Window owner = dialog != null ? dialog : null;
+
+    JCheckBox enabled = new JCheckBox("Enabled", base.enabled());
+
+    JComboBox<IrcEventNotificationRule.EventType> eventType =
+        new JComboBox<>(IrcEventNotificationRule.EventType.values());
+    eventType.setSelectedItem(
+        base.eventType() != null
+            ? base.eventType()
+            : IrcEventNotificationRule.EventType.INVITE_RECEIVED);
+
+    JComboBox<IrcEventNotificationRule.SourceMode> sourceMode =
+        new JComboBox<>(IrcEventNotificationRule.SourceMode.values());
+    sourceMode.setSelectedItem(
+        base.sourceMode() != null ? base.sourceMode() : IrcEventNotificationRule.SourceMode.ANY);
+
+    JTextField sourcePattern = new JTextField(Objects.toString(base.sourcePattern(), ""));
+    sourcePattern.setToolTipText(
+        "For Specific nicks: comma-separated list.\n"
+            + "For Nick glob: wildcard patterns (* and ?).\n"
+            + "For Nick regex: Java regular expression.");
+
+    JComboBox<IrcEventNotificationRule.ChannelScope> channelScope =
+        new JComboBox<>(IrcEventNotificationRule.ChannelScope.values());
+    channelScope.setSelectedItem(
+        base.channelScope() != null
+            ? base.channelScope()
+            : IrcEventNotificationRule.ChannelScope.ALL);
+
+    JTextField channelPatterns = new JTextField(Objects.toString(base.channelPatterns(), ""));
+    channelPatterns.setToolTipText("Comma-separated channel masks (for example: #staff*, #ops).");
+
+    JCheckBox toastEnabled = new JCheckBox("Desktop toast", base.toastEnabled());
+
+    JComboBox<IrcEventNotificationRule.FocusScope> focusScope =
+        new JComboBox<>(IrcEventNotificationRule.FocusScope.values());
+    focusScope.setSelectedItem(
+        base.focusScope() != null
+            ? base.focusScope()
+            : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY);
+
+    JCheckBox statusBarEnabled = new JCheckBox("Status bar message", base.statusBarEnabled());
+    JCheckBox notificationsNodeEnabled =
+        new JCheckBox("Notifications node entry", base.notificationsNodeEnabled());
+
+    JCheckBox soundEnabled = new JCheckBox("Play sound", base.soundEnabled());
+    JComboBox<BuiltInSound> builtInSound = new JComboBox<>(BuiltInSound.valuesForUi());
+    configureBuiltInSoundCombo(builtInSound);
+    builtInSound.setSelectedItem(BuiltInSound.fromId(base.soundId()));
+
+    JCheckBox soundUseCustom = new JCheckBox("Use custom file", base.soundUseCustom());
+    JTextField soundCustomPath = new JTextField(Objects.toString(base.soundCustomPath(), ""));
+    JButton browseCustomSound = new JButton("Browse...");
+    JButton clearCustomSound = new JButton("Clear");
+    JButton testSound = new JButton("Test");
+    configureIconOnlyButton(browseCustomSound, "folder-open", "Browse/import custom sound file");
+    configureIconOnlyButton(clearCustomSound, "close", "Clear custom sound path");
+    configureIconOnlyButton(testSound, "play", "Test selected sound");
+
+    JCheckBox scriptEnabled = new JCheckBox("Run script/program", base.scriptEnabled());
+    JTextField scriptPath = new JTextField(Objects.toString(base.scriptPath(), ""));
+    JButton browseScript = new JButton("Browse...");
+    JButton clearScript = new JButton("Clear");
+    configureIconOnlyButton(browseScript, "terminal", "Browse for script/program");
+    configureIconOnlyButton(clearScript, "close", "Clear script path");
+
+    JTextField scriptArgs = new JTextField(Objects.toString(base.scriptArgs(), ""));
+    JTextField scriptWorkingDirectory =
+        new JTextField(Objects.toString(base.scriptWorkingDirectory(), ""));
+    JButton browseScriptWorkingDirectory = new JButton("Browse...");
+    JButton clearScriptWorkingDirectory = new JButton("Clear");
+    configureIconOnlyButton(
+        browseScriptWorkingDirectory, "settings", "Browse for script working directory");
+    configureIconOnlyButton(clearScriptWorkingDirectory, "close", "Clear script working directory");
+
+    Runnable refreshSourceFieldState =
+        () -> {
+          IrcEventNotificationRule.SourceMode mode =
+              sourceMode.getSelectedItem() instanceof IrcEventNotificationRule.SourceMode s
+                  ? s
+                  : IrcEventNotificationRule.SourceMode.ANY;
+          boolean needsPattern =
+              mode == IrcEventNotificationRule.SourceMode.NICK_LIST
+                  || mode == IrcEventNotificationRule.SourceMode.GLOB
+                  || mode == IrcEventNotificationRule.SourceMode.REGEX;
+          sourcePattern.setEnabled(needsPattern);
+          sourcePattern.setEditable(needsPattern);
+          String placeholder =
+              switch (mode) {
+                case NICK_LIST -> "alice, bob";
+                case GLOB -> "op*, admin?";
+                case REGEX -> "^op[0-9]+$";
+                default -> "";
+              };
+          sourcePattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, placeholder);
+        };
+
+    Runnable refreshChannelFieldState =
+        () -> {
+          IrcEventNotificationRule.ChannelScope scope =
+              channelScope.getSelectedItem() instanceof IrcEventNotificationRule.ChannelScope s
+                  ? s
+                  : IrcEventNotificationRule.ChannelScope.ALL;
+          boolean needsPattern =
+              scope == IrcEventNotificationRule.ChannelScope.ONLY
+                  || scope == IrcEventNotificationRule.ChannelScope.ALL_EXCEPT;
+          channelPatterns.setEnabled(needsPattern);
+          channelPatterns.setEditable(needsPattern);
+          channelPatterns.putClientProperty(
+              FlatClientProperties.PLACEHOLDER_TEXT, needsPattern ? "#staff*, #ops" : "");
+        };
+
+    Runnable refreshSoundState =
+        () -> {
+          boolean soundOn = soundEnabled.isSelected();
+          soundUseCustom.setEnabled(soundOn);
+          boolean useCustom = soundOn && soundUseCustom.isSelected();
+          builtInSound.setEnabled(soundOn && !useCustom);
+          soundCustomPath.setEnabled(soundOn && useCustom);
+          soundCustomPath.setEditable(soundOn && useCustom);
+          browseCustomSound.setEnabled(soundOn && useCustom);
+          String custom = Objects.toString(soundCustomPath.getText(), "").trim();
+          clearCustomSound.setEnabled(soundOn && useCustom && !custom.isBlank());
+          testSound.setEnabled(soundOn);
+        };
+
+    Runnable refreshScriptState =
+        () -> {
+          boolean run = scriptEnabled.isSelected();
+          scriptPath.setEnabled(run);
+          scriptPath.setEditable(run);
+          browseScript.setEnabled(run);
+          clearScript.setEnabled(
+              run && !Objects.toString(scriptPath.getText(), "").trim().isBlank());
+          scriptArgs.setEnabled(run);
+          scriptArgs.setEditable(run);
+          scriptWorkingDirectory.setEnabled(run);
+          scriptWorkingDirectory.setEditable(run);
+          browseScriptWorkingDirectory.setEnabled(run);
+          clearScriptWorkingDirectory.setEnabled(
+              run && !Objects.toString(scriptWorkingDirectory.getText(), "").trim().isBlank());
+        };
+
+    final IrcEventNotificationRule.EventType[] priorEvent =
+        new IrcEventNotificationRule.EventType[] {
+          eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType e
+              ? e
+              : IrcEventNotificationRule.EventType.INVITE_RECEIVED
+        };
+
+    eventType.addActionListener(
+        e -> {
+          IrcEventNotificationRule.EventType selectedEvent =
+              eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType et
+                  ? et
+                  : IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          IrcEventNotificationRule.EventType previous = priorEvent[0];
+          if (previous == null) previous = IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          if (!soundUseCustom.isSelected()) {
+            Object selectedSound = builtInSound.getSelectedItem();
+            if (selectedSound instanceof BuiltInSound currentSound) {
+              BuiltInSound previousDefault = defaultBuiltInSoundForIrcEventRule(previous);
+              if (currentSound == previousDefault) {
+                builtInSound.setSelectedItem(defaultBuiltInSoundForIrcEventRule(selectedEvent));
+              }
+            }
+          }
+          priorEvent[0] = selectedEvent;
+        });
+
+    sourceMode.addActionListener(e -> refreshSourceFieldState.run());
+    channelScope.addActionListener(e -> refreshChannelFieldState.run());
+    soundEnabled.addActionListener(e -> refreshSoundState.run());
+    soundUseCustom.addActionListener(e -> refreshSoundState.run());
+    soundCustomPath.getDocument().addDocumentListener(new SimpleDocListener(refreshSoundState));
+    scriptEnabled.addActionListener(e -> refreshScriptState.run());
+    scriptPath.getDocument().addDocumentListener(new SimpleDocListener(refreshScriptState));
+    scriptWorkingDirectory
+        .getDocument()
+        .addDocumentListener(new SimpleDocListener(refreshScriptState));
+
+    browseCustomSound.addActionListener(
+        e -> {
+          try {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Choose notification sound (MP3 or WAV)");
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            chooser.setAcceptAllFileFilterUsed(true);
+            chooser.addChoosableFileFilter(
+                new FileNameExtensionFilter("Audio files (MP3, WAV)", "mp3", "wav"));
+            int result = chooser.showOpenDialog(owner);
+            if (result != JFileChooser.APPROVE_OPTION) return;
+            File f = chooser.getSelectedFile();
+            if (f == null) return;
+            String rel = importNotificationSoundFileToRuntimeDir(f);
+            if (rel != null && !rel.isBlank()) {
+              soundCustomPath.setText(rel);
+              soundUseCustom.setSelected(true);
+              refreshSoundState.run();
+            }
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                owner,
+                "Could not import sound file.\n\n" + ex.getMessage(),
+                "Import failed",
+                JOptionPane.ERROR_MESSAGE);
+          }
+        });
+
+    clearCustomSound.addActionListener(
+        e -> {
+          soundUseCustom.setSelected(false);
+          soundCustomPath.setText("");
+          refreshSoundState.run();
+        });
+
+    testSound.addActionListener(
+        e -> {
+          try {
+            if (notificationSoundService == null) return;
+            if (soundUseCustom.isSelected()) {
+              String rel = Objects.toString(soundCustomPath.getText(), "").trim();
+              if (!rel.isBlank()) notificationSoundService.previewCustom(rel);
+            } else {
+              BuiltInSound sound =
+                  builtInSound.getSelectedItem() instanceof BuiltInSound s ? s : null;
+              notificationSoundService.preview(sound);
+            }
+          } catch (Throwable ignored) {
+          }
+        });
+
+    browseScript.addActionListener(
+        e -> {
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Select script/program");
+          chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+          chooser.setAcceptAllFileFilterUsed(true);
+          int result = chooser.showOpenDialog(owner);
+          if (result != JFileChooser.APPROVE_OPTION) return;
+          File selected = chooser.getSelectedFile();
+          if (selected == null) return;
+          scriptPath.setText(selected.getAbsolutePath());
+          refreshScriptState.run();
+        });
+
+    clearScript.addActionListener(
+        e -> {
+          scriptPath.setText("");
+          refreshScriptState.run();
+        });
+
+    browseScriptWorkingDirectory.addActionListener(
+        e -> {
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Select script working directory");
+          chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+          chooser.setAcceptAllFileFilterUsed(true);
+          int result = chooser.showOpenDialog(owner);
+          if (result != JFileChooser.APPROVE_OPTION) return;
+          File selected = chooser.getSelectedFile();
+          if (selected == null) return;
+          scriptWorkingDirectory.setText(selected.getAbsolutePath());
+          refreshScriptState.run();
+        });
+
+    clearScriptWorkingDirectory.addActionListener(
+        e -> {
+          scriptWorkingDirectory.setText("");
+          refreshScriptState.run();
+        });
+
+    refreshSourceFieldState.run();
+    refreshChannelFieldState.run();
+    refreshSoundState.run();
+    refreshScriptState.run();
+
+    JPanel filtersPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 2,hidemode 3", "[right]8[grow,fill]", "[]6[]6[]6[]6[]6[]"));
+    filtersPanel.add(enabled, "span 2,wrap");
+    filtersPanel.add(new JLabel("Event"));
+    filtersPanel.add(eventType, "growx, wmin 220, wrap");
+    filtersPanel.add(new JLabel("Source"));
+    filtersPanel.add(sourceMode, "growx, wrap");
+    filtersPanel.add(new JLabel("Source match"));
+    filtersPanel.add(sourcePattern, "growx, wrap");
+    filtersPanel.add(new JLabel("Channel scope"));
+    filtersPanel.add(channelScope, "growx, wrap");
+    filtersPanel.add(new JLabel("Channels"));
+    filtersPanel.add(channelPatterns, "growx, wrap");
+    filtersPanel.add(new JLabel(""));
+    filtersPanel.add(
+        helpText(
+            "Active channel only means the event target must match the currently selected channel on the same server."),
+        "growx, wmin 0, wrap");
+
+    JPanel actionsPanel =
+        new JPanel(
+            new MigLayout("insets 10,fillx,wrap 2,hidemode 3", "[right]8[grow,fill]", "[]6[]6[]"));
+    actionsPanel.add(toastEnabled, "span 2, growx, wrap");
+    actionsPanel.add(new JLabel("Toast focus"));
+    actionsPanel.add(focusScope, "growx, wrap");
+    actionsPanel.add(statusBarEnabled, "span 2, growx, wrap");
+    actionsPanel.add(notificationsNodeEnabled, "span 2, growx, wrap");
+    actionsPanel.add(new JLabel(""));
+    actionsPanel.add(
+        helpText(
+            "Tip: combine multiple rules for the same event to split foreground/background behavior."),
+        "growx, wmin 0, wrap");
+
+    JPanel soundPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 4,hidemode 3", "[right]8[grow,fill]8[]8[]", "[]6[]4[]"));
+    soundPanel.add(soundEnabled, "span 4, growx, wrap");
+    soundPanel.add(new JLabel("Built-in"));
+    soundPanel.add(builtInSound, "growx, wmin 180");
+    soundPanel.add(testSound, "w 36!, h 28!");
+    soundPanel.add(soundUseCustom, "wrap");
+    soundPanel.add(new JLabel("Custom file"));
+    soundPanel.add(soundCustomPath, "growx, pushx, wmin 0");
+    soundPanel.add(browseCustomSound, "w 36!, h 28!");
+    soundPanel.add(clearCustomSound, "w 36!, h 28!, wrap");
+    soundPanel.add(new JLabel(""));
+    soundPanel.add(
+        helpText("When Sound is disabled on a rule, no sound is played for that event."),
+        "span 3, growx, wmin 0, wrap");
+
+    JPanel scriptPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 4,hidemode 3", "[right]8[grow,fill]8[]8[]", "[]6[]4[]"));
+    scriptPanel.add(scriptEnabled, "span 4, growx, wrap");
+    scriptPanel.add(new JLabel("Script path"));
+    scriptPanel.add(scriptPath, "growx, pushx, wmin 0");
+    scriptPanel.add(browseScript, "w 36!, h 28!");
+    scriptPanel.add(clearScript, "w 36!, h 28!, wrap");
+    scriptPanel.add(new JLabel("Arguments"));
+    scriptPanel.add(scriptArgs, "span 3, growx, wmin 0, wrap");
+    scriptPanel.add(new JLabel("Working dir"));
+    scriptPanel.add(scriptWorkingDirectory, "growx, pushx, wmin 0");
+    scriptPanel.add(browseScriptWorkingDirectory, "w 36!, h 28!");
+    scriptPanel.add(clearScriptWorkingDirectory, "w 36!, h 28!, wrap");
+    scriptPanel.add(new JLabel(""));
+    scriptPanel.add(
+        helpText(
+            "If enabled, IRCafe executes the script and sets env vars:\n"
+                + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
+                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY, IRCAFE_TIMESTAMP_MS.\n"
+                + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
+        "span 3, growx, wmin 0, wrap");
+
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+    tabs.addTab("Filters", filtersPanel);
+    tabs.addTab("Actions", actionsPanel);
+    tabs.addTab("Sound", soundPanel);
+    tabs.addTab("Script", scriptPanel);
+    tabs.setPreferredSize(new Dimension(640, 420));
+
+    JPanel form = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[grow,fill]"));
+    form.add(tabs, "grow, push, wmin 0");
+
+    String dialogTitle = Objects.toString(title, "IRC Event Rule");
+    while (true) {
+      int choice =
+          JOptionPane.showConfirmDialog(
+              owner, form, dialogTitle, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+      if (choice != JOptionPane.OK_OPTION) return null;
+
+      IrcEventNotificationRule.EventType selectedEvent =
+          eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType ev
+              ? ev
+              : IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+      IrcEventNotificationRule.SourceMode selectedSourceMode =
+          sourceMode.getSelectedItem() instanceof IrcEventNotificationRule.SourceMode mode
+              ? mode
+              : IrcEventNotificationRule.SourceMode.ANY;
+      IrcEventNotificationRule.ChannelScope selectedChannelScope =
+          channelScope.getSelectedItem() instanceof IrcEventNotificationRule.ChannelScope scope
+              ? scope
+              : IrcEventNotificationRule.ChannelScope.ALL;
+      IrcEventNotificationRule.FocusScope selectedFocusScope =
+          focusScope.getSelectedItem() instanceof IrcEventNotificationRule.FocusScope focus
+              ? focus
+              : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+
+      String sourcePatternValue = Objects.toString(sourcePattern.getText(), "").trim();
+      if (sourcePatternValue.isEmpty()) sourcePatternValue = null;
+      boolean sourceNeedsPattern =
+          selectedSourceMode == IrcEventNotificationRule.SourceMode.NICK_LIST
+              || selectedSourceMode == IrcEventNotificationRule.SourceMode.GLOB
+              || selectedSourceMode == IrcEventNotificationRule.SourceMode.REGEX;
+      if (sourceNeedsPattern && sourcePatternValue == null) {
+        JOptionPane.showMessageDialog(
+            owner,
+            "Source mode \"" + selectedSourceMode + "\" requires a source pattern.",
+            "Invalid IRC Event Rule",
+            JOptionPane.ERROR_MESSAGE);
+        tabs.setSelectedIndex(0);
+        continue;
+      }
+      if (selectedSourceMode == IrcEventNotificationRule.SourceMode.REGEX
+          && sourcePatternValue != null) {
+        try {
+          Pattern.compile(sourcePatternValue);
+        } catch (Exception ex) {
+          JOptionPane.showMessageDialog(
+              owner,
+              "Invalid source regex pattern:\n"
+                  + Objects.toString(ex.getMessage(), "Invalid regex"),
+              "Invalid IRC Event Rule",
+              JOptionPane.ERROR_MESSAGE);
+          tabs.setSelectedIndex(0);
+          continue;
+        }
+      }
+      if (!sourceNeedsPattern) sourcePatternValue = null;
+
+      String channelPatternsValue = Objects.toString(channelPatterns.getText(), "").trim();
+      if (channelPatternsValue.isEmpty()) channelPatternsValue = null;
+      boolean channelNeedsPattern =
+          selectedChannelScope == IrcEventNotificationRule.ChannelScope.ONLY
+              || selectedChannelScope == IrcEventNotificationRule.ChannelScope.ALL_EXCEPT;
+      if (channelNeedsPattern && channelPatternsValue == null) {
+        JOptionPane.showMessageDialog(
+            owner,
+            "Channel scope \"" + selectedChannelScope + "\" requires channel patterns.",
+            "Invalid IRC Event Rule",
+            JOptionPane.ERROR_MESSAGE);
+        tabs.setSelectedIndex(0);
+        continue;
+      }
+      if (!channelNeedsPattern) channelPatternsValue = null;
+
+      BuiltInSound selectedSound =
+          builtInSound.getSelectedItem() instanceof BuiltInSound sound
+              ? sound
+              : defaultBuiltInSoundForIrcEventRule(selectedEvent);
+      String soundCustomPathValue = Objects.toString(soundCustomPath.getText(), "").trim();
+      if (soundCustomPathValue.isEmpty()) soundCustomPathValue = null;
+      boolean useCustomSound = soundUseCustom.isSelected() && soundCustomPathValue != null;
+
+      String scriptPathValue = Objects.toString(scriptPath.getText(), "").trim();
+      if (scriptPathValue.isEmpty()) scriptPathValue = null;
+      String scriptArgsValue = Objects.toString(scriptArgs.getText(), "").trim();
+      if (scriptArgsValue.isEmpty()) scriptArgsValue = null;
+      String scriptWorkingDirectoryValue =
+          Objects.toString(scriptWorkingDirectory.getText(), "").trim();
+      if (scriptWorkingDirectoryValue.isEmpty()) scriptWorkingDirectoryValue = null;
+      boolean runScript = scriptEnabled.isSelected();
+      if (runScript && scriptPathValue == null) {
+        JOptionPane.showMessageDialog(
+            owner,
+            "Script path is required when Run script/program is enabled.",
+            "Invalid IRC Event Rule",
+            JOptionPane.ERROR_MESSAGE);
+        tabs.setSelectedIndex(3);
+        continue;
+      }
+
+      return new IrcEventNotificationRule(
+          enabled.isSelected(),
+          selectedEvent,
+          selectedSourceMode,
+          sourcePatternValue,
+          selectedChannelScope,
+          channelPatternsValue,
+          toastEnabled.isSelected(),
+          selectedFocusScope,
+          statusBarEnabled.isSelected(),
+          notificationsNodeEnabled.isSelected(),
+          soundEnabled.isSelected(),
+          selectedSound.name(),
+          useCustomSound,
+          soundCustomPathValue,
+          runScript,
+          scriptPathValue,
+          scriptArgsValue,
+          scriptWorkingDirectoryValue);
+    }
+  }
+
+  private List<IrcEventNotificationRule> buildIrcEventDefaultPreset(
+      IrcEventNotificationPreset preset) {
     if (preset == null) return List.of();
     return switch (preset) {
-      case ESSENTIAL -> List.of(
-          eventDefaultRule(IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.INVITE_RECEIVED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.YOU_KICKED, IrcEventNotificationRule.SourceMode.ANY, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.YOU_BANNED, IrcEventNotificationRule.SourceMode.ANY, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.YOU_KLINED, IrcEventNotificationRule.SourceMode.ANY, false));
-      case MODERATION -> List.of(
-          eventDefaultRule(IrcEventNotificationRule.EventType.KICKED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.BANNED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.OPPED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.DEOPPED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.VOICED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.DEVOICED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.HALF_OPPED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.DEHALF_OPPED, IrcEventNotificationRule.SourceMode.OTHERS, false),
-          eventDefaultRule(IrcEventNotificationRule.EventType.INVITE_RECEIVED, IrcEventNotificationRule.SourceMode.ANY, false));
-      case ALL_EVENTS -> Arrays.stream(IrcEventNotificationRule.EventType.values())
-          .map(t -> eventDefaultRule(
-              t,
-              IrcEventNotificationRule.SourceMode.ANY,
-              false))
-          .toList();
+      case ESSENTIAL ->
+          List.of(
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.INVITE_RECEIVED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.YOU_KICKED,
+                  IrcEventNotificationRule.SourceMode.ANY,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.YOU_BANNED,
+                  IrcEventNotificationRule.SourceMode.ANY,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.YOU_KLINED,
+                  IrcEventNotificationRule.SourceMode.ANY,
+                  false));
+      case MODERATION ->
+          List.of(
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.KICKED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.BANNED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.OPPED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.DEOPPED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.VOICED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.DEVOICED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.HALF_OPPED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.DEHALF_OPPED,
+                  IrcEventNotificationRule.SourceMode.OTHERS,
+                  false),
+              eventDefaultRule(
+                  IrcEventNotificationRule.EventType.INVITE_RECEIVED,
+                  IrcEventNotificationRule.SourceMode.ANY,
+                  false));
+      case ALL_EVENTS ->
+          Arrays.stream(IrcEventNotificationRule.EventType.values())
+              .map(t -> eventDefaultRule(t, IrcEventNotificationRule.SourceMode.ANY, false))
+              .toList();
     };
   }
 
   private static IrcEventNotificationRule eventDefaultRule(
       IrcEventNotificationRule.EventType eventType,
       IrcEventNotificationRule.SourceMode sourceMode,
-      boolean soundEnabled
-  ) {
+      boolean soundEnabled) {
     return new IrcEventNotificationRule(
         true,
         eventType,
@@ -5432,19 +6437,21 @@ panel.setOpaque(false);
   }
 
   private static BuiltInSound defaultBuiltInSoundForIrcEventRule(
-      IrcEventNotificationRule.EventType eventType
-  ) {
+      IrcEventNotificationRule.EventType eventType) {
     return IrcEventNotificationRule.defaultBuiltInSoundForEvent(eventType);
   }
 
-  private JPanel buildNotificationsPanel(NotificationRulesControls notifications, IrcEventNotificationControls ircEventNotifications) {
-    JPanel panel = new JPanel(new MigLayout("insets 10, fill, wrap 1", "[grow,fill]", "[]8[]4[grow,fill]"));
+  private JPanel buildNotificationsPanel(
+      NotificationRulesControls notifications, IrcEventNotificationControls ircEventNotifications) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 10, fill, wrap 1", "[grow,fill]", "[]8[]4[grow,fill]"));
 
     panel.add(tabTitle("Notifications"), "growx, wmin 0, wrap");
     panel.add(sectionTitle("Rule matches"), "growx, wmin 0, wrap");
-    panel.add(helpText(
-        "Add custom word/regex rules to create notifications when messages match.\n"
-            + "Rules only trigger for channels (not PMs) and only when the channel isn't the active target."),
+    panel.add(
+        helpText(
+            "Add custom word/regex rules to create notifications when messages match.\n"
+                + "Rules only trigger for channels (not PMs) and only when the channel isn't the active target."),
         "growx, wmin 0, wrap");
 
     JButton add = new JButton("Add");
@@ -5453,16 +6460,12 @@ panel.setOpaque(false);
     JButton remove = new JButton("Remove");
     JButton up = new JButton("Up");
     JButton down = new JButton("Down");
-    JButton pickColor = new JButton("Color…");
-    JButton clearColor = new JButton("Clear color");
     configureIconOnlyButton(add, "plus", "Add notification rule");
     configureIconOnlyButton(edit, "edit", "Edit selected notification rule");
     configureIconOnlyButton(duplicate, "copy", "Duplicate selected notification rule");
     configureIconOnlyButton(remove, "trash", "Remove selected notification rule");
     configureIconOnlyButton(up, "arrow-up", "Move selected notification rule up");
     configureIconOnlyButton(down, "arrow-down", "Move selected notification rule down");
-    configureIconOnlyButton(pickColor, "palette", "Choose highlight color for selected rule");
-    configureIconOnlyButton(clearColor, "close", "Clear highlight color for selected rule");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(add);
@@ -5471,161 +6474,160 @@ panel.setOpaque(false);
     buttons.add(remove);
     buttons.add(up);
     buttons.add(down);
-    buttons.add(pickColor);
-    buttons.add(clearColor);
+    Runnable refreshRuleButtons =
+        () -> {
+          int viewRow = notifications.table.getSelectedRow();
+          boolean hasSelection = viewRow >= 0;
+          int modelRow = hasSelection ? notifications.table.convertRowIndexToModel(viewRow) : -1;
+          edit.setEnabled(hasSelection);
+          duplicate.setEnabled(hasSelection);
+          remove.setEnabled(hasSelection);
+          up.setEnabled(hasSelection && modelRow > 0);
+          down.setEnabled(
+              hasSelection && modelRow >= 0 && modelRow < (notifications.model.getRowCount() - 1));
+        };
 
-    add.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.model.addRule(new NotificationRule(
-          "",
-          NotificationRule.Type.WORD,
-          "",
-          true,
-          false,
-          true,
-          null
-      ));
-      if (row >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(row, row);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(row, 0, true));
-        notifications.table.editCellAt(row, NotificationRulesTableModel.COL_PATTERN);
-        notifications.table.requestFocusInWindow();
-      }
-    });
-
-    edit.addActionListener(e -> {
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      notifications.table.editCellAt(row, NotificationRulesTableModel.COL_PATTERN);
-      notifications.table.requestFocusInWindow();
-    });
-
-    duplicate.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      int dup = notifications.model.duplicateRow(row);
-      if (dup >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(dup, dup);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(dup, 0, true));
-      }
-    });
-
-    remove.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      int res = JOptionPane.showConfirmDialog(dialog, "Remove selected rule?", "Remove rule", JOptionPane.OK_CANCEL_OPTION);
-      if (res != JOptionPane.OK_OPTION) return;
-      notifications.model.removeRow(row);
-    });
-
-    up.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row <= 0) return;
-      int next = notifications.model.moveRow(row, row - 1);
-      if (next >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(next, next);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(next, 0, true));
-      }
-    });
-
-    down.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      int next = notifications.model.moveRow(row, row + 1);
-      if (next >= 0) {
-        notifications.table.getSelectionModel().setSelectionInterval(next, next);
-        notifications.table.scrollRectToVisible(notifications.table.getCellRect(next, 0, true));
-      }
-    });
-
-    pickColor.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      pickNotificationRuleColor(notifications, row);
-    });
-
-    clearColor.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-
-      int row = notifications.table.getSelectedRow();
-      if (row < 0) return;
-      notifications.model.setHighlightFg(row, null);
-    });
-
-
-    // Double-click on a Color cell to pick a color (faster than using the button bar).
-    notifications.table.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (e == null) return;
-        if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
-        if (e.getClickCount() != 2) return;
-
-        int viewRow = notifications.table.rowAtPoint(e.getPoint());
-        int viewCol = notifications.table.columnAtPoint(e.getPoint());
-        if (viewRow < 0 || viewCol < 0) return;
-
-        int modelCol = notifications.table.convertColumnIndexToModel(viewCol);
-        if (modelCol != NotificationRulesTableModel.COL_COLOR) return;
-
-        if (notifications.table.isEditing()) {
-          try {
-            notifications.table.getCellEditor().stopCellEditing();
-          } catch (Exception ignored) {
+    Runnable openEditRuleDialog =
+        () -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          NotificationRule seed = notifications.model.ruleAt(modelRow);
+          if (seed == null) return;
+          NotificationRule edited = promptNotificationRuleDialog("Edit Notification Rule", seed);
+          if (edited == null) return;
+          notifications.model.setRule(modelRow, edited);
+          int nextView = notifications.table.convertRowIndexToView(modelRow);
+          if (nextView >= 0) {
+            notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+            notifications.table.scrollRectToVisible(
+                notifications.table.getCellRect(nextView, 0, true));
           }
-        }
+          refreshRuleButtons.run();
+        };
 
-        int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-        notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-        pickNotificationRuleColor(notifications, modelRow);
-      }
-    });
+    add.addActionListener(
+        e -> {
+          NotificationRule created = promptNotificationRuleDialog("Add Notification Rule", null);
+          if (created == null) return;
+          int row = notifications.model.addRule(created);
+          if (row >= 0) {
+            int viewRow = notifications.table.convertRowIndexToView(row);
+            if (viewRow >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+              notifications.table.scrollRectToVisible(
+                  notifications.table.getCellRect(viewRow, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    edit.addActionListener(e -> openEditRuleDialog.run());
+
+    duplicate.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          int dup = notifications.model.duplicateRow(modelRow);
+          if (dup >= 0) {
+            int dupView = notifications.table.convertRowIndexToView(dup);
+            if (dupView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(dupView, dupView);
+              notifications.table.scrollRectToVisible(
+                  notifications.table.getCellRect(dupView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    remove.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          NotificationRule rule = notifications.model.ruleAt(modelRow);
+          String label = NotificationRulesTableModel.effectiveRuleLabel(rule);
+          int res =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove notification rule \"" + label + "\"?",
+                  "Remove Notification Rule",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (res != JOptionPane.OK_OPTION) return;
+          notifications.model.removeRow(modelRow);
+          int nextModelRow = Math.min(modelRow, notifications.model.getRowCount() - 1);
+          if (nextModelRow >= 0) {
+            int nextView = notifications.table.convertRowIndexToView(nextModelRow);
+            if (nextView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              notifications.table.scrollRectToVisible(
+                  notifications.table.getCellRect(nextView, 0, true));
+            }
+          } else {
+            notifications.table.clearSelection();
+          }
+          refreshRuleButtons.run();
+        });
+
+    up.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          int next = notifications.model.moveRow(modelRow, modelRow - 1);
+          if (next >= 0) {
+            int nextView = notifications.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              notifications.table.scrollRectToVisible(
+                  notifications.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    down.addActionListener(
+        e -> {
+          int viewRow = notifications.table.getSelectedRow();
+          if (viewRow < 0) return;
+          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
+          int next = notifications.model.moveRow(modelRow, modelRow + 1);
+          if (next >= 0) {
+            int nextView = notifications.table.convertRowIndexToView(next);
+            if (nextView >= 0) {
+              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
+              notifications.table.scrollRectToVisible(
+                  notifications.table.getCellRect(nextView, 0, true));
+            }
+          }
+          refreshRuleButtons.run();
+        });
+
+    notifications
+        .table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (e != null && e.getValueIsAdjusting()) return;
+              refreshRuleButtons.run();
+            });
+
+    notifications.table.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e == null) return;
+            if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
+            if (e.getClickCount() != 2) return;
+            int viewRow = notifications.table.rowAtPoint(e.getPoint());
+            if (viewRow < 0) return;
+            notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+            openEditRuleDialog.run();
+          }
+        });
+    refreshRuleButtons.run();
+
     JScrollPane scroll = new JScrollPane(notifications.table);
     scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -5648,49 +6650,45 @@ panel.setOpaque(false);
     testButtons.add(clearTest);
     testButtons.add(notifications.testStatus);
 
-    runTest.addActionListener(e -> {
-      if (notifications.table.isEditing()) {
-        try {
-          notifications.table.getCellEditor().stopCellEditing();
-        } catch (Exception ignored) {
-        }
-      }
-      refreshNotificationRuleValidation(notifications);
-      notifications.testRunner.runTest(notifications);
-    });
+    runTest.addActionListener(
+        e -> {
+          if (notifications.table.isEditing()) {
+            try {
+              notifications.table.getCellEditor().stopCellEditing();
+            } catch (Exception ignored) {
+            }
+          }
+          refreshNotificationRuleValidation(notifications);
+          notifications.testRunner.runTest(notifications);
+        });
 
-    clearTest.addActionListener(e -> {
-      notifications.testInput.setText("");
-      notifications.testOutput.setText("");
-      notifications.testStatus.setText(" ");
-    });
+    clearTest.addActionListener(
+        e -> {
+          notifications.testInput.setText("");
+          notifications.testOutput.setText("");
+          notifications.testStatus.setText(" ");
+        });
 
     JPanel rulesTab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]8[]"));
     rulesTab.setOpaque(false);
-    JPanel rulesBehaviorPanel = captionPanel("Rule behavior", "insets 0, fillx, wrap 2", "[right]10[grow,fill]", "[]");
+    JPanel rulesBehaviorPanel =
+        captionPanel("Rule behavior", "insets 0, fillx, wrap 2", "[right]10[grow,fill]", "[]");
     rulesBehaviorPanel.add(new JLabel("Cooldown (sec)"));
     rulesBehaviorPanel.add(notifications.cooldownSeconds, "w 110!, wrap");
     rulesTab.add(rulesBehaviorPanel, "growx, wmin 0, wrap");
-    JPanel rulesTablePanel = captionPanel(
-        "Rule list",
-        "insets 0, fill, wrap 1",
-        "[grow,fill]",
-        "[]6[grow,fill]4[]4[]");
+    JPanel rulesTablePanel =
+        captionPanel("Rule list", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]4[]4[]");
     rulesTablePanel.add(buttons, "growx, wmin 0, wrap");
     rulesTablePanel.add(scroll, "grow, push, h 260!, wmin 0, wrap");
     rulesTablePanel.add(notifications.validationLabel, "growx, wmin 0, wrap");
-    rulesTablePanel.add(
-        helpText("Tip: Double-click a rule's Color cell to quickly choose a color."),
-        "growx, wmin 0, wrap");
+    rulesTablePanel.add(helpText("Tip: Double-click a rule to edit it."), "growx, wmin 0, wrap");
     rulesTab.add(rulesTablePanel, "grow, push, wmin 0");
 
     JPanel testTab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]"));
     testTab.setOpaque(false);
-    JPanel testRunnerPanel = captionPanel(
-        "Message test",
-        "insets 0, fill, wrap 2",
-        "[right]10[grow,fill]",
-        "[]6[]4[]4[]");
+    JPanel testRunnerPanel =
+        captionPanel(
+            "Message test", "insets 0, fill, wrap 2", "[right]10[grow,fill]", "[]6[]4[]4[]");
     testRunnerPanel.add(
         helpText(
             "Paste a sample message to see which rules match. This is just a preview; it won't create real notifications."),
@@ -5706,8 +6704,10 @@ panel.setOpaque(false);
     JTabbedPane subTabs = new JTabbedPane();
     Icon rulesTabIcon = SvgIcons.action("edit", 14);
     Icon testTabIcon = SvgIcons.action("check", 14);
-    subTabs.addTab("Rules", rulesTabIcon, padSubTab(rulesTab), "Manage notification matching rules");
-    subTabs.addTab("Test", testTabIcon, padSubTab(testTab), "Try a sample message against your rules");
+    subTabs.addTab(
+        "Rules", rulesTabIcon, padSubTab(rulesTab), "Manage notification matching rules");
+    subTabs.addTab(
+        "Test", testTabIcon, padSubTab(testTab), "Try a sample message against your rules");
     subTabs.addTab(
         "IRC Events",
         null,
@@ -5729,11 +6729,13 @@ panel.setOpaque(false);
     table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     table.setRowHeight(Math.max(22, table.getRowHeight()));
 
-    TableColumn enabledCol = table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_ENABLED);
+    TableColumn enabledCol =
+        table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_ENABLED);
     enabledCol.setMaxWidth(80);
     enabledCol.setPreferredWidth(70);
 
-    TableColumn commandCol = table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_COMMAND);
+    TableColumn commandCol =
+        table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_COMMAND);
     commandCol.setPreferredWidth(220);
 
     JTextArea template = new JTextArea(7, 40);
@@ -5756,8 +6758,8 @@ panel.setOpaque(false);
     configureIconOnlyButton(remove, "trash", "Remove selected alias");
     configureIconOnlyButton(up, "arrow-up", "Move selected alias up");
     configureIconOnlyButton(down, "arrow-down", "Move selected alias down");
-    JCheckBox unknownCommandAsRaw = new JCheckBox(
-        "Fallback unknown /commands to raw IRC (HexChat-compatible)");
+    JCheckBox unknownCommandAsRaw =
+        new JCheckBox("Fallback unknown /commands to raw IRC (HexChat-compatible)");
     unknownCommandAsRaw.setSelected(unknownCommandAsRawEnabled);
     unknownCommandAsRaw.setToolTipText(
         "When enabled, typing an unknown slash command sends it to the server "
@@ -5766,40 +6768,48 @@ panel.setOpaque(false);
     JLabel hint = new JLabel("Select an alias row to edit its expansion.");
     hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
 
-    final boolean[] syncing = new boolean[] { false };
+    final boolean[] syncing = new boolean[] {false};
 
-    Runnable loadSelectedTemplate = () -> {
-      int row = table.getSelectedRow();
-      syncing[0] = true;
-      if (row < 0) {
-        template.setText("");
-      } else {
-        int modelRow = table.convertRowIndexToModel(row);
-        template.setText(model.templateAt(modelRow));
-      }
-      syncing[0] = false;
+    Runnable loadSelectedTemplate =
+        () -> {
+          int row = table.getSelectedRow();
+          syncing[0] = true;
+          if (row < 0) {
+            template.setText("");
+          } else {
+            int modelRow = table.convertRowIndexToModel(row);
+            template.setText(model.templateAt(modelRow));
+          }
+          syncing[0] = false;
 
-      boolean selected = row >= 0;
-      duplicate.setEnabled(selected);
-      remove.setEnabled(selected);
-      up.setEnabled(selected && row > 0);
-      down.setEnabled(selected && row < table.getRowCount() - 1);
-      template.setEnabled(selected);
-      hint.setText(selected ? "Expansion supports multi-command ';' / newline and placeholders (%1, %2-, %*)." : "Select an alias row to edit its expansion.");
-    };
+          boolean selected = row >= 0;
+          duplicate.setEnabled(selected);
+          remove.setEnabled(selected);
+          up.setEnabled(selected && row > 0);
+          down.setEnabled(selected && row < table.getRowCount() - 1);
+          template.setEnabled(selected);
+          hint.setText(
+              selected
+                  ? "Expansion supports multi-command ';' / newline and placeholders (%1, %2-, %*)."
+                  : "Select an alias row to edit its expansion.");
+        };
 
-    Runnable persistSelectedTemplate = () -> {
-      if (syncing[0]) return;
-      int row = table.getSelectedRow();
-      if (row < 0) return;
-      int modelRow = table.convertRowIndexToModel(row);
-      model.setTemplateAt(modelRow, template.getText());
-    };
+    Runnable persistSelectedTemplate =
+        () -> {
+          if (syncing[0]) return;
+          int row = table.getSelectedRow();
+          if (row < 0) return;
+          int modelRow = table.convertRowIndexToModel(row);
+          model.setTemplateAt(modelRow, template.getText());
+        };
 
-    table.getSelectionModel().addListSelectionListener(e -> {
-      if (e != null && e.getValueIsAdjusting()) return;
-      loadSelectedTemplate.run();
-    });
+    table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (e != null && e.getValueIsAdjusting()) return;
+              loadSelectedTemplate.run();
+            });
     template.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedTemplate));
 
     add.addActionListener(
@@ -5911,15 +6921,14 @@ panel.setOpaque(false);
           }
 
           if (skippedExisting > 0) {
-            summary.append("\nSkipped ")
-                .append(skippedExisting)
-                .append(" alias");
+            summary.append("\nSkipped ").append(skippedExisting).append(" alias");
             if (skippedExisting != 1) summary.append('e').append('s');
             summary.append(" because the command name already exists.");
           }
 
           if (imported.mergedDuplicateCommands() > 0) {
-            summary.append("\nMerged ")
+            summary
+                .append("\nMerged ")
                 .append(imported.mergedDuplicateCommands())
                 .append(" duplicate command");
             if (imported.mergedDuplicateCommands() != 1) summary.append('s');
@@ -5927,7 +6936,8 @@ panel.setOpaque(false);
           }
 
           if (imported.translatedPlaceholders() > 0) {
-            summary.append("\nTranslated ")
+            summary
+                .append("\nTranslated ")
                 .append(imported.translatedPlaceholders())
                 .append(" HexChat placeholder");
             if (imported.translatedPlaceholders() != 1) summary.append('s');
@@ -5935,7 +6945,8 @@ panel.setOpaque(false);
           }
 
           if (imported.skippedInvalidEntries() > 0) {
-            summary.append("\nSkipped ")
+            summary
+                .append("\nSkipped ")
                 .append(imported.skippedInvalidEntries())
                 .append(" invalid command name");
             if (imported.skippedInvalidEntries() != 1) summary.append('s');
@@ -5980,10 +6991,7 @@ panel.setOpaque(false);
           if (row < 0) return;
           int res =
               JOptionPane.showConfirmDialog(
-                  dialog,
-                  "Remove selected alias?",
-                  "Remove alias",
-                  JOptionPane.OK_CANCEL_OPTION);
+                  dialog, "Remove selected alias?", "Remove alias", JOptionPane.OK_CANCEL_OPTION);
           if (res != JOptionPane.OK_OPTION) return;
           int modelRow = table.convertRowIndexToModel(row);
           model.removeRow(modelRow);
@@ -6047,10 +7055,7 @@ panel.setOpaque(false);
   private JPanel buildUserCommandsPanel(UserCommandAliasesControls controls) {
     JPanel panel =
         new JPanel(
-            new MigLayout(
-                "insets 12, fill, wrap 1",
-                "[grow,fill]",
-                "[]8[]6[]8[grow,fill]8[]"));
+            new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]6[]8[grow,fill]8[]"));
 
     panel.add(tabTitle("Commands"), "growx, wmin 0, wrap");
     panel.add(sectionTitle("User command aliases"), "growx, wmin 0, wrap");
@@ -6082,20 +7087,14 @@ panel.setOpaque(false);
     templateScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     templateScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-    JPanel aliasList = captionPanel(
-        "Alias list",
-        "insets 0, fill, wrap 1",
-        "[grow,fill]",
-        "[]6[grow,fill]");
+    JPanel aliasList =
+        captionPanel("Alias list", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]");
     aliasList.add(buttons, "growx, wmin 0, wrap");
     aliasList.add(tableScroll, "grow, push, h 220!, wmin 0");
     panel.add(aliasList, "grow, push, wmin 0, wrap");
 
-    JPanel editor = captionPanel(
-        "Expansion editor",
-        "insets 0, fillx, wrap 1",
-        "[grow,fill]",
-        "[]6[]");
+    JPanel editor =
+        captionPanel("Expansion editor", "insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]");
     editor.add(controls.hint, "growx, wmin 0, wrap");
     editor.add(templateScroll, "growx, h 140!, wmin 0, wrap");
     panel.add(editor, "growx, wmin 0, wrap");
@@ -6123,6 +7122,24 @@ panel.setOpaque(false);
     JSpinner assertjSwingWatchdogPollMs =
         new JSpinner(new SpinnerNumberModel(watchdogPollMs, 100, 10_000, 100));
 
+    int fallbackViolationReportMs =
+        runtimeConfig.readAppDiagnosticsAssertjSwingFallbackViolationReportMs(5000);
+    JSpinner assertjSwingFallbackViolationReportMs =
+        new JSpinner(new SpinnerNumberModel(fallbackViolationReportMs, 250, 120_000, 250));
+
+    JCheckBox assertjSwingOnIssuePlaySound = new JCheckBox("Play sound when an issue is detected");
+    assertjSwingOnIssuePlaySound.setSelected(
+        runtimeConfig.readAppDiagnosticsAssertjSwingIssuePlaySound(false));
+    assertjSwingOnIssuePlaySound.setToolTipText(
+        "Uses the configured tray notification sound when EDT freeze/violation issues are detected.");
+
+    JCheckBox assertjSwingOnIssueShowNotification =
+        new JCheckBox("Show desktop notification when an issue is detected");
+    assertjSwingOnIssueShowNotification.setSelected(
+        runtimeConfig.readAppDiagnosticsAssertjSwingIssueShowNotification(false));
+    assertjSwingOnIssueShowNotification.setToolTipText(
+        "Uses the tray notification pipeline; desktop-notification delivery still follows tray settings.");
+
     JCheckBox jhiccupEnabled = new JCheckBox("Enable jHiccup process integration");
     jhiccupEnabled.setSelected(runtimeConfig.readAppDiagnosticsJhiccupEnabled(false));
     jhiccupEnabled.setToolTipText(
@@ -6146,9 +7163,13 @@ panel.setOpaque(false);
         () -> {
           boolean assertjEnabled = assertjSwingEnabled.isSelected();
           assertjSwingFreezeWatchdogEnabled.setEnabled(assertjEnabled);
-          boolean watchdogEnabled = assertjEnabled && assertjSwingFreezeWatchdogEnabled.isSelected();
+          boolean watchdogEnabled =
+              assertjEnabled && assertjSwingFreezeWatchdogEnabled.isSelected();
           assertjSwingFreezeThresholdMs.setEnabled(watchdogEnabled);
           assertjSwingWatchdogPollMs.setEnabled(watchdogEnabled);
+          assertjSwingFallbackViolationReportMs.setEnabled(assertjEnabled);
+          assertjSwingOnIssuePlaySound.setEnabled(assertjEnabled);
+          assertjSwingOnIssueShowNotification.setEnabled(assertjEnabled);
         };
     assertjSwingEnabled.addActionListener(e -> syncEnabledState.run());
     assertjSwingFreezeWatchdogEnabled.addActionListener(e -> syncEnabledState.run());
@@ -6159,6 +7180,9 @@ panel.setOpaque(false);
         assertjSwingFreezeWatchdogEnabled,
         assertjSwingFreezeThresholdMs,
         assertjSwingWatchdogPollMs,
+        assertjSwingFallbackViolationReportMs,
+        assertjSwingOnIssuePlaySound,
+        assertjSwingOnIssueShowNotification,
         jhiccupEnabled,
         jhiccupJarPath,
         jhiccupJavaCommand,
@@ -6166,12 +7190,7 @@ panel.setOpaque(false);
   }
 
   private JPanel buildDiagnosticsPanel(DiagnosticsControls controls) {
-    JPanel panel =
-        new JPanel(
-            new MigLayout(
-                "insets 12, fill, wrap 1",
-                "[grow,fill]",
-                "[]8[]8[]"));
+    JPanel panel = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]8[]"));
 
     panel.add(tabTitle("Diagnostics"), "growx, wmin 0, wrap");
     panel.add(
@@ -6185,7 +7204,7 @@ panel.setOpaque(false);
             "AssertJ Swing / EDT watchdog",
             "insets 0, fillx, wrap 2",
             "[right]10[grow,fill]",
-            "[]4[]4[]4[]");
+            "[]4[]4[]4[]4[]4[]");
     assertjPanel.add(controls.assertjSwingEnabled, "span 2, growx, wmin 0, wrap");
     assertjPanel.add(
         controls.assertjSwingFreezeWatchdogEnabled, "span 2, growx, wmin 0, gapleft 14, wrap");
@@ -6193,8 +7212,16 @@ panel.setOpaque(false);
     assertjPanel.add(controls.assertjSwingFreezeThresholdMs, "w 140!");
     assertjPanel.add(new JLabel("Watchdog poll (ms)"), "gapleft 24");
     assertjPanel.add(controls.assertjSwingWatchdogPollMs, "w 140!");
+    assertjPanel.add(new JLabel("Fallback violation report interval (ms)"), "gapleft 24");
+    assertjPanel.add(controls.assertjSwingFallbackViolationReportMs, "w 140!");
     assertjPanel.add(
-        helpText("Watchdog logs stalls when EDT lag exceeds the threshold."),
+        controls.assertjSwingOnIssuePlaySound, "span 2, growx, wmin 0, gapleft 24, wrap");
+    assertjPanel.add(
+        controls.assertjSwingOnIssueShowNotification, "span 2, growx, wmin 0, gapleft 24, wrap");
+    assertjPanel.add(
+        helpText(
+            "Watchdog logs stalls when EDT lag exceeds the threshold. Fallback interval controls how often "
+                + "off-EDT Swing violations are re-reported."),
         "span 2, gapleft 24, growx, wrap");
     panel.add(assertjPanel, "growx, wmin 0, wrap");
 
@@ -6254,7 +7281,11 @@ panel.setOpaque(false);
         List.of(
             userHome.resolve(".config").resolve("hexchat").resolve("commands.conf"),
             userHome.resolve(".xchat2").resolve("commands.conf"),
-            userHome.resolve("AppData").resolve("Roaming").resolve("HexChat").resolve("commands.conf"));
+            userHome
+                .resolve("AppData")
+                .resolve("Roaming")
+                .resolve("HexChat")
+                .resolve("commands.conf"));
 
     for (Path p : candidates) {
       if (p != null && Files.isRegularFile(p)) return p.toFile();
@@ -6262,12 +7293,14 @@ panel.setOpaque(false);
     return candidates.get(0).toFile();
   }
 
-  private void attachNotificationRuleValidation(NotificationRulesControls notifications, JButton apply, JButton ok) {
-    Runnable refresh = () -> {
-      boolean valid = refreshNotificationRuleValidation(notifications);
-      apply.setEnabled(valid);
-      ok.setEnabled(valid);
-    };
+  private void attachNotificationRuleValidation(
+      NotificationRulesControls notifications, JButton apply, JButton ok) {
+    Runnable refresh =
+        () -> {
+          boolean valid = refreshNotificationRuleValidation(notifications);
+          apply.setEnabled(valid);
+          ok.setEnabled(valid);
+        };
 
     notifications.model.addTableModelListener(e -> refresh.run());
     refresh.run();
@@ -6316,7 +7349,14 @@ panel.setOpaque(false);
 
     String formatForDialog() {
       String msg = message != null ? message.trim() : "Invalid regex";
-      return "Row " + (rowIndex + 1) + " (" + effectiveLabel() + "):\n" + msg + "\n\nPattern:\n" + (pattern != null ? pattern : "");
+      return "Row "
+          + (rowIndex + 1)
+          + " ("
+          + effectiveLabel()
+          + "):\n"
+          + msg
+          + "\n\nPattern:\n"
+          + (pattern != null ? pattern : "");
     }
   }
 
@@ -6357,15 +7397,17 @@ panel.setOpaque(false);
       controls.testStatus.setText("Testing…");
 
       final String sampleFinal = sample;
-      exec.submit(() -> {
-        String report = buildRuleTestReport(rules, errors, sampleFinal);
-        SwingUtilities.invokeLater(() -> {
-          if (seq.get() != token) return;
-          controls.testOutput.setText(report);
-          controls.testOutput.setCaretPosition(0);
-          controls.testStatus.setText(" ");
-        });
-      });
+      exec.submit(
+          () -> {
+            String report = buildRuleTestReport(rules, errors, sampleFinal);
+            SwingUtilities.invokeLater(
+                () -> {
+                  if (seq.get() != token) return;
+                  controls.testOutput.setText(report);
+                  controls.testOutput.setCaretPosition(0);
+                  controls.testStatus.setText(" ");
+                });
+          });
     }
 
     @Override
@@ -6374,7 +7416,8 @@ panel.setOpaque(false);
     }
   }
 
-  private static String buildRuleTestReport(List<NotificationRule> rules, List<ValidationError> errors, String sample) {
+  private static String buildRuleTestReport(
+      List<NotificationRule> rules, List<ValidationError> errors, String sample) {
     String msg = sample != null ? sample : "";
     msg = msg.trim();
     if (msg.isEmpty()) {
@@ -6388,7 +7431,11 @@ panel.setOpaque(false);
       int shown = 0;
       for (ValidationError e : errors) {
         if (e == null) continue;
-        out.append("  - row ").append(e.rowIndex + 1).append(": ").append(e.effectiveLabel()).append("\n");
+        out.append("  - row ")
+            .append(e.rowIndex + 1)
+            .append(": ")
+            .append(e.effectiveLabel())
+            .append("\n");
         shown++;
         if (shown >= 5) {
           int remain = errors.size() - shown;
@@ -6451,9 +7498,10 @@ panel.setOpaque(false);
   }
 
   private static String lineFor(NotificationRule rule, String snippet) {
-    String label = (rule.label() != null && !rule.label().trim().isEmpty())
-        ? rule.label().trim()
-        : (rule.pattern() != null ? rule.pattern().trim() : "(unnamed)");
+    String label =
+        (rule.label() != null && !rule.label().trim().isEmpty())
+            ? rule.label().trim()
+            : (rule.pattern() != null ? rule.pattern().trim() : "(unnamed)");
     return "- " + label + " [" + rule.type() + "]: " + snippet;
   }
 
@@ -6483,7 +7531,8 @@ panel.setOpaque(false);
     return s.replaceAll("\\s+", " ");
   }
 
-  private static RuleMatch findWordMatch(String msg, String pat, boolean caseSensitive, boolean wholeWord) {
+  private static RuleMatch findWordMatch(
+      String msg, String pat, boolean caseSensitive, boolean wholeWord) {
     if (msg == null || pat == null) return null;
     if (pat.isEmpty()) return null;
 
@@ -6493,9 +7542,10 @@ panel.setOpaque(false);
         int tlen = tok.end - tok.start;
         if (tlen != plen) continue;
 
-        boolean ok = caseSensitive
-            ? msg.regionMatches(false, tok.start, pat, 0, plen)
-            : msg.regionMatches(true, tok.start, pat, 0, plen);
+        boolean ok =
+            caseSensitive
+                ? msg.regionMatches(false, tok.start, pat, 0, plen)
+                : msg.regionMatches(true, tok.start, pat, 0, plen);
 
         if (ok) return new RuleMatch(tok.start, tok.end);
       }
@@ -6542,7 +7592,6 @@ panel.setOpaque(false);
 
   private record RuleMatch(int start, int end) {}
 
-
   private static String normalizeThemeIdInternal(String id) {
     return ThemeIdUtils.normalizeThemeId(id);
   }
@@ -6554,7 +7603,6 @@ panel.setOpaque(false);
   private static boolean supportsFlatLafTweaksInternal(String themeId) {
     return ThemeIdUtils.isLikelyFlatTarget(themeId);
   }
-
 
   private static void configureIconOnlyButton(JButton button, String iconName, String tooltip) {
     if (button == null) return;
@@ -6572,14 +7620,16 @@ panel.setOpaque(false);
     return d;
   }
 
-  private static JSpinner numberSpinner(int value, int min, int max, int step, List<AutoCloseable> closeables) {
+  private static JSpinner numberSpinner(
+      int value, int min, int max, int step, List<AutoCloseable> closeables) {
     JSpinner s = new JSpinner(new SpinnerNumberModel(value, min, max, step));
     AutoCloseable ac = MouseWheelDecorator.decorateNumberSpinner(s);
     if (ac != null) closeables.add(ac);
     return s;
   }
 
-  private static JSpinner doubleSpinner(double value, double min, double max, double step, List<AutoCloseable> closeables) {
+  private static JSpinner doubleSpinner(
+      double value, double min, double max, double step, List<AutoCloseable> closeables) {
     JSpinner s = new JSpinner(new SpinnerNumberModel(value, min, max, step));
     AutoCloseable ac = MouseWheelDecorator.decorateNumberSpinner(s);
     if (ac != null) closeables.add(ac);
@@ -6604,9 +7654,7 @@ panel.setOpaque(false);
     } catch (Exception ignored) {
       return null;
     }
-
   }
-
 
   private static final int MAX_RECENT_COLORS = 12;
   private static final Deque<String> RECENT_COLOR_HEX = new ArrayDeque<>();
@@ -6649,21 +7697,154 @@ panel.setOpaque(false);
     return new ColorSwatch(color, w, h);
   }
 
-  private void pickNotificationRuleColor(NotificationRulesControls notifications, int row) {
-    if (notifications == null) return;
-    if (row < 0 || row >= notifications.model.getRowCount()) return;
+  private NotificationRule promptNotificationRuleDialog(String title, NotificationRule seed) {
+    NotificationRule base =
+        seed != null
+            ? seed
+            : new NotificationRule("", NotificationRule.Type.WORD, "", true, false, true, null);
 
-    String raw = notifications.model.highlightFgAt(row);
-    Color currentColor = parseHexColorLenient(raw);
-    if (currentColor == null) {
-      Color def = UIManager.getColor("TextPane.foreground");
-      if (def == null) def = UIManager.getColor("Label.foreground");
-      currentColor = def != null ? def : Color.WHITE;
-    }
+    JCheckBox enabled = new JCheckBox("Enabled", base.enabled());
+    JTextField label = new JTextField(Objects.toString(base.label(), ""));
+    JComboBox<NotificationRule.Type> type = new JComboBox<>(NotificationRule.Type.values());
+    type.setSelectedItem(base.type() != null ? base.type() : NotificationRule.Type.WORD);
 
-    Color chosen = showColorPickerDialog(dialog, "Choose Rule Highlight Color", currentColor, preferredPreviewBackground());
-    if (chosen != null) {
-      notifications.model.setHighlightFg(row, toHex(chosen));
+    JTextField pattern = new JTextField(Objects.toString(base.pattern(), ""));
+    pattern.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT, "Keyword or regular expression");
+    JCheckBox caseSensitive = new JCheckBox("Case sensitive", base.caseSensitive());
+    JCheckBox wholeWord = new JCheckBox("Whole word", base.wholeWord());
+    wholeWord.setToolTipText("Only applies to WORD rules.");
+
+    Color seedColor = parseHexColorLenient(base.highlightFg());
+    final String[] colorHex = new String[] {seedColor != null ? toHex(seedColor) : null};
+    JLabel colorPreview = new JLabel();
+    JButton pickColor = new JButton("Choose…");
+    JButton clearColor = new JButton("Clear");
+    pickColor.setIcon(SvgIcons.action("palette", 14));
+    pickColor.setDisabledIcon(SvgIcons.actionDisabled("palette", 14));
+    clearColor.setIcon(SvgIcons.action("close", 14));
+    clearColor.setDisabledIcon(SvgIcons.actionDisabled("close", 14));
+
+    Runnable refreshWholeWordState =
+        () -> {
+          boolean wordRule = NotificationRule.Type.WORD.equals(type.getSelectedItem());
+          wholeWord.setEnabled(wordRule);
+          if (!wordRule) {
+            wholeWord.setSelected(false);
+          }
+        };
+    type.addActionListener(e -> refreshWholeWordState.run());
+    refreshWholeWordState.run();
+
+    Runnable refreshColorPreview =
+        () -> {
+          Color c = parseHexColorLenient(colorHex[0]);
+          if (c == null) {
+            colorPreview.setIcon(null);
+            colorPreview.setText("Default");
+            Color fg = UIManager.getColor("Label.foreground");
+            if (fg != null) colorPreview.setForeground(fg);
+            return;
+          }
+          colorPreview.setIcon(new ColorSwatch(c, 14, 14));
+          colorPreview.setText(toHex(c));
+          Color fg = UIManager.getColor("Label.foreground");
+          if (fg != null) colorPreview.setForeground(fg);
+        };
+    refreshColorPreview.run();
+
+    pickColor.addActionListener(
+        e -> {
+          Color current = parseHexColorLenient(colorHex[0]);
+          if (current == null) {
+            Color fallback = UIManager.getColor("TextPane.foreground");
+            if (fallback == null) fallback = UIManager.getColor("Label.foreground");
+            current = fallback != null ? fallback : Color.WHITE;
+          }
+          Color chosen =
+              showColorPickerDialog(
+                  dialog, "Choose Rule Highlight Color", current, preferredPreviewBackground());
+          if (chosen == null) return;
+          colorHex[0] = toHex(chosen);
+          refreshColorPreview.run();
+        });
+
+    clearColor.addActionListener(
+        e -> {
+          colorHex[0] = null;
+          refreshColorPreview.run();
+        });
+
+    JPanel colorRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    colorRow.setOpaque(false);
+    colorRow.add(colorPreview);
+    colorRow.add(pickColor);
+    colorRow.add(clearColor);
+
+    JTextArea hint =
+        helpText("WORD supports whole-word matching; REGEX supports Java regular expressions.");
+
+    JPanel form =
+        new JPanel(
+            new MigLayout(
+                "insets 10,fillx,wrap 2,hidemode 3", "[right][grow,fill]", "[]6[]6[]6[]6[]6[]6[]"));
+    form.add(enabled, "span 2,wrap");
+    form.add(new JLabel("Label:"));
+    form.add(label, "growx,pushx,wmin 0,wrap");
+    form.add(new JLabel("Type:"));
+    form.add(type, "w 140!,wrap");
+    form.add(new JLabel("Pattern:"));
+    form.add(pattern, "growx,pushx,wmin 0,wrap");
+    form.add(new JLabel("Options:"));
+    JPanel options = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+    options.setOpaque(false);
+    options.add(caseSensitive);
+    options.add(wholeWord);
+    form.add(options, "growx,wrap");
+    form.add(new JLabel("Color:"));
+    form.add(colorRow, "growx,wrap");
+    form.add(new JLabel(""));
+    form.add(hint, "growx,wmin 0,wrap");
+
+    Window owner = dialog != null ? dialog : null;
+    String dialogTitle = Objects.toString(title, "Notification Rule");
+
+    while (true) {
+      int choice =
+          JOptionPane.showConfirmDialog(
+              owner, form, dialogTitle, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+      if (choice != JOptionPane.OK_OPTION) return null;
+
+      NotificationRule.Type selectedType =
+          type.getSelectedItem() instanceof NotificationRule.Type t
+              ? t
+              : NotificationRule.Type.WORD;
+
+      String patternText = Objects.toString(pattern.getText(), "").trim();
+      if (selectedType == NotificationRule.Type.REGEX && !patternText.isEmpty()) {
+        try {
+          int flags = Pattern.UNICODE_CASE;
+          if (!caseSensitive.isSelected()) flags |= Pattern.CASE_INSENSITIVE;
+          Pattern.compile(patternText, flags);
+        } catch (Exception ex) {
+          String msg = Objects.toString(ex.getMessage(), "Invalid regular expression");
+          JOptionPane.showMessageDialog(
+              owner,
+              "Invalid REGEX pattern:\n" + msg,
+              "Invalid Notification Rule",
+              JOptionPane.ERROR_MESSAGE);
+          continue;
+        }
+      }
+
+      return new NotificationRule(
+          label.getText(),
+          selectedType,
+          patternText,
+          enabled.isSelected(),
+          caseSensitive.isSelected(),
+          selectedType == NotificationRule.Type.WORD && wholeWord.isSelected(),
+          colorHex[0]);
     }
   }
 
@@ -6705,9 +7886,10 @@ panel.setOpaque(false);
     b.setContentAreaFilled(false);
     b.setIcon(new ColorSwatch(c, 18, 18));
     b.setToolTipText(toHex(c));
-    b.addActionListener(e -> {
-      if (onPick != null) onPick.accept(c);
-    });
+    b.addActionListener(
+        e -> {
+          if (onPick != null) onPick.accept(c);
+        });
     return b;
   }
 
@@ -6736,7 +7918,8 @@ panel.setOpaque(false);
     return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
   }
 
-  private static Color showColorPickerDialog(Window owner, String title, Color initial, Color previewBackground) {
+  private static Color showColorPickerDialog(
+      Window owner, String title, Color initial, Color previewBackground) {
     Color bg = previewBackground != null ? previewBackground : preferredPreviewBackground();
     Color init = initial != null ? initial : Color.WHITE;
 
@@ -6744,7 +7927,7 @@ panel.setOpaque(false);
     final JDialog d = new JDialog(owner, title, JDialog.ModalityType.APPLICATION_MODAL);
     d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
-    final Color[] current = new Color[] { init };
+    final Color[] current = new Color[] {init};
     final Color[] result = new Color[1];
 
     JLabel preview = new JLabel(" IRCafe preview ");
@@ -6765,93 +7948,112 @@ panel.setOpaque(false);
     JButton ok = new JButton("OK");
     JButton cancel = new JButton("Cancel");
 
-    final boolean[] internalUpdate = new boolean[] { false };
+    final boolean[] internalUpdate = new boolean[] {false};
 
-    Runnable updatePreview = () -> {
-      Color fg = current[0];
-      preview.setForeground(fg);
-      preview.setText(" IRCafe preview  " + toHex(fg));
-      double cr = contrastRatio(fg, bg);
-      String verdict = cr >= 4.5 ? "OK" : (cr >= 3.0 ? "Low" : "Bad");
-      contrast.setText(String.format(Locale.ROOT, "Contrast: %.1f (%s)", cr, verdict));
-      ok.setEnabled(fg != null);
-    };
+    Runnable updatePreview =
+        () -> {
+          Color fg = current[0];
+          preview.setForeground(fg);
+          preview.setText(" IRCafe preview  " + toHex(fg));
+          double cr = contrastRatio(fg, bg);
+          String verdict = cr >= 4.5 ? "OK" : (cr >= 3.0 ? "Low" : "Bad");
+          contrast.setText(String.format(Locale.ROOT, "Contrast: %.1f (%s)", cr, verdict));
+          ok.setEnabled(fg != null);
+        };
 
-    Consumer<Color> setColor = c -> {
-      if (c == null) return;
-      current[0] = c;
-      internalUpdate[0] = true;
-      hex.setText(toHex(c));
-      internalUpdate[0] = false;
-      hexStatus.setText(" ");
-      updatePreview.run();
-    };
+    Consumer<Color> setColor =
+        c -> {
+          if (c == null) return;
+          current[0] = c;
+          internalUpdate[0] = true;
+          hex.setText(toHex(c));
+          internalUpdate[0] = false;
+          hexStatus.setText(" ");
+          updatePreview.run();
+        };
 
-    hex.getDocument().addDocumentListener(new SimpleDocListener(() -> {
-      if (internalUpdate[0]) return;
+    hex.getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  if (internalUpdate[0]) return;
 
-      Color parsed = parseHexColorLenient(hex.getText());
-      if (parsed == null) {
-        hexStatus.setText("Invalid hex (use #RRGGBB or #RGB)");
-        ok.setEnabled(false);
-        return;
-      }
-      current[0] = parsed;
-      hexStatus.setText(" ");
-      updatePreview.run();
-    }));
+                  Color parsed = parseHexColorLenient(hex.getText());
+                  if (parsed == null) {
+                    hexStatus.setText("Invalid hex (use #RRGGBB or #RGB)");
+                    ok.setEnabled(false);
+                    return;
+                  }
+                  current[0] = parsed;
+                  hexStatus.setText(" ");
+                  updatePreview.run();
+                }));
 
     JPanel palette = new JPanel(new MigLayout("insets 0, wrap 8, gap 6", "[]", "[]"));
-    Color[] colors = new Color[] {
-        new Color(0xFFFFFF), new Color(0xD9D9D9), new Color(0xA6A6A6), new Color(0x4D4D4D), new Color(0x000000), new Color(0xFF6B6B), new Color(0xFFA94D), new Color(0xFFD43B),
-        new Color(0x69DB7C), new Color(0x38D9A9), new Color(0x22B8CF), new Color(0x4DABF7), new Color(0x748FFC), new Color(0x9775FA), new Color(0xDA77F2), new Color(0xF783AC),
-        new Color(0xC92A2A), new Color(0xE8590C), new Color(0xF08C00), new Color(0x2F9E44), new Color(0x0CA678), new Color(0x1098AD), new Color(0x1971C2), new Color(0x5F3DC4)
-    };
+    Color[] colors =
+        new Color[] {
+          new Color(0xFFFFFF), new Color(0xD9D9D9), new Color(0xA6A6A6), new Color(0x4D4D4D),
+              new Color(0x000000), new Color(0xFF6B6B), new Color(0xFFA94D), new Color(0xFFD43B),
+          new Color(0x69DB7C), new Color(0x38D9A9), new Color(0x22B8CF), new Color(0x4DABF7),
+              new Color(0x748FFC), new Color(0x9775FA), new Color(0xDA77F2), new Color(0xF783AC),
+          new Color(0xC92A2A), new Color(0xE8590C), new Color(0xF08C00), new Color(0x2F9E44),
+              new Color(0x0CA678), new Color(0x1098AD), new Color(0x1971C2), new Color(0x5F3DC4)
+        };
     for (Color c : colors) {
       palette.add(colorSwatchButton(c, setColor));
     }
 
     JPanel recent = new JPanel(new MigLayout("insets 0, wrap 8, gap 6", "[]", "[]"));
-    Runnable refreshRecent = () -> {
-      recent.removeAll();
-      List<String> rec = snapshotRecentColorHex();
-      if (rec.isEmpty()) {
-        recent.add(helpText("No recent colors yet."), "span 8");
-      } else {
-        for (String hx : rec) {
-          Color c = parseHexColorLenient(hx);
-          if (c == null) continue;
-          recent.add(colorSwatchButton(c, setColor));
-        }
-      }
-      recent.revalidate();
-      recent.repaint();
-    };
+    Runnable refreshRecent =
+        () -> {
+          recent.removeAll();
+          List<String> rec = snapshotRecentColorHex();
+          if (rec.isEmpty()) {
+            recent.add(helpText("No recent colors yet."), "span 8");
+          } else {
+            for (String hx : rec) {
+              Color c = parseHexColorLenient(hx);
+              if (c == null) continue;
+              recent.add(colorSwatchButton(c, setColor));
+            }
+          }
+          recent.revalidate();
+          recent.repaint();
+        };
     refreshRecent.run();
 
-    more.addActionListener(e -> {
-      Color picked = JColorChooser.showDialog(d, "More Colors", current[0] != null ? current[0] : init);
-      if (picked != null) setColor.accept(picked);
-    });
+    more.addActionListener(
+        e -> {
+          Color picked =
+              JColorChooser.showDialog(d, "More Colors", current[0] != null ? current[0] : init);
+          if (picked != null) setColor.accept(picked);
+        });
 
-    ok.addActionListener(e -> {
-      if (current[0] == null) return;
-      result[0] = current[0];
-      rememberRecentColorHex(toHex(current[0]));
-      d.dispose();
-    });
+    ok.addActionListener(
+        e -> {
+          if (current[0] == null) return;
+          result[0] = current[0];
+          rememberRecentColorHex(toHex(current[0]));
+          d.dispose();
+        });
 
-    cancel.addActionListener(e -> {
-      result[0] = null;
-      d.dispose();
-    });
+    cancel.addActionListener(
+        e -> {
+          result[0] = null;
+          d.dispose();
+        });
 
-    JPanel content = new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
+    JPanel content =
+        new JPanel(
+            new MigLayout(
+                "insets 12, fillx, wrap 2", "[grow,fill]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
     content.add(preview, "span 2, growx, wrap");
     content.add(contrast, "span 2, growx, wrap");
 
     content.add(new JLabel("Hex"));
-    JPanel hexRow = new JPanel(new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]6[nogrid]6[nogrid]", "[]2[]"));
+    JPanel hexRow =
+        new JPanel(
+            new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]6[nogrid]6[nogrid]", "[]2[]"));
     hexRow.setOpaque(false);
     hexRow.add(hex, "w 110!");
     hexRow.add(more);
@@ -6875,11 +8077,11 @@ panel.setOpaque(false);
 
     d.setContentPane(outer);
     d.getRootPane().setDefaultButton(ok);
-    d.getRootPane().registerKeyboardAction(
-        ev -> cancel.doClick(),
-        javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
-        JComponent.WHEN_IN_FOCUSED_WINDOW
-    );
+    d.getRootPane()
+        .registerKeyboardAction(
+            ev -> cancel.doClick(),
+            javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW);
 
     updatePreview.run();
     d.pack();
@@ -6901,7 +8103,8 @@ panel.setOpaque(false);
       this.label = label;
     }
 
-    @Override public String toString() {
+    @Override
+    public String toString() {
       return label;
     }
   }
@@ -6925,109 +8128,68 @@ panel.setOpaque(false);
 
   private static LookupRatePreset detectLookupRatePreset(UiSettings s) {
     if (matchesLookupRatePreset(s, LookupRatePreset.BALANCED)) return LookupRatePreset.BALANCED;
-    if (matchesLookupRatePreset(s, LookupRatePreset.CONSERVATIVE)) return LookupRatePreset.CONSERVATIVE;
+    if (matchesLookupRatePreset(s, LookupRatePreset.CONSERVATIVE))
+      return LookupRatePreset.CONSERVATIVE;
     if (matchesLookupRatePreset(s, LookupRatePreset.RAPID)) return LookupRatePreset.RAPID;
     return LookupRatePreset.CUSTOM;
   }
 
   private static boolean matchesLookupRatePreset(UiSettings s, LookupRatePreset preset) {
     return switch (preset) {
-      case CONSERVATIVE -> (
-          s.userhostMinIntervalSeconds() == 10 &&
-              s.userhostMaxCommandsPerMinute() == 2 &&
-              s.userhostNickCooldownMinutes() == 60 &&
-              s.userhostMaxNicksPerCommand() == 5 &&
-
-              s.userInfoEnrichmentUserhostMinIntervalSeconds() == 30 &&
-              s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 2 &&
-              s.userInfoEnrichmentUserhostNickCooldownMinutes() == 180 &&
-              s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5 &&
-
-              s.userInfoEnrichmentWhoisMinIntervalSeconds() == 120 &&
-              s.userInfoEnrichmentWhoisNickCooldownMinutes() == 240 &&
-
-              s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 600 &&
-              s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 1
-      );
-      case BALANCED -> (
-          s.userhostMinIntervalSeconds() == 5 &&
-              s.userhostMaxCommandsPerMinute() == 6 &&
-              s.userhostNickCooldownMinutes() == 30 &&
-              s.userhostMaxNicksPerCommand() == 5 &&
-
-              s.userInfoEnrichmentUserhostMinIntervalSeconds() == 15 &&
-              s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 4 &&
-              s.userInfoEnrichmentUserhostNickCooldownMinutes() == 60 &&
-              s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5 &&
-
-              s.userInfoEnrichmentWhoisMinIntervalSeconds() == 60 &&
-              s.userInfoEnrichmentWhoisNickCooldownMinutes() == 120 &&
-
-              s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 300 &&
-              s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 2
-      );
-      case RAPID -> (
-          s.userhostMinIntervalSeconds() == 2 &&
-              s.userhostMaxCommandsPerMinute() == 15 &&
-              s.userhostNickCooldownMinutes() == 10 &&
-              s.userhostMaxNicksPerCommand() == 5 &&
-
-              s.userInfoEnrichmentUserhostMinIntervalSeconds() == 5 &&
-              s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 10 &&
-              s.userInfoEnrichmentUserhostNickCooldownMinutes() == 15 &&
-              s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5 &&
-
-              s.userInfoEnrichmentWhoisMinIntervalSeconds() == 15 &&
-              s.userInfoEnrichmentWhoisNickCooldownMinutes() == 30 &&
-
-              s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 60 &&
-              s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 3
-      );
+      case CONSERVATIVE ->
+          (s.userhostMinIntervalSeconds() == 10
+              && s.userhostMaxCommandsPerMinute() == 2
+              && s.userhostNickCooldownMinutes() == 60
+              && s.userhostMaxNicksPerCommand() == 5
+              && s.userInfoEnrichmentUserhostMinIntervalSeconds() == 30
+              && s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 2
+              && s.userInfoEnrichmentUserhostNickCooldownMinutes() == 180
+              && s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5
+              && s.userInfoEnrichmentWhoisMinIntervalSeconds() == 120
+              && s.userInfoEnrichmentWhoisNickCooldownMinutes() == 240
+              && s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 600
+              && s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 1);
+      case BALANCED ->
+          (s.userhostMinIntervalSeconds() == 5
+              && s.userhostMaxCommandsPerMinute() == 6
+              && s.userhostNickCooldownMinutes() == 30
+              && s.userhostMaxNicksPerCommand() == 5
+              && s.userInfoEnrichmentUserhostMinIntervalSeconds() == 15
+              && s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 4
+              && s.userInfoEnrichmentUserhostNickCooldownMinutes() == 60
+              && s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5
+              && s.userInfoEnrichmentWhoisMinIntervalSeconds() == 60
+              && s.userInfoEnrichmentWhoisNickCooldownMinutes() == 120
+              && s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 300
+              && s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 2);
+      case RAPID ->
+          (s.userhostMinIntervalSeconds() == 2
+              && s.userhostMaxCommandsPerMinute() == 15
+              && s.userhostNickCooldownMinutes() == 10
+              && s.userhostMaxNicksPerCommand() == 5
+              && s.userInfoEnrichmentUserhostMinIntervalSeconds() == 5
+              && s.userInfoEnrichmentUserhostMaxCommandsPerMinute() == 10
+              && s.userInfoEnrichmentUserhostNickCooldownMinutes() == 15
+              && s.userInfoEnrichmentUserhostMaxNicksPerCommand() == 5
+              && s.userInfoEnrichmentWhoisMinIntervalSeconds() == 15
+              && s.userInfoEnrichmentWhoisNickCooldownMinutes() == 30
+              && s.userInfoEnrichmentPeriodicRefreshIntervalSeconds() == 60
+              && s.userInfoEnrichmentPeriodicRefreshNicksPerTick() == 3);
       default -> false;
     };
   }
 
-  private record NotificationRulesControls(JSpinner cooldownSeconds,
-                                JTable table,
-                                NotificationRulesTableModel model,
-                                JLabel validationLabel,
-                                JTextArea testInput,
-                                JTextArea testOutput,
-                                JLabel testStatus,
-                                RuleTestRunner testRunner) {
-  }
-
-  private record IrcEventNotificationControls(
+  private record NotificationRulesControls(
+      JSpinner cooldownSeconds,
       JTable table,
-      IrcEventNotificationTableModel model,
-      JCheckBox detailEnabled,
-      JComboBox<IrcEventNotificationRule.EventType> detailEvent,
-      JComboBox<IrcEventNotificationRule.SourceMode> detailSource,
-      JTextField detailSourcePattern,
-      JComboBox<IrcEventNotificationRule.ChannelScope> detailChannelScope,
-      JTextField detailChannelPatterns,
-      JComboBox<IrcEventNotificationRule.FocusScope> detailFocus,
-      JCheckBox detailToast,
-      JCheckBox detailStatusBar,
-      JCheckBox detailNode,
-      JCheckBox detailSound,
-      JComboBox<BuiltInSound> sound,
-      JCheckBox useCustom,
-      JTextField customPath,
-      JButton browseCustom,
-      JButton clearCustom,
-      JButton testSound,
-      JCheckBox runScript,
-      JTextField scriptPath,
-      JTextField scriptArgs,
-      JTextField scriptWorkingDirectory,
-      JButton browseScript,
-      JButton clearScript,
-      JButton browseScriptWorkingDirectory,
-      JButton clearScriptWorkingDirectory,
-      JLabel selectionHint
-  ) {
-  }
+      NotificationRulesTableModel model,
+      JLabel validationLabel,
+      JTextArea testInput,
+      JTextArea testOutput,
+      JLabel testStatus,
+      RuleTestRunner testRunner) {}
+
+  private record IrcEventNotificationControls(JTable table, IrcEventNotificationTableModel model) {}
 
   private record UserCommandAliasesControls(
       JTable table,
@@ -7047,6 +8209,9 @@ panel.setOpaque(false);
       JCheckBox assertjSwingFreezeWatchdogEnabled,
       JSpinner assertjSwingFreezeThresholdMs,
       JSpinner assertjSwingWatchdogPollMs,
+      JSpinner assertjSwingFallbackViolationReportMs,
+      JCheckBox assertjSwingOnIssuePlaySound,
+      JCheckBox assertjSwingOnIssueShowNotification,
       JCheckBox jhiccupEnabled,
       JTextField jhiccupJarPath,
       JTextField jhiccupJavaCommand,
@@ -7057,29 +8222,12 @@ panel.setOpaque(false);
   private static final class IrcEventNotificationTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
     static final int COL_EVENT = 1;
-    static final int COL_SOURCE = 2;
-    static final int COL_SOURCE_PATTERN = 3;
-    static final int COL_TOAST = 4;
-    static final int COL_STATUS_BAR = 5;
-    static final int COL_FOCUS_SCOPE = 6;
-    static final int COL_NOTIFICATIONS_NODE = 7;
-    static final int COL_SOUND = 8;
-    static final int COL_CHANNEL_SCOPE = 9;
-    static final int COL_CHANNEL_PATTERNS = 10;
+    static final int COL_SOURCE_SUMMARY = 2;
+    static final int COL_CHANNEL_SUMMARY = 3;
+    static final int COL_ACTIONS_SUMMARY = 4;
 
-    private static final String[] COLS = new String[] {
-        "Enabled",
-        "Event",
-        "Source",
-        "Source Match",
-        "Toast",
-        "Status Bar",
-        "Focus",
-        "Node",
-        "Sound",
-        "Channel Scope",
-        "Channels"
-    };
+    private static final String[] COLS =
+        new String[] {"Enabled", "Event", "Source", "Channel", "Actions"};
 
     private final List<MutableRule> rows = new ArrayList<>();
 
@@ -7096,123 +8244,34 @@ panel.setOpaque(false);
       return rows.stream().map(MutableRule::toRule).toList();
     }
 
-    boolean enabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).enabled;
-    }
-
-    IrcEventNotificationRule.EventType eventTypeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
-      return rows.get(row).eventType;
-    }
-
-    IrcEventNotificationRule.SourceMode sourceModeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.SourceMode.ANY;
-      return rows.get(row).sourceMode;
-    }
-
-    String sourcePatternAt(int row) {
+    IrcEventNotificationRule ruleAt(int row) {
       if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).sourcePattern;
+      MutableRule m = rows.get(row);
+      return m != null ? m.toRule() : null;
     }
 
-    IrcEventNotificationRule.ChannelScope channelScopeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.ChannelScope.ALL;
-      return rows.get(row).channelScope;
-    }
-
-    String channelPatternsAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).channelPatterns;
-    }
-
-    IrcEventNotificationRule.FocusScope focusScopeAt(int row) {
-      if (row < 0 || row >= rows.size()) return IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
-      return rows.get(row).focusScope;
-    }
-
-    boolean toastEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).toastEnabled;
-    }
-
-    boolean statusBarEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).statusBarEnabled;
-    }
-
-    boolean notificationsNodeEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).notificationsNodeEnabled;
-    }
-
-    String soundIdAt(int row) {
-      if (row < 0 || row >= rows.size()) return BuiltInSound.NOTIF_1.name();
-      return rows.get(row).soundId;
-    }
-
-    boolean soundEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).soundEnabled;
-    }
-
-    boolean soundUseCustomAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).soundUseCustom;
-    }
-
-    String soundCustomPathAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).soundCustomPath;
-    }
-
-    boolean scriptEnabledAt(int row) {
-      if (row < 0 || row >= rows.size()) return false;
-      return rows.get(row).scriptEnabled;
-    }
-
-    String scriptPathAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).scriptPath;
-    }
-
-    String scriptArgsAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).scriptArgs;
-    }
-
-    String scriptWorkingDirectoryAt(int row) {
-      if (row < 0 || row >= rows.size()) return null;
-      return rows.get(row).scriptWorkingDirectory;
-    }
-
-    void setSoundConfig(int row, String soundId, boolean soundUseCustom, String soundCustomPath) {
+    void setRule(int row, IrcEventNotificationRule rule) {
       if (row < 0 || row >= rows.size()) return;
-      MutableRule r = rows.get(row);
-      r.soundId = BuiltInSound.fromId(soundId).name();
-      String path = Objects.toString(soundCustomPath, "").trim();
-      if (path.isBlank()) path = null;
-      r.soundCustomPath = path;
-      // Keep the checkbox state in the editor model even if a file has not been chosen yet.
-      // The immutable rule constructor still normalizes invalid persisted combinations.
-      r.soundUseCustom = soundUseCustom;
+      rows.set(row, MutableRule.from(rule));
       fireTableRowsUpdated(row, row);
     }
 
-    void setScriptConfig(int row, boolean scriptEnabled, String scriptPath, String scriptArgs, String scriptWorkingDirectory) {
+    void setEnabledAt(int row, boolean enabled) {
       if (row < 0 || row >= rows.size()) return;
-      MutableRule r = rows.get(row);
-      String path = Objects.toString(scriptPath, "").trim();
-      if (path.isBlank()) path = null;
-      r.scriptPath = path;
-      String args = Objects.toString(scriptArgs, "").trim();
-      if (args.isBlank()) args = null;
-      r.scriptArgs = args;
-      String cwd = Objects.toString(scriptWorkingDirectory, "").trim();
-      if (cwd.isBlank()) cwd = null;
-      r.scriptWorkingDirectory = cwd;
-      r.scriptEnabled = scriptEnabled && path != null;
+      MutableRule current = rows.get(row);
+      if (current == null || current.enabled == enabled) return;
+      current.enabled = enabled;
       fireTableRowsUpdated(row, row);
+    }
+
+    static String effectiveRuleLabel(IrcEventNotificationRule rule) {
+      if (rule == null) return "(rule)";
+      String event = rule.eventType() != null ? Objects.toString(rule.eventType(), "").trim() : "";
+      String source =
+          rule.sourceMode() != null ? Objects.toString(rule.sourceMode(), "").trim() : "";
+      if (event.isEmpty()) event = "Event";
+      if (source.isEmpty()) return event;
+      return event + " (" + source + ")";
     }
 
     int addRule(IrcEventNotificationRule rule) {
@@ -7301,15 +8360,7 @@ panel.setOpaque(false);
 
     @Override
     public Class<?> getColumnClass(int columnIndex) {
-      return switch (columnIndex) {
-        case COL_ENABLED, COL_TOAST, COL_STATUS_BAR, COL_NOTIFICATIONS_NODE, COL_SOUND ->
-            Boolean.class;
-        case COL_EVENT -> IrcEventNotificationRule.EventType.class;
-        case COL_SOURCE -> IrcEventNotificationRule.SourceMode.class;
-        case COL_FOCUS_SCOPE -> IrcEventNotificationRule.FocusScope.class;
-        case COL_CHANNEL_SCOPE -> IrcEventNotificationRule.ChannelScope.class;
-        default -> String.class;
-      };
+      return columnIndex == COL_ENABLED ? Boolean.class : String.class;
     }
 
     @Override
@@ -7323,77 +8374,22 @@ panel.setOpaque(false);
       MutableRule r = rows.get(rowIndex);
       return switch (columnIndex) {
         case COL_ENABLED -> r.enabled;
-        case COL_EVENT -> r.eventType;
-        case COL_SOURCE -> r.sourceMode;
-        case COL_SOURCE_PATTERN -> r.sourcePattern;
-        case COL_TOAST -> r.toastEnabled;
-        case COL_STATUS_BAR -> r.statusBarEnabled;
-        case COL_FOCUS_SCOPE -> r.focusScope;
-        case COL_NOTIFICATIONS_NODE -> r.notificationsNodeEnabled;
-        case COL_SOUND -> r.soundEnabled;
-        case COL_CHANNEL_SCOPE -> r.channelScope;
-        case COL_CHANNEL_PATTERNS -> r.channelPatterns;
+        case COL_EVENT -> Objects.toString(r.eventType, "");
+        case COL_SOURCE_SUMMARY -> summarizeSource(r);
+        case COL_CHANNEL_SUMMARY -> summarizeChannel(r);
+        case COL_ACTIONS_SUMMARY -> summarizeActions(r);
         default -> null;
       };
     }
 
-    @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return;
-      MutableRule r = rows.get(rowIndex);
-
-      switch (columnIndex) {
-        case COL_ENABLED -> r.enabled = asBool(aValue);
-        case COL_EVENT -> {
-          r.eventType = asEventType(aValue);
-          applyDefaultSoundForEventIfGeneric(r);
-        }
-        case COL_SOURCE -> {
-          r.sourceMode = asSourceMode(aValue);
-          if (!sourcePatternAllowed(r.sourceMode)) {
-            r.sourcePattern = null;
-          }
-          applyDefaultSoundForEventIfGeneric(r);
-        }
-        case COL_SOURCE_PATTERN -> {
-          if (sourcePatternAllowed(r.sourceMode)) {
-            r.sourcePattern = trimToNull(aValue);
-          } else {
-            r.sourcePattern = null;
-          }
-        }
-        case COL_TOAST -> r.toastEnabled = asBool(aValue);
-        case COL_STATUS_BAR -> r.statusBarEnabled = asBool(aValue);
-        case COL_FOCUS_SCOPE -> r.focusScope = asFocusScope(aValue);
-        case COL_NOTIFICATIONS_NODE -> r.notificationsNodeEnabled = asBool(aValue);
-        case COL_SOUND -> r.soundEnabled = asBool(aValue);
-        case COL_CHANNEL_SCOPE -> {
-          r.channelScope = asChannelScope(aValue);
-          if (!channelPatternAllowed(r.channelScope)) {
-            r.channelPatterns = null;
-          }
-        }
-        case COL_CHANNEL_PATTERNS -> {
-          if (channelPatternAllowed(r.channelScope)) {
-            r.channelPatterns = trimToNull(aValue);
-          } else {
-            r.channelPatterns = null;
-          }
-        }
-        default -> {
-        }
-      }
-
-      fireTableRowsUpdated(rowIndex, rowIndex);
-    }
-
-    private static void applyDefaultSoundForEventIfGeneric(MutableRule r) {
-      if (r == null || r.soundUseCustom) return;
-
-      String current = BuiltInSound.fromId(r.soundId).name();
-      if (!BuiltInSound.NOTIF_1.name().equals(current)) return;
-
-      r.soundId = defaultBuiltInSoundForIrcEventRule(r.eventType).name();
+    private static String summarizeSource(MutableRule r) {
+      if (r == null) return "";
+      IrcEventNotificationRule.SourceMode mode =
+          r.sourceMode != null ? r.sourceMode : IrcEventNotificationRule.SourceMode.ANY;
+      String label = Objects.toString(mode, "");
+      if (!sourcePatternAllowed(mode)) return label;
+      String pattern = trimToNull(r.sourcePattern);
+      return pattern == null ? label + ": (empty)" : label + ": " + truncate(pattern, 56);
     }
 
     private static boolean sourcePatternAllowed(IrcEventNotificationRule.SourceMode mode) {
@@ -7407,58 +8403,61 @@ panel.setOpaque(false);
           || scope == IrcEventNotificationRule.ChannelScope.ALL_EXCEPT;
     }
 
-    private static boolean asBool(Object v) {
-      if (v instanceof Boolean b) return b;
-      return Boolean.parseBoolean(Objects.toString(v, "false"));
+    private static String summarizeChannel(MutableRule r) {
+      if (r == null) return "";
+      IrcEventNotificationRule.ChannelScope scope =
+          r.channelScope != null ? r.channelScope : IrcEventNotificationRule.ChannelScope.ALL;
+      String label = Objects.toString(scope, "");
+      if (!channelPatternAllowed(scope)) return label;
+      String patterns = trimToNull(r.channelPatterns);
+      return patterns == null ? label + ": (empty)" : label + ": " + truncate(patterns, 56);
     }
 
-    private static IrcEventNotificationRule.EventType asEventType(Object v) {
-      if (v instanceof IrcEventNotificationRule.EventType t) return t;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
-      try {
-        return IrcEventNotificationRule.EventType.valueOf(s);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+    private static String summarizeActions(MutableRule r) {
+      if (r == null) return "";
+      List<String> parts = new ArrayList<>();
+      if (r.toastEnabled) {
+        IrcEventNotificationRule.FocusScope focus =
+            r.focusScope != null
+                ? r.focusScope
+                : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+        parts.add("Toast(" + focus + ")");
       }
-    }
-
-    private static IrcEventNotificationRule.SourceMode asSourceMode(Object v) {
-      if (v instanceof IrcEventNotificationRule.SourceMode f) return f;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return IrcEventNotificationRule.SourceMode.ANY;
-      try {
-        return IrcEventNotificationRule.SourceMode.valueOf(s);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.SourceMode.ANY;
+      if (r.statusBarEnabled) parts.add("Status bar");
+      if (r.notificationsNodeEnabled) parts.add("Node");
+      if (r.soundEnabled) {
+        if (r.soundUseCustom && trimToNull(r.soundCustomPath) != null) {
+          parts.add("Sound(custom)");
+        } else {
+          BuiltInSound sound = BuiltInSound.fromId(r.soundId);
+          parts.add("Sound(" + sound.displayNameForUi() + ")");
+        }
       }
-    }
-
-    private static IrcEventNotificationRule.FocusScope asFocusScope(Object v) {
-      if (v instanceof IrcEventNotificationRule.FocusScope f) return f;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
-      try {
-        return IrcEventNotificationRule.FocusScope.valueOf(s);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
+      if (r.scriptEnabled) {
+        String script = trimToNull(r.scriptPath);
+        if (script == null) {
+          parts.add("Script");
+        } else {
+          int slash = Math.max(script.lastIndexOf('/'), script.lastIndexOf('\\'));
+          String leaf =
+              (slash >= 0 && slash < (script.length() - 1)) ? script.substring(slash + 1) : script;
+          parts.add("Script(" + truncate(leaf, 26) + ")");
+        }
       }
+      if (parts.isEmpty()) return "(none)";
+      return String.join(", ", parts);
     }
 
-    private static IrcEventNotificationRule.ChannelScope asChannelScope(Object v) {
-      if (v instanceof IrcEventNotificationRule.ChannelScope s) return s;
-      String raw = Objects.toString(v, "").trim();
-      if (raw.isEmpty()) return IrcEventNotificationRule.ChannelScope.ALL;
-      try {
-        return IrcEventNotificationRule.ChannelScope.valueOf(raw);
-      } catch (Exception ignored) {
-        return IrcEventNotificationRule.ChannelScope.ALL;
-      }
+    private static String trimToNull(String raw) {
+      String value = Objects.toString(raw, "").trim();
+      return value.isEmpty() ? null : value;
     }
 
-    private static String trimToNull(Object v) {
-      String s = Objects.toString(v, "").trim();
-      return s.isEmpty() ? null : s;
+    private static String truncate(String value, int maxLen) {
+      if (value == null) return "";
+      String v = value.trim();
+      if (v.length() <= maxLen) return v;
+      return v.substring(0, Math.max(0, maxLen - 1)) + "…";
     }
 
     private static final class MutableRule {
@@ -7540,7 +8539,7 @@ panel.setOpaque(false);
           m.focusScope = IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
           m.notificationsNodeEnabled = true;
           m.soundEnabled = false;
-          m.soundId = BuiltInSound.NOTIF_1.name();
+          m.soundId = defaultBuiltInSoundForIrcEventRule(m.eventType).name();
           m.soundUseCustom = false;
           m.soundCustomPath = null;
           m.scriptEnabled = false;
@@ -7648,7 +8647,8 @@ panel.setOpaque(false);
 
         String cmd = normalizeCommand(a.name);
         if (cmd.isEmpty()) {
-          return new UserCommandAliasValidationError(i, a.name, "Enabled aliases require a command name.");
+          return new UserCommandAliasValidationError(
+              i, a.name, "Enabled aliases require a command name.");
         }
         if (!COMMAND_NAME_PATTERN.matcher(cmd).matches()) {
           return new UserCommandAliasValidationError(
@@ -7657,7 +8657,8 @@ panel.setOpaque(false);
               "Command names must start with a letter and contain only letters, numbers, '_' or '-'.");
         }
         if (Objects.toString(a.template, "").isBlank()) {
-          return new UserCommandAliasValidationError(i, cmd, "Enabled aliases require an expansion.");
+          return new UserCommandAliasValidationError(
+              i, cmd, "Enabled aliases require an expansion.");
         }
 
         String key = cmd.toLowerCase(Locale.ROOT);
@@ -7697,7 +8698,10 @@ panel.setOpaque(false);
 
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
-      return rowIndex >= 0 && rowIndex < rows.size() && columnIndex >= 0 && columnIndex < COLS.length;
+      return rowIndex >= 0
+          && rowIndex < rows.size()
+          && columnIndex >= 0
+          && columnIndex < COLS.length;
     }
 
     @Override
@@ -7719,8 +8723,7 @@ panel.setOpaque(false);
       switch (columnIndex) {
         case COL_ENABLED -> a.enabled = aValue instanceof Boolean b && b;
         case COL_COMMAND -> a.name = normalizeCommand(Objects.toString(aValue, ""));
-        default -> {
-        }
+        default -> {}
       }
 
       fireTableRowsUpdated(rowIndex, rowIndex);
@@ -7738,7 +8741,8 @@ panel.setOpaque(false);
       String template;
 
       UserCommandAlias toAlias() {
-        return new UserCommandAlias(enabled, normalizeCommand(name), Objects.toString(template, ""));
+        return new UserCommandAlias(
+            enabled, normalizeCommand(name), Objects.toString(template, ""));
       }
 
       MutableAlias copy() {
@@ -7767,22 +8771,15 @@ panel.setOpaque(false);
 
   private static final class NotificationRulesTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
-    static final int COL_TYPE = 1;
-    static final int COL_LABEL = 2;
-    static final int COL_PATTERN = 3;
+    static final int COL_LABEL = 1;
+    static final int COL_MATCH = 2;
+    static final int COL_OPTIONS = 3;
     static final int COL_COLOR = 4;
-    static final int COL_CASE = 5;
-    static final int COL_WHOLE = 6;
 
-    private static final String[] COLS = new String[] {
-        "Enabled",
-        "Type",
-        "Label",
-        "Pattern",
-        "Color",
-        "Case",
-        "Whole"
-    };
+    private static final String[] COLS =
+        new String[] {
+          "Enabled", "Label", "Match", "Options", "Color",
+        };
 
     private final List<MutableRule> rows = new ArrayList<>();
 
@@ -7799,6 +8796,26 @@ panel.setOpaque(false);
       return rows.stream().map(MutableRule::toRule).toList();
     }
 
+    NotificationRule ruleAt(int row) {
+      if (row < 0 || row >= rows.size()) return null;
+      MutableRule m = rows.get(row);
+      return m != null ? m.toRule() : null;
+    }
+
+    void setRule(int row, NotificationRule rule) {
+      if (row < 0 || row >= rows.size()) return;
+      rows.set(row, MutableRule.from(rule));
+      fireTableRowsUpdated(row, row);
+    }
+
+    static String effectiveRuleLabel(NotificationRule rule) {
+      if (rule == null) return "(unnamed)";
+      String label = Objects.toString(rule.label(), "").trim();
+      if (!label.isEmpty()) return label;
+      String pattern = Objects.toString(rule.pattern(), "").trim();
+      return pattern.isEmpty() ? "(unnamed)" : pattern;
+    }
+
     String highlightFgAt(int row) {
       if (row < 0 || row >= rows.size()) return null;
       MutableRule r = rows.get(row);
@@ -7812,7 +8829,6 @@ panel.setOpaque(false);
       r.highlightFg = normalizeHexColor(Objects.toString(hex, "").trim());
       fireTableRowsUpdated(row, row);
     }
-
 
     List<ValidationError> validationErrors() {
       List<ValidationError> out = new ArrayList<>();
@@ -7892,20 +8908,13 @@ panel.setOpaque(false);
 
     @Override
     public Class<?> getColumnClass(int columnIndex) {
-      return switch (columnIndex) {
-        case COL_ENABLED, COL_CASE, COL_WHOLE -> Boolean.class;
-        case COL_TYPE -> NotificationRule.Type.class;
-        default -> String.class;
-      };
+      if (columnIndex == COL_ENABLED) return Boolean.class;
+      return String.class;
     }
 
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return false;
-      if (columnIndex == COL_WHOLE) {
-        return rows.get(rowIndex).type == NotificationRule.Type.WORD;
-      }
-      return true;
+      return false;
     }
 
     @Override
@@ -7914,71 +8923,29 @@ panel.setOpaque(false);
       MutableRule r = rows.get(rowIndex);
       return switch (columnIndex) {
         case COL_ENABLED -> r.enabled;
-        case COL_TYPE -> r.type;
-        case COL_LABEL -> r.label;
-        case COL_PATTERN -> r.pattern;
-        case COL_COLOR -> r.highlightFg;
-        case COL_CASE -> r.caseSensitive;
-        case COL_WHOLE -> r.wholeWord;
+        case COL_LABEL -> effectiveRuleLabel(r.toRule());
+        case COL_MATCH -> summarizeMatch(r);
+        case COL_OPTIONS -> summarizeOptions(r);
+        case COL_COLOR -> Objects.toString(r.highlightFg, "");
         default -> null;
       };
     }
 
-    @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-      if (rowIndex < 0 || rowIndex >= rows.size()) return;
-      MutableRule r = rows.get(rowIndex);
+    private static String summarizeMatch(MutableRule r) {
+      if (r == null) return "";
+      String pattern = Objects.toString(r.pattern, "").trim();
+      if (pattern.isEmpty()) pattern = "(empty)";
+      String type = r.type == NotificationRule.Type.REGEX ? "REGEX" : "WORD";
+      return type + ": " + pattern;
+    }
 
-      switch (columnIndex) {
-        case COL_ENABLED -> r.enabled = asBool(aValue);
-        case COL_TYPE -> {
-          NotificationRule.Type t = asType(aValue);
-          if (t == null) t = NotificationRule.Type.WORD;
-          r.type = t;
-          if (t == NotificationRule.Type.REGEX) {
-            r.wholeWord = false;
-          }
-        }
-        case COL_LABEL -> r.label = asStr(aValue);
-        case COL_PATTERN -> {
-          r.pattern = asStr(aValue);
-          if (r.pattern.isBlank()) {
-            r.enabled = false;
-          }
-        }
-        case COL_COLOR -> r.highlightFg = normalizeHexColor(asStr(aValue));
-        case COL_CASE -> r.caseSensitive = asBool(aValue);
-        case COL_WHOLE -> {
-          if (r.type == NotificationRule.Type.WORD) {
-            r.wholeWord = asBool(aValue);
-          }
-        }
-        default -> {
-        }
+    private static String summarizeOptions(MutableRule r) {
+      if (r == null) return "";
+      String caseLabel = r.caseSensitive ? "Case" : "No case";
+      if (r.type == NotificationRule.Type.WORD) {
+        return caseLabel + ", " + (r.wholeWord ? "Whole word" : "Substring");
       }
-
-      fireTableRowsUpdated(rowIndex, rowIndex);
-    }
-
-    private static String asStr(Object v) {
-      String s = Objects.toString(v, "");
-      return s.trim();
-    }
-
-    private static boolean asBool(Object v) {
-      if (v instanceof Boolean b) return b;
-      return Boolean.parseBoolean(Objects.toString(v, "false"));
-    }
-
-    private static NotificationRule.Type asType(Object v) {
-      if (v instanceof NotificationRule.Type t) return t;
-      String s = Objects.toString(v, "").trim();
-      if (s.isEmpty()) return null;
-      try {
-        return NotificationRule.Type.valueOf(s);
-      } catch (Exception ignored) {
-        return null;
-      }
+      return caseLabel;
     }
 
     private static String normalizeHexColor(String raw) {
@@ -7998,15 +8965,12 @@ panel.setOpaque(false);
 
       for (int i = 0; i < s.length(); i++) {
         char c = s.charAt(i);
-        boolean ok = (c >= '0' && c <= '9')
-            || (c >= 'a' && c <= 'f')
-            || (c >= 'A' && c <= 'F');
+        boolean ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         if (!ok) return null;
       }
 
       return "#" + s.toUpperCase(Locale.ROOT);
     }
-
 
     private static final class MutableRule {
       boolean enabled;
@@ -8056,15 +9020,16 @@ panel.setOpaque(false);
         m.highlightFg = r.highlightFg();
         return m;
       }
-
-
     }
   }
 
   private static final class RuleColorCellRenderer extends DefaultTableCellRenderer {
     @Override
-    public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-      JLabel c = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+    public java.awt.Component getTableCellRendererComponent(
+        JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+      JLabel c =
+          (JLabel)
+              super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
       String raw = value != null ? value.toString().trim() : "";
       Color col = parseHexColor(raw);
@@ -8097,8 +9062,15 @@ panel.setOpaque(false);
       this.h = Math.max(6, h);
     }
 
-    @Override public int getIconWidth() { return w; }
-    @Override public int getIconHeight() { return h; }
+    @Override
+    public int getIconWidth() {
+      return w;
+    }
+
+    @Override
+    public int getIconHeight() {
+      return h;
+    }
 
     @Override
     public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
@@ -8106,12 +9078,12 @@ panel.setOpaque(false);
       try {
         g.setColor(color);
         g.fillRect(x, y, w, h);
-	        Color border = c != null ? c.getForeground() : null;
-	        if (border == null) border = UIManager.getColor("Component.borderColor");
-	        if (border == null) border = UIManager.getColor("Separator.foreground");
-	        if (border == null) border = Color.BLACK;
-	        border = new Color(border.getRed(), border.getGreen(), border.getBlue(), 120);
-	        g.setColor(border);
+        Color border = c != null ? c.getForeground() : null;
+        if (border == null) border = UIManager.getColor("Component.borderColor");
+        if (border == null) border = UIManager.getColor("Separator.foreground");
+        if (border == null) border = Color.BLACK;
+        border = new Color(border.getRed(), border.getGreen(), border.getBlue(), 120);
+        g.setColor(border);
         g.drawRect(x, y, w - 1, h - 1);
       } finally {
         g.setColor(old);
@@ -8148,30 +9120,32 @@ panel.setOpaque(false);
     }
   }
 
-  private record AccentControls(JCheckBox enabled,
-                               JComboBox<AccentPreset> preset,
-                               JTextField hex,
-                               JButton pick,
-                               JButton clear,
-                               JSlider strength,
-                               JComponent chip,
-                               JPanel panel,
-                               Runnable applyEnabledState,
-                               Runnable syncPresetFromHex,
-                               Runnable updateChip) {
-  }
+  private record AccentControls(
+      JCheckBox enabled,
+      JComboBox<AccentPreset> preset,
+      JTextField hex,
+      JButton pick,
+      JButton clear,
+      JSlider strength,
+      JComponent chip,
+      JPanel panel,
+      Runnable applyEnabledState,
+      Runnable syncPresetFromHex,
+      Runnable updateChip) {}
 
-  private record ColorField(JTextField hex, JButton pick, JButton clear, JPanel panel, Runnable updateIcon) {}
+  private record ColorField(
+      JTextField hex, JButton pick, JButton clear, JPanel panel, Runnable updateIcon) {}
 
-  private record ChatThemeControls(JComboBox<ChatThemeSettings.Preset> preset, ColorField timestamp, ColorField system, ColorField mention, JSlider mentionStrength) {}
+  private record ChatThemeControls(
+      JComboBox<ChatThemeSettings.Preset> preset,
+      ColorField timestamp,
+      ColorField system,
+      ColorField mention,
+      JSlider mentionStrength) {}
 
+  private record ThemeControls(JComboBox<String> combo) {}
 
-  private record ThemeControls(JComboBox<String> combo) {
-  }
-
-  private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {
-  }
-
+  private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {}
 
   private record DensityOption(String id, String label) {
     @Override
@@ -8186,49 +9160,70 @@ panel.setOpaque(false);
       JCheckBox uiFontOverrideEnabled,
       JComboBox<String> uiFontFamily,
       JSpinner uiFontSize,
-      Runnable applyUiFontEnabledState) {
+      Runnable applyUiFontEnabledState) {}
+
+  private enum PushyTargetMode {
+    DEVICE_TOKEN("Device token"),
+    TOPIC("Topic");
+
+    private final String label;
+
+    PushyTargetMode(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
   }
 
+  private record TrayControls(
+      JCheckBox enabled,
+      JCheckBox closeToTray,
+      JCheckBox minimizeToTray,
+      JCheckBox startMinimized,
+      JCheckBox notifyHighlights,
+      JCheckBox notifyPrivateMessages,
+      JCheckBox notifyConnectionState,
+      JCheckBox notifyOnlyWhenUnfocused,
+      JCheckBox notifyOnlyWhenMinimizedOrHidden,
+      JCheckBox notifySuppressWhenTargetActive,
+      JCheckBox linuxDbusActions,
+      JComboBox<NotificationBackendMode> notificationBackend,
+      JButton testNotification,
+      JCheckBox notificationSoundsEnabled,
+      JCheckBox notificationSoundUseCustom,
+      JTextField notificationSoundCustomPath,
+      JButton browseCustomSound,
+      JButton clearCustomSound,
+      JComboBox<BuiltInSound> notificationSound,
+      JButton testSound,
+      JCheckBox pushyEnabled,
+      JTextField pushyEndpoint,
+      JPasswordField pushyApiKey,
+      JComboBox<PushyTargetMode> pushyTargetMode,
+      JTextField pushyTargetValue,
+      JTextField pushyTitlePrefix,
+      JSpinner pushyConnectTimeoutSeconds,
+      JSpinner pushyReadTimeoutSeconds,
+      JLabel pushyValidationLabel,
+      JButton pushyTest,
+      JLabel pushyTestStatus,
+      JPanel panel) {}
 
-  private record TrayControls(JCheckBox enabled,
-                              JCheckBox closeToTray,
-                              JCheckBox minimizeToTray,
-                              JCheckBox startMinimized,
-                              JCheckBox notifyHighlights,
-                              JCheckBox notifyPrivateMessages,
-                              JCheckBox notifyConnectionState,
-                              JCheckBox notifyOnlyWhenUnfocused,
-                              JCheckBox notifyOnlyWhenMinimizedOrHidden,
-                              JCheckBox notifySuppressWhenTargetActive,
-                              JCheckBox linuxDbusActions,
-                              JComboBox<NotificationBackendMode> notificationBackend,
-                              JButton testNotification,
-                              JCheckBox notificationSoundsEnabled,
-                              JCheckBox notificationSoundUseCustom,
-                              JTextField notificationSoundCustomPath,
-                              JButton browseCustomSound,
-                              JButton clearCustomSound,
-                              JComboBox<BuiltInSound> notificationSound,
-                              JButton testSound,
-                              JPanel panel) {
-  }
+  private record ImageEmbedControls(
+      JCheckBox enabled,
+      JCheckBox collapsed,
+      JSpinner maxWidth,
+      JSpinner maxHeight,
+      JCheckBox animateGifs,
+      JPanel panel) {}
 
-  private record ImageEmbedControls(JCheckBox enabled,
-                                   JCheckBox collapsed,
-                                   JSpinner maxWidth,
-                                   JSpinner maxHeight,
-                                   JCheckBox animateGifs,
-                                   JPanel panel) {
-  }
+  private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {}
 
-  private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {
-  }
-
-  private record CtcpAutoReplyControls(JCheckBox enabled,
-                                       JCheckBox version,
-                                       JCheckBox ping,
-                                       JCheckBox time) {
-  }
+  private record CtcpAutoReplyControls(
+      JCheckBox enabled, JCheckBox version, JCheckBox ping, JCheckBox time) {}
 
   private record Ircv3CapabilitiesControls(Map<String, JCheckBox> checkboxes, JPanel panel) {
     Map<String, Boolean> snapshot() {
@@ -8241,46 +9236,44 @@ panel.setOpaque(false);
     }
   }
 
-  private record NickColorControls(JCheckBox enabled,
-                                  JSpinner minContrast,
-                                  JButton overrides,
-                                  NickColorPreviewPanel preview,
-                                  JPanel panel) {
-  }
+  private record NickColorControls(
+      JCheckBox enabled,
+      JSpinner minContrast,
+      JButton overrides,
+      NickColorPreviewPanel preview,
+      JPanel panel) {}
 
-  private record TimestampControls(JCheckBox enabled,
-                                  JTextField format,
-                                  JCheckBox includeChatMessages,
-                                  JCheckBox includePresenceMessages,
-                                  JPanel panel) {
-  }
-  private record HistoryControls(JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {
-  }
+  private record TimestampControls(
+      JCheckBox enabled,
+      JTextField format,
+      JCheckBox includeChatMessages,
+      JCheckBox includePresenceMessages,
+      JPanel panel) {}
 
-  private record LoggingControls(JCheckBox enabled,
-                                JCheckBox logSoftIgnored,
-                                JCheckBox logPrivateMessages,
-                                JCheckBox savePrivateMessageList,
-                                JButton managePrivateMessageList,
-                                JCheckBox keepForever,
-                                JSpinner retentionDays,
-                                JTextField dbBaseName,
-                                JCheckBox dbNextToConfig,
-                                JTextArea info) {
-  }
+  private record HistoryControls(
+      JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {}
 
-  private record OutgoingColorControls(JCheckBox enabled,
-                                      JTextField hex,
-                                      JLabel preview,
-                                      JPanel panel) {
-  }
+  private record LoggingControls(
+      JCheckBox enabled,
+      JCheckBox logSoftIgnored,
+      JCheckBox logPrivateMessages,
+      JCheckBox savePrivateMessageList,
+      JButton managePrivateMessageList,
+      JCheckBox keepForever,
+      JSpinner retentionDays,
+      JTextField dbBaseName,
+      JCheckBox dbNextToConfig,
+      JTextArea info) {}
 
-  private record UserhostControls(JCheckBox enabled,
-                                 JSpinner minIntervalSeconds,
-                                 JSpinner maxPerMinute,
-                                 JSpinner nickCooldownMinutes,
-                                 JSpinner maxNicksPerCommand) {
-  }
+  private record OutgoingColorControls(
+      JCheckBox enabled, JTextField hex, JLabel preview, JPanel panel) {}
+
+  private record UserhostControls(
+      JCheckBox enabled,
+      JSpinner minIntervalSeconds,
+      JSpinner maxPerMinute,
+      JSpinner nickCooldownMinutes,
+      JSpinner maxNicksPerCommand) {}
 
   private record UserInfoEnrichmentControls(
       JCheckBox enabled,
@@ -8293,40 +9286,35 @@ panel.setOpaque(false);
       JSpinner whoisNickCooldownMinutes,
       JCheckBox periodicRefreshEnabled,
       JSpinner periodicRefreshIntervalSeconds,
-      JSpinner periodicRefreshNicksPerTick
-  ) {
-  }
+      JSpinner periodicRefreshNicksPerTick) {}
 
-  private record ProxyControls(JCheckBox enabled,
-                               JTextField host,
-                               JSpinner port,
-                               JCheckBox remoteDns,
-                               JTextField username,
-                               JPasswordField password,
-                               JButton clearPassword,
-                               JSpinner connectTimeoutSeconds,
-                               JSpinner readTimeoutSeconds) {
-  }
+  private record ProxyControls(
+      JCheckBox enabled,
+      JTextField host,
+      JSpinner port,
+      JCheckBox remoteDns,
+      JTextField username,
+      JPasswordField password,
+      JButton clearPassword,
+      JSpinner connectTimeoutSeconds,
+      JSpinner readTimeoutSeconds) {}
 
-  private record HeartbeatControls(JCheckBox enabled,
-                                  JSpinner checkPeriodSeconds,
-                                  JSpinner timeoutSeconds) {
-  }
+  private record HeartbeatControls(
+      JCheckBox enabled, JSpinner checkPeriodSeconds, JSpinner timeoutSeconds) {}
 
-  private record NetworkAdvancedControls(ProxyControls proxy,
-                                         UserhostControls userhost,
-                                         UserInfoEnrichmentControls enrichment,
-                                         HeartbeatControls heartbeat,
-                                         JSpinner monitorIsonPollIntervalSeconds,
-                                         JCheckBox trustAllTlsCertificates,
-                                         JPanel networkPanel,
-                                         JPanel userLookupsPanel) {
-  }
+  private record NetworkAdvancedControls(
+      ProxyControls proxy,
+      UserhostControls userhost,
+      UserInfoEnrichmentControls enrichment,
+      HeartbeatControls heartbeat,
+      JSpinner monitorIsonPollIntervalSeconds,
+      JCheckBox trustAllTlsCertificates,
+      JPanel networkPanel,
+      JPanel userLookupsPanel) {}
 
   private static final class NickColorPreviewPanel extends JPanel {
-    private static final String[] SAMPLE_NICKS = new String[] {
-        "Alice", "Bob", "Carol", "Dave", "Eve", "Mallory"
-    };
+    private static final String[] SAMPLE_NICKS =
+        new String[] {"Alice", "Bob", "Carol", "Dave", "Eve", "Mallory"};
 
     private final NickColorService nickColorService;
     private final java.util.List<JLabel> labels = new java.util.ArrayList<>();
@@ -8341,10 +9329,10 @@ panel.setOpaque(false);
       if (border == null) border = UIManager.getColor("Label.foreground");
       if (border == null) border = Color.GRAY;
 
-      setBorder(BorderFactory.createCompoundBorder(
-          BorderFactory.createLineBorder(border, 1),
-          BorderFactory.createEmptyBorder(6, 8, 6, 8)
-      ));
+      setBorder(
+          BorderFactory.createCompoundBorder(
+              BorderFactory.createLineBorder(border, 1),
+              BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 
       for (String n : SAMPLE_NICKS) {
         JLabel l = new JLabel(n);
@@ -8369,9 +9357,10 @@ panel.setOpaque(false);
         JLabel l = labels.get(i);
         String nick = SAMPLE_NICKS[i];
 
-        Color c = (nickColorService != null)
-            ? nickColorService.previewColorForNick(nick, bg, fg, enabled, minContrast)
-            : fg;
+        Color c =
+            (nickColorService != null)
+                ? nickColorService.previewColorForNick(nick, bg, fg, enabled, minContrast)
+                : fg;
 
         l.setForeground(c);
       }
@@ -8387,9 +9376,20 @@ panel.setOpaque(false);
       this.onChange = onChange;
     }
 
-    @Override public void insertUpdate(DocumentEvent e) { onChange.run(); }
-    @Override public void removeUpdate(DocumentEvent e) { onChange.run(); }
-    @Override public void changedUpdate(DocumentEvent e) { onChange.run(); }
+    @Override
+    public void insertUpdate(DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void removeUpdate(DocumentEvent e) {
+      onChange.run();
+    }
+
+    @Override
+    public void changedUpdate(DocumentEvent e) {
+      onChange.run();
+    }
   }
 
   // ------------------------------
@@ -8421,25 +9421,26 @@ panel.setOpaque(false);
     final JButton moveRuleUp;
     final JButton moveRuleDown;
 
-    private FilterControls(JCheckBox filtersEnabledByDefault,
-                           JCheckBox placeholdersEnabledByDefault,
-                           JCheckBox placeholdersCollapsedByDefault,
-                           JSpinner placeholderPreviewLines,
-                           JSpinner placeholderMaxLinesPerRun,
-                           JSpinner placeholderTooltipMaxTags,
-                           JCheckBox historyPlaceholdersEnabledByDefault,
-                           JSpinner historyPlaceholderMaxRunsPerBatch,
-                           FilterOverridesTableModel overridesModel,
-                           JTable overridesTable,
-                           JButton addOverride,
-                           JButton removeOverride,
-                           FilterRulesTableModel rulesModel,
-                           JTable rulesTable,
-                           JButton addRule,
-                           JButton editRule,
-                           JButton deleteRule,
-                           JButton moveRuleUp,
-                           JButton moveRuleDown) {
+    private FilterControls(
+        JCheckBox filtersEnabledByDefault,
+        JCheckBox placeholdersEnabledByDefault,
+        JCheckBox placeholdersCollapsedByDefault,
+        JSpinner placeholderPreviewLines,
+        JSpinner placeholderMaxLinesPerRun,
+        JSpinner placeholderTooltipMaxTags,
+        JCheckBox historyPlaceholdersEnabledByDefault,
+        JSpinner historyPlaceholderMaxRunsPerBatch,
+        FilterOverridesTableModel overridesModel,
+        JTable overridesTable,
+        JButton addOverride,
+        JButton removeOverride,
+        FilterRulesTableModel rulesModel,
+        JTable rulesTable,
+        JButton addRule,
+        JButton editRule,
+        JButton deleteRule,
+        JButton moveRuleUp,
+        JButton moveRuleDown) {
       this.filtersEnabledByDefault = filtersEnabledByDefault;
       this.placeholdersEnabledByDefault = placeholdersEnabledByDefault;
       this.placeholdersCollapsedByDefault = placeholdersCollapsedByDefault;
@@ -8469,7 +9470,10 @@ panel.setOpaque(false);
     OFF("Off");
 
     final String label;
-    Tri(String label) { this.label = label; }
+
+    Tri(String label) {
+      this.label = label;
+    }
 
     static Tri fromNullable(Boolean b) {
       if (b == null) return DEFAULT;
@@ -8484,7 +9488,10 @@ panel.setOpaque(false);
       };
     }
 
-    @Override public String toString() { return label; }
+    @Override
+    public String toString() {
+      return label;
+    }
   }
 
   private static final class FilterOverridesRow {
@@ -8508,12 +9515,12 @@ panel.setOpaque(false);
       rows.clear();
       if (overrides != null) {
         for (FilterScopeOverride o : overrides) {
-          rows.add(new FilterOverridesRow(
-              o.scopePattern(),
-              Tri.fromNullable(o.filtersEnabled()),
-              Tri.fromNullable(o.placeholdersEnabled()),
-              Tri.fromNullable(o.placeholdersCollapsed())
-          ));
+          rows.add(
+              new FilterOverridesRow(
+                  o.scopePattern(),
+                  Tri.fromNullable(o.filtersEnabled()),
+                  Tri.fromNullable(o.placeholdersEnabled()),
+                  Tri.fromNullable(o.placeholdersCollapsed())));
         }
       }
       fireTableDataChanged();
@@ -8524,12 +9531,9 @@ panel.setOpaque(false);
       for (FilterOverridesRow r : rows) {
         String s = r.scope != null ? r.scope.trim() : "";
         if (s.isEmpty()) continue;
-        out.add(new FilterScopeOverride(
-            s,
-            r.filters.toNullable(),
-            r.placeholders.toNullable(),
-            r.collapsed.toNullable()
-        ));
+        out.add(
+            new FilterScopeOverride(
+                s, r.filters.toNullable(), r.placeholders.toNullable(), r.collapsed.toNullable()));
       }
       return out;
     }
@@ -8545,8 +9549,15 @@ panel.setOpaque(false);
       fireTableRowsDeleted(idx, idx);
     }
 
-    @Override public int getRowCount() { return rows.size(); }
-    @Override public int getColumnCount() { return 4; }
+    @Override
+    public int getRowCount() {
+      return rows.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+      return 4;
+    }
 
     @Override
     public String getColumnName(int column) {
@@ -8598,9 +9609,8 @@ panel.setOpaque(false);
     }
   }
 
-
-  
-  private static final class CenteredBooleanRenderer extends JCheckBox implements TableCellRenderer {
+  private static final class CenteredBooleanRenderer extends JCheckBox
+      implements TableCellRenderer {
     CenteredBooleanRenderer() {
       setHorizontalAlignment(SwingConstants.CENTER);
       setBorderPainted(false);
@@ -8609,9 +9619,8 @@ panel.setOpaque(false);
     }
 
     @Override
-    public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
-                                                           boolean isSelected, boolean hasFocus,
-                                                           int row, int column) {
+    public java.awt.Component getTableCellRendererComponent(
+        JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
       setSelected(Boolean.TRUE.equals(value));
       if (isSelected) {
         setBackground(table.getSelectionBackground());
@@ -8638,8 +9647,15 @@ panel.setOpaque(false);
       return rules.get(row);
     }
 
-    @Override public int getRowCount() { return rules.size(); }
-    @Override public int getColumnCount() { return 5; }
+    @Override
+    public int getRowCount() {
+      return rules.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+      return 5;
+    }
 
     @Override
     public String getColumnName(int column) {
@@ -8689,18 +9705,18 @@ panel.setOpaque(false);
       boolean enabled = Boolean.TRUE.equals(aValue);
       if (cur.enabled() == enabled) return;
 
-      FilterRule next = new FilterRule(
-          cur.id(),
-          cur.name(),
-          enabled,
-          cur.scopePattern(),
-          cur.action(),
-          cur.direction(),
-          cur.kinds(),
-          cur.fromNickGlobs(),
-          cur.textRegex(),
-          cur.tags()
-      );
+      FilterRule next =
+          new FilterRule(
+              cur.id(),
+              cur.name(),
+              enabled,
+              cur.scopePattern(),
+              cur.action(),
+              cur.direction(),
+              cur.kinds(),
+              cur.fromNickGlobs(),
+              cur.textRegex(),
+              cur.tags());
       rules.set(rowIndex, next);
       fireTableCellUpdated(rowIndex, columnIndex);
     }
@@ -8716,11 +9732,13 @@ panel.setOpaque(false);
       List<String> parts = new ArrayList<>();
 
       if (r.hasKinds()) {
-        String ks = r.kinds().stream().map(Enum::name).sorted().reduce((a, b) -> a + "," + b).orElse("");
+        String ks =
+            r.kinds().stream().map(Enum::name).sorted().reduce((a, b) -> a + "," + b).orElse("");
         if (!ks.isBlank()) parts.add("kinds=" + ks);
       }
 
-      if (r.direction() != null && r.direction() != cafe.woden.ircclient.ui.filter.FilterDirection.ANY) {
+      if (r.direction() != null
+          && r.direction() != cafe.woden.ircclient.ui.filter.FilterDirection.ANY) {
         parts.add("dir=" + r.direction().name());
       }
 
@@ -8734,9 +9752,12 @@ panel.setOpaque(false);
         String flags = "";
         if (r.textRegex().flags() != null && !r.textRegex().flags().isEmpty()) {
           StringBuilder sb = new StringBuilder();
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.I)) sb.append('i');
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.M)) sb.append('m');
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.S)) sb.append('s');
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.I))
+            sb.append('i');
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.M))
+            sb.append('m');
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.S))
+            sb.append('s');
           flags = sb.toString();
         }
         String re = "/" + truncate(pat, 48) + "/" + flags;
@@ -8759,23 +9780,24 @@ panel.setOpaque(false);
     }
   }
 
-
-  private FilterControls buildFilterControls(FilterSettings current, List<AutoCloseable> closeables) {
+  private FilterControls buildFilterControls(
+      FilterSettings current, List<AutoCloseable> closeables) {
     Objects.requireNonNull(current);
 
     JCheckBox enabledByDefault = new JCheckBox("Enable filters by default");
     enabledByDefault.setSelected(current.filtersEnabledByDefault());
 
-    JCheckBox placeholdersEnabledByDefault = new JCheckBox("Enable \"Filtered (N)\" placeholders by default");
+    JCheckBox placeholdersEnabledByDefault =
+        new JCheckBox("Enable \"Filtered (N)\" placeholders by default");
     placeholdersEnabledByDefault.setSelected(current.placeholdersEnabledByDefault());
 
     JCheckBox placeholdersCollapsedByDefault = new JCheckBox("Collapse placeholders by default");
     placeholdersCollapsedByDefault.setSelected(current.placeholdersCollapsedByDefault());
 
-    JSpinner previewLines = new JSpinner(new SpinnerNumberModel(
-        Math.max(0, Math.min(25, current.placeholderMaxPreviewLines())),
-        0, 25, 1
-    ));
+    JSpinner previewLines =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Math.max(0, Math.min(25, current.placeholderMaxPreviewLines())), 0, 25, 1));
     // Keep consistent with other numeric spinners in the dialog.
     if (closeables != null) {
       try {
@@ -8791,37 +9813,54 @@ panel.setOpaque(false);
       }
     }
 
-
-    JSpinner maxLinesPerRun = new JSpinner(new SpinnerNumberModel(
-        Math.max(0, Math.min(50_000, current.placeholderMaxLinesPerRun())),
-        0, 50_000, 50
-    ));
-    maxLinesPerRun.setToolTipText("Max hidden lines represented in a single placeholder run. 0 = unlimited.");
+    JSpinner maxLinesPerRun =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Math.max(0, Math.min(50_000, current.placeholderMaxLinesPerRun())), 0, 50_000, 50));
+    maxLinesPerRun.setToolTipText(
+        "Max hidden lines represented in a single placeholder run. 0 = unlimited.");
     if (closeables != null) {
-      try { closeables.add(MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun)); } catch (Exception ignored) {}
+      try {
+        closeables.add(MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun));
+      } catch (Exception ignored) {
+      }
     } else {
-      try { MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun); } catch (Exception ignored) {}
+      try {
+        MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun);
+      } catch (Exception ignored) {
+      }
     }
 
-    JSpinner tooltipMaxTags = new JSpinner(new SpinnerNumberModel(
-        Math.max(0, Math.min(500, current.placeholderTooltipMaxTags())),
-        0, 500, 1
-    ));
+    JSpinner tooltipMaxTags =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Math.max(0, Math.min(500, current.placeholderTooltipMaxTags())), 0, 500, 1));
     tooltipMaxTags.setToolTipText("Max tags shown in placeholder/hint tooltips. 0 = hide tags.");
     if (closeables != null) {
-      try { closeables.add(MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags)); } catch (Exception ignored) {}
+      try {
+        closeables.add(MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags));
+      } catch (Exception ignored) {
+      }
     } else {
-      try { MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags); } catch (Exception ignored) {}
+      try {
+        MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags);
+      } catch (Exception ignored) {
+      }
     }
 
-    JCheckBox historyPlaceholdersEnabledByDefault = new JCheckBox("Show placeholders for filtered history loads");
+    JCheckBox historyPlaceholdersEnabledByDefault =
+        new JCheckBox("Show placeholders for filtered history loads");
     historyPlaceholdersEnabledByDefault.setSelected(current.historyPlaceholdersEnabledByDefault());
-    historyPlaceholdersEnabledByDefault.setToolTipText("If off, filtered lines loaded from history are silently hidden (no placeholder/hint rows).");
+    historyPlaceholdersEnabledByDefault.setToolTipText(
+        "If off, filtered lines loaded from history are silently hidden (no placeholder/hint rows).");
 
-    JSpinner historyMaxRuns = new JSpinner(new SpinnerNumberModel(
-        Math.max(0, Math.min(5_000, current.historyPlaceholderMaxRunsPerBatch())),
-        0, 5_000, 1
-    ));
+    JSpinner historyMaxRuns =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Math.max(0, Math.min(5_000, current.historyPlaceholderMaxRunsPerBatch())),
+                0,
+                5_000,
+                1));
     historyMaxRuns.setToolTipText("Max placeholder runs per history load batch. 0 = unlimited.");
     if (closeables != null) {
       try {
@@ -8835,13 +9874,12 @@ panel.setOpaque(false);
       }
     }
 
-
-    // If history placeholders are disabled, the batch cap is irrelevant (keep the value but disable the control).
+    // If history placeholders are disabled, the batch cap is irrelevant (keep the value but disable
+    // the control).
     try {
       historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected());
-      historyPlaceholdersEnabledByDefault.addActionListener(e ->
-          historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected())
-      );
+      historyPlaceholdersEnabledByDefault.addActionListener(
+          e -> historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected()));
     } catch (Exception ignored) {
       // best-effort
     }
@@ -8867,30 +9905,45 @@ panel.setOpaque(false);
     configureIconOnlyButton(remove, "trash", "Remove selected scope override");
     remove.setEnabled(false);
 
-    table.getSelectionModel().addListSelectionListener(e -> {
-      remove.setEnabled(table.getSelectedRow() >= 0);
-    });
+    table
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              remove.setEnabled(table.getSelectedRow() >= 0);
+            });
 
-    add.addActionListener(e -> {
-      String scope = JOptionPane.showInputDialog(dialog, "Scope pattern (e.g. libera/#llamas, libera/*, */status)", "Add Override", JOptionPane.PLAIN_MESSAGE);
-      if (scope == null) return;
-      scope = scope.trim();
-      if (scope.isEmpty()) return;
-      model.addEmpty(scope);
-      int idx = model.getRowCount() - 1;
-      if (idx >= 0) {
-        table.getSelectionModel().setSelectionInterval(idx, idx);
-        table.scrollRectToVisible(table.getCellRect(idx, 0, true));
-      }
-    });
+    add.addActionListener(
+        e -> {
+          String scope =
+              JOptionPane.showInputDialog(
+                  dialog,
+                  "Scope pattern (e.g. libera/#llamas, libera/*, */status)",
+                  "Add Override",
+                  JOptionPane.PLAIN_MESSAGE);
+          if (scope == null) return;
+          scope = scope.trim();
+          if (scope.isEmpty()) return;
+          model.addEmpty(scope);
+          int idx = model.getRowCount() - 1;
+          if (idx >= 0) {
+            table.getSelectionModel().setSelectionInterval(idx, idx);
+            table.scrollRectToVisible(table.getCellRect(idx, 0, true));
+          }
+        });
 
-    remove.addActionListener(e -> {
-      int row = table.getSelectedRow();
-      if (row < 0) return;
-      int confirm = JOptionPane.showConfirmDialog(dialog, "Remove selected override?", "Remove Override", JOptionPane.OK_CANCEL_OPTION);
-      if (confirm != JOptionPane.OK_OPTION) return;
-      model.removeAt(row);
-    });
+    remove.addActionListener(
+        e -> {
+          int row = table.getSelectedRow();
+          if (row < 0) return;
+          int confirm =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Remove selected override?",
+                  "Remove Override",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (confirm != JOptionPane.OK_OPTION) return;
+          model.removeAt(row);
+        });
 
     // Rules
     FilterRulesTableModel rulesModel = new FilterRulesTableModel();
@@ -8922,104 +9975,107 @@ panel.setOpaque(false);
     }
 
     // Keep in sync if filter settings change while the dialog is open (e.g. /filter add ...).
-    PropertyChangeListener rulesListener = evt -> {
-      if (!FilterSettingsBus.PROP_FILTER_SETTINGS.equals(evt.getPropertyName())) return;
-      Object nv = evt.getNewValue();
-      if (!(nv instanceof FilterSettings fs)) return;
+    PropertyChangeListener rulesListener =
+        evt -> {
+          if (!FilterSettingsBus.PROP_FILTER_SETTINGS.equals(evt.getPropertyName())) return;
+          Object nv = evt.getNewValue();
+          if (!(nv instanceof FilterSettings fs)) return;
 
-      SwingUtilities.invokeLater(() -> {
-        try {
-          java.util.UUID selectedId = null;
-          int selectedRow = rulesTable.getSelectedRow();
-          if (selectedRow >= 0) {
-            FilterRule selected = rulesModel.ruleAt(selectedRow);
-            if (selected != null) selectedId = selected.id();
-          }
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  java.util.UUID selectedId = null;
+                  int selectedRow = rulesTable.getSelectedRow();
+                  if (selectedRow >= 0) {
+                    FilterRule selected = rulesModel.ruleAt(selectedRow);
+                    if (selected != null) selectedId = selected.id();
+                  }
 
-          rulesModel.setRules(fs.rules());
+                  rulesModel.setRules(fs.rules());
 
-          if (selectedId != null) {
-            for (int i = 0; i < rulesModel.getRowCount(); i++) {
-              FilterRule r = rulesModel.ruleAt(i);
-              if (r != null && selectedId.equals(r.id())) {
-                rulesTable.getSelectionModel().setSelectionInterval(i, i);
-                rulesTable.scrollRectToVisible(rulesTable.getCellRect(i, 0, true));
-                break;
-              }
-            }
-          }
-        } catch (Exception ignored) {
-        }
-      });
-    };
+                  if (selectedId != null) {
+                    for (int i = 0; i < rulesModel.getRowCount(); i++) {
+                      FilterRule r = rulesModel.ruleAt(i);
+                      if (r != null && selectedId.equals(r.id())) {
+                        rulesTable.getSelectionModel().setSelectionInterval(i, i);
+                        rulesTable.scrollRectToVisible(rulesTable.getCellRect(i, 0, true));
+                        break;
+                      }
+                    }
+                  }
+                } catch (Exception ignored) {
+                }
+              });
+        };
     filterSettingsBus.addListener(rulesListener);
     if (closeables != null) {
       closeables.add(() -> filterSettingsBus.removeListener(rulesListener));
     }
 
     // Persist enabled/disabled toggles from the table immediately.
-    rulesModel.addTableModelListener(ev -> {
-      try {
-        if (ev.getColumn() != 0) return;
-        int row = ev.getFirstRow();
-        if (row < 0) return;
-        FilterRule edited = rulesModel.ruleAt(row);
-        if (edited == null) return;
+    rulesModel.addTableModelListener(
+        ev -> {
+          try {
+            if (ev.getColumn() != 0) return;
+            int row = ev.getFirstRow();
+            if (row < 0) return;
+            FilterRule edited = rulesModel.ruleAt(row);
+            if (edited == null) return;
 
-        FilterSettings snap = filterSettingsBus.get();
-        if (snap == null) return;
+            FilterSettings snap = filterSettingsBus.get();
+            if (snap == null) return;
 
-        java.util.List<FilterRule> nextRules = new java.util.ArrayList<>();
-        boolean replaced = false;
-        if (snap.rules() != null) {
-          for (FilterRule r : snap.rules()) {
-            if (!replaced && r != null && edited.id() != null && edited.id().equals(r.id())) {
-              nextRules.add(edited);
-              replaced = true;
-            } else {
-              nextRules.add(r);
+            java.util.List<FilterRule> nextRules = new java.util.ArrayList<>();
+            boolean replaced = false;
+            if (snap.rules() != null) {
+              for (FilterRule r : snap.rules()) {
+                if (!replaced && r != null && edited.id() != null && edited.id().equals(r.id())) {
+                  nextRules.add(edited);
+                  replaced = true;
+                } else {
+                  nextRules.add(r);
+                }
+              }
             }
+
+            if (!replaced) {
+              // Fallback: replace by index if possible.
+              if (row >= 0 && row < nextRules.size()) {
+                nextRules.set(row, edited);
+                replaced = true;
+              }
+            }
+
+            if (!replaced) {
+              // Better than losing the toggle.
+              nextRules.add(edited);
+            }
+
+            FilterSettings next =
+                new FilterSettings(
+                    snap.filtersEnabledByDefault(),
+                    snap.placeholdersEnabledByDefault(),
+                    snap.placeholdersCollapsedByDefault(),
+                    snap.placeholderMaxPreviewLines(),
+                    snap.placeholderMaxLinesPerRun(),
+                    snap.placeholderTooltipMaxTags(),
+                    snap.historyPlaceholderMaxRunsPerBatch(),
+                    snap.historyPlaceholdersEnabledByDefault(),
+                    nextRules,
+                    snap.overrides());
+
+            filterSettingsBus.set(next);
+            runtimeConfig.rememberFilterRules(next.rules());
+
+            // Best-effort: rebuild active target so changes take effect immediately.
+            try {
+              TargetRef active = targetCoordinator.getActiveTarget();
+              if (active != null) transcriptRebuildService.rebuild(active);
+            } catch (Exception ignored) {
+            }
+          } catch (Exception ignored) {
           }
-        }
-
-        if (!replaced) {
-          // Fallback: replace by index if possible.
-          if (row >= 0 && row < nextRules.size()) {
-            nextRules.set(row, edited);
-            replaced = true;
-          }
-        }
-
-        if (!replaced) {
-          // Better than losing the toggle.
-          nextRules.add(edited);
-        }
-
-        FilterSettings next = new FilterSettings(
-            snap.filtersEnabledByDefault(),
-            snap.placeholdersEnabledByDefault(),
-            snap.placeholdersCollapsedByDefault(),
-            snap.placeholderMaxPreviewLines(),
-            snap.placeholderMaxLinesPerRun(),
-            snap.placeholderTooltipMaxTags(),
-            snap.historyPlaceholderMaxRunsPerBatch(),
-            snap.historyPlaceholdersEnabledByDefault(),
-            nextRules,
-            snap.overrides()
-        );
-
-        filterSettingsBus.set(next);
-        runtimeConfig.rememberFilterRules(next.rules());
-
-        // Best-effort: rebuild active target so changes take effect immediately.
-        try {
-          TargetRef active = targetCoordinator.getActiveTarget();
-          if (active != null) transcriptRebuildService.rebuild(active);
-        } catch (Exception ignored) {
-        }
-      } catch (Exception ignored) {
-      }
-    });
+        });
 
     JButton addRule = new JButton("Add rule...");
     JButton editRule = new JButton("Edit...");
@@ -9036,20 +10092,21 @@ panel.setOpaque(false);
     moveRuleUp.setEnabled(false);
     moveRuleDown.setEnabled(false);
 
-    Runnable refreshRuleButtons = () -> {
-      int row = rulesTable.getSelectedRow();
-      boolean has = row >= 0 && rulesModel.ruleAt(row) != null;
-      editRule.setEnabled(has);
-      deleteRule.setEnabled(has);
+    Runnable refreshRuleButtons =
+        () -> {
+          int row = rulesTable.getSelectedRow();
+          boolean has = row >= 0 && rulesModel.ruleAt(row) != null;
+          editRule.setEnabled(has);
+          deleteRule.setEnabled(has);
 
-      if (!has) {
-        moveRuleUp.setEnabled(false);
-        moveRuleDown.setEnabled(false);
-        return;
-      }
-      moveRuleUp.setEnabled(row > 0);
-      moveRuleDown.setEnabled(row < (rulesModel.getRowCount() - 1));
-    };
+          if (!has) {
+            moveRuleUp.setEnabled(false);
+            moveRuleDown.setEnabled(false);
+            return;
+          }
+          moveRuleUp.setEnabled(row > 0);
+          moveRuleDown.setEnabled(row < (rulesModel.getRowCount() - 1));
+        };
 
     rulesTable.getSelectionModel().addListSelectionListener(e -> refreshRuleButtons.run());
 
@@ -9060,7 +10117,8 @@ panel.setOpaque(false);
 
         RuleRowTransferHandler() {
           try {
-            rowFlavor = new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=java.lang.Integer");
+            rowFlavor =
+                new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=java.lang.Integer");
           } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
           }
@@ -9076,7 +10134,7 @@ panel.setOpaque(false);
           return new Transferable() {
             @Override
             public DataFlavor[] getTransferDataFlavors() {
-              return new DataFlavor[]{rowFlavor};
+              return new DataFlavor[] {rowFlavor};
             }
 
             @Override
@@ -9151,18 +10209,18 @@ panel.setOpaque(false);
           dropModelRow = Math.max(0, Math.min(dropModelRow, nextRules.size()));
           nextRules.add(dropModelRow, moving);
 
-          FilterSettings next = new FilterSettings(
-              snap.filtersEnabledByDefault(),
-              snap.placeholdersEnabledByDefault(),
-              snap.placeholdersCollapsedByDefault(),
-              snap.placeholderMaxPreviewLines(),
-              snap.placeholderMaxLinesPerRun(),
-              snap.placeholderTooltipMaxTags(),
-              snap.historyPlaceholderMaxRunsPerBatch(),
-              snap.historyPlaceholdersEnabledByDefault(),
-              nextRules,
-              snap.overrides()
-          );
+          FilterSettings next =
+              new FilterSettings(
+                  snap.filtersEnabledByDefault(),
+                  snap.placeholdersEnabledByDefault(),
+                  snap.placeholdersCollapsedByDefault(),
+                  snap.placeholderMaxPreviewLines(),
+                  snap.placeholderMaxLinesPerRun(),
+                  snap.placeholderTooltipMaxTags(),
+                  snap.historyPlaceholderMaxRunsPerBatch(),
+                  snap.historyPlaceholdersEnabledByDefault(),
+                  nextRules,
+                  snap.overrides());
 
           filterSettingsBus.set(next);
           runtimeConfig.rememberFilterRules(next.rules());
@@ -9174,17 +10232,18 @@ panel.setOpaque(false);
           }
 
           final int newRow = dropModelRow;
-          SwingUtilities.invokeLater(() -> {
-            try {
-              rulesModel.setRules(next.rules());
-              if (newRow >= 0 && newRow < rulesModel.getRowCount()) {
-                rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
-                rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
-              }
-              refreshRuleButtons.run();
-            } catch (Exception ignored) {
-            }
-          });
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  rulesModel.setRules(next.rules());
+                  if (newRow >= 0 && newRow < rulesModel.getRowCount()) {
+                    rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
+                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
+                  }
+                  refreshRuleButtons.run();
+                } catch (Exception ignored) {
+                }
+              });
 
           return true;
         }
@@ -9195,346 +10254,362 @@ panel.setOpaque(false);
       // best-effort; keep Move up/down buttons as fallback
     }
 
-    Runnable moveSelectedRuleUp = () -> {
-      int row = rulesTable.getSelectedRow();
-      if (row <= 0) return;
+    Runnable moveSelectedRuleUp =
+        () -> {
+          int row = rulesTable.getSelectedRow();
+          if (row <= 0) return;
 
-      int newRow = row - 1;
-      FilterSettings snap = filterSettingsBus.get();
-      if (snap == null || snap.rules() == null) return;
+          int newRow = row - 1;
+          FilterSettings snap = filterSettingsBus.get();
+          if (snap == null || snap.rules() == null) return;
 
-      List<FilterRule> nextRules = new ArrayList<>(snap.rules());
-      if (row >= nextRules.size() || newRow < 0) return;
-      java.util.Collections.swap(nextRules, row, newRow);
+          List<FilterRule> nextRules = new ArrayList<>(snap.rules());
+          if (row >= nextRules.size() || newRow < 0) return;
+          java.util.Collections.swap(nextRules, row, newRow);
 
-      FilterSettings next = new FilterSettings(
-          snap.filtersEnabledByDefault(),
-          snap.placeholdersEnabledByDefault(),
-          snap.placeholdersCollapsedByDefault(),
-          snap.placeholderMaxPreviewLines(),
-          snap.placeholderMaxLinesPerRun(),
-          snap.placeholderTooltipMaxTags(),
-          snap.historyPlaceholderMaxRunsPerBatch(),
-          snap.historyPlaceholdersEnabledByDefault(),
-          nextRules,
-          snap.overrides()
-      );
+          FilterSettings next =
+              new FilterSettings(
+                  snap.filtersEnabledByDefault(),
+                  snap.placeholdersEnabledByDefault(),
+                  snap.placeholdersCollapsedByDefault(),
+                  snap.placeholderMaxPreviewLines(),
+                  snap.placeholderMaxLinesPerRun(),
+                  snap.placeholderTooltipMaxTags(),
+                  snap.historyPlaceholderMaxRunsPerBatch(),
+                  snap.historyPlaceholdersEnabledByDefault(),
+                  nextRules,
+                  snap.overrides());
 
-      filterSettingsBus.set(next);
-      runtimeConfig.rememberFilterRules(next.rules());
+          filterSettingsBus.set(next);
+          runtimeConfig.rememberFilterRules(next.rules());
 
-      try {
-        TargetRef active = targetCoordinator.getActiveTarget();
-        if (active != null) transcriptRebuildService.rebuild(active);
-      } catch (Exception ignored) {
-      }
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null) transcriptRebuildService.rebuild(active);
+          } catch (Exception ignored) {
+          }
 
-      SwingUtilities.invokeLater(() -> {
-        try {
-          rulesModel.setRules(next.rules());
-          rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
-          rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
-          refreshRuleButtons.run();
-        } catch (Exception ignored) {
-        }
-      });
-    };
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  rulesModel.setRules(next.rules());
+                  rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
+                  rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
+                  refreshRuleButtons.run();
+                } catch (Exception ignored) {
+                }
+              });
+        };
 
-    Runnable moveSelectedRuleDown = () -> {
-      int row = rulesTable.getSelectedRow();
-      if (row < 0) return;
-      if (row >= rulesModel.getRowCount() - 1) return;
+    Runnable moveSelectedRuleDown =
+        () -> {
+          int row = rulesTable.getSelectedRow();
+          if (row < 0) return;
+          if (row >= rulesModel.getRowCount() - 1) return;
 
-      int newRow = row + 1;
-      FilterSettings snap = filterSettingsBus.get();
-      if (snap == null || snap.rules() == null) return;
+          int newRow = row + 1;
+          FilterSettings snap = filterSettingsBus.get();
+          if (snap == null || snap.rules() == null) return;
 
-      List<FilterRule> nextRules = new ArrayList<>(snap.rules());
-      if (newRow >= nextRules.size()) return;
-      java.util.Collections.swap(nextRules, row, newRow);
+          List<FilterRule> nextRules = new ArrayList<>(snap.rules());
+          if (newRow >= nextRules.size()) return;
+          java.util.Collections.swap(nextRules, row, newRow);
 
-      FilterSettings next = new FilterSettings(
-          snap.filtersEnabledByDefault(),
-          snap.placeholdersEnabledByDefault(),
-          snap.placeholdersCollapsedByDefault(),
-          snap.placeholderMaxPreviewLines(),
-          snap.placeholderMaxLinesPerRun(),
-          snap.placeholderTooltipMaxTags(),
-          snap.historyPlaceholderMaxRunsPerBatch(),
-          snap.historyPlaceholdersEnabledByDefault(),
-          nextRules,
-          snap.overrides()
-      );
+          FilterSettings next =
+              new FilterSettings(
+                  snap.filtersEnabledByDefault(),
+                  snap.placeholdersEnabledByDefault(),
+                  snap.placeholdersCollapsedByDefault(),
+                  snap.placeholderMaxPreviewLines(),
+                  snap.placeholderMaxLinesPerRun(),
+                  snap.placeholderTooltipMaxTags(),
+                  snap.historyPlaceholderMaxRunsPerBatch(),
+                  snap.historyPlaceholdersEnabledByDefault(),
+                  nextRules,
+                  snap.overrides());
 
-      filterSettingsBus.set(next);
-      runtimeConfig.rememberFilterRules(next.rules());
+          filterSettingsBus.set(next);
+          runtimeConfig.rememberFilterRules(next.rules());
 
-      try {
-        TargetRef active = targetCoordinator.getActiveTarget();
-        if (active != null) transcriptRebuildService.rebuild(active);
-      } catch (Exception ignored) {
-      }
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null) transcriptRebuildService.rebuild(active);
+          } catch (Exception ignored) {
+          }
 
-      SwingUtilities.invokeLater(() -> {
-        try {
-          rulesModel.setRules(next.rules());
-          rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
-          rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
-          refreshRuleButtons.run();
-        } catch (Exception ignored) {
-        }
-      });
-    };
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  rulesModel.setRules(next.rules());
+                  rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
+                  rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
+                  refreshRuleButtons.run();
+                } catch (Exception ignored) {
+                }
+              });
+        };
 
     moveRuleUp.addActionListener(e -> moveSelectedRuleUp.run());
     moveRuleDown.addActionListener(e -> moveSelectedRuleDown.run());
 
-    Runnable openEditRule = () -> {
-      int row = rulesTable.getSelectedRow();
-      if (row < 0) return;
-      FilterRule seed = rulesModel.ruleAt(row);
-      if (seed == null) return;
+    Runnable openEditRule =
+        () -> {
+          int row = rulesTable.getSelectedRow();
+          if (row < 0) return;
+          FilterRule seed = rulesModel.ruleAt(row);
+          if (seed == null) return;
 
-      FilterSettings snap = filterSettingsBus.get();
+          FilterSettings snap = filterSettingsBus.get();
 
-      Set<String> reserved = new HashSet<>();
-      if (snap != null && snap.rules() != null) {
-        for (FilterRule r : snap.rules()) {
-          if (r == null) continue;
-          if (seed.id() != null && seed.id().equals(r.id())) continue;
-          reserved.add(r.nameKey());
-        }
-      }
-
-      var edited = FilterRuleEntryDialog.open(dialog, "Edit Filter Rule", seed, reserved, seed.scopePattern());
-      if (edited.isEmpty()) return;
-
-      List<FilterRule> nextRules = new ArrayList<>();
-      boolean replaced = false;
-      if (snap != null && snap.rules() != null) {
-        for (FilterRule r : snap.rules()) {
-          if (!replaced && r != null && seed.id() != null && seed.id().equals(r.id())) {
-            nextRules.add(edited.get());
-            replaced = true;
-          } else {
-            nextRules.add(r);
-          }
-        }
-      }
-
-      if (!replaced) {
-        // Fallback (should be rare): replace by index if possible.
-        if (row >= 0 && row < nextRules.size()) {
-          nextRules.set(row, edited.get());
-          replaced = true;
-        }
-      }
-
-      // If we still didn't replace, append (better than losing the edit).
-      if (!replaced) nextRules.add(edited.get());
-
-      FilterSettings next = new FilterSettings(
-          snap != null ? snap.filtersEnabledByDefault() : true,
-          snap != null ? snap.placeholdersEnabledByDefault() : true,
-          snap != null ? snap.placeholdersCollapsedByDefault() : true,
-          snap != null ? snap.placeholderMaxPreviewLines() : 3,
-          snap != null ? snap.placeholderMaxLinesPerRun() : 250,
-          snap != null ? snap.placeholderTooltipMaxTags() : 12,
-          snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
-          snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
-          nextRules,
-          snap != null ? snap.overrides() : List.of()
-      );
-
-      filterSettingsBus.set(next);
-      runtimeConfig.rememberFilterRules(next.rules());
-
-      // Rebuild active target so changes take effect immediately.
-      try {
-        TargetRef active = targetCoordinator.getActiveTarget();
-        if (active != null) transcriptRebuildService.rebuild(active);
-      } catch (Exception ignored) {
-      }
-
-      SwingUtilities.invokeLater(() -> {
-        try {
-          rulesModel.setRules(next.rules());
-          // Re-select the edited rule.
-          int idx = -1;
-          for (int i = 0; i < next.rules().size(); i++) {
-            FilterRule r = next.rules().get(i);
-            if (r != null && edited.get().id() != null && edited.get().id().equals(r.id())) {
-              idx = i;
-              break;
+          Set<String> reserved = new HashSet<>();
+          if (snap != null && snap.rules() != null) {
+            for (FilterRule r : snap.rules()) {
+              if (r == null) continue;
+              if (seed.id() != null && seed.id().equals(r.id())) continue;
+              reserved.add(r.nameKey());
             }
           }
-          if (idx < 0) idx = Math.max(0, Math.min(row, rulesModel.getRowCount() - 1));
-          if (idx >= 0 && idx < rulesModel.getRowCount()) {
-            rulesTable.getSelectionModel().setSelectionInterval(idx, idx);
-            rulesTable.scrollRectToVisible(rulesTable.getCellRect(idx, 0, true));
+
+          var edited =
+              FilterRuleEntryDialog.open(
+                  dialog, "Edit Filter Rule", seed, reserved, seed.scopePattern());
+          if (edited.isEmpty()) return;
+
+          List<FilterRule> nextRules = new ArrayList<>();
+          boolean replaced = false;
+          if (snap != null && snap.rules() != null) {
+            for (FilterRule r : snap.rules()) {
+              if (!replaced && r != null && seed.id() != null && seed.id().equals(r.id())) {
+                nextRules.add(edited.get());
+                replaced = true;
+              } else {
+                nextRules.add(r);
+              }
+            }
           }
-          refreshRuleButtons.run();
-        } catch (Exception ignored) {
-        }
-      });
-    };
+
+          if (!replaced) {
+            // Fallback (should be rare): replace by index if possible.
+            if (row >= 0 && row < nextRules.size()) {
+              nextRules.set(row, edited.get());
+              replaced = true;
+            }
+          }
+
+          // If we still didn't replace, append (better than losing the edit).
+          if (!replaced) nextRules.add(edited.get());
+
+          FilterSettings next =
+              new FilterSettings(
+                  snap != null ? snap.filtersEnabledByDefault() : true,
+                  snap != null ? snap.placeholdersEnabledByDefault() : true,
+                  snap != null ? snap.placeholdersCollapsedByDefault() : true,
+                  snap != null ? snap.placeholderMaxPreviewLines() : 3,
+                  snap != null ? snap.placeholderMaxLinesPerRun() : 250,
+                  snap != null ? snap.placeholderTooltipMaxTags() : 12,
+                  snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
+                  snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
+                  nextRules,
+                  snap != null ? snap.overrides() : List.of());
+
+          filterSettingsBus.set(next);
+          runtimeConfig.rememberFilterRules(next.rules());
+
+          // Rebuild active target so changes take effect immediately.
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null) transcriptRebuildService.rebuild(active);
+          } catch (Exception ignored) {
+          }
+
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  rulesModel.setRules(next.rules());
+                  // Re-select the edited rule.
+                  int idx = -1;
+                  for (int i = 0; i < next.rules().size(); i++) {
+                    FilterRule r = next.rules().get(i);
+                    if (r != null
+                        && edited.get().id() != null
+                        && edited.get().id().equals(r.id())) {
+                      idx = i;
+                      break;
+                    }
+                  }
+                  if (idx < 0) idx = Math.max(0, Math.min(row, rulesModel.getRowCount() - 1));
+                  if (idx >= 0 && idx < rulesModel.getRowCount()) {
+                    rulesTable.getSelectionModel().setSelectionInterval(idx, idx);
+                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(idx, 0, true));
+                  }
+                  refreshRuleButtons.run();
+                } catch (Exception ignored) {
+                }
+              });
+        };
 
     editRule.addActionListener(e -> openEditRule.run());
 
-    deleteRule.addActionListener(e -> {
-      int row = rulesTable.getSelectedRow();
-      if (row < 0) return;
-      FilterRule seed = rulesModel.ruleAt(row);
-      if (seed == null) return;
+    deleteRule.addActionListener(
+        e -> {
+          int row = rulesTable.getSelectedRow();
+          if (row < 0) return;
+          FilterRule seed = rulesModel.ruleAt(row);
+          if (seed == null) return;
 
-      int confirm = JOptionPane.showConfirmDialog(
-          dialog,
-          "Delete filter rule '" + seed.name() + "'?",
-          "Delete Filter Rule",
-          JOptionPane.OK_CANCEL_OPTION
-      );
-      if (confirm != JOptionPane.OK_OPTION) return;
+          int confirm =
+              JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Delete filter rule '" + seed.name() + "'?",
+                  "Delete Filter Rule",
+                  JOptionPane.OK_CANCEL_OPTION);
+          if (confirm != JOptionPane.OK_OPTION) return;
 
-      FilterSettings snap = filterSettingsBus.get();
-      List<FilterRule> nextRules = new ArrayList<>();
-      boolean removed = false;
-      if (snap != null && snap.rules() != null) {
-        for (FilterRule r : snap.rules()) {
-          if (!removed && r != null) {
-            if (seed.id() != null && seed.id().equals(r.id())) {
-              removed = true;
-              continue;
+          FilterSettings snap = filterSettingsBus.get();
+          List<FilterRule> nextRules = new ArrayList<>();
+          boolean removed = false;
+          if (snap != null && snap.rules() != null) {
+            for (FilterRule r : snap.rules()) {
+              if (!removed && r != null) {
+                if (seed.id() != null && seed.id().equals(r.id())) {
+                  removed = true;
+                  continue;
+                }
+              }
+              nextRules.add(r);
             }
           }
-          nextRules.add(r);
-        }
-      }
 
-      if (!removed) {
-        // Fallback: remove by index if possible.
-        if (row >= 0 && row < nextRules.size()) {
-          nextRules.remove(row);
-          removed = true;
-        }
-      }
-
-      if (!removed) return;
-
-      FilterSettings next = new FilterSettings(
-          snap != null ? snap.filtersEnabledByDefault() : true,
-          snap != null ? snap.placeholdersEnabledByDefault() : true,
-          snap != null ? snap.placeholdersCollapsedByDefault() : true,
-          snap != null ? snap.placeholderMaxPreviewLines() : 3,
-          snap != null ? snap.placeholderMaxLinesPerRun() : 250,
-          snap != null ? snap.placeholderTooltipMaxTags() : 12,
-          snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
-          snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
-          nextRules,
-          snap != null ? snap.overrides() : List.of()
-      );
-
-      filterSettingsBus.set(next);
-      runtimeConfig.rememberFilterRules(next.rules());
-
-      // Rebuild active target so changes take effect immediately.
-      try {
-        TargetRef active = targetCoordinator.getActiveTarget();
-        if (active != null) transcriptRebuildService.rebuild(active);
-      } catch (Exception ignored) {
-      }
-
-      SwingUtilities.invokeLater(() -> {
-        try {
-          rulesModel.setRules(next.rules());
-          int nextRow = Math.min(row, Math.max(0, rulesModel.getRowCount() - 1));
-          if (rulesModel.getRowCount() > 0) {
-            rulesTable.getSelectionModel().setSelectionInterval(nextRow, nextRow);
-            rulesTable.scrollRectToVisible(rulesTable.getCellRect(nextRow, 0, true));
+          if (!removed) {
+            // Fallback: remove by index if possible.
+            if (row >= 0 && row < nextRules.size()) {
+              nextRules.remove(row);
+              removed = true;
+            }
           }
-          refreshRuleButtons.run();
-        } catch (Exception ignored) {
-        }
-      });
-    });
-    rulesTable.addMouseListener(new java.awt.event.MouseAdapter() {
-      @Override
-      public void mouseClicked(java.awt.event.MouseEvent e) {
-        if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
-          openEditRule.run();
-        }
-      }
-    });
 
-    addRule.addActionListener(e -> {
-      FilterSettings snap = filterSettingsBus.get();
+          if (!removed) return;
 
-      // Suggest a scope based on the currently active target.
-      String suggestedScope = "*";
-      try {
-        TargetRef active = targetCoordinator.getActiveTarget();
-        if (active != null && !active.isUiOnly()) {
-          if (active.isStatus()) {
-            suggestedScope = "*/status";
-          } else {
-            suggestedScope = active.serverId() + "/" + active.target();
+          FilterSettings next =
+              new FilterSettings(
+                  snap != null ? snap.filtersEnabledByDefault() : true,
+                  snap != null ? snap.placeholdersEnabledByDefault() : true,
+                  snap != null ? snap.placeholdersCollapsedByDefault() : true,
+                  snap != null ? snap.placeholderMaxPreviewLines() : 3,
+                  snap != null ? snap.placeholderMaxLinesPerRun() : 250,
+                  snap != null ? snap.placeholderTooltipMaxTags() : 12,
+                  snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
+                  snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
+                  nextRules,
+                  snap != null ? snap.overrides() : List.of());
+
+          filterSettingsBus.set(next);
+          runtimeConfig.rememberFilterRules(next.rules());
+
+          // Rebuild active target so changes take effect immediately.
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null) transcriptRebuildService.rebuild(active);
+          } catch (Exception ignored) {
           }
-        }
-      } catch (Exception ignored) {
-      }
 
-      Set<String> reserved = new HashSet<>();
-      if (snap != null && snap.rules() != null) {
-        for (FilterRule r : snap.rules()) {
-          if (r == null) continue;
-          reserved.add(r.nameKey());
-        }
-      }
-
-      var created = FilterRuleEntryDialog.open(dialog, "Add Filter Rule", null, reserved, suggestedScope);
-      if (created.isEmpty()) return;
-
-      List<FilterRule> nextRules = new ArrayList<>();
-      if (snap != null && snap.rules() != null) {
-        nextRules.addAll(snap.rules());
-      }
-      nextRules.add(created.get());
-
-      FilterSettings next = new FilterSettings(
-          snap != null ? snap.filtersEnabledByDefault() : true,
-          snap != null ? snap.placeholdersEnabledByDefault() : true,
-          snap != null ? snap.placeholdersCollapsedByDefault() : true,
-          snap != null ? snap.placeholderMaxPreviewLines() : 3,
-          snap != null ? snap.placeholderMaxLinesPerRun() : 250,
-          snap != null ? snap.placeholderTooltipMaxTags() : 12,
-          snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
-          snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
-          nextRules,
-          snap != null ? snap.overrides() : List.of()
-      );
-
-      filterSettingsBus.set(next);
-      runtimeConfig.rememberFilterRules(next.rules());
-
-      // Rebuild active target so changes take effect immediately.
-      try {
-        TargetRef active = targetCoordinator.getActiveTarget();
-        if (active != null) transcriptRebuildService.rebuild(active);
-      } catch (Exception ignored) {
-      }
-
-      // Select the newly-added rule.
-      SwingUtilities.invokeLater(() -> {
-        try {
-          rulesModel.setRules(next.rules());
-          int row = rulesModel.getRowCount() - 1;
-          if (row >= 0) {
-            rulesTable.getSelectionModel().setSelectionInterval(row, row);
-            rulesTable.scrollRectToVisible(rulesTable.getCellRect(row, 0, true));
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  rulesModel.setRules(next.rules());
+                  int nextRow = Math.min(row, Math.max(0, rulesModel.getRowCount() - 1));
+                  if (rulesModel.getRowCount() > 0) {
+                    rulesTable.getSelectionModel().setSelectionInterval(nextRow, nextRow);
+                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(nextRow, 0, true));
+                  }
+                  refreshRuleButtons.run();
+                } catch (Exception ignored) {
+                }
+              });
+        });
+    rulesTable.addMouseListener(
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mouseClicked(java.awt.event.MouseEvent e) {
+            if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+              openEditRule.run();
+            }
           }
-        } catch (Exception ignored) {
-        }
-      });
-    });
+        });
+
+    addRule.addActionListener(
+        e -> {
+          FilterSettings snap = filterSettingsBus.get();
+
+          // Suggest a scope based on the currently active target.
+          String suggestedScope = "*";
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null && !active.isUiOnly()) {
+              if (active.isStatus()) {
+                suggestedScope = "*/status";
+              } else {
+                suggestedScope = active.serverId() + "/" + active.target();
+              }
+            }
+          } catch (Exception ignored) {
+          }
+
+          Set<String> reserved = new HashSet<>();
+          if (snap != null && snap.rules() != null) {
+            for (FilterRule r : snap.rules()) {
+              if (r == null) continue;
+              reserved.add(r.nameKey());
+            }
+          }
+
+          var created =
+              FilterRuleEntryDialog.open(dialog, "Add Filter Rule", null, reserved, suggestedScope);
+          if (created.isEmpty()) return;
+
+          List<FilterRule> nextRules = new ArrayList<>();
+          if (snap != null && snap.rules() != null) {
+            nextRules.addAll(snap.rules());
+          }
+          nextRules.add(created.get());
+
+          FilterSettings next =
+              new FilterSettings(
+                  snap != null ? snap.filtersEnabledByDefault() : true,
+                  snap != null ? snap.placeholdersEnabledByDefault() : true,
+                  snap != null ? snap.placeholdersCollapsedByDefault() : true,
+                  snap != null ? snap.placeholderMaxPreviewLines() : 3,
+                  snap != null ? snap.placeholderMaxLinesPerRun() : 250,
+                  snap != null ? snap.placeholderTooltipMaxTags() : 12,
+                  snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
+                  snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
+                  nextRules,
+                  snap != null ? snap.overrides() : List.of());
+
+          filterSettingsBus.set(next);
+          runtimeConfig.rememberFilterRules(next.rules());
+
+          // Rebuild active target so changes take effect immediately.
+          try {
+            TargetRef active = targetCoordinator.getActiveTarget();
+            if (active != null) transcriptRebuildService.rebuild(active);
+          } catch (Exception ignored) {
+          }
+
+          // Select the newly-added rule.
+          SwingUtilities.invokeLater(
+              () -> {
+                try {
+                  rulesModel.setRules(next.rules());
+                  int row = rulesModel.getRowCount() - 1;
+                  if (row >= 0) {
+                    rulesTable.getSelectionModel().setSelectionInterval(row, row);
+                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(row, 0, true));
+                  }
+                } catch (Exception ignored) {
+                }
+              });
+        });
 
     return new FilterControls(
         enabledByDefault,
@@ -9555,12 +10630,12 @@ panel.setOpaque(false);
         editRule,
         deleteRule,
         moveRuleUp,
-        moveRuleDown
-    );
+        moveRuleDown);
   }
 
   private JPanel buildFiltersPanel(FilterControls c) {
-    JPanel panel = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]6[grow,fill]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]6[grow,fill]"));
 
     panel.add(tabTitle("Filters"), "growx, wrap");
     panel.add(sectionTitle("Configuration"), "growx, wmin 0, wrap");
@@ -9598,7 +10673,8 @@ panel.setOpaque(false);
     JPanel panel = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]8[]8[]"));
     panel.setOpaque(false);
 
-    JPanel behavior = captionPanel("Placeholder behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    JPanel behavior =
+        captionPanel("Placeholder behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     behavior.add(c.placeholdersEnabledByDefault, "growx, wrap");
     behavior.add(c.placeholdersCollapsedByDefault, "growx, wrap");
 
@@ -9608,7 +10684,8 @@ panel.setOpaque(false);
     behavior.add(previewRow, "growx, wrap");
     panel.add(behavior, "growx, wmin 0, wrap");
 
-    JPanel limits = captionPanel("Preview and run limits", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    JPanel limits =
+        captionPanel("Preview and run limits", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     JPanel runCapRow = new JPanel(new MigLayout("insets 0", "[][grow]", ""));
     runCapRow.add(new JLabel("Max hidden lines per run:"), "split 2");
     runCapRow.add(c.placeholderMaxLinesPerRun, "w 80!");
@@ -9663,14 +10740,16 @@ panel.setOpaque(false);
     buttons.add(c.addOverride);
     buttons.add(c.removeOverride);
 
-    JPanel overrides = captionPanel("Scope overrides", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    JPanel overrides =
+        captionPanel("Scope overrides", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     overrides.add(
         helpText("Overrides apply by scope pattern. Most specific match wins."),
         "growx, wmin 0, wrap");
     overrides.add(tableScroll, "growx, wrap 8");
     overrides.add(buttons, "growx, wrap 8");
     overrides.add(
-        helpText("Tip: You can also manage overrides via /filter override ... and export with /filter export."),
+        helpText(
+            "Tip: You can also manage overrides via /filter override ... and export with /filter export."),
         "growx, wmin 0, wrap");
     panel.add(overrides, "growx, wmin 0");
 
@@ -9698,7 +10777,8 @@ panel.setOpaque(false);
     rules.add(rulesScroll, "growx, wrap 8");
     rules.add(ruleButtons, "growx, wrap 8");
     rules.add(
-        helpText("Tip: You can also manage rules via /filter add|del|set and export with /filter export."),
+        helpText(
+            "Tip: You can also manage rules via /filter add|del|set and export with /filter export."),
         "growx, wmin 0, wrap");
     panel.add(rules, "growx, wmin 0");
 
@@ -9724,7 +10804,8 @@ panel.setOpaque(false);
     if (tooltipMaxTags < 0) tooltipMaxTags = 0;
     if (tooltipMaxTags > 500) tooltipMaxTags = 500;
 
-    boolean historyPlaceholdersEnabledByDefault = c.historyPlaceholdersEnabledByDefault.isSelected();
+    boolean historyPlaceholdersEnabledByDefault =
+        c.historyPlaceholdersEnabledByDefault.isSelected();
 
     int maxRunsPerBatch = ((Number) c.historyPlaceholderMaxRunsPerBatch.getValue()).intValue();
     if (maxRunsPerBatch < 0) maxRunsPerBatch = 0;
@@ -9732,18 +10813,18 @@ panel.setOpaque(false);
 
     List<FilterScopeOverride> overrides = c.overridesModel.toOverrides();
 
-    FilterSettings next = new FilterSettings(
-        enabledByDefault,
-        placeholdersEnabledByDefault,
-        placeholdersCollapsedByDefault,
-        previewLines,
-        maxLinesPerRun,
-        tooltipMaxTags,
-        maxRunsPerBatch,
-        historyPlaceholdersEnabledByDefault,
-        prev != null ? prev.rules() : List.of(),
-        overrides
-    );
+    FilterSettings next =
+        new FilterSettings(
+            enabledByDefault,
+            placeholdersEnabledByDefault,
+            placeholdersCollapsedByDefault,
+            previewLines,
+            maxLinesPerRun,
+            tooltipMaxTags,
+            maxRunsPerBatch,
+            historyPlaceholdersEnabledByDefault,
+            prev != null ? prev.rules() : List.of(),
+            overrides);
 
     // If nothing changed, don't trigger a transcript rebuild. Pressing OK/Apply on the preferences
     // dialog should be a no-op for the active transcript unless a setting meaningfully changed.
@@ -9758,7 +10839,8 @@ panel.setOpaque(false);
     runtimeConfig.rememberFilterPlaceholderMaxPreviewLines(previewLines);
     runtimeConfig.rememberFilterPlaceholderMaxLinesPerRun(maxLinesPerRun);
     runtimeConfig.rememberFilterPlaceholderTooltipMaxTags(tooltipMaxTags);
-    runtimeConfig.rememberFilterHistoryPlaceholdersEnabledByDefault(historyPlaceholdersEnabledByDefault);
+    runtimeConfig.rememberFilterHistoryPlaceholdersEnabledByDefault(
+        historyPlaceholdersEnabledByDefault);
     runtimeConfig.rememberFilterHistoryPlaceholderMaxRunsPerBatch(maxRunsPerBatch);
     runtimeConfig.rememberFilterOverrides(overrides);
 
@@ -9772,5 +10854,4 @@ panel.setOpaque(false);
       // rebuild is best-effort; never block saving preferences
     }
   }
-
 }
