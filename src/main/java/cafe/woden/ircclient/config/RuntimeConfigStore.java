@@ -38,6 +38,21 @@ public class RuntimeConfigStore {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
 
+  public record ServerTreeBuiltInNodesVisibility(
+      boolean server,
+      boolean notifications,
+      boolean logViewer,
+      boolean monitor,
+      boolean interceptors) {
+    public static ServerTreeBuiltInNodesVisibility defaults() {
+      return new ServerTreeBuiltInNodesVisibility(true, true, true, true, true);
+    }
+
+    public boolean isDefaultVisible() {
+      return server && notifications && logViewer && monitor && interceptors;
+    }
+  }
+
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
@@ -396,6 +411,96 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist UI config to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Reads persisted per-server visibility for built-in server tree nodes.
+   *
+   * <p>Stored under {@code ircafe.ui.serverTree.builtInNodesByServer.<serverId>}.
+   */
+  public synchronized Map<String, ServerTreeBuiltInNodesVisibility> readServerTreeBuiltInNodesVisibility() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object serverTreeObj = ui.get("serverTree");
+      if (!(serverTreeObj instanceof Map<?, ?> serverTree)) return Map.of();
+
+      Object byServerObj = serverTree.get("builtInNodesByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, ServerTreeBuiltInNodesVisibility> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        if (!(entry.getValue() instanceof Map<?, ?> raw)) continue;
+
+        ServerTreeBuiltInNodesVisibility d = ServerTreeBuiltInNodesVisibility.defaults();
+        boolean server = asBoolean(raw.get("server")).orElse(d.server());
+        boolean notifications = asBoolean(raw.get("notifications")).orElse(d.notifications());
+        boolean logViewer = asBoolean(raw.get("logViewer")).orElse(d.logViewer());
+        boolean monitor = asBoolean(raw.get("monitor")).orElse(d.monitor());
+        boolean interceptors = asBoolean(raw.get("interceptors")).orElse(d.interceptors());
+
+        out.put(sid, new ServerTreeBuiltInNodesVisibility(server, notifications, logViewer, monitor, interceptors));
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree built-in node visibility from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists per-server visibility for built-in server tree nodes.
+   *
+   * <p>When all flags are {@code true}, the server entry is removed to keep config compact.
+   */
+  public synchronized void rememberServerTreeBuiltInNodesVisibility(
+      String serverId,
+      ServerTreeBuiltInNodesVisibility visibility) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeBuiltInNodesVisibility v =
+          visibility != null ? visibility : ServerTreeBuiltInNodesVisibility.defaults();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> byServer = getOrCreateMap(serverTree, "builtInNodesByServer");
+
+      if (v.isDefaultVisible()) {
+        byServer.remove(sid);
+      } else {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("server", v.server());
+        out.put("notifications", v.notifications());
+        out.put("logViewer", v.logViewer());
+        out.put("monitor", v.monitor());
+        out.put("interceptors", v.interceptors());
+        byServer.put(sid, out);
+      }
+
+      if (byServer.isEmpty()) serverTree.remove("builtInNodesByServer");
+      if (serverTree.isEmpty()) ui.remove("serverTree");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree built-in node visibility to '{}'", file, e);
     }
   }
 
@@ -971,6 +1076,63 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberPushySettings(PushyProperties settings) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      PushyProperties safe =
+          settings != null ? settings : new PushyProperties(false, null, null, null, null, null, null, null);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> pushy = getOrCreateMap(ircafe, "pushy");
+
+      pushy.put("enabled", safe.enabled());
+
+      String endpoint = Objects.toString(safe.endpoint(), "").trim();
+      if (endpoint.isEmpty() || "https://api.pushy.me/push".equals(endpoint)) {
+        pushy.remove("endpoint");
+      } else {
+        pushy.put("endpoint", endpoint);
+      }
+
+      String apiKey = Objects.toString(safe.apiKey(), "").trim();
+      if (apiKey.isEmpty()) {
+        pushy.remove("apiKey");
+      } else {
+        pushy.put("apiKey", apiKey);
+      }
+
+      String deviceToken = Objects.toString(safe.deviceToken(), "").trim();
+      if (deviceToken.isEmpty()) {
+        pushy.remove("deviceToken");
+      } else {
+        pushy.put("deviceToken", deviceToken);
+      }
+
+      String topic = Objects.toString(safe.topic(), "").trim();
+      if (topic.isEmpty()) {
+        pushy.remove("topic");
+      } else {
+        pushy.put("topic", topic);
+      }
+
+      String titlePrefix = Objects.toString(safe.titlePrefix(), "").trim();
+      if (titlePrefix.isEmpty() || "IRCafe".equals(titlePrefix)) {
+        pushy.remove("titlePrefix");
+      } else {
+        pushy.put("titlePrefix", titlePrefix);
+      }
+
+      pushy.put("connectTimeoutSeconds", safe.connectTimeoutSeconds());
+      pushy.put("readTimeoutSeconds", safe.readTimeoutSeconds());
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist pushy settings to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberNotificationRuleCooldownSeconds(int seconds) {
     try {
       if (file.toString().isBlank()) return;
@@ -1139,6 +1301,48 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized int readAppDiagnosticsAssertjSwingFallbackViolationReportMs(int defaultValue) {
+    try {
+      if (file.toString().isBlank()) return clampAssertjFallbackViolationReportMs(defaultValue);
+      if (!Files.exists(file)) return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Object appObj = ui.get("appDiagnostics");
+      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return clampAssertjFallbackViolationReportMs(defaultValue);
+
+      Object assertjObj = appDiagnostics.get("assertjSwing");
+      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) {
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+      }
+
+      if (!assertjSwing.containsKey("edtFallbackViolationReportMs")) {
+        return clampAssertjFallbackViolationReportMs(defaultValue);
+      }
+      return clampAssertjFallbackViolationReportMs(
+          asInt(assertjSwing.get("edtFallbackViolationReportMs")).orElse(defaultValue));
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFallbackViolationReportMs from '{}'",
+          file,
+          e);
+      return clampAssertjFallbackViolationReportMs(defaultValue);
+    }
+  }
+
+  public synchronized boolean readAppDiagnosticsAssertjSwingIssuePlaySound(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("onIssuePlaySound", defaultValue);
+  }
+
+  public synchronized boolean readAppDiagnosticsAssertjSwingIssueShowNotification(boolean defaultValue) {
+    return readAppDiagnosticsAssertjSwingBoolean("onIssueShowNotification", defaultValue);
+  }
+
   public synchronized boolean readAppDiagnosticsJhiccupEnabled(boolean defaultValue) {
     try {
       if (file.toString().isBlank()) return defaultValue;
@@ -1294,6 +1498,12 @@ public class RuntimeConfigStore {
     return value;
   }
 
+  private static int clampAssertjFallbackViolationReportMs(int value) {
+    if (value < 250) return 250;
+    if (value > 120_000) return 120_000;
+    return value;
+  }
+
   private static List<String> sanitizeArgs(List<String> args) {
     if (args == null || args.isEmpty()) return List.of();
     List<String> out = new ArrayList<>();
@@ -1432,6 +1642,38 @@ public class RuntimeConfigStore {
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtWatchdogPollMs to '{}'", file, e);
     }
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingFallbackViolationReportMs(int ms) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampAssertjFallbackViolationReportMs(ms);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+
+      assertjSwing.put("edtFallbackViolationReportMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist ui.appDiagnostics.assertjSwing.edtFallbackViolationReportMs to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingIssuePlaySound(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean("onIssuePlaySound", enabled, "onIssuePlaySound");
+  }
+
+  public synchronized void rememberAppDiagnosticsAssertjSwingIssueShowNotification(boolean enabled) {
+    rememberAppDiagnosticsAssertjSwingBoolean(
+        "onIssueShowNotification", enabled, "onIssueShowNotification");
   }
 
   public synchronized void rememberAppDiagnosticsJhiccupEnabled(boolean enabled) {

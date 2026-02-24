@@ -3191,10 +3191,7 @@ public void appendChatAt(TargetRef ref,
     if (msgStyle != null) msgStyle.addAttribute(ChatStyles.ATTR_OUTGOING, Boolean.TRUE);
 
     UiSettings s = safeSettings();
-    boolean enabled = s != null && s.clientLineColorEnabled();
-    if (!enabled) return;
-
-    Color c = parseHexColor(s.clientLineColor());
+    Color c = configuredOutgoingLineColor(s);
     if (c == null) return;
 
     if (fromStyle != null) {
@@ -3234,6 +3231,89 @@ public void appendChatAt(TargetRef ref,
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  private Color configuredOutgoingLineColor(UiSettings s) {
+    if (s == null || !s.clientLineColorEnabled()) return null;
+
+    Color requested = parseHexColor(s.clientLineColor());
+    if (requested == null) return null;
+
+    Color bg = transcriptBaseBackground();
+    if (bg == null) return requested;
+    if (contrastRatio(requested, bg) >= 4.5) return requested;
+
+    Color fallback = transcriptBaseForeground();
+    if (fallback == null) fallback = bestTextColorForBackground(bg);
+
+    // Try to preserve as much of the requested hue as possible while meeting transcript readability.
+    for (int i = 1; i <= 24; i++) {
+      double keepRequested = i / 24.0;
+      Color adjusted = blendToward(fallback, requested, keepRequested);
+      if (contrastRatio(adjusted, bg) >= 4.5) return adjusted;
+    }
+
+    if (contrastRatio(fallback, bg) >= 4.5) return fallback;
+    return bestTextColorForBackground(bg);
+  }
+
+  private Color transcriptBaseBackground() {
+    Color bg = StyleConstants.getBackground(styles.message());
+    if (bg == null) bg = javax.swing.UIManager.getColor("TextPane.background");
+    return bg;
+  }
+
+  private Color transcriptBaseForeground() {
+    Color fg = StyleConstants.getForeground(styles.message());
+    if (fg == null) fg = javax.swing.UIManager.getColor("TextPane.foreground");
+    return fg;
+  }
+
+  private static Color blendToward(Color target, Color source, double sourceWeight) {
+    if (target == null) return source;
+    if (source == null) return target;
+
+    double clamped = Math.max(0.0, Math.min(1.0, sourceWeight));
+    double tw = 1.0 - clamped;
+    int r = clampChannel((int) Math.round(target.getRed() * tw + source.getRed() * clamped));
+    int g = clampChannel((int) Math.round(target.getGreen() * tw + source.getGreen() * clamped));
+    int b = clampChannel((int) Math.round(target.getBlue() * tw + source.getBlue() * clamped));
+    return new Color(r, g, b);
+  }
+
+  private static Color bestTextColorForBackground(Color bg) {
+    if (bg == null) return Color.BLACK;
+    double blackContrast = contrastRatio(Color.BLACK, bg);
+    double whiteContrast = contrastRatio(Color.WHITE, bg);
+    return blackContrast >= whiteContrast ? Color.BLACK : Color.WHITE;
+  }
+
+  private static double contrastRatio(Color a, Color b) {
+    if (a == null || b == null) return 0.0;
+    double l1 = relativeLuminance(a);
+    double l2 = relativeLuminance(b);
+    if (l1 < l2) {
+      double t = l1;
+      l1 = l2;
+      l2 = t;
+    }
+    return (l1 + 0.05) / (l2 + 0.05);
+  }
+
+  private static double relativeLuminance(Color c) {
+    double r = srgbToLinear(c.getRed());
+    double g = srgbToLinear(c.getGreen());
+    double b = srgbToLinear(c.getBlue());
+    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  }
+
+  private static double srgbToLinear(int channel) {
+    double v = channel / 255.0;
+    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+
+  private static int clampChannel(int v) {
+    return Math.max(0, Math.min(255, v));
   }
 
   private static Color parseHexColor(String raw) {
@@ -4259,8 +4339,8 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     }
 
     UiSettings s = safeSettings();
-    boolean outgoingColorEnabled = s != null && s.clientLineColorEnabled();
-    Color outgoingColor = outgoingColorEnabled ? parseHexColor(s.clientLineColor()) : null;
+    Color outgoingColor = configuredOutgoingLineColor(s);
+    boolean outgoingColorEnabled = outgoingColor != null;
 
     boolean scheduleNext = false;
     synchronized (this) {
@@ -4310,8 +4390,8 @@ public void appendErrorAt(TargetRef ref, String from, String text, long tsEpochM
     if (doc == null) return;
 
     UiSettings s = safeSettings();
-    boolean outgoingColorEnabled = s != null && s.clientLineColorEnabled();
-    Color outgoingColor = outgoingColorEnabled ? parseHexColor(s.clientLineColor()) : null;
+    Color outgoingColor = configuredOutgoingLineColor(s);
+    boolean outgoingColorEnabled = outgoingColor != null;
 
     int offset = 0;
     while (true) {

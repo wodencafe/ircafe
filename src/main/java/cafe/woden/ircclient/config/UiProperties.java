@@ -333,7 +333,9 @@ if (historyPlaceholdersEnabledByDefault == null) {
       Jhiccup jhiccup
   ) {
     public AppDiagnostics {
-      if (assertjSwing == null) assertjSwing = new AssertjSwing(null, null, null, null);
+      if (assertjSwing == null) {
+        assertjSwing = new AssertjSwing(null, null, null, null, null, null, null);
+      }
       if (jhiccup == null) jhiccup = new Jhiccup(null, null, null, null);
     }
   }
@@ -345,7 +347,10 @@ if (historyPlaceholdersEnabledByDefault == null) {
       Boolean enabled,
       Boolean edtFreezeWatchdogEnabled,
       Integer edtFreezeThresholdMs,
-      Integer edtWatchdogPollMs
+      Integer edtWatchdogPollMs,
+      Integer edtFallbackViolationReportMs,
+      Boolean onIssuePlaySound,
+      Boolean onIssueShowNotification
   ) {
     public AssertjSwing {
       if (enabled == null) enabled = true;
@@ -354,6 +359,12 @@ if (historyPlaceholdersEnabledByDefault == null) {
       if (edtFreezeThresholdMs > 120_000) edtFreezeThresholdMs = 120_000;
       if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 500;
       if (edtWatchdogPollMs > 10_000) edtWatchdogPollMs = 10_000;
+      if (edtFallbackViolationReportMs == null || edtFallbackViolationReportMs < 250) {
+        edtFallbackViolationReportMs = 5000;
+      }
+      if (edtFallbackViolationReportMs > 120_000) edtFallbackViolationReportMs = 120_000;
+      if (onIssuePlaySound == null) onIssuePlaySound = false;
+      if (onIssueShowNotification == null) onIssueShowNotification = false;
     }
   }
 

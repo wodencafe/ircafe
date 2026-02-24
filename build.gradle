@@ -132,6 +132,9 @@ if (System.getenv("CI") == "true") {
 }
 
 dependencies {
+    implementation 'org.jmolecules:jmolecules-ddd:2.0.1'
+    implementation 'org.jmolecules:jmolecules-layered-architecture:2.0.1'
+
     //errorprone 'com.google.errorprone:error_prone_core:2.46.0'
     implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
@@ -185,6 +188,7 @@ dependencies {
     implementation "com.github.hypfvieh:dbus-java-core:5.2.0"
     implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:5.2.0"
 
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

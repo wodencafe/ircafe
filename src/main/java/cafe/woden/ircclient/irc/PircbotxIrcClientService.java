@@ -30,6 +30,7 @@ import java.lang.reflect.Method;
 import java.util.OptionalLong;
 
 import jakarta.annotation.PreDestroy;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +39,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
+@InfrastructureLayer
 public class PircbotxIrcClientService implements IrcClientService {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);

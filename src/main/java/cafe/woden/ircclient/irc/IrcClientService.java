@@ -6,12 +6,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /**
  * Multi-server IRC client API.
  *
  * <p>All operations are explicitly scoped to a server id.
  */
+@ApplicationLayer
 public interface IrcClientService {
   /**
    * Stop reconnect timers and close any active IRC connections immediately.

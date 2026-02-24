@@ -271,10 +271,10 @@ private static final class InsertionLine {
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
-  private volatile boolean showLogViewerNodes = true;
-  private volatile boolean showNotificationsNodes = true;
-  private volatile boolean showMonitorNodes = true;
-  private volatile boolean showInterceptorsNodes = true;
+  private volatile ServerBuiltInNodesVisibility defaultBuiltInNodesVisibility =
+      ServerBuiltInNodesVisibility.defaults();
+  private final Map<String, ServerBuiltInNodesVisibility> builtInNodesVisibilityByServer =
+      new HashMap<>();
   private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
@@ -300,6 +300,7 @@ private static final class InsertionLine {
     this.interceptorStore = interceptorStore;
     this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
+    loadPersistedBuiltInNodesVisibility();
     syncTypingIndicatorStyleFromSettings();
 
     this.connectBtn = connectBtn;
@@ -711,12 +712,12 @@ private static final class InsertionLine {
     tree.addMouseListener(middleDragReorder);
     tree.addMouseMotionListener(middleDragReorder);
     SwingUtilities.invokeLater(() -> {
-      TargetRef first = servers.values().stream()
+      String firstServerId = servers.values().stream()
           .findFirst()
-          .map(sn -> sn.statusRef)
-          .orElse(null);
-      if (first != null) {
-        selectTarget(first);
+          .map(sn -> sn.statusRef.serverId())
+          .orElse("");
+      if (!firstServerId.isBlank()) {
+        selectBestFallbackForServer(firstServerId);
       } else {
         tree.setSelectionPath(defaultSelectionPath());
       }
@@ -734,6 +735,84 @@ private static final class InsertionLine {
     treeScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
     if (treeScroll.getVerticalScrollBar() != null) {
       treeScroll.getVerticalScrollBar().setUnitIncrement(16);
+    }
+  }
+
+  private void loadPersistedBuiltInNodesVisibility() {
+    if (runtimeConfig == null) return;
+    try {
+      Map<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> persisted =
+          runtimeConfig.readServerTreeBuiltInNodesVisibility();
+      if (persisted == null || persisted.isEmpty()) return;
+      for (Map.Entry<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> entry : persisted.entrySet()) {
+        String sid = normalizeServerId(entry.getKey());
+        if (sid.isEmpty()) continue;
+        RuntimeConfigStore.ServerTreeBuiltInNodesVisibility raw = entry.getValue();
+        ServerBuiltInNodesVisibility parsed = (raw == null)
+            ? defaultBuiltInNodesVisibility
+            : new ServerBuiltInNodesVisibility(
+                raw.server(),
+                raw.notifications(),
+                raw.logViewer(),
+                raw.monitor(),
+                raw.interceptors());
+        if (parsed.equals(defaultBuiltInNodesVisibility)) {
+          builtInNodesVisibilityByServer.remove(sid);
+        } else {
+          builtInNodesVisibilityByServer.put(sid, parsed);
+        }
+      }
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static String normalizeServerId(String serverId) {
+    return Objects.toString(serverId, "").trim();
+  }
+
+  private ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return defaultBuiltInNodesVisibility;
+    return builtInNodesVisibilityByServer.getOrDefault(sid, defaultBuiltInNodesVisibility);
+  }
+
+  private void applyBuiltInNodesVisibilityGlobally(
+      java.util.function.UnaryOperator<ServerBuiltInNodesVisibility> mutator) {
+    if (mutator == null) return;
+    Set<String> allServerIds = new HashSet<>(servers.keySet());
+    allServerIds.addAll(builtInNodesVisibilityByServer.keySet());
+    for (String sid : allServerIds) {
+      if (sid == null || sid.isBlank()) continue;
+      ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+      ServerBuiltInNodesVisibility next = Objects.requireNonNullElse(mutator.apply(current), current);
+      applyBuiltInNodesVisibilityForServer(sid, next, true, false);
+    }
+    syncUiLeafVisibility();
+  }
+
+  private void applyBuiltInNodesVisibilityForServer(
+      String serverId,
+      ServerBuiltInNodesVisibility next,
+      boolean persist,
+      boolean syncUi) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || next == null) return;
+
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    if (current.equals(next)) return;
+
+    if (next.equals(defaultBuiltInNodesVisibility)) {
+      builtInNodesVisibilityByServer.remove(sid);
+    } else {
+      builtInNodesVisibilityByServer.put(sid, next);
+    }
+
+    if (persist && runtimeConfig != null) {
+      runtimeConfig.rememberServerTreeBuiltInNodesVisibility(sid, next.toRuntimeVisibility());
+    }
+
+    if (syncUi) {
+      syncUiLeafVisibility();
     }
   }
 
@@ -2265,20 +2344,79 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     return showDccTransfersNodes;
   }
 
+  public boolean isServerNodesVisible() {
+    return defaultBuiltInNodesVisibility.server();
+  }
+
   public boolean isLogViewerNodesVisible() {
-    return showLogViewerNodes;
+    return defaultBuiltInNodesVisibility.logViewer();
   }
 
   public boolean isNotificationsNodesVisible() {
-    return showNotificationsNodes;
+    return defaultBuiltInNodesVisibility.notifications();
   }
 
   public boolean isMonitorNodesVisible() {
-    return showMonitorNodes;
+    return defaultBuiltInNodesVisibility.monitor();
   }
 
   public boolean isInterceptorsNodesVisible() {
-    return showInterceptorsNodes;
+    return defaultBuiltInNodesVisibility.interceptors();
+  }
+
+  public boolean isServerNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).server();
+  }
+
+  public boolean isLogViewerNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).logViewer();
+  }
+
+  public boolean isNotificationsNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).notifications();
+  }
+
+  public boolean isMonitorNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).monitor();
+  }
+
+  public boolean isInterceptorsNodeVisibleForServer(String serverId) {
+    return builtInNodesVisibility(serverId).interceptors();
+  }
+
+  public void setServerNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withServer(visible), true, true);
+  }
+
+  public void setLogViewerNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withLogViewer(visible), true, true);
+  }
+
+  public void setNotificationsNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withNotifications(visible), true, true);
+  }
+
+  public void setMonitorNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withMonitor(visible), true, true);
+  }
+
+  public void setInterceptorsNodeVisibleForServer(String serverId, boolean visible) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, current.withInterceptors(visible), true, true);
   }
 
   public boolean isApplicationRootVisible() {
@@ -2303,40 +2441,42 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
   }
 
+  /**
+   * Back-compat/global toggle for all current and future servers.
+   *
+   * <p>Per-server callers should use {@link #setServerNodeVisibleForServer(String, boolean)}.
+   */
+  public void setServerNodesVisible(boolean visible) {
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withServer(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withServer(visible));
+  }
+
   public void setLogViewerNodesVisible(boolean visible) {
-    boolean old = showLogViewerNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showLogViewerNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.logViewer();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withLogViewer(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withLogViewer(visible));
+    firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, visible);
   }
 
   public void setNotificationsNodesVisible(boolean visible) {
-    boolean old = showNotificationsNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showNotificationsNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_NOTIFICATIONS_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.notifications();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withNotifications(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withNotifications(visible));
+    firePropertyChange(PROP_NOTIFICATIONS_NODES_VISIBLE, old, visible);
   }
 
   public void setMonitorNodesVisible(boolean visible) {
-    boolean old = showMonitorNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showMonitorNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_MONITOR_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.monitor();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withMonitor(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withMonitor(visible));
+    firePropertyChange(PROP_MONITOR_NODES_VISIBLE, old, visible);
   }
 
   public void setInterceptorsNodesVisible(boolean visible) {
-    boolean old = showInterceptorsNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showInterceptorsNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_INTERCEPTORS_NODES_VISIBLE, old, next);
+    boolean old = defaultBuiltInNodesVisibility.interceptors();
+    defaultBuiltInNodesVisibility = defaultBuiltInNodesVisibility.withInterceptors(visible);
+    applyBuiltInNodesVisibilityGlobally(v -> v.withInterceptors(visible));
+    firePropertyChange(PROP_INTERCEPTORS_NODES_VISIBLE, old, visible);
   }
 
   public void setApplicationRootVisible(boolean visible) {
@@ -2578,35 +2718,72 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
 
     for (ServerNodes sn : servers.values()) {
       if (sn == null || sn.serverNode == null) continue;
+      String sid = normalizeServerId(sn.statusRef.serverId());
+      ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
 
-      ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", showNotificationsNodes);
-      ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, showLogViewerNodes);
+      ensureUiLeafVisible(sn, sn.statusRef, statusLeafLabelForServer(sid), vis.server());
+      ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", vis.notifications());
+      ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
-      ensureMonitorGroupVisible(sn, showMonitorNodes);
-      ensureInterceptorsGroupVisible(sn, showInterceptorsNodes);
+      ensureMonitorGroupVisible(sn, vis.monitor());
+      ensureInterceptorsGroupVisible(sn, vis.interceptors());
     }
 
     if (selected != null) {
-      if (selected.isNotifications() && !showNotificationsNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
-      } else if (selected.isLogViewer() && !showLogViewerNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
+      String sid = normalizeServerId(selected.serverId());
+      ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
+      if (selected.isStatus() && !vis.server()) {
+        selectBestFallbackForServer(sid);
+      } else if (selected.isNotifications() && !vis.notifications()) {
+        selectBestFallbackForServer(sid);
+      } else if (selected.isLogViewer() && !vis.logViewer()) {
+        selectBestFallbackForServer(sid);
       } else if (selected.isChannelList() && !showChannelListNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
+        selectBestFallbackForServer(sid);
       } else if (selected.isDccTransfers() && !showDccTransfersNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
-      } else if ((selected.isInterceptorsGroup() || selected.isInterceptor()) && !showInterceptorsNodes) {
-        selectTarget(new TargetRef(selected.serverId(), "status"));
+        selectBestFallbackForServer(sid);
+      } else if (selected.isMonitorGroup() && !vis.monitor()) {
+        selectBestFallbackForServer(sid);
+      } else if ((selected.isInterceptorsGroup() || selected.isInterceptor()) && !vis.interceptors()) {
+        selectBestFallbackForServer(sid);
       }
-    } else if (selectedMonitorGroup && !showMonitorNodes) {
+    } else if (selectedMonitorGroup && !builtInNodesVisibility(selectedGroupServerId).monitor()) {
       if (!selectedGroupServerId.isBlank()) {
-        selectTarget(new TargetRef(selectedGroupServerId, "status"));
+        selectBestFallbackForServer(selectedGroupServerId);
       }
-    } else if (selectedInterceptorsGroup && !showInterceptorsNodes) {
+    } else if (selectedInterceptorsGroup && !builtInNodesVisibility(selectedGroupServerId).interceptors()) {
       if (!selectedGroupServerId.isBlank()) {
-        selectTarget(new TargetRef(selectedGroupServerId, "status"));
+        selectBestFallbackForServer(selectedGroupServerId);
       }
+    }
+  }
+
+  private void selectBestFallbackForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null) return;
+
+    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
+    if (vis.server() && leaves.containsKey(sn.statusRef)) {
+      selectTarget(sn.statusRef);
+      return;
+    }
+    if (vis.notifications() && leaves.containsKey(sn.notificationsRef)) {
+      selectTarget(sn.notificationsRef);
+      return;
+    }
+    if (vis.logViewer() && leaves.containsKey(sn.logViewerRef)) {
+      selectTarget(sn.logViewerRef);
+      return;
+    }
+    if (vis.monitor() && sn.monitorNode != null && sn.monitorNode.getParent() == sn.serverNode) {
+      selectTarget(TargetRef.monitorGroup(sid));
+      return;
+    }
+    if (vis.interceptors() && sn.interceptorsNode != null && sn.interceptorsNode.getParent() == sn.serverNode) {
+      selectTarget(TargetRef.interceptorsGroup(sid));
     }
   }
 
@@ -2772,18 +2949,6 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
     if (ref.isDccTransfers() && !showDccTransfersNodes) {
       setDccTransfersNodesVisible(true);
     }
-    if (ref.isLogViewer() && !showLogViewerNodes) {
-      setLogViewerNodesVisible(true);
-    }
-    if (ref.isNotifications() && !showNotificationsNodes) {
-      setNotificationsNodesVisible(true);
-    }
-    if (ref.isMonitorGroup() && !showMonitorNodes) {
-      setMonitorNodesVisible(true);
-    }
-    if ((ref.isInterceptorsGroup() || ref.isInterceptor()) && !showInterceptorsNodes) {
-      setInterceptorsNodesVisible(true);
-    }
     if (ref.isMonitorGroup() || ref.isInterceptorsGroup()) {
       // This is a built-in grouping node (not a leaf/PM/channel). Selecting it should not
       // create a synthetic leaf (for example "__monitor_group__") under private messages.
@@ -2793,6 +2958,13 @@ private InsertionLine insertionLineForIndex(DefaultMutableTreeNode parent, int i
       }
       return;
     }
+
+    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(ref.serverId());
+    if (ref.isStatus() && !vis.server()) return;
+    if (ref.isNotifications() && !vis.notifications()) return;
+    if (ref.isLogViewer() && !vis.logViewer()) return;
+    if (ref.isMonitorGroup() && !vis.monitor()) return;
+    if ((ref.isInterceptorsGroup() || ref.isInterceptor()) && !vis.interceptors()) return;
     if (leaves.containsKey(ref)) return;
 
     ServerNodes sn = servers.get(ref.serverId());
@@ -3541,25 +3713,29 @@ private void removeServerRoot(String serverId) {
     }
 
     parent.add(serverNode);
+    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(id);
     TargetRef statusRef = new TargetRef(id, "status");
-    DefaultMutableTreeNode statusLeaf = new DefaultMutableTreeNode(new NodeData(statusRef, statusLeafLabelForServer(id)));
-    serverNode.insert(statusLeaf, 0);
-    leaves.put(statusRef, statusLeaf);
+    int nextUiLeafIndex = 0;
+    if (vis.server()) {
+      DefaultMutableTreeNode statusLeaf =
+          new DefaultMutableTreeNode(new NodeData(statusRef, statusLeafLabelForServer(id)));
+      serverNode.insert(statusLeaf, nextUiLeafIndex++);
+      leaves.put(statusRef, statusLeaf);
+    }
 
     TargetRef notificationsRef = TargetRef.notifications(id);
     NodeData notificationsData = new NodeData(notificationsRef, "Notifications");
     if (notificationStore != null) {
       notificationsData.highlightUnread = notificationStore.count(id);
     }
-    DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
-    if (showNotificationsNodes) {
-      serverNode.insert(notificationsLeaf, 1);
+    if (vis.notifications()) {
+      DefaultMutableTreeNode notificationsLeaf = new DefaultMutableTreeNode(notificationsData);
+      serverNode.insert(notificationsLeaf, nextUiLeafIndex++);
       leaves.put(notificationsRef, notificationsLeaf);
     }
 
     TargetRef logViewerRef = TargetRef.logViewer(id);
-    int nextUiLeafIndex = 2;
-    if (showLogViewerNodes) {
+    if (vis.logViewer()) {
       DefaultMutableTreeNode logViewerLeaf = new DefaultMutableTreeNode(new NodeData(logViewerRef, LOG_VIEWER_LABEL));
       serverNode.insert(logViewerLeaf, nextUiLeafIndex++);
       leaves.put(logViewerRef, logViewerLeaf);
@@ -3585,7 +3761,7 @@ private void removeServerRoot(String serverId) {
     }
     NodeData monitorData = new NodeData(null, MONITOR_GROUP_LABEL);
     DefaultMutableTreeNode monitorNode = new DefaultMutableTreeNode(monitorData);
-    if (showMonitorNodes) {
+    if (vis.monitor()) {
       serverNode.add(monitorNode);
     }
 
@@ -3607,7 +3783,7 @@ private void removeServerRoot(String serverId) {
     }
 
     serverNode.add(pmNode);
-    if (showInterceptorsNodes) {
+    if (vis.interceptors()) {
       int interceptorsIdx = serverNode.getIndex(pmNode);
       if (interceptorsIdx < 0) interceptorsIdx = serverNode.getChildCount();
       int monitorIdx = serverNode.getIndex(monitorNode);
@@ -3772,6 +3948,42 @@ private void removeServerRoot(String serverId) {
         case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> GLOW_DOT;
         default -> DOTS;
       };
+    }
+  }
+
+  private record ServerBuiltInNodesVisibility(
+      boolean server,
+      boolean notifications,
+      boolean logViewer,
+      boolean monitor,
+      boolean interceptors) {
+    static ServerBuiltInNodesVisibility defaults() {
+      return new ServerBuiltInNodesVisibility(true, true, true, true, true);
+    }
+
+    ServerBuiltInNodesVisibility withServer(boolean visible) {
+      return new ServerBuiltInNodesVisibility(visible, notifications, logViewer, monitor, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withNotifications(boolean visible) {
+      return new ServerBuiltInNodesVisibility(server, visible, logViewer, monitor, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withLogViewer(boolean visible) {
+      return new ServerBuiltInNodesVisibility(server, notifications, visible, monitor, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withMonitor(boolean visible) {
+      return new ServerBuiltInNodesVisibility(server, notifications, logViewer, visible, interceptors);
+    }
+
+    ServerBuiltInNodesVisibility withInterceptors(boolean visible) {
+      return new ServerBuiltInNodesVisibility(server, notifications, logViewer, monitor, visible);
+    }
+
+    RuntimeConfigStore.ServerTreeBuiltInNodesVisibility toRuntimeVisibility() {
+      return new RuntimeConfigStore.ServerTreeBuiltInNodesVisibility(
+          server, notifications, logViewer, monitor, interceptors);
     }
   }
 

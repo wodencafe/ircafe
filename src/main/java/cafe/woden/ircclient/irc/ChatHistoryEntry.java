@@ -1,11 +1,13 @@
 package cafe.woden.ircclient.irc;
 
 import java.time.Instant;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /**
  * A single line returned as part of an IRCv3 {@code CHATHISTORY} batch.
  *
  */
+@ValueObject
 public record ChatHistoryEntry(
     Instant at,
     Kind kind,

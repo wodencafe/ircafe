@@ -515,33 +515,77 @@ public class AppMenuBar extends JMenuBar {
     serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, evt ->
         showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
 
-    JCheckBoxMenuItem showLogViewerNodes = new JCheckBoxMenuItem("Show Log Viewer Node");
-    showLogViewerNodes.setSelected(serverTree.isLogViewerNodesVisible());
-    showLogViewerNodes.addActionListener(e ->
-        serverTree.setLogViewerNodesVisible(showLogViewerNodes.isSelected()));
-    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_LOG_VIEWER_NODES_VISIBLE, evt ->
-        showLogViewerNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
-
+    JMenu currentServerNodes = new JMenu("Current Server Nodes");
+    JCheckBoxMenuItem showServerNode = new JCheckBoxMenuItem("Show Server Node");
     JCheckBoxMenuItem showNotificationsNodes = new JCheckBoxMenuItem("Show Notifications Node");
-    showNotificationsNodes.setSelected(serverTree.isNotificationsNodesVisible());
-    showNotificationsNodes.addActionListener(e ->
-        serverTree.setNotificationsNodesVisible(showNotificationsNodes.isSelected()));
-    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_NOTIFICATIONS_NODES_VISIBLE, evt ->
-        showNotificationsNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
-
+    JCheckBoxMenuItem showLogViewerNodes = new JCheckBoxMenuItem("Show Log Viewer Node");
     JCheckBoxMenuItem showMonitorNodes = new JCheckBoxMenuItem("Show Monitor Node");
-    showMonitorNodes.setSelected(serverTree.isMonitorNodesVisible());
-    showMonitorNodes.addActionListener(e ->
-        serverTree.setMonitorNodesVisible(showMonitorNodes.isSelected()));
-    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_MONITOR_NODES_VISIBLE, evt ->
-        showMonitorNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
-
     JCheckBoxMenuItem showInterceptorsNodes = new JCheckBoxMenuItem("Show Interceptors Node");
-    showInterceptorsNodes.setSelected(serverTree.isInterceptorsNodesVisible());
-    showInterceptorsNodes.addActionListener(e ->
-        serverTree.setInterceptorsNodesVisible(showInterceptorsNodes.isSelected()));
-    serverTree.addPropertyChangeListener(ServerTreeDockable.PROP_INTERCEPTORS_NODES_VISIBLE, evt ->
-        showInterceptorsNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+
+    Runnable refreshCurrentServerNodeItems = () -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      boolean hasServer = !sid.isBlank();
+
+      showServerNode.setEnabled(hasServer);
+      showNotificationsNodes.setEnabled(hasServer);
+      showLogViewerNodes.setEnabled(hasServer);
+      showMonitorNodes.setEnabled(hasServer);
+      showInterceptorsNodes.setEnabled(hasServer);
+
+      if (!hasServer) {
+        showServerNode.setSelected(false);
+        showNotificationsNodes.setSelected(false);
+        showLogViewerNodes.setSelected(false);
+        showMonitorNodes.setSelected(false);
+        showInterceptorsNodes.setSelected(false);
+        return;
+      }
+
+      showServerNode.setSelected(serverTree.isServerNodeVisibleForServer(sid));
+      showNotificationsNodes.setSelected(serverTree.isNotificationsNodeVisibleForServer(sid));
+      showLogViewerNodes.setSelected(serverTree.isLogViewerNodeVisibleForServer(sid));
+      showMonitorNodes.setSelected(serverTree.isMonitorNodeVisibleForServer(sid));
+      showInterceptorsNodes.setSelected(serverTree.isInterceptorsNodeVisibleForServer(sid));
+    };
+
+    showServerNode.addActionListener(e -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      if (sid.isBlank()) return;
+      serverTree.setServerNodeVisibleForServer(sid, showServerNode.isSelected());
+    });
+
+    showNotificationsNodes.addActionListener(e -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      if (sid.isBlank()) return;
+      serverTree.setNotificationsNodeVisibleForServer(sid, showNotificationsNodes.isSelected());
+    });
+
+    showLogViewerNodes.addActionListener(e -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      if (sid.isBlank()) return;
+      serverTree.setLogViewerNodeVisibleForServer(sid, showLogViewerNodes.isSelected());
+    });
+
+    showMonitorNodes.addActionListener(e -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      if (sid.isBlank()) return;
+      serverTree.setMonitorNodeVisibleForServer(sid, showMonitorNodes.isSelected());
+    });
+
+    showInterceptorsNodes.addActionListener(e -> {
+      String sid = resolveCurrentServerId(targetCoordinator);
+      if (sid.isBlank()) return;
+      serverTree.setInterceptorsNodeVisibleForServer(sid, showInterceptorsNodes.isSelected());
+    });
+
+    currentServerNodes.add(showServerNode);
+    currentServerNodes.add(showNotificationsNodes);
+    currentServerNodes.add(showLogViewerNodes);
+    currentServerNodes.add(showMonitorNodes);
+    currentServerNodes.add(showInterceptorsNodes);
+    currentServerNodes.addSeparator();
+    currentServerNodes.add(showChannelListNodes);
+    currentServerNodes.add(showDccNodes);
 
     JCheckBoxMenuItem showApplicationRoot = new JCheckBoxMenuItem("Show Application Root");
     showApplicationRoot.setSelected(serverTree.isApplicationRootVisible());
@@ -561,12 +605,7 @@ public class AppMenuBar extends JMenuBar {
     window.addSeparator();
     window.add(resetLayout);
     window.addSeparator();
-    window.add(showChannelListNodes);
-    window.add(showDccNodes);
-    window.add(showLogViewerNodes);
-    window.add(showNotificationsNodes);
-    window.add(showMonitorNodes);
-    window.add(showInterceptorsNodes);
+    window.add(currentServerNodes);
     window.add(showApplicationRoot);
     window.addSeparator();
     window.add(openSelectedNodeDock);
@@ -592,6 +631,19 @@ public class AppMenuBar extends JMenuBar {
     window.add(moveNodeDown);
     window.addSeparator();
     window.add(closeNode);
+
+    window.addMenuListener(new MenuListener() {
+      @Override
+      public void menuSelected(MenuEvent e) {
+        refreshCurrentServerNodeItems.run();
+      }
+
+      @Override
+      public void menuDeselected(MenuEvent e) {}
+
+      @Override
+      public void menuCanceled(MenuEvent e) {}
+    });
 
     // Servers
     JMenu servers = new JMenu("Servers");

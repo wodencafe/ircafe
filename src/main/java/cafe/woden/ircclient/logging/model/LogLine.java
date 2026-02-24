@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.logging.model;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /**
  * A single persisted transcript line.
@@ -8,6 +9,7 @@ import java.util.Objects;
  * <p>This is intentionally UI-facing, not protocol-facing: it represents what IRCafe
  * chose to render for a given target at a point in time.
  */
+@ValueObject
 public record LogLine(
     String serverId,
     String target,

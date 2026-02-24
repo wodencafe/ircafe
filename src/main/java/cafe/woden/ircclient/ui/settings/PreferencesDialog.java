@@ -4,6 +4,7 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
@@ -35,6 +36,8 @@ import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.notify.sound.BuiltInSound;
+import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
+import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
@@ -72,6 +75,7 @@ import java.awt.Toolkit;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.Window;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.ArrayDeque;
@@ -154,6 +158,8 @@ public class PreferencesDialog {
   private final TrayNotificationService trayNotificationService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
+  private final PushySettingsBus pushySettingsBus;
+  private final PushyNotificationService pushyNotificationService;
   private final IrcEventNotificationRulesBus ircEventNotificationRulesBus;
   private final UserCommandAliasesBus userCommandAliasesBus;
   private final NotificationSoundService notificationSoundService;
@@ -179,6 +185,8 @@ public class PreferencesDialog {
                            TrayNotificationService trayNotificationService,
                            GnomeDbusNotificationBackend gnomeDbusBackend,
                            NotificationSoundSettingsBus notificationSoundSettingsBus,
+                           PushySettingsBus pushySettingsBus,
+                           PushyNotificationService pushyNotificationService,
                            IrcEventNotificationRulesBus ircEventNotificationRulesBus,
                            UserCommandAliasesBus userCommandAliasesBus,
                            NotificationSoundService notificationSoundService,
@@ -201,6 +209,8 @@ public class PreferencesDialog {
     this.trayNotificationService = trayNotificationService;
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
+    this.pushySettingsBus = pushySettingsBus;
+    this.pushyNotificationService = pushyNotificationService;
     this.ircEventNotificationRulesBus = ircEventNotificationRulesBus;
     this.userCommandAliasesBus = userCommandAliasesBus;
     this.notificationSoundService = notificationSoundService;
@@ -553,7 +563,10 @@ public class PreferencesDialog {
     NotificationSoundSettings soundSettings = notificationSoundSettingsBus != null
         ? notificationSoundSettingsBus.get()
         : new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
-    TrayControls trayControls = buildTrayControls(current, soundSettings);
+    PushyProperties pushySettings = pushySettingsBus != null
+        ? pushySettingsBus.get()
+        : new PushyProperties(false, null, null, null, null, null, null, null);
+    TrayControls trayControls = buildTrayControls(current, soundSettings, pushySettings, closeables);
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
@@ -761,6 +774,50 @@ public class PreferencesDialog {
         trayNotificationSoundUseCustomV = false;
       }
 
+      boolean pushyEnabledV = trayControls.pushyEnabled.isSelected();
+      String pushyEndpointV = Objects.toString(trayControls.pushyEndpoint.getText(), "").trim();
+      String pushyApiKeyV = new String(trayControls.pushyApiKey.getPassword()).trim();
+      PushyTargetMode pushyTargetModeV =
+          trayControls.pushyTargetMode.getSelectedItem() instanceof PushyTargetMode mode
+              ? mode
+              : PushyTargetMode.DEVICE_TOKEN;
+      String pushyTargetValueV = Objects.toString(trayControls.pushyTargetValue.getText(), "").trim();
+      String pushyTitlePrefixV = Objects.toString(trayControls.pushyTitlePrefix.getText(), "").trim();
+      int pushyConnectTimeoutSecondsV =
+          ((Number) trayControls.pushyConnectTimeoutSeconds.getValue()).intValue();
+      int pushyReadTimeoutSecondsV =
+          ((Number) trayControls.pushyReadTimeoutSeconds.getValue()).intValue();
+
+      String pushyValidationErrorV =
+          validatePushyInputs(pushyEnabledV, pushyEndpointV, pushyApiKeyV, pushyTargetModeV, pushyTargetValueV);
+      if (pushyValidationErrorV != null) {
+        JOptionPane.showMessageDialog(
+            dialog,
+            pushyValidationErrorV,
+            "Invalid Pushy settings",
+            JOptionPane.ERROR_MESSAGE);
+        return;
+      }
+
+      String pushyDeviceTokenV =
+          pushyTargetModeV == PushyTargetMode.DEVICE_TOKEN && !pushyTargetValueV.isBlank()
+              ? pushyTargetValueV
+              : null;
+      String pushyTopicV =
+          pushyTargetModeV == PushyTargetMode.TOPIC && !pushyTargetValueV.isBlank()
+              ? pushyTargetValueV
+              : null;
+
+      PushyProperties pushyNext = new PushyProperties(
+          pushyEnabledV,
+          pushyEndpointV.isBlank() ? null : pushyEndpointV,
+          pushyApiKeyV.isBlank() ? null : pushyApiKeyV,
+          pushyDeviceTokenV,
+          pushyTopicV,
+          pushyTitlePrefixV.isBlank() ? null : pushyTitlePrefixV,
+          pushyConnectTimeoutSecondsV,
+          pushyReadTimeoutSecondsV);
+
       boolean timestampsEnabledV = timestamps.enabled.isSelected();
       boolean timestampsIncludeChatMessagesV = timestamps.includeChatMessages.isSelected();
       boolean timestampsIncludePresenceMessagesV = timestamps.includePresenceMessages.isSelected();
@@ -944,6 +1001,17 @@ public class PreferencesDialog {
           ((Number) diagnostics.assertjSwingWatchdogPollMs.getValue()).intValue();
       if (diagnosticsAssertjSwingWatchdogPollMsV < 100) diagnosticsAssertjSwingWatchdogPollMsV = 100;
       if (diagnosticsAssertjSwingWatchdogPollMsV > 10_000) diagnosticsAssertjSwingWatchdogPollMsV = 10_000;
+      int diagnosticsAssertjSwingFallbackViolationReportMsV =
+          ((Number) diagnostics.assertjSwingFallbackViolationReportMs.getValue()).intValue();
+      if (diagnosticsAssertjSwingFallbackViolationReportMsV < 250) {
+        diagnosticsAssertjSwingFallbackViolationReportMsV = 250;
+      }
+      if (diagnosticsAssertjSwingFallbackViolationReportMsV > 120_000) {
+        diagnosticsAssertjSwingFallbackViolationReportMsV = 120_000;
+      }
+      boolean diagnosticsAssertjSwingOnIssuePlaySoundV = diagnostics.assertjSwingOnIssuePlaySound.isSelected();
+      boolean diagnosticsAssertjSwingOnIssueShowNotificationV =
+          diagnostics.assertjSwingOnIssueShowNotification.isSelected();
       boolean diagnosticsJhiccupEnabledV = diagnostics.jhiccupEnabled.isSelected();
       String diagnosticsJhiccupJarPathV =
           Objects.toString(diagnostics.jhiccupJarPath.getText(), "").trim();
@@ -961,6 +1029,12 @@ public class PreferencesDialog {
                   != diagnosticsAssertjSwingFreezeThresholdMsV
               || runtimeConfig.readAppDiagnosticsAssertjSwingWatchdogPollMs(500)
                   != diagnosticsAssertjSwingWatchdogPollMsV
+              || runtimeConfig.readAppDiagnosticsAssertjSwingFallbackViolationReportMs(5000)
+                  != diagnosticsAssertjSwingFallbackViolationReportMsV
+              || runtimeConfig.readAppDiagnosticsAssertjSwingIssuePlaySound(false)
+                  != diagnosticsAssertjSwingOnIssuePlaySoundV
+              || runtimeConfig.readAppDiagnosticsAssertjSwingIssueShowNotification(false)
+                  != diagnosticsAssertjSwingOnIssueShowNotificationV
               || runtimeConfig.readAppDiagnosticsJhiccupEnabled(false) != diagnosticsJhiccupEnabledV
               || !Objects.equals(
                   runtimeConfig.readAppDiagnosticsJhiccupJarPath(""), diagnosticsJhiccupJarPathV)
@@ -1088,6 +1162,10 @@ public class PreferencesDialog {
       runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
       runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
       runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+      if (pushySettingsBus != null) {
+        pushySettingsBus.set(pushyNext);
+      }
+      runtimeConfig.rememberPushySettings(pushyNext);
 
       if (trayService != null) {
         trayService.applySettings();
@@ -1157,6 +1235,12 @@ public class PreferencesDialog {
           diagnosticsAssertjSwingFreezeThresholdMsV);
       runtimeConfig.rememberAppDiagnosticsAssertjSwingWatchdogPollMs(
           diagnosticsAssertjSwingWatchdogPollMsV);
+      runtimeConfig.rememberAppDiagnosticsAssertjSwingFallbackViolationReportMs(
+          diagnosticsAssertjSwingFallbackViolationReportMsV);
+      runtimeConfig.rememberAppDiagnosticsAssertjSwingIssuePlaySound(
+          diagnosticsAssertjSwingOnIssuePlaySoundV);
+      runtimeConfig.rememberAppDiagnosticsAssertjSwingIssueShowNotification(
+          diagnosticsAssertjSwingOnIssueShowNotificationV);
       runtimeConfig.rememberAppDiagnosticsJhiccupEnabled(diagnosticsJhiccupEnabledV);
       runtimeConfig.rememberAppDiagnosticsJhiccupJarPath(diagnosticsJhiccupJarPathV);
       runtimeConfig.rememberAppDiagnosticsJhiccupJavaCommand(diagnosticsJhiccupJavaCommandRawV);
@@ -2379,9 +2463,16 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
   }
 
 
-  private TrayControls buildTrayControls(UiSettings current, NotificationSoundSettings soundSettings) {
+  private TrayControls buildTrayControls(
+      UiSettings current,
+      NotificationSoundSettings soundSettings,
+      PushyProperties pushySettings,
+      List<AutoCloseable> closeables) {
     if (soundSettings == null) {
       soundSettings = new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
+    }
+    if (pushySettings == null) {
+      pushySettings = new PushyProperties(false, null, null, null, null, null, null, null);
     }
     JCheckBox enabled = new JCheckBox("Enable system tray icon", current.trayEnabled());
     JCheckBox closeToTray = new JCheckBox("Close button hides to tray instead of exiting", current.trayCloseToTray());
@@ -2534,6 +2625,168 @@ private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
       }
     });
 
+    JCheckBox pushyEnabled = new JCheckBox(
+        "Forward matched IRC event notifications to Pushy",
+        Boolean.TRUE.equals(pushySettings.enabled()));
+    pushyEnabled.setToolTipText(
+        "Sends notifications for matching IRC event rules to Pushy (device token or topic).");
+
+    JTextField pushyEndpoint =
+        new JTextField(Objects.toString(pushySettings.endpoint(), "https://api.pushy.me/push"));
+    pushyEndpoint.setToolTipText("Pushy API endpoint URL.");
+
+    JPasswordField pushyApiKey =
+        new JPasswordField(Objects.toString(pushySettings.apiKey(), ""));
+    pushyApiKey.setToolTipText("Pushy Secret API key.");
+
+    PushyTargetMode pushyInitialTargetMode =
+        pushySettings.deviceToken() != null && !pushySettings.deviceToken().isBlank()
+            ? PushyTargetMode.DEVICE_TOKEN
+            : PushyTargetMode.TOPIC;
+    String pushyInitialTargetValue =
+        pushyInitialTargetMode == PushyTargetMode.DEVICE_TOKEN
+            ? Objects.toString(pushySettings.deviceToken(), "")
+            : Objects.toString(pushySettings.topic(), "");
+
+    JComboBox<PushyTargetMode> pushyTargetMode = new JComboBox<>(PushyTargetMode.values());
+    pushyTargetMode.setSelectedItem(pushyInitialTargetMode);
+    pushyTargetMode.setToolTipText("Choose destination type for Pushy notifications.");
+
+    JTextField pushyTargetValue = new JTextField(pushyInitialTargetValue);
+    pushyTargetValue.setToolTipText("Destination value for selected target mode.");
+
+    JTextField pushyTitlePrefix =
+        new JTextField(Objects.toString(pushySettings.titlePrefix(), "IRCafe"));
+    pushyTitlePrefix.setToolTipText("Prefix prepended to Pushy notification titles.");
+
+    JSpinner pushyConnectTimeoutSeconds =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Integer.valueOf(pushySettings.connectTimeoutSeconds()),
+                Integer.valueOf(1),
+                Integer.valueOf(30),
+                Integer.valueOf(1)));
+    JSpinner pushyReadTimeoutSeconds =
+        new JSpinner(
+            new SpinnerNumberModel(
+                Integer.valueOf(pushySettings.readTimeoutSeconds()),
+                Integer.valueOf(1),
+                Integer.valueOf(60),
+                Integer.valueOf(1)));
+
+    JButton pushyTest = new JButton("Test Pushy");
+    pushyTest.setToolTipText("Send a real test notification to the configured Pushy destination.");
+    JLabel pushyValidationLabel = new JLabel(" ");
+    pushyValidationLabel.setForeground(errorForeground());
+    JLabel pushyTestStatus = new JLabel(" ");
+
+    Runnable refreshPushyValidation = () -> {
+      PushyTargetMode mode =
+          pushyTargetMode.getSelectedItem() instanceof PushyTargetMode m ? m : PushyTargetMode.DEVICE_TOKEN;
+      String endpoint = Objects.toString(pushyEndpoint.getText(), "").trim();
+      String apiKey = new String(pushyApiKey.getPassword()).trim();
+      String target = Objects.toString(pushyTargetValue.getText(), "").trim();
+      String err = validatePushyInputs(pushyEnabled.isSelected(), endpoint, apiKey, mode, target);
+      if (err == null) {
+        pushyValidationLabel.setText(" ");
+        pushyValidationLabel.setVisible(false);
+        pushyTest.setEnabled(pushyEnabled.isSelected());
+      } else {
+        pushyValidationLabel.setText(err);
+        pushyValidationLabel.setVisible(true);
+        pushyTest.setEnabled(false);
+      }
+    };
+
+    ExecutorService pushyTestExec = VirtualThreads.newSingleThreadExecutor("ircafe-pushy-test");
+    closeables.add(() -> pushyTestExec.shutdownNow());
+    pushyTest.addActionListener(
+        e -> {
+          PushyTargetMode mode =
+              pushyTargetMode.getSelectedItem() instanceof PushyTargetMode m
+                  ? m
+                  : PushyTargetMode.DEVICE_TOKEN;
+          String endpoint = Objects.toString(pushyEndpoint.getText(), "").trim();
+          String apiKey = new String(pushyApiKey.getPassword()).trim();
+          String target = Objects.toString(pushyTargetValue.getText(), "").trim();
+          String titlePrefix = Objects.toString(pushyTitlePrefix.getText(), "").trim();
+          int connectSeconds = ((Number) pushyConnectTimeoutSeconds.getValue()).intValue();
+          int readSeconds = ((Number) pushyReadTimeoutSeconds.getValue()).intValue();
+
+          String err = validatePushyInputs(pushyEnabled.isSelected(), endpoint, apiKey, mode, target);
+          if (err != null) {
+            pushyTestStatus.setText(err);
+            pushyTestStatus.setForeground(errorForeground());
+            return;
+          }
+
+          String deviceToken = mode == PushyTargetMode.DEVICE_TOKEN ? target : null;
+          String topic = mode == PushyTargetMode.TOPIC ? target : null;
+          PushyProperties draft = new PushyProperties(
+              pushyEnabled.isSelected(),
+              endpoint.isBlank() ? null : endpoint,
+              apiKey.isBlank() ? null : apiKey,
+              deviceToken,
+              topic,
+              titlePrefix.isBlank() ? null : titlePrefix,
+              connectSeconds,
+              readSeconds);
+
+          pushyTest.setEnabled(false);
+          pushyTestStatus.setText("Sending test push…");
+          pushyTestStatus.setForeground(UIManager.getColor("Label.foreground"));
+
+          pushyTestExec.submit(
+              () -> {
+                PushyNotificationService.PushResult result =
+                    pushyNotificationService != null
+                        ? pushyNotificationService.sendTestNotification(
+                            draft, "IRCafe Test", "This is a Pushy test notification from IRCafe.")
+                        : PushyNotificationService.PushResult.failed("Pushy service is unavailable.");
+                SwingUtilities.invokeLater(
+                    () -> {
+                      pushyTestStatus.setText(
+                          result.message() == null || result.message().isBlank()
+                              ? (result.success() ? "Push sent." : "Push failed.")
+                              : result.message());
+                      pushyTestStatus.setForeground(
+                          result.success()
+                              ? UIManager.getColor("Label.foreground")
+                              : errorForeground());
+                      refreshPushyValidation.run();
+                    });
+              });
+        });
+
+    Runnable refreshPushyDestinationState = () -> {
+      PushyTargetMode mode =
+          pushyTargetMode.getSelectedItem() instanceof PushyTargetMode m ? m : PushyTargetMode.DEVICE_TOKEN;
+      if (mode == PushyTargetMode.DEVICE_TOKEN) {
+        pushyTargetValue.setToolTipText("Single-device destination token.");
+      } else {
+        pushyTargetValue.setToolTipText("Topic destination for fan-out delivery.");
+      }
+    };
+
+    Runnable refreshPushyState = () -> {
+      boolean en = pushyEnabled.isSelected();
+      pushyEndpoint.setEnabled(en);
+      pushyApiKey.setEnabled(en);
+      pushyTargetMode.setEnabled(en);
+      pushyTargetValue.setEnabled(en);
+      pushyTitlePrefix.setEnabled(en);
+      pushyConnectTimeoutSeconds.setEnabled(en);
+      pushyReadTimeoutSeconds.setEnabled(en);
+      refreshPushyDestinationState.run();
+      refreshPushyValidation.run();
+    };
+    pushyEnabled.addActionListener(e -> refreshPushyState.run());
+    pushyTargetMode.addActionListener(e -> refreshPushyState.run());
+    pushyEndpoint.getDocument().addDocumentListener(new SimpleDocListener(refreshPushyValidation));
+    pushyApiKey.getDocument().addDocumentListener(new SimpleDocListener(refreshPushyValidation));
+    pushyTargetValue.getDocument().addDocumentListener(new SimpleDocListener(refreshPushyValidation));
+    refreshPushyState.run();
+
     Runnable refreshEnabled = () -> {
       boolean en = enabled.isSelected();
       closeToTray.setEnabled(en);
@@ -2672,6 +2925,59 @@ if (base != null) {
       "growx");
 }
 
+JPanel pushyTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
+pushyTab.setOpaque(false);
+
+JPanel pushyBasics = captionPanel(
+    "Pushy integration",
+    "insets 0, fillx, wrap 2",
+    "[right]8[grow,fill]",
+    "[]");
+pushyBasics.add(pushyEnabled, "span 2, growx, wrap");
+pushyBasics.add(new JLabel("Endpoint:"));
+pushyBasics.add(pushyEndpoint, "growx, pushx, wmin 0, wrap");
+pushyBasics.add(new JLabel("API key:"));
+pushyBasics.add(pushyApiKey, "growx, pushx, wmin 0, wrap");
+pushyBasics.add(new JLabel("Title prefix:"));
+pushyBasics.add(pushyTitlePrefix, "growx, pushx, wmin 0, wrap");
+pushyTab.add(pushyBasics, "growx, wmin 0, wrap");
+
+JPanel pushyDestination = captionPanel(
+    "Destination",
+    "insets 0, fillx, wrap 2",
+    "[right]8[grow,fill]",
+    "[]");
+pushyDestination.add(new JLabel("Target mode:"));
+pushyDestination.add(pushyTargetMode, "w 180!, wrap");
+pushyDestination.add(new JLabel("Target value:"));
+pushyDestination.add(pushyTargetValue, "growx, pushx, wmin 0, wrap");
+pushyDestination.add(
+    helpText("Choose a destination type and enter the corresponding value."),
+    "span 2, growx");
+pushyTab.add(pushyDestination, "growx, wmin 0, wrap");
+
+JPanel pushyTimeouts = captionPanel(
+    "Network timeouts",
+    "insets 0, fillx, wrap 4",
+    "[right]8[]20[right]8[]",
+    "[]");
+pushyTimeouts.add(new JLabel("Connect (s):"));
+pushyTimeouts.add(pushyConnectTimeoutSeconds, "w 90!");
+pushyTimeouts.add(new JLabel("Read (s):"));
+pushyTimeouts.add(pushyReadTimeoutSeconds, "w 90!, wrap");
+pushyTab.add(pushyTimeouts, "growx, wmin 0, wrap");
+JPanel pushyActions =
+    captionPanel("Validation & testing", "insets 0, fillx, wrap 2", "[]12[grow,fill]", "[]");
+pushyActions.add(pushyTest, "w 150!");
+pushyActions.add(pushyTestStatus, "growx, wmin 0, wrap");
+pushyActions.add(new JLabel(""));
+pushyActions.add(pushyValidationLabel, "growx, wmin 0");
+pushyTab.add(pushyActions, "growx, wmin 0, wrap");
+pushyTab.add(
+    helpText(
+        "Pushy notifications are triggered by matching IRC event rules in Notifications -> IRC Event Rules."),
+    "growx");
+
 JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
 linuxTab.setOpaque(false);
 JPanel linuxGroup = captionPanel("Linux integration", "insets 0, fillx, wrap 1", "[grow,fill]", "");
@@ -2696,6 +3002,7 @@ JTabbedPane subTabs = new JTabbedPane();
 subTabs.addTab("Tray", padSubTab(trayTab));
 subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
 subTabs.addTab("Sounds", padSubTab(soundsTab));
+subTabs.addTab("Pushy", padSubTab(pushyTab));
 subTabs.addTab("Linux / Advanced", padSubTab(linuxTab));
 
 JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
@@ -2707,7 +3014,47 @@ panel.setOpaque(false);
         linuxDbusActions, notificationBackend, testNotification,
         notificationSoundsEnabled, notificationSoundUseCustom, notificationSoundCustomPath, browseCustomSound, clearCustomSound,
         notificationSound, testSound,
+        pushyEnabled, pushyEndpoint, pushyApiKey, pushyTargetMode, pushyTargetValue, pushyTitlePrefix,
+        pushyConnectTimeoutSeconds, pushyReadTimeoutSeconds, pushyValidationLabel, pushyTest, pushyTestStatus,
         panel);
+  }
+
+  private static String validatePushyInputs(
+      boolean enabled,
+      String endpoint,
+      String apiKey,
+      PushyTargetMode targetMode,
+      String targetValue) {
+    if (!enabled) return null;
+
+    String key = Objects.toString(apiKey, "").trim();
+    if (key.isEmpty()) return "Pushy API key is required.";
+
+    String target = Objects.toString(targetValue, "").trim();
+    if (target.isEmpty()) {
+      return switch (targetMode) {
+        case TOPIC -> "Pushy topic is required.";
+        case DEVICE_TOKEN -> "Pushy device token is required.";
+      };
+    }
+
+    String ep = Objects.toString(endpoint, "").trim();
+    if (!ep.isEmpty() && !isValidPushyEndpoint(ep)) {
+      return "Pushy endpoint must be a valid http(s) URL.";
+    }
+
+    return null;
+  }
+
+  private static boolean isValidPushyEndpoint(String endpoint) {
+    try {
+      URI uri = URI.create(Objects.toString(endpoint, "").trim());
+      String scheme = Objects.toString(uri.getScheme(), "").trim().toLowerCase(Locale.ROOT);
+      String host = Objects.toString(uri.getHost(), "").trim();
+      return ("https".equals(scheme) || "http".equals(scheme)) && !host.isBlank();
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
 
@@ -6155,6 +6502,24 @@ panel.setOpaque(false);
     JSpinner assertjSwingWatchdogPollMs =
         new JSpinner(new SpinnerNumberModel(watchdogPollMs, 100, 10_000, 100));
 
+    int fallbackViolationReportMs =
+        runtimeConfig.readAppDiagnosticsAssertjSwingFallbackViolationReportMs(5000);
+    JSpinner assertjSwingFallbackViolationReportMs =
+        new JSpinner(new SpinnerNumberModel(fallbackViolationReportMs, 250, 120_000, 250));
+
+    JCheckBox assertjSwingOnIssuePlaySound = new JCheckBox("Play sound when an issue is detected");
+    assertjSwingOnIssuePlaySound.setSelected(
+        runtimeConfig.readAppDiagnosticsAssertjSwingIssuePlaySound(false));
+    assertjSwingOnIssuePlaySound.setToolTipText(
+        "Uses the configured tray notification sound when EDT freeze/violation issues are detected.");
+
+    JCheckBox assertjSwingOnIssueShowNotification =
+        new JCheckBox("Show desktop notification when an issue is detected");
+    assertjSwingOnIssueShowNotification.setSelected(
+        runtimeConfig.readAppDiagnosticsAssertjSwingIssueShowNotification(false));
+    assertjSwingOnIssueShowNotification.setToolTipText(
+        "Uses the tray notification pipeline; desktop-notification delivery still follows tray settings.");
+
     JCheckBox jhiccupEnabled = new JCheckBox("Enable jHiccup process integration");
     jhiccupEnabled.setSelected(runtimeConfig.readAppDiagnosticsJhiccupEnabled(false));
     jhiccupEnabled.setToolTipText(
@@ -6181,6 +6546,9 @@ panel.setOpaque(false);
           boolean watchdogEnabled = assertjEnabled && assertjSwingFreezeWatchdogEnabled.isSelected();
           assertjSwingFreezeThresholdMs.setEnabled(watchdogEnabled);
           assertjSwingWatchdogPollMs.setEnabled(watchdogEnabled);
+          assertjSwingFallbackViolationReportMs.setEnabled(assertjEnabled);
+          assertjSwingOnIssuePlaySound.setEnabled(assertjEnabled);
+          assertjSwingOnIssueShowNotification.setEnabled(assertjEnabled);
         };
     assertjSwingEnabled.addActionListener(e -> syncEnabledState.run());
     assertjSwingFreezeWatchdogEnabled.addActionListener(e -> syncEnabledState.run());
@@ -6191,6 +6559,9 @@ panel.setOpaque(false);
         assertjSwingFreezeWatchdogEnabled,
         assertjSwingFreezeThresholdMs,
         assertjSwingWatchdogPollMs,
+        assertjSwingFallbackViolationReportMs,
+        assertjSwingOnIssuePlaySound,
+        assertjSwingOnIssueShowNotification,
         jhiccupEnabled,
         jhiccupJarPath,
         jhiccupJavaCommand,
@@ -6217,7 +6588,7 @@ panel.setOpaque(false);
             "AssertJ Swing / EDT watchdog",
             "insets 0, fillx, wrap 2",
             "[right]10[grow,fill]",
-            "[]4[]4[]4[]");
+            "[]4[]4[]4[]4[]4[]");
     assertjPanel.add(controls.assertjSwingEnabled, "span 2, growx, wmin 0, wrap");
     assertjPanel.add(
         controls.assertjSwingFreezeWatchdogEnabled, "span 2, growx, wmin 0, gapleft 14, wrap");
@@ -6225,8 +6596,15 @@ panel.setOpaque(false);
     assertjPanel.add(controls.assertjSwingFreezeThresholdMs, "w 140!");
     assertjPanel.add(new JLabel("Watchdog poll (ms)"), "gapleft 24");
     assertjPanel.add(controls.assertjSwingWatchdogPollMs, "w 140!");
+    assertjPanel.add(new JLabel("Fallback violation report interval (ms)"), "gapleft 24");
+    assertjPanel.add(controls.assertjSwingFallbackViolationReportMs, "w 140!");
+    assertjPanel.add(controls.assertjSwingOnIssuePlaySound, "span 2, growx, wmin 0, gapleft 24, wrap");
     assertjPanel.add(
-        helpText("Watchdog logs stalls when EDT lag exceeds the threshold."),
+        controls.assertjSwingOnIssueShowNotification, "span 2, growx, wmin 0, gapleft 24, wrap");
+    assertjPanel.add(
+        helpText(
+            "Watchdog logs stalls when EDT lag exceeds the threshold. Fallback interval controls how often "
+                + "off-EDT Swing violations are re-reported."),
         "span 2, gapleft 24, growx, wrap");
     panel.add(assertjPanel, "growx, wmin 0, wrap");
 
@@ -7200,6 +7578,9 @@ panel.setOpaque(false);
       JCheckBox assertjSwingFreezeWatchdogEnabled,
       JSpinner assertjSwingFreezeThresholdMs,
       JSpinner assertjSwingWatchdogPollMs,
+      JSpinner assertjSwingFallbackViolationReportMs,
+      JCheckBox assertjSwingOnIssuePlaySound,
+      JCheckBox assertjSwingOnIssueShowNotification,
       JCheckBox jhiccupEnabled,
       JTextField jhiccupJarPath,
       JTextField jhiccupJavaCommand,
@@ -8148,6 +8529,22 @@ panel.setOpaque(false);
       Runnable applyUiFontEnabledState) {
   }
 
+  private enum PushyTargetMode {
+    DEVICE_TOKEN("Device token"),
+    TOPIC("Topic");
+
+    private final String label;
+
+    PushyTargetMode(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
 
   private record TrayControls(JCheckBox enabled,
                               JCheckBox closeToTray,
@@ -8169,6 +8566,17 @@ panel.setOpaque(false);
                               JButton clearCustomSound,
                               JComboBox<BuiltInSound> notificationSound,
                               JButton testSound,
+                              JCheckBox pushyEnabled,
+                              JTextField pushyEndpoint,
+                              JPasswordField pushyApiKey,
+                              JComboBox<PushyTargetMode> pushyTargetMode,
+                              JTextField pushyTargetValue,
+                              JTextField pushyTitlePrefix,
+                              JSpinner pushyConnectTimeoutSeconds,
+                              JSpinner pushyReadTimeoutSeconds,
+                              JLabel pushyValidationLabel,
+                              JButton pushyTest,
+                              JLabel pushyTestStatus,
                               JPanel panel) {
   }
 

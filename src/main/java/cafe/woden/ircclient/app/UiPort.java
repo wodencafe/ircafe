@@ -5,10 +5,12 @@ import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /**
  * Boundary between application logic and the Swing UI.
  */
+@ApplicationLayer
 public interface UiPort {
   // User-initiated stuff.
   Flowable<TargetRef> targetSelections();

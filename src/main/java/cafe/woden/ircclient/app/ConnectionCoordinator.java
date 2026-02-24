@@ -17,11 +17,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
+@ApplicationLayer
 public class ConnectionCoordinator {
   public enum ConnectivityChange {
     NONE,

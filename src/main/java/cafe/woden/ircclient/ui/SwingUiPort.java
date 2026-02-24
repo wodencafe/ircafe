@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Lazy
+@InterfaceLayer
 public class SwingUiPort implements UiPort {
   private final ServerTreeDockable serverTree;
   private final ChatDockable chat;

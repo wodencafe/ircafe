@@ -45,6 +45,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -53,6 +54,7 @@ import org.springframework.stereotype.Component;
 /** App mediator. */
 @Component
 @Lazy
+@ApplicationLayer
 public class IrcMediator {
   private static final Logger log = LoggerFactory.getLogger(IrcMediator.class);
   private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);

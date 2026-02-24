@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /**
  * Identifies a chat "target" within a server.
@@ -12,6 +13,7 @@ import java.util.Objects;
  *
  * <p>The original {@link #target()} is preserved for display/persistence.
  */
+@ValueObject
 public final class TargetRef {
 
   public static final String NOTIFICATIONS_TARGET = "__notifications__";
