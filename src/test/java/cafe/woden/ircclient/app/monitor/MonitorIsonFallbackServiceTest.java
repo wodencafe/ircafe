@@ -7,10 +7,10 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
-import cafe.woden.ircclient.app.UiSettingsPort;
-import cafe.woden.ircclient.app.UiSettingsSnapshot;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;

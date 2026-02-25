@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
-import cafe.woden.ircclient.app.UiSettingsPort;
-import cafe.woden.ircclient.app.UiSettingsSnapshot;
+import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import java.beans.PropertyChangeListener;
 import java.util.Objects;
 import org.springframework.stereotype.Component;

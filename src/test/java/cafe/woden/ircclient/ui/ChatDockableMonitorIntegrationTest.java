@@ -9,7 +9,7 @@ import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.SpringRuntimeEventsService;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -113,7 +113,7 @@ class ChatDockableMonitorIntegrationTest {
     when(interceptorStore.changes()).thenReturn(Flowable.never());
     DccTransferStore dccTransferStore = new DccTransferStore();
     TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
-    JfrRuntimeEventsService jfrRuntimeEventsService = new JfrRuntimeEventsService();
+    JfrRuntimeEventsService jfrRuntimeEventsService = new JfrRuntimeEventsService(runtimeConfig);
     SpringRuntimeEventsService springRuntimeEventsService = new SpringRuntimeEventsService();
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);

@@ -3,7 +3,7 @@ package cafe.woden.ircclient.logging;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import org.junit.jupiter.api.Test;

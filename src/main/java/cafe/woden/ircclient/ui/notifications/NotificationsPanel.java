@@ -4,7 +4,7 @@ import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.NotificationStore.HighlightEvent;
 import cafe.woden.ircclient.app.NotificationStore.IrcEventRuleEvent;
 import cafe.woden.ircclient.app.NotificationStore.RuleMatchEvent;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.*;
 import java.awt.event.MouseAdapter;

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import java.util.List;
 import java.util.function.Consumer;
 

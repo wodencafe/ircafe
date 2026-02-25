@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.ConnectionState;
+import cafe.woden.ircclient.app.api.ConnectionState;
+import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
+import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -87,6 +89,7 @@ import javax.swing.Timer;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.event.TreeSelectionListener;
+import javax.swing.event.TableModelEvent;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -166,11 +169,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> closeTargetRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
+  private final FlowableProcessor<TargetRef> joinChannelRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<TargetRef> detachChannelRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
   private final FlowableProcessor<TargetRef> clearLogRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests =
+      PublishProcessor.<Ircv3CapabilityToggleRequest>create().toSerialized();
 
   // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("(root)");
@@ -275,9 +287,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final NotificationStore notificationStore;
   private final InterceptorStore interceptorStore;
+  private final JfrRuntimeEventsService jfrRuntimeEventsService;
   private final ServerDialogs serverDialogs;
   private final UiSettingsBus settingsBus;
   private PropertyChangeListener settingsListener;
+  private PropertyChangeListener jfrStateListener;
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile boolean showChannelListNodes = false;
   private volatile boolean showDccTransfersNodes = false;
@@ -299,6 +313,35 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       InterceptorStore interceptorStore,
       UiSettingsBus settingsBus,
       ServerDialogs serverDialogs) {
+    this(
+        serverCatalog,
+        runtimeConfig,
+        logProps,
+        sojuAutoConnect,
+        zncAutoConnect,
+        connectBtn,
+        disconnectBtn,
+        notificationStore,
+        interceptorStore,
+        settingsBus,
+        serverDialogs,
+        null);
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public ServerTreeDockable(
+      ServerCatalog serverCatalog,
+      RuntimeConfigStore runtimeConfig,
+      LogProperties logProps,
+      SojuAutoConnectStore sojuAutoConnect,
+      ZncAutoConnectStore zncAutoConnect,
+      ConnectButton connectBtn,
+      DisconnectButton disconnectBtn,
+      NotificationStore notificationStore,
+      InterceptorStore interceptorStore,
+      UiSettingsBus settingsBus,
+      ServerDialogs serverDialogs,
+      JfrRuntimeEventsService jfrRuntimeEventsService) {
     super(new BorderLayout());
 
     this.serverCatalog = serverCatalog;
@@ -308,6 +351,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.zncAutoConnect = zncAutoConnect;
     this.notificationStore = notificationStore;
     this.interceptorStore = interceptorStore;
+    this.jfrRuntimeEventsService = jfrRuntimeEventsService;
     this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
     loadPersistedBuiltInNodesVisibility();
@@ -391,7 +435,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               if (uo instanceof NodeData nd) return nd.ref;
               return null;
             },
-            ref -> closeTargetRequests.onNext(ref));
+            ref -> {
+              if (ref == null) return;
+              if (ref.isChannel()) {
+                if (!isChannelDetached(ref)) {
+                  detachChannelRequests.onNext(ref);
+                }
+                return;
+              }
+              closeTargetRequests.onNext(ref);
+            });
     installTreeKeyBindings();
 
     treeScroll.setPreferredSize(new Dimension(260, 400));
@@ -460,6 +513,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange);
           };
       this.settingsBus.addListener(settingsListener);
+    }
+    if (this.jfrRuntimeEventsService != null) {
+      jfrStateListener =
+          evt -> {
+            if (!JfrRuntimeEventsService.PROP_STATE.equals(evt.getPropertyName())) return;
+            SwingUtilities.invokeLater(this::refreshApplicationJfrNode);
+          };
+      this.jfrRuntimeEventsService.addStateListener(jfrStateListener);
     }
 
     TreeSelectionListener tsl =
@@ -1387,9 +1448,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         if (!nd.ref.isStatus() && !nd.ref.isUiOnly()) {
           menu.addSeparator();
           if (nd.ref.isChannel()) {
-            JMenuItem leave = new JMenuItem("Leave \"" + nd.label + "\"");
-            leave.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
-            menu.add(leave);
+            boolean detached = isChannelDetached(nd.ref);
+            if (detached) {
+              JMenuItem join = new JMenuItem("Join \"" + nd.label + "\"");
+              join.addActionListener(ev -> joinChannelRequests.onNext(nd.ref));
+              menu.add(join);
+            } else {
+              JMenuItem detach = new JMenuItem("Detach \"" + nd.label + "\"");
+              detach.addActionListener(ev -> detachChannelRequests.onNext(nd.ref));
+              menu.add(detach);
+            }
           } else {
             JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
             close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
@@ -1594,6 +1662,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     NodeData next = new NodeData(prev.ref, nextLabel);
     next.unread = prev.unread;
     next.highlightUnread = prev.highlightUnread;
+    next.detached = prev.detached;
     next.copyTypingFrom(prev);
     if (!Objects.equals(prev.label, nextLabel)) {
       node.setUserObject(next);
@@ -1861,12 +1930,24 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return closeTargetRequests.onBackpressureLatest();
   }
 
+  public Flowable<TargetRef> joinChannelRequests() {
+    return joinChannelRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> detachChannelRequests() {
+    return detachChannelRequests.onBackpressureLatest();
+  }
+
   public Flowable<TargetRef> clearLogRequests() {
     return clearLogRequests.onBackpressureLatest();
   }
 
   public Flowable<TargetRef> openPinnedChatRequests() {
     return openPinnedChatRequests.onBackpressureLatest();
+  }
+
+  public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
+    return ircv3CapabilityToggleRequests.onBackpressureLatest();
   }
 
   /**
@@ -2156,28 +2237,42 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     JDialog dialog = new JDialog(owner, title, Dialog.ModalityType.APPLICATION_MODAL);
     dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
-    JPanel content =
-        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill][]"));
-    content.add(buildNetworkSummaryPanel(sid, meta), "growx");
+    JPanel body =
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+    body.add(buildNetworkSummaryPanel(sid, meta), "growx");
 
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Overview", buildOverviewTab(sid, meta));
-    tabs.addTab("Capabilities (" + meta.ircv3Caps.size() + ")", buildCapabilitiesInfoPanel(meta));
+    tabs.addTab(
+        "Capabilities (" + meta.ircv3Caps.size() + ")", buildCapabilitiesInfoPanel(sid, meta));
     tabs.addTab("ISUPPORT (" + meta.isupport.size() + ")", buildIsupportInfoPanel(meta));
-    content.add(tabs, "grow");
+    body.add(tabs, "grow, push");
+
+    JScrollPane bodyScroll =
+        new JScrollPane(
+            body,
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    bodyScroll.setBorder(BorderFactory.createEmptyBorder());
+    bodyScroll.getVerticalScrollBar().setUnitIncrement(16);
+    bodyScroll.setPreferredSize(new Dimension(820, 470));
 
     JButton close = new JButton("Close");
     close.addActionListener(ev -> dialog.dispose());
     JPanel actions = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill][]", "[]"));
     actions.add(new JLabel(""), "growx");
     actions.add(close, "tag ok");
+
+    JPanel content =
+        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[grow,fill][]"));
+    content.add(bodyScroll, "grow, push");
     content.add(actions, "growx");
 
     dialog.setContentPane(content);
     dialog.getRootPane().setDefaultButton(close);
     dialog.pack();
     int width = Math.max(820, dialog.getWidth());
-    int height = Math.max(620, dialog.getHeight());
+    int height = Math.max(500, Math.min(560, dialog.getHeight()));
     dialog.setSize(width, height);
     dialog.setLocationRelativeTo(owner);
     dialog.setVisible(true);
@@ -2260,36 +2355,79 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return panel;
   }
 
-  private JPanel buildCapabilitiesInfoPanel(ServerRuntimeMetadata meta) {
+  private JPanel buildCapabilitiesInfoPanel(String serverId, ServerRuntimeMetadata meta) {
     JPanel panel =
         new JPanel(
             new MigLayout(
-                "insets 8, fill, wrap 1", "[grow,fill]", "[]6[]6[grow,fill]6[grow,fill]"));
+                "insets 8, fill, wrap 1", "[grow,fill]", "[]6[]6[]6[grow,fill]6[grow,fill]"));
     panel.add(buildCapabilityCountsRow(meta), "growx");
     panel.add(new JLabel(capabilityStatusSummary(meta)), "growx");
+    panel.add(
+        new JLabel("Toggle Requested to send CAP REQ now and persist the startup preference."),
+        "growx");
 
-    if (meta.ircv3Caps.isEmpty()) {
+    TreeMap<String, CapabilityState> sortedObserved = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    sortedObserved.putAll(meta.ircv3Caps);
+    java.util.TreeSet<String> allCapabilities = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    allCapabilities.addAll(sortedObserved.keySet());
+    for (String cap : PircbotxBotFactory.requestableCapabilities()) {
+      String normalized = Objects.toString(cap, "").trim().toLowerCase(java.util.Locale.ROOT);
+      if (!normalized.isEmpty()) allCapabilities.add(normalized);
+    }
+
+    if (allCapabilities.isEmpty()) {
       panel.add(new JLabel("No IRCv3 capabilities observed yet."), "grow");
       panel.add(buildCapabilityTransitionsPanel(meta), "grow");
       return panel;
     }
 
-    TreeMap<String, CapabilityState> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-    sorted.putAll(meta.ircv3Caps);
-    Object[][] rows = new Object[sorted.size()][4];
+    Object[][] rows = new Object[allCapabilities.size()][4];
     int idx = 0;
-    for (Map.Entry<String, CapabilityState> e : sorted.entrySet()) {
-      String capName = e.getKey();
-      CapabilityState st = e.getValue();
+    for (String capName : allCapabilities) {
+      CapabilityState st = sortedObserved.get(capName);
       rows[idx][0] = capName;
-      rows[idx][1] = st == null ? "unknown" : st.label;
-      rows[idx][2] = isCapabilityRequested(capName) ? "yes" : "no";
+      rows[idx][1] = st == null ? "(not seen)" : st.label;
+      rows[idx][2] = isCapabilityRequested(capName);
       rows[idx][3] = fallbackInfoValue(meta.ircv3CapLastSubcommand.get(capName));
       idx++;
     }
 
-    JTable table =
-        buildReadOnlyTable(new String[] {"Capability", "State", "Requested", "Last CAP"}, rows);
+    DefaultTableModel model =
+        new DefaultTableModel(rows, new String[] {"Capability", "State", "Requested", "Last CAP"}) {
+          @Override
+          public boolean isCellEditable(int row, int column) {
+            return column == 2;
+          }
+
+          @Override
+          public Class<?> getColumnClass(int columnIndex) {
+            if (columnIndex == 2) return Boolean.class;
+            return String.class;
+          }
+        };
+    model.addTableModelListener(
+        e -> {
+          if (e == null || e.getType() != TableModelEvent.UPDATE) return;
+          if (e.getColumn() != 2 && e.getColumn() != TableModelEvent.ALL_COLUMNS) return;
+          int from = Math.max(0, e.getFirstRow());
+          int to = Math.max(from, e.getLastRow());
+          for (int row = from; row <= to; row++) {
+            String cap =
+                Objects.toString(model.getValueAt(row, 0), "")
+                    .trim()
+                    .toLowerCase(java.util.Locale.ROOT);
+            if (cap.isEmpty()) continue;
+            boolean enable = Boolean.TRUE.equals(model.getValueAt(row, 2));
+            ircv3CapabilityToggleRequests.onNext(
+                new Ircv3CapabilityToggleRequest(serverId, cap, enable));
+          }
+        });
+
+    JTable table = new JTable(model);
+    table.setFillsViewportHeight(true);
+    table.setAutoCreateRowSorter(true);
+    table.setColumnSelectionAllowed(false);
+    table.getTableHeader().setReorderingAllowed(false);
     JScrollPane scroll = new JScrollPane(table);
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     panel.add(scroll, "grow");
@@ -2899,6 +3037,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return ref.target();
   }
 
+  private boolean isApplicationJfrActive() {
+    if (jfrRuntimeEventsService == null) return true;
+    return jfrRuntimeEventsService.isEnabled();
+  }
+
+  private void refreshApplicationJfrNode() {
+    DefaultMutableTreeNode node = leaves.get(applicationJfrRef);
+    if (node != null) {
+      model.nodeChanged(node);
+      return;
+    }
+    tree.repaint();
+  }
+
   private void syncUiLeafVisibility() {
     TargetRef selected = selectedTargetRef();
     DefaultMutableTreeNode selectedNode =
@@ -3305,6 +3457,27 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!removedAny) {
       model.reload(root);
     }
+  }
+
+  public void setChannelDetached(TargetRef ref, boolean detached) {
+    if (ref == null || !ref.isChannel()) return;
+    ensureNode(ref);
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd)) return;
+    if (nd.detached == detached) return;
+    nd.detached = detached;
+    model.nodeChanged(node);
+  }
+
+  public boolean isChannelDetached(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return false;
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd)) return false;
+    return nd.detached;
   }
 
   private java.util.List<DefaultMutableTreeNode> findTreeNodesByTarget(TargetRef ref) {
@@ -3738,7 +3911,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         return "Diagnostic buffer for jHiccup latency output.";
       }
       if (nd.ref.isApplicationJfr()) {
-        return "Runtime JFR stream and periodic JVM memory/CPU samples.";
+        return isApplicationJfrActive()
+            ? "Runtime JFR diagnostics are active (status gauges + JFR event stream)."
+            : "Runtime JFR diagnostics are disabled. Open the JFR view to enable.";
       }
       if (nd.ref.isApplicationSpring()) {
         return "Spring framework lifecycle and availability event feed.";
@@ -4099,6 +4274,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       NodeData nd = new NodeData(statusRef, label);
       nd.unread = old.unread;
       nd.highlightUnread = old.highlightUnread;
+      nd.detached = old.detached;
       nd.copyTypingFrom(old);
       node.setUserObject(nd);
       model.nodeChanged(node);
@@ -4320,10 +4496,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         Object uo = node.getUserObject();
         if (uo instanceof NodeData nd) {
           setText(nd.toString());
-          if (nd.highlightUnread > 0) {
-            setFont(base.deriveFont(Font.BOLD));
-          } else {
-            setFont(base.deriveFont(Font.PLAIN));
+          boolean detachedChannel = nd.ref != null && nd.ref.isChannel() && nd.detached;
+          int style = nd.highlightUnread > 0 ? Font.BOLD : Font.PLAIN;
+          if (detachedChannel) {
+            style |= Font.ITALIC;
+          }
+          setFont(base.deriveFont(style));
+          if (!sel && detachedChannel) {
+            Color muted = UIManager.getColor("Label.disabledForeground");
+            if (muted == null) muted = UIManager.getColor("Component.disabledForeground");
+            if (muted != null) setForeground(muted);
           }
           if (nd.ref != null && nd.ref.isChannel()) {
             setTreeIcon("channel");
@@ -4341,7 +4523,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
             setTreeIcon("refresh");
           } else if (nd.ref != null && nd.ref.isApplicationJfr()) {
-            setTreeIcon("refresh");
+            boolean active = isApplicationJfrActive();
+            String iconName = active ? "play" : "pause";
+            Palette palette = active ? Palette.TREE_PM_ONLINE : Palette.TREE_DISABLED;
+            Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
+            setIcon(icon);
+            setDisabledIcon(icon);
           } else if (nd.ref != null && nd.ref.isApplicationSpring()) {
             setTreeIcon("theme");
           } else if (nd.ref != null && nd.ref.isApplicationTerminal()) {
@@ -4413,6 +4600,25 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       return c;
     }
 
+    @Override
+    public java.awt.Insets getInsets() {
+      java.awt.Insets insets = super.getInsets();
+      if (!typingIndicatorSlotVisible || insets == null) return insets;
+      return new java.awt.Insets(
+          insets.top,
+          insets.left + typingIndicatorReserveLeftInset(typingIndicatorStyle),
+          insets.bottom,
+          insets.right);
+    }
+
+    @Override
+    public java.awt.Insets getInsets(java.awt.Insets insets) {
+      java.awt.Insets resolved = super.getInsets(insets);
+      if (!typingIndicatorSlotVisible || resolved == null) return resolved;
+      resolved.left = resolved.left + typingIndicatorReserveLeftInset(typingIndicatorStyle);
+      return resolved;
+    }
+
     private boolean isInterceptorEnabled(TargetRef ref) {
       if (ref == null || !ref.isInterceptor()) return true;
       if (interceptorStore == null) return true;
@@ -4437,7 +4643,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         int height = indicatorHeight(style);
         java.awt.Insets insets = getInsets();
         int leftInset = insets != null ? insets.left : 0;
-        int slotWidth = Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, width + 2);
+        int slotWidth = typingIndicatorSlotWidth(style);
         int slotLeft = Math.max(0, leftInset - slotWidth - 1);
         int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
         int y = Math.max(0, (getHeight() - height) / 2);
@@ -4461,6 +4667,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             TYPING_ACTIVITY_DOT_COUNT * TYPING_ACTIVITY_DOT_SIZE
                 + (TYPING_ACTIVITY_DOT_COUNT - 1) * TYPING_ACTIVITY_DOT_GAP;
       };
+    }
+
+    private static int typingIndicatorSlotWidth(TreeTypingIndicatorStyle style) {
+      return Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, indicatorWidth(style) + 2);
+    }
+
+    private static int typingIndicatorReserveLeftInset(TreeTypingIndicatorStyle style) {
+      return typingIndicatorSlotWidth(style) + 1;
     }
 
     private static int indicatorHeight(TreeTypingIndicatorStyle style) {
@@ -4539,6 +4753,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     final String label;
     int unread = 0;
     int highlightUnread = 0;
+    boolean detached = false;
     long typingPulseUntilMs = 0L;
     long typingDoneFadeStartMs = 0L;
 
@@ -4641,6 +4856,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       if (settingsBus != null && settingsListener != null) {
         settingsBus.removeListener(settingsListener);
         settingsListener = null;
+      }
+      if (jfrRuntimeEventsService != null && jfrStateListener != null) {
+        jfrRuntimeEventsService.removeStateListener(jfrStateListener);
+        jfrStateListener = null;
       }
       if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();

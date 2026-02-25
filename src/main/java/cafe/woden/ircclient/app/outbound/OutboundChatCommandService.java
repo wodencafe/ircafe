@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.ConnectionCoordinator;
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.app.state.JoinRoutingState;
@@ -161,8 +161,6 @@ public class OutboundChatCommandService {
     String chan = channel == null ? "" : channel.trim();
     String msg = reason == null ? "" : reason.trim();
 
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
     // If no explicit channel was provided, we can only /part if the active target is a channel.
     TargetRef target;
     if (chan.isEmpty()) {
@@ -180,28 +178,7 @@ public class OutboundChatCommandService {
       }
     }
 
-    // Remove from auto-join for next startup.
-    runtimeConfig.forgetJoinedChannel(target.serverId(), target.target());
-
-    if (!connectionCoordinator.isConnected(target.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      // Still close the local buffer so the UX matches normal /part.
-      ui.closeTarget(target);
-      return;
-    }
-
-    // If we're parting the currently active target, switch back to status first.
-    if (target.equals(at)) {
-      ui.selectTarget(status);
-    }
-
-    disposables.add(
-        irc.partChannel(target.serverId(), target.target(), msg.isBlank() ? null : msg)
-            .subscribe(
-                () -> ui.appendStatus(status, "(part)", "Left " + target.target()),
-                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
-
-    ui.closeTarget(target);
+    targetCoordinator.detachChannel(target, msg);
   }
 
   public void handleConnect(String target) {
@@ -283,11 +260,12 @@ public class OutboundChatCommandService {
       return;
     }
 
-    // Persist the preferred nick for next time.
-    runtimeConfig.rememberNick(at.serverId(), nick);
-
     if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      runtimeConfig.rememberNick(at.serverId(), nick);
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(nick)",
+          "Not connected. Saved preferred nick for next connect.");
       return;
     }
 

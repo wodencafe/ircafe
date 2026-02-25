@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.app.RuntimeJfrService;
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
@@ -27,17 +27,21 @@ import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GradientPaint;
 import java.awt.Insets;
 import java.awt.RenderingHints;
+import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.InputEvent;
@@ -45,6 +49,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
+import java.awt.geom.Arc2D;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -76,6 +81,7 @@ import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
+import javax.swing.border.Border;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
@@ -139,14 +145,18 @@ public class AppMenuBar extends JMenuBar {
   private final JPopupMenu memoryModePopup = new JPopupMenu();
   private final Timer memoryTimer = new Timer(MEMORY_REFRESH_MS, e -> refreshMemoryUsage());
   private MemoryUsageDisplayMode memoryUsageDisplayMode = MemoryUsageDisplayMode.LONG;
+  private final Border memoryButtonDefaultBorder;
+  private final Insets memoryButtonDefaultMargin;
+  private final boolean memoryButtonDefaultContentAreaFilled;
+  private final boolean memoryButtonDefaultOpaque;
   private JDialog memoryDialog;
   private JProgressBar memoryDialogGauge;
+  private MemoryDialGauge memoryDialogDialGauge;
   private JLabel memoryDialogDetails;
   private Popup warningTooltipPopup;
   private Timer warningTooltipHideTimer;
   private long lastWarningAtMs;
   private boolean warningThresholdActive;
-  private int shortMemoryButtonHeightPx = -1;
 
   public AppMenuBar(
       PreferencesDialog preferencesDialog,
@@ -166,7 +176,7 @@ public class AppMenuBar extends JMenuBar {
       ServerTreeDockable serverTree,
       UserListDockable users,
       ActiveInputRouter activeInputRouter,
-      TargetCoordinator targetCoordinator,
+      ActiveTargetPort targetCoordinator,
       ApplicationShutdownCoordinator shutdownCoordinator) {
 
     this.uiProps = uiProps;
@@ -185,6 +195,15 @@ public class AppMenuBar extends JMenuBar {
     memoryButton.setToolTipText("Show JVM memory usage details.");
     memoryButton.addActionListener(e -> openMemoryDialog());
     installMemoryContextMenuTrigger(memoryButton);
+    memoryButtonDefaultBorder = memoryButton.getBorder();
+    Insets defaultMargin = memoryButton.getMargin();
+    memoryButtonDefaultMargin =
+        defaultMargin == null
+            ? new Insets(1, 6, 1, 6)
+            : new Insets(
+                defaultMargin.top, defaultMargin.left, defaultMargin.bottom, defaultMargin.right);
+    memoryButtonDefaultContentAreaFilled = memoryButton.isContentAreaFilled();
+    memoryButtonDefaultOpaque = memoryButton.isOpaque();
 
     memoryMoonButton.setFocusable(false);
     memoryMoonButton.setBorderPainted(false);
@@ -198,7 +217,7 @@ public class AppMenuBar extends JMenuBar {
     memoryIndicator.setStringPainted(false);
     memoryIndicator.setFocusable(false);
     memoryIndicator.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    memoryIndicator.setPreferredSize(new Dimension(74, 14));
+    memoryIndicator.setPreferredSize(new Dimension(86, 18));
     memoryIndicator.setToolTipText("Show JVM memory usage details.");
     memoryIndicator.addMouseListener(
         new MouseAdapter() {
@@ -900,6 +919,9 @@ public class AppMenuBar extends JMenuBar {
   @Override
   public void addNotify() {
     super.addNotify();
+    updateMemoryButtonStyleForCurrentMode();
+    updateMemoryButtonHeightForCurrentMode();
+    updateMemoryIndicatorSizeForCurrentMode();
     if (memoryUsageDisplayMode != MemoryUsageDisplayMode.HIDDEN && !memoryTimer.isRunning()) {
       memoryTimer.start();
     }
@@ -948,6 +970,7 @@ public class AppMenuBar extends JMenuBar {
       }
     }
 
+    updateMemoryButtonStyleForCurrentMode();
     syncMemoryModePopupSelection();
     if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) {
       memoryTimer.stop();
@@ -957,6 +980,7 @@ public class AppMenuBar extends JMenuBar {
       memoryTimer.start();
     }
     updateMemoryButtonHeightForCurrentMode();
+    updateMemoryIndicatorSizeForCurrentMode();
     revalidate();
     repaint();
   }
@@ -965,6 +989,10 @@ public class AppMenuBar extends JMenuBar {
     if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) return;
 
     MemorySnapshot snapshot = readMemorySnapshot();
+    Integer percentUsed =
+        snapshot.maxBytes() > 0
+            ? Math.max(0, Math.min(100, (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes())))
+            : null;
     double usageRatio =
         snapshot.maxBytes() > 0 ? snapshot.usedBytes() / (double) snapshot.maxBytes() : 0d;
     UiSettings currentSettings = settingsBus != null ? settingsBus.get() : null;
@@ -975,15 +1003,9 @@ public class AppMenuBar extends JMenuBar {
 
     String longText =
         snapshot.maxBytes() > 0
-            ? "Mem: " + toMib(snapshot.usedBytes()) + " / " + toMib(snapshot.maxBytes())
-            : "Mem: " + toMib(snapshot.usedBytes());
-    String shortText =
-        snapshot.maxBytes() > 0
-            ? Math.round(snapshot.usedBytes() / (double) MIB)
-                + "/"
-                + Math.round(snapshot.maxBytes() / (double) MIB)
-                + " MiB"
-            : Math.round(snapshot.usedBytes() / (double) MIB) + " MiB";
+            ? "Mem: " + toGib(snapshot.usedBytes()) + " / " + toGib(snapshot.maxBytes())
+            : "Mem: " + toGib(snapshot.usedBytes());
+    String shortText = percentUsed == null ? "n/a" : percentUsed + "%";
     String tooltip =
         longText
             + (snapshot.maxBytes() > 0
@@ -999,18 +1021,17 @@ public class AppMenuBar extends JMenuBar {
     updateMemoryButtonHeightForCurrentMode();
     memoryButton.setToolTipText(tooltip);
 
-    if (snapshot.maxBytes() > 0) {
-      int pct = (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes());
-      pct = Math.max(0, Math.min(100, pct));
+    if (percentUsed != null) {
       memoryIndicator.setIndeterminate(false);
-      memoryIndicator.setValue(pct);
+      memoryIndicator.setValue(percentUsed);
       memoryIndicator.setStringPainted(true);
-      memoryIndicator.setString(pct + "%");
+      memoryIndicator.setString(percentUsed + "%");
     } else {
       memoryIndicator.setIndeterminate(true);
       memoryIndicator.setStringPainted(false);
       memoryIndicator.setString(null);
     }
+    updateMemoryIndicatorSizeForCurrentMode();
     memoryIndicator.setToolTipText(tooltip);
     updateMoonDisplay(snapshot, isNearMax);
 
@@ -1046,6 +1067,8 @@ public class AppMenuBar extends JMenuBar {
 
     memoryDialogGauge = new JProgressBar(0, 100);
     memoryDialogGauge.setStringPainted(true);
+    memoryDialogGauge.setPreferredSize(new Dimension(240, 22));
+    memoryDialogDialGauge = new MemoryDialGauge();
     memoryDialogDetails = new JLabel();
 
     JButton gcButton = new JButton("Run GC");
@@ -1069,18 +1092,23 @@ public class AppMenuBar extends JMenuBar {
     controls.add(gcButton);
     controls.add(closeButton);
 
+    JPanel metrics = new JPanel(new BorderLayout(12, 0));
+    metrics.setOpaque(false);
+    metrics.add(memoryDialogDialGauge, BorderLayout.WEST);
+    metrics.add(memoryDialogDetails, BorderLayout.CENTER);
+
     JPanel content = new JPanel(new BorderLayout(10, 10));
     content.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
     content.add(memoryDialogGauge, BorderLayout.NORTH);
-    content.add(memoryDialogDetails, BorderLayout.CENTER);
+    content.add(metrics, BorderLayout.CENTER);
     content.add(controls, BorderLayout.SOUTH);
 
     memoryDialog.setContentPane(content);
-    memoryDialog.setSize(420, 220);
+    memoryDialog.setSize(520, 280);
   }
 
   private void updateMemoryDialog(MemorySnapshot snapshot) {
-    if (memoryDialogGauge == null || memoryDialogDetails == null) return;
+    if (memoryDialogGauge == null || memoryDialogDialGauge == null || memoryDialogDetails == null) return;
     if (snapshot.maxBytes() > 0) {
       int percent = (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes());
       percent = Math.max(0, Math.min(100, percent));
@@ -1091,6 +1119,7 @@ public class AppMenuBar extends JMenuBar {
       memoryDialogGauge.setIndeterminate(true);
       memoryDialogGauge.setString("max heap unknown");
     }
+    memoryDialogDialGauge.setSnapshot(snapshot);
 
     memoryDialogDetails.setText(
         "<html>"
@@ -1105,6 +1134,9 @@ public class AppMenuBar extends JMenuBar {
             + "<br>"
             + "Max heap: "
             + (snapshot.maxBytes() > 0 ? toMib(snapshot.maxBytes()) : "unknown")
+            + "<br>"
+            + "Usage: "
+            + toPercent(snapshot.usedBytes(), snapshot.maxBytes())
             + "</html>");
   }
 
@@ -1123,6 +1155,11 @@ public class AppMenuBar extends JMenuBar {
   private static String toMib(long bytes) {
     double mib = bytes / (double) MIB;
     return String.format(Locale.ROOT, "%.1f MiB", mib);
+  }
+
+  private static String toGib(long bytes) {
+    double gib = bytes / (double) (1024L * 1024L * 1024L);
+    return String.format(Locale.ROOT, "%.2f GiB", gib);
   }
 
   private static String toPercent(long part, long whole) {
@@ -1262,32 +1299,70 @@ public class AppMenuBar extends JMenuBar {
     return null;
   }
 
+  private void updateMemoryButtonStyleForCurrentMode() {
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.SHORT) {
+      Color border = javax.swing.UIManager.getColor("Component.borderColor");
+      if (border == null) border = javax.swing.UIManager.getColor("Label.disabledForeground");
+      if (border == null) border = new Color(120, 120, 120);
+      memoryButton.setBorder(
+          javax.swing.BorderFactory.createCompoundBorder(
+              javax.swing.BorderFactory.createLineBorder(border),
+              javax.swing.BorderFactory.createEmptyBorder(1, 8, 1, 8)));
+      memoryButton.setMargin(new Insets(1, 8, 1, 8));
+      memoryButton.setContentAreaFilled(false);
+      memoryButton.setOpaque(false);
+      return;
+    }
+
+    memoryButton.setBorder(memoryButtonDefaultBorder);
+    memoryButton.setMargin(
+        new Insets(
+            memoryButtonDefaultMargin.top,
+            memoryButtonDefaultMargin.left,
+            memoryButtonDefaultMargin.bottom,
+            memoryButtonDefaultMargin.right));
+    memoryButton.setContentAreaFilled(memoryButtonDefaultContentAreaFilled);
+    memoryButton.setOpaque(memoryButtonDefaultOpaque);
+  }
+
   private void updateMemoryButtonHeightForCurrentMode() {
     if (memoryUsageDisplayMode != MemoryUsageDisplayMode.SHORT) {
       memoryButton.setPreferredSize(null);
       memoryButton.setMinimumSize(null);
       memoryButton.setMaximumSize(null);
-      shortMemoryButtonHeightPx = -1;
       return;
     }
+
     int barH = targetShortMemoryButtonHeightPx();
-    int width = 120;
-    Dimension pref = memoryButton.getPreferredSize();
-    if (pref != null && pref.width > 0) {
-      width = pref.width;
+    int width = targetShortMemoryButtonWidthPx();
+    Dimension d = new Dimension(width, barH);
+    memoryButton.setPreferredSize(d);
+    memoryButton.setMinimumSize(d);
+    memoryButton.setMaximumSize(d);
+  }
+
+  private int targetShortMemoryButtonWidthPx() {
+    int width = 56;
+    FontMetrics metrics = memoryButton.getFontMetrics(memoryButton.getFont());
+    if (metrics == null) return width;
+    width = Math.max(width, metrics.stringWidth("100%") + 22);
+    String label = Objects.toString(memoryButton.getText(), "");
+    if (!label.isBlank()) {
+      width = Math.max(width, metrics.stringWidth(label) + 22);
     }
-    if (memoryButton.getWidth() > width) {
-      width = memoryButton.getWidth();
+    return width;
+  }
+
+  private void updateMemoryIndicatorSizeForCurrentMode() {
+    int barH = Math.max(18, targetShortMemoryButtonHeightPx() - 2);
+    int width = 86;
+    FontMetrics metrics = memoryIndicator.getFontMetrics(memoryIndicator.getFont());
+    if (metrics != null) {
+      width = Math.max(width, metrics.stringWidth("100%") + 30);
     }
-    if (shortMemoryButtonHeightPx == barH
-        && memoryButton.getPreferredSize() != null
-        && memoryButton.getPreferredSize().height == barH) {
-      return;
-    }
-    memoryButton.setPreferredSize(new Dimension(width, barH));
-    memoryButton.setMinimumSize(new Dimension(40, barH));
-    memoryButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, barH));
-    shortMemoryButtonHeightPx = barH;
+    Dimension d = new Dimension(width, barH);
+    memoryIndicator.setPreferredSize(d);
+    memoryIndicator.setMinimumSize(d);
   }
 
   private int targetShortMemoryButtonHeightPx() {
@@ -1607,7 +1682,7 @@ public class AppMenuBar extends JMenuBar {
   }
 
   private static String resolveSelectedNick(
-      UserListDockable users, TargetCoordinator targetCoordinator) {
+      UserListDockable users, ActiveTargetPort targetCoordinator) {
     String nick = users == null ? "" : Objects.toString(users.selectedNick(), "").trim();
     if (!nick.isEmpty()) return nick;
 
@@ -1618,13 +1693,13 @@ public class AppMenuBar extends JMenuBar {
     return "";
   }
 
-  private static String resolveCurrentChannel(TargetCoordinator targetCoordinator) {
+  private static String resolveCurrentChannel(ActiveTargetPort targetCoordinator) {
     TargetRef at = targetCoordinator == null ? null : targetCoordinator.getActiveTarget();
     if (at == null || !at.isChannel()) return "";
     return Objects.toString(at.target(), "").trim();
   }
 
-  private static String resolveCurrentServerId(TargetCoordinator targetCoordinator) {
+  private static String resolveCurrentServerId(ActiveTargetPort targetCoordinator) {
     TargetRef at = targetCoordinator == null ? null : targetCoordinator.getActiveTarget();
     String sid = at == null ? "" : Objects.toString(at.serverId(), "").trim();
     if (!sid.isEmpty()) return sid;
@@ -1809,6 +1884,107 @@ public class AppMenuBar extends JMenuBar {
         default -> {}
       }
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, aa);
+    }
+  }
+
+  private static final class MemoryDialGauge extends JComponent {
+    private int percentUsed = -1;
+    private long usedBytes;
+    private long maxBytes;
+
+    private MemoryDialGauge() {
+      setOpaque(false);
+      setPreferredSize(new Dimension(176, 176));
+      setMinimumSize(new Dimension(150, 150));
+      setToolTipText("Heap usage gauge");
+    }
+
+    private void setSnapshot(MemorySnapshot snapshot) {
+      if (snapshot == null) {
+        percentUsed = -1;
+        usedBytes = 0L;
+        maxBytes = 0L;
+        repaint();
+        return;
+      }
+      usedBytes = Math.max(0L, snapshot.usedBytes());
+      maxBytes = Math.max(0L, snapshot.maxBytes());
+      if (maxBytes > 0L) {
+        percentUsed = (int) Math.round((usedBytes * 100.0d) / maxBytes);
+        percentUsed = Math.max(0, Math.min(100, percentUsed));
+      } else {
+        percentUsed = -1;
+      }
+      repaint();
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+      super.paintComponent(g);
+      if (!(g instanceof Graphics2D g2)) return;
+
+      Object oldAa = g2.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+      Stroke oldStroke = g2.getStroke();
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+      int pad = 12;
+      int size = Math.min(getWidth(), getHeight()) - (pad * 2);
+      if (size <= 10) {
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
+        return;
+      }
+      int x = (getWidth() - size) / 2;
+      int y = (getHeight() - size) / 2;
+      int strokeW = Math.max(10, size / 9);
+
+      Color track = uiColor("ProgressBar.background", new Color(228, 228, 228));
+      Color text = uiColor("Label.foreground", new Color(33, 33, 33));
+      Color arcStart = new Color(38, 166, 91);
+      Color arcEnd = new Color(220, 73, 56);
+
+      g2.setStroke(new BasicStroke(strokeW, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      g2.setColor(track);
+      g2.draw(new Arc2D.Double(x, y, size, size, 225, -270, Arc2D.OPEN));
+
+      if (percentUsed >= 0) {
+        double extent = -270.0d * percentUsed / 100.0d;
+        GradientPaint paint =
+            new GradientPaint(
+                (float) x, (float) (y + size), arcStart, (float) (x + size), (float) y, arcEnd);
+        g2.setPaint(paint);
+        g2.draw(new Arc2D.Double(x, y, size, size, 225, extent, Arc2D.OPEN));
+      }
+
+      java.awt.Font baseFont = getFont();
+      if (baseFont == null) {
+        baseFont = javax.swing.UIManager.getFont("Label.font");
+      }
+      if (baseFont == null) {
+        baseFont = new java.awt.Font("Dialog", java.awt.Font.PLAIN, 12);
+      }
+
+      String pctLabel = percentUsed >= 0 ? percentUsed + "%" : "n/a";
+      g2.setColor(text);
+      g2.setFont(baseFont.deriveFont(java.awt.Font.BOLD, Math.max(18f, size * 0.18f)));
+      FontMetrics pctMetrics = g2.getFontMetrics();
+      int pctX = (getWidth() - pctMetrics.stringWidth(pctLabel)) / 2;
+      int pctY = (getHeight() / 2) + (pctMetrics.getAscent() / 3);
+      g2.drawString(pctLabel, pctX, pctY);
+
+      String detailLabel = maxBytes > 0L ? toMib(usedBytes) + " / " + toMib(maxBytes) : toMib(usedBytes);
+      g2.setFont(baseFont.deriveFont(java.awt.Font.PLAIN, Math.max(11f, size * 0.075f)));
+      FontMetrics detailMetrics = g2.getFontMetrics();
+      int detailX = (getWidth() - detailMetrics.stringWidth(detailLabel)) / 2;
+      int detailY = pctY + detailMetrics.getHeight() + 2;
+      g2.drawString(detailLabel, detailX, detailY);
+
+      g2.setStroke(oldStroke);
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAa);
+    }
+
+    private static Color uiColor(String key, Color fallback) {
+      Color c = javax.swing.UIManager.getColor(key);
+      return c != null ? c : fallback;
     }
   }
 

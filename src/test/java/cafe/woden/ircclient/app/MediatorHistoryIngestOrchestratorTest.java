@@ -13,6 +13,14 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
+import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
+import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;

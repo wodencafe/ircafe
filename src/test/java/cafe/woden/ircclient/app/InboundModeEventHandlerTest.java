@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.state.ChannelFlagModeState;
 import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.app.state.RecentStatusModeState;

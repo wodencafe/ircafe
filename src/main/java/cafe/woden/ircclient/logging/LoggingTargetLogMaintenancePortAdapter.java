@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.logging;
 
-import cafe.woden.ircclient.app.TargetLogMaintenancePort;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
+import cafe.woden.ircclient.app.api.TargetRef;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 

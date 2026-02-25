@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.chat.render;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;

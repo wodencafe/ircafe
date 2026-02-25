@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;

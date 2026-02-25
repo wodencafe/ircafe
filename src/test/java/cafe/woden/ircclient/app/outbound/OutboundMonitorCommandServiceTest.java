@@ -6,10 +6,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.ConnectionCoordinator;
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.irc.IrcClientService;

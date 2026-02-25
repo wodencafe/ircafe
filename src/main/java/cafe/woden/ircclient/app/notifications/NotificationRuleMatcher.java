@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.notifications;
 
-import cafe.woden.ircclient.app.UiSettingsPort;
-import cafe.woden.ircclient.app.UiSettingsSnapshot;
+import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import cafe.woden.ircclient.model.NotificationRule;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;

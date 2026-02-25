@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
@@ -40,7 +39,6 @@ public class MainFrame extends JFrame {
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
 
   public MainFrame(
-      IrcMediator controller,
       AppMenuBar menuBar,
       UiProperties uiProps,
       RuntimeConfigStore runtimeConfigStore,

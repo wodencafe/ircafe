@@ -88,6 +88,22 @@ configurations {
     }
 }
 
+sourceSets {
+    functionalTest {
+        java.srcDir('src/functionalTest/java')
+        resources.srcDir('src/functionalTest/resources')
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations.named('functionalTestImplementation') {
+    extendsFrom(configurations.testImplementation)
+}
+configurations.named('functionalTestRuntimeOnly') {
+    extendsFrom(configurations.testRuntimeOnly)
+}
+
 spotless {
     java {
         target "src/**/*.java"
@@ -284,6 +300,16 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+tasks.register('functionalTest', Test) {
+    group = 'verification'
+    description = 'Runs Swing functional smoke tests.'
+    testClassesDirs = sourceSets.functionalTest.output.classesDirs
+    classpath = sourceSets.functionalTest.runtimeClasspath
+    useJUnitPlatform()
+    systemProperty 'java.awt.headless', 'true'
+    shouldRunAfter(tasks.named('test'))
 }
 
 tasks.register('themeValidate', Test) {

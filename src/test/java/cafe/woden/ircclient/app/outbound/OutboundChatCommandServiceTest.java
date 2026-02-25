@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -11,10 +12,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.ConnectionCoordinator;
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
 import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
@@ -103,6 +104,63 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void partWithoutActiveTargetPromptsToSelectServer() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(null);
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "", "");
+
+    verify(ui).appendStatus(status, "(part)", "Select a server first.");
+    verify(targetCoordinator, never()).detachChannel(any(TargetRef.class), anyString());
+  }
+
+  @Test
+  void partWithoutExplicitChannelDetachesActiveChannelWithTrimmedReason() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+
+    service.handlePart(disposables, "", "  be right back  ");
+
+    verify(targetCoordinator).detachChannel(chan, "be right back");
+  }
+
+  @Test
+  void partWithoutExplicitChannelRejectsNonChannelSelection() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "", "bye");
+
+    verify(ui)
+        .appendStatus(
+            status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
+    verify(targetCoordinator, never()).detachChannel(any(TargetRef.class), anyString());
+  }
+
+  @Test
+  void partWithExplicitChannelDetachesChannelOnActiveServer() {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef expected = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "  #ircafe ", "  later ");
+
+    verify(targetCoordinator).detachChannel(expected, "later");
+  }
+
+  @Test
+  void partWithExplicitNonChannelShowsUsageAndDoesNotDetach() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "alice", "bye");
+
+    verify(ui).appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
+    verify(targetCoordinator, never()).detachChannel(any(TargetRef.class), anyString());
+  }
+
+  @Test
   void connectWithoutArgUsesActiveServerContext() {
     TargetRef pm = new TargetRef("libera", "alice");
     when(targetCoordinator.getActiveTarget()).thenReturn(pm);
@@ -126,6 +184,36 @@ class OutboundChatCommandServiceTest {
     service.handleReconnect("oftc");
 
     verify(connectionCoordinator).reconnectOne("oftc");
+  }
+
+  @Test
+  void nickWhileConnectedRequestsChangeWithoutPersistingPreferredNick() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.changeNick("libera", "alice1")).thenReturn(Completable.complete());
+
+    service.handleNick(disposables, "alice1");
+
+    verify(irc).changeNick("libera", "alice1");
+    verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
+  }
+
+  @Test
+  void nickWhileDisconnectedPersistsPreferredNickOnly() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(false);
+
+    service.handleNick(disposables, "alice1");
+
+    verify(runtimeConfig).rememberNick("libera", "alice1");
+    verify(irc, never()).changeNick(anyString(), anyString());
+    verify(ui)
+        .appendStatus(
+            new TargetRef("libera", "status"),
+            "(nick)",
+            "Not connected. Saved preferred nick for next connect.");
   }
 
   @Test

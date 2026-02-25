@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.ChatLogRepository;

@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.app.ChatHistoryBatchEventsPort;
-import cafe.woden.ircclient.app.ChatHistoryIngestEventsPort;
-import cafe.woden.ircclient.app.ChatHistoryIngestionPort;
-import cafe.woden.ircclient.app.TargetChatHistoryPort;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.ZncPlaybackEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
+import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import java.util.Objects;
 import java.util.function.Consumer;

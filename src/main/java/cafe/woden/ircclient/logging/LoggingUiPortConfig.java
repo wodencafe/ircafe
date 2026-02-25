@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging;
 
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.LogProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

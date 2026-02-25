@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.perform;
 
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.IrcProperties;

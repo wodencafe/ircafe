@@ -9,7 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import java.util.List;

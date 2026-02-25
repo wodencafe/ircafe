@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;

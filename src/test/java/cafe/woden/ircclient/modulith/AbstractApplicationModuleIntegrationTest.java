@@ -1,8 +1,18 @@
 package cafe.woden.ircclient.modulith;
 
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.UserhostQueryService;
+import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
+import org.mockito.Answers;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.convention.TestBean;
@@ -25,12 +35,31 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
     })
 public abstract class AbstractApplicationModuleIntegrationTest {
 
-  @MockitoBean IrcClientService ircClientService;
+  @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
+  IrcClientService ircClientService;
 
   @MockitoBean ChatHistoryTranscriptPort chatHistoryTranscriptPort;
 
-  @MockitoBean(name = "swingUiPort")
+  @MockitoBean(name = "swingUiPort", answers = Answers.RETURNS_DEEP_STUBS)
   UiPort swingUiPort;
+
+  @MockitoBean UiSettingsPort uiSettingsPort;
+
+  @MockitoBean ChatTranscriptHistoryPort chatTranscriptHistoryPort;
+
+  @MockitoBean TrayNotificationsPort trayNotificationsPort;
+
+  @MockitoBean UserListStore userListStore;
+
+  @MockitoBean UserhostQueryService userhostQueryService;
+
+  @MockitoBean UserInfoEnrichmentService userInfoEnrichmentService;
+
+  @MockitoBean IgnoreListService ignoreListService;
+
+  @MockitoBean LocalFilterCommandHandler localFilterCommandHandler;
+
+  @MockitoBean InboundIgnorePolicy inboundIgnorePolicy;
 
   @TestBean(name = "run")
   ApplicationRunner run;

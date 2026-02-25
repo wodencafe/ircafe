@@ -2,7 +2,10 @@ package cafe.woden.ircclient.ui.chat;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;
 import java.awt.Color;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -87,6 +90,37 @@ class ChatStylesContrastTest {
     assertNotNull(status);
     assertTrue(relativeLuminance(status) > relativeLuminance(bg));
     assertTrue(contrastRatio(status, bg) >= 2.6);
+  }
+
+  @Test
+  void messageTypeOverridesApplyToTranscriptStyles() {
+    UIManager.put("TextPane.background", Color.WHITE);
+    UIManager.put("TextPane.foreground", Color.BLACK);
+    UIManager.put("Label.foreground", Color.BLACK);
+    UIManager.put("Label.disabledForeground", new Color(0x66, 0x66, 0x66));
+
+    ChatThemeSettingsBus bus = new ChatThemeSettingsBus(null);
+    bus.set(
+        new ChatThemeSettings(
+            ChatThemeSettings.Preset.DEFAULT,
+            null,
+            "#223344",
+            null,
+            35,
+            "#112233",
+            "#334455",
+            "#445566",
+            "#556677",
+            "#667788"));
+
+    ChatStyles styles = new ChatStyles(bus);
+
+    assertEquals(new Color(0x11, 0x22, 0x33), fg(styles.message()));
+    assertEquals(new Color(0x22, 0x33, 0x44), fg(styles.status()));
+    assertEquals(new Color(0x33, 0x44, 0x55), fg(styles.noticeMessage()));
+    assertEquals(new Color(0x44, 0x55, 0x66), fg(styles.actionMessage()));
+    assertEquals(new Color(0x55, 0x66, 0x77), fg(styles.error()));
+    assertEquals(new Color(0x66, 0x77, 0x88), fg(styles.presence()));
   }
 
   private static Color fg(AttributeSet attrs) {

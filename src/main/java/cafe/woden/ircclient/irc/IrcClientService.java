@@ -5,6 +5,8 @@ import io.reactivex.rxjava3.core.Flowable;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
@@ -278,6 +280,28 @@ public interface IrcClientService {
   default Completable sendReadMarker(String serverId, String target, Instant markerAt) {
     return Completable.error(
         new UnsupportedOperationException("read-marker capability not supported"));
+  }
+
+  /**
+   * Send an IRCv3 capability toggle request via {@code CAP REQ}.
+   *
+   * <p>Examples: {@code CAP REQ :message-tags} (enable), {@code CAP REQ :-typing} (disable).
+   */
+  default Completable setIrcv3CapabilityEnabled(
+      String serverId, String capability, boolean enabled) {
+    String cap = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
+    if (cap.isEmpty()) {
+      return Completable.error(new IllegalArgumentException("capability is blank"));
+    }
+    if (cap.indexOf(' ') >= 0
+        || cap.indexOf(',') >= 0
+        || cap.indexOf('\n') >= 0
+        || cap.indexOf('\r') >= 0) {
+      return Completable.error(
+          new IllegalArgumentException("capability contains unsupported characters: " + capability));
+    }
+    String token = enabled ? cap : ("-" + cap);
+    return sendRaw(serverId, "CAP REQ :" + token);
   }
 
   /**

@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.filter;
 
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -36,7 +36,7 @@ import org.springframework.stereotype.Component;
 public class LocalFilterCommandService implements LocalFilterCommandHandler {
 
   private final UiPort ui;
-  private final TargetCoordinator targetCoordinator;
+  private final ActiveTargetPort targetCoordinator;
   private final FilterSettingsBus filterSettingsBus;
   private final FilterEngine filterEngine;
   private final RuntimeConfigStore runtimeConfig;
@@ -44,7 +44,7 @@ public class LocalFilterCommandService implements LocalFilterCommandHandler {
 
   public LocalFilterCommandService(
       UiPort ui,
-      TargetCoordinator targetCoordinator,
+      ActiveTargetPort targetCoordinator,
       FilterSettingsBus filterSettingsBus,
       FilterEngine filterEngine,
       RuntimeConfigStore runtimeConfig,

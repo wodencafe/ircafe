@@ -147,6 +147,11 @@ public class ChatStyles {
     // Base colors derived from preset.
     Color tsFg = dim;
     Color sysFg = dim;
+    Color msgFg = fg;
+    Color noticeFg = warn;
+    Color actionFg = fg;
+    Color errFg = err;
+    Color presenceFg;
     // Mention base: prefer selection background (theme-native). If not available, prefer accent.
     // Avoid hard-coded colors where possible to prevent clashes with theme pack themes.
     Color mentionBase = selBg != null ? selBg : accent;
@@ -171,6 +176,7 @@ public class ChatStyles {
         // DEFAULT
       }
     }
+    presenceFg = sysFg;
 
     // Explicit overrides win.
     if (s != null && s.timestampColor() != null) {
@@ -180,6 +186,26 @@ public class ChatStyles {
     if (s != null && s.systemColor() != null) {
       Color o = parseHexColor(s.systemColor());
       if (o != null) sysFg = o;
+    }
+    if (s != null && s.messageColor() != null) {
+      Color o = parseHexColor(s.messageColor());
+      if (o != null) msgFg = o;
+    }
+    if (s != null && s.noticeColor() != null) {
+      Color o = parseHexColor(s.noticeColor());
+      if (o != null) noticeFg = o;
+    }
+    if (s != null && s.actionColor() != null) {
+      Color o = parseHexColor(s.actionColor());
+      if (o != null) actionFg = o;
+    }
+    if (s != null && s.errorColor() != null) {
+      Color o = parseHexColor(s.errorColor());
+      if (o != null) errFg = o;
+    }
+    if (s != null && s.presenceColor() != null) {
+      Color o = parseHexColor(s.presenceColor());
+      if (o != null) presenceFg = o;
     }
 
     Color mentionBg;
@@ -193,8 +219,13 @@ public class ChatStyles {
 
     tsFg = ensureReadableTextColor(tsFg, bg, darkUi, 2.6, dim);
     sysFg = ensureReadableTextColor(sysFg, bg, darkUi, 2.6, dim);
+    msgFg = ensureReadableTextColor(msgFg, bg, darkUi, 4.5, fg);
+    noticeFg = ensureReadableTextColor(noticeFg, bg, darkUi, 2.6, warn);
+    actionFg = ensureReadableTextColor(actionFg, bg, darkUi, 4.5, msgFg);
+    errFg = ensureReadableTextColor(errFg, bg, darkUi, 2.6, err);
+    presenceFg = ensureReadableTextColor(presenceFg, bg, darkUi, 2.6, sysFg);
 
-    Color mentionFg = fg;
+    Color mentionFg = msgFg;
     if (mentionFg != null && mentionBg != null) {
       double cr = contrastRatio(mentionFg, mentionBg);
       if (cr > 0.0 && cr < 3.0) {
@@ -204,12 +235,12 @@ public class ChatStyles {
 
     tsStyle = attrs(STYLE_TIMESTAMP, tsFg, bg, false, false);
     fromStyle = attrs(STYLE_FROM, fg, bg, true, false);
-    msgStyle = attrs(STYLE_MESSAGE, fg, bg, false, false);
-    noticeFromStyle = attrs(STYLE_NOTICE_FROM, warn, bg, true, false);
-    noticeMsgStyle = attrs(STYLE_NOTICE_MESSAGE, warn, bg, false, false);
+    msgStyle = attrs(STYLE_MESSAGE, msgFg, bg, false, false);
+    noticeFromStyle = attrs(STYLE_NOTICE_FROM, noticeFg, bg, true, false);
+    noticeMsgStyle = attrs(STYLE_NOTICE_MESSAGE, noticeFg, bg, false, false);
     statusStyle = attrs(STYLE_STATUS, sysFg, bg, false, true);
-    presenceStyle = attrs(STYLE_PRESENCE, sysFg, bg, false, true);
-    errorStyle = attrs(STYLE_ERROR, err, bg, true, false);
+    presenceStyle = attrs(STYLE_PRESENCE, presenceFg, bg, false, true);
+    errorStyle = attrs(STYLE_ERROR, errFg, bg, true, false);
 
     linkStyle = attrs(STYLE_LINK, link, bg, false, false);
     StyleConstants.setUnderline(linkStyle, true);
@@ -217,8 +248,8 @@ public class ChatStyles {
     mentionStyle = attrs(STYLE_MENTION, mentionFg, mentionBg, false, false);
 
     // /me ACTION lines
-    actionFromStyle = attrs(STYLE_ACTION_FROM, fg, bg, true, true);
-    actionMsgStyle = attrs(STYLE_ACTION_MESSAGE, fg, bg, false, true);
+    actionFromStyle = attrs(STYLE_ACTION_FROM, actionFg, bg, true, true);
+    actionMsgStyle = attrs(STYLE_ACTION_MESSAGE, actionFg, bg, false, true);
   }
 
   public AttributeSet timestamp() {

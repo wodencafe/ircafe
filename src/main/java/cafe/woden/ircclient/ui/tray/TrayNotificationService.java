@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.tray;
 
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
@@ -74,7 +74,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
   private final ObjectProvider<TrayService> trayServiceProvider;
   private final ObjectProvider<MainFrame> mainFrameProvider;
   private final ObjectProvider<StatusBar> statusBarProvider;
-  private final ObjectProvider<TargetCoordinator> targetCoordinatorProvider;
+  private final ObjectProvider<ActiveTargetPort> targetCoordinatorProvider;
   private final ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
   private final NotificationSoundService soundService;
@@ -91,7 +91,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
       ObjectProvider<TrayService> trayServiceProvider,
       ObjectProvider<MainFrame> mainFrameProvider,
       ObjectProvider<StatusBar> statusBarProvider,
-      ObjectProvider<TargetCoordinator> targetCoordinatorProvider,
+      ObjectProvider<ActiveTargetPort> targetCoordinatorProvider,
       ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
       ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
       NotificationSoundService soundService) {
@@ -345,7 +345,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
 
   private boolean isTargetActive(TargetRef target) {
     try {
-      TargetCoordinator tc =
+      ActiveTargetPort tc =
           targetCoordinatorProvider != null ? targetCoordinatorProvider.getIfAvailable() : null;
       if (tc == null) return false;
       TargetRef active = tc.getActiveTarget();

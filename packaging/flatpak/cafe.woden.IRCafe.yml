@@ -1,0 +1,34 @@
+app-id: cafe.woden.IRCafe
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+command: ircafe
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.freedesktop.Notifications
+modules:
+  - name: ircafe
+    buildsystem: simple
+    build-commands:
+      - install -d /app/bin /app/lib/ircafe /app/share/applications /app/share/icons/hicolor/512x512/apps /app/share/metainfo
+      - cp -a IRCafe /app/lib/ircafe/
+      - install -Dm755 ircafe.sh /app/bin/ircafe
+      - install -Dm644 cafe.woden.IRCafe.desktop /app/share/applications/cafe.woden.IRCafe.desktop
+      - install -Dm644 cafe.woden.IRCafe.metainfo.xml /app/share/metainfo/cafe.woden.IRCafe.metainfo.xml
+      - install -Dm644 ircafe_512.png /app/share/icons/hicolor/512x512/apps/cafe.woden.IRCafe.png
+    sources:
+      - type: dir
+        path: ../../build/dist/IRCafe
+      - type: file
+        path: ircafe.sh
+      - type: file
+        path: cafe.woden.IRCafe.desktop
+      - type: file
+        path: cafe.woden.IRCafe.metainfo.xml
+      - type: file
+        path: ../../src/main/resources/icons/ircafe_512.png

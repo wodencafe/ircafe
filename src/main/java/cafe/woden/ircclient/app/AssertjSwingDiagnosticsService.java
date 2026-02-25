@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;

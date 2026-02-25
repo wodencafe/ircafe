@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.filter;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import java.util.Objects;
