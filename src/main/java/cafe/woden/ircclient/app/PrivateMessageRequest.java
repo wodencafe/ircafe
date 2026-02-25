@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.app;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
+@ValueObject
 public record PrivateMessageRequest(String serverId, String nick) {
   public PrivateMessageRequest {
     serverId = Objects.requireNonNull(serverId, "serverId").trim();

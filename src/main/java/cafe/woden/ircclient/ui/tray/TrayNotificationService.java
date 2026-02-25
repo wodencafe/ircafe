@@ -2,7 +2,8 @@ package cafe.woden.ircclient.ui.tray;
 
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.TrayNotificationsPort;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.StatusBar;
@@ -54,7 +55,7 @@ import org.springframework.stereotype.Component;
  * paths fail, we try {@code two-slices} before a final beep fallback.
  */
 @Component
-public class TrayNotificationService {
+public class TrayNotificationService implements TrayNotificationsPort {
   private static final Logger log = LoggerFactory.getLogger(TrayNotificationService.class);
 
   private static final Duration CONTENT_DEDUPE_WINDOW = Duration.ofSeconds(2);

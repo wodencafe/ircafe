@@ -25,7 +25,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final OutboundMonitorCommandService monitor = mock(OutboundMonitorCommandService.class);
   private final OutboundIgnoreCommandService ignore = mock(OutboundIgnoreCommandService.class);
-  private final LocalFilterCommandService filter = mock(LocalFilterCommandService.class);
+  private final LocalFilterCommandHandler filter = mock(LocalFilterCommandHandler.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final UiPort ui = mock(UiPort.class);
   private final UserCommandAliasesBus userCommandAliasesBus = mock(UserCommandAliasesBus.class);

@@ -1,6 +1,12 @@
 package cafe.woden.ircclient.ui.filter;
 
-import cafe.woden.ircclient.logging.model.LogKind;
+import cafe.woden.ircclient.model.FilterAction;
+import cafe.woden.ircclient.model.FilterDirection;
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.RegexFlag;
+import cafe.woden.ircclient.model.RegexSpec;
+import cafe.woden.ircclient.model.TagSpec;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;

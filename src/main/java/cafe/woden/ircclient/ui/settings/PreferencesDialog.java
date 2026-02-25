@@ -3,9 +3,7 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
-import cafe.woden.ircclient.app.commands.UserCommandAlias;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
@@ -14,12 +12,17 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.model.BuiltInSound;
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.FilterScopeOverride;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
-import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
@@ -27,9 +30,7 @@ import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
-import cafe.woden.ircclient.ui.filter.FilterRule;
 import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
-import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
 import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -671,6 +672,9 @@ public class PreferencesDialog {
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
     TimestampControls timestamps = buildTimestampControls(current);
+    JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode =
+        buildMemoryUsageDisplayModeCombo(current);
+    MemoryWarningControls memoryWarnings = buildMemoryWarningControls(current, closeables);
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
@@ -681,6 +685,11 @@ public class PreferencesDialog {
         buildTypingTreeIndicatorStyleCombo(current);
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
+
+    try {
+      closeables.add(MouseWheelDecorator.decorateComboBoxSelection(memoryUsageDisplayMode));
+    } catch (Exception ignored) {
+    }
 
     HistoryControls history = buildHistoryControls(current, closeables);
     LoggingControls logging = buildLoggingControls(logProps, closeables);
@@ -714,6 +723,7 @@ public class PreferencesDialog {
     DiagnosticsControls diagnostics = buildDiagnosticsControls();
 
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
+    JPanel memoryPanel = buildMemoryPanel(memoryUsageDisplayMode, memoryWarnings);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel =
@@ -993,6 +1003,16 @@ public class PreferencesDialog {
           int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
           int commandHistoryMaxSizeV =
               ((Number) history.commandHistoryMaxSize.getValue()).intValue();
+          MemoryUsageDisplayMode memoryUsageDisplayModeV =
+              memoryUsageDisplayMode.getSelectedItem() instanceof MemoryUsageDisplayMode mode
+                  ? mode
+                  : MemoryUsageDisplayMode.LONG;
+          int memoryWarningNearMaxPercentV =
+              ((Number) memoryWarnings.nearMaxPercent.getValue()).intValue();
+          boolean memoryWarningTooltipEnabledV = memoryWarnings.tooltipEnabled.isSelected();
+          boolean memoryWarningToastEnabledV = memoryWarnings.toastEnabled.isSelected();
+          boolean memoryWarningPushyEnabledV = memoryWarnings.pushyEnabled.isSelected();
+          boolean memoryWarningSoundEnabledV = memoryWarnings.soundEnabled.isSelected();
           IrcProperties.Proxy proxyCfg;
           try {
             boolean proxyEnabledV = proxy.enabled.isSelected();
@@ -1270,6 +1290,12 @@ public class PreferencesDialog {
                   uiePeriodicRefreshNicksPerTickV,
                   monitorIsonPollIntervalSecondsV,
                   notificationRuleCooldownSecondsV,
+                  memoryUsageDisplayModeV,
+                  memoryWarningNearMaxPercentV,
+                  memoryWarningTooltipEnabledV,
+                  memoryWarningToastEnabledV,
+                  memoryWarningPushyEnabledV,
+                  memoryWarningSoundEnabledV,
                   notificationRulesV);
 
           boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
@@ -1297,6 +1323,17 @@ public class PreferencesDialog {
 
           runtimeConfig.rememberUiSettings(
               next.theme(), next.chatFontFamily(), next.chatFontSize());
+          runtimeConfig.rememberMemoryUsageDisplayMode(next.memoryUsageDisplayMode().token());
+          runtimeConfig.rememberMemoryUsageWarningNearMaxPercent(
+              next.memoryUsageWarningNearMaxPercent());
+          runtimeConfig.rememberMemoryUsageWarningTooltipEnabled(
+              next.memoryUsageWarningTooltipEnabled());
+          runtimeConfig.rememberMemoryUsageWarningToastEnabled(
+              next.memoryUsageWarningToastEnabled());
+          runtimeConfig.rememberMemoryUsageWarningPushyEnabled(
+              next.memoryUsageWarningPushyEnabled());
+          runtimeConfig.rememberMemoryUsageWarningSoundEnabled(
+              next.memoryUsageWarningSoundEnabled());
           // Chat theme (transcript-only palette)
           runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
           runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
@@ -1533,6 +1570,7 @@ public class PreferencesDialog {
     JTabbedPane tabs = new DynamicTabbedPane();
 
     tabs.addTab("Appearance", wrapTab(appearancePanel));
+    tabs.addTab("Memory", wrapTab(memoryPanel));
     tabs.addTab("Startup", wrapTab(startupPanel));
     tabs.addTab("Tray & Notifications", wrapTab(trayPanel));
     tabs.addTab("Chat", wrapTab(chatPanel));
@@ -3747,6 +3785,51 @@ public class PreferencesDialog {
         enabled, format, includeChatMessages, includePresenceMessages, panel);
   }
 
+  private JComboBox<MemoryUsageDisplayMode> buildMemoryUsageDisplayModeCombo(UiSettings current) {
+    JComboBox<MemoryUsageDisplayMode> combo = new JComboBox<>(MemoryUsageDisplayMode.values());
+    MemoryUsageDisplayMode selected =
+        current != null && current.memoryUsageDisplayMode() != null
+            ? current.memoryUsageDisplayMode()
+            : MemoryUsageDisplayMode.LONG;
+    combo.setSelectedItem(selected);
+    combo.setToolTipText("Controls the memory widget shown on the far right side of the menu bar.");
+    return combo;
+  }
+
+  private MemoryWarningControls buildMemoryWarningControls(
+      UiSettings current, List<AutoCloseable> closeables) {
+    int nearMaxPercent =
+        current != null && current.memoryUsageWarningNearMaxPercent() > 0
+            ? current.memoryUsageWarningNearMaxPercent()
+            : 5;
+
+    JSpinner nearMaxPercentSpinner = numberSpinner(nearMaxPercent, 1, 50, 1, closeables);
+    nearMaxPercentSpinner.setToolTipText(
+        "Trigger warning actions when heap usage is within this percent of the JVM max.");
+
+    JCheckBox tooltipEnabled = new JCheckBox("Show warning tooltip near memory widget");
+    tooltipEnabled.setSelected(current == null || current.memoryUsageWarningTooltipEnabled());
+    tooltipEnabled.setToolTipText(
+        "Shows a transient warning tooltip near the memory widget when threshold is crossed.");
+
+    JCheckBox toastEnabled = new JCheckBox("Show desktop toast warning");
+    toastEnabled.setSelected(current != null && current.memoryUsageWarningToastEnabled());
+    toastEnabled.setToolTipText(
+        "Uses the existing tray notification pipeline for memory threshold alerts.");
+
+    JCheckBox pushyEnabled = new JCheckBox("Send Pushy warning");
+    pushyEnabled.setSelected(current != null && current.memoryUsageWarningPushyEnabled());
+    pushyEnabled.setToolTipText(
+        "Sends a Pushy notification when configured and the warning threshold is crossed.");
+
+    JCheckBox soundEnabled = new JCheckBox("Play warning sound");
+    soundEnabled.setSelected(current != null && current.memoryUsageWarningSoundEnabled());
+    soundEnabled.setToolTipText("Plays the configured notification sound on memory warning.");
+
+    return new MemoryWarningControls(
+        nearMaxPercentSpinner, tooltipEnabled, toastEnabled, pushyEnabled, soundEnabled);
+  }
+
   private HistoryControls buildHistoryControls(UiSettings current, List<AutoCloseable> closeables) {
     JSpinner historyInitialLoadLines =
         numberSpinner(current.chatHistoryInitialLoadLines(), 0, 10_000, 50, closeables);
@@ -4897,6 +4980,54 @@ public class PreferencesDialog {
     form.add(fonts.fontFamily, "growx");
     form.add(new JLabel("Font size"));
     form.add(fonts.fontSize, "w 110!");
+
+    return form;
+  }
+
+  private JPanel buildMemoryPanel(
+      JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode,
+      MemoryWarningControls memoryWarnings) {
+    JPanel form =
+        new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]"));
+    form.add(tabTitle("Memory"), "span 2, growx, wmin 0, wrap");
+
+    form.add(sectionTitle("Widget"), "span 2, growx, wmin 0, wrap");
+    form.add(new JLabel("Memory usage widget"));
+    form.add(memoryUsageDisplayMode, "growx");
+
+    form.add(sectionTitle("Warnings"), "span 2, growx, wmin 0, wrap");
+    form.add(new JLabel("Warn near max (%)"));
+    form.add(memoryWarnings.nearMaxPercent, "w 110!");
+
+    form.add(new JLabel("Warning actions"), "aligny top");
+    JPanel warningActions =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]2[]2[]2[]"));
+    warningActions.setOpaque(false);
+    warningActions.add(memoryWarnings.tooltipEnabled, "growx");
+    warningActions.add(memoryWarnings.toastEnabled, "growx");
+    warningActions.add(memoryWarnings.pushyEnabled, "growx");
+    warningActions.add(memoryWarnings.soundEnabled, "growx");
+    form.add(warningActions, "growx");
+
+    JTextArea hint = subtleInfoText();
+    hint.setText(
+        "Controls the memory widget in the top menu bar and threshold-triggered warning behavior.");
+    form.add(new JLabel(""));
+    form.add(hint, "growx, wmin 0");
+
+    JButton reset = new JButton("Reset memory defaults");
+    reset.setToolTipText("Reset memory mode and warning actions to defaults.");
+    reset.addActionListener(
+        e -> {
+          memoryUsageDisplayMode.setSelectedItem(MemoryUsageDisplayMode.LONG);
+          memoryWarnings.nearMaxPercent.setValue(5);
+          memoryWarnings.tooltipEnabled.setSelected(true);
+          memoryWarnings.toastEnabled.setSelected(false);
+          memoryWarnings.pushyEnabled.setSelected(false);
+          memoryWarnings.soundEnabled.setSelected(false);
+        });
+    form.add(new JLabel(""));
+    form.add(reset, "alignx left");
 
     return form;
   }
@@ -9222,6 +9353,13 @@ public class PreferencesDialog {
 
   private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {}
 
+  private record MemoryWarningControls(
+      JSpinner nearMaxPercent,
+      JCheckBox tooltipEnabled,
+      JCheckBox toastEnabled,
+      JCheckBox pushyEnabled,
+      JCheckBox soundEnabled) {}
+
   private record CtcpAutoReplyControls(
       JCheckBox enabled, JCheckBox version, JCheckBox ping, JCheckBox time) {}
 
@@ -9738,7 +9876,7 @@ public class PreferencesDialog {
       }
 
       if (r.direction() != null
-          && r.direction() != cafe.woden.ircclient.ui.filter.FilterDirection.ANY) {
+          && r.direction() != cafe.woden.ircclient.model.FilterDirection.ANY) {
         parts.add("dir=" + r.direction().name());
       }
 
@@ -9752,11 +9890,11 @@ public class PreferencesDialog {
         String flags = "";
         if (r.textRegex().flags() != null && !r.textRegex().flags().isEmpty()) {
           StringBuilder sb = new StringBuilder();
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.I))
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.model.RegexFlag.I))
             sb.append('i');
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.M))
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.model.RegexFlag.M))
             sb.append('m');
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.S))
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.model.RegexFlag.S))
             sb.append('s');
           flags = sb.toString();
         }

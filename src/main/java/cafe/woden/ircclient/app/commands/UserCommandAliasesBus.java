@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.commands;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.model.UserCommandAlias;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.List;

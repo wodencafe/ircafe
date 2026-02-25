@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.logging.model.LogKind;
-import cafe.woden.ircclient.ui.filter.FilterAction;
-import cafe.woden.ircclient.ui.filter.FilterDirection;
+import cafe.woden.ircclient.model.FilterAction;
+import cafe.woden.ircclient.model.FilterDirection;
+import cafe.woden.ircclient.model.LogKind;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;

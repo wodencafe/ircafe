@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.notify.sound;
 
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.model.BuiltInSound;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import org.springframework.context.annotation.Lazy;

@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.logging.model.LogKind;
-import cafe.woden.ircclient.ui.filter.FilterAction;
-import cafe.woden.ircclient.ui.filter.FilterDirection;
-import cafe.woden.ircclient.ui.filter.RegexSpec;
+import cafe.woden.ircclient.model.FilterAction;
+import cafe.woden.ircclient.model.FilterDirection;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.RegexSpec;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -306,7 +306,7 @@ public sealed interface FilterCommand
   }
 
   /**
-   * Patch-like update for a {@link cafe.woden.ircclient.ui.filter.FilterRule}.
+   * Patch-like update for a {@link cafe.woden.ircclient.model.FilterRule}.
    *
    * <p>We need explicit "specified" flags so users can clear a field (e.g., {@code kind=} to mean
    * "any kind").

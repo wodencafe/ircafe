@@ -16,7 +16,6 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.List;
@@ -35,7 +34,7 @@ class ConnectionCoordinatorTest {
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
@@ -72,7 +71,7 @@ class ConnectionCoordinatorTest {
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera", "oftc"));
     when(serverCatalog.containsId(anyString())).thenReturn(true);
@@ -110,7 +109,7 @@ class ConnectionCoordinatorTest {
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
@@ -141,7 +140,7 @@ class ConnectionCoordinatorTest {
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
@@ -172,7 +171,7 @@ class ConnectionCoordinatorTest {
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TrayNotificationService trayNotificationService = mock(TrayNotificationService.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);

@@ -1,11 +1,10 @@
 package cafe.woden.ircclient.app;
 
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -34,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.JComponent;
 import javax.swing.RepaintManager;
 import javax.swing.SwingUtilities;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -42,6 +42,7 @@ import org.springframework.stereotype.Component;
 
 /** Optional AssertJ Swing integration + EDT responsiveness watchdog. */
 @Component
+@ApplicationLayer
 public class AssertjSwingDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(AssertjSwingDiagnosticsService.class);
   private static final long AUTO_CAPTURE_COOLDOWN_MS = 120_000L;
@@ -53,7 +54,7 @@ public class AssertjSwingDiagnosticsService {
   private final UiProperties uiProps;
   private final RuntimeConfigStore runtimeConfig;
   private final ObjectProvider<NotificationSoundService> soundServiceProvider;
-  private final ObjectProvider<TrayNotificationService> trayNotificationServiceProvider;
+  private final ObjectProvider<TrayNotificationsPort> trayNotificationServiceProvider;
 
   private final ScheduledExecutorService watchdogExec;
 
@@ -78,7 +79,7 @@ public class AssertjSwingDiagnosticsService {
       UiProperties uiProps,
       RuntimeConfigStore runtimeConfig,
       ObjectProvider<NotificationSoundService> soundServiceProvider,
-      ObjectProvider<TrayNotificationService> trayNotificationServiceProvider,
+      ObjectProvider<TrayNotificationsPort> trayNotificationServiceProvider,
       @Qualifier(ExecutorConfig.ASSERTJ_WATCHDOG_SCHEDULER) ScheduledExecutorService watchdogExec) {
     this.diagnostics = diagnostics;
     this.uiProps = uiProps;
@@ -502,7 +503,7 @@ public class AssertjSwingDiagnosticsService {
     }
 
     if (onIssueShowNotification) {
-      TrayNotificationService tray =
+      TrayNotificationsPort tray =
           trayNotificationServiceProvider != null
               ? trayNotificationServiceProvider.getIfAvailable()
               : null;

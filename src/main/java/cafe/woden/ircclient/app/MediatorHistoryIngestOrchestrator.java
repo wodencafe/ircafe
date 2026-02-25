@@ -5,11 +5,6 @@ import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.logging.history.ChatHistoryBatchBus;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
-import cafe.woden.ircclient.logging.history.ZncPlaybackBus;
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,10 +16,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Orchestrates history batch persistence side effects extracted from {@link IrcMediator}. */
 @Component
+@ApplicationLayer
 public class MediatorHistoryIngestOrchestrator {
   private static final Duration LIVE_REQUEST_MAX_AGE = Duration.ofMinutes(2);
   private static final String HISTORY_STATUS_TAG = "(history)";
@@ -32,12 +29,12 @@ public class MediatorHistoryIngestOrchestrator {
   private static final long HISTORY_RENDER_DEDUP_TTL_MS = 10L * 60L * 1000L;
 
   private final UiPort ui;
-  private final ChatHistoryIngestor chatHistoryIngestor;
-  private final ChatHistoryIngestBus chatHistoryIngestBus;
-  private final ChatHistoryBatchBus chatHistoryBatchBus;
-  private final ZncPlaybackBus zncPlaybackBus;
+  private final ChatHistoryIngestionPort chatHistoryIngestionPort;
+  private final ChatHistoryIngestEventsPort chatHistoryIngestEventsPort;
+  private final ChatHistoryBatchEventsPort chatHistoryBatchEventsPort;
+  private final ZncPlaybackEventsPort zncPlaybackEventsPort;
   private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
-  private final ChatTranscriptStore transcripts;
+  private final ChatTranscriptHistoryPort transcripts;
   private final IrcClientService irc;
   private final Object historyRenderDedupLock = new Object();
   private final LinkedHashMap<HistoryRenderKey, Long> recentRenderedHistory =
@@ -45,18 +42,18 @@ public class MediatorHistoryIngestOrchestrator {
 
   public MediatorHistoryIngestOrchestrator(
       UiPort ui,
-      ChatHistoryIngestor chatHistoryIngestor,
-      ChatHistoryIngestBus chatHistoryIngestBus,
-      ChatHistoryBatchBus chatHistoryBatchBus,
-      ZncPlaybackBus zncPlaybackBus,
+      ChatHistoryIngestionPort chatHistoryIngestionPort,
+      ChatHistoryIngestEventsPort chatHistoryIngestEventsPort,
+      ChatHistoryBatchEventsPort chatHistoryBatchEventsPort,
+      ZncPlaybackEventsPort zncPlaybackEventsPort,
       ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
-      ChatTranscriptStore transcripts,
+      ChatTranscriptHistoryPort transcripts,
       IrcClientService irc) {
     this.ui = ui;
-    this.chatHistoryIngestor = chatHistoryIngestor;
-    this.chatHistoryIngestBus = chatHistoryIngestBus;
-    this.chatHistoryBatchBus = chatHistoryBatchBus;
-    this.zncPlaybackBus = zncPlaybackBus;
+    this.chatHistoryIngestionPort = chatHistoryIngestionPort;
+    this.chatHistoryIngestEventsPort = chatHistoryIngestEventsPort;
+    this.chatHistoryBatchEventsPort = chatHistoryBatchEventsPort;
+    this.zncPlaybackEventsPort = zncPlaybackEventsPort;
     this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
     this.transcripts = transcripts;
     this.irc = irc;
@@ -70,11 +67,9 @@ public class MediatorHistoryIngestOrchestrator {
     try {
       long earliest = earliestEpochMs(ev.entries());
       long latest = latestEpochMs(ev.entries());
-      if (chatHistoryBatchBus != null) {
-        chatHistoryBatchBus.publish(
-            new ChatHistoryBatchBus.BatchEvent(
-                sid, target, ev.batchId(), ev.entries(), earliest, latest));
-      }
+      chatHistoryBatchEventsPort.publish(
+          new ChatHistoryBatchEventsPort.BatchEvent(
+              sid, target, ev.batchId(), ev.entries(), earliest, latest));
     } catch (Exception ignored) {
     }
 
@@ -102,7 +97,7 @@ public class MediatorHistoryIngestOrchestrator {
               + "). Persisting for scrollback.");
     }
 
-    chatHistoryIngestor.ingestAsync(
+    chatHistoryIngestionPort.ingestAsync(
         sid,
         target,
         ev.batchId(),
@@ -124,17 +119,15 @@ public class MediatorHistoryIngestOrchestrator {
           appendStatus(dest, HISTORY_STATUS_TAG, msg);
 
           try {
-            if (chatHistoryIngestBus != null) {
-              chatHistoryIngestBus.publish(
-                  new ChatHistoryIngestBus.IngestEvent(
-                      sid,
-                      target,
-                      ev.batchId(),
-                      result.total(),
-                      result.inserted(),
-                      result.earliestInsertedEpochMs(),
-                      result.latestInsertedEpochMs()));
-            }
+            chatHistoryIngestEventsPort.publish(
+                new ChatHistoryIngestEventsPort.IngestEvent(
+                    sid,
+                    target,
+                    ev.batchId(),
+                    result.total(),
+                    result.inserted(),
+                    result.earliestInsertedEpochMs(),
+                    result.latestInsertedEpochMs()));
           } catch (Exception ignored) {
           }
         });
@@ -155,11 +148,9 @@ public class MediatorHistoryIngestOrchestrator {
     try {
       long earliest = earliestEpochMs(ev.entries());
       long latest = latestEpochMs(ev.entries());
-      if (zncPlaybackBus != null) {
-        zncPlaybackBus.publish(
-            new ZncPlaybackBus.PlaybackEvent(
-                sid, target, ev.fromInclusive(), ev.toInclusive(), ev.entries(), earliest, latest));
-      }
+      zncPlaybackEventsPort.publish(
+          new ZncPlaybackEventsPort.PlaybackEvent(
+              sid, target, ev.fromInclusive(), ev.toInclusive(), ev.entries(), earliest, latest));
     } catch (Exception ignored) {
     }
 
@@ -183,7 +174,7 @@ public class MediatorHistoryIngestOrchestrator {
           "Received " + n + " playback history lines. Persisting for scrollback.");
     }
 
-    chatHistoryIngestor.ingestAsync(
+    chatHistoryIngestionPort.ingestAsync(
         sid,
         target,
         batchId,
@@ -205,17 +196,15 @@ public class MediatorHistoryIngestOrchestrator {
           appendStatus(dest, HISTORY_STATUS_TAG, msg);
 
           try {
-            if (chatHistoryIngestBus != null) {
-              chatHistoryIngestBus.publish(
-                  new ChatHistoryIngestBus.IngestEvent(
-                      sid,
-                      target,
-                      batchId,
-                      result.total(),
-                      result.inserted(),
-                      result.earliestInsertedEpochMs(),
-                      result.latestInsertedEpochMs()));
-            }
+            chatHistoryIngestEventsPort.publish(
+                new ChatHistoryIngestEventsPort.IngestEvent(
+                    sid,
+                    target,
+                    batchId,
+                    result.total(),
+                    result.inserted(),
+                    result.earliestInsertedEpochMs(),
+                    result.latestInsertedEpochMs()));
           } catch (Exception ignored) {
           }
         });

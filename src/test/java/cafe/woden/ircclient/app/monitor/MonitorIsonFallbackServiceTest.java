@@ -9,11 +9,11 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.UiSettingsPort;
+import cafe.woden.ircclient.app.UiSettingsSnapshot;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
@@ -28,7 +28,7 @@ class MonitorIsonFallbackServiceTest {
   private final IrcClientService irc = Mockito.mock(IrcClientService.class);
   private final MonitorListService monitorListService = Mockito.mock(MonitorListService.class);
   private final UiPort ui = Mockito.mock(UiPort.class);
-  private final UiSettingsBus uiSettingsBus = Mockito.mock(UiSettingsBus.class);
+  private final UiSettingsPort uiSettingsPort = Mockito.mock(UiSettingsPort.class);
   private final PublishProcessor<ServerIrcEvent> events = PublishProcessor.create();
   private final PublishProcessor<MonitorListService.Change> changes = PublishProcessor.create();
 
@@ -37,11 +37,11 @@ class MonitorIsonFallbackServiceTest {
   MonitorIsonFallbackServiceTest() {
     when(irc.events()).thenReturn(events.onBackpressureBuffer());
     when(monitorListService.changes()).thenReturn(changes.onBackpressureBuffer());
-    when(uiSettingsBus.get()).thenReturn(defaultUiSettings());
+    when(uiSettingsPort.get()).thenReturn(defaultUiSettings());
     when(irc.isMonitorAvailable("libera")).thenReturn(false);
     when(irc.sendRaw(eq("libera"), startsWith("ISON "))).thenReturn(Completable.complete());
     when(monitorListService.listNicks("libera")).thenReturn(List.of("alice", "bob"));
-    service = new MonitorIsonFallbackService(irc, monitorListService, ui, uiSettingsBus);
+    service = new MonitorIsonFallbackService(irc, monitorListService, ui, uiSettingsPort);
   }
 
   @AfterEach
@@ -89,32 +89,7 @@ class MonitorIsonFallbackServiceTest {
     return new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "ircafe");
   }
 
-  private static UiSettings defaultUiSettings() {
-    return new UiSettings(
-        "darcula",
-        "Monospaced",
-        12,
-        true,
-        false,
-        false,
-        0,
-        0,
-        true,
-        false,
-        false,
-        true,
-        true,
-        true,
-        "HH:mm:ss",
-        true,
-        100,
-        200,
-        true,
-        "#6AA2FF",
-        true,
-        7,
-        6,
-        30,
-        5);
+  private static UiSettingsSnapshot defaultUiSettings() {
+    return new UiSettingsSnapshot(List.of(), 15, 30, true, true);
   }
 }

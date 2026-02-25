@@ -4,13 +4,11 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.ChatLogRepository;
-import cafe.woden.ircclient.logging.model.LogDirection;
-import cafe.woden.ircclient.logging.model.LogKind;
-import cafe.woden.ircclient.logging.model.LogLine;
-import cafe.woden.ircclient.logging.model.LogRow;
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
-import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.LogLine;
+import cafe.woden.ircclient.model.LogRow;
+import java.awt.Component;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.time.Duration;
@@ -50,8 +48,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
   private final ChatLogRepository repo;
   private final LogProperties props;
-  private final ChatTranscriptStore transcripts;
-  private final UiSettingsBus settingsBus;
+  private final ChatHistoryTranscriptPort transcripts;
 
   // Optional remote fill when DB runs out:
   //  - Prefer IRCv3 CHATHISTORY (soju / servers that support it)
@@ -74,15 +71,13 @@ public final class DbChatHistoryService implements ChatHistoryService {
   public DbChatHistoryService(
       ChatLogRepository repo,
       LogProperties props,
-      ChatTranscriptStore transcripts,
-      UiSettingsBus settingsBus,
+      ChatHistoryTranscriptPort transcripts,
       IrcClientService irc,
       ChatHistoryIngestBus ingestBus,
       ExecutorService exec) {
     this.repo = repo;
     this.props = props;
     this.transcripts = transcripts;
-    this.settingsBus = settingsBus;
     this.irc = irc;
     this.ingestBus = ingestBus;
     this.exec = Objects.requireNonNull(exec, "exec");
@@ -375,9 +370,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     int limit = 100;
     try {
-      if (settingsBus != null) {
-        limit = settingsBus.get().chatHistoryInitialLoadLines();
-      }
+      limit = transcripts.chatHistoryInitialLoadLines();
     } catch (Exception ignored) {
       limit = 100;
     }
@@ -532,10 +525,10 @@ public final class DbChatHistoryService implements ChatHistoryService {
     if (target == null) return;
 
     // Capture a reference to the embedded control so we can anchor scroll position during prepend.
-    final LoadOlderMessagesComponent control = transcripts.ensureLoadOlderMessagesControl(target);
+    final Component control = transcripts.ensureLoadOlderMessagesControl(target);
 
     // Ensure READY state when installed.
-    transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
+    transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
 
     transcripts.setLoadOlderMessagesControlHandler(
         target,
@@ -544,8 +537,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
           if (!canLoadOlder(target)) return false;
 
           // Flip to LOADING immediately.
-          transcripts.setLoadOlderMessagesControlState(
-              target, LoadOlderMessagesComponent.State.LOADING);
+          transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.LOADING);
 
           // If the user isn't pinned to y=0, preserve their viewport anchor while we prepend lines
           // above.
@@ -553,7 +545,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
           int pageSize = DEFAULT_PAGE_SIZE;
           try {
-            if (settingsBus != null) pageSize = settingsBus.get().chatHistoryPageSize();
+            pageSize = transcripts.chatHistoryPageSize();
           } catch (Exception ignored) {
             pageSize = DEFAULT_PAGE_SIZE;
           }
@@ -576,15 +568,14 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
                   if (res.hasMore()) {
                     transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderMessagesComponent.State.READY);
+                        target, LoadOlderControlState.READY);
                   } else {
                     transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderMessagesComponent.State.EXHAUSTED);
+                        target, LoadOlderControlState.EXHAUSTED);
                   }
                 } catch (Exception e) {
                   // Fail open: allow retry.
-                  transcripts.setLoadOlderMessagesControlState(
-                      target, LoadOlderMessagesComponent.State.READY);
+                  transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
                 } finally {
                   try {
                     transcripts.endHistoryInsertBatch(target);
@@ -616,7 +607,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
       this.intraLineDeltaY = intraLineDeltaY;
     }
 
-    static ScrollAnchor capture(LoadOlderMessagesComponent control) {
+    static ScrollAnchor capture(Component control) {
       if (control == null) return null;
       try {
         JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, control);

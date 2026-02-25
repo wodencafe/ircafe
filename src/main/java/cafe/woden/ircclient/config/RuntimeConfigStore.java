@@ -1,15 +1,15 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.app.commands.UserCommandAlias;
-import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
-import cafe.woden.ircclient.app.interceptors.InterceptorRule;
-import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
-import cafe.woden.ircclient.ui.filter.FilterRule;
-import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
-import cafe.woden.ircclient.ui.filter.RegexSpec;
-import cafe.woden.ircclient.ui.filter.TagSpec;
-import cafe.woden.ircclient.ui.settings.NotificationRule;
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.FilterScopeOverride;
+import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.model.InterceptorRule;
+import cafe.woden.ircclient.model.InterceptorRuleMode;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.model.RegexSpec;
+import cafe.woden.ircclient.model.TagSpec;
+import cafe.woden.ircclient.model.UserCommandAlias;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -433,6 +433,81 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist UI config to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberMemoryUsageDisplayMode(String mode) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      String normalized = Objects.toString(mode, "").trim().toLowerCase(Locale.ROOT);
+      normalized =
+          switch (normalized) {
+            case "short", "compact" -> "short";
+            case "indicator", "gauge", "bar" -> "indicator";
+            case "moon", "moon-phase", "moon-phases", "lunar" -> "moon";
+            case "hidden", "off", "none", "disable", "disabled" -> "hidden";
+            default -> "long";
+          };
+      ui.put("memoryUsageDisplayMode", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.memoryUsageDisplayMode setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberMemoryUsageWarningNearMaxPercent(int percent) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      int p = Math.max(1, Math.min(50, percent));
+      ui.put("memoryUsageWarningNearMaxPercent", p);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist ui.memoryUsageWarningNearMaxPercent setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberMemoryUsageWarningTooltipEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningTooltipEnabled", enabled);
+  }
+
+  public synchronized void rememberMemoryUsageWarningToastEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningToastEnabled", enabled);
+  }
+
+  public synchronized void rememberMemoryUsageWarningPushyEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningPushyEnabled", enabled);
+  }
+
+  public synchronized void rememberMemoryUsageWarningSoundEnabled(boolean enabled) {
+    rememberMemoryUsageWarningBoolean("memoryUsageWarningSoundEnabled", enabled);
+  }
+
+  private synchronized void rememberMemoryUsageWarningBoolean(String key, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      ui.put(key, enabled);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.{} setting to '{}'", key, file, e);
     }
   }
 

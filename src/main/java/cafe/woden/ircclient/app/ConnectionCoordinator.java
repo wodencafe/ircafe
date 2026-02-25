@@ -7,9 +7,9 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.ui.SwingEdt;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,8 @@ import org.springframework.stereotype.Component;
 @Lazy
 @ApplicationLayer
 public class ConnectionCoordinator {
+  private static final Scheduler EDT_SCHEDULER = Schedulers.from(SwingUtilities::invokeLater);
+
   public enum ConnectivityChange {
     NONE,
     CHANGED
@@ -36,7 +39,7 @@ public class ConnectionCoordinator {
   private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
   private final LogProperties logProps;
-  private final TrayNotificationService trayNotificationService;
+  private final TrayNotificationsPort trayNotificationService;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   /** Per-server connection states (missing => {@link ConnectionState#DISCONNECTED}). */
@@ -60,7 +63,7 @@ public class ConnectionCoordinator {
       ServerCatalog serverCatalog,
       RuntimeConfigStore runtimeConfig,
       LogProperties logProps,
-      TrayNotificationService trayNotificationService) {
+      TrayNotificationsPort trayNotificationService) {
     this.irc = irc;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
@@ -184,7 +187,7 @@ public class ConnectionCoordinator {
 
     disposables.add(
         reconnect
-            .observeOn(SwingEdt.scheduler())
+            .observeOn(EDT_SCHEDULER)
             .subscribe(
                 () -> {},
                 err -> {
@@ -239,7 +242,7 @@ public class ConnectionCoordinator {
 
     disposables.add(
         irc.connect(id)
-            .observeOn(SwingEdt.scheduler())
+            .observeOn(EDT_SCHEDULER)
             .subscribe(
                 () -> {},
                 err -> {
@@ -277,7 +280,7 @@ public class ConnectionCoordinator {
 
     disposables.add(
         irc.disconnect(id, reason)
-            .observeOn(SwingEdt.scheduler())
+            .observeOn(EDT_SCHEDULER)
             .subscribe(
                 () -> {},
                 err -> {
@@ -323,7 +326,7 @@ public class ConnectionCoordinator {
         setDesiredOnline(sid, false);
         disposables.add(
             irc.disconnect(sid)
-                .observeOn(SwingEdt.scheduler())
+                .observeOn(EDT_SCHEDULER)
                 .subscribe(
                     () -> {}, err -> ui.appendError(status, "(disc-error)", String.valueOf(err))));
       }

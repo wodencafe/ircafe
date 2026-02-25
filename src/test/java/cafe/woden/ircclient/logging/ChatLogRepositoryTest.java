@@ -3,7 +3,7 @@ package cafe.woden.ircclient.logging;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.model.LogLine;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;

@@ -1,10 +1,11 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.app.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.PresenceEvent;
 import cafe.woden.ircclient.app.PresenceKind;
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.logging.model.LogDirection;
-import cafe.woden.ircclient.logging.model.LogKind;
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
 import cafe.woden.ircclient.ui.chat.fold.FilteredFoldComponent;
@@ -49,7 +50,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
-public class ChatTranscriptStore {
+public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   private static final int MAX_FILTERED_LINES_PER_PLACEHOLDER_RUN = 250;
   private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;

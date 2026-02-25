@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.model.LogLine;
 import java.util.List;
 
 public record LoadOlderResult(

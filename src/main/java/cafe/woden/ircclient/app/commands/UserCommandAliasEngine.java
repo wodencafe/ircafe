@@ -1,8 +1,9 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.app.AppVersion;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.UserCommandAlias;
+import cafe.woden.ircclient.util.AppVersion;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;

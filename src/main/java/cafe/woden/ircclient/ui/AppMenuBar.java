@@ -1,53 +1,84 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.ApplicationShutdownCoordinator;
+import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
+import cafe.woden.ircclient.app.RuntimeJfrService;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.PreferencesDialog;
 import cafe.woden.ircclient.ui.settings.ThemeIdUtils;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.ThemeSelectionDialog;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeListener;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import javax.swing.Box;
 import javax.swing.ButtonGroup;
+import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JProgressBar;
 import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JToolTip;
 import javax.swing.KeyStroke;
+import javax.swing.Popup;
+import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.WindowConstants;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
 
-@Component
+@org.springframework.stereotype.Component
 @Lazy
 public class AppMenuBar extends JMenuBar {
   // Default proportions used when docking.
@@ -58,6 +89,10 @@ public class AppMenuBar extends JMenuBar {
   // These constants are only a fallback if the window isn't sized yet.
   private static final double DEFAULT_SERVER_DOCK_PROPORTION = 0.22;
   private static final double DEFAULT_USERS_DOCK_PROPORTION = 0.18;
+  private static final int MEMORY_REFRESH_MS = 1000;
+  private static final long MEMORY_WARNING_COOLDOWN_MS = 120_000L;
+  private static final int MOON_ICON_SIZE = 16;
+  private static final long MIB = 1024L * 1024L;
 
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
@@ -88,9 +123,30 @@ public class AppMenuBar extends JMenuBar {
       };
 
   private final UiProperties uiProps;
+  private final UiSettingsBus settingsBus;
+  private final RuntimeConfigStore runtimeConfig;
+  private final TrayNotificationService trayNotificationService;
+  private final PushyNotificationService pushyNotificationService;
+  private final NotificationSoundService notificationSoundService;
+  private final RuntimeJfrService runtimeJfrService;
   private final ChatDockable chat;
   private final ServerTreeDockable serverTree;
   private final UserListDockable users;
+  private final JButton memoryButton = new JButton();
+  private final JButton memoryMoonButton = new JButton();
+  private final JProgressBar memoryIndicator = new JProgressBar(0, 100);
+  private final JPanel memoryWidget = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+  private final JPopupMenu memoryModePopup = new JPopupMenu();
+  private final Timer memoryTimer = new Timer(MEMORY_REFRESH_MS, e -> refreshMemoryUsage());
+  private MemoryUsageDisplayMode memoryUsageDisplayMode = MemoryUsageDisplayMode.LONG;
+  private JDialog memoryDialog;
+  private JProgressBar memoryDialogGauge;
+  private JLabel memoryDialogDetails;
+  private Popup warningTooltipPopup;
+  private Timer warningTooltipHideTimer;
+  private long lastWarningAtMs;
+  private boolean warningThresholdActive;
+  private int shortMemoryButtonHeightPx = -1;
 
   public AppMenuBar(
       PreferencesDialog preferencesDialog,
@@ -100,6 +156,10 @@ public class AppMenuBar extends JMenuBar {
       ThemeManager themeManager,
       UiSettingsBus settingsBus,
       RuntimeConfigStore runtimeConfig,
+      TrayNotificationService trayNotificationService,
+      PushyNotificationService pushyNotificationService,
+      NotificationSoundService notificationSoundService,
+      RuntimeJfrService runtimeJfrService,
       ServerDialogs serverDialogs,
       UiProperties uiProps,
       ChatDockable chat,
@@ -110,9 +170,70 @@ public class AppMenuBar extends JMenuBar {
       ApplicationShutdownCoordinator shutdownCoordinator) {
 
     this.uiProps = uiProps;
+    this.settingsBus = settingsBus;
+    this.runtimeConfig = runtimeConfig;
+    this.trayNotificationService = trayNotificationService;
+    this.pushyNotificationService = pushyNotificationService;
+    this.notificationSoundService = notificationSoundService;
+    this.runtimeJfrService = runtimeJfrService;
     this.chat = chat;
     this.serverTree = serverTree;
     this.users = users;
+
+    memoryButton.setFocusable(false);
+    memoryButton.setMargin(new Insets(1, 6, 1, 6));
+    memoryButton.setToolTipText("Show JVM memory usage details.");
+    memoryButton.addActionListener(e -> openMemoryDialog());
+    installMemoryContextMenuTrigger(memoryButton);
+
+    memoryMoonButton.setFocusable(false);
+    memoryMoonButton.setBorderPainted(false);
+    memoryMoonButton.setContentAreaFilled(false);
+    memoryMoonButton.setOpaque(false);
+    memoryMoonButton.setMargin(new Insets(0, 4, 0, 4));
+    memoryMoonButton.setToolTipText("Show JVM memory usage details.");
+    memoryMoonButton.addActionListener(e -> openMemoryDialog());
+    installMemoryContextMenuTrigger(memoryMoonButton);
+
+    memoryIndicator.setStringPainted(false);
+    memoryIndicator.setFocusable(false);
+    memoryIndicator.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    memoryIndicator.setPreferredSize(new Dimension(74, 14));
+    memoryIndicator.setToolTipText("Show JVM memory usage details.");
+    memoryIndicator.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (!SwingUtilities.isLeftMouseButton(e)) return;
+            openMemoryDialog();
+          }
+
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowMemoryModePopup(e);
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowMemoryModePopup(e);
+          }
+        });
+
+    memoryWidget.setOpaque(false);
+    installMemoryContextMenuTrigger(memoryWidget);
+    memoryWidget.add(memoryButton);
+    memoryWidget.add(memoryIndicator);
+    memoryWidget.add(memoryMoonButton);
+    memoryTimer.setRepeats(true);
+    buildMemoryModePopup();
+
+    MemoryUsageDisplayMode initialMemoryMode =
+        settingsBus.get() != null
+            ? settingsBus.get().memoryUsageDisplayMode()
+            : MemoryUsageDisplayMode.fromToken(
+                uiProps != null ? uiProps.memoryUsageDisplayMode() : null);
+    applyMemoryUsageDisplayMode(initialMemoryMode);
+    refreshMemoryUsage();
 
     // File
     JMenu file = new JMenu("File");
@@ -469,6 +590,13 @@ public class AppMenuBar extends JMenuBar {
         evt -> {
           if (UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) {
             syncThemeChecks.run();
+            UiSettings current = settingsBus.get();
+            applyMemoryUsageDisplayMode(
+                current != null
+                    ? current.memoryUsageDisplayMode()
+                    : MemoryUsageDisplayMode.fromToken(
+                        uiProps != null ? uiProps.memoryUsageDisplayMode() : null));
+            refreshMemoryUsage();
           }
         };
     settingsBus.addListener(themeListener);
@@ -740,6 +868,8 @@ public class AppMenuBar extends JMenuBar {
     add(settings);
     add(window);
     add(help);
+    add(Box.createHorizontalGlue());
+    add(memoryWidget);
 
     installMenuPopupThemeSync(file, servers, edit, insert, settings, window, help);
   }
@@ -765,6 +895,508 @@ public class AppMenuBar extends JMenuBar {
             public void menuCanceled(MenuEvent e) {}
           });
     }
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    if (memoryUsageDisplayMode != MemoryUsageDisplayMode.HIDDEN && !memoryTimer.isRunning()) {
+      memoryTimer.start();
+    }
+  }
+
+  @Override
+  public void removeNotify() {
+    memoryTimer.stop();
+    hideWarningTooltip();
+    if (warningTooltipHideTimer != null) {
+      warningTooltipHideTimer.stop();
+    }
+    if (memoryDialog != null) {
+      memoryDialog.setVisible(false);
+    }
+    super.removeNotify();
+  }
+
+  private void applyMemoryUsageDisplayMode(MemoryUsageDisplayMode mode) {
+    memoryUsageDisplayMode = mode != null ? mode : MemoryUsageDisplayMode.LONG;
+
+    switch (memoryUsageDisplayMode) {
+      case LONG, SHORT -> {
+        memoryWidget.setVisible(true);
+        memoryButton.setVisible(true);
+        memoryIndicator.setVisible(false);
+        memoryMoonButton.setVisible(false);
+      }
+      case INDICATOR -> {
+        memoryWidget.setVisible(true);
+        memoryButton.setVisible(false);
+        memoryIndicator.setVisible(true);
+        memoryMoonButton.setVisible(false);
+      }
+      case MOON -> {
+        memoryWidget.setVisible(true);
+        memoryButton.setVisible(false);
+        memoryIndicator.setVisible(false);
+        memoryMoonButton.setVisible(true);
+      }
+      case HIDDEN -> {
+        memoryWidget.setVisible(false);
+        memoryButton.setVisible(false);
+        memoryIndicator.setVisible(false);
+        memoryMoonButton.setVisible(false);
+      }
+    }
+
+    syncMemoryModePopupSelection();
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) {
+      memoryTimer.stop();
+      if (memoryDialog != null) memoryDialog.setVisible(false);
+      hideWarningTooltip();
+    } else if (isDisplayable() && !memoryTimer.isRunning()) {
+      memoryTimer.start();
+    }
+    updateMemoryButtonHeightForCurrentMode();
+    revalidate();
+    repaint();
+  }
+
+  private void refreshMemoryUsage() {
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) return;
+
+    MemorySnapshot snapshot = readMemorySnapshot();
+    double usageRatio =
+        snapshot.maxBytes() > 0 ? snapshot.usedBytes() / (double) snapshot.maxBytes() : 0d;
+    UiSettings currentSettings = settingsBus != null ? settingsBus.get() : null;
+    int nearMaxPercent =
+        currentSettings != null ? currentSettings.memoryUsageWarningNearMaxPercent() : 5;
+    boolean isNearMax =
+        snapshot.maxBytes() > 0 && usageRatio >= Math.max(0d, (100d - nearMaxPercent) / 100d);
+
+    String longText =
+        snapshot.maxBytes() > 0
+            ? "Mem: " + toMib(snapshot.usedBytes()) + " / " + toMib(snapshot.maxBytes())
+            : "Mem: " + toMib(snapshot.usedBytes());
+    String shortText =
+        snapshot.maxBytes() > 0
+            ? Math.round(snapshot.usedBytes() / (double) MIB)
+                + "/"
+                + Math.round(snapshot.maxBytes() / (double) MIB)
+                + " MiB"
+            : Math.round(snapshot.usedBytes() / (double) MIB) + " MiB";
+    String tooltip =
+        longText
+            + (snapshot.maxBytes() > 0
+                ? " (" + toPercent(snapshot.usedBytes(), snapshot.maxBytes()) + ")"
+                : "")
+            + ". Click for details.";
+
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.LONG) {
+      memoryButton.setText(longText);
+    } else if (memoryUsageDisplayMode == MemoryUsageDisplayMode.SHORT) {
+      memoryButton.setText(shortText);
+    }
+    updateMemoryButtonHeightForCurrentMode();
+    memoryButton.setToolTipText(tooltip);
+
+    if (snapshot.maxBytes() > 0) {
+      int pct = (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes());
+      pct = Math.max(0, Math.min(100, pct));
+      memoryIndicator.setIndeterminate(false);
+      memoryIndicator.setValue(pct);
+      memoryIndicator.setStringPainted(true);
+      memoryIndicator.setString(pct + "%");
+    } else {
+      memoryIndicator.setIndeterminate(true);
+      memoryIndicator.setStringPainted(false);
+      memoryIndicator.setString(null);
+    }
+    memoryIndicator.setToolTipText(tooltip);
+    updateMoonDisplay(snapshot, isNearMax);
+
+    maybeEmitMemoryWarning(snapshot, isNearMax, currentSettings);
+
+    if (memoryDialog != null && memoryDialog.isVisible()) {
+      updateMemoryDialog(snapshot);
+    }
+  }
+
+  private void openMemoryDialog() {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::openMemoryDialog);
+      return;
+    }
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) return;
+    if (memoryDialog == null) {
+      createMemoryDialog();
+    }
+    updateMemoryDialog(readMemorySnapshot());
+    memoryDialog.setLocationRelativeTo(SwingUtilities.getWindowAncestor(this));
+    memoryDialog.setVisible(true);
+    memoryDialog.toFront();
+  }
+
+  private void createMemoryDialog() {
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    memoryDialog =
+        owner instanceof Frame frame
+            ? new JDialog(frame, "JVM Memory", false)
+            : new JDialog((Frame) null, "JVM Memory", false);
+    memoryDialog.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+
+    memoryDialogGauge = new JProgressBar(0, 100);
+    memoryDialogGauge.setStringPainted(true);
+    memoryDialogDetails = new JLabel();
+
+    JButton gcButton = new JButton("Run GC");
+    gcButton.addActionListener(
+        e -> {
+          System.gc();
+          refreshMemoryUsage();
+        });
+    JButton closeButton = new JButton("Close");
+    closeButton.addActionListener(e -> memoryDialog.setVisible(false));
+
+    JButton jfrStatusButton = new JButton("JFR Status");
+    jfrStatusButton.addActionListener(e -> showJfrStatusDialog());
+
+    JButton jfrSnapshotButton = new JButton("Capture JFR Snapshot");
+    jfrSnapshotButton.addActionListener(e -> showJfrSnapshotDialog());
+
+    JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+    controls.add(jfrStatusButton);
+    controls.add(jfrSnapshotButton);
+    controls.add(gcButton);
+    controls.add(closeButton);
+
+    JPanel content = new JPanel(new BorderLayout(10, 10));
+    content.setBorder(javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    content.add(memoryDialogGauge, BorderLayout.NORTH);
+    content.add(memoryDialogDetails, BorderLayout.CENTER);
+    content.add(controls, BorderLayout.SOUTH);
+
+    memoryDialog.setContentPane(content);
+    memoryDialog.setSize(420, 220);
+  }
+
+  private void updateMemoryDialog(MemorySnapshot snapshot) {
+    if (memoryDialogGauge == null || memoryDialogDetails == null) return;
+    if (snapshot.maxBytes() > 0) {
+      int percent = (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes());
+      percent = Math.max(0, Math.min(100, percent));
+      memoryDialogGauge.setIndeterminate(false);
+      memoryDialogGauge.setValue(percent);
+      memoryDialogGauge.setString(percent + "% used");
+    } else {
+      memoryDialogGauge.setIndeterminate(true);
+      memoryDialogGauge.setString("max heap unknown");
+    }
+
+    memoryDialogDetails.setText(
+        "<html>"
+            + "Used heap: "
+            + toMib(snapshot.usedBytes())
+            + "<br>"
+            + "Committed heap: "
+            + toMib(snapshot.committedBytes())
+            + "<br>"
+            + "Free in committed heap: "
+            + toMib(snapshot.freeBytes())
+            + "<br>"
+            + "Max heap: "
+            + (snapshot.maxBytes() > 0 ? toMib(snapshot.maxBytes()) : "unknown")
+            + "</html>");
+  }
+
+  private static MemorySnapshot readMemorySnapshot() {
+    Runtime runtime = Runtime.getRuntime();
+    long committed = Math.max(0L, runtime.totalMemory());
+    long free = Math.max(0L, runtime.freeMemory());
+    long used = Math.max(0L, committed - free);
+    long max = runtime.maxMemory();
+    if (max == Long.MAX_VALUE || max <= 0L) {
+      max = 0L;
+    }
+    return new MemorySnapshot(used, committed, free, max);
+  }
+
+  private static String toMib(long bytes) {
+    double mib = bytes / (double) MIB;
+    return String.format(Locale.ROOT, "%.1f MiB", mib);
+  }
+
+  private static String toPercent(long part, long whole) {
+    if (whole <= 0L) return "n/a";
+    double pct = (part * 100.0d) / whole;
+    return String.format(Locale.ROOT, "%.1f%%", pct);
+  }
+
+  private void updateMoonDisplay(MemorySnapshot snapshot, boolean nearMax) {
+    if (memoryUsageDisplayMode != MemoryUsageDisplayMode.MOON) return;
+    double usageRatio =
+        snapshot.maxBytes() > 0 ? snapshot.usedBytes() / (double) snapshot.maxBytes() : 0d;
+    MoonPhase phase = phaseForUsage(usageRatio, nearMax);
+    memoryMoonButton.setIcon(new MoonPhaseIcon(phase, MOON_ICON_SIZE));
+    memoryMoonButton.setText(null);
+    memoryMoonButton.setPreferredSize(new Dimension(MOON_ICON_SIZE + 10, MOON_ICON_SIZE + 6));
+  }
+
+  private MoonPhase phaseForUsage(double usageRatio, boolean nearMax) {
+    if (nearMax) return MoonPhase.WARNING;
+    if (usageRatio < 0.05d) return MoonPhase.EMPTY;
+    if (usageRatio < 0.25d) return MoonPhase.NEW;
+    if (usageRatio < 0.45d) return MoonPhase.WAXING_CRESCENT;
+    if (usageRatio < 0.65d) return MoonPhase.FIRST_QUARTER;
+    if (usageRatio < 0.90d) return MoonPhase.WAXING_GIBBOUS;
+    return MoonPhase.FULL;
+  }
+
+  private void maybeEmitMemoryWarning(
+      MemorySnapshot snapshot, boolean nearMax, UiSettings currentSettings) {
+    if (!nearMax) {
+      warningThresholdActive = false;
+      hideWarningTooltip();
+      return;
+    }
+
+    long now = System.currentTimeMillis();
+    if (warningThresholdActive && (now - lastWarningAtMs) < MEMORY_WARNING_COOLDOWN_MS) {
+      return;
+    }
+    warningThresholdActive = true;
+    lastWarningAtMs = now;
+
+    String message =
+        "Memory usage is close to JVM max: "
+            + toMib(snapshot.usedBytes())
+            + " / "
+            + toMib(snapshot.maxBytes())
+            + " ("
+            + toPercent(snapshot.usedBytes(), snapshot.maxBytes())
+            + ").";
+
+    boolean tooltipEnabled =
+        currentSettings == null || currentSettings.memoryUsageWarningTooltipEnabled();
+    boolean toastEnabled =
+        currentSettings != null && currentSettings.memoryUsageWarningToastEnabled();
+    boolean pushyEnabled =
+        currentSettings != null && currentSettings.memoryUsageWarningPushyEnabled();
+    boolean soundEnabled =
+        currentSettings != null && currentSettings.memoryUsageWarningSoundEnabled();
+
+    if (tooltipEnabled) {
+      showWarningTooltip(message);
+    }
+    if (toastEnabled && trayNotificationService != null) {
+      trayNotificationService.notifyCustom(
+          "local",
+          "status",
+          "IRCafe Memory Warning",
+          message,
+          true,
+          false,
+          IrcEventNotificationRule.FocusScope.ANY,
+          false,
+          null,
+          false,
+          null);
+    }
+    if (pushyEnabled && pushyNotificationService != null) {
+      pushyNotificationService.notifyEvent(
+          IrcEventNotificationRule.EventType.NOTICE_RECEIVED,
+          "local",
+          "status",
+          "ircafe",
+          false,
+          "IRCafe Memory Warning",
+          message);
+    }
+    if (soundEnabled && notificationSoundService != null) {
+      notificationSoundService.play();
+    }
+  }
+
+  private void showWarningTooltip(String text) {
+    JComponent anchor = currentMemoryAnchor();
+    if (anchor == null || !anchor.isShowing()) return;
+    hideWarningTooltip();
+
+    JToolTip tip = new JToolTip();
+    tip.setTipText(text);
+    java.awt.Point p = anchor.getLocationOnScreen();
+    int x = p.x + Math.max(4, anchor.getWidth() / 2 - 140);
+    int y = p.y + anchor.getHeight() + 6;
+    warningTooltipPopup = PopupFactory.getSharedInstance().getPopup(anchor, tip, x, y);
+    warningTooltipPopup.show();
+
+    if (warningTooltipHideTimer == null) {
+      warningTooltipHideTimer =
+          new Timer(
+              4500,
+              e -> {
+                hideWarningTooltip();
+                if (warningTooltipHideTimer != null) warningTooltipHideTimer.stop();
+              });
+      warningTooltipHideTimer.setRepeats(false);
+    }
+    warningTooltipHideTimer.restart();
+  }
+
+  private void hideWarningTooltip() {
+    if (warningTooltipHideTimer != null) {
+      warningTooltipHideTimer.stop();
+    }
+    if (warningTooltipPopup != null) {
+      try {
+        warningTooltipPopup.hide();
+      } catch (Exception ignored) {
+      }
+      warningTooltipPopup = null;
+    }
+  }
+
+  private JComponent currentMemoryAnchor() {
+    if (memoryButton.isVisible()) return memoryButton;
+    if (memoryIndicator.isVisible()) return memoryIndicator;
+    if (memoryMoonButton.isVisible()) return memoryMoonButton;
+    return null;
+  }
+
+  private void updateMemoryButtonHeightForCurrentMode() {
+    if (memoryUsageDisplayMode != MemoryUsageDisplayMode.SHORT) {
+      memoryButton.setPreferredSize(null);
+      memoryButton.setMinimumSize(null);
+      memoryButton.setMaximumSize(null);
+      shortMemoryButtonHeightPx = -1;
+      return;
+    }
+    int barH = targetShortMemoryButtonHeightPx();
+    int width = 120;
+    Dimension pref = memoryButton.getPreferredSize();
+    if (pref != null && pref.width > 0) {
+      width = pref.width;
+    }
+    if (memoryButton.getWidth() > width) {
+      width = memoryButton.getWidth();
+    }
+    if (shortMemoryButtonHeightPx == barH
+        && memoryButton.getPreferredSize() != null
+        && memoryButton.getPreferredSize().height == barH) {
+      return;
+    }
+    memoryButton.setPreferredSize(new Dimension(width, barH));
+    memoryButton.setMinimumSize(new Dimension(40, barH));
+    memoryButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, barH));
+    shortMemoryButtonHeightPx = barH;
+  }
+
+  private int targetShortMemoryButtonHeightPx() {
+    int menuHeight = 0;
+    for (int i = 0; i < getMenuCount(); i++) {
+      JMenu menu = getMenu(i);
+      if (menu == null || !menu.isVisible()) continue;
+      Dimension d = menu.getPreferredSize();
+      if (d != null && d.height > menuHeight) {
+        menuHeight = d.height;
+      }
+    }
+    if (menuHeight <= 0) {
+      Dimension pref = super.getPreferredSize();
+      if (pref != null) {
+        menuHeight = pref.height - getInsets().top - getInsets().bottom;
+      }
+    }
+    return Math.max(20, menuHeight);
+  }
+
+  private void buildMemoryModePopup() {
+    memoryModePopup.removeAll();
+    ButtonGroup group = new ButtonGroup();
+    for (MemoryUsageDisplayMode mode : MemoryUsageDisplayMode.values()) {
+      JRadioButtonMenuItem item = new JRadioButtonMenuItem(mode.toString());
+      item.putClientProperty("memoryMode", mode);
+      item.addActionListener(e -> setMemoryUsageDisplayModeFromUi(mode));
+      group.add(item);
+      memoryModePopup.add(item);
+    }
+  }
+
+  private void syncMemoryModePopupSelection() {
+    for (Component c : memoryModePopup.getComponents()) {
+      if (!(c instanceof JRadioButtonMenuItem item)) continue;
+      Object v = item.getClientProperty("memoryMode");
+      item.setSelected(v == memoryUsageDisplayMode);
+    }
+  }
+
+  private void setMemoryUsageDisplayModeFromUi(MemoryUsageDisplayMode mode) {
+    if (mode == null) return;
+    UiSettings current = settingsBus != null ? settingsBus.get() : null;
+    if (current != null && settingsBus != null) {
+      UiSettings updated = current.withMemoryUsageDisplayMode(mode);
+      settingsBus.set(updated);
+    } else {
+      applyMemoryUsageDisplayMode(mode);
+      refreshMemoryUsage();
+    }
+    if (runtimeConfig != null) {
+      runtimeConfig.rememberMemoryUsageDisplayMode(mode.token());
+    }
+  }
+
+  private void installMemoryContextMenuTrigger(JComponent component) {
+    if (component == null) return;
+    component.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowMemoryModePopup(e);
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowMemoryModePopup(e);
+          }
+        });
+  }
+
+  private void maybeShowMemoryModePopup(MouseEvent e) {
+    if (e == null || !e.isPopupTrigger()) return;
+    if (!(e.getComponent() instanceof JComponent c)) return;
+    syncMemoryModePopupSelection();
+    PopupMenuThemeSupport.prepareForDisplay(memoryModePopup);
+    memoryModePopup.show(c, e.getX(), e.getY());
+  }
+
+  private void showJfrStatusDialog() {
+    String report =
+        runtimeJfrService != null
+            ? runtimeJfrService.statusReport()
+            : "JFR service is unavailable.";
+    showMultilineInfoDialog("JFR Status", report);
+  }
+
+  private void showJfrSnapshotDialog() {
+    String report;
+    if (runtimeJfrService != null) {
+      RuntimeJfrService.SnapshotReport snapshot = runtimeJfrService.captureSnapshot();
+      report = snapshot != null ? snapshot.summary() : "No snapshot data.";
+    } else {
+      report = "JFR service is unavailable.";
+    }
+    showMultilineInfoDialog("JFR Snapshot", report);
+  }
+
+  private void showMultilineInfoDialog(String title, String body) {
+    JTextArea text = new JTextArea(Objects.toString(body, ""));
+    text.setEditable(false);
+    text.setLineWrap(true);
+    text.setWrapStyleWord(true);
+    text.setCaretPosition(0);
+    JScrollPane scroll = new JScrollPane(text);
+    scroll.setPreferredSize(new Dimension(760, 420));
+    JOptionPane.showMessageDialog(
+        SwingUtilities.getWindowAncestor(this), scroll, title, JOptionPane.INFORMATION_MESSAGE);
   }
 
   private void resetDockLayout() {
@@ -1085,6 +1717,103 @@ public class AppMenuBar extends JMenuBar {
     } catch (Exception ignored) {
     }
   }
+
+  private enum MoonPhase {
+    EMPTY,
+    NEW,
+    WAXING_CRESCENT,
+    FIRST_QUARTER,
+    WAXING_GIBBOUS,
+    FULL,
+    WARNING
+  }
+
+  private static final class MoonPhaseIcon implements javax.swing.Icon {
+    private final MoonPhase phase;
+    private final int size;
+
+    private MoonPhaseIcon(MoonPhase phase, int size) {
+      this.phase = phase == null ? MoonPhase.EMPTY : phase;
+      this.size = Math.max(10, size);
+    }
+
+    @Override
+    public int getIconWidth() {
+      return size;
+    }
+
+    @Override
+    public int getIconHeight() {
+      return size;
+    }
+
+    @Override
+    public void paintIcon(Component c, Graphics g, int x, int y) {
+      if (!(g instanceof Graphics2D g2)) return;
+      Object aa = g2.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+      Color fg = javax.swing.UIManager.getColor("Label.foreground");
+      Color bg = javax.swing.UIManager.getColor("Panel.background");
+      if (fg == null) fg = Color.WHITE;
+      if (bg == null) bg = Color.BLACK;
+
+      int d = size - 2;
+      int ox = x + 1;
+      int oy = y + 1;
+
+      if (phase == MoonPhase.WARNING) {
+        int[] xs = {ox + d / 2, ox + d, ox};
+        int[] ys = {oy, oy + d, oy + d};
+        g2.setColor(new Color(246, 186, 42));
+        g2.fillPolygon(xs, ys, 3);
+        g2.setColor(new Color(60, 44, 10));
+        g2.drawPolygon(xs, ys, 3);
+        g2.drawLine(ox + d / 2, oy + d / 3, ox + d / 2, oy + (d * 2 / 3));
+        g2.fillOval(ox + d / 2 - 1, oy + (d * 3 / 4), 3, 3);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, aa);
+        return;
+      }
+
+      g2.setColor(fg);
+      g2.drawOval(ox, oy, d, d);
+
+      switch (phase) {
+        case EMPTY -> {
+          // Outline only.
+        }
+        case NEW -> {
+          g2.fillOval(ox, oy, d, d);
+        }
+        case WAXING_CRESCENT -> {
+          g2.fillOval(ox, oy, d, d);
+          g2.setColor(bg);
+          g2.fillOval(ox + (d / 3), oy, d, d);
+        }
+        case FIRST_QUARTER -> {
+          g2.fillOval(ox, oy, d, d);
+          g2.setColor(bg);
+          g2.fillRect(ox, oy, d / 2, d + 1);
+        }
+        case WAXING_GIBBOUS -> {
+          g2.fillOval(ox, oy, d, d);
+          g2.setColor(bg);
+          g2.fillOval(ox - (d / 5), oy, d / 2, d);
+        }
+        case FULL -> {
+          g2.setColor(new Color(246, 246, 232));
+          g2.fillOval(ox, oy, d, d);
+          g2.setColor(fg);
+          g2.drawOval(ox, oy, d, d);
+        }
+        default -> {}
+      }
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, aa);
+    }
+  }
+
+  private record MemorySnapshot(
+      long usedBytes, long committedBytes, long freeBytes, long maxBytes) {}
 
   private record IrcColorSelection(Integer foreground, Integer background) {}
 

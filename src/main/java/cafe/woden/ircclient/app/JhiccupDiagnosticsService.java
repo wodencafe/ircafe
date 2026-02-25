@@ -14,12 +14,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /** Optional external jHiccup process integration. */
 @Component
+@ApplicationLayer
 public class JhiccupDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(JhiccupDiagnosticsService.class);
 

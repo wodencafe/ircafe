@@ -1,8 +1,15 @@
 package cafe.woden.ircclient.ui.filter;
 
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.logging.model.LogDirection;
-import cafe.woden.ircclient.logging.model.LogKind;
+import cafe.woden.ircclient.model.FilterAction;
+import cafe.woden.ircclient.model.FilterDirection;
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.FilterScopeOverride;
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.RegexFlag;
+import cafe.woden.ircclient.model.RegexSpec;
+import cafe.woden.ircclient.model.TagSpec;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;

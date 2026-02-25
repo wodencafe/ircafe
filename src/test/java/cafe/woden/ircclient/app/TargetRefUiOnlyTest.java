@@ -50,4 +50,28 @@ class TargetRefUiOnlyTest {
     assertEquals(
         ref, new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_TERMINAL_TARGET));
   }
+
+  @Test
+  void applicationJfrTargetIsUiOnly() {
+    TargetRef ref = TargetRef.applicationJfr();
+    assertTrue(ref.isApplicationJfr());
+    assertTrue(ref.isApplicationUi());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(
+        ref, new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_JFR_TARGET));
+  }
+
+  @Test
+  void applicationSpringTargetIsUiOnly() {
+    TargetRef ref = TargetRef.applicationSpring();
+    assertTrue(ref.isApplicationSpring());
+    assertTrue(ref.isApplicationUi());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(
+        ref, new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_SPRING_TARGET));
+  }
 }

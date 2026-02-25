@@ -6,11 +6,9 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
-import cafe.woden.ircclient.logging.ChatLogMaintenance;
-import cafe.woden.ircclient.logging.history.ChatHistoryService;
-import cafe.woden.ircclient.model.UserListStore;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.Comparator;
@@ -22,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -30,6 +29,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
+@ApplicationLayer
 public class TargetCoordinator {
   private static final Logger log = LoggerFactory.getLogger(TargetCoordinator.class);
 
@@ -42,8 +42,8 @@ public class TargetCoordinator {
   private final IgnoreListService ignoreList;
   private final UserhostQueryService userhostQueryService;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
-  private final ChatHistoryService chatHistoryService;
-  private final ChatLogMaintenance chatLogMaintenance;
+  private final TargetChatHistoryPort targetChatHistoryPort;
+  private final TargetLogMaintenancePort targetLogMaintenancePort;
 
   private final ExecutorService maintenanceExec;
 
@@ -71,8 +71,8 @@ public class TargetCoordinator {
       IgnoreListService ignoreList,
       UserhostQueryService userhostQueryService,
       UserInfoEnrichmentService userInfoEnrichmentService,
-      ChatHistoryService chatHistoryService,
-      ChatLogMaintenance chatLogMaintenance,
+      TargetChatHistoryPort targetChatHistoryPort,
+      TargetLogMaintenancePort targetLogMaintenancePort,
       @Qualifier(ExecutorConfig.TARGET_COORDINATOR_MAINTENANCE_EXECUTOR)
           ExecutorService maintenanceExec,
       @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
@@ -86,8 +86,8 @@ public class TargetCoordinator {
     this.ignoreList = ignoreList;
     this.userhostQueryService = userhostQueryService;
     this.userInfoEnrichmentService = userInfoEnrichmentService;
-    this.chatHistoryService = chatHistoryService;
-    this.chatLogMaintenance = chatLogMaintenance;
+    this.targetChatHistoryPort = targetChatHistoryPort;
+    this.targetLogMaintenancePort = targetLogMaintenancePort;
     this.maintenanceExec = maintenanceExec;
     this.usersRefreshExec = usersRefreshExec;
   }
@@ -106,13 +106,13 @@ public class TargetCoordinator {
     // Immediate UI reset on EDT (caller is already on EDT via IrcMediator subscription).
     ui.clearTranscript(target);
     ui.clearUnread(target);
-    chatHistoryService.reset(target);
+    targetChatHistoryPort.reset(target);
 
     // DB purge off the EDT.
     maintenanceExec.submit(
         () -> {
           try {
-            chatLogMaintenance.clearTarget(target);
+            targetLogMaintenancePort.clearTarget(target);
           } catch (Throwable t) {
             log.warn("[ircafe] Clear log failed for {}", target, t);
           }
@@ -152,7 +152,7 @@ public class TargetCoordinator {
     ensureTargetExists(target);
 
     // Load history into an empty transcript before showing it (async; won't block the EDT).
-    chatHistoryService.onTargetSelected(target);
+    targetChatHistoryPort.onTargetSelected(target);
 
     // Selection in the server tree drives what the main Chat dock is displaying.
     ui.setChatActiveTarget(target);
@@ -445,6 +445,10 @@ public class TargetCoordinator {
       statusBarChannel = "AssertJ Swing";
     } else if (target.isApplicationJhiccup()) {
       statusBarChannel = "jHiccup";
+    } else if (target.isApplicationJfr()) {
+      statusBarChannel = "JFR";
+    } else if (target.isApplicationSpring()) {
+      statusBarChannel = "Spring";
     } else if (target.isApplicationTerminal()) {
       statusBarChannel = "Terminal";
     } else if (target.isLogViewer()) {

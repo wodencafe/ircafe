@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.filter;
 
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.FilterScopeOverride;
 import java.util.List;
 
 /** Current filter settings snapshot. */

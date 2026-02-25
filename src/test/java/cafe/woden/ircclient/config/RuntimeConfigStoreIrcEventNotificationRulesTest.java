@@ -2,7 +2,7 @@ package cafe.woden.ircclient.config;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

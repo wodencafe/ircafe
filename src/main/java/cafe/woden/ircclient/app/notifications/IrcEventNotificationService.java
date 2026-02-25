@@ -1,9 +1,10 @@
 package cafe.woden.ircclient.app.notifications;
 
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,14 +28,14 @@ public class IrcEventNotificationService {
   private static final long SCRIPT_TIMEOUT_SECONDS = 8L;
 
   private final IrcEventNotificationRulesBus rulesBus;
-  private final TrayNotificationService trayNotificationService;
+  private final TrayNotificationsPort trayNotificationService;
   private final NotificationStore notificationStore;
   private final PushyNotificationService pushyNotificationService;
   private final ExecutorService scriptExecutor;
 
   public IrcEventNotificationService(
       IrcEventNotificationRulesBus rulesBus,
-      TrayNotificationService trayNotificationService,
+      TrayNotificationsPort trayNotificationService,
       NotificationStore notificationStore,
       PushyNotificationService pushyNotificationService,
       @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService scriptExecutor) {

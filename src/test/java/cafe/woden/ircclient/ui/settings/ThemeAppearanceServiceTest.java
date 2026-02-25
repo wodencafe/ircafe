@@ -119,6 +119,52 @@ class ThemeAppearanceServiceTest {
         });
   }
 
+  @Test
+  void uiFontOverrideDoesNotLeakAcrossLookAndFeelClassSwitches() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            UIManager.setLookAndFeel(new FlatLightLaf());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+
+          Font lightTreeBaseline = uiFont("Tree.font");
+          int targetSize = lightTreeBaseline.getSize() + 4;
+
+          try {
+            UIManager.setLookAndFeel(new FlatDarkLaf());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+
+          Font darkTreeBaseline = uiFont("Tree.font");
+          service.applyCommonTweaks(
+              new ThemeTweakSettings(
+                  ThemeTweakSettings.ThemeDensity.AUTO, 10, true, darkTreeBaseline.getFamily(), targetSize));
+          Font darkAfterApply = uiFont("Tree.font");
+          assertEquals(targetSize, darkAfterApply.getSize());
+
+          try {
+            UIManager.setLookAndFeel(new FlatLightLaf());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+
+          service.applyCommonTweaks(
+              new ThemeTweakSettings(
+                  ThemeTweakSettings.ThemeDensity.AUTO,
+                  10,
+                  false,
+                  darkTreeBaseline.getFamily(),
+                  targetSize));
+
+          Font lightAfterRestore = uiFont("Tree.font");
+          assertEquals(lightTreeBaseline.getFamily(), lightAfterRestore.getFamily());
+          assertEquals(lightTreeBaseline.getSize(), lightAfterRestore.getSize());
+        });
+  }
+
   @AfterAll
   void restoreLookAndFeel() throws Exception {
     if (initialLookAndFeelClassName == null || initialLookAndFeelClassName.isBlank()) return;
@@ -137,5 +183,13 @@ class ThemeAppearanceServiceTest {
       return;
     }
     SwingUtilities.invokeAndWait(r);
+  }
+
+  private static Font uiFont(String key) {
+    Font f = UIManager.getFont(key);
+    if (f != null) return f;
+    Font fallback = UIManager.getFont("defaultFont");
+    if (fallback != null) return fallback;
+    return new Font("Dialog", Font.PLAIN, 12);
   }
 }

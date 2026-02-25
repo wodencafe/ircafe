@@ -7,12 +7,14 @@ import java.util.IdentityHashMap;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /** Routes non-IRC application diagnostics into dedicated application buffers. */
 @Component
+@ApplicationLayer
 public class ApplicationDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(ApplicationDiagnosticsService.class);
   private static final int MAX_STACK_LINES = 20;

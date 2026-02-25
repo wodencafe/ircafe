@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
-import cafe.woden.ircclient.notify.sound.BuiltInSound;
+import cafe.woden.ircclient.model.BuiltInSound;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

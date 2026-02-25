@@ -4,12 +4,9 @@ import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.logging.model.LogDirection;
-import cafe.woden.ircclient.logging.model.LogKind;
-import cafe.woden.ircclient.logging.model.LogLine;
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
-import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.LogLine;
 import io.reactivex.rxjava3.core.Completable;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -57,8 +54,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private final IrcClientService irc;
   private final ChatHistoryBatchBus batchBus;
   private final ZncPlaybackBus zncPlaybackBus;
-  private final ChatTranscriptStore transcripts;
-  private final UiSettingsBus settingsBus;
+  private final ChatHistoryTranscriptPort transcripts;
 
   private final ExecutorService exec;
 
@@ -73,14 +69,12 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       IrcClientService irc,
       ChatHistoryBatchBus batchBus,
       ZncPlaybackBus zncPlaybackBus,
-      ChatTranscriptStore transcripts,
-      UiSettingsBus settingsBus,
+      ChatHistoryTranscriptPort transcripts,
       @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
     this.zncPlaybackBus = zncPlaybackBus;
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
-    this.settingsBus = settingsBus;
     this.exec = Objects.requireNonNull(exec, "exec");
   }
 
@@ -169,7 +163,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     }
 
     try {
-      transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
+      transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
     } catch (Exception ignored) {
     }
   }
@@ -194,9 +188,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
     int limit = 100;
     try {
-      if (settingsBus != null) {
-        limit = settingsBus.get().chatHistoryInitialLoadLines();
-      }
+      limit = transcripts.chatHistoryInitialLoadLines();
     } catch (Exception ignored) {
       limit = 100;
     }
@@ -258,8 +250,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                       transcripts.setLoadOlderMessagesControlState(
                           target,
                           res.hasMore()
-                              ? LoadOlderMessagesComponent.State.READY
-                              : LoadOlderMessagesComponent.State.EXHAUSTED);
+                              ? LoadOlderControlState.READY
+                              : LoadOlderControlState.EXHAUSTED);
                     } catch (Exception ignored) {
                     }
                   } finally {
@@ -336,22 +328,20 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   }
 
   private void ensureLoadOlderControlAndHandler(TargetRef target) {
-    final LoadOlderMessagesComponent control = transcripts.ensureLoadOlderMessagesControl(target);
+    final java.awt.Component control = transcripts.ensureLoadOlderMessagesControl(target);
 
     if (Boolean.TRUE.equals(noMoreOlder.getOrDefault(target, false))) {
-      transcripts.setLoadOlderMessagesControlState(
-          target, LoadOlderMessagesComponent.State.EXHAUSTED);
+      transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.EXHAUSTED);
       return;
     }
 
     if (!irc.isChatHistoryAvailable(target.serverId())
         && !irc.isZncPlaybackAvailable(target.serverId())) {
-      transcripts.setLoadOlderMessagesControlState(
-          target, LoadOlderMessagesComponent.State.UNAVAILABLE);
+      transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.UNAVAILABLE);
       return;
     }
 
-    transcripts.setLoadOlderMessagesControlState(target, LoadOlderMessagesComponent.State.READY);
+    transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
     oldestCursor.computeIfAbsent(target, t -> new LogCursor(seedCursorEpochMs(t), 0));
 
     if (Boolean.TRUE.equals(handlerInstalled.putIfAbsent(target, Boolean.TRUE))) {
@@ -363,13 +353,12 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         () -> {
           if (!canLoadOlder(target)) return false;
 
-          transcripts.setLoadOlderMessagesControlState(
-              target, LoadOlderMessagesComponent.State.LOADING);
+          transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.LOADING);
           final ScrollAnchor anchor = ScrollAnchor.capture(control);
 
           int pageSize = DEFAULT_PAGE_SIZE;
           try {
-            if (settingsBus != null) pageSize = settingsBus.get().chatHistoryPageSize();
+            pageSize = transcripts.chatHistoryPageSize();
           } catch (Exception ignored) {
             pageSize = DEFAULT_PAGE_SIZE;
           }
@@ -401,15 +390,14 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
                   if (res.hasMore()) {
                     transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderMessagesComponent.State.READY);
+                        target, LoadOlderControlState.READY);
                   } else {
                     transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderMessagesComponent.State.EXHAUSTED);
+                        target, LoadOlderControlState.EXHAUSTED);
                   }
                 } catch (Exception e) {
                   // Fail open: allow retry.
-                  transcripts.setLoadOlderMessagesControlState(
-                      target, LoadOlderMessagesComponent.State.READY);
+                  transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
                 } finally {
                   try {
                     transcripts.endHistoryInsertBatch(target);
@@ -714,7 +702,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       this.intraLineDeltaY = intraLineDeltaY;
     }
 
-    static ScrollAnchor capture(LoadOlderMessagesComponent control) {
+    static ScrollAnchor capture(java.awt.Component control) {
       if (control == null) return null;
       try {
         JViewport vp = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, control);

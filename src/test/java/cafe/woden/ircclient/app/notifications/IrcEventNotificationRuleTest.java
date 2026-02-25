@@ -4,7 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.notify.sound.BuiltInSound;
+import cafe.woden.ircclient.model.BuiltInSound;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import org.junit.jupiter.api.Test;
 
 class IrcEventNotificationRuleTest {

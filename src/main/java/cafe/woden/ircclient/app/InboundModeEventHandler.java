@@ -178,12 +178,14 @@ public class InboundModeEventHandler {
 
     // Seed our flag-mode state from the 324 listing (first token is the mode string).
     String listed = ev.details();
+    boolean hadFlagState = channelFlagModeState.hasAnyState(serverId, ev.channel());
+    boolean changedFlagState = false;
     if (listed != null) {
       String d = listed.trim();
       if (!d.isEmpty()) {
         int sp = d.indexOf(' ');
         String token = (sp < 0) ? d : d.substring(0, sp);
-        channelFlagModeState.applyDelta(serverId, ev.channel(), token);
+        changedFlagState = channelFlagModeState.applyDelta(serverId, ev.channel(), token);
       }
     }
 
@@ -192,13 +194,33 @@ public class InboundModeEventHandler {
     joinModeBurstService.discardJoinModeBuffer(serverId, ev.channel());
 
     TargetRef out = modeRoutingState.removePendingModeTarget(serverId, ev.channel());
+    boolean hadPendingModeTarget = out != null;
     if (out == null) out = chan;
     ui.ensureTargetExists(out);
 
     String summary = modeFormattingService.describeCurrentChannelModes(ev.details());
     if (summary != null && !summary.isBlank()) {
+      boolean outputIsChannel = out.equals(chan);
       if (joinModeBurstService.shouldSuppressModesListedSummary(
-          serverId, ev.channel(), out.equals(chan))) {
+          serverId, ev.channel(), outputIsChannel)) {
+        return;
+      }
+
+      // Some networks emit a MODE listing (324) immediately after +v/+o updates.
+      // If the summary is unsolicited and does not change our tracked channel flags, suppress it.
+      if (!hadPendingModeTarget
+          && outputIsChannel
+          && recentStatusModeState.isRecent(serverId, ev.channel(), 2000L)
+          && (!hadFlagState || !changedFlagState)) {
+        if (log.isDebugEnabled()) {
+          log.debug(
+              "MODEDBG handler suppress 324 status echo serverId={} channel={} details={} hadFlagState={} changedFlagState={}",
+              serverId,
+              ev.channel(),
+              clip(ev.details()),
+              hadFlagState,
+              changedFlagState);
+        }
         return;
       }
       ui.appendNotice(out, "(mode)", summary);

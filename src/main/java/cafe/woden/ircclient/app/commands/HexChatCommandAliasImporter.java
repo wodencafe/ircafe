@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
+import cafe.woden.ircclient.model.UserCommandAlias;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

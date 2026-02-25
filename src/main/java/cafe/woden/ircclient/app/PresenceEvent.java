@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.app;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
+@ValueObject
 public record PresenceEvent(
     PresenceKind kind, String nick, String oldNick, String newNick, String reason) {
 
