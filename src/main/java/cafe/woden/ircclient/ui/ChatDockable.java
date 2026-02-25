@@ -703,8 +703,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private void refreshManagedChannelsCard(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty() || serverTree == null) {
-      channelListPanel.setManagedChannels(
-          sid, List.of(), ChannelListPanel.ManagedSortMode.CUSTOM);
+      channelListPanel.setManagedChannels(sid, List.of(), ChannelListPanel.ManagedSortMode.CUSTOM);
       return;
     }
 
@@ -907,7 +906,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     channelListPanel.appendEntry(serverId, channel, visibleUsers, topic);
   }
 
-  public void appendChannelListEntries(String serverId, List<ChannelListPanel.ListEntryRow> entries) {
+  public void appendChannelListEntries(
+      String serverId, List<ChannelListPanel.ListEntryRow> entries) {
     channelListPanel.appendEntries(serverId, entries);
   }
 
@@ -985,8 +985,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (out.isEmpty()) {
       return List.of();
     }
-    String summary =
-        banListSummaryByServer.getOrDefault(sid, Map.of()).getOrDefault(ch, "").trim();
+    String summary = banListSummaryByServer.getOrDefault(sid, Map.of()).getOrDefault(ch, "").trim();
     if (!summary.isEmpty()) out.add(summary);
     return List.copyOf(out);
   }

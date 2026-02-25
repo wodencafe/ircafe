@@ -44,8 +44,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import javax.swing.JButton;
 import javax.swing.Icon;
+import javax.swing.JButton;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -65,9 +65,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
       fixture.ui.beginChannelList("libera", "Loading ALIS search results...");
       waitFor(() -> onEdtCall(() -> !fixture.runAlisButton.isEnabled()), Duration.ofSeconds(2));
       waitFor(
-          () ->
-              onEdtCall(
-                  () -> fixture.listTable.getCursor().getType() == Cursor.WAIT_CURSOR),
+          () -> onEdtCall(() -> fixture.listTable.getCursor().getType() == Cursor.WAIT_CURSOR),
           Duration.ofSeconds(2));
       waitFor(
           () -> onEdtCall(() -> fixture.runAlisButton.getIcon() != fixture.defaultAlisIcon),
@@ -79,9 +77,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
       fixture.ui.endChannelList("libera", "End of output.");
       waitFor(() -> onEdtCall(() -> fixture.runAlisButton.isEnabled()), Duration.ofSeconds(2));
       waitFor(
-          () ->
-              onEdtCall(
-                  () -> fixture.listTable.getCursor().getType() == Cursor.DEFAULT_CURSOR),
+          () -> onEdtCall(() -> fixture.listTable.getCursor().getType() == Cursor.DEFAULT_CURSOR),
           Duration.ofSeconds(2));
       waitFor(
           () -> onEdtCall(() -> fixture.runAlisButton.getIcon() == fixture.defaultAlisIcon),
@@ -219,7 +215,8 @@ class ChannelListLoggingDecoratorFunctionalTest {
         null);
   }
 
-  private static void waitFor(ThrowingBooleanSupplier condition, Duration timeout) throws Exception {
+  private static void waitFor(ThrowingBooleanSupplier condition, Duration timeout)
+      throws Exception {
     Instant deadline = Instant.now().plus(timeout);
     while (Instant.now().isBefore(deadline)) {
       flushEdt();

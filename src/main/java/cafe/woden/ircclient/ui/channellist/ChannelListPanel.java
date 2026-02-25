@@ -7,8 +7,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
-import java.awt.Dimension;
 import java.awt.Dialog;
+import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -30,12 +30,12 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
-import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -226,15 +226,13 @@ public final class ChannelListPanel extends JPanel {
     JPanel root = new JPanel(new BorderLayout(0, 8));
     root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-    JPanel controls =
-        new JPanel(new MigLayout("insets 0, fillx", "[][][]push[][grow,fill]", "[]"));
+    JPanel controls = new JPanel(new MigLayout("insets 0, fillx", "[][][]push[][grow,fill]", "[]"));
     configureActionButton(
         runListButton,
         "refresh",
         "Request full /list from server (heavy; confirmation required)",
         "Run /list");
-    runListButton.setToolTipText(
-        "Request full /list from server (heavy; confirmation required)");
+    runListButton.setToolTipText("Request full /list from server (heavy; confirmation required)");
     runListButton.addActionListener(e -> runFullListRequested());
 
     configureActionButton(
@@ -247,10 +245,7 @@ public final class ChannelListPanel extends JPanel {
     runAlisButton.addActionListener(e -> runAlisRequested());
 
     configureActionButton(
-        listDetailsButton,
-        "eye",
-        "Show details for selected channel",
-        "Show details");
+        listDetailsButton, "eye", "Show details for selected channel", "Show details");
     listDetailsButton.addActionListener(e -> showServerListDetailsForSelection());
 
     controls.add(runListButton);
@@ -360,18 +355,11 @@ public final class ChannelListPanel extends JPanel {
         "Attach selected channel if detached, or detach if attached",
         "Attach/Detach");
     configureActionButton(
-        closeChannelButton,
-        "close",
-        "Close selected channel and remove it from the list",
-        "Close");
+        closeChannelButton, "close", "Close selected channel and remove it from the list", "Close");
     configureActionButton(
-        managedDetailsButton,
-        "eye",
-        "Show details for selected managed channel",
-        "Show details");
+        managedDetailsButton, "eye", "Show details for selected managed channel", "Show details");
     configureActionButton(moveUpButton, "arrow-up", "Move selected channel up", "Move up");
-    configureActionButton(
-        moveDownButton, "arrow-down", "Move selected channel down", "Move down");
+    configureActionButton(moveDownButton, "arrow-down", "Move selected channel down", "Move down");
 
     sortModeCombo.setToolTipText("Sort mode for managed channels on this server.");
     sortModeCombo.setRenderer(
@@ -643,7 +631,8 @@ public final class ChannelListPanel extends JPanel {
       String ch = Objects.toString(entry.channel(), "").trim();
       if (ch.isEmpty()) continue;
       toAppend.add(
-          new Row(ch, Math.max(0, entry.visibleUsers()), Objects.toString(entry.topic(), "").trim()));
+          new Row(
+              ch, Math.max(0, entry.visibleUsers()), Objects.toString(entry.topic(), "").trim()));
     }
     if (toAppend.isEmpty()) return;
 
@@ -673,7 +662,8 @@ public final class ChannelListPanel extends JPanel {
     refreshOpenDetailsDialog();
   }
 
-  public void setManagedChannels(String serverId, List<ManagedChannelRow> rows, ManagedSortMode mode) {
+  public void setManagedChannels(
+      String serverId, List<ManagedChannelRow> rows, ManagedSortMode mode) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
 
@@ -773,8 +763,7 @@ public final class ChannelListPanel extends JPanel {
       if (totalCount == 0) {
         listSubtitle.setText(DEFAULT_HINT);
       } else if (filtered) {
-        listSubtitle.setText(
-            sid + " - " + visibleCount + " of " + totalCount + " channels shown");
+        listSubtitle.setText(sid + " - " + visibleCount + " of " + totalCount + " channels shown");
       } else {
         listSubtitle.setText(sid + " - " + totalCount + " channels");
       }
@@ -829,11 +818,9 @@ public final class ChannelListPanel extends JPanel {
                 Objects.toString(entry.getStringValue(LIST_COL_CHANNEL), "")
                     .toLowerCase(Locale.ROOT);
             String users =
-                Objects.toString(entry.getStringValue(LIST_COL_USERS), "")
-                    .toLowerCase(Locale.ROOT);
+                Objects.toString(entry.getStringValue(LIST_COL_USERS), "").toLowerCase(Locale.ROOT);
             String topic =
-                Objects.toString(entry.getStringValue(LIST_COL_TOPIC), "")
-                    .toLowerCase(Locale.ROOT);
+                Objects.toString(entry.getStringValue(LIST_COL_TOPIC), "").toLowerCase(Locale.ROOT);
             for (String term : terms) {
               if (term == null || term.isBlank()) continue;
               if (channel.contains(term) || users.contains(term) || topic.contains(term)) continue;
@@ -972,8 +959,7 @@ public final class ChannelListPanel extends JPanel {
   }
 
   static String buildAlisCommand(String query, AlisSearchOptions options) {
-    AlisSearchOptions opts =
-        options == null ? AlisSearchOptions.defaults(false) : options;
+    AlisSearchOptions opts = options == null ? AlisSearchOptions.defaults(false) : options;
     String q = Objects.toString(query, "").trim();
     StringBuilder raw = new StringBuilder("LIST ");
     raw.append(opts.includeTopic() ? "*" : (q.isEmpty() ? "*" : q));
@@ -999,9 +985,7 @@ public final class ChannelListPanel extends JPanel {
     }
 
     AlisRegistrationFilter registration =
-        opts.registrationFilter() == null
-            ? AlisRegistrationFilter.ANY
-            : opts.registrationFilter();
+        opts.registrationFilter() == null ? AlisRegistrationFilter.ANY : opts.registrationFilter();
     if (registration == AlisRegistrationFilter.REGISTERED_ONLY) {
       raw.append(" -show r");
     } else if (registration == AlisRegistrationFilter.UNREGISTERED_ONLY) {
@@ -1326,7 +1310,8 @@ public final class ChannelListPanel extends JPanel {
     ManagedChannelRow managed = findManagedRowByChannel(sid, channel);
     Row list = findListRowByChannel(sid, channel);
 
-    String statusText = managed == null ? "Not managed" : (managed.detached() ? "Detached" : "Attached");
+    String statusText =
+        managed == null ? "Not managed" : (managed.detached() ? "Detached" : "Attached");
     String modesText = managed == null ? "(Unknown)" : displayManagedModes(managed);
     String notificationsText =
         managed == null ? "0" : String.valueOf(Math.max(0, managed.notifications()));
@@ -1337,7 +1322,8 @@ public final class ChannelListPanel extends JPanel {
       if (managed == null) {
         usersText = "Not available";
       } else {
-        usersText = managed.detached() ? "Unavailable while detached" : String.valueOf(managed.users());
+        usersText =
+            managed.detached() ? "Unavailable while detached" : String.valueOf(managed.users());
       }
     } else if (list != null) {
       usersText = String.valueOf(Math.max(0, list.visibleUsers()));
@@ -1390,9 +1376,7 @@ public final class ChannelListPanel extends JPanel {
     refreshBanListButton.addActionListener(
         e -> {
           requestBanListRefresh(sid, channel);
-          setAreaText(
-              banListArea,
-              "Requested MODE +b...\nWaiting for server response.");
+          setAreaText(banListArea, "Requested MODE +b...\nWaiting for server response.");
         });
 
     JPanel content =
@@ -1408,7 +1392,8 @@ public final class ChannelListPanel extends JPanel {
 
     content.add(new JLabel("Source"));
     content.add(
-        readOnlyField(details.source() == ChannelDetailsSource.MANAGED ? "Managed" : "Server /LIST"),
+        readOnlyField(
+            details.source() == ChannelDetailsSource.MANAGED ? "Managed" : "Server /LIST"),
         "growx");
     content.add(new JLabel("State"));
     content.add(stateField, "growx");
@@ -1440,7 +1425,9 @@ public final class ChannelListPanel extends JPanel {
     root.add(south, BorderLayout.SOUTH);
 
     Window owner = SwingUtilities.getWindowAncestor(this);
-    JDialog dialog = new JDialog(owner, "Channel Details - " + details.channel(), Dialog.ModalityType.APPLICATION_MODAL);
+    JDialog dialog =
+        new JDialog(
+            owner, "Channel Details - " + details.channel(), Dialog.ModalityType.APPLICATION_MODAL);
     dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
     dialog.setContentPane(root);
     dialog.setSize(700, 520);
@@ -1713,7 +1700,8 @@ public final class ChannelListPanel extends JPanel {
         int py = y + (ACTION_ICON_SIZE - size) / 2;
 
         if (alisActivityState == AlisActivityState.SPINNER) {
-          Color spinnerColor = c != null && c.getForeground() != null ? c.getForeground() : Color.GRAY;
+          Color spinnerColor =
+              c != null && c.getForeground() != null ? c.getForeground() : Color.GRAY;
           g2.setColor(spinnerColor);
           g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
           g2.drawArc(px, py, size, size, alisSpinnerAngleDeg, 270);

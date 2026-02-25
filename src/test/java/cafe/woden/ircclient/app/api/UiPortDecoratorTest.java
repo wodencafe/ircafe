@@ -28,8 +28,7 @@ class UiPortDecoratorTest {
 
     verify(delegate).beginChannelBanList("libera", "#ircafe");
     verify(delegate)
-        .appendChannelBanListEntry(
-            "libera", "#ircafe", "*!*@bad.host", "ChanOp", 1_739_900_000L);
+        .appendChannelBanListEntry("libera", "#ircafe", "*!*@bad.host", "ChanOp", 1_739_900_000L);
     verify(delegate).endChannelBanList("libera", "#ircafe", "End of channel ban list");
 
     verifyNoMoreInteractions(delegate);
@@ -41,4 +40,3 @@ class UiPortDecoratorTest {
     }
   }
 }
-

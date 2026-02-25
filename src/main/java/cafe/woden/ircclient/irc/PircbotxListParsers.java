@@ -11,8 +11,7 @@ final class PircbotxListParsers {
   static record ListEntry(
       String channel, int visibleUsers, boolean hasVisibleUsers, String topic) {}
 
-  static record BanListEntry(
-      String channel, String mask, String setBy, Long setAtEpochSeconds) {}
+  static record BanListEntry(String channel, String mask, String setBy, Long setAtEpochSeconds) {}
 
   static String parseListStartBanner(String command, String trailing) {
     String cmd = Objects.toString(command, "").trim();

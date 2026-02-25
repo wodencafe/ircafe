@@ -19,8 +19,7 @@ class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
   void senderNickFallsBackToNoticeRawPrefix() throws Exception {
-    Method m =
-        PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
     m.setAccessible(true);
 
     String nick =
@@ -34,8 +33,7 @@ class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
   void senderNickDefaultsToServerWhenUnavailable() throws Exception {
-    Method m =
-        PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
     m.setAccessible(true);
 
     String nick = (String) m.invoke(null, new Object());
@@ -44,8 +42,7 @@ class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
   void senderNickPrefersRawPrefixOverGetSourceFallback() throws Exception {
-    Method m =
-        PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
     m.setAccessible(true);
 
     String nick =

@@ -2775,8 +2775,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String key = entry.channel().toLowerCase(Locale.ROOT);
       if (activeBanListChannels.add(key)) {
         bus.onNext(
-            new ServerIrcEvent(
-                serverId, new IrcEvent.ChannelBanListStarted(at, entry.channel())));
+            new ServerIrcEvent(serverId, new IrcEvent.ChannelBanListStarted(at, entry.channel())));
       }
       bus.onNext(
           new ServerIrcEvent(
@@ -3341,8 +3340,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (event == null) return null;
     String raw = rawLineFromEvent(event);
     if (raw == null || raw.isBlank()) return null;
-    ParsedIrcLine parsed =
-        parseIrcLine(PircbotxLineParseUtil.normalizeIrcLineForParsing(raw));
+    ParsedIrcLine parsed = parseIrcLine(PircbotxLineParseUtil.normalizeIrcLineForParsing(raw));
     if (parsed != null) {
       String nick = nickFromPrefix(parsed.prefix());
       if (nick != null && !nick.isBlank()) return nick;

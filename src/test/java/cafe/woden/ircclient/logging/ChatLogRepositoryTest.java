@@ -125,7 +125,10 @@ class ChatLogRepositoryTest {
       assertEquals(1, fixture.repo.fetchRecentRows("srv", "#chancase", 10).size());
       assertEquals(
           1,
-          fixture.repo.fetchOlderRows("srv", "#chancase", Long.MAX_VALUE, Long.MAX_VALUE, 10).size());
+          fixture
+              .repo
+              .fetchOlderRows("srv", "#chancase", Long.MAX_VALUE, Long.MAX_VALUE, 10)
+              .size());
       assertEquals(1, fixture.repo.deleteTarget("srv", "#chancase"));
       assertEquals(0, fixture.repo.fetchRecent("srv", "#ChanCase", 10).size());
     }

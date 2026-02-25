@@ -81,8 +81,7 @@ public class RuntimeConfigStore {
       List<String> customOrder,
       List<ServerTreeChannelPreference> channels) {
     public static ServerTreeChannelState defaults() {
-      return new ServerTreeChannelState(
-          ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
+      return new ServerTreeChannelState(ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
     }
   }
 
@@ -415,8 +414,7 @@ public class RuntimeConfigStore {
     if (sid.isEmpty()) return;
 
     ServerTreeChannelState state = readServerTreeChannelState(sid);
-    ServerTreeChannelSortMode nextMode =
-        (mode == null) ? ServerTreeChannelSortMode.CUSTOM : mode;
+    ServerTreeChannelSortMode nextMode = (mode == null) ? ServerTreeChannelSortMode.CUSTOM : mode;
 
     writeServerTreeChannelState(
         sid, new ServerTreeChannelState(nextMode, state.customOrder(), state.channels()));
@@ -438,7 +436,8 @@ public class RuntimeConfigStore {
 
     writeServerTreeChannelState(
         sid,
-        new ServerTreeChannelState(state.sortMode(), List.copyOf(nextCustomOrder), state.channels()));
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(nextCustomOrder), state.channels()));
   }
 
   public synchronized ServerTreeChannelState readServerTreeChannelState(String serverId) {
@@ -498,7 +497,8 @@ public class RuntimeConfigStore {
         return ServerTreeChannelState.defaults();
       }
 
-      return new ServerTreeChannelState(sortMode, List.copyOf(customOrder), List.copyOf(byKey.values()));
+      return new ServerTreeChannelState(
+          sortMode, List.copyOf(customOrder), List.copyOf(byKey.values()));
     } catch (Exception e) {
       log.warn("[ircafe] Could not read server-tree channel state from '{}'", file, e);
       return stateFromLegacyAutoJoin(joinedChannels);
@@ -572,7 +572,8 @@ public class RuntimeConfigStore {
         if (n.isEmpty()) continue;
         String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
         if (encoded.isEmpty()) continue;
-        if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded))) continue;
+        if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded)))
+          continue;
         nextAutoJoin.add(encoded);
       }
       if (nextAutoJoin.isEmpty()) {

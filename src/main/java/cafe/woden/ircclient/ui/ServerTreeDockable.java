@@ -3548,11 +3548,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
     }
     int idx;
-    if (ref.isInterceptor() && parent == sn.interceptorsNode) {
-      idx = parent.getChildCount();
-    } else {
-      idx = parent.getChildCount();
-    }
+    idx = parent.getChildCount();
     parent.insert(leaf, idx);
 
     model.nodesWereInserted(parent, new int[] {idx});
@@ -3771,8 +3767,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
     if (channelListNode == null) return List.of();
 
-    Map<String, Boolean> autoByChannel =
-        channelAutoReattachByServer.getOrDefault(sid, Map.of());
+    Map<String, Boolean> autoByChannel = channelAutoReattachByServer.getOrDefault(sid, Map.of());
     ArrayList<ManagedChannelEntry> out = new ArrayList<>();
 
     for (int i = 0; i < channelListNode.getChildCount(); i++) {
@@ -3837,7 +3832,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             return ac.compareTo(bc);
           });
     } else {
-      ArrayList<String> customOrder = channelCustomOrderByServer.getOrDefault(sid, new ArrayList<>());
+      ArrayList<String> customOrder =
+          channelCustomOrderByServer.getOrDefault(sid, new ArrayList<>());
       Map<String, Integer> byKey = new HashMap<>();
       for (int i = 0; i < customOrder.size(); i++) {
         String c = Objects.toString(customOrder.get(i), "").trim();
@@ -3922,7 +3918,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     Map<String, Boolean> autoByChannel = new HashMap<>();
 
     if (runtimeConfig != null) {
-      RuntimeConfigStore.ServerTreeChannelState state = runtimeConfig.readServerTreeChannelState(sid);
+      RuntimeConfigStore.ServerTreeChannelState state =
+          runtimeConfig.readServerTreeChannelState(sid);
       if (state != null && state.sortMode() != null) {
         sortMode =
             state.sortMode() == RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL

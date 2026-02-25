@@ -67,13 +67,18 @@ class ChannelHistoryPreservationFunctionalTest {
       TargetRef lowerCase = new TargetRef("libera", "#chancase");
       long ts = 1_770_000_000_000L;
 
-      fixture.repoFixture().repo().insert(
-          fixture.lineFactory.chatAt(
-              mixedCase, "alice", "history survives close/reopen", false, ts));
+      fixture
+          .repoFixture()
+          .repo()
+          .insert(
+              fixture.lineFactory.chatAt(
+                  mixedCase, "alice", "history survives close/reopen", false, ts));
 
       onEdt(() -> fixture.targetCoordinator.onTargetSelected(lowerCase));
       waitFor(
-          () -> transcriptText(fixture.transcripts.document(lowerCase)).contains("history survives close/reopen"),
+          () ->
+              transcriptText(fixture.transcripts.document(lowerCase))
+                  .contains("history survives close/reopen"),
           Duration.ofSeconds(3));
 
       onEdt(() -> fixture.targetCoordinator.closeChannel(lowerCase));
@@ -82,7 +87,9 @@ class ChannelHistoryPreservationFunctionalTest {
 
       onEdt(() -> fixture.targetCoordinator.onTargetSelected(lowerCase));
       waitFor(
-          () -> transcriptText(fixture.transcripts.document(lowerCase)).contains("history survives close/reopen"),
+          () ->
+              transcriptText(fixture.transcripts.document(lowerCase))
+                  .contains("history survives close/reopen"),
           Duration.ofSeconds(3));
       assertTrue(
           transcriptText(fixture.transcripts.document(lowerCase))
@@ -100,9 +107,12 @@ class ChannelHistoryPreservationFunctionalTest {
       TargetRef selectedTarget = new TargetRef("libera", "alice");
       long ts = 1_770_000_000_100L;
 
-      fixture.repoFixture().repo().insert(
-          fixture.lineFactory.chatAt(
-              storedTarget, "Alice", "pm history survives close/reopen", false, ts));
+      fixture
+          .repoFixture()
+          .repo()
+          .insert(
+              fixture.lineFactory.chatAt(
+                  storedTarget, "Alice", "pm history survives close/reopen", false, ts));
 
       onEdt(() -> fixture.targetCoordinator.onTargetSelected(selectedTarget));
       waitFor(
@@ -436,7 +446,8 @@ class ChannelHistoryPreservationFunctionalTest {
         String text,
         boolean outgoingLocalEcho,
         long tsEpochMs) {
-      return delegate.insertChatFromHistoryAt(ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs);
+      return delegate.insertChatFromHistoryAt(
+          ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs);
     }
 
     @Override
@@ -447,7 +458,8 @@ class ChannelHistoryPreservationFunctionalTest {
         String text,
         boolean outgoingLocalEcho,
         long tsEpochMs) {
-      return delegate.insertActionFromHistoryAt(ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs);
+      return delegate.insertActionFromHistoryAt(
+          ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs);
     }
 
     @Override
@@ -469,7 +481,8 @@ class ChannelHistoryPreservationFunctionalTest {
     }
 
     @Override
-    public int insertPresenceFromHistoryAt(TargetRef ref, int insertAt, String text, long tsEpochMs) {
+    public int insertPresenceFromHistoryAt(
+        TargetRef ref, int insertAt, String text, long tsEpochMs) {
       return delegate.insertPresenceFromHistoryAt(ref, insertAt, text, tsEpochMs);
     }
 
@@ -526,7 +539,6 @@ class ChannelHistoryPreservationFunctionalTest {
     public int chatHistoryPageSize() {
       return pageSize;
     }
-
   }
 
   @FunctionalInterface

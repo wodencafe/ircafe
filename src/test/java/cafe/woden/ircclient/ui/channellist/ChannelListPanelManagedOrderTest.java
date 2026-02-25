@@ -15,9 +15,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.Icon;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -27,11 +27,11 @@ class ChannelListPanelManagedOrderTest {
   @Test
   void buildAlisCommandUsesRawPrivmsgAndLiberaTopicSyntax() {
     assertEquals(
-        "/quote PRIVMSG ALIS :LIST * -topic test",
-        ChannelListPanel.buildAlisCommand("test", true));
+        "/quote PRIVMSG ALIS :LIST * -topic test", ChannelListPanel.buildAlisCommand("test", true));
     assertEquals(
         "/quote PRIVMSG ALIS :LIST * -topic *", ChannelListPanel.buildAlisCommand("", true));
-    assertEquals("/quote PRIVMSG ALIS :LIST test", ChannelListPanel.buildAlisCommand("test", false));
+    assertEquals(
+        "/quote PRIVMSG ALIS :LIST test", ChannelListPanel.buildAlisCommand("test", false));
     assertEquals("/quote PRIVMSG ALIS :LIST *", ChannelListPanel.buildAlisCommand("", false));
   }
 
@@ -39,13 +39,7 @@ class ChannelListPanelManagedOrderTest {
   void buildAlisCommandSupportsMinMaxAndDisplayFlags() {
     ChannelListPanel.AlisSearchOptions options =
         new ChannelListPanel.AlisSearchOptions(
-            true,
-            25,
-            400,
-            10,
-            true,
-            true,
-            ChannelListPanel.AlisRegistrationFilter.REGISTERED_ONLY);
+            true, 25, 400, 10, true, true, ChannelListPanel.AlisRegistrationFilter.REGISTERED_ONLY);
     assertEquals(
         "/quote PRIVMSG ALIS :LIST * -topic java -min 25 -max 400 -skip 10 -show mt -show r",
         ChannelListPanel.buildAlisCommand("java", options));
@@ -181,7 +175,8 @@ class ChannelListPanelManagedOrderTest {
           assertEquals(Cursor.DEFAULT_CURSOR, listTable.getCursor().getType());
         });
 
-    waitFor(() -> onEdtCall(() -> runAlisButton.getIcon() == defaultAlisIcon), Duration.ofSeconds(3));
+    waitFor(
+        () -> onEdtCall(() -> runAlisButton.getIcon() == defaultAlisIcon), Duration.ofSeconds(3));
     onEdt(() -> assertSame(defaultAlisIcon, runAlisButton.getIcon()));
   }
 
@@ -221,7 +216,8 @@ class ChannelListPanelManagedOrderTest {
     return out.get();
   }
 
-  private static void waitFor(ThrowingBooleanSupplier condition, Duration timeout) throws Exception {
+  private static void waitFor(ThrowingBooleanSupplier condition, Duration timeout)
+      throws Exception {
     Instant deadline = Instant.now().plus(timeout);
     while (Instant.now().isBefore(deadline)) {
       if (condition.getAsBoolean()) return;

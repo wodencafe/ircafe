@@ -122,16 +122,14 @@ class PircbotxListParsersTest {
   @Test
   void parseAlisNoticeEntryIgnoresHelpLines() {
     PircbotxListParsers.ListEntry entry =
-        PircbotxListParsers.parseAlisNoticeEntry(
-            "alis", "Syntax: LIST <pattern> [options]");
+        PircbotxListParsers.parseAlisNoticeEntry("alis", "Syntax: LIST <pattern> [options]");
     assertNull(entry);
   }
 
   @Test
   void parseAlisNoticeEndSummaryRecognizesEndMarker() {
     assertEquals(
-        "End of output.",
-        PircbotxListParsers.parseAlisNoticeEndSummary("alis", "End of output."));
+        "End of output.", PircbotxListParsers.parseAlisNoticeEndSummary("alis", "End of output."));
     assertEquals(
         "End of output.",
         PircbotxListParsers.parseAlisNoticeEndSummary("server", "End of output."));

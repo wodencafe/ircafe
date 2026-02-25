@@ -19,8 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.swing.JComponent;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
@@ -382,7 +382,8 @@ class ServerTreeDockableDetachedChannelTest {
             dockable.ensureNode(new TargetRef("oftc", "#beta"));
             dockable.ensureNode(new TargetRef("oftc", "#alpha"));
 
-            dockable.setChannelSortModeForServer("libera", ServerTreeDockable.ChannelSortMode.CUSTOM);
+            dockable.setChannelSortModeForServer(
+                "libera", ServerTreeDockable.ChannelSortMode.CUSTOM);
             dockable.setChannelCustomOrderForServer("libera", List.of("#beta", "#alpha"));
             dockable.setChannelSortModeForServer(
                 "oftc", ServerTreeDockable.ChannelSortMode.ALPHABETICAL);
@@ -396,7 +397,9 @@ class ServerTreeDockableDetachedChannelTest {
                     .map(ServerTreeDockable.ManagedChannelEntry::channel)
                     .toList();
 
-            assertEquals(ServerTreeDockable.ChannelSortMode.CUSTOM, dockable.channelSortModeForServer("libera"));
+            assertEquals(
+                ServerTreeDockable.ChannelSortMode.CUSTOM,
+                dockable.channelSortModeForServer("libera"));
             assertEquals(
                 ServerTreeDockable.ChannelSortMode.ALPHABETICAL,
                 dockable.channelSortModeForServer("oftc"));

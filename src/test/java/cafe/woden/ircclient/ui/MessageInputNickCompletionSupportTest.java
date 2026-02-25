@@ -50,11 +50,7 @@ class MessageInputNickCompletionSupportTest {
       throws Exception {
     Method method =
         MessageInputNickCompletionSupport.class.getDeclaredMethod(
-            "shouldArmPendingNickAddressSuffix",
-            String.class,
-            int.class,
-            String.class,
-            int.class);
+            "shouldArmPendingNickAddressSuffix", String.class, int.class, String.class, int.class);
     method.setAccessible(true);
     return (boolean) method.invoke(support, beforeText, beforeCaret, afterText, afterCaret);
   }

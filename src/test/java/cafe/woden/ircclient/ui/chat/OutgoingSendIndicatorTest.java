@@ -23,7 +23,8 @@ class OutgoingSendIndicatorTest {
 
           Dimension pref = dot.getPreferredSize();
           assertEquals(expectedHeight, pref.height);
-          assertEquals(Math.min(pref.height - 1, fm.getAscent()), dot.getBaseline(pref.width, pref.height));
+          assertEquals(
+              Math.min(pref.height - 1, fm.getAscent()), dot.getBaseline(pref.width, pref.height));
         });
   }
 
@@ -40,7 +41,8 @@ class OutgoingSendIndicatorTest {
           Dimension pref = spinner.getPreferredSize();
           assertEquals(expectedHeight, pref.height);
           assertEquals(
-              Math.min(pref.height - 1, fm.getAscent()), spinner.getBaseline(pref.width, pref.height));
+              Math.min(pref.height - 1, fm.getAscent()),
+              spinner.getBaseline(pref.width, pref.height));
         });
   }
 
