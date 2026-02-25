@@ -214,6 +214,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<TargetRef> closeChannelRequests() {
+    return serverTree.closeChannelRequests();
+  }
+
+  @Override
   public Flowable<TargetRef> clearLogRequests() {
     return serverTree.clearLogRequests();
   }

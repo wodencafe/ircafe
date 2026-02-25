@@ -175,6 +175,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> detachChannelRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
+  private final FlowableProcessor<TargetRef> closeChannelRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
   private final FlowableProcessor<TargetRef> clearLogRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
@@ -1458,6 +1461,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               detach.addActionListener(ev -> detachChannelRequests.onNext(nd.ref));
               menu.add(detach);
             }
+            JMenuItem closeChannel = new JMenuItem("Close Channel \"" + nd.label + "\"");
+            closeChannel.addActionListener(ev -> closeChannelRequests.onNext(nd.ref));
+            menu.add(closeChannel);
           } else {
             JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
             close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
@@ -1936,6 +1942,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public Flowable<TargetRef> detachChannelRequests() {
     return detachChannelRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> closeChannelRequests() {
+    return closeChannelRequests.onBackpressureLatest();
   }
 
   public Flowable<TargetRef> clearLogRequests() {

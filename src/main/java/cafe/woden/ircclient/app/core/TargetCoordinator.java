@@ -403,6 +403,43 @@ public class TargetCoordinator implements ActiveTargetPort {
     ui.closeTarget(target);
   }
 
+  /**
+   * Fully close a channel target.
+   *
+   * <p>Unlike detach, this removes the channel target from the tree/transcript and removes it from
+   * persisted joined-channel state.
+   */
+  public void closeChannel(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    ensureTargetExists(status);
+    ensureTargetExists(target);
+    boolean detached = ui.isChannelDetached(target);
+
+    if (Objects.equals(activeTarget, target)) {
+      applyTargetContext(status);
+      ui.setChatActiveTarget(status);
+      ui.selectTarget(status);
+    }
+
+    detachedChannelsByUserOrKick.remove(target);
+    runtimeConfig.forgetJoinedChannel(sid, target.target());
+    userListStore.clear(sid, target.target());
+    ui.appendStatus(status, "(ui)", "Closed " + target.target());
+    ui.closeTarget(target);
+
+    if (detached || !connectionCoordinator.isConnected(sid)) return;
+    disposables.add(
+        irc.partChannel(sid, target.target(), null)
+            .subscribe(
+                () -> {},
+                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+  }
+
   public void detachChannel(TargetRef target) {
     detachChannel(target, null);
   }

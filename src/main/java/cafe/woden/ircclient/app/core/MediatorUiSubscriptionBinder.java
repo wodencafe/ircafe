@@ -96,6 +96,15 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
+        ui.closeChannelRequests()
+            .observeOn(AppSchedulers.edt())
+            .subscribe(
+                targetCoordinator::closeChannel,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
+
+    disposables.add(
         ui.clearLogRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(

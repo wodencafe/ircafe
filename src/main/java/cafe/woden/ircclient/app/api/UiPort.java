@@ -58,6 +58,11 @@ public interface UiPort {
     return Flowable.empty();
   }
 
+  /** User-initiated request to close a channel target (remove it from the tree/transcript). */
+  default Flowable<TargetRef> closeChannelRequests() {
+    return Flowable.empty();
+  }
+
   Flowable<TargetRef> clearLogRequests();
 
   /** User-initiated IRCv3 capability toggle requests from Network Info UI. */

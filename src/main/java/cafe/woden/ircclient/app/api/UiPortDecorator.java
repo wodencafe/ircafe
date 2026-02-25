@@ -83,6 +83,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public Flowable<TargetRef> closeChannelRequests() {
+    return delegate.closeChannelRequests();
+  }
+
+  @Override
   public Flowable<TargetRef> clearLogRequests() {
     return delegate.clearLogRequests();
   }

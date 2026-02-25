@@ -44,6 +44,7 @@ class ServerTreeDockableDetachedChannelTest {
             JPopupMenu attachedMenu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(attachedMenu);
             assertNotNull(findMenuItem(attachedMenu, "Detach \"#ircafe\""));
+            assertNotNull(findMenuItem(attachedMenu, "Close Channel \"#ircafe\""));
             assertFalse(dockable.isChannelDetached(chan));
             assertNull(findMenuItem(attachedMenu, "Join \"#ircafe\""));
 
@@ -53,6 +54,7 @@ class ServerTreeDockableDetachedChannelTest {
             JPopupMenu detachedMenu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(detachedMenu);
             assertNotNull(findMenuItem(detachedMenu, "Join \"#ircafe\""));
+            assertNotNull(findMenuItem(detachedMenu, "Close Channel \"#ircafe\""));
             assertNull(findMenuItem(detachedMenu, "Detach \"#ircafe\""));
           } catch (Exception e) {
             throw new RuntimeException(e);
@@ -66,6 +68,7 @@ class ServerTreeDockableDetachedChannelTest {
         () -> {
           Disposable detachSub = null;
           Disposable joinSub = null;
+          Disposable closeSub = null;
           try {
             ServerTreeDockable dockable = newDockable();
             invokeAddServerRoot(dockable, "libera");
@@ -75,8 +78,10 @@ class ServerTreeDockableDetachedChannelTest {
 
             AtomicReference<TargetRef> detached = new AtomicReference<>();
             AtomicReference<TargetRef> joined = new AtomicReference<>();
+            AtomicReference<TargetRef> closed = new AtomicReference<>();
             detachSub = dockable.detachChannelRequests().subscribe(detached::set);
             joinSub = dockable.joinChannelRequests().subscribe(joined::set);
+            closeSub = dockable.closeChannelRequests().subscribe(closed::set);
 
             JMenuItem detachItem =
                 findMenuItem(
@@ -85,6 +90,14 @@ class ServerTreeDockableDetachedChannelTest {
             assertNotNull(detachItem);
             detachItem.doClick();
             assertEquals(chan, detached.get());
+
+            JMenuItem closeItem =
+                findMenuItem(
+                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
+                    "Close Channel \"#ircafe\"");
+            assertNotNull(closeItem);
+            closeItem.doClick();
+            assertEquals(chan, closed.get());
 
             dockable.setChannelDetached(chan, true);
             JMenuItem joinItem =
@@ -99,6 +112,7 @@ class ServerTreeDockableDetachedChannelTest {
           } finally {
             if (detachSub != null) detachSub.dispose();
             if (joinSub != null) joinSub.dispose();
+            if (closeSub != null) closeSub.dispose();
           }
         });
   }

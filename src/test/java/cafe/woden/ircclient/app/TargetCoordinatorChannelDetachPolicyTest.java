@@ -50,6 +50,46 @@ class TargetCoordinatorChannelDetachPolicyTest {
   }
 
   @Test
+  void closeChannelForgetsPersistedChannelAndClosesBuffer() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(ui.isChannelDetached(chan)).thenReturn(false);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
+
+    coordinator.closeChannel(chan);
+
+    verify(runtimeConfig).forgetJoinedChannel("libera", "#ircafe");
+    verify(ui).closeTarget(chan);
+    verify(irc).partChannel(eq("libera"), eq("#ircafe"), isNull());
+  }
+
+  @Test
+  void closeDetachedChannelForgetsAndClosesWithoutSendingPart() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(ui.isChannelDetached(chan)).thenReturn(true);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+
+    coordinator.closeChannel(chan);
+
+    verify(runtimeConfig).forgetJoinedChannel("libera", "#ircafe");
+    verify(ui).closeTarget(chan);
+    verify(irc, never()).partChannel(eq("libera"), eq("#ircafe"), isNull());
+    verify(irc, never()).partChannel("libera", "#ircafe");
+  }
+
+  @Test
   void joinedChannelWhileSuppressedIsPartedAgainAndRemainsDetached() {
     UiPort ui = mock(UiPort.class);
     IrcClientService irc = mock(IrcClientService.class);
