@@ -1824,7 +1824,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   @Override
   public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-    return orientation == SwingConstants.VERTICAL ? 16 : 16;
+    return 16;
   }
 
   @Override
