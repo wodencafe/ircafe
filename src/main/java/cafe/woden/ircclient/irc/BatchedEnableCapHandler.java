@@ -44,7 +44,6 @@ final class BatchedEnableCapHandler implements CapHandler {
       for (String cap : serverCaps) {
         String normalized = normalizeCap(cap);
         if (normalized == null) continue;
-        if (normalized.startsWith("-")) normalized = normalized.substring(1);
         if (!normalized.isEmpty()) {
           offeredLower.add(normalized.toLowerCase(Locale.ROOT));
         }
@@ -87,7 +86,6 @@ final class BatchedEnableCapHandler implements CapHandler {
     for (String cap : caps) {
       String normalized = normalizeCap(cap);
       if (normalized == null) continue;
-      if (normalized.startsWith("-")) normalized = normalized.substring(1);
       if (!normalized.isEmpty()) {
         pendingCapsLower.remove(normalized.toLowerCase(Locale.ROOT));
       }
@@ -99,17 +97,19 @@ final class BatchedEnableCapHandler implements CapHandler {
     String normalized = cap.trim();
     if (normalized.isEmpty()) return null;
     if (normalized.startsWith(":")) normalized = normalized.substring(1).trim();
-    boolean negated = false;
-    if (normalized.startsWith("-")) {
-      negated = true;
-      normalized = normalized.substring(1).trim();
+    while (!normalized.isEmpty()) {
+      char leading = normalized.charAt(0);
+      // CAP v3 tokens may be prefixed by '-', '~', or '=' modifiers.
+      if (leading == '-' || leading == '~' || leading == '=') {
+        normalized = normalized.substring(1).trim();
+        continue;
+      }
+      break;
     }
     int eq = normalized.indexOf('=');
     if (eq >= 0) {
       normalized = normalized.substring(0, eq).trim();
     }
-    if (normalized.isEmpty()) return null;
-    if (negated) normalized = "-" + normalized;
     return normalized.isEmpty() ? null : normalized;
   }
 

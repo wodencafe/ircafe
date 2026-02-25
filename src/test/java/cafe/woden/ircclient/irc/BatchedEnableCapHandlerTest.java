@@ -81,4 +81,25 @@ class BatchedEnableCapHandlerTest {
     assertFalse(handler.handleACK(bot, ImmutableList.of("sts=duration=86400,port=6697,preload")));
     assertTrue(handler.handleACK(bot, ImmutableList.of("multiline=max-bytes=4096")));
   }
+
+  @Test
+  void recognizesCapabilitiesWithCapV3Modifiers() throws Exception {
+    BatchedEnableCapHandler handler =
+        new BatchedEnableCapHandler(List.of("message-tags", "typing", "batch"));
+    PircBotX bot = mock(PircBotX.class);
+    OutputCAP outputCap = mock(OutputCAP.class);
+    when(bot.sendCAP()).thenReturn(outputCap);
+
+    boolean finished =
+        handler.handleLS(
+            bot,
+            ImmutableList.of("~message-tags", "=typing", "batch=max-bytes=4096", "sasl=PLAIN"));
+
+    assertFalse(finished);
+    verify(outputCap).request("message-tags", "typing", "batch");
+
+    assertFalse(handler.handleACK(bot, ImmutableList.of(":~message-tags")));
+    assertFalse(handler.handleACK(bot, ImmutableList.of("=typing")));
+    assertTrue(handler.handleACK(bot, ImmutableList.of("batch=max-bytes=4096")));
+  }
 }
