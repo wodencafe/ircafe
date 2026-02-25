@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.app;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
+@ValueObject
 public record UserActionRequest(TargetRef contextTarget, String nick, Action action) {
 
   public enum Action {

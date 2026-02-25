@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.app.AppVersion;
+import cafe.woden.ircclient.util.AppVersion;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;

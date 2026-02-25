@@ -7,7 +7,6 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
-import com.tngtech.archunit.library.freeze.FreezingArchRule;
 
 @AnalyzeClasses(
     packages = "cafe.woden.ircclient",
@@ -16,15 +15,34 @@ class ArchitectureGuardrailsTest {
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_ui_package_directly =
-      FreezingArchRule.freeze(
-          noClasses()
-              .that()
-              .resideInAPackage("cafe.woden.ircclient.app..")
-              .should()
-              .dependOnClassesThat()
-              .resideInAPackage("cafe.woden.ircclient.ui..")
-              .because(
-                  "application code should use app-level ports and abstractions, not concrete Swing/UI types"));
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.ui..")
+          .because(
+              "application code should use app-level ports and abstractions, not concrete Swing/UI types");
+
+  @ArchTest
+  static final ArchRule app_should_not_depend_on_logging_package_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.logging..")
+          .because("application code should use app-owned ports, not logging module internals");
+
+  @ArchTest
+  static final ArchRule logging_should_not_depend_on_ui_package_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.logging..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.ui..")
+          .because("logging should stay UI-agnostic and communicate through app/logging ports");
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_pircbotx_service_directly =

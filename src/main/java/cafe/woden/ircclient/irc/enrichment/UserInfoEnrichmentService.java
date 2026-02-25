@@ -3,9 +3,9 @@ package cafe.woden.ircclient.irc.enrichment;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcRuntimeSettings;
+import cafe.woden.ircclient.irc.IrcRuntimeSettingsProvider;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -51,7 +51,7 @@ public class UserInfoEnrichmentService {
   private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
-  private final ObjectProvider<UiSettingsBus> settingsBusProvider;
+  private final ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider;
 
   private final UserInfoEnrichmentPlanner planner;
   private final Set<String> knownServers = ConcurrentHashMap.newKeySet();
@@ -91,11 +91,11 @@ public class UserInfoEnrichmentService {
 
   public UserInfoEnrichmentService(
       IrcClientService irc,
-      ObjectProvider<UiSettingsBus> settingsBusProvider,
+      ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider,
       UserInfoEnrichmentPlanner planner,
       @Qualifier(ExecutorConfig.USER_INFO_ENRICHMENT_SCHEDULER) ScheduledExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.settingsBusProvider = Objects.requireNonNull(settingsBusProvider, "settingsBusProvider");
+    this.settingsProvider = Objects.requireNonNull(settingsProvider, "settingsProvider");
     this.planner = Objects.requireNonNull(planner, "planner");
     this.exec = Objects.requireNonNull(exec, "exec");
 
@@ -176,10 +176,8 @@ public class UserInfoEnrichmentService {
 
   /** Enqueue WHOIS probes for these nicks (only executed if WHOIS fallback is enabled). */
   public void enqueueWhois(String serverId, Collection<String> nicks) {
-    UiSettingsBus bus = settingsBusProvider.getIfAvailable();
-    UiSettings s = bus != null ? bus.get() : null;
-    if (s == null || !s.userInfoEnrichmentEnabled() || !s.userInfoEnrichmentWhoisFallbackEnabled())
-      return;
+    IrcRuntimeSettings s = currentSettings();
+    if (!s.userInfoEnrichmentEnabled() || !s.userInfoEnrichmentWhoisFallbackEnabled()) return;
 
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
@@ -190,9 +188,8 @@ public class UserInfoEnrichmentService {
 
   /** Enqueue a channel WHO scan (best-effort, rate limited). */
   public void enqueueWhoChannel(String serverId, String channel) {
-    UiSettingsBus bus = settingsBusProvider.getIfAvailable();
-    UiSettings s = bus != null ? bus.get() : null;
-    if (s == null || !s.userInfoEnrichmentEnabled()) return;
+    IrcRuntimeSettings s = currentSettings();
+    if (!s.userInfoEnrichmentEnabled()) return;
 
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
@@ -203,9 +200,8 @@ public class UserInfoEnrichmentService {
 
   /** Enqueue a channel WHO scan as high priority (promoted to the front of the queue). */
   public void enqueueWhoChannelPrioritized(String serverId, String channel) {
-    UiSettingsBus bus = settingsBusProvider.getIfAvailable();
-    UiSettings s = bus != null ? bus.get() : null;
-    if (s == null || !s.userInfoEnrichmentEnabled()) return;
+    IrcRuntimeSettings s = currentSettings();
+    if (!s.userInfoEnrichmentEnabled()) return;
 
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
@@ -216,10 +212,8 @@ public class UserInfoEnrichmentService {
 
   /** Enqueue WHOIS probes as high priority (promoted to the front of the queue). */
   public void enqueueWhoisPrioritized(String serverId, List<String> nicks) {
-    UiSettingsBus bus = settingsBusProvider.getIfAvailable();
-    UiSettings s = bus != null ? bus.get() : null;
-    if (s == null || !s.userInfoEnrichmentEnabled() || !s.userInfoEnrichmentWhoisFallbackEnabled())
-      return;
+    IrcRuntimeSettings s = currentSettings();
+    if (!s.userInfoEnrichmentEnabled() || !s.userInfoEnrichmentWhoisFallbackEnabled()) return;
 
     String sid = norm(serverId);
     if (sid.isEmpty()) return;
@@ -464,10 +458,14 @@ public class UserInfoEnrichmentService {
     return irc.currentNick(serverId).isPresent();
   }
 
+  private IrcRuntimeSettings currentSettings() {
+    IrcRuntimeSettingsProvider provider = settingsProvider.getIfAvailable();
+    return provider != null ? provider.current() : IrcRuntimeSettings.defaults();
+  }
+
   private UserInfoEnrichmentPlanner.Settings config() {
-    UiSettingsBus bus = settingsBusProvider.getIfAvailable();
-    UiSettings s = bus != null ? bus.get() : null;
-    boolean enabled = s != null && s.userInfoEnrichmentEnabled();
+    IrcRuntimeSettings s = currentSettings();
+    boolean enabled = s.userInfoEnrichmentEnabled();
     Duration uhMinInterval = Duration.ofSeconds(15);
     int uhMaxPerMinute = 3;
     Duration uhNickCooldown = Duration.ofMinutes(60);
@@ -479,31 +477,29 @@ public class UserInfoEnrichmentService {
     Duration periodicInterval = Duration.ofSeconds(300);
     int periodicNicksPerTick = 2;
 
-    if (s != null) {
-      uhMinInterval =
-          Duration.ofSeconds(Math.max(1, s.userInfoEnrichmentUserhostMinIntervalSeconds()));
-      uhMaxPerMinute = Math.max(1, s.userInfoEnrichmentUserhostMaxCommandsPerMinute());
-      uhNickCooldown =
-          Duration.ofMinutes(Math.max(1, s.userInfoEnrichmentUserhostNickCooldownMinutes()));
-      uhMaxNicksPerCmd =
-          Math.max(
-              1,
-              Math.min(
-                  UserInfoEnrichmentPlanner.ABSOLUTE_MAX_USERHOST_NICKS_PER_CMD,
-                  s.userInfoEnrichmentUserhostMaxNicksPerCommand()));
+    uhMinInterval =
+        Duration.ofSeconds(Math.max(1, s.userInfoEnrichmentUserhostMinIntervalSeconds()));
+    uhMaxPerMinute = Math.max(1, s.userInfoEnrichmentUserhostMaxCommandsPerMinute());
+    uhNickCooldown =
+        Duration.ofMinutes(Math.max(1, s.userInfoEnrichmentUserhostNickCooldownMinutes()));
+    uhMaxNicksPerCmd =
+        Math.max(
+            1,
+            Math.min(
+                UserInfoEnrichmentPlanner.ABSOLUTE_MAX_USERHOST_NICKS_PER_CMD,
+                s.userInfoEnrichmentUserhostMaxNicksPerCommand()));
 
-      whoisEnabled = s.userInfoEnrichmentWhoisFallbackEnabled();
-      whoisMinInterval =
-          Duration.ofSeconds(Math.max(1, s.userInfoEnrichmentWhoisMinIntervalSeconds()));
-      whoisNickCooldown =
-          Duration.ofMinutes(Math.max(1, s.userInfoEnrichmentWhoisNickCooldownMinutes()));
+    whoisEnabled = s.userInfoEnrichmentWhoisFallbackEnabled();
+    whoisMinInterval =
+        Duration.ofSeconds(Math.max(1, s.userInfoEnrichmentWhoisMinIntervalSeconds()));
+    whoisNickCooldown =
+        Duration.ofMinutes(Math.max(1, s.userInfoEnrichmentWhoisNickCooldownMinutes()));
 
-      periodicEnabled = s.userInfoEnrichmentPeriodicRefreshEnabled();
-      periodicInterval =
-          Duration.ofSeconds(Math.max(5, s.userInfoEnrichmentPeriodicRefreshIntervalSeconds()));
-      periodicNicksPerTick =
-          Math.max(1, Math.min(10, s.userInfoEnrichmentPeriodicRefreshNicksPerTick()));
-    }
+    periodicEnabled = s.userInfoEnrichmentPeriodicRefreshEnabled();
+    periodicInterval =
+        Duration.ofSeconds(Math.max(5, s.userInfoEnrichmentPeriodicRefreshIntervalSeconds()));
+    periodicNicksPerTick =
+        Math.max(1, Math.min(10, s.userInfoEnrichmentPeriodicRefreshNicksPerTick()));
 
     return new UserInfoEnrichmentPlanner.Settings(
         enabled,

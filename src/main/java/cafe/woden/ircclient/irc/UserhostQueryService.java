@@ -1,8 +1,6 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -48,7 +46,7 @@ public class UserhostQueryService {
   private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
-  private final ObjectProvider<UiSettingsBus> settingsBusProvider;
+  private final ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider;
   private final ScheduledExecutorService exec;
   private final Object scheduleLock = new Object();
   private ScheduledFuture<?> scheduledTick;
@@ -58,10 +56,10 @@ public class UserhostQueryService {
 
   public UserhostQueryService(
       IrcClientService irc,
-      ObjectProvider<UiSettingsBus> settingsBusProvider,
+      ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider,
       @Qualifier(ExecutorConfig.USERHOST_QUERY_SCHEDULER) ScheduledExecutorService exec) {
     this.irc = irc;
-    this.settingsBusProvider = settingsBusProvider;
+    this.settingsProvider = settingsProvider;
     this.exec = exec;
   }
 
@@ -272,22 +270,20 @@ public class UserhostQueryService {
   }
 
   private UserhostConfig config() {
-    UiSettingsBus bus = settingsBusProvider.getIfAvailable();
-    UiSettings s = bus != null ? bus.get() : null;
+    IrcRuntimeSettingsProvider provider = settingsProvider.getIfAvailable();
+    IrcRuntimeSettings s = provider != null ? provider.current() : IrcRuntimeSettings.defaults();
 
-    boolean enabled = s == null || s.userhostDiscoveryEnabled();
+    boolean enabled = s.userhostDiscoveryEnabled();
 
     Duration minInterval = DEFAULT_MIN_CMD_INTERVAL;
     int maxPerMinute = DEFAULT_MAX_CMDS_PER_MINUTE;
     Duration cooldown = DEFAULT_NICK_COOLDOWN;
     int maxNicks = DEFAULT_MAX_NICKS_PER_CMD;
 
-    if (s != null) {
-      minInterval = Duration.ofSeconds(Math.max(1, s.userhostMinIntervalSeconds()));
-      maxPerMinute = Math.max(1, s.userhostMaxCommandsPerMinute());
-      cooldown = Duration.ofMinutes(Math.max(1, s.userhostNickCooldownMinutes()));
-      maxNicks = Math.max(1, Math.min(ABSOLUTE_MAX_NICKS_PER_CMD, s.userhostMaxNicksPerCommand()));
-    }
+    minInterval = Duration.ofSeconds(Math.max(1, s.userhostMinIntervalSeconds()));
+    maxPerMinute = Math.max(1, s.userhostMaxCommandsPerMinute());
+    cooldown = Duration.ofMinutes(Math.max(1, s.userhostNickCooldownMinutes()));
+    maxNicks = Math.max(1, Math.min(ABSOLUTE_MAX_NICKS_PER_CMD, s.userhostMaxNicksPerCommand()));
 
     return new UserhostConfig(enabled, minInterval, maxPerMinute, cooldown, maxNicks);
   }

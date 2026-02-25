@@ -7,11 +7,10 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.nio.file.Files;
@@ -165,13 +164,11 @@ public class ChatLogDatabaseConfig {
   public ChatHistoryService chatHistoryService(
       ChatLogRepository repo,
       LogProperties props,
-      ChatTranscriptStore transcripts,
-      UiSettingsBus settingsBus,
+      ChatHistoryTranscriptPort transcripts,
       IrcClientService irc,
       ChatHistoryIngestBus ingestBus,
       @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_EXECUTOR) ExecutorService chatHistoryExecutor) {
-    return new DbChatHistoryService(
-        repo, props, transcripts, settingsBus, irc, ingestBus, chatHistoryExecutor);
+    return new DbChatHistoryService(repo, props, transcripts, irc, ingestBus, chatHistoryExecutor);
   }
 
   @Bean

@@ -2,8 +2,10 @@ package cafe.woden.ircclient.app.interceptors;
 
 import java.time.Instant;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** A single event captured by an interceptor rule. */
+@ValueObject
 public record InterceptorHit(
     String serverId,
     String interceptorId,

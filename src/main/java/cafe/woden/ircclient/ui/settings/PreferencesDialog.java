@@ -3,9 +3,7 @@ package cafe.woden.ircclient.ui.settings;
 import cafe.woden.ircclient.app.TargetCoordinator;
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
-import cafe.woden.ircclient.app.commands.UserCommandAlias;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
@@ -14,12 +12,17 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.model.BuiltInSound;
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.FilterScopeOverride;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
-import cafe.woden.ircclient.notify.sound.BuiltInSound;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
@@ -27,9 +30,7 @@ import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
-import cafe.woden.ircclient.ui.filter.FilterRule;
 import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
-import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
 import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -9875,7 +9876,7 @@ public class PreferencesDialog {
       }
 
       if (r.direction() != null
-          && r.direction() != cafe.woden.ircclient.ui.filter.FilterDirection.ANY) {
+          && r.direction() != cafe.woden.ircclient.model.FilterDirection.ANY) {
         parts.add("dir=" + r.direction().name());
       }
 
@@ -9889,11 +9890,11 @@ public class PreferencesDialog {
         String flags = "";
         if (r.textRegex().flags() != null && !r.textRegex().flags().isEmpty()) {
           StringBuilder sb = new StringBuilder();
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.I))
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.model.RegexFlag.I))
             sb.append('i');
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.M))
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.model.RegexFlag.M))
             sb.append('m');
-          if (r.textRegex().flags().contains(cafe.woden.ircclient.ui.filter.RegexFlag.S))
+          if (r.textRegex().flags().contains(cafe.woden.ircclient.model.RegexFlag.S))
             sb.append('s');
           flags = sb.toString();
         }

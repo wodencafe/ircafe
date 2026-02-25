@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.notifications;
 
 import cafe.woden.ircclient.config.IrcEventNotificationRuleProperties;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.List;

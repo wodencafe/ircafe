@@ -2,6 +2,7 @@ package cafe.woden.ircclient.notify.sound;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.model.BuiltInSound;
 import jakarta.annotation.PreDestroy;
 import java.beans.PropertyChangeListener;
 import java.io.BufferedInputStream;

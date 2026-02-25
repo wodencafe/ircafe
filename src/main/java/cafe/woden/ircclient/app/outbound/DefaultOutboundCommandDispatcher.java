@@ -18,7 +18,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundMonitorCommandService outboundMonitorCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
-  private final LocalFilterCommandService localFilterCommandService;
+  private final LocalFilterCommandHandler localFilterCommandService;
   private final TargetCoordinator targetCoordinator;
   private final UiPort ui;
   private final UserCommandAliasesBus userCommandAliasesBus;
@@ -30,7 +30,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundChatCommandService outboundChatCommandService,
       OutboundMonitorCommandService outboundMonitorCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
-      LocalFilterCommandService localFilterCommandService,
+      LocalFilterCommandHandler localFilterCommandService,
       TargetCoordinator targetCoordinator,
       UiPort ui,
       UserCommandAliasesBus userCommandAliasesBus) {

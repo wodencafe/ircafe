@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.logging.viewer;
 
-import cafe.woden.ircclient.logging.model.LogDirection;
-import cafe.woden.ircclient.logging.model.LogKind;
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
 import java.util.Map;
 import java.util.Objects;
 

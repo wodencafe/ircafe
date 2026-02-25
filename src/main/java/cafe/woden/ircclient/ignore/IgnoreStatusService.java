@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ignore;
 
-import cafe.woden.ircclient.model.UserListStore;
+import cafe.woden.ircclient.irc.UserListStore;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.List;

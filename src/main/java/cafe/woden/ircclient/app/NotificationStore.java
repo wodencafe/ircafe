@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.app;
 
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -11,11 +10,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** In-memory store of per-server "highlight" notifications. */
 @Component
+@ApplicationLayer
 public class NotificationStore {
 
   /**
@@ -60,7 +61,7 @@ public class NotificationStore {
   public static final int DEFAULT_RULE_MATCH_COOLDOWN_SECONDS = 15;
 
   private final int maxEventsPerServer;
-  private final UiSettingsBus uiSettingsBus;
+  private final UiSettingsPort uiSettingsPort;
 
   private final ConcurrentHashMap<String, List<HighlightEvent>> eventsByServer =
       new ConcurrentHashMap<>();
@@ -88,12 +89,12 @@ public class NotificationStore {
   }
 
   @Autowired
-  public NotificationStore(UiSettingsBus uiSettingsBus) {
-    this(uiSettingsBus, DEFAULT_MAX_EVENTS_PER_SERVER);
+  public NotificationStore(UiSettingsPort uiSettingsPort) {
+    this(uiSettingsPort, DEFAULT_MAX_EVENTS_PER_SERVER);
   }
 
-  public NotificationStore(UiSettingsBus uiSettingsBus, int maxEventsPerServer) {
-    this.uiSettingsBus = uiSettingsBus;
+  public NotificationStore(UiSettingsPort uiSettingsPort, int maxEventsPerServer) {
+    this.uiSettingsPort = uiSettingsPort;
     this.maxEventsPerServer = Math.max(50, maxEventsPerServer);
   }
 
@@ -353,8 +354,8 @@ public class NotificationStore {
 
   private int currentRuleMatchCooldownSeconds() {
     try {
-      if (uiSettingsBus == null) return DEFAULT_RULE_MATCH_COOLDOWN_SECONDS;
-      int v = uiSettingsBus.get().notificationRuleCooldownSeconds();
+      if (uiSettingsPort == null) return DEFAULT_RULE_MATCH_COOLDOWN_SECONDS;
+      int v = uiSettingsPort.get().notificationRuleCooldownSeconds();
       // Allow 0 to mean "no cooldown".
       if (v < 0) return DEFAULT_RULE_MATCH_COOLDOWN_SECONDS;
       if (v > 3600) return 3600;

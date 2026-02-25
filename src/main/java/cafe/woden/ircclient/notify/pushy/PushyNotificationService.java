@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.notify.pushy;
 
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.PushyProperties;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;

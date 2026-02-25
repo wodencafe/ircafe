@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.logging.model.LogLine;
+import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.ArrayList;
 import java.util.List;

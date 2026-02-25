@@ -19,14 +19,18 @@ import java.util.concurrent.TimeUnit;
 import jdk.jfr.ValueDescriptor;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordingStream;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /** Collects runtime JFR feed events plus lightweight periodic runtime samples for UI display. */
 @Service
 @Lazy(false)
+@ApplicationLayer
+@NamedInterface("diagnostics")
 public class JfrRuntimeEventsService {
   private static final Logger log = LoggerFactory.getLogger(JfrRuntimeEventsService.class);
   private static final int MAX_EVENTS = 1200;

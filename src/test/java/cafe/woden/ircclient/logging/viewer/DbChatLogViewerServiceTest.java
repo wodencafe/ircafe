@@ -10,10 +10,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.logging.ChatLogRepository;
-import cafe.woden.ircclient.logging.model.LogDirection;
-import cafe.woden.ircclient.logging.model.LogKind;
-import cafe.woden.ircclient.logging.model.LogLine;
-import cafe.woden.ircclient.logging.model.LogRow;
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.LogLine;
+import cafe.woden.ircclient.model.LogRow;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

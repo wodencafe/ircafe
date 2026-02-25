@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -11,6 +10,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -4243,15 +4243,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           } else if (nd.ref != null && nd.ref.isApplicationJfr()) {
             setTreeIcon("refresh");
           } else if (nd.ref != null && nd.ref.isApplicationSpring()) {
-            setTreeIcon("settings");
+            setTreeIcon("theme");
           } else if (nd.ref != null && nd.ref.isApplicationTerminal()) {
             setTreeIcon("terminal");
           } else if (nd.ref != null && nd.ref.isStatus()) {
-            setTreeIcon("terminal");
+            setTreeIcon("dock-left");
           } else if (nd.ref != null && nd.ref.isNotifications()) {
             setTreeIcon("info");
           } else if (nd.ref != null && nd.ref.isLogViewer()) {
-            setTreeIcon("terminal");
+            setTreeIcon("copy");
           } else if (nd.ref != null && nd.ref.isInterceptor()) {
             setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
           } else if (nd.ref != null && nd.ref.isChannelList()) {

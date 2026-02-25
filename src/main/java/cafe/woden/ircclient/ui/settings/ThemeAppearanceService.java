@@ -298,6 +298,12 @@ class ThemeAppearanceService {
 
     String currentLafClassName = ThemeLookAndFeelUtils.currentLookAndFeelClassName();
     if (!Objects.equals(currentLafClassName, uiFontBaselineLafClassName)) {
+      // UIManager.put() writes developer defaults, which survive LAF switches.
+      // If a font override was applied under another LAF class, clear those keys so the
+      // newly-installed LAF can supply its own defaults (e.g. Tree.font in DarkLaf).
+      for (Object key : uiFontBaselineValues.keySet()) {
+        UIManager.put(key, null);
+      }
       uiFontBaselineValues.clear();
       uiFontBaselineLafClassName = null;
       return;

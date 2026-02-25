@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.app.AppVersion;
+import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
@@ -9,6 +8,7 @@ import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.util.AppVersion;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;

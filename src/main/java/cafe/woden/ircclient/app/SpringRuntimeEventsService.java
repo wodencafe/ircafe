@@ -11,17 +11,21 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.boot.availability.AvailabilityChangeEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /** Captures Spring framework/runtime events into a rolling in-memory feed for UI diagnostics. */
 @Service
 @Lazy(false)
+@ApplicationLayer
+@NamedInterface("diagnostics")
 public class SpringRuntimeEventsService implements ApplicationListener<ApplicationEvent> {
   private static final int MAX_EVENTS = 1200;
   private static final DateTimeFormatter TS_FMT =

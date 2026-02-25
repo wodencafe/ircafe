@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.tray;
 
-import cafe.woden.ircclient.ApplicationShutdownCoordinator;
+import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;

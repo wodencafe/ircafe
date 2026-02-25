@@ -2,11 +2,11 @@ package cafe.woden.ircclient.app.monitor;
 
 import cafe.woden.ircclient.app.TargetRef;
 import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.UiSettingsPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.PircbotxIsonParsers;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -38,7 +38,7 @@ public class MonitorIsonFallbackService {
   private final IrcClientService irc;
   private final MonitorListService monitorListService;
   private final UiPort ui;
-  private final UiSettingsBus uiSettingsBus;
+  private final UiSettingsPort uiSettingsPort;
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final ConcurrentHashMap<String, Boolean> connectedByServer = new ConcurrentHashMap<>();
@@ -54,11 +54,11 @@ public class MonitorIsonFallbackService {
       IrcClientService irc,
       MonitorListService monitorListService,
       UiPort ui,
-      UiSettingsBus uiSettingsBus) {
+      UiSettingsPort uiSettingsPort) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.monitorListService = Objects.requireNonNull(monitorListService, "monitorListService");
     this.ui = Objects.requireNonNull(ui, "ui");
-    this.uiSettingsBus = Objects.requireNonNull(uiSettingsBus, "uiSettingsBus");
+    this.uiSettingsPort = Objects.requireNonNull(uiSettingsPort, "uiSettingsPort");
 
     disposables.add(irc.events().subscribe(this::onEvent, this::onEventError));
     disposables.add(
@@ -340,9 +340,7 @@ public class MonitorIsonFallbackService {
   private int pollIntervalSeconds() {
     int seconds = DEFAULT_POLL_INTERVAL_SECONDS;
     try {
-      if (uiSettingsBus.get() != null) {
-        seconds = uiSettingsBus.get().monitorIsonFallbackPollIntervalSeconds();
-      }
+      seconds = uiSettingsPort.get().monitorIsonFallbackPollIntervalSeconds();
     } catch (Exception ignored) {
     }
     if (seconds < MIN_POLL_INTERVAL_SECONDS) return MIN_POLL_INTERVAL_SECONDS;

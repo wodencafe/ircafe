@@ -2,7 +2,7 @@ package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.app.UiPort;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.ui.SwingUiPort;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +19,10 @@ public class LoggingUiPortConfig {
   @Primary
   @Lazy
   public UiPort loggingUiPort(
-      SwingUiPort swingUiPort, ChatLogWriter writer, LogLineFactory factory, LogProperties props) {
+      @Qualifier("swingUiPort") UiPort swingUiPort,
+      ChatLogWriter writer,
+      LogLineFactory factory,
+      LogProperties props) {
     return new LoggingUiPortDecorator(swingUiPort, writer, factory, props);
   }
 }

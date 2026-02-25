@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.filter;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.model.TagSpec;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 

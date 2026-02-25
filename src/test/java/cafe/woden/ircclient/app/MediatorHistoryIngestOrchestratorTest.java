@@ -17,12 +17,6 @@ import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.logging.history.ChatHistoryBatchBus;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestResult;
-import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
-import cafe.woden.ircclient.logging.history.ZncPlaybackBus;
-import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -34,31 +28,40 @@ import org.junit.jupiter.api.Test;
 class MediatorHistoryIngestOrchestratorTest {
 
   private final UiPort ui = mock(UiPort.class);
-  private final ChatHistoryIngestor ingestor = mock(ChatHistoryIngestor.class);
-  private final ChatHistoryIngestBus ingestBus = mock(ChatHistoryIngestBus.class);
-  private final ChatHistoryBatchBus batchBus = mock(ChatHistoryBatchBus.class);
-  private final ZncPlaybackBus playbackBus = mock(ZncPlaybackBus.class);
+  private final ChatHistoryIngestionPort ingestionPort = mock(ChatHistoryIngestionPort.class);
+  private final ChatHistoryIngestEventsPort ingestEventsPort =
+      mock(ChatHistoryIngestEventsPort.class);
+  private final ChatHistoryBatchEventsPort batchEventsPort = mock(ChatHistoryBatchEventsPort.class);
+  private final ZncPlaybackEventsPort playbackEventsPort = mock(ZncPlaybackEventsPort.class);
   private final ChatHistoryRequestRoutingState routingState =
       mock(ChatHistoryRequestRoutingState.class);
-  private final ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
+  private final ChatTranscriptHistoryPort transcripts = mock(ChatTranscriptHistoryPort.class);
   private final IrcClientService irc = mock(IrcClientService.class);
 
   private final MediatorHistoryIngestOrchestrator orchestrator =
       new MediatorHistoryIngestOrchestrator(
-          ui, ingestor, ingestBus, batchBus, playbackBus, routingState, transcripts, irc);
+          ui,
+          ingestionPort,
+          ingestEventsPort,
+          batchEventsPort,
+          playbackEventsPort,
+          routingState,
+          transcripts,
+          irc);
 
   @BeforeEach
   void setUp() {
     doAnswer(
             inv -> {
               @SuppressWarnings("unchecked")
-              Consumer<ChatHistoryIngestResult> cb = inv.getArgument(4, Consumer.class);
+              Consumer<ChatHistoryIngestionPort.IngestResult> cb =
+                  inv.getArgument(4, Consumer.class);
               if (cb != null) {
-                cb.accept(new ChatHistoryIngestResult(true, 2, 2, 0, 0L, 0L, null));
+                cb.accept(new ChatHistoryIngestionPort.IngestResult(true, null, 2, 2, 0L, 0L));
               }
               return null;
             })
-        .when(ingestor)
+        .when(ingestionPort)
         .ingestAsync(anyString(), anyString(), anyString(), any(), any());
   }
 

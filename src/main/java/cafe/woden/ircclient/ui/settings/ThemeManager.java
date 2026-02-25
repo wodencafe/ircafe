@@ -137,9 +137,9 @@ public class ThemeManager {
   public void applyTheme(String themeId) {
     runOnEdt(
         () -> {
-          boolean animateFlat = isFlatLafActive() || ThemeIdUtils.isLikelyFlatTarget(themeId);
+          // Keep transitions smooth across all LAF families, not just FlatLaf variants.
           runWithFlatAnimation(
-              animateFlat,
+              true,
               true,
               () -> {
                 lookAndFeelInstaller.install(themeId);
@@ -156,10 +156,9 @@ public class ThemeManager {
   public void applyAppearance(boolean animate) {
     runOnEdt(
         () -> {
-          boolean animateFlat = animate && isFlatLafActive();
           runWithFlatAnimation(
-              animateFlat,
-              animateFlat,
+              animate,
+              animate,
               () -> {
                 applyAppearanceOverrides();
                 refreshUiAndStyles();

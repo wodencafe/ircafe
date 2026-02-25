@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.notify.sound;
 
+import cafe.woden.ircclient.model.BuiltInSound;
+
 /**
  * Notification sound preferences.
  *

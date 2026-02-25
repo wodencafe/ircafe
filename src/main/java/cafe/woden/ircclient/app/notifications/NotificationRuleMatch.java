@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app.notifications;
 
+import org.jmolecules.ddd.annotation.ValueObject;
+
 /**
  * A single rule match against a message.
  *
@@ -9,5 +11,6 @@ package cafe.woden.ircclient.app.notifications;
  * @param end end index in the message (exclusive)
  * @param highlightColor optional per-rule highlight color (hex, e.g. "#FFCC66")
  */
+@ValueObject
 public record NotificationRuleMatch(
     String ruleLabel, String matchedText, int start, int end, String highlightColor) {}

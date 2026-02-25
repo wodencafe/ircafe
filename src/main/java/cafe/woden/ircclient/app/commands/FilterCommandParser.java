@@ -1,10 +1,10 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.logging.model.LogKind;
-import cafe.woden.ircclient.ui.filter.FilterAction;
-import cafe.woden.ircclient.ui.filter.FilterDirection;
-import cafe.woden.ircclient.ui.filter.RegexFlag;
-import cafe.woden.ircclient.ui.filter.RegexSpec;
+import cafe.woden.ircclient.model.FilterAction;
+import cafe.woden.ircclient.model.FilterDirection;
+import cafe.woden.ircclient.model.LogKind;
+import cafe.woden.ircclient.model.RegexFlag;
+import cafe.woden.ircclient.model.RegexSpec;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;

@@ -29,8 +29,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.modulith.Modulithic;
 
 @SpringBootApplication
+@Modulithic(
+    systemName = "IRCafe",
+    sharedModules = {"config", "logging", "model", "notify", "util"})
 @EnableConfigurationProperties({
   IrcProperties.class,
   UiProperties.class,

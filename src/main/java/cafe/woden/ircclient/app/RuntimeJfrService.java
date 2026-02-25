@@ -16,14 +16,18 @@ import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordingFile;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /** Starts a best-effort always-on JFR recording and exposes snapshot/status helpers for the UI. */
 @Service
 @Lazy(false)
+@ApplicationLayer
+@NamedInterface("diagnostics")
 public class RuntimeJfrService {
   private static final Logger log = LoggerFactory.getLogger(RuntimeJfrService.class);
   private static final long DEFAULT_MAX_SIZE_BYTES = 256L * 1024L * 1024L;

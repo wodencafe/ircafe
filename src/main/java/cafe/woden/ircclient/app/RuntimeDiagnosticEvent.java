@@ -2,8 +2,12 @@ package cafe.woden.ircclient.app;
 
 import java.time.Instant;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
+import org.springframework.modulith.NamedInterface;
 
 /** Immutable runtime event row shown in diagnostic tables. */
+@ValueObject
+@NamedInterface("diagnostics")
 public record RuntimeDiagnosticEvent(
     Instant at, String level, String type, String summary, String details) {
 

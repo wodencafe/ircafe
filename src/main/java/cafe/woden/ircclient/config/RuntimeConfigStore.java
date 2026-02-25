@@ -1,15 +1,15 @@
 package cafe.woden.ircclient.config;
 
-import cafe.woden.ircclient.app.commands.UserCommandAlias;
-import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
-import cafe.woden.ircclient.app.interceptors.InterceptorRule;
-import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
-import cafe.woden.ircclient.ui.filter.FilterRule;
-import cafe.woden.ircclient.ui.filter.FilterScopeOverride;
-import cafe.woden.ircclient.ui.filter.RegexSpec;
-import cafe.woden.ircclient.ui.filter.TagSpec;
-import cafe.woden.ircclient.ui.settings.NotificationRule;
+import cafe.woden.ircclient.model.FilterRule;
+import cafe.woden.ircclient.model.FilterScopeOverride;
+import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.model.InterceptorRule;
+import cafe.woden.ircclient.model.InterceptorRuleMode;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.model.RegexSpec;
+import cafe.woden.ircclient.model.TagSpec;
+import cafe.woden.ircclient.model.UserCommandAlias;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;

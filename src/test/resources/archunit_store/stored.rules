@@ -1,3 +1,0 @@
-#
-#Tue Feb 24 12:43:20 CST 2026
-no\ classes\ that\ reside\ in\ a\ package\ 'cafe.woden.ircclient.app..'\ should\ depend\ on\ classes\ that\ reside\ in\ a\ package\ 'cafe.woden.ircclient.ui..',\ because\ application\ code\ should\ use\ app-level\ ports\ and\ abstractions,\ not\ concrete\ Swing/UI\ types=1219e14a-2bc3-4948-bd54-c189e38f142f

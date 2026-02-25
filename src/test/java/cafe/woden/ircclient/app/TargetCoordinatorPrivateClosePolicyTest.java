@@ -11,11 +11,9 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
-import cafe.woden.ircclient.logging.ChatLogMaintenance;
-import cafe.woden.ircclient.logging.history.ChatHistoryService;
-import cafe.woden.ircclient.model.UserListStore;
 import org.junit.jupiter.api.Test;
 
 class TargetCoordinatorPrivateClosePolicyTest {
@@ -112,8 +110,8 @@ class TargetCoordinatorPrivateClosePolicyTest {
         mock(IgnoreListService.class),
         mock(UserhostQueryService.class),
         mock(UserInfoEnrichmentService.class),
-        mock(ChatHistoryService.class),
-        mock(ChatLogMaintenance.class),
+        mock(TargetChatHistoryPort.class),
+        mock(TargetLogMaintenancePort.class),
         mock(java.util.concurrent.ExecutorService.class),
         mock(java.util.concurrent.ScheduledExecutorService.class));
   }

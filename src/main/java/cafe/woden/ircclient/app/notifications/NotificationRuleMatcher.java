@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.app.notifications;
 
-import cafe.woden.ircclient.ui.settings.NotificationRule;
-import cafe.woden.ircclient.ui.settings.UiSettings;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.app.UiSettingsPort;
+import cafe.woden.ircclient.app.UiSettingsSnapshot;
+import cafe.woden.ircclient.model.NotificationRule;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.beans.PropertyChangeEvent;
@@ -31,24 +31,24 @@ public class NotificationRuleMatcher {
 
   private static final Logger log = LoggerFactory.getLogger(NotificationRuleMatcher.class);
 
-  private final UiSettingsBus uiSettingsBus;
+  private final UiSettingsPort uiSettingsPort;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
 
   private volatile Compiled compiled;
 
-  public NotificationRuleMatcher(UiSettingsBus uiSettingsBus) {
-    this.uiSettingsBus = Objects.requireNonNull(uiSettingsBus, "uiSettingsBus");
-    this.compiled = compile(uiSettingsBus.get());
+  public NotificationRuleMatcher(UiSettingsPort uiSettingsPort) {
+    this.uiSettingsPort = Objects.requireNonNull(uiSettingsPort, "uiSettingsPort");
+    this.compiled = compile(uiSettingsPort.get());
   }
 
   @PostConstruct
   public void start() {
-    uiSettingsBus.addListener(settingsListener);
+    uiSettingsPort.addListener(settingsListener);
   }
 
   @PreDestroy
   public void stop() {
-    uiSettingsBus.removeListener(settingsListener);
+    uiSettingsPort.removeListener(settingsListener);
   }
 
   /** Returns all rule matches for the given message. At most one match is returned per rule. */
@@ -138,16 +138,15 @@ public class NotificationRuleMatcher {
   }
 
   private void onSettingsChanged(PropertyChangeEvent ev) {
-    if (!UiSettingsBus.PROP_UI_SETTINGS.equals(ev.getPropertyName())) return;
     try {
-      this.compiled = compile((UiSettings) ev.getNewValue());
+      this.compiled = compile(uiSettingsPort.get());
     } catch (Exception e) {
       // Don't let a bad rule list take down the app; keep last known good.
       log.warn("Failed to refresh notification rule matcher; keeping previous compiled rules.", e);
     }
   }
 
-  private static Compiled compile(UiSettings settings) {
+  private static Compiled compile(UiSettingsSnapshot settings) {
     List<NotificationRule> rules = settings != null ? settings.notificationRules() : List.of();
     if (rules == null || rules.isEmpty()) return new Compiled(List.of(), false, false);
 

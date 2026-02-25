@@ -1,11 +1,14 @@
 package cafe.woden.ircclient.app.interceptors;
 
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
+import cafe.woden.ircclient.app.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.notify.sound.BuiltInSound;
+import cafe.woden.ircclient.model.BuiltInSound;
+import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.model.InterceptorRule;
+import cafe.woden.ircclient.model.InterceptorRuleMode;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -52,7 +55,7 @@ public class InterceptorStore {
 
   private final RuntimeConfigStore runtimeConfig;
   private final NotificationSoundService notificationSoundService;
-  private final TrayNotificationService trayNotificationService;
+  private final TrayNotificationsPort trayNotificationService;
   private final ExecutorService actionScriptExecutor;
 
   private final int maxHitsPerInterceptor;
@@ -79,7 +82,7 @@ public class InterceptorStore {
   public InterceptorStore(
       RuntimeConfigStore runtimeConfig,
       NotificationSoundService notificationSoundService,
-      @Lazy TrayNotificationService trayNotificationService,
+      @Lazy TrayNotificationsPort trayNotificationService,
       @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor) {
     this(
         runtimeConfig,
@@ -97,7 +100,7 @@ public class InterceptorStore {
   private InterceptorStore(
       RuntimeConfigStore runtimeConfig,
       NotificationSoundService notificationSoundService,
-      TrayNotificationService trayNotificationService,
+      TrayNotificationsPort trayNotificationService,
       ExecutorService actionScriptExecutor,
       int maxHitsPerInterceptor,
       boolean loadFromRuntimeConfig) {

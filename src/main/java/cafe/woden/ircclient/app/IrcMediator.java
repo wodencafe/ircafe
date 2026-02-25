@@ -5,7 +5,6 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRule;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationService;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
@@ -27,10 +26,9 @@ import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
-import cafe.woden.ircclient.model.UserListStore;
-import cafe.woden.ircclient.ui.settings.UiSettingsBus;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -77,8 +75,8 @@ public class IrcMediator {
   private final OutboundCommandDispatcher outboundCommandDispatcher;
   private final OutboundDccCommandService outboundDccCommandService;
   private final TargetCoordinator targetCoordinator;
-  private final UiSettingsBus uiSettingsBus;
-  private final TrayNotificationService trayNotificationService;
+  private final UiSettingsPort uiSettingsPort;
+  private final TrayNotificationsPort trayNotificationService;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final UserListStore userListStore;
   private final InboundIgnorePolicy inboundIgnorePolicy;
@@ -134,8 +132,8 @@ public class IrcMediator {
       OutboundCommandDispatcher outboundCommandDispatcher,
       OutboundDccCommandService outboundDccCommandService,
       TargetCoordinator targetCoordinator,
-      UiSettingsBus uiSettingsBus,
-      TrayNotificationService trayNotificationService,
+      UiSettingsPort uiSettingsPort,
+      TrayNotificationsPort trayNotificationService,
       NotificationRuleMatcher notificationRuleMatcher,
       UserInfoEnrichmentService userInfoEnrichmentService,
       UserListStore userListStore,
@@ -167,7 +165,7 @@ public class IrcMediator {
     this.outboundCommandDispatcher = outboundCommandDispatcher;
     this.outboundDccCommandService = outboundDccCommandService;
     this.targetCoordinator = targetCoordinator;
-    this.uiSettingsBus = uiSettingsBus;
+    this.uiSettingsPort = uiSettingsPort;
     this.trayNotificationService = trayNotificationService;
     this.notificationRuleMatcher = notificationRuleMatcher;
     this.userInfoEnrichmentService = userInfoEnrichmentService;
@@ -208,7 +206,7 @@ public class IrcMediator {
   private void bindIrcEventSubscriptions() {
     disposables.add(
         irc.events()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 this::onServerIrcEvent,
                 err ->
@@ -219,7 +217,7 @@ public class IrcMediator {
   private void bindLabeledResponseTimeoutTicker() {
     disposables.add(
         Flowable.interval(5, TimeUnit.SECONDS)
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 tick -> {
                   handleLabeledRequestTimeouts();
@@ -1073,7 +1071,7 @@ public class IrcMediator {
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         TargetRef dest;
-        if (uiSettingsBus.get().ctcpRequestsInActiveTargetEnabled()) {
+        if (uiSettingsPort.get().ctcpRequestsInActiveTargetEnabled()) {
           dest = resolveActiveOrStatus(sid, status);
         } else {
           if (ev.channel() != null && !ev.channel().isBlank()) {
@@ -1623,7 +1621,7 @@ public class IrcMediator {
 
         boolean prefEnabled = false;
         try {
-          prefEnabled = uiSettingsBus.get().typingIndicatorsReceiveEnabled();
+          prefEnabled = uiSettingsPort.get().typingIndicatorsReceiveEnabled();
         } catch (Exception ignored) {
         }
         boolean typingAvailable = false;

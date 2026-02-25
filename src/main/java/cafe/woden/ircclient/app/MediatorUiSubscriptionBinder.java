@@ -2,10 +2,12 @@ package cafe.woden.ircclient.app;
 
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Wires non-connection UI subscriptions for {@link IrcMediator}. */
 @Component
+@ApplicationLayer
 public class MediatorUiSubscriptionBinder {
 
   public void bind(
@@ -20,7 +22,7 @@ public class MediatorUiSubscriptionBinder {
             // to be re-emitted even when it has not actually changed. De-dupe to avoid
             // re-running expensive side effects (history prefill, WHO refresh, etc.).
             .distinctUntilChanged()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::onTargetSelected,
                 err ->
@@ -29,7 +31,7 @@ public class MediatorUiSubscriptionBinder {
 
     disposables.add(
         ui.targetActivations()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::onTargetActivated,
                 err ->
@@ -38,7 +40,7 @@ public class MediatorUiSubscriptionBinder {
 
     disposables.add(
         ui.privateMessageRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::openPrivateConversation,
                 err ->
@@ -47,7 +49,7 @@ public class MediatorUiSubscriptionBinder {
 
     disposables.add(
         ui.userActionRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 onUserActionRequest::accept,
                 err ->
@@ -56,7 +58,7 @@ public class MediatorUiSubscriptionBinder {
 
     disposables.add(
         ui.outboundLines()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 onOutboundLine::accept,
                 err ->
@@ -65,7 +67,7 @@ public class MediatorUiSubscriptionBinder {
 
     disposables.add(
         ui.closeTargetRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::closeTarget,
                 err ->
@@ -74,7 +76,7 @@ public class MediatorUiSubscriptionBinder {
 
     disposables.add(
         ui.clearLogRequests()
-            .observeOn(cafe.woden.ircclient.ui.SwingEdt.scheduler())
+            .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::clearLog,
                 err ->

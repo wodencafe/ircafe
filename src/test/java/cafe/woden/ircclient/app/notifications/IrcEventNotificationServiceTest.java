@@ -9,8 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.TrayNotificationsPort;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
-import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,7 +22,7 @@ class IrcEventNotificationServiceTest {
   @Test
   void appliesAllMatchingRulesForSameEventType() {
     IrcEventNotificationRulesBus rulesBus = mock(IrcEventNotificationRulesBus.class);
-    TrayNotificationService tray = mock(TrayNotificationService.class);
+    TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
     NotificationStore store = mock(NotificationStore.class);
     PushyNotificationService pushy = null;
 
@@ -109,7 +110,7 @@ class IrcEventNotificationServiceTest {
   @Test
   void activeChannelOnlyScopeRequiresActiveTargetChannelOnSameServer() {
     IrcEventNotificationRulesBus rulesBus = mock(IrcEventNotificationRulesBus.class);
-    TrayNotificationService tray = mock(TrayNotificationService.class);
+    TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
     NotificationStore store = mock(NotificationStore.class);
     PushyNotificationService pushy = null;
 

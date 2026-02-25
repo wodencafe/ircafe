@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.interceptors.InterceptorDefinition;
-import cafe.woden.ircclient.app.interceptors.InterceptorRule;
-import cafe.woden.ircclient.app.interceptors.InterceptorRuleMode;
+import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.model.InterceptorRule;
+import cafe.woden.ircclient.model.InterceptorRuleMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
