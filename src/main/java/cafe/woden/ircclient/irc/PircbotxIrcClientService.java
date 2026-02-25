@@ -764,9 +764,10 @@ public class PircbotxIrcClientService implements IrcClientService {
       // Typing is a client-only tag (+typing) delivered via message-tags + TAGMSG.
       // Networks may block specific client-only tags via RPL_ISUPPORT CLIENTTAGDENY.
       boolean messageTags = c.messageTagsCapAcked.get();
-      boolean typingAllowed =
-          c.typingClientTagAllowed.get() || c.typingCapAcked.get(); // legacy fallback
-      return messageTags && typingAllowed;
+      boolean typingCap = c.typingCapAcked.get();
+      boolean typingAllowedByPolicy =
+          c.typingClientTagPolicyKnown.get() && c.typingClientTagAllowed.get();
+      return messageTags && (typingCap || typingAllowedByPolicy);
     } catch (Exception e) {
       return false;
     }
@@ -784,9 +785,13 @@ public class PircbotxIrcClientService implements IrcClientService {
         return "message-tags not negotiated";
       }
 
-      boolean typingAllowed = c.typingClientTagAllowed.get();
       boolean typingCap = c.typingCapAcked.get();
-      if (!(typingAllowed || typingCap)) {
+      boolean typingPolicyKnown = c.typingClientTagPolicyKnown.get();
+      boolean typingAllowed = c.typingClientTagAllowed.get();
+      if (!typingCap && !typingPolicyKnown) {
+        return "typing capability not negotiated";
+      }
+      if (!typingCap && !typingAllowed) {
         return "server denies +typing via CLIENTTAGDENY";
       }
 

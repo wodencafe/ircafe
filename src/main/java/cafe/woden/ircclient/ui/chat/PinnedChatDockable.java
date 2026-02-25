@@ -605,19 +605,20 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     typingUnavailableWarned.set(false);
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
-    irc.sendTyping(target.serverId(), target.target(), s)
-        .subscribe(
-            () -> inputPanel.onLocalTypingIndicatorSent(s),
-            err -> {
-              if (log.isDebugEnabled()) {
-                log.debug(
-                    "[{}] typing send failed (target={} state={}): {}",
-                    target.serverId(),
-                    target.target(),
-                    s,
-                    err.toString());
-              }
-            });
+    var unused =
+        irc.sendTyping(target.serverId(), target.target(), s)
+            .subscribe(
+                () -> inputPanel.onLocalTypingIndicatorSent(s),
+                err -> {
+                  if (log.isDebugEnabled()) {
+                    log.debug(
+                        "[{}] typing send failed (target={} state={}): {}",
+                        target.serverId(),
+                        target.target(),
+                        s,
+                        err.toString());
+                  }
+                });
   }
 
   private static String normalizeTypingState(String state) {
@@ -694,7 +695,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     lastReadMarkerSentAtMs = now;
 
     transcripts.updateReadMarker(target, now);
-    irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
-        .subscribe(() -> {}, err -> {});
+    var unused =
+        irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+            .subscribe(() -> {}, err -> {});
   }
 }

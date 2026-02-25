@@ -133,6 +133,8 @@ final class PircbotxConnectionState {
    */
   final AtomicBoolean typingClientTagAllowed = new AtomicBoolean(true);
 
+  final AtomicBoolean typingClientTagPolicyKnown = new AtomicBoolean(false);
+
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
   final AtomicBoolean monitorCapAcked = new AtomicBoolean(false);
@@ -205,6 +207,7 @@ final class PircbotxConnectionState {
     draftMessageRedactionCapAcked.set(false);
     messageTagsCapAcked.set(false);
     typingClientTagAllowed.set(true);
+    typingClientTagPolicyKnown.set(false);
     typingCapAcked.set(false);
     readMarkerCapAcked.set(false);
     monitorCapAcked.set(false);

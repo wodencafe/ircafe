@@ -46,6 +46,34 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capAckTracksDraftTypingAlias() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :draft/typing",
+        List.of("me", "ACK", ":draft/typing"),
+        ImmutableMap.of());
+
+    assertTrue(conn.typingCapAcked.get());
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.Ircv3CapabilityChanged cap
+                        && "ACK".equalsIgnoreCase(cap.subcommand())
+                        && "draft/typing".equalsIgnoreCase(cap.capability())
+                        && cap.enabled()));
+  }
+
+  @Test
   void capAckTracksStandardRepliesState() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();

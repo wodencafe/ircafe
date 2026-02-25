@@ -8,7 +8,7 @@ import org.jmolecules.ddd.annotation.ValueObject;
 public record ServerIrcEvent(String serverId, IrcEvent event) {
   public ServerIrcEvent {
     serverId = Objects.requireNonNull(serverId, "serverId").trim();
-    event = Objects.requireNonNull(event, "event");
+    Objects.requireNonNull(event, "event");
     if (serverId.isEmpty()) throw new IllegalArgumentException("serverId is blank");
   }
 }

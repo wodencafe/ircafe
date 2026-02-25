@@ -178,6 +178,16 @@ Common local checks:
 ./gradlew check
 ```
 
+Auto-fix workflow (Error Prone auto-corrects first, then Spotless formatting):
+
+```bash
+./gradlew spotlessApply
+# Run Error Prone auto-corrects, then Spotless lint check
+./gradlew spotlessLint
+# Optional: override which Error Prone patch checks are applied
+./gradlew spotlessApply -PerrorPronePatchChecks=CheckReturnValue,ReturnValueIgnored
+```
+
 Additional verification/reporting tasks:
 
 ```bash

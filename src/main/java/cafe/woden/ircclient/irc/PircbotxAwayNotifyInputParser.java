@@ -759,11 +759,11 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
               enabled ? "enabled" : "disabled");
         }
       }
-      case "typing" -> {
+      case "typing", "draft/typing" -> {
         boolean prev = conn.typingCapAcked.getAndSet(enabled);
         if (prev != enabled) {
           log.info(
-              "[{}] CAP {}: typing {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "read-marker" -> {

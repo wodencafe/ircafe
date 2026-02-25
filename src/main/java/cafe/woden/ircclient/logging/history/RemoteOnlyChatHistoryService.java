@@ -458,7 +458,14 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         Completable send = irc.requestChatHistoryBefore(sid, tgt, beforeExclusive, limit);
         if (send != null) {
           try {
-            send.blockingAwait(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            boolean completed =
+                send.blockingAwait(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            if (!completed) {
+              log.debug(
+                  "remote CHATHISTORY request timed out for {} / {} while awaiting completion",
+                  sid,
+                  tgt);
+            }
           } catch (Exception ignored) {
           }
         }
@@ -538,7 +545,14 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         Completable send = irc.requestZncPlaybackRange(sid, tgt, start, end);
         if (send != null) {
           try {
-            send.blockingAwait(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            boolean completed =
+                send.blockingAwait(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            if (!completed) {
+              log.debug(
+                  "remote ZNC playback request timed out for {} / {} while awaiting completion",
+                  sid,
+                  tgt);
+            }
           } catch (Exception ignored) {
           }
         }

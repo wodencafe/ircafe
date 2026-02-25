@@ -967,7 +967,7 @@ public class PreferencesDialog {
               timestamps.format.getText() != null ? timestamps.format.getText().trim() : "";
           if (timestampFormatV.isBlank()) timestampFormatV = "HH:mm:ss";
           try {
-            DateTimeFormatter.ofPattern(timestampFormatV);
+            var unused = DateTimeFormatter.ofPattern(timestampFormatV);
           } catch (Exception ex) {
             javax.swing.JOptionPane.showMessageDialog(
                 dialog,
@@ -5338,6 +5338,7 @@ public class PreferencesDialog {
       case "userhost-in-names" -> "USERHOST in NAMES";
       case "multiline" -> "Multiline messages";
       case "draft/multiline" -> "Multiline messages (draft)";
+      case "draft/typing" -> "Typing transport (draft)";
       case "typing" -> "Typing transport";
       case "read-marker" -> "Read markers";
       case "draft/reply" -> "Reply metadata";
@@ -5391,6 +5392,7 @@ public class PreferencesDialog {
           "message-edit",
           "draft/message-redaction",
           "message-redaction",
+          "draft/typing",
           "typing",
           "read-marker",
           "multiline",
@@ -5432,6 +5434,7 @@ public class PreferencesDialog {
       // Conversation features
       case "multiline" -> 210;
       case "draft/multiline" -> 220;
+      case "draft/typing" -> 225;
       case "typing" -> 230;
       case "read-marker" -> 240;
       case "draft/reply" -> 250;
@@ -5466,7 +5469,8 @@ public class PreferencesDialog {
           "May provide richer host/user identity details during names lists.";
       case "multiline", "draft/multiline" ->
           "Allows sending and receiving multiline messages as a single logical message.";
-      case "typing" -> "Transport for typing indicators; required to send/receive typing events.";
+      case "typing", "draft/typing" ->
+          "Transport for typing indicators; required to send/receive typing events.";
       case "read-marker" -> "Enables read-position markers on servers that support them.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
       case "draft/react" -> "Carries reaction metadata where servers/clients support it.";

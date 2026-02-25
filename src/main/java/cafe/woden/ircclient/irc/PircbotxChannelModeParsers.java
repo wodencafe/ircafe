@@ -28,7 +28,7 @@ final class PircbotxChannelModeParsers {
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
     }
 
-    String[] toks = s.split("\s+");
+    String[] toks = s.split("\\s+");
     if (toks.length < 4) return null;
 
     // Format: 324 <me> <#chan> <modes> [args...]
