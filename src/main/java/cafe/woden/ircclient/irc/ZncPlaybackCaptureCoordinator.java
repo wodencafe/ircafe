@@ -61,7 +61,7 @@ public final class ZncPlaybackCaptureCoordinator {
     }
 
     session.startedAt = Instant.now();
-    session.lastActivity = session.startedAt;
+
     session.emit = emit;
 
     session.maxTimeout =
@@ -190,7 +190,7 @@ public final class ZncPlaybackCaptureCoordinator {
   }
 
   private void touch(CaptureSession s) {
-    s.lastActivity = Instant.now();
+
     scheduleQuietTimeout(s);
   }
 
@@ -223,12 +223,8 @@ public final class ZncPlaybackCaptureCoordinator {
     if (s.maxTimeout != null) s.maxTimeout.cancel(false);
 
     List<ChatHistoryEntry> entries = new ArrayList<>(s.entries);
-    long earliest = 0L;
-    long latest = 0L;
-    if (!entries.isEmpty()) {
-      earliest = entries.stream().mapToLong(e -> e.at().toEpochMilli()).min().orElse(0L);
-      latest = entries.stream().mapToLong(e -> e.at().toEpochMilli()).max().orElse(0L);
-    }
+
+    if (!entries.isEmpty()) {}
 
     try {
       IrcEvent.ZncPlaybackBatchReceived ev =
@@ -263,7 +259,7 @@ public final class ZncPlaybackCaptureCoordinator {
     final CopyOnWriteArrayList<ChatHistoryEntry> entries = new CopyOnWriteArrayList<>();
 
     volatile Instant startedAt;
-    volatile Instant lastActivity;
+
     volatile ScheduledFuture<?> quietTimeout;
     volatile ScheduledFuture<?> maxTimeout;
     volatile Consumer<ServerIrcEvent> emit;

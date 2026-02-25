@@ -435,11 +435,10 @@ public final class MultiSaslCapHandler implements CapHandler {
         }
       }
 
-      String prefix = null;
       if (line.startsWith(":")) {
         int sp = line.indexOf(' ');
         if (sp > 0) {
-          prefix = line.substring(1, sp);
+
           line = line.substring(sp + 1);
         }
       }

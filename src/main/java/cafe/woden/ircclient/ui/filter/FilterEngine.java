@@ -537,7 +537,7 @@ public class FilterEngine implements PropertyChangeListener {
   private static final class CompiledRule {
     private final UUID id;
     private final String name;
-    private final String nameKey;
+
     private final boolean enabled;
     private final Pattern scope;
     private final FilterAction action;
@@ -550,7 +550,6 @@ public class FilterEngine implements PropertyChangeListener {
     private CompiledRule(
         UUID id,
         String name,
-        String nameKey,
         boolean enabled,
         Pattern scope,
         FilterAction action,
@@ -561,7 +560,7 @@ public class FilterEngine implements PropertyChangeListener {
         Pattern text) {
       this.id = id;
       this.name = Objects.toString(name, "");
-      this.nameKey = Objects.toString(nameKey, "");
+
       this.enabled = enabled;
       this.scope = scope;
       this.action = action;

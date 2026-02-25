@@ -466,39 +466,29 @@ public class UserInfoEnrichmentService {
   private UserInfoEnrichmentPlanner.Settings config() {
     IrcRuntimeSettings s = currentSettings();
     boolean enabled = s.userInfoEnrichmentEnabled();
-    Duration uhMinInterval = Duration.ofSeconds(15);
-    int uhMaxPerMinute = 3;
-    Duration uhNickCooldown = Duration.ofMinutes(60);
-    int uhMaxNicksPerCmd = 5;
-    boolean whoisEnabled = false;
-    Duration whoisMinInterval = Duration.ofSeconds(45);
-    Duration whoisNickCooldown = Duration.ofMinutes(120);
-    boolean periodicEnabled = false;
-    Duration periodicInterval = Duration.ofSeconds(300);
-    int periodicNicksPerTick = 2;
 
-    uhMinInterval =
+    Duration uhMinInterval =
         Duration.ofSeconds(Math.max(1, s.userInfoEnrichmentUserhostMinIntervalSeconds()));
-    uhMaxPerMinute = Math.max(1, s.userInfoEnrichmentUserhostMaxCommandsPerMinute());
-    uhNickCooldown =
+    int uhMaxPerMinute = Math.max(1, s.userInfoEnrichmentUserhostMaxCommandsPerMinute());
+    Duration uhNickCooldown =
         Duration.ofMinutes(Math.max(1, s.userInfoEnrichmentUserhostNickCooldownMinutes()));
-    uhMaxNicksPerCmd =
+    int uhMaxNicksPerCmd =
         Math.max(
             1,
             Math.min(
                 UserInfoEnrichmentPlanner.ABSOLUTE_MAX_USERHOST_NICKS_PER_CMD,
                 s.userInfoEnrichmentUserhostMaxNicksPerCommand()));
 
-    whoisEnabled = s.userInfoEnrichmentWhoisFallbackEnabled();
-    whoisMinInterval =
+    boolean whoisEnabled = s.userInfoEnrichmentWhoisFallbackEnabled();
+    Duration whoisMinInterval =
         Duration.ofSeconds(Math.max(1, s.userInfoEnrichmentWhoisMinIntervalSeconds()));
-    whoisNickCooldown =
+    Duration whoisNickCooldown =
         Duration.ofMinutes(Math.max(1, s.userInfoEnrichmentWhoisNickCooldownMinutes()));
 
-    periodicEnabled = s.userInfoEnrichmentPeriodicRefreshEnabled();
-    periodicInterval =
+    boolean periodicEnabled = s.userInfoEnrichmentPeriodicRefreshEnabled();
+    Duration periodicInterval =
         Duration.ofSeconds(Math.max(5, s.userInfoEnrichmentPeriodicRefreshIntervalSeconds()));
-    periodicNicksPerTick =
+    int periodicNicksPerTick =
         Math.max(1, Math.min(10, s.userInfoEnrichmentPeriodicRefreshNicksPerTick()));
 
     return new UserInfoEnrichmentPlanner.Settings(

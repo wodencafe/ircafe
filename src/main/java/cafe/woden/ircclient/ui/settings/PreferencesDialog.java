@@ -2463,7 +2463,7 @@ public class PreferencesDialog {
             pick.setText("Pick");
           } else {
             pick.setText("");
-            pick.setIcon(createColorSwatchIcon(c, 14, 14, preferredPreviewBackground()));
+            pick.setIcon(createColorSwatchIcon(c, 14, 14));
           }
         };
 
@@ -7827,7 +7827,7 @@ public class PreferencesDialog {
     return bg != null ? bg : new Color(30, 30, 30);
   }
 
-  private static Icon createColorSwatchIcon(Color color, int w, int h, Color previewBackground) {
+  private static Icon createColorSwatchIcon(Color color, int w, int h) {
     // Simple swatch icon used in compact pickers/buttons.
     return new ColorSwatch(color, w, h);
   }
@@ -9553,7 +9553,6 @@ public class PreferencesDialog {
     final JButton addOverride;
     final JButton removeOverride;
 
-    final FilterRulesTableModel rulesModel;
     final JTable rulesTable;
 
     final JButton addRule;
@@ -9576,7 +9575,6 @@ public class PreferencesDialog {
         JTable overridesTable,
         JButton addOverride,
         JButton removeOverride,
-        FilterRulesTableModel rulesModel,
         JTable rulesTable,
         JButton addRule,
         JButton editRule,
@@ -9595,7 +9593,7 @@ public class PreferencesDialog {
       this.overridesTable = overridesTable;
       this.addOverride = addOverride;
       this.removeOverride = removeOverride;
-      this.rulesModel = rulesModel;
+
       this.rulesTable = rulesTable;
       this.addRule = addRule;
       this.editRule = editRule;

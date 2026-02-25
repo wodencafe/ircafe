@@ -26,7 +26,7 @@ public final class RestartableRxTimer implements AutoCloseable {
 
   public RestartableRxTimer(Scheduler scheduler, Consumer<Throwable> onError) {
     this.scheduler = Objects.requireNonNullElse(scheduler, RxVirtualSchedulers.computation());
-    this.onError = (onError != null) ? onError : (err -> {});
+    this.onError = (onError != null) ? onError : err -> {};
   }
 
   public void restart(long delayMs, Runnable action) {

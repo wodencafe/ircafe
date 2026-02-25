@@ -29,8 +29,6 @@ public final class JoinModeBurstService {
   private final UiPort ui;
   private final ModeFormattingService modeFormattingService;
 
-  // Keep scheduling out of the EDT. SwingUiPort already marshals UI calls onto the EDT.
-  private final ScheduledExecutorService joinModeExec;
   private final Scheduler joinModeScheduler;
 
   private final ConcurrentHashMap<ModeKey, JoinModeBuffer> joinModeBuffers =
@@ -45,7 +43,7 @@ public final class JoinModeBurstService {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.modeFormattingService =
         Objects.requireNonNull(modeFormattingService, "modeFormattingService");
-    this.joinModeExec = Objects.requireNonNull(joinModeExec, "joinModeExec");
+
     this.joinModeScheduler = Schedulers.from(joinModeExec);
   }
 

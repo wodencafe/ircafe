@@ -77,9 +77,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     InterceptorRuleMode.GLOB,
     InterceptorRuleMode.REGEX
   };
-  private static final InterceptorRuleMode[] RULE_DIMENSION_MODES = {
-    InterceptorRuleMode.LIKE, InterceptorRuleMode.GLOB, InterceptorRuleMode.REGEX
-  };
+
   private static final InterceptorRuleMode[] RULE_DIMENSION_MODES_WITH_ANY = {
     InterceptorRuleMode.ALL,
     InterceptorRuleMode.LIKE,

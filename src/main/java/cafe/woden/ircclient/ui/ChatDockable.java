@@ -74,7 +74,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final ChatTranscriptStore transcripts;
   private final ServerTreeDockable serverTree;
-  private final NotificationStore notificationStore;
+
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
@@ -172,7 +172,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     super(settingsBus);
     this.transcripts = transcripts;
     this.serverTree = serverTree;
-    this.notificationStore = notificationStore;
+
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
     this.irc = irc;

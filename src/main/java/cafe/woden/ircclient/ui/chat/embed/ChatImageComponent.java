@@ -39,7 +39,6 @@ final class ChatImageComponent extends JPanel {
   private final GifAnimationCoordinator gifCoordinator;
   private final long embedSeq;
 
-  private final boolean collapsedByDefault;
   private boolean collapsed;
 
   private final JLabel imageLabel = new JLabel("Loading image…");
@@ -91,7 +90,6 @@ final class ChatImageComponent extends JPanel {
   private boolean gifAnimationEnabled = true;
   private boolean lastAnimateSetting = true;
   private java.util.List<javax.swing.ImageIcon> gifFrames = java.util.List.of();
-  private int[] gifDelaysMs = new int[0];
 
   ChatImageComponent(
       String serverId,
@@ -108,7 +106,7 @@ final class ChatImageComponent extends JPanel {
     this.uiSettingsBus = uiSettingsBus;
     this.gifCoordinator = gifCoordinator;
     this.embedSeq = embedSeq;
-    this.collapsedByDefault = collapsedByDefault;
+
     this.collapsed = collapsedByDefault;
 
     setOpaque(false);
@@ -373,7 +371,6 @@ final class ChatImageComponent extends JPanel {
       }
 
       this.gifFrames = java.util.List.copyOf(icons);
-      this.gifDelaysMs = gif.delaysMs();
 
       if (gifPlayer == null) {
         gifPlayer = new AnimatedGifPlayer(imageLabel);

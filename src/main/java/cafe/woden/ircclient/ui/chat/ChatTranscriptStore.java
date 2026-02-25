@@ -52,7 +52,6 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
-  private static final int MAX_FILTERED_LINES_PER_PLACEHOLDER_RUN = 250;
   private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;
 
   /**
@@ -1694,7 +1693,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     block.entries.add(foldEntry);
     if (!block.folded && block.entries.size() == 2) {
-      foldBlock(doc, ref, block);
+      foldBlock(doc, block);
     }
   }
 
@@ -4068,7 +4067,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
   }
 
-  private void foldBlock(StyledDocument doc, TargetRef ref, PresenceBlock block) {
+  private void foldBlock(StyledDocument doc, PresenceBlock block) {
     if (doc == null || block == null) return;
 
     int start = Math.max(0, Math.min(block.startOffset, doc.getLength()));
@@ -4294,22 +4293,20 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   }
 
   private static final class HistoryDividerControl {
-    final Position pos;
+
     final HistoryDividerComponent component;
 
-    private HistoryDividerControl(Position pos, HistoryDividerComponent component) {
-      this.pos = pos;
+    private HistoryDividerControl(HistoryDividerComponent component) {
+
       this.component = component;
     }
   }
 
   private static final class ReadMarkerControl {
     final Position pos;
-    final HistoryDividerComponent component;
 
-    private ReadMarkerControl(Position pos, HistoryDividerComponent component) {
+    private ReadMarkerControl(Position pos) {
       this.pos = pos;
-      this.component = component;
     }
   }
 

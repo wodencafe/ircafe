@@ -119,7 +119,7 @@ public final class MessageInputComposeSupport {
     JPopupMenu menu = new JPopupMenu();
     for (String reaction : QUICK_REACTION_TOKENS) {
       JMenuItem item = new JMenuItem(reaction);
-      item.addActionListener(e -> emitQuickReaction(target, msgId, reaction));
+      item.addActionListener(e -> emitQuickReaction(msgId, reaction));
       menu.add(item);
     }
     menu.addSeparator();
@@ -134,7 +134,7 @@ public final class MessageInputComposeSupport {
                   JOptionPane.PLAIN_MESSAGE);
           String token = normalizeReactionToken(entered);
           if (token.isEmpty()) return;
-          emitQuickReaction(target, msgId, token);
+          emitQuickReaction(msgId, token);
         });
     menu.add(custom);
 
@@ -146,7 +146,7 @@ public final class MessageInputComposeSupport {
     }
   }
 
-  private void emitQuickReaction(String target, String msgId, String reaction) {
+  private void emitQuickReaction(String msgId, String reaction) {
     String m = normalizeComposeMessageId(msgId);
     String r = normalizeReactionToken(reaction);
     if (m.isEmpty() || r.isEmpty()) return;

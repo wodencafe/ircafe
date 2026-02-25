@@ -251,7 +251,7 @@ final class GitHubPreviewUtil {
     StringBuilder sb = new StringBuilder();
     sb.append(kind);
     if (num != null) sb.append(" #").append(num);
-    boolean had = true;
+
     if (state != null && !state.isBlank()) {
       sb.append(" • ").append(state.strip());
     }

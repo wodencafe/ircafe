@@ -37,7 +37,6 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
 
   private volatile long lastDebugNs = 0L;
 
-  private final JScrollPane scroll;
   private final JScrollBar bar;
   private final BoundedRangeModel barModel;
 
@@ -90,7 +89,7 @@ public final class FollowTailScrollDecorator implements AutoCloseable {
       Consumer<Boolean> setFollowTail,
       IntSupplier getSavedScrollValue,
       IntConsumer setSavedScrollValue) {
-    this.scroll = scroll;
+
     this.bar = scroll.getVerticalScrollBar();
     this.barModel = this.bar.getModel();
     this.isFollowTail = isFollowTail;

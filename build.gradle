@@ -141,10 +141,11 @@ tasks.register('errorProneApplyMain', JavaCompile) {
     options.annotationProcessorPath = configurations.annotationProcessor
     options.generatedSourceOutputDirectory =
         layout.buildDirectory.dir('generated/sources/annotationProcessor/java/errorProneApplyMain')
-    options.compilerArgs += [
+    options.errorprone.enabled = true
+    options.errorprone.errorproneArgs.addAll([
         "-XepPatchChecks:${errorPronePatchChecks}",
         '-XepPatchLocation:IN_PLACE'
-    ]
+    ])
 }
 
 tasks.register('errorProneApply') {

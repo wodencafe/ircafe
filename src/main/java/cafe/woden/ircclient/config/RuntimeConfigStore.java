@@ -4045,7 +4045,7 @@ public class RuntimeConfigStore {
   @SuppressWarnings("unchecked")
   private static Optional<List<Map<String, Object>>> readServerList(Map<String, Object> irc) {
     Object o = irc.get("servers");
-    if (o instanceof List<?> list) {
+    if (o instanceof List<?>) {
       // We expect a list of maps.
       return Optional.of((List<Map<String, Object>>) o);
     }
@@ -4105,7 +4105,7 @@ public class RuntimeConfigStore {
   @SuppressWarnings("unchecked")
   private static List<String> getOrCreateStringList(Map<String, Object> m, String key) {
     Object o = m.get(key);
-    if (o instanceof List<?> list) {
+    if (o instanceof List<?>) {
       // Cast defensively; we only store strings.
       return (List<String>) o;
     }

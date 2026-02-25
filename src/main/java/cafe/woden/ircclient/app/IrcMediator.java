@@ -1684,6 +1684,10 @@ public class IrcMediator {
         String rendered;
         if ("NEW".equals(sub)) {
           rendered = "CAP NEW: " + cap + " (available)";
+        } else if ("LS".equals(sub)) {
+          rendered = "CAP LS: " + cap + " (available)";
+        } else if ("NAK".equals(sub)) {
+          rendered = "CAP NAK: " + cap + " (rejected)";
         } else if ("DEL".equals(sub)) {
           rendered = "CAP DEL: " + cap + " (removed)";
         } else if ("ACK".equals(sub)) {

@@ -47,9 +47,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
   private final JTextComponent transcript;
   private final Runnable openFind;
-  private final Function<Point, String> urlAt;
-  private final Function<Point, String> nickAt;
-  private final Function<String, JPopupMenu> nickMenuFor;
+
   private final Consumer<String> openUrl;
   private final MouseAdapter mouse;
 
@@ -127,9 +125,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> onEditMessage,
       Consumer<String> onRedactMessage) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
-    this.urlAt = urlAt;
-    this.nickAt = nickAt;
-    this.nickMenuFor = nickMenuFor;
+
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
     this.proxyPlanSupplier = proxyPlanSupplier;

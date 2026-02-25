@@ -269,7 +269,7 @@ public record UiSettings(
       int rgb = Integer.parseInt(s, 16);
       int r = (rgb >> 16) & 0xFF;
       int g = (rgb >> 8) & 0xFF;
-      int b = (rgb) & 0xFF;
+      int b = rgb & 0xFF;
       return String.format("#%02X%02X%02X", r, g, b);
     } catch (Exception ignored) {
       return fb;

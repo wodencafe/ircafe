@@ -182,9 +182,7 @@ public final class ChannelListPanel extends JPanel {
   private void refresh() {
     String sid = this.serverId;
     List<Row> rows =
-        (sid.isEmpty())
-            ? List.of()
-            : List.copyOf(rowsByServer.getOrDefault(sid, new ArrayList<>()));
+        sid.isEmpty() ? List.of() : List.copyOf(rowsByServer.getOrDefault(sid, new ArrayList<>()));
     model.setRows(rows);
     updateHeader();
   }

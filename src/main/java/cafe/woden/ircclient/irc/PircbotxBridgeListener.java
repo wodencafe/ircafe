@@ -63,17 +63,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final Ircv3MultilineAccumulator multilineAccumulator = new Ircv3MultilineAccumulator();
 
   private static final class ChatHistoryBatchBuffer {
-    final String batchId;
+
     final String target;
     final ArrayList<ChatHistoryEntry> entries = new ArrayList<>();
 
-    ChatHistoryBatchBuffer(String batchId, String target) {
-      this.batchId = batchId == null ? "" : batchId;
+    ChatHistoryBatchBuffer(String target) {
+
       this.target = target == null ? "" : target;
     }
   }
 
-  private static final int RPL_SASL_SUCCESS = 903;
   private static final int ERR_SASL_FAIL = 904;
   private static final int ERR_SASL_TOO_LONG = 905;
   private static final int ERR_SASL_ABORTED = 906;
@@ -476,7 +475,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     return t.contains("chathistory");
   }
 
-  private boolean handleBatchControlLine(String originalLineWithTags, String normalizedLine) {
+  private boolean handleBatchControlLine(String normalizedLine) {
     ParsedIrcLine pl = parseIrcLine(normalizedLine);
     if (pl == null || pl.command() == null) return false;
     if (!"BATCH".equalsIgnoreCase(pl.command())) return false;
@@ -1603,7 +1602,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return;
     }
 
-    if (handleBatchControlLine(line, rawLine)) {
+    if (handleBatchControlLine(rawLine)) {
       return;
     }
 
@@ -2908,7 +2907,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     String[] parts = s.split("\\s+");
     if (parts.length == 0) return null;
 
-    int codeIdx = (parts[0].startsWith(":")) ? 1 : 0;
+    int codeIdx = parts[0].startsWith(":") ? 1 : 0;
     if (parts.length <= codeIdx) return null;
 
     String codeStr = parts[codeIdx];

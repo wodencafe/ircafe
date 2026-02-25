@@ -91,9 +91,12 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         }
         if ("ACK".equalsIgnoreCase(sub) || "DEL".equalsIgnoreCase(sub)) {
           applyCapStateFromCapLine(sub, capList);
-        } else if ("NEW".equalsIgnoreCase(sub)) {
+        } else if ("NEW".equalsIgnoreCase(sub) || "LS".equalsIgnoreCase(sub)) {
           emitCapAvailabilityFromCapLine(sub, capList);
+        } else if ("NAK".equalsIgnoreCase(sub)) {
+          emitCapNakFromCapLine(sub, capList);
         }
+        maybeRequestMessageTagsFallback(sub, capList);
       }
       return;
     }
@@ -497,7 +500,61 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
   private void emitCapAvailabilityFromCapLine(String sub, String capList) {
     String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
-    if (!"NEW".equals(action)) return;
+    if (!"NEW".equals(action) && !"LS".equals(action)) return;
+    String caps = Objects.toString(capList, "").trim();
+    if (caps.startsWith(":")) caps = caps.substring(1).trim();
+    if (caps.isEmpty()) return;
+
+    for (String token : caps.split("\\s+")) {
+      String capName = canonicalCapName(token);
+      if (capName == null || capName.isBlank()) continue;
+      sink.accept(
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, false)));
+    }
+  }
+
+  private void maybeRequestMessageTagsFallback(String sub, String capList) {
+    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
+    if (!"LS".equals(action) && !"NEW".equals(action)) return;
+    if (conn.messageTagsCapAcked.get()) return;
+    if (!conn.messageTagsFallbackReqSent.compareAndSet(false, true)) return;
+
+    String caps = Objects.toString(capList, "").trim();
+    if (caps.startsWith(":")) caps = caps.substring(1).trim();
+    if (caps.isEmpty()) {
+      conn.messageTagsFallbackReqSent.set(false);
+      return;
+    }
+
+    boolean offered = false;
+    for (String token : caps.split("\\s+")) {
+      String capName = canonicalCapName(token);
+      if ("message-tags".equalsIgnoreCase(capName)) {
+        offered = true;
+        break;
+      }
+    }
+    if (!offered) {
+      conn.messageTagsFallbackReqSent.set(false);
+      return;
+    }
+
+    try {
+      bot.sendCAP().request("message-tags");
+      log.info(
+          "[{}] fallback CAP REQ sent for message-tags (downstream capability remained unenabled)",
+          serverId);
+    } catch (Exception ex) {
+      conn.messageTagsFallbackReqSent.set(false);
+      log.debug("[{}] fallback CAP REQ for message-tags failed", serverId, ex);
+    }
+  }
+
+  private void emitCapNakFromCapLine(String sub, String capList) {
+    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
+    if (!"NAK".equals(action)) return;
     String caps = Objects.toString(capList, "").trim();
     if (caps.startsWith(":")) caps = caps.substring(1).trim();
     if (caps.isEmpty()) return;

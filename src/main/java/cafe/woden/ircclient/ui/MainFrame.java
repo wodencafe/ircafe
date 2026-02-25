@@ -39,16 +39,6 @@ public class MainFrame extends JFrame {
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
 
-  private final StatusBar statusBar;
-  private final UiProperties uiProps;
-  private final RuntimeConfigStore runtimeConfigStore;
-  private final TrayService trayService;
-
-  // Dockables (Spring beans)
-  private final ServerTreeDockable serverTree;
-  private final ChatDockable chat;
-  private final UserListDockable users;
-
   public MainFrame(
       IrcMediator controller,
       AppMenuBar menuBar,
@@ -62,13 +52,6 @@ public class MainFrame extends JFrame {
       StatusBar statusBar,
       ApplicationShutdownCoordinator shutdownCoordinator) {
     super(AppVersion.windowTitle());
-    this.uiProps = uiProps;
-    this.runtimeConfigStore = runtimeConfigStore;
-    this.trayService = trayService;
-    this.serverTree = serverTree;
-    this.chat = chat;
-    this.users = users;
-    this.statusBar = statusBar;
 
     // Window/taskbar icon (best-effort, cross-platform).
     try {
