@@ -535,7 +535,7 @@ public class ConnectionCoordinator {
     if (runtimeConfig == null) {
       return;
     }
-    List<String> channels = runtimeConfig.readJoinedChannels(serverId);
+    List<String> channels = runtimeConfig.readKnownChannels(serverId);
     if (channels == null || channels.isEmpty()) {
       return;
     }

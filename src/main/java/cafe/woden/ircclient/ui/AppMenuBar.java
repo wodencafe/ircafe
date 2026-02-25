@@ -689,12 +689,9 @@ public class AppMenuBar extends JMenuBar {
     resetLayout.addActionListener(e -> resetDockLayout());
 
     JCheckBoxMenuItem showChannelListNodes = new JCheckBoxMenuItem("Show Channel List Node");
-    showChannelListNodes.setSelected(serverTree.isChannelListNodesVisible());
-    showChannelListNodes.addActionListener(
-        e -> serverTree.setChannelListNodesVisible(showChannelListNodes.isSelected()));
-    serverTree.addPropertyChangeListener(
-        ServerTreeDockable.PROP_CHANNEL_LIST_NODES_VISIBLE,
-        evt -> showChannelListNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+    showChannelListNodes.setSelected(true);
+    showChannelListNodes.setEnabled(false);
+    showChannelListNodes.setToolTipText("Channel List nodes are always visible.");
 
     JCheckBoxMenuItem showDccNodes = new JCheckBoxMenuItem("Show DCC Transfers Node");
     showDccNodes.setSelected(serverTree.isDccTransfersNodesVisible());

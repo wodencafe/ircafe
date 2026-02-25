@@ -1112,6 +1112,16 @@ public class IrcMediator implements MediatorControlPort {
       case IrcEvent.ChannelListEnded ev -> {
         ui.endChannelList(sid, ev.summary());
       }
+      case IrcEvent.ChannelBanListStarted ev -> {
+        ui.beginChannelBanList(sid, ev.channel());
+      }
+      case IrcEvent.ChannelBanListEntry ev -> {
+        ui.appendChannelBanListEntry(
+            sid, ev.channel(), ev.mask(), ev.setBy(), ev.setAtEpochSeconds());
+      }
+      case IrcEvent.ChannelBanListEnded ev -> {
+        ui.endChannelBanList(sid, ev.channel(), ev.summary());
+      }
       case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {
         handleServerResponseLine(sid, status, ev);
         String rawLine = Objects.toString(ev.rawLine(), "").trim();

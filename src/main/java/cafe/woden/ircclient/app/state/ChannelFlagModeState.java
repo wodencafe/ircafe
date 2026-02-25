@@ -60,6 +60,23 @@ public class ChannelFlagModeState {
     return s != null && !s.isEmpty();
   }
 
+  /** Returns a normalized {@code +modes} summary (for example {@code +Cnst}), or empty. */
+  public String snapshotModeSummary(String serverId, String channel) {
+    if (serverId == null || channel == null) return "";
+    Set<Character> flags = channelFlags.get(ModeKey.of(serverId, channel));
+    if (flags == null || flags.isEmpty()) return "";
+
+    java.util.ArrayList<Character> sorted = new java.util.ArrayList<>(flags);
+    java.util.Collections.sort(sorted);
+    StringBuilder out = new StringBuilder(sorted.size() + 1);
+    out.append('+');
+    for (Character flag : sorted) {
+      if (flag == null) continue;
+      out.append(flag.charValue());
+    }
+    return out.length() <= 1 ? "" : out.toString();
+  }
+
   public void clearServer(String serverId) {
     String sid = normalizeServer(serverId);
     channelFlags.keySet().removeIf(k -> Objects.equals(k.serverId, sid));

@@ -8,15 +8,19 @@ import javax.swing.tree.DefaultMutableTreeNode;
 /**
  * Move/close rules for {@link ServerTreeDockable}.
  *
- * <p>Protects server root nodes, the status leaf, and the "Private messages" group node. Only
- * channel leaves (under a server) and PM leaves (under the group) can be moved/closed.
+ * <p>Protects server root nodes, built-in UI leaves, and the "Private messages" group node. Only
+ * channel leaves (under Channel List) and PM leaves (under the group) can be moved/closed.
  */
 public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy {
 
   private final Predicate<DefaultMutableTreeNode> isServerNode;
+  private final Predicate<DefaultMutableTreeNode> isChannelListNode;
 
-  public ServerTreeNodeReorderPolicy(Predicate<DefaultMutableTreeNode> isServerNode) {
+  public ServerTreeNodeReorderPolicy(
+      Predicate<DefaultMutableTreeNode> isServerNode,
+      Predicate<DefaultMutableTreeNode> isChannelListNode) {
     this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
+    this.isChannelListNode = Objects.requireNonNull(isChannelListNode, "isChannelListNode");
   }
 
   @Override
@@ -33,8 +37,9 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     if (parent == null) return null;
 
     boolean parentIsServer = isServerNode.test(parent);
+    boolean parentIsChannelList = isChannelListNode.test(parent);
     boolean parentIsPmGroup = isPrivateMessagesGroupNode(parent);
-    if (!parentIsServer && !parentIsPmGroup) return null;
+    if (!parentIsServer && !parentIsPmGroup && !parentIsChannelList) return null;
 
     int idx = parent.getIndex(node);
     int min = minMovableIndex(parentIsServer, parent);

@@ -51,6 +51,41 @@ public class RuntimeConfigStore {
     }
   }
 
+  public enum ServerTreeChannelSortMode {
+    ALPHABETICAL("alphabetical"),
+    CUSTOM("custom");
+
+    private final String token;
+
+    ServerTreeChannelSortMode(String token) {
+      this.token = token;
+    }
+
+    public String token() {
+      return token;
+    }
+
+    public static ServerTreeChannelSortMode fromToken(String token) {
+      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
+      if ("alphabetical".equals(raw) || "alpha".equals(raw) || "a-z".equals(raw)) {
+        return ALPHABETICAL;
+      }
+      return CUSTOM;
+    }
+  }
+
+  public record ServerTreeChannelPreference(String channel, boolean autoReattach) {}
+
+  public record ServerTreeChannelState(
+      ServerTreeChannelSortMode sortMode,
+      List<String> customOrder,
+      List<ServerTreeChannelPreference> channels) {
+    public static ServerTreeChannelState defaults() {
+      return new ServerTreeChannelState(
+          ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
+    }
+  }
+
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
@@ -252,35 +287,225 @@ public class RuntimeConfigStore {
   }
 
   public synchronized void rememberJoinedChannel(String serverId, String channel) {
-    updateServer(
-        serverId,
-        server -> {
-          String chan = Objects.toString(channel, "").trim();
-          if (chan.isEmpty()) return;
-
-          List<String> autoJoin = getOrCreateStringList(server, "autoJoin");
-          if (autoJoin.stream().noneMatch(c -> c.equalsIgnoreCase(chan))) {
-            autoJoin.add(chan);
-          }
-        });
+    rememberServerTreeChannel(serverId, channel);
   }
 
   public synchronized void forgetJoinedChannel(String serverId, String channel) {
-    updateServer(
-        serverId,
-        server -> {
-          String chan = Objects.toString(channel, "").trim();
-          if (chan.isEmpty()) return;
-
-          Object o = server.get("autoJoin");
-          if (!(o instanceof List<?> list)) return;
-          @SuppressWarnings("unchecked")
-          List<String> autoJoin = (List<String>) list;
-          autoJoin.removeIf(c -> c != null && c.equalsIgnoreCase(chan));
-        });
+    forgetServerTreeChannel(serverId, channel);
   }
 
   public synchronized List<String> readJoinedChannels(String serverId) {
+    return readServerAutoJoinChannels(serverId);
+  }
+
+  /** Returns known channels for this server (attached + detached). */
+  public synchronized List<String> readKnownChannels(String serverId) {
+    ServerTreeChannelState state = readServerTreeChannelState(serverId);
+    if (state == null || state.channels() == null || state.channels().isEmpty()) {
+      return List.of();
+    }
+    ArrayList<String> out = new ArrayList<>();
+    for (ServerTreeChannelPreference pref : state.channels()) {
+      if (pref == null) continue;
+      String ch = normalizeChannelName(pref.channel());
+      if (ch.isEmpty()) continue;
+      if (containsIgnoreCase(out, ch)) continue;
+      out.add(ch);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  public synchronized boolean readServerTreeChannelAutoReattach(
+      String serverId, String channel, boolean defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return defaultValue;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    if (state == null || state.channels() == null) return defaultValue;
+
+    for (ServerTreeChannelPreference pref : state.channels()) {
+      if (pref == null) continue;
+      String existing = normalizeChannelName(pref.channel());
+      if (existing.isEmpty()) continue;
+      if (existing.equalsIgnoreCase(chan)) {
+        return pref.autoReattach();
+      }
+    }
+    return defaultValue;
+  }
+
+  public synchronized void rememberServerTreeChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    String key = foldChannelKey(chan);
+    if (!byKey.containsKey(key)) {
+      byKey.put(key, new ServerTreeChannelPreference(chan, true));
+    }
+
+    ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
+    if (!containsIgnoreCase(customOrder, chan)) {
+      customOrder.add(chan);
+    }
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(customOrder), List.copyOf(byKey.values())));
+  }
+
+  public synchronized void forgetServerTreeChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    String key = foldChannelKey(chan);
+    if (!byKey.containsKey(key)) return;
+    byKey.remove(key);
+
+    ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
+    customOrder.removeIf(c -> foldChannelKey(c).equals(key));
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(customOrder), List.copyOf(byKey.values())));
+  }
+
+  public synchronized void rememberServerTreeChannelAutoReattach(
+      String serverId, String channel, boolean autoReattach) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    String key = foldChannelKey(chan);
+    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach));
+
+    ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
+    if (!containsIgnoreCase(customOrder, chan)) {
+      customOrder.add(chan);
+    }
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(customOrder), List.copyOf(byKey.values())));
+  }
+
+  public synchronized ServerTreeChannelSortMode readServerTreeChannelSortMode(
+      String serverId, ServerTreeChannelSortMode defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return defaultValue;
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    if (state == null || state.sortMode() == null) return defaultValue;
+    return state.sortMode();
+  }
+
+  public synchronized void rememberServerTreeChannelSortMode(
+      String serverId, ServerTreeChannelSortMode mode) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    ServerTreeChannelSortMode nextMode =
+        (mode == null) ? ServerTreeChannelSortMode.CUSTOM : mode;
+
+    writeServerTreeChannelState(
+        sid, new ServerTreeChannelState(nextMode, state.customOrder(), state.channels()));
+  }
+
+  public synchronized List<String> readServerTreeChannelCustomOrder(String serverId) {
+    ServerTreeChannelState state = readServerTreeChannelState(serverId);
+    return state.customOrder();
+  }
+
+  public synchronized void rememberServerTreeChannelCustomOrder(
+      String serverId, List<String> customOrder) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    ArrayList<String> nextCustomOrder = sanitizeCustomOrder(customOrder, byKey);
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(state.sortMode(), List.copyOf(nextCustomOrder), state.channels()));
+  }
+
+  public synchronized ServerTreeChannelState readServerTreeChannelState(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return ServerTreeChannelState.defaults();
+
+    List<String> joinedChannels = readServerAutoJoinChannels(sid);
+
+    try {
+      if (file.toString().isBlank()) {
+        return stateFromLegacyAutoJoin(joinedChannels);
+      }
+      if (!Files.exists(file)) {
+        return stateFromLegacyAutoJoin(joinedChannels);
+      }
+
+      Map<String, Object> doc = loadFile();
+      Map<String, Object> ircafe = readMap(doc.get("ircafe"));
+      Map<String, Object> ui = readMap(ircafe.get("ui"));
+      Map<String, Object> serverTree = readMap(ui.get("serverTree"));
+      Map<String, Object> channelsByServer = readMap(serverTree.get("channelsByServer"));
+      Map<String, Object> raw = readMap(channelsByServer.get(sid));
+
+      ServerTreeChannelSortMode sortMode =
+          ServerTreeChannelSortMode.fromToken(Objects.toString(raw.get("sortMode"), ""));
+
+      LinkedHashMap<String, ServerTreeChannelPreference> byKey = new LinkedHashMap<>();
+      Object channelsObj = raw.get("channels");
+      if (channelsObj instanceof List<?> list) {
+        for (Object entry : list) {
+          if (!(entry instanceof Map<?, ?> item)) continue;
+          String channel = normalizeChannelName(item.get("name"));
+          if (channel.isEmpty()) continue;
+          String key = foldChannelKey(channel);
+          if (byKey.containsKey(key)) continue;
+          boolean auto = asBoolean(item.get("autoReattach")).orElse(Boolean.TRUE);
+          byKey.put(key, new ServerTreeChannelPreference(channel, auto));
+        }
+      }
+
+      for (String joined : joinedChannels) {
+        String channel = normalizeChannelName(joined);
+        if (channel.isEmpty()) continue;
+        String key = foldChannelKey(channel);
+        byKey.putIfAbsent(key, new ServerTreeChannelPreference(channel, true));
+      }
+
+      ArrayList<String> customOrder = sanitizeCustomOrder(raw.get("customOrder"), byKey);
+
+      if (customOrder.isEmpty()) {
+        for (ServerTreeChannelPreference pref : byKey.values()) {
+          customOrder.add(pref.channel());
+        }
+      }
+
+      if (byKey.isEmpty() && joinedChannels.isEmpty()) {
+        return ServerTreeChannelState.defaults();
+      }
+
+      return new ServerTreeChannelState(sortMode, List.copyOf(customOrder), List.copyOf(byKey.values()));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree channel state from '{}'", file, e);
+      return stateFromLegacyAutoJoin(joinedChannels);
+    }
+  }
+
+  private synchronized List<String> readServerAutoJoinChannels(String serverId) {
     try {
       if (file.toString().isBlank()) return List.of();
       String sid = Objects.toString(serverId, "").trim();
@@ -303,6 +528,210 @@ public class RuntimeConfigStore {
       log.warn("[ircafe] Could not read joined-channel list from '{}'", file, e);
     }
     return List.of();
+  }
+
+  private void writeServerTreeChannelState(String serverId, ServerTreeChannelState state) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeChannelState nextState = state != null ? state : ServerTreeChannelState.defaults();
+      LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(nextState);
+      ArrayList<String> customOrder = sanitizeCustomOrder(nextState.customOrder(), byKey);
+      ServerTreeChannelSortMode sortMode =
+          nextState.sortMode() == null ? ServerTreeChannelSortMode.CUSTOM : nextState.sortMode();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      List<Map<String, Object>> servers = readServerList(irc).orElseGet(ArrayList::new);
+      Map<String, Object> serverMap = null;
+      for (Map<String, Object> server : servers) {
+        if (server == null) continue;
+        if (sid.equalsIgnoreCase(Objects.toString(server.get("id"), "").trim())) {
+          serverMap = server;
+          break;
+        }
+      }
+      if (serverMap == null) return;
+
+      List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
+      List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
+
+      ArrayList<String> nextAutoJoin = new ArrayList<>();
+      for (ServerTreeChannelPreference pref : byKey.values()) {
+        if (pref == null || !pref.autoReattach()) continue;
+        String channel = normalizeChannelName(pref.channel());
+        if (channel.isEmpty()) continue;
+        if (containsIgnoreCase(nextAutoJoin, channel)) continue;
+        nextAutoJoin.add(channel);
+      }
+      for (String nick : previousPmTargets) {
+        String n = Objects.toString(nick, "").trim();
+        if (n.isEmpty()) continue;
+        String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
+        if (encoded.isEmpty()) continue;
+        if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded))) continue;
+        nextAutoJoin.add(encoded);
+      }
+      if (nextAutoJoin.isEmpty()) {
+        serverMap.remove("autoJoin");
+      } else {
+        serverMap.put("autoJoin", nextAutoJoin);
+      }
+
+      irc.put("servers", servers);
+
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> channelsByServer = getOrCreateMap(serverTree, "channelsByServer");
+
+      boolean shouldKeepState =
+          !byKey.isEmpty()
+              || !customOrder.isEmpty()
+              || sortMode != ServerTreeChannelSortMode.CUSTOM;
+
+      if (!shouldKeepState) {
+        channelsByServer.remove(sid);
+      } else {
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (sortMode != ServerTreeChannelSortMode.CUSTOM) {
+          out.put("sortMode", sortMode.token());
+        }
+        if (!customOrder.isEmpty()) {
+          out.put("customOrder", List.copyOf(customOrder));
+        }
+        if (!byKey.isEmpty()) {
+          ArrayList<Map<String, Object>> channelsOut = new ArrayList<>();
+          for (ServerTreeChannelPreference pref : byKey.values()) {
+            if (pref == null) continue;
+            String channel = normalizeChannelName(pref.channel());
+            if (channel.isEmpty()) continue;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", channel);
+            item.put("autoReattach", pref.autoReattach());
+            channelsOut.add(item);
+          }
+          if (!channelsOut.isEmpty()) {
+            out.put("channels", channelsOut);
+          }
+        }
+        channelsByServer.put(sid, out);
+      }
+
+      if (channelsByServer.isEmpty()) {
+        serverTree.remove("channelsByServer");
+      }
+      if (serverTree.isEmpty()) {
+        ui.remove("serverTree");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree channel state to '{}'", file, e);
+    }
+  }
+
+  private static ServerTreeChannelState stateFromLegacyAutoJoin(List<String> joinedChannels) {
+    if (joinedChannels == null || joinedChannels.isEmpty()) {
+      return ServerTreeChannelState.defaults();
+    }
+
+    ArrayList<ServerTreeChannelPreference> channels = new ArrayList<>();
+    for (String entry : joinedChannels) {
+      String channel = normalizeChannelName(entry);
+      if (channel.isEmpty()) continue;
+      if (channels.stream().anyMatch(pref -> channel.equalsIgnoreCase(pref.channel()))) continue;
+      channels.add(new ServerTreeChannelPreference(channel, true));
+    }
+
+    if (channels.isEmpty()) {
+      return ServerTreeChannelState.defaults();
+    }
+
+    ArrayList<String> customOrder = new ArrayList<>();
+    for (ServerTreeChannelPreference pref : channels) {
+      customOrder.add(pref.channel());
+    }
+    return new ServerTreeChannelState(
+        ServerTreeChannelSortMode.CUSTOM, List.copyOf(customOrder), List.copyOf(channels));
+  }
+
+  private static LinkedHashMap<String, ServerTreeChannelPreference> channelPreferencesByKey(
+      ServerTreeChannelState state) {
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = new LinkedHashMap<>();
+    if (state == null || state.channels() == null) return byKey;
+    for (ServerTreeChannelPreference pref : state.channels()) {
+      if (pref == null) continue;
+      String channel = normalizeChannelName(pref.channel());
+      if (channel.isEmpty()) continue;
+      String key = foldChannelKey(channel);
+      byKey.put(key, new ServerTreeChannelPreference(channel, pref.autoReattach()));
+    }
+    return byKey;
+  }
+
+  private static ArrayList<String> sanitizeCustomOrder(
+      ServerTreeChannelState state, Map<String, ServerTreeChannelPreference> channelsByKey) {
+    if (state == null) return sanitizeCustomOrder((Object) null, channelsByKey);
+    return sanitizeCustomOrder(state.customOrder(), channelsByKey);
+  }
+
+  private static ArrayList<String> sanitizeCustomOrder(
+      Object rawOrder, Map<String, ServerTreeChannelPreference> channelsByKey) {
+    ArrayList<String> out = new ArrayList<>();
+
+    if (rawOrder instanceof List<?> rawList) {
+      for (Object entry : rawList) {
+        String channel = normalizeChannelName(entry);
+        if (channel.isEmpty()) continue;
+        String key = foldChannelKey(channel);
+        if (!channelsByKey.containsKey(key)) continue;
+        if (containsIgnoreCase(out, channel)) continue;
+        out.add(channelsByKey.get(key).channel());
+      }
+    } else if (rawOrder instanceof ServerTreeChannelState state) {
+      return sanitizeCustomOrder(state.customOrder(), channelsByKey);
+    }
+
+    for (ServerTreeChannelPreference pref : channelsByKey.values()) {
+      if (pref == null) continue;
+      String channel = normalizeChannelName(pref.channel());
+      if (channel.isEmpty()) continue;
+      if (containsIgnoreCase(out, channel)) continue;
+      out.add(channel);
+    }
+    return out;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> readMap(Object raw) {
+    if (raw instanceof Map<?, ?> m) {
+      return (Map<String, Object>) m;
+    }
+    return Map.of();
+  }
+
+  private static List<String> sanitizeStringList(Object raw) {
+    if (!(raw instanceof List<?> list) || list.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(list.size());
+    for (Object entry : list) {
+      String v = Objects.toString(entry, "").trim();
+      if (!v.isEmpty()) out.add(v);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static String normalizeChannelName(Object channel) {
+    String ch = Objects.toString(channel, "").trim();
+    if (ch.isEmpty()) return "";
+    return (ch.startsWith("#") || ch.startsWith("&")) ? ch : "";
+  }
+
+  private static String foldChannelKey(String channel) {
+    return Objects.toString(channel, "").trim().toLowerCase(Locale.ROOT);
   }
 
   public synchronized void rememberPrivateMessageTarget(String serverId, String nick) {

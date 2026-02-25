@@ -20,6 +20,7 @@ public final class TreeNodeActions<T> implements AutoCloseable {
   private final TreeNodeReorderPolicy policy;
   private final Function<DefaultMutableTreeNode, T> closePayloadExtractor;
   private final Consumer<T> closeHandler;
+  private final Consumer<DefaultMutableTreeNode> moveHandler;
 
   private final TreeSelectionListener selectionListener;
 
@@ -33,12 +34,23 @@ public final class TreeNodeActions<T> implements AutoCloseable {
       TreeNodeReorderPolicy policy,
       Function<DefaultMutableTreeNode, T> closePayloadExtractor,
       Consumer<T> closeHandler) {
+    this(tree, model, policy, closePayloadExtractor, closeHandler, null);
+  }
+
+  public TreeNodeActions(
+      JTree tree,
+      DefaultTreeModel model,
+      TreeNodeReorderPolicy policy,
+      Function<DefaultMutableTreeNode, T> closePayloadExtractor,
+      Consumer<T> closeHandler,
+      Consumer<DefaultMutableTreeNode> moveHandler) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.model = Objects.requireNonNull(model, "model");
     this.policy = Objects.requireNonNull(policy, "policy");
     this.closePayloadExtractor =
         Objects.requireNonNull(closePayloadExtractor, "closePayloadExtractor");
     this.closeHandler = Objects.requireNonNull(closeHandler, "closeHandler");
+    this.moveHandler = moveHandler;
 
     this.moveUpAction =
         new AbstractAction("Move Node Up") {
@@ -142,6 +154,10 @@ public final class TreeNodeActions<T> implements AutoCloseable {
     TreePath path = new TreePath(n.getPath());
     tree.setSelectionPath(path);
     tree.scrollPathToVisible(path);
+
+    if (moveHandler != null) {
+      moveHandler.accept(n);
+    }
 
     refreshEnabledState();
   }

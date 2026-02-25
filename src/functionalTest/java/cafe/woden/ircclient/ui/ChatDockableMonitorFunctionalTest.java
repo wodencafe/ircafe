@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -97,6 +98,9 @@ class ChatDockableMonitorFunctionalTest {
 
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(Flowable.never());
+    when(serverTree.openChannelsForServer(anyString())).thenReturn(List.of());
+    when(serverTree.managedChannelsForServer(anyString())).thenReturn(List.of());
     NotificationStore notificationStore = new NotificationStore();
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
@@ -105,6 +109,7 @@ class ChatDockableMonitorFunctionalTest {
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
     UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
     ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
@@ -135,6 +140,7 @@ class ChatDockableMonitorFunctionalTest {
                     ignoreStatusService,
                     monitorListService,
                     userListStore,
+                    usersDock,
                     nickContextMenuFactory,
                     proxyResolver,
                     chatHistoryService,

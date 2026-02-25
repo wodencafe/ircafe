@@ -240,6 +240,21 @@ class LoggingUiPortDecoratorTest {
     verify(delegate, times(2)).appendNoticeAt(target, at, "server", "maintenance");
   }
 
+  @Test
+  void channelListMethodsAreForwardedThroughDecoratorChain() {
+    UiPort delegate = mock(UiPort.class);
+    AtomicReference<LogLine> captured = new AtomicReference<>();
+    LoggingUiPortDecorator d = newDecorator(delegate, captured);
+
+    d.beginChannelList("srv", "Loading ALIS search results...");
+    d.appendChannelListEntry("srv", "#chan", 42, "topic");
+    d.endChannelList("srv", "End of output.");
+
+    verify(delegate).beginChannelList("srv", "Loading ALIS search results...");
+    verify(delegate).appendChannelListEntry("srv", "#chan", 42, "topic");
+    verify(delegate).endChannelList("srv", "End of output.");
+  }
+
   private static LoggingUiPortDecorator newDecorator(
       UiPort delegate, AtomicReference<LogLine> captured) {
     return newDecorator(delegate, captured, LOGGING_ON);

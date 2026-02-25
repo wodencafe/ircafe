@@ -131,6 +131,16 @@ public interface UiPort {
   /** Mark completion of a /LIST response stream for the given server. */
   default void endChannelList(String serverId, String summary) {}
 
+  /** Reset/prepare the cached ban-list details for one channel (RPL_BANLIST/367 stream). */
+  default void beginChannelBanList(String serverId, String channel) {}
+
+  /** Append one ban-list row for the given server/channel. */
+  default void appendChannelBanListEntry(
+      String serverId, String channel, String mask, String setBy, Long setAtEpochSeconds) {}
+
+  /** Mark completion of a ban-list stream for one channel. */
+  default void endChannelBanList(String serverId, String channel, String summary) {}
+
   void setStatusBarChannel(String channel);
 
   void setStatusBarCounts(int users, int ops);

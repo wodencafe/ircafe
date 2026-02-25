@@ -8,11 +8,14 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,6 +51,10 @@ public class SwingUiPort implements UiPort {
   // skipping completion updates if the nick *set* hasn't changed.
   private int lastNickCompletionSize = -1;
   private int lastNickCompletionHash = 0;
+  private final Object channelListAppendLock = new Object();
+  private final Map<String, ArrayList<ChannelListPanel.ListEntryRow>>
+      pendingChannelListEntriesByServer = new HashMap<>();
+  private boolean channelListAppendFlushScheduled;
 
   private void onEdt(Runnable r) {
     if (SwingUtilities.isEventDispatchThread()) {
@@ -81,6 +88,56 @@ public class SwingUiPort implements UiPort {
       return fallback;
     }
     return out.get();
+  }
+
+  private void enqueueChannelListEntry(
+      String serverId, String channel, int visibleUsers, String topic) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    synchronized (channelListAppendLock) {
+      pendingChannelListEntriesByServer
+          .computeIfAbsent(sid, __ -> new ArrayList<>())
+          .add(new ChannelListPanel.ListEntryRow(ch, Math.max(0, visibleUsers), topic));
+      if (channelListAppendFlushScheduled) return;
+      channelListAppendFlushScheduled = true;
+    }
+    onEdt(this::flushPendingChannelListEntriesOnEdt);
+  }
+
+  private void flushPendingChannelListEntriesOnEdt() {
+    Map<String, ArrayList<ChannelListPanel.ListEntryRow>> drained = new HashMap<>();
+    synchronized (channelListAppendLock) {
+      if (pendingChannelListEntriesByServer.isEmpty()) {
+        channelListAppendFlushScheduled = false;
+        return;
+      }
+      for (Map.Entry<String, ArrayList<ChannelListPanel.ListEntryRow>> e :
+          pendingChannelListEntriesByServer.entrySet()) {
+        drained.put(e.getKey(), new ArrayList<>(e.getValue()));
+      }
+      pendingChannelListEntriesByServer.clear();
+      channelListAppendFlushScheduled = false;
+    }
+
+    for (Map.Entry<String, ArrayList<ChannelListPanel.ListEntryRow>> e : drained.entrySet()) {
+      String sid = Objects.toString(e.getKey(), "").trim();
+      if (sid.isEmpty()) continue;
+      List<ChannelListPanel.ListEntryRow> rows = e.getValue();
+      if (rows == null || rows.isEmpty()) continue;
+      serverTree.ensureNode(TargetRef.channelList(sid));
+      chat.appendChannelListEntries(sid, List.copyOf(rows));
+    }
+
+    boolean reschedule;
+    synchronized (channelListAppendLock) {
+      reschedule = !pendingChannelListEntriesByServer.isEmpty() && !channelListAppendFlushScheduled;
+      if (reschedule) channelListAppendFlushScheduled = true;
+    }
+    if (reschedule) {
+      onEdt(this::flushPendingChannelListEntriesOnEdt);
+    }
   }
 
   public SwingUiPort(
@@ -367,6 +424,7 @@ public class SwingUiPort implements UiPort {
   public void beginChannelList(String serverId, String banner) {
     onEdt(
         () -> {
+          flushPendingChannelListEntriesOnEdt();
           String sid = Objects.toString(serverId, "").trim();
           if (sid.isEmpty()) return;
           serverTree.ensureNode(TargetRef.channelList(sid));
@@ -377,24 +435,35 @@ public class SwingUiPort implements UiPort {
   @Override
   public void appendChannelListEntry(
       String serverId, String channel, int visibleUsers, String topic) {
-    onEdt(
-        () -> {
-          String sid = Objects.toString(serverId, "").trim();
-          if (sid.isEmpty()) return;
-          serverTree.ensureNode(TargetRef.channelList(sid));
-          chat.appendChannelListEntry(sid, channel, visibleUsers, topic);
-        });
+    enqueueChannelListEntry(serverId, channel, visibleUsers, topic);
   }
 
   @Override
   public void endChannelList(String serverId, String summary) {
     onEdt(
         () -> {
+          flushPendingChannelListEntriesOnEdt();
           String sid = Objects.toString(serverId, "").trim();
           if (sid.isEmpty()) return;
           serverTree.ensureNode(TargetRef.channelList(sid));
           chat.endChannelList(sid, summary);
         });
+  }
+
+  @Override
+  public void beginChannelBanList(String serverId, String channel) {
+    onEdt(() -> chat.beginChannelBanList(serverId, channel));
+  }
+
+  @Override
+  public void appendChannelBanListEntry(
+      String serverId, String channel, String mask, String setBy, Long setAtEpochSeconds) {
+    onEdt(() -> chat.appendChannelBanListEntry(serverId, channel, mask, setBy, setAtEpochSeconds));
+  }
+
+  @Override
+  public void endChannelBanList(String serverId, String channel, String summary) {
+    onEdt(() -> chat.endChannelBanList(serverId, channel, summary));
   }
 
   @Override

@@ -15,10 +15,12 @@ import java.awt.event.ActionEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JComponent;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
@@ -56,6 +58,55 @@ class ServerTreeDockableDetachedChannelTest {
             assertNotNull(findMenuItem(detachedMenu, "Join \"#ircafe\""));
             assertNotNull(findMenuItem(detachedMenu, "Close Channel \"#ircafe\""));
             assertNull(findMenuItem(detachedMenu, "Detach \"#ircafe\""));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void channelNodeIsNestedUnderChannelListNode() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef channelList = TargetRef.channelList("libera");
+            TargetRef chan = new TargetRef("libera", "#nested");
+            dockable.ensureNode(chan);
+
+            DefaultMutableTreeNode channelNode = findLeafNode(dockable, chan);
+            assertNotNull(channelNode);
+            DefaultMutableTreeNode channelListNode = findLeafNode(dockable, channelList);
+            assertNotNull(channelListNode);
+            assertEquals(channelListNode, channelNode.getParent());
+            assertTrue(dockable.isChannelListNodesVisible());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void channelContextMenuShowsAutoReattachCheckbox() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+
+            JPopupMenu menu = buildPopupMenuForTarget(dockable, chan);
+            assertNotNull(menu);
+            JCheckBoxMenuItem autoReattach = findCheckBoxMenuItem(menu, "Auto-reattach on startup");
+            assertNotNull(autoReattach);
+            assertTrue(autoReattach.isSelected());
+
+            autoReattach.doClick();
+            assertFalse(dockable.isChannelAutoReattach(chan));
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -220,6 +271,39 @@ class ServerTreeDockableDetachedChannelTest {
   }
 
   @Test
+  void detachingChannelClearsTypingIndicatorImmediately() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+            dockable.markTypingActivity(chan, "active");
+
+            DefaultMutableTreeNode node = findLeafNode(dockable, chan);
+            assertNotNull(node);
+            assertTrue(node.getUserObject() instanceof ServerTreeDockable.NodeData);
+            ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
+            assertTrue(nd.hasTypingActivity());
+            assertTrue(typingActivityNodes(dockable).contains(node));
+
+            dockable.setChannelDetached(chan, true);
+            assertTrue(dockable.isChannelDetached(chan));
+            assertFalse(nd.hasTypingActivity());
+            assertFalse(typingActivityNodes(dockable).contains(node));
+
+            dockable.markTypingActivity(chan, "active");
+            assertFalse(nd.hasTypingActivity());
+            assertFalse(typingActivityNodes(dockable).contains(node));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void keyboardCloseOnDetachedChannelDoesNotEmitRequests() throws Exception {
     onEdt(
         () -> {
@@ -284,6 +368,46 @@ class ServerTreeDockableDetachedChannelTest {
         });
   }
 
+  @Test
+  void channelSortModeAndCustomOrderAreServerScoped() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+            invokeAddServerRoot(dockable, "oftc");
+
+            dockable.ensureNode(new TargetRef("libera", "#beta"));
+            dockable.ensureNode(new TargetRef("libera", "#alpha"));
+            dockable.ensureNode(new TargetRef("oftc", "#beta"));
+            dockable.ensureNode(new TargetRef("oftc", "#alpha"));
+
+            dockable.setChannelSortModeForServer("libera", ServerTreeDockable.ChannelSortMode.CUSTOM);
+            dockable.setChannelCustomOrderForServer("libera", List.of("#beta", "#alpha"));
+            dockable.setChannelSortModeForServer(
+                "oftc", ServerTreeDockable.ChannelSortMode.ALPHABETICAL);
+
+            List<String> liberaOrder =
+                dockable.managedChannelsForServer("libera").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+            List<String> oftcOrder =
+                dockable.managedChannelsForServer("oftc").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+
+            assertEquals(ServerTreeDockable.ChannelSortMode.CUSTOM, dockable.channelSortModeForServer("libera"));
+            assertEquals(
+                ServerTreeDockable.ChannelSortMode.ALPHABETICAL,
+                dockable.channelSortModeForServer("oftc"));
+            assertEquals(List.of("#beta", "#alpha"), liberaOrder);
+            assertEquals(List.of("#alpha", "#beta"), oftcOrder);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
   private static ServerTreeDockable newDockable() {
     return new ServerTreeDockable(
         null,
@@ -327,6 +451,15 @@ class ServerTreeDockableDetachedChannelTest {
     return null;
   }
 
+  private static JCheckBoxMenuItem findCheckBoxMenuItem(JPopupMenu menu, String text) {
+    if (menu == null || text == null) return null;
+    for (java.awt.Component c : menu.getComponents()) {
+      if (!(c instanceof JCheckBoxMenuItem item)) continue;
+      if (text.equals(item.getText())) return item;
+    }
+    return null;
+  }
+
   private static void triggerKeyboardClose(ServerTreeDockable dockable) throws Exception {
     JTree tree = getTree(dockable);
     tree.getActionMap()
@@ -348,6 +481,14 @@ class ServerTreeDockableDetachedChannelTest {
     Map<TargetRef, DefaultMutableTreeNode> leaves =
         (Map<TargetRef, DefaultMutableTreeNode>) leavesField.get(dockable);
     return leaves.get(ref);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static java.util.Set<DefaultMutableTreeNode> typingActivityNodes(
+      ServerTreeDockable dockable) throws Exception {
+    Field field = ServerTreeDockable.class.getDeclaredField("typingActivityNodes");
+    field.setAccessible(true);
+    return (java.util.Set<DefaultMutableTreeNode>) field.get(dockable);
   }
 
   private static void onEdt(Runnable r) throws InvocationTargetException, InterruptedException {

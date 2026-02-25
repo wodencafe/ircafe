@@ -4,6 +4,8 @@ import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -23,6 +25,27 @@ import javax.swing.Timer;
 public final class OutgoingSendIndicator {
 
   private OutgoingSendIndicator() {}
+
+  private static InlineFontMetrics inlineFontMetrics(JComponent c, int minHeight) {
+    if (c == null) return new InlineFontMetrics(Math.max(1, minHeight), -1);
+    try {
+      Font f = c.getFont();
+      if (f != null) {
+        FontMetrics fm = c.getFontMetrics(f);
+        if (fm != null) {
+          int ascent = Math.max(0, fm.getAscent());
+          int descent = Math.max(0, fm.getDescent());
+          int textHeight = ascent + descent;
+          int h = Math.max(minHeight, textHeight > 0 ? textHeight : fm.getHeight());
+          return new InlineFontMetrics(Math.max(1, h), ascent > 0 ? ascent : -1);
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return new InlineFontMetrics(Math.max(1, minHeight), -1);
+  }
+
+  private record InlineFontMetrics(int height, int ascent) {}
 
   /** Animated spinner that runs indefinitely while the component is displayable. */
   public static final class PendingSpinner extends JComponent {
@@ -63,25 +86,11 @@ public final class OutgoingSendIndicator {
     }
 
     private int inlineHeight() {
-      try {
-        if (getFont() != null) {
-          int h = getFontMetrics(getFont()).getHeight();
-          if (h > 0) return Math.max(DEFAULT_SIZE, h);
-        }
-      } catch (Exception ignored) {
-      }
-      return DEFAULT_SIZE;
+      return inlineFontMetrics(this, DEFAULT_SIZE).height();
     }
 
     private int inlineAscent() {
-      try {
-        if (getFont() != null) {
-          int a = getFontMetrics(getFont()).getAscent();
-          if (a > 0) return a;
-        }
-      } catch (Exception ignored) {
-      }
-      return -1;
+      return inlineFontMetrics(this, DEFAULT_SIZE).ascent();
     }
 
     @Override
@@ -182,25 +191,11 @@ public final class OutgoingSendIndicator {
     }
 
     private int inlineHeight() {
-      try {
-        if (getFont() != null) {
-          int h = getFontMetrics(getFont()).getHeight();
-          if (h > 0) return Math.max(DEFAULT_SIZE, h);
-        }
-      } catch (Exception ignored) {
-      }
-      return DEFAULT_SIZE;
+      return inlineFontMetrics(this, DEFAULT_SIZE).height();
     }
 
     private int inlineAscent() {
-      try {
-        if (getFont() != null) {
-          int a = getFontMetrics(getFont()).getAscent();
-          if (a > 0) return a;
-        }
-      } catch (Exception ignored) {
-      }
-      return -1;
+      return inlineFontMetrics(this, DEFAULT_SIZE).ascent();
     }
 
     @Override

@@ -180,7 +180,7 @@ class ConnectionCoordinatorTest {
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
     when(runtimeConfig.readPrivateMessageTargets("libera")).thenReturn(List.of("Alice", "Bob"));
-    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#ircafe"));
+    when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of("#ircafe"));
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
@@ -243,7 +243,7 @@ class ConnectionCoordinatorTest {
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
-    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
+    when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
 
     new ConnectionCoordinator(
         irc, ui, serverRegistry, serverCatalog, runtimeConfig, LOG_PROPS, trayNotificationService);
