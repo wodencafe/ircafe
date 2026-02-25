@@ -10,16 +10,16 @@ import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.TargetRef;
-import cafe.woden.ircclient.app.interceptors.InterceptorStore;
-import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
@@ -43,7 +43,7 @@ class ChatDockableMonitorFunctionalTest {
   @TempDir Path tempDir;
 
   @Test
-  void monitorPanelReflectsRosterAndOnlineState() throws Exception {
+  void monitorPanelReflectsRosterUpdatesAndOnlineState() throws Exception {
     Fixture fixture = createFixture();
     try {
       fixture.monitorListService.addNicks("libera", List.of("alice", "bob"));
@@ -59,10 +59,29 @@ class ChatDockableMonitorFunctionalTest {
             assertEquals("Unknown", statusForNick(fixture.monitorTable, "bob"));
           });
 
+      Thread updater =
+          new Thread(
+              () -> fixture.monitorListService.addNicks("libera", List.of("carol")),
+              "monitor-list-updater");
+      updater.start();
+      updater.join();
+      flushEdt();
+
+      onEdt(
+          () -> {
+            assertEquals(3, fixture.monitorTable.getRowCount());
+            assertEquals("Unknown", statusForNick(fixture.monitorTable, "carol"));
+          });
+
       onEdt(() -> fixture.chat.setPrivateMessageOnlineState("libera", "alice", true));
       flushEdt();
 
-      onEdt(() -> assertEquals("Online", statusForNick(fixture.monitorTable, "alice")));
+      onEdt(
+          () -> {
+            assertEquals("Online", statusForNick(fixture.monitorTable, "alice"));
+            assertEquals("Unknown", statusForNick(fixture.monitorTable, "bob"));
+            assertEquals("Unknown", statusForNick(fixture.monitorTable, "carol"));
+          });
     } finally {
       onEdt(fixture.chat::shutdown);
       flushEdt();

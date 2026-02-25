@@ -104,6 +104,33 @@ class ChatLogRepositoryTest {
     }
   }
 
+  @Test
+  void targetLookupsAreCaseInsensitive() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-case-insensitive-target"))) {
+      TargetRef target = new TargetRef("srv", "#ChanCase");
+      LogLineFactory factory = new LogLineFactory(fixedClock(1_700_003_000_000L));
+
+      fixture.repo.insert(
+          factory.chatAt(
+              target,
+              "alice",
+              "case-check",
+              false,
+              1_700_003_000_000L,
+              "case-target-1",
+              Map.of("msgid", "case-target-1")));
+
+      assertEquals(1, fixture.repo.fetchRecent("srv", "#chancase", 10).size());
+      assertEquals(1, fixture.repo.fetchRecent("srv", "#CHANCASE", 10).size());
+      assertEquals(1, fixture.repo.fetchRecentRows("srv", "#chancase", 10).size());
+      assertEquals(
+          1,
+          fixture.repo.fetchOlderRows("srv", "#chancase", Long.MAX_VALUE, Long.MAX_VALUE, 10).size());
+      assertEquals(1, fixture.repo.deleteTarget("srv", "#chancase"));
+      assertEquals(0, fixture.repo.fetchRecent("srv", "#ChanCase", 10).size());
+    }
+  }
+
   private static Clock fixedClock(long epochMs) {
     return Clock.fixed(Instant.ofEpochMilli(epochMs), ZoneOffset.UTC);
   }

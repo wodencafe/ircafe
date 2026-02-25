@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.architecture;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import cafe.woden.ircclient.app.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.app.AssertjSwingDiagnosticsService;
@@ -14,7 +15,13 @@ import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
+import cafe.woden.ircclient.app.api.InterceptorIngestPort;
+import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.MonitorRosterPort;
+import cafe.woden.ircclient.app.api.NotificationRuleMatch;
+import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
@@ -31,9 +38,9 @@ import cafe.woden.ircclient.app.core.MediatorConnectionSubscriptionBinder;
 import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.interceptors.InterceptorHit;
-import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
+import cafe.woden.ircclient.interceptors.InterceptorHit;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
@@ -43,6 +50,13 @@ import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.model.UserCommandAlias;
+import cafe.woden.ircclient.monitor.MonitorIsonFallbackService;
+import cafe.woden.ircclient.monitor.MonitorListService;
+import cafe.woden.ircclient.monitor.MonitorSyncService;
+import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
+import cafe.woden.ircclient.notifications.IrcEventNotificationService;
+import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
+import cafe.woden.ircclient.perform.PerformOnConnectService;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import java.lang.annotation.Annotation;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -50,6 +64,10 @@ import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.jmolecules.ddd.annotation.ValueObject;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.stereotype.Component;
 
 class JmoleculesIncrementalAdoptionTest {
 
@@ -80,7 +98,20 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(TargetChatHistoryPort.class, ApplicationLayer.class);
     assertAnnotated(TargetLogMaintenancePort.class, ApplicationLayer.class);
     assertAnnotated(ChatTranscriptHistoryPort.class, ApplicationLayer.class);
+    assertAnnotated(InterceptorIngestPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcEventNotifierPort.class, ApplicationLayer.class);
+    assertAnnotated(NotificationRuleMatcherPort.class, ApplicationLayer.class);
+    assertAnnotated(MonitorFallbackPort.class, ApplicationLayer.class);
+    assertAnnotated(MonitorRosterPort.class, ApplicationLayer.class);
     assertAnnotated(LocalFilterCommandHandler.class, ApplicationLayer.class);
+    assertAnnotated(PerformOnConnectService.class, ApplicationLayer.class);
+    assertAnnotated(JfrSnapshotSummarizer.class, ApplicationLayer.class);
+    assertAnnotated(MonitorListService.class, ApplicationLayer.class);
+    assertAnnotated(MonitorIsonFallbackService.class, ApplicationLayer.class);
+    assertAnnotated(MonitorSyncService.class, ApplicationLayer.class);
+    assertAnnotated(IrcEventNotificationService.class, ApplicationLayer.class);
+    assertAnnotated(NotificationRuleMatcher.class, ApplicationLayer.class);
+    assertAnnotated(IrcEventNotificationRulesBus.class, ApplicationLayer.class);
 
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
@@ -94,11 +125,24 @@ class JmoleculesIncrementalAdoptionTest {
         "TrayNotificationsPort should remain an interface");
     assertTrue(UiSettingsPort.class.isInterface(), "UiSettingsPort should remain an interface");
     assertTrue(
+        MonitorFallbackPort.class.isInterface(), "MonitorFallbackPort should remain an interface");
+    assertTrue(
+        MonitorRosterPort.class.isInterface(), "MonitorRosterPort should remain an interface");
+    assertTrue(
         ChatHistoryIngestionPort.class.isInterface(),
         "ChatHistoryIngestionPort should remain an interface");
     assertTrue(
         LocalFilterCommandHandler.class.isInterface(),
         "LocalFilterCommandHandler should remain an interface");
+    assertTrue(
+        InterceptorIngestPort.class.isInterface(),
+        "InterceptorIngestPort should remain an interface");
+    assertTrue(
+        IrcEventNotifierPort.class.isInterface(),
+        "IrcEventNotifierPort should remain an interface");
+    assertTrue(
+        NotificationRuleMatcherPort.class.isInterface(),
+        "NotificationRuleMatcherPort should remain an interface");
   }
 
   @Test
@@ -117,6 +161,36 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InterceptorDefinition.class, ValueObject.class);
     assertAnnotated(InterceptorRule.class, ValueObject.class);
     assertAnnotated(InterceptorHit.class, ValueObject.class);
+  }
+
+  @Test
+  void componentEntryPointsInExtractedModulesRemainApplicationLayerAnnotated() {
+    assertComponentPackageAnnotated("cafe.woden.ircclient.perform", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.diagnostics", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.monitor", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.interceptors", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.notifications", ApplicationLayer.class);
+  }
+
+  private static void assertComponentPackageAnnotated(
+      String basePackage, Class<? extends Annotation> marker) {
+    ClassPathScanningCandidateComponentProvider scanner =
+        new ClassPathScanningCandidateComponentProvider(false);
+    scanner.addIncludeFilter(new AnnotationTypeFilter(Component.class));
+    var candidates = scanner.findCandidateComponents(basePackage);
+    assertTrue(!candidates.isEmpty(), "Expected at least one @Component in " + basePackage);
+    for (BeanDefinition candidate : candidates) {
+      String className = candidate.getBeanClassName();
+      if (className == null || className.isBlank()) {
+        fail("Missing bean class name for candidate in " + basePackage);
+      }
+      try {
+        Class<?> type = Class.forName(className);
+        assertAnnotated(type, marker);
+      } catch (ClassNotFoundException e) {
+        fail("Could not load component class " + className, e);
+      }
+    }
   }
 
   private static void assertAnnotated(Class<?> type, Class<? extends Annotation> marker) {

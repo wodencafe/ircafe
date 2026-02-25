@@ -305,6 +305,35 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    filter {
+        // Functional Swing coverage lives in src/functionalTest and runs via the dedicated task.
+        excludeTestsMatching '*FunctionalTest'
+    }
+}
+
+tasks.register('integrationTest', Test) {
+    group = 'verification'
+    description = 'Runs test-source-set integration tests (classes ending with IntegrationTest).'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*IntegrationTest'
+    }
+    shouldRunAfter(tasks.named('test'))
+}
+
+tasks.register('architectureTest', Test) {
+    group = 'verification'
+    description = 'Runs architecture and modulith guardrail tests.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'cafe.woden.ircclient.architecture.*'
+        includeTestsMatching 'cafe.woden.ircclient.modulith.*'
+    }
+    shouldRunAfter(tasks.named('test'))
 }
 
 tasks.register('functionalTest', Test) {
@@ -314,6 +343,9 @@ tasks.register('functionalTest', Test) {
     classpath = sourceSets.functionalTest.runtimeClasspath
     useJUnitPlatform()
     systemProperty 'java.awt.headless', 'true'
+    filter {
+        includeTestsMatching '*FunctionalTest'
+    }
     shouldRunAfter(tasks.named('test'))
 }
 

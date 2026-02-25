@@ -1,10 +1,16 @@
 package cafe.woden.ircclient.modulith;
 
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
+import cafe.woden.ircclient.app.api.InterceptorIngestPort;
+import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.MonitorRosterPort;
+import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -60,6 +66,18 @@ public abstract class AbstractApplicationModuleIntegrationTest {
   @MockitoBean LocalFilterCommandHandler localFilterCommandHandler;
 
   @MockitoBean InboundIgnorePolicy inboundIgnorePolicy;
+
+  @MockitoBean JfrSnapshotSummarizer jfrSnapshotSummarizer;
+
+  @MockitoBean MonitorRosterPort monitorRosterPort;
+
+  @MockitoBean MonitorFallbackPort monitorFallbackPort;
+
+  @MockitoBean InterceptorIngestPort interceptorIngestPort;
+
+  @MockitoBean IrcEventNotifierPort ircEventNotifierPort;
+
+  @MockitoBean NotificationRuleMatcherPort notificationRuleMatcherPort;
 
   @TestBean(name = "run")
   ApplicationRunner run;

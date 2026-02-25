@@ -9,16 +9,23 @@ import cafe.woden.ircclient.app.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.app.RuntimeJfrService;
 import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.InterceptorIngestPort;
+import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.MonitorRosterPort;
+import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
-import cafe.woden.ircclient.app.interceptors.InterceptorStore;
-import cafe.woden.ircclient.app.monitor.MonitorListService;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.monitor.MonitorListService;
+import cafe.woden.ircclient.notifications.IrcEventNotificationService;
+import cafe.woden.ircclient.perform.PerformOnConnectService;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModule;
@@ -41,6 +48,29 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(moduleFor(modules, SpringRuntimeEventsService.class)).isEqualTo(appModule);
     assertThat(appModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.app");
     assertAppNamedInterfaces(appModule);
+
+    ApplicationModule performModule = moduleFor(modules, PerformOnConnectService.class);
+    assertThat(performModule).isNotEqualTo(appModule);
+    assertThat(performModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.perform");
+
+    ApplicationModule diagnosticsSupportModule = moduleFor(modules, JfrSnapshotSummarizer.class);
+    assertThat(diagnosticsSupportModule).isNotEqualTo(appModule);
+    assertThat(diagnosticsSupportModule.getBasePackage().getName())
+        .isEqualTo("cafe.woden.ircclient.diagnostics");
+
+    ApplicationModule monitorModule = moduleFor(modules, MonitorListService.class);
+    assertThat(monitorModule).isNotEqualTo(appModule);
+    assertThat(monitorModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.monitor");
+
+    ApplicationModule interceptorsModule = moduleFor(modules, InterceptorStore.class);
+    assertThat(interceptorsModule).isNotEqualTo(appModule);
+    assertThat(interceptorsModule.getBasePackage().getName())
+        .isEqualTo("cafe.woden.ircclient.interceptors");
+
+    ApplicationModule notificationsModule = moduleFor(modules, IrcEventNotificationService.class);
+    assertThat(notificationsModule).isNotEqualTo(appModule);
+    assertThat(notificationsModule.getBasePackage().getName())
+        .isEqualTo("cafe.woden.ircclient.notifications");
 
     ApplicationModule uiModule = moduleFor(modules, RuntimeEventsPanel.class);
     assertThat(uiModule).isNotEqualTo(appModule);
@@ -65,15 +95,17 @@ class SpringModulithIncrementalAdoptionTest {
         UiPort.class,
         ActiveTargetPort.class,
         MediatorControlPort.class,
+        InterceptorIngestPort.class,
+        IrcEventNotifierPort.class,
+        NotificationRuleMatcherPort.class,
+        MonitorFallbackPort.class,
+        MonitorRosterPort.class,
         TargetRef.class,
         TrayNotificationsPort.class);
     assertNamedInterfaceContains(
         appModule, "diagnostics", RuntimeJfrService.class, RuntimeDiagnosticEvent.class);
     assertNamedInterfaceContains(
         appModule, "commands", UserCommandAliasesBus.class, FilterCommand.class);
-    assertNamedInterfaceContains(appModule, "interceptors", InterceptorStore.class);
-    assertNamedInterfaceContains(appModule, "monitor", MonitorListService.class);
-    assertNamedInterfaceContains(appModule, "notifications", IrcEventNotificationRulesBus.class);
     assertNamedInterfaceContains(appModule, "outbound", LocalFilterCommandHandler.class);
   }
 

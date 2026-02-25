@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.ui.interceptors;
 
+import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.TargetRef;
-import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
-import cafe.woden.ircclient.app.interceptors.InterceptorHit;
-import cafe.woden.ircclient.app.interceptors.InterceptorStore;
+import cafe.woden.ircclient.interceptors.InterceptorHit;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;

@@ -6,12 +6,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
-import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -26,9 +26,8 @@ class OutboundMonitorCommandServiceTest {
   private final TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
   private final ConnectionCoordinator connectionCoordinator =
       Mockito.mock(ConnectionCoordinator.class);
-  private final MonitorListService monitorListService = Mockito.mock(MonitorListService.class);
-  private final MonitorIsonFallbackService monitorIsonFallbackService =
-      Mockito.mock(MonitorIsonFallbackService.class);
+  private final MonitorRosterPort monitorRosterPort = Mockito.mock(MonitorRosterPort.class);
+  private final MonitorFallbackPort monitorFallbackPort = Mockito.mock(MonitorFallbackPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundMonitorCommandService service =
@@ -37,8 +36,8 @@ class OutboundMonitorCommandServiceTest {
           ui,
           targetCoordinator,
           connectionCoordinator,
-          monitorListService,
-          monitorIsonFallbackService);
+          monitorRosterPort,
+          monitorFallbackPort);
 
   @AfterEach
   void tearDown() {
@@ -50,14 +49,16 @@ class OutboundMonitorCommandServiceTest {
     TargetRef active = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(monitorListService.addNicks(eq("libera"), eq(java.util.List.of("alice", "bob"))))
+    when(monitorRosterPort.parseNickInput("alice,bob"))
+        .thenReturn(java.util.List.of("alice", "bob"));
+    when(monitorRosterPort.addNicks(eq("libera"), eq(java.util.List.of("alice", "bob"))))
         .thenReturn(2);
     when(irc.negotiatedMonitorLimit("libera")).thenReturn(100);
     when(irc.sendRaw("libera", "MONITOR +alice,bob")).thenReturn(Completable.complete());
 
     service.handleMonitor(disposables, "+alice,bob");
 
-    verify(monitorListService).addNicks("libera", java.util.List.of("alice", "bob"));
+    verify(monitorRosterPort).addNicks("libera", java.util.List.of("alice", "bob"));
     verify(irc).sendRaw("libera", "MONITOR +alice,bob");
   }
 
@@ -67,7 +68,7 @@ class OutboundMonitorCommandServiceTest {
     TargetRef monitor = TargetRef.monitorGroup("libera");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(connectionCoordinator.isConnected("libera")).thenReturn(false);
-    when(monitorListService.listNicks("libera")).thenReturn(java.util.List.of("alice"));
+    when(monitorRosterPort.listNicks("libera")).thenReturn(java.util.List.of("alice"));
 
     service.handleMonitor(disposables, "list");
 
@@ -80,11 +81,11 @@ class OutboundMonitorCommandServiceTest {
     TargetRef active = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(monitorIsonFallbackService.isFallbackActive("libera")).thenReturn(true);
+    when(monitorFallbackPort.isFallbackActive("libera")).thenReturn(true);
 
     service.handleMonitor(disposables, "status");
 
-    verify(monitorIsonFallbackService).requestImmediateRefresh("libera");
+    verify(monitorFallbackPort).requestImmediateRefresh("libera");
     verify(irc, never()).sendRaw(eq("libera"), any());
   }
 }

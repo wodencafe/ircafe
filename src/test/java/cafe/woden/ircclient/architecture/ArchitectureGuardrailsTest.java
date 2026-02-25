@@ -35,6 +35,28 @@ class ArchitectureGuardrailsTest {
           .because("application code should use app-owned ports, not logging module internals");
 
   @ArchTest
+  static final ArchRule app_should_not_depend_on_interceptors_module_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.interceptors..")
+          .because(
+              "application code should depend on app::api interceptor ports, not interceptor module internals");
+
+  @ArchTest
+  static final ArchRule app_should_not_depend_on_notifications_module_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.notifications..")
+          .because(
+              "application code should depend on app::api notification ports, not notification module internals");
+
+  @ArchTest
   static final ArchRule logging_should_not_depend_on_ui_package_directly =
       noClasses()
           .that()
@@ -59,9 +81,92 @@ class ArchitectureGuardrailsTest {
   static final ArchRule non_app_modules_should_not_depend_on_app_core_directly =
       noClasses()
           .that()
-          .resideOutsideOfPackages("cafe.woden.ircclient.app..", "cafe.woden.ircclient")
+          .resideOutsideOfPackage("cafe.woden.ircclient.app..")
           .should()
           .dependOnClassesThat()
           .resideInAPackage("cafe.woden.ircclient.app.core..")
           .because("app.core is internal orchestration and should only be used from within app.");
+
+  @ArchTest
+  static final ArchRule perform_should_not_depend_on_ui_logging_or_app_internal_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.perform..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.notifications..",
+              "cafe.woden.ircclient.interceptors..")
+          .because(
+              "perform module should integrate through app api/commands ports and remain decoupled from UI and app internals");
+
+  @ArchTest
+  static final ArchRule monitor_should_not_depend_on_ui_logging_or_app_internal_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.monitor..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.notifications..",
+              "cafe.woden.ircclient.interceptors..")
+          .because(
+              "monitor module should integrate via app::api plus config/irc without coupling to UI or app internals");
+
+  @ArchTest
+  static final ArchRule interceptors_should_not_depend_on_ui_logging_or_app_internal_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.interceptors..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.notifications..")
+          .because(
+              "interceptor module should integrate via app::api and remain decoupled from app internals and UI/logging");
+
+  @ArchTest
+  static final ArchRule notifications_should_not_depend_on_ui_logging_or_app_internal_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.notifications..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.interceptors..")
+          .because(
+              "notification module should integrate via app::api and remain decoupled from UI and app internals");
+
+  @ArchTest
+  static final ArchRule diagnostics_should_not_depend_on_app_ui_or_logging_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.diagnostics..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.app..",
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..")
+          .because(
+              "diagnostics support helpers should remain standalone and reusable without app/ui/logging coupling");
 }

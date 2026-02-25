@@ -198,6 +198,27 @@ Common local checks:
 ./gradlew check
 ```
 
+Targeted suites:
+
+```bash
+# Spring/context integration tests from src/test (classes ending with IntegrationTest)
+./gradlew integrationTest
+
+# Modulith/jMolecules/ArchUnit guardrails
+./gradlew architectureTest
+
+# Swing UI functional tests from src/functionalTest (classes ending with FunctionalTest)
+./gradlew functionalTest
+```
+
+When to run which tests:
+
+- Spring Modulith/jMolecules/ArchUnit or module-boundary refactors: `./gradlew architectureTest test`
+- Spring wiring/integration changes (new beans, events, transactional boundaries): `./gradlew integrationTest`
+- Swing UI behavior changes (dialogs, tree interactions, panel flows, rendering): `./gradlew functionalTest test`
+- Non-UI feature work: `./gradlew test`
+- Pre-merge on larger changes: `./gradlew check` plus relevant targeted suites above
+
 Auto-fix workflow (Error Prone auto-corrects first, then Spotless formatting):
 
 ```bash

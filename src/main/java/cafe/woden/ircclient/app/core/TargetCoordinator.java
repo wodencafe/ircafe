@@ -65,6 +65,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final Set<TargetRef> closedPrivateTargetsByUser = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> detachedChannelsByUserOrKick = ConcurrentHashMap.newKeySet();
+  private final Set<TargetRef> channelsClosedByUser = ConcurrentHashMap.newKeySet();
 
   private TargetRef activeTarget;
 
@@ -399,6 +400,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     markClosedPrivateTargetByUser(target);
+    targetChatHistoryPort.reset(target);
     ui.appendStatus(status, "(ui)", "Closed " + target.target());
     ui.closeTarget(target);
   }
@@ -427,12 +429,16 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     detachedChannelsByUserOrKick.remove(target);
+    channelsClosedByUser.remove(target);
     runtimeConfig.forgetJoinedChannel(sid, target.target());
     userListStore.clear(sid, target.target());
+    targetChatHistoryPort.reset(target);
     ui.appendStatus(status, "(ui)", "Closed " + target.target());
     ui.closeTarget(target);
 
-    if (detached || !connectionCoordinator.isConnected(sid)) return;
+    boolean shouldPart = !detached && connectionCoordinator.isConnected(sid);
+    if (!shouldPart) return;
+    channelsClosedByUser.add(target);
     disposables.add(
         irc.partChannel(sid, target.target(), null)
             .subscribe(
@@ -453,6 +459,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(status);
     ensureTargetExists(target);
 
+    channelsClosedByUser.remove(target);
     detachedChannelsByUserOrKick.add(target);
     ui.setChannelDetached(target, true);
     userListStore.clear(sid, target.target());
@@ -484,6 +491,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(status);
     ensureTargetExists(target);
 
+    channelsClosedByUser.remove(target);
     runtimeConfig.rememberJoinedChannel(sid, target.target());
     detachedChannelsByUserOrKick.remove(target);
     // Keep detached until JOIN is confirmed by the server.
@@ -520,6 +528,12 @@ public class TargetCoordinator implements ActiveTargetPort {
     TargetRef target = new TargetRef(sid, ch);
     if (!target.isChannel()) return;
 
+    if (channelsClosedByUser.remove(target)) {
+      detachedChannelsByUserOrKick.remove(target);
+      userListStore.clear(sid, ch);
+      return;
+    }
+
     if (suppressAutoRejoin) detachedChannelsByUserOrKick.add(target);
     else detachedChannelsByUserOrKick.remove(target);
 
@@ -545,6 +559,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     TargetRef target = new TargetRef(sid, ch);
     if (!target.isChannel()) return false;
 
+    channelsClosedByUser.remove(target);
     ensureTargetExists(target);
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);

@@ -43,7 +43,7 @@ public class ChatLogRepository {
              outgoing_local_echo, soft_ignored, meta
         FROM chat_log
        WHERE server_id = ?
-         AND target = ?
+         AND LOWER(target) = LOWER(?)
     ORDER BY ts_epoch_ms DESC, id DESC
        LIMIT ?
       """;
@@ -56,7 +56,7 @@ public class ChatLogRepository {
              outgoing_local_echo, soft_ignored, meta
         FROM chat_log
        WHERE server_id = ?
-         AND target = ?
+         AND LOWER(target) = LOWER(?)
     ORDER BY ts_epoch_ms DESC, id DESC
        LIMIT ?
       """;
@@ -69,7 +69,7 @@ public class ChatLogRepository {
              outgoing_local_echo, soft_ignored, meta
         FROM chat_log
        WHERE server_id = ?
-         AND target = ?
+         AND LOWER(target) = LOWER(?)
          AND (
               ts_epoch_ms < ?
            OR (ts_epoch_ms = ? AND id < ?)
@@ -84,7 +84,7 @@ public class ChatLogRepository {
       SELECT 1
         FROM chat_log
        WHERE server_id = ?
-         AND target = ?
+         AND LOWER(target) = LOWER(?)
          AND (
               ts_epoch_ms < ?
            OR (ts_epoch_ms = ? AND id < ?)
@@ -121,7 +121,7 @@ public class ChatLogRepository {
       SELECT 1
         FROM chat_log
        WHERE server_id = ?
-         AND target = ?
+         AND LOWER(target) = LOWER(?)
          AND ts_epoch_ms = ?
          AND direction = ?
          AND kind = ?
@@ -368,7 +368,8 @@ public class ChatLogRepository {
   public int deleteTarget(String serverId, String target) {
     if (serverId == null || serverId.isBlank()) return 0;
     if (target == null || target.isBlank()) return 0;
-    return jdbc.update("DELETE FROM chat_log WHERE server_id = ? AND target = ?", serverId, target);
+    return jdbc.update(
+        "DELETE FROM chat_log WHERE server_id = ? AND LOWER(target) = LOWER(?)", serverId, target);
   }
 
   private static String truncate(String s) {
