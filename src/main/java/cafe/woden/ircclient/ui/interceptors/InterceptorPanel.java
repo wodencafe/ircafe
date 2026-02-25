@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.interceptors;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
 import cafe.woden.ircclient.app.interceptors.InterceptorHit;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;

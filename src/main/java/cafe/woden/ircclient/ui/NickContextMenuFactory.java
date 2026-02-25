@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UserActionRequest;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import java.util.Objects;
 import javax.swing.JMenu;

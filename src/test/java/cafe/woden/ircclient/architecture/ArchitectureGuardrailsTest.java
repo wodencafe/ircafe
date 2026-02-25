@@ -54,4 +54,14 @@ class ArchitectureGuardrailsTest {
           .areAssignableTo(PircbotxIrcClientService.class)
           .because(
               "application code should depend on IrcClientService, not transport-specific adapters");
+
+  @ArchTest
+  static final ArchRule non_app_modules_should_not_depend_on_app_core_directly =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages("cafe.woden.ircclient.app..", "cafe.woden.ircclient")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.app.core..")
+          .because("app.core is internal orchestration and should only be used from within app.");
 }

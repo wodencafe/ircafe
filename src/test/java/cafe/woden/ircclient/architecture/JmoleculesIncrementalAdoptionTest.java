@@ -4,32 +4,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.app.AssertjSwingDiagnosticsService;
-import cafe.woden.ircclient.app.ChatHistoryBatchEventsPort;
-import cafe.woden.ircclient.app.ChatHistoryIngestEventsPort;
-import cafe.woden.ircclient.app.ChatHistoryIngestionPort;
-import cafe.woden.ircclient.app.ChatTranscriptHistoryPort;
-import cafe.woden.ircclient.app.ConnectionCoordinator;
-import cafe.woden.ircclient.app.IrcMediator;
 import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.JhiccupDiagnosticsService;
-import cafe.woden.ircclient.app.MediatorConnectionSubscriptionBinder;
-import cafe.woden.ircclient.app.MediatorHistoryIngestOrchestrator;
-import cafe.woden.ircclient.app.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.PresenceEvent;
-import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.app.RuntimeJfrService;
 import cafe.woden.ircclient.app.SpringRuntimeEventsService;
-import cafe.woden.ircclient.app.TargetChatHistoryPort;
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetLogMaintenancePort;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.TrayNotificationsPort;
-import cafe.woden.ircclient.app.UiPort;
-import cafe.woden.ircclient.app.UiSettingsPort;
-import cafe.woden.ircclient.app.UserActionRequest;
-import cafe.woden.ircclient.app.ZncPlaybackEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
+import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
+import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.PresenceEvent;
+import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
+import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.IrcMediator;
+import cafe.woden.ircclient.app.core.MediatorConnectionSubscriptionBinder;
+import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
+import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.interceptors.InterceptorHit;
 import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
@@ -69,6 +70,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(RuntimeJfrService.class, ApplicationLayer.class);
     assertAnnotated(JfrRuntimeEventsService.class, ApplicationLayer.class);
     assertAnnotated(SpringRuntimeEventsService.class, ApplicationLayer.class);
+    assertAnnotated(MediatorControlPort.class, ApplicationLayer.class);
     assertAnnotated(TrayNotificationsPort.class, ApplicationLayer.class);
     assertAnnotated(UiSettingsPort.class, ApplicationLayer.class);
     assertAnnotated(ChatHistoryIngestionPort.class, ApplicationLayer.class);
@@ -84,6 +86,8 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
 
     assertTrue(UiPort.class.isInterface(), "UiPort should remain an interface");
+    assertTrue(
+        MediatorControlPort.class.isInterface(), "MediatorControlPort should remain an interface");
     assertTrue(IrcClientService.class.isInterface(), "IrcClientService should remain an interface");
     assertTrue(
         TrayNotificationsPort.class.isInterface(),

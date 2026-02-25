@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
@@ -51,7 +51,7 @@ class TrayNotificationServiceTest {
     when(frame.isVisible()).thenReturn(true);
     when(frame.isActive()).thenReturn(frameActive);
 
-    TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+    ActiveTargetPort targetCoordinator = mock(ActiveTargetPort.class);
     when(targetCoordinator.getActiveTarget()).thenReturn(activeTarget);
 
     @SuppressWarnings("unchecked")
@@ -65,7 +65,7 @@ class TrayNotificationServiceTest {
         mock(ObjectProvider.class);
     when(statusBarProvider.getIfAvailable()).thenReturn(null);
     @SuppressWarnings("unchecked")
-    ObjectProvider<TargetCoordinator> targetCoordinatorProvider = mock(ObjectProvider.class);
+    ObjectProvider<ActiveTargetPort> targetCoordinatorProvider = mock(ObjectProvider.class);
     when(targetCoordinatorProvider.getIfAvailable()).thenReturn(targetCoordinator);
     @SuppressWarnings("unchecked")
     ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider =

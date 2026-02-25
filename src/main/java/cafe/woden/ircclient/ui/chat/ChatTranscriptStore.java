@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.app.ChatTranscriptHistoryPort;
-import cafe.woden.ircclient.app.PresenceEvent;
-import cafe.woden.ircclient.app.PresenceKind;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
+import cafe.woden.ircclient.app.api.PresenceEvent;
+import cafe.woden.ircclient.app.api.PresenceKind;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;

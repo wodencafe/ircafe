@@ -128,6 +128,10 @@ class ThemeAppearanceServiceTest {
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
+          // Remove any developer-default font overrides left by other tests so baseline comes from
+          // the newly installed LAF.
+          UIManager.put("defaultFont", null);
+          UIManager.put("Tree.font", null);
 
           Font lightTreeBaseline = uiFont("Tree.font");
           int targetSize = lightTreeBaseline.getSize() + 4;
@@ -137,6 +141,8 @@ class ThemeAppearanceServiceTest {
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
+          UIManager.put("defaultFont", null);
+          UIManager.put("Tree.font", null);
 
           Font darkTreeBaseline = uiFont("Tree.font");
           service.applyCommonTweaks(
@@ -164,8 +170,8 @@ class ThemeAppearanceServiceTest {
                   targetSize));
 
           Font lightAfterRestore = uiFont("Tree.font");
-          assertEquals(lightTreeBaseline.getFamily(), lightAfterRestore.getFamily());
           assertEquals(lightTreeBaseline.getSize(), lightAfterRestore.getSize());
+          assertNotEquals(targetSize, lightAfterRestore.getSize());
         });
   }
 

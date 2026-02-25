@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.chat.fold;
 
-import cafe.woden.ircclient.app.PresenceEvent;
-import cafe.woden.ircclient.app.PresenceKind;
+import cafe.woden.ircclient.app.api.PresenceEvent;
+import cafe.woden.ircclient.app.api.PresenceKind;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;

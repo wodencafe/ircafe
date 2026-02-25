@@ -10,6 +10,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
@@ -176,6 +180,7 @@ class ConnectionCoordinatorTest {
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
     when(runtimeConfig.readPrivateMessageTargets("libera")).thenReturn(List.of("Alice", "Bob"));
+    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#ircafe"));
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
@@ -192,6 +197,29 @@ class ConnectionCoordinatorTest {
 
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));
+    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
+    verify(ui, atLeastOnce()).setChannelDetached(new TargetRef("libera", "#ircafe"), true);
     verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
+  }
+
+  @Test
+  void constructorRestoresJoinedChannelsAsDetached() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
+    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
+
+    new ConnectionCoordinator(
+        irc, ui, serverRegistry, serverCatalog, runtimeConfig, LOG_PROPS, trayNotificationService);
+
+    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
+    verify(ui, atLeastOnce()).setChannelDetached(new TargetRef("libera", "#ircafe"), true);
+    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#java"));
+    verify(ui, atLeastOnce()).setChannelDetached(new TargetRef("libera", "#java"), true);
   }
 }

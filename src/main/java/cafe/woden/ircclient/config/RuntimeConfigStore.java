@@ -280,6 +280,31 @@ public class RuntimeConfigStore {
         });
   }
 
+  public synchronized List<String> readJoinedChannels(String serverId) {
+    try {
+      if (file.toString().isBlank()) return List.of();
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return List.of();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> irc = getOrCreateMap(doc, "irc");
+      List<Map<String, Object>> servers = readServerList(irc).orElse(List.of());
+
+      for (Map<String, Object> server : servers) {
+        if (server == null) continue;
+        if (!sid.equalsIgnoreCase(Objects.toString(server.get("id"), "").trim())) continue;
+        Object autoJoinObj = server.get("autoJoin");
+        if (!(autoJoinObj instanceof List<?> rawList)) return List.of();
+        @SuppressWarnings("unchecked")
+        List<String> autoJoin = (List<String>) rawList;
+        return List.copyOf(AutoJoinEntryCodec.channelEntries(autoJoin));
+      }
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read joined-channel list from '{}'", file, e);
+    }
+    return List.of();
+  }
+
   public synchronized void rememberPrivateMessageTarget(String serverId, String nick) {
     updateServer(
         serverId,
@@ -436,6 +461,60 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Reads {@code ircafe.ui.startupThemePending} from runtime config.
+   *
+   * <p>When present, this indicates startup began applying a theme but did not clear the marker.
+   * The value is used as a recovery hint on the next launch.
+   */
+  public synchronized Optional<String> readStartupThemePending() {
+    try {
+      if (file.toString().isBlank()) return Optional.empty();
+      if (!Files.exists(file)) return Optional.empty();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
+
+      String theme = Objects.toString(ui.get("startupThemePending"), "").trim();
+      if (theme.isEmpty()) return Optional.empty();
+      return Optional.of(theme);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.startupThemePending from '{}'", file, e);
+      return Optional.empty();
+    }
+  }
+
+  /** Persists {@code ircafe.ui.startupThemePending}. Blank values remove the key. */
+  public synchronized void rememberStartupThemePending(String theme) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      String normalized = Objects.toString(theme, "").trim();
+      if (normalized.isEmpty()) {
+        ui.remove("startupThemePending");
+      } else {
+        ui.put("startupThemePending", normalized);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.startupThemePending to '{}'", file, e);
+    }
+  }
+
+  /** Removes {@code ircafe.ui.startupThemePending}. */
+  public synchronized void clearStartupThemePending() {
+    rememberStartupThemePending(null);
+  }
+
   public synchronized void rememberMemoryUsageDisplayMode(String mode) {
     try {
       if (file.toString().isBlank()) return;
@@ -495,6 +574,59 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberMemoryUsageWarningSoundEnabled(boolean enabled) {
     rememberMemoryUsageWarningBoolean("memoryUsageWarningSoundEnabled", enabled);
+  }
+
+  /**
+   * Reads whether runtime JFR diagnostics are enabled from {@code ircafe.ui.appDiagnostics.jfr}.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readApplicationJfrEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object appDiagObj = ui.get("appDiagnostics");
+      if (!(appDiagObj instanceof Map<?, ?> appDiag)) return defaultValue;
+
+      Object jfrObj = appDiag.get("jfr");
+      if (!(jfrObj instanceof Map<?, ?> jfr)) return defaultValue;
+
+      if (!jfr.containsKey("enabled")) return defaultValue;
+      return asBoolean(jfr.get("enabled")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.appDiagnostics.jfr.enabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  /**
+   * Persists {@code ircafe.ui.appDiagnostics.jfr.enabled}.
+   *
+   * <p>This controls runtime JFR diagnostics visibility/collection in the Application -> JFR view.
+   */
+  public synchronized void rememberApplicationJfrEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> appDiag = getOrCreateMap(ui, "appDiagnostics");
+      Map<String, Object> jfr = getOrCreateMap(appDiag, "jfr");
+      jfr.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.appDiagnostics.jfr.enabled to '{}'", file, e);
+    }
   }
 
   private synchronized void rememberMemoryUsageWarningBoolean(String key, boolean enabled) {
@@ -801,6 +933,26 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberChatSystemColor(String hex) {
     rememberOptionalUiHex("chatSystemColor", hex, "chatSystemColor");
+  }
+
+  public synchronized void rememberChatMessageColor(String hex) {
+    rememberOptionalUiHex("chatMessageColor", hex, "chatMessageColor");
+  }
+
+  public synchronized void rememberChatNoticeColor(String hex) {
+    rememberOptionalUiHex("chatNoticeColor", hex, "chatNoticeColor");
+  }
+
+  public synchronized void rememberChatActionColor(String hex) {
+    rememberOptionalUiHex("chatActionColor", hex, "chatActionColor");
+  }
+
+  public synchronized void rememberChatErrorColor(String hex) {
+    rememberOptionalUiHex("chatErrorColor", hex, "chatErrorColor");
+  }
+
+  public synchronized void rememberChatPresenceColor(String hex) {
+    rememberOptionalUiHex("chatPresenceColor", hex, "chatPresenceColor");
   }
 
   public synchronized void rememberChatMentionBgColor(String hex) {

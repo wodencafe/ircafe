@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,9 +81,9 @@ class PircbotxAwayNotifyInputParserTest {
   void capLsSendsFallbackReqForMessageTagsWhenOfferedButNotEnabled() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
-    PircBotX bot = dummyBot();
+    PircBotX bot = spy(dummyBot());
     OutputCAP outputCap = mock(OutputCAP.class);
-    when(bot.sendCAP()).thenReturn(outputCap);
+    doReturn(outputCap).when(bot).sendCAP();
     PircbotxAwayNotifyInputParser parser =
         new PircbotxAwayNotifyInputParser(
             bot, "libera", conn, out::add, new Ircv3StsPolicyService());

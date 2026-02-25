@@ -5,15 +5,20 @@ import java.util.Locale;
 /**
  * Chat transcript theme overrides.
  *
- * <p>These settings only affect chat rendering (timestamps, status/system lines, mention
- * highlights). They are layered on top of the active Look & Feel.
+ * <p>These settings only affect chat rendering (timestamps, status/system lines, per-message
+ * colors, mention highlights). They are layered on top of the active Look & Feel.
  */
 public record ChatThemeSettings(
     Preset preset,
     String timestampColor,
     String systemColor,
     String mentionBgColor,
-    int mentionStrength) {
+    int mentionStrength,
+    String messageColor,
+    String noticeColor,
+    String actionColor,
+    String errorColor,
+    String presenceColor) {
 
   public ChatThemeSettings {
     if (preset == null) preset = Preset.DEFAULT;

@@ -4,8 +4,8 @@ import java.util.Locale;
 import java.util.Objects;
 
 public enum MemoryUsageDisplayMode {
-  LONG("long", "Long (used / max)"),
-  SHORT("short", "Short (compact text)"),
+  LONG("long", "Long (used / max GiB)"),
+  SHORT("short", "Short (percent badge)"),
   INDICATOR("indicator", "Indicator only"),
   MOON("moon", "Moon phases"),
   HIDDEN("hidden", "Hidden");

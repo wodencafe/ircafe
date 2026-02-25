@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IRCafe
+Comment=IRC Client in modern Java, utilizing PircBotX, Spring Boot, and RXJava.
+Exec=ircafe
+Icon=cafe.woden.IRCafe
+Categories=Network;Chat;
+Terminal=false
+StartupWMClass=IRCafe

@@ -1,11 +1,12 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.ConnectionState;
 import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.PrivateMessageRequest;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
-import cafe.woden.ircclient.app.UserActionRequest;
+import cafe.woden.ircclient.app.api.ConnectionState;
+import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
+import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
@@ -203,8 +204,28 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<TargetRef> joinChannelRequests() {
+    return serverTree.joinChannelRequests();
+  }
+
+  @Override
+  public Flowable<TargetRef> detachChannelRequests() {
+    return serverTree.detachChannelRequests();
+  }
+
+  @Override
+  public Flowable<TargetRef> closeChannelRequests() {
+    return serverTree.closeChannelRequests();
+  }
+
+  @Override
   public Flowable<TargetRef> clearLogRequests() {
     return serverTree.clearLogRequests();
+  }
+
+  @Override
+  public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
+    return serverTree.ircv3CapabilityToggleRequests();
   }
 
   @Override
@@ -229,6 +250,16 @@ public class SwingUiPort implements UiPort {
           chat.clearTopic(target);
           transcripts.closeTarget(target);
         });
+  }
+
+  @Override
+  public void setChannelDetached(TargetRef target, boolean detached) {
+    onEdt(() -> serverTree.setChannelDetached(target, detached));
+  }
+
+  @Override
+  public boolean isChannelDetached(TargetRef target) {
+    return onEdtCall(() -> serverTree.isChannelDetached(target), false);
   }
 
   @Override
@@ -654,7 +685,7 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void appendPresence(TargetRef target, cafe.woden.ircclient.app.PresenceEvent event) {
+  public void appendPresence(TargetRef target, cafe.woden.ircclient.app.api.PresenceEvent event) {
     onEdt(() -> transcripts.appendPresence(target, event));
   }
 

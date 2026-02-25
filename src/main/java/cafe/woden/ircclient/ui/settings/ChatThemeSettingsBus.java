@@ -24,13 +24,20 @@ public class ChatThemeSettingsBus {
     String ts = props != null ? props.chatTimestampColor() : null;
     String sys = props != null ? props.chatSystemColor() : null;
     String mention = props != null ? props.chatMentionBgColor() : null;
+    String msg = props != null ? props.chatMessageColor() : null;
+    String notice = props != null ? props.chatNoticeColor() : null;
+    String action = props != null ? props.chatActionColor() : null;
+    String error = props != null ? props.chatErrorColor() : null;
+    String presence = props != null ? props.chatPresenceColor() : null;
 
     int strength = 35;
     if (props != null && props.chatMentionStrength() != null) {
       strength = props.chatMentionStrength();
     }
 
-    this.current = new ChatThemeSettings(preset, ts, sys, mention, strength);
+    this.current =
+        new ChatThemeSettings(
+            preset, ts, sys, mention, strength, msg, notice, action, error, presence);
   }
 
   public ChatThemeSettings get() {
@@ -42,7 +49,17 @@ public class ChatThemeSettingsBus {
     this.current =
         next != null
             ? next
-            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+            : new ChatThemeSettings(
+                ChatThemeSettings.Preset.DEFAULT,
+                null,
+                null,
+                null,
+                35,
+                null,
+                null,
+                null,
+                null,
+                null);
     pcs.firePropertyChange(PROP_CHAT_THEME_SETTINGS, prev, this.current);
   }
 

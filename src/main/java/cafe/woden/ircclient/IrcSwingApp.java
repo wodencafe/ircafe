@@ -1,16 +1,18 @@
 package cafe.woden.ircclient;
 
-import cafe.woden.ircclient.app.IrcMediator;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.ui.MainFrame;
+import cafe.woden.ircclient.ui.settings.ThemeIdUtils;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
@@ -56,17 +58,24 @@ public class IrcSwingApp {
   @Bean
   public ApplicationRunner run(
       ObjectProvider<MainFrame> frames,
-      ObjectProvider<IrcMediator> mediatorProvider,
+      ObjectProvider<MediatorControlPort> mediatorProvider,
       ThemeManager themeManager,
       UiSettingsBus settingsBus,
+      RuntimeConfigStore runtimeConfig,
       TrayService trayService,
       UiPort ui) {
-    return args ->
-        SwingUtilities.invokeLater(
-            () -> {
+    return args -> {
+      String startupTheme = determineStartupTheme(settingsBus, runtimeConfig);
+      runtimeConfig.rememberStartupThemePending(startupTheme);
+
+      SwingUtilities.invokeLater(
+          () -> {
+            boolean startupCompleted = false;
+            try {
+              reconcileThemeSettingIfNeeded(startupTheme, settingsBus, runtimeConfig);
+
               // Install theme before showing UI.
-              String theme = settingsBus.get().theme();
-              themeManager.installLookAndFeel(theme);
+              themeManager.installLookAndFeel(startupTheme);
 
               MainFrame frame = frames.getObject();
               SwingUtilities.updateComponentTreeUI(frame);
@@ -84,11 +93,54 @@ public class IrcSwingApp {
                       && trayService.startMinimized();
               frame.setVisible(!startMinimized);
 
-              IrcMediator mediator = mediatorProvider.getObject();
+              MediatorControlPort mediator = mediatorProvider.getObject();
               if (settingsBus.get().autoConnectOnStart()) {
                 mediator.connectAll();
               }
-            });
+              startupCompleted = true;
+            } finally {
+              if (startupCompleted) {
+                runtimeConfig.clearStartupThemePending();
+              }
+            }
+          });
+    };
+  }
+
+  private static String determineStartupTheme(
+      UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+    var current = settingsBus != null ? settingsBus.get() : null;
+    String configuredTheme =
+        ThemeIdUtils.normalizeThemeId(current != null ? current.theme() : null);
+
+    String pendingTheme = runtimeConfig.readStartupThemePending().orElse(null);
+    if (pendingTheme == null || pendingTheme.isBlank()) {
+      return configuredTheme;
+    }
+    if (!ThemeIdUtils.sameTheme(configuredTheme, pendingTheme)) {
+      return configuredTheme;
+    }
+
+    String fallbackTheme = UiProperties.DEFAULT_THEME;
+    log.warn(
+        "[ircafe] startup recovery: theme '{}' was still pending from previous launch; "
+            + "falling back to '{}'",
+        configuredTheme,
+        fallbackTheme);
+    return fallbackTheme;
+  }
+
+  private static void reconcileThemeSettingIfNeeded(
+      String startupTheme, UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+    if (settingsBus == null) return;
+    var current = settingsBus.get();
+    if (current == null) return;
+    if (ThemeIdUtils.sameTheme(current.theme(), startupTheme)) return;
+
+    var updated = current.withTheme(startupTheme);
+    settingsBus.set(updated);
+    runtimeConfig.rememberUiSettings(
+        updated.theme(), updated.chatFontFamily(), updated.chatFontSize());
   }
 
   private static void installDesktopHandlers(MainFrame frame, UiPort ui) {

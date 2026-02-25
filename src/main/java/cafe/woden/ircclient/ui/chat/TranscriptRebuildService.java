@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import java.util.Objects;
 import org.slf4j.Logger;

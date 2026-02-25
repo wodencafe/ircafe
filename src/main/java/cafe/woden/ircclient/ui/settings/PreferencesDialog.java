@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
-import cafe.woden.ircclient.app.TargetCoordinator;
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.notifications.IrcEventNotificationRulesBus;
@@ -152,7 +152,7 @@ public class PreferencesDialog {
   private final PircbotxIrcClientService ircClientService;
   private final FilterSettingsBus filterSettingsBus;
   private final TranscriptRebuildService transcriptRebuildService;
-  private final TargetCoordinator targetCoordinator;
+  private final ActiveTargetPort targetCoordinator;
   private final TrayService trayService;
   private final TrayNotificationService trayNotificationService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
@@ -180,7 +180,7 @@ public class PreferencesDialog {
       PircbotxIrcClientService ircClientService,
       FilterSettingsBus filterSettingsBus,
       TranscriptRebuildService transcriptRebuildService,
-      TargetCoordinator targetCoordinator,
+      ActiveTargetPort targetCoordinator,
       TrayService trayService,
       TrayNotificationService trayNotificationService,
       GnomeDbusNotificationBackend gnomeDbusBackend,
@@ -252,7 +252,17 @@ public class PreferencesDialog {
     ChatThemeSettings initialChatTheme =
         chatThemeSettingsBus != null
             ? chatThemeSettingsBus.get()
-            : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+            : new ChatThemeSettings(
+                ChatThemeSettings.Preset.DEFAULT,
+                null,
+                null,
+                null,
+                35,
+                null,
+                null,
+                null,
+                null,
+                null);
     ChatThemeControls chatTheme = buildChatThemeControls(initialChatTheme);
 
     // Allow mousewheel selection cycling for Appearance-tab combos.
@@ -294,7 +304,16 @@ public class PreferencesDialog {
                 initialChatTheme != null
                     ? initialChatTheme
                     : new ChatThemeSettings(
-                        ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+                        ChatThemeSettings.Preset.DEFAULT,
+                        null,
+                        null,
+                        null,
+                        35,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null));
 
     final java.util.concurrent.atomic.AtomicBoolean suppressLivePreview =
         new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -318,6 +337,31 @@ public class PreferencesDialog {
         new java.util.concurrent.atomic.AtomicReference<>(
             committedChatThemeSettings.get() != null
                 ? committedChatThemeSettings.get().mentionBgColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatMessageHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().messageColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatNoticeHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().noticeColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatActionHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().actionColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatErrorHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().errorColor()
+                : null);
+    final java.util.concurrent.atomic.AtomicReference<String> lastValidChatPresenceHex =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            committedChatThemeSettings.get() != null
+                ? committedChatThemeSettings.get().presenceColor()
                 : null);
 
     // Debounced live preview to avoid spamming full UI refreshes while sliders are dragged.
@@ -428,10 +472,26 @@ public class PreferencesDialog {
               parseOptionalHex.apply(chatTheme.timestamp.hex, lastValidChatTimestampHex);
           String sysHexV = parseOptionalHex.apply(chatTheme.system.hex, lastValidChatSystemHex);
           String menHexV = parseOptionalHex.apply(chatTheme.mention.hex, lastValidChatMentionHex);
+          String msgHexV = parseOptionalHex.apply(chatTheme.message.hex, lastValidChatMessageHex);
+          String noticeHexV = parseOptionalHex.apply(chatTheme.notice.hex, lastValidChatNoticeHex);
+          String actionHexV = parseOptionalHex.apply(chatTheme.action.hex, lastValidChatActionHex);
+          String errHexV = parseOptionalHex.apply(chatTheme.error.hex, lastValidChatErrorHex);
+          String presenceHexV =
+              parseOptionalHex.apply(chatTheme.presence.hex, lastValidChatPresenceHex);
           int mentionStrengthV = chatTheme.mentionStrength.getValue();
 
           ChatThemeSettings nextChatTheme =
-              new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+              new ChatThemeSettings(
+                  presetV,
+                  tsHexV,
+                  sysHexV,
+                  menHexV,
+                  mentionStrengthV,
+                  msgHexV,
+                  noticeHexV,
+                  actionHexV,
+                  errHexV,
+                  presenceHexV);
           chatThemeSettingsBus.set(nextChatTheme);
           themeManager.refreshChatStyles();
         };
@@ -506,7 +566,16 @@ public class PreferencesDialog {
                   ct != null
                       ? ct
                       : new ChatThemeSettings(
-                          ChatThemeSettings.Preset.DEFAULT, null, null, null, 35));
+                          ChatThemeSettings.Preset.DEFAULT,
+                          null,
+                          null,
+                          null,
+                          35,
+                          null,
+                          null,
+                          null,
+                          null,
+                          null));
             }
 
             String committed = committedThemeId.get();
@@ -637,6 +706,91 @@ public class PreferencesDialog {
                   } else {
                     Color c = parseHexColorLenient(raw);
                     if (c != null) lastValidChatMentionHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .message
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.message.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatMessageHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatMessageHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .notice
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.notice.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatNoticeHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatNoticeHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .action
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.action.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatActionHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatActionHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .error
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.error.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatErrorHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatErrorHex.set(toHex(c));
+                  }
+                  scheduleChatPreview.run();
+                }));
+    chatTheme
+        .presence
+        .hex
+        .getDocument()
+        .addDocumentListener(
+            new SimpleDocListener(
+                () -> {
+                  String raw = chatTheme.presence.hex.getText();
+                  raw = raw != null ? raw.trim() : "";
+                  if (raw.isBlank()) {
+                    lastValidChatPresenceHex.set(null);
+                  } else {
+                    Color c = parseHexColorLenient(raw);
+                    if (c != null) lastValidChatPresenceHex.set(toHex(c));
                   }
                   scheduleChatPreview.run();
                 }));
@@ -806,63 +960,71 @@ public class PreferencesDialog {
           ChatThemeSettings prevChatTheme =
               chatThemeSettingsBus != null
                   ? chatThemeSettingsBus.get()
-                  : new ChatThemeSettings(ChatThemeSettings.Preset.DEFAULT, null, null, null, 35);
+                  : new ChatThemeSettings(
+                      ChatThemeSettings.Preset.DEFAULT,
+                      null,
+                      null,
+                      null,
+                      35,
+                      null,
+                      null,
+                      null,
+                      null,
+                      null);
 
           ChatThemeSettings.Preset presetV =
               (ChatThemeSettings.Preset) chatTheme.preset.getSelectedItem();
           if (presetV == null) presetV = ChatThemeSettings.Preset.DEFAULT;
 
-          String tsHexV = chatTheme.timestamp.hex.getText();
-          tsHexV = tsHexV != null ? tsHexV.trim() : "";
-          if (tsHexV.isBlank()) tsHexV = null;
-          if (tsHexV != null) {
-            Color c = parseHexColorLenient(tsHexV);
-            if (c == null) {
-              JOptionPane.showMessageDialog(
-                  dialog,
-                  "Chat timestamp color must be a hex value like #RRGGBB (or blank for default).",
-                  "Invalid chat timestamp color",
-                  JOptionPane.ERROR_MESSAGE);
-              return;
-            }
-            tsHexV = toHex(c);
-          }
-
-          String sysHexV = chatTheme.system.hex.getText();
-          sysHexV = sysHexV != null ? sysHexV.trim() : "";
-          if (sysHexV.isBlank()) sysHexV = null;
-          if (sysHexV != null) {
-            Color c = parseHexColorLenient(sysHexV);
-            if (c == null) {
-              JOptionPane.showMessageDialog(
-                  dialog,
-                  "Chat system color must be a hex value like #RRGGBB (or blank for default).",
-                  "Invalid chat system color",
-                  JOptionPane.ERROR_MESSAGE);
-              return;
-            }
-            sysHexV = toHex(c);
-          }
-
-          String menHexV = chatTheme.mention.hex.getText();
-          menHexV = menHexV != null ? menHexV.trim() : "";
-          if (menHexV.isBlank()) menHexV = null;
-          if (menHexV != null) {
-            Color c = parseHexColorLenient(menHexV);
-            if (c == null) {
-              JOptionPane.showMessageDialog(
-                  dialog,
-                  "Mention highlight color must be a hex value like #RRGGBB (or blank for default).",
-                  "Invalid mention highlight color",
-                  JOptionPane.ERROR_MESSAGE);
-              return;
-            }
-            menHexV = toHex(c);
+          String tsHexV;
+          String sysHexV;
+          String menHexV;
+          String msgHexV;
+          String noticeHexV;
+          String actionHexV;
+          String errHexV;
+          String presenceHexV;
+          try {
+            tsHexV =
+                normalizeOptionalHexForApply(
+                    chatTheme.timestamp.hex.getText(), "Chat timestamp color");
+            sysHexV =
+                normalizeOptionalHexForApply(chatTheme.system.hex.getText(), "Chat system color");
+            menHexV =
+                normalizeOptionalHexForApply(
+                    chatTheme.mention.hex.getText(), "Mention highlight color");
+            msgHexV =
+                normalizeOptionalHexForApply(chatTheme.message.hex.getText(), "User message color");
+            noticeHexV =
+                normalizeOptionalHexForApply(
+                    chatTheme.notice.hex.getText(), "Notice message color");
+            actionHexV =
+                normalizeOptionalHexForApply(
+                    chatTheme.action.hex.getText(), "Action message color");
+            errHexV =
+                normalizeOptionalHexForApply(chatTheme.error.hex.getText(), "Error message color");
+            presenceHexV =
+                normalizeOptionalHexForApply(
+                    chatTheme.presence.hex.getText(), "Presence message color");
+          } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(
+                dialog, ex.getMessage(), "Invalid chat message color", JOptionPane.ERROR_MESSAGE);
+            return;
           }
 
           int mentionStrengthV = chatTheme.mentionStrength.getValue();
           ChatThemeSettings nextChatTheme =
-              new ChatThemeSettings(presetV, tsHexV, sysHexV, menHexV, mentionStrengthV);
+              new ChatThemeSettings(
+                  presetV,
+                  tsHexV,
+                  sysHexV,
+                  menHexV,
+                  mentionStrengthV,
+                  msgHexV,
+                  noticeHexV,
+                  actionHexV,
+                  errHexV,
+                  presenceHexV);
           boolean chatThemeChanged = !java.util.Objects.equals(prevChatTheme, nextChatTheme);
 
           boolean autoConnectV = autoConnectOnStart.isSelected();
@@ -1338,6 +1500,11 @@ public class PreferencesDialog {
           runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
           runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
           runtimeConfig.rememberChatSystemColor(nextChatTheme.systemColor());
+          runtimeConfig.rememberChatMessageColor(nextChatTheme.messageColor());
+          runtimeConfig.rememberChatNoticeColor(nextChatTheme.noticeColor());
+          runtimeConfig.rememberChatActionColor(nextChatTheme.actionColor());
+          runtimeConfig.rememberChatErrorColor(nextChatTheme.errorColor());
+          runtimeConfig.rememberChatPresenceColor(nextChatTheme.presenceColor());
           runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
           runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
           runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
@@ -1531,6 +1698,11 @@ public class PreferencesDialog {
           lastValidChatTimestampHex.set(nextChatTheme.timestampColor());
           lastValidChatSystemHex.set(nextChatTheme.systemColor());
           lastValidChatMentionHex.set(nextChatTheme.mentionBgColor());
+          lastValidChatMessageHex.set(nextChatTheme.messageColor());
+          lastValidChatNoticeHex.set(nextChatTheme.noticeColor());
+          lastValidChatActionHex.set(nextChatTheme.actionColor());
+          lastValidChatErrorHex.set(nextChatTheme.errorColor());
+          lastValidChatPresenceHex.set(nextChatTheme.presenceColor());
         };
 
     apply.addActionListener(e -> doApply.run());
@@ -2430,6 +2602,21 @@ public class PreferencesDialog {
     ColorField mention =
         buildOptionalColorField(
             current != null ? current.mentionBgColor() : null, "Pick a mention highlight color");
+    ColorField message =
+        buildOptionalColorField(
+            current != null ? current.messageColor() : null, "Pick a user message color");
+    ColorField notice =
+        buildOptionalColorField(
+            current != null ? current.noticeColor() : null, "Pick a notice message color");
+    ColorField action =
+        buildOptionalColorField(
+            current != null ? current.actionColor() : null, "Pick an action message color");
+    ColorField error =
+        buildOptionalColorField(
+            current != null ? current.errorColor() : null, "Pick an error message color");
+    ColorField presence =
+        buildOptionalColorField(
+            current != null ? current.presenceColor() : null, "Pick a presence message color");
 
     int ms = current != null ? current.mentionStrength() : 35;
     JSlider mentionStrength = new JSlider(0, 100, Math.max(0, Math.min(100, ms)));
@@ -2441,7 +2628,17 @@ public class PreferencesDialog {
     mentionStrength.setToolTipText(
         "How strong the mention highlight is when using the preset highlight (0-100). Defaults to 35.");
 
-    return new ChatThemeControls(preset, timestamp, system, mention, mentionStrength);
+    return new ChatThemeControls(
+        preset,
+        timestamp,
+        system,
+        mention,
+        message,
+        notice,
+        action,
+        error,
+        presence,
+        mentionStrength);
   }
 
   private ColorField buildOptionalColorField(String initialHex, String pickerTitle) {
@@ -4876,7 +5073,7 @@ public class PreferencesDialog {
     JPanel form =
         new JPanel(
             new MigLayout(
-                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]6[]"));
+                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]10[]6[]"));
 
     form.add(tabTitle("Appearance"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
@@ -4892,21 +5089,6 @@ public class PreferencesDialog {
 
     form.add(new JLabel("Accent strength"));
     form.add(accent.strength, "growx");
-
-    form.add(new JLabel("Chat theme preset"));
-    form.add(chatTheme.preset, "growx");
-
-    form.add(new JLabel("Chat timestamp color"));
-    form.add(chatTheme.timestamp.panel, "growx");
-
-    form.add(new JLabel("Chat system color"));
-    form.add(chatTheme.system.panel, "growx");
-
-    form.add(new JLabel("Mention highlight"));
-    form.add(chatTheme.mention.panel, "growx");
-
-    form.add(new JLabel("Mention strength"));
-    form.add(chatTheme.mentionStrength, "growx");
 
     form.add(new JLabel("Density"));
     form.add(tweaks.density, "growx");
@@ -4932,6 +5114,12 @@ public class PreferencesDialog {
         "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
     form.add(new JLabel(""));
     form.add(uiFontHint, "growx, wmin 0");
+
+    form.add(sectionTitle("Chat transcript"), "span 2, growx, wmin 0, wrap");
+    JTabbedPane chatTabs = new JTabbedPane();
+    chatTabs.addTab("Palette", padSubTab(buildChatThemePaletteSubTab(chatTheme)));
+    chatTabs.addTab("Message colors", padSubTab(buildChatMessageColorsSubTab(chatTheme)));
+    form.add(chatTabs, "span 2, growx, wmin 0");
 
     JButton reset = new JButton("Reset to defaults");
     reset.setToolTipText(
@@ -4963,10 +5151,20 @@ public class PreferencesDialog {
           chatTheme.timestamp.hex.setText("");
           chatTheme.system.hex.setText("");
           chatTheme.mention.hex.setText("");
+          chatTheme.message.hex.setText("");
+          chatTheme.notice.hex.setText("");
+          chatTheme.action.hex.setText("");
+          chatTheme.error.hex.setText("");
+          chatTheme.presence.hex.setText("");
           chatTheme.mentionStrength.setValue(35);
           chatTheme.timestamp.updateIcon.run();
           chatTheme.system.updateIcon.run();
           chatTheme.mention.updateIcon.run();
+          chatTheme.message.updateIcon.run();
+          chatTheme.notice.updateIcon.run();
+          chatTheme.action.updateIcon.run();
+          chatTheme.error.updateIcon.run();
+          chatTheme.presence.updateIcon.run();
 
           accent.applyEnabledState.run();
           accent.syncPresetFromHex.run();
@@ -4982,6 +5180,61 @@ public class PreferencesDialog {
     form.add(fonts.fontSize, "w 110!");
 
     return form;
+  }
+
+  private JPanel buildChatThemePaletteSubTab(ChatThemeControls chatTheme) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(new JLabel("Chat theme preset"));
+    panel.add(chatTheme.preset, "growx");
+
+    panel.add(new JLabel("Timestamp color"));
+    panel.add(chatTheme.timestamp.panel, "growx");
+
+    panel.add(new JLabel("Mention highlight"));
+    panel.add(chatTheme.mention.panel, "growx");
+
+    panel.add(new JLabel("Mention strength"));
+    panel.add(chatTheme.mentionStrength, "growx");
+
+    panel.add(new JLabel(""));
+    panel.add(
+        helpText("Use Message colors when you want to override specific line types."),
+        "growx, wmin 0");
+    return panel;
+  }
+
+  private JPanel buildChatMessageColorsSubTab(ChatThemeControls chatTheme) {
+    JPanel panel =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]6[]6[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(new JLabel("Server/system"));
+    panel.add(chatTheme.system.panel, "growx");
+
+    panel.add(new JLabel("User messages"));
+    panel.add(chatTheme.message.panel, "growx");
+
+    panel.add(new JLabel("Notice messages"));
+    panel.add(chatTheme.notice.panel, "growx");
+
+    panel.add(new JLabel("Action messages"));
+    panel.add(chatTheme.action.panel, "growx");
+
+    panel.add(new JLabel("Presence messages"));
+    panel.add(chatTheme.presence.panel, "growx");
+
+    panel.add(new JLabel("Error messages"));
+    panel.add(chatTheme.error.panel, "growx");
+
+    panel.add(new JLabel(""));
+    panel.add(helpText("Leave any field blank to use the theme default."), "growx, wmin 0");
+
+    return panel;
   }
 
   private JPanel buildMemoryPanel(
@@ -7809,6 +8062,18 @@ public class PreferencesDialog {
     return parseHexColor("#" + r + r + g + g + b + b);
   }
 
+  static String normalizeOptionalHexForApply(String raw, String fieldLabel) {
+    String hex = raw != null ? raw.trim() : "";
+    if (hex.isBlank()) return null;
+    Color c = parseHexColorLenient(hex);
+    if (c == null) {
+      String label = Objects.toString(fieldLabel, "Color");
+      throw new IllegalArgumentException(
+          label + " must be a hex value like #RRGGBB (or blank for default).");
+    }
+    return toHex(c);
+  }
+
   private static Color contrastTextColor(Color bg) {
     if (bg == null) return UIManager.getColor("Label.foreground");
     // Relative luminance (sRGB-ish) for a quick black/white choice.
@@ -9276,6 +9541,11 @@ public class PreferencesDialog {
       ColorField timestamp,
       ColorField system,
       ColorField mention,
+      ColorField message,
+      ColorField notice,
+      ColorField action,
+      ColorField error,
+      ColorField presence,
       JSlider mentionStrength) {}
 
   private record ThemeControls(JComboBox<String> combo) {}

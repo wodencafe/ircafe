@@ -168,6 +168,26 @@ To install just the desktop entry for the current user on Linux:
 ./gradlew installLinuxDesktopEntry
 ```
 
+## Build a Flatpak bundle (Linux)
+
+Install tooling (example for Debian/Ubuntu):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y flatpak flatpak-builder
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+```
+
+Build the app image and Flatpak repo/bundle:
+
+```bash
+./gradlew jpackage
+flatpak-builder --force-clean --repo=build/flatpak/repo --default-branch=stable --install-deps-from=flathub build/flatpak/workdir packaging/flatpak/cafe.woden.IRCafe.yml
+flatpak build-bundle build/flatpak/repo build/dist/ircafe.flatpak cafe.woden.IRCafe stable --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
+```
+
+On tagged GitHub releases, CI now publishes `ircafe-<version>-linux-x64.flatpak` as a release asset.
+
 ## Developer workflow
 
 Common local checks:

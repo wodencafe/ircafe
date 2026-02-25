@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.LoadOlderControlState;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;

@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.PrivateMessageRequest;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UserActionRequest;
+import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreMaskMatcher;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;

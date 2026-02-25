@@ -8,6 +8,11 @@ import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.app.RuntimeJfrService;
 import cafe.woden.ircclient.app.SpringRuntimeEventsService;
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
@@ -54,6 +59,14 @@ class SpringModulithIncrementalAdoptionTest {
   }
 
   private static void assertAppNamedInterfaces(ApplicationModule appModule) {
+    assertNamedInterfaceContains(
+        appModule,
+        "api",
+        UiPort.class,
+        ActiveTargetPort.class,
+        MediatorControlPort.class,
+        TargetRef.class,
+        TrayNotificationsPort.class);
     assertNamedInterfaceContains(
         appModule, "diagnostics", RuntimeJfrService.class, RuntimeDiagnosticEvent.class);
     assertNamedInterfaceContains(

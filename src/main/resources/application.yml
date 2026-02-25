@@ -40,6 +40,18 @@ ircafe:
     # Color when enabled (hex like "#RRGGBB").
     clientLineColor: "#6AA2FF"
 
+    # Optional chat transcript color overrides (hex like "#RRGGBB").
+    # Leave unset to follow the active theme/preset defaults.
+    # chatThemePreset: DEFAULT
+    # chatTimestampColor: "#7F8FA6"
+    # chatSystemColor: "#7F8FA6"
+    # chatMessageColor: "#E3E8EF"
+    # chatNoticeColor: "#D4AE66"
+    # chatActionColor: "#E3E8EF"
+    # chatErrorColor: "#C96E6E"
+    # chatPresenceColor: "#7F8FA6"
+    # chatMentionBgColor: "#2D6BFF"
+    # chatMentionStrength: 35
 
     # Inline image embedding (direct links to .png/.jpg/.gif/.webp). Default: OFF.
     imageEmbedsEnabled: false
@@ -151,6 +163,11 @@ ircafe:
         # Optional issue actions when EDT freeze/violation problems are detected.
         onIssuePlaySound: false
         onIssueShowNotification: false
+
+      jfr:
+        # Master toggle for runtime JFR diagnostics shown under Application -> JFR.
+        # You can change this live in the JFR panel, and IRCafe persists it to runtime config.
+        enabled: true
 
       jhiccup:
         # Optional external jHiccup process integration.

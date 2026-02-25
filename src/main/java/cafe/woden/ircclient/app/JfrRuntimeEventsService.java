@@ -1,12 +1,13 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -26,31 +27,78 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
-/** Collects runtime JFR feed events plus lightweight periodic runtime samples for UI display. */
+/**
+ * Collects runtime JFR feed events for UI diagnostics, with runtime enable/disable + pause
+ * controls.
+ */
 @Service
 @Lazy(false)
 @ApplicationLayer
 @NamedInterface("diagnostics")
 public class JfrRuntimeEventsService {
   private static final Logger log = LoggerFactory.getLogger(JfrRuntimeEventsService.class);
+  public static final String PROP_STATE = "jfrRuntimeState";
   private static final int MAX_EVENTS = 1200;
-  private static final DateTimeFormatter TS_FMT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
-          .withLocale(Locale.ROOT)
-          .withZone(ZoneId.systemDefault());
+  private static final Duration GC_WINDOW = Duration.ofMinutes(2);
+  private static final double GC_ALERT_EVENTS_PER_MINUTE = 10.0d;
+  private static final Duration CPU_SAMPLE_PERIOD = Duration.ofSeconds(5);
 
+  private final RuntimeConfigStore runtimeConfigStore;
   private final Deque<RuntimeDiagnosticEvent> events = new ArrayDeque<>();
+  private final Deque<Instant> gcEventsInWindow = new ArrayDeque<>();
+  private final PropertyChangeSupport stateChanges = new PropertyChangeSupport(this);
   private final ScheduledExecutorService samplerExec =
       VirtualThreads.newSingleThreadScheduledExecutor("ircafe-jfr-event-sampler");
+
   private volatile RecordingStream recordingStream;
   private volatile boolean started;
+  private volatile boolean enabled;
+  private volatile boolean tableLoggingPaused;
+  private volatile Instant lastCpuSampleAt;
+  private volatile Double cpuJvmUserRatio;
+  private volatile Double cpuJvmSystemRatio;
+  private volatile Double cpuMachineTotalRatio;
+  private volatile Instant lastRuntimeSampleAt;
+  private volatile long runtimeUsedBytes;
+  private volatile long runtimeCommittedBytes;
+  private volatile long runtimeMaxBytes;
+  private volatile int runtimeHeapPercent;
+  private volatile Instant lastGcEventAt;
+
+  public JfrRuntimeEventsService(RuntimeConfigStore runtimeConfigStore) {
+    this.runtimeConfigStore = runtimeConfigStore;
+    this.enabled = runtimeConfigStore == null || runtimeConfigStore.readApplicationJfrEnabled(true);
+  }
 
   @PostConstruct
   public void start() {
-    if (started) return;
-    started = true;
+    synchronized (this) {
+      if (started) return;
+      started = true;
+      appendEventAtLocked(
+          Instant.now(),
+          "INFO",
+          "jdk.RuntimeSample",
+          "Periodic runtime sampling started.",
+          "Sampling cadence: every 5 seconds.",
+          true);
+    }
     startPeriodicSampler();
-    startRecordingStream();
+    synchronized (this) {
+      if (enabled) {
+        startRecordingStreamLocked();
+      } else {
+        appendEventAtLocked(
+            Instant.now(),
+            "WARN",
+            "jdk.RecordingStream",
+            "JFR diagnostics are disabled.",
+            "Enable diagnostics from Application -> JFR to start runtime event capture.",
+            true);
+      }
+    }
+    captureRuntimeSample();
+    fireStateChanged();
   }
 
   @PreDestroy
@@ -59,15 +107,11 @@ public class JfrRuntimeEventsService {
       samplerExec.shutdownNow();
     } catch (Exception ignored) {
     }
-
-    RecordingStream stream = recordingStream;
-    recordingStream = null;
-    if (stream != null) {
-      try {
-        stream.close();
-      } catch (Exception ignored) {
-      }
+    synchronized (this) {
+      stopRecordingStreamLocked();
+      started = false;
     }
+    fireStateChanged();
   }
 
   public synchronized List<RuntimeDiagnosticEvent> recentEvents(int limit) {
@@ -81,87 +125,221 @@ public class JfrRuntimeEventsService {
     return List.copyOf(out);
   }
 
-  private void startPeriodicSampler() {
-    appendEvent(
+  public synchronized void clearEvents() {
+    if (events.isEmpty()) return;
+    events.clear();
+    fireStateChanged();
+  }
+
+  public synchronized boolean removeEvent(RuntimeDiagnosticEvent event) {
+    if (event == null || events.isEmpty()) return false;
+    boolean removed = events.removeFirstOccurrence(event);
+    if (removed) {
+      fireStateChanged();
+    }
+    return removed;
+  }
+
+  public synchronized boolean isEnabled() {
+    return enabled;
+  }
+
+  public synchronized void setEnabled(boolean enabled) {
+    if (this.enabled == enabled) return;
+    this.enabled = enabled;
+    if (runtimeConfigStore != null) {
+      runtimeConfigStore.rememberApplicationJfrEnabled(enabled);
+    }
+    if (enabled) {
+      appendEventAtLocked(
+          Instant.now(),
+          "INFO",
+          "jdk.RecordingStream",
+          "JFR diagnostics enabled.",
+          "Starting runtime JFR event stream.",
+          true);
+      if (started) {
+        startRecordingStreamLocked();
+      }
+      captureRuntimeSample();
+    } else {
+      stopRecordingStreamLocked();
+      appendEventAtLocked(
+          Instant.now(),
+          "WARN",
+          "jdk.RecordingStream",
+          "JFR diagnostics disabled.",
+          "Runtime JFR event stream has been stopped.",
+          true);
+    }
+    fireStateChanged();
+  }
+
+  public synchronized boolean isTableLoggingPaused() {
+    return tableLoggingPaused;
+  }
+
+  public synchronized void setTableLoggingPaused(boolean paused) {
+    if (tableLoggingPaused == paused) return;
+    tableLoggingPaused = paused;
+    appendEventAtLocked(
+        Instant.now(),
         "INFO",
-        "jdk.RuntimeSample",
-        "Periodic runtime sampling started.",
-        "Sampling cadence: every 30 seconds.");
-    samplerExec.scheduleAtFixedRate(this::captureRuntimeSample, 2L, 30L, TimeUnit.SECONDS);
+        "RuntimeEvents",
+        paused ? "JFR event table logging paused." : "JFR event table logging resumed.",
+        paused
+            ? "Events continue to update status gauges, but table rows are not appended."
+            : "Table rows are now appended for incoming JFR events.",
+        true);
+    fireStateChanged();
+  }
+
+  public synchronized StatusSnapshot statusSnapshot() {
+    Instant now = Instant.now();
+    pruneGcWindowLocked(now);
+    int gcCount = gcEventsInWindow.size();
+    double gcPerMinute = gcCount * 60.0d / Math.max(1.0d, GC_WINDOW.toSeconds());
+    boolean gcAlert = gcPerMinute >= GC_ALERT_EVENTS_PER_MINUTE;
+    return new StatusSnapshot(
+        enabled,
+        tableLoggingPaused,
+        recordingStream != null,
+        lastCpuSampleAt,
+        cpuJvmUserRatio,
+        cpuJvmSystemRatio,
+        cpuMachineTotalRatio,
+        lastRuntimeSampleAt,
+        runtimeUsedBytes,
+        runtimeCommittedBytes,
+        runtimeMaxBytes,
+        runtimeHeapPercent,
+        gcCount,
+        gcPerMinute,
+        gcAlert,
+        lastGcEventAt);
+  }
+
+  public void requestImmediateRefresh() {
+    captureRuntimeSample();
+  }
+
+  public void addStateListener(PropertyChangeListener listener) {
+    if (listener == null) return;
+    stateChanges.addPropertyChangeListener(listener);
+  }
+
+  public void removeStateListener(PropertyChangeListener listener) {
+    if (listener == null) return;
+    stateChanges.removePropertyChangeListener(listener);
+  }
+
+  private void startPeriodicSampler() {
+    samplerExec.scheduleAtFixedRate(this::captureRuntimeSample, 1L, 5L, TimeUnit.SECONDS);
   }
 
   private void captureRuntimeSample() {
     try {
       Runtime rt = Runtime.getRuntime();
-      long used = Math.max(0L, rt.totalMemory() - rt.freeMemory());
+      long committed = Math.max(0L, rt.totalMemory());
+      long free = Math.max(0L, rt.freeMemory());
+      long used = Math.max(0L, committed - free);
       long max = rt.maxMemory();
       if (max == Long.MAX_VALUE || max <= 0L) max = 0L;
-      long committed = Math.max(0L, rt.totalMemory());
+      int heapPercent =
+          max > 0L ? Math.max(0, Math.min(100, (int) Math.round((used * 100.0d) / max))) : -1;
 
-      double ratio = max > 0L ? (used * 100.0d / max) : 0.0d;
-      String summary =
-          max > 0L
-              ? String.format(
-                  Locale.ROOT, "Heap %.1f%% used (%s / %s).", ratio, toMib(used), toMib(max))
-              : "Heap usage sampled (" + toMib(used) + " used; max unknown).";
-
-      String level = (max > 0L && ratio >= 95.0d) ? "WARN" : "INFO";
-      String details =
-          "used="
-              + used
-              + " bytes\n"
-              + "committed="
-              + committed
-              + " bytes\n"
-              + "max="
-              + max
-              + " bytes\n"
-              + "sampledAt="
-              + TS_FMT.format(Instant.now())
-              + '\n';
-      appendEvent(level, "jdk.RuntimeSample", summary, details);
+      synchronized (this) {
+        if (!enabled) return;
+        lastRuntimeSampleAt = Instant.now();
+        runtimeUsedBytes = used;
+        runtimeCommittedBytes = committed;
+        runtimeMaxBytes = max;
+        runtimeHeapPercent = heapPercent;
+      }
+      fireStateChanged();
     } catch (Throwable t) {
-      appendEvent(
-          "ERROR",
-          "jdk.RuntimeSample",
-          "Runtime sampler failed: " + summarizeThrowable(t),
-          stackTrace(t));
+      synchronized (this) {
+        appendEventAtLocked(
+            Instant.now(),
+            "ERROR",
+            "jdk.RuntimeSample",
+            "Runtime sampler failed: " + summarizeThrowable(t),
+            stackTrace(t),
+            true);
+      }
+      fireStateChanged();
     }
   }
 
-  private void startRecordingStream() {
+  private synchronized void startRecordingStreamLocked() {
+    if (!enabled) return;
+    if (recordingStream != null) return;
     try {
       RecordingStream stream = new RecordingStream();
       stream.enable("jdk.GarbageCollection");
-      stream.enable("jdk.CPULoad").withPeriod(Duration.ofSeconds(20));
+      stream.enable("jdk.CPULoad").withPeriod(CPU_SAMPLE_PERIOD);
       stream.onEvent("jdk.GarbageCollection", this::onGarbageCollection);
       stream.onEvent("jdk.CPULoad", this::onCpuLoad);
       stream.onError(
           err -> {
-            String summary = "JFR recording stream error: " + summarizeThrowable(err);
-            appendEvent("ERROR", "jdk.RecordingStream", summary, stackTrace(err));
+            synchronized (JfrRuntimeEventsService.this) {
+              appendEventAtLocked(
+                  Instant.now(),
+                  "ERROR",
+                  "jdk.RecordingStream",
+                  "JFR recording stream error: " + summarizeThrowable(err),
+                  stackTrace(err),
+                  true);
+            }
+            fireStateChanged();
           });
       stream.onClose(
-          () ->
-              appendEvent(
-                  "WARN",
-                  "jdk.RecordingStream",
-                  "JFR recording stream closed.",
-                  "The stream is no longer receiving runtime JFR events."));
+          () -> {
+            synchronized (JfrRuntimeEventsService.this) {
+              if (recordingStream == stream) {
+                recordingStream = null;
+              }
+              if (enabled) {
+                appendEventAtLocked(
+                    Instant.now(),
+                    "WARN",
+                    "jdk.RecordingStream",
+                    "JFR recording stream closed.",
+                    "The stream is no longer receiving runtime JFR events.",
+                    true);
+              }
+            }
+            fireStateChanged();
+          });
       stream.startAsync();
       recordingStream = stream;
-      appendEvent(
+      appendEventAtLocked(
+          Instant.now(),
           "INFO",
           "jdk.RecordingStream",
           "JFR recording stream started.",
-          "Enabled events: jdk.GarbageCollection, jdk.CPULoad.");
+          "Enabled events: jdk.GarbageCollection, jdk.CPULoad.",
+          true);
     } catch (Throwable t) {
       log.warn("[ircafe] Failed to start JFR recording stream", t);
-      appendEvent(
+      appendEventAtLocked(
+          Instant.now(),
           "WARN",
           "jdk.RecordingStream",
           "JFR recording stream unavailable: " + summarizeThrowable(t),
-          stackTrace(t));
+          stackTrace(t),
+          true);
+    }
+  }
+
+  private synchronized void stopRecordingStreamLocked() {
+    RecordingStream stream = recordingStream;
+    recordingStream = null;
+    if (stream != null) {
+      try {
+        stream.close();
+      } catch (Exception ignored) {
+      }
     }
   }
 
@@ -171,42 +349,60 @@ public class JfrRuntimeEventsService {
     String gcName = safeTextField(event, "name");
     String cause = safeTextField(event, "cause");
     Duration pauses = safeDurationField(event, "sumOfPauses");
-
     StringBuilder summary = new StringBuilder("Garbage collection");
     if (!gcName.isBlank()) summary.append(" (").append(gcName).append(')');
     if (!cause.isBlank()) summary.append(" cause=").append(cause);
     if (pauses != null) summary.append(", pauses=").append(pauses.toMillis()).append(" ms");
     summary.append('.');
 
-    appendEventAt(
-        at,
-        "INFO",
-        event.getEventType() != null ? event.getEventType().getName() : "jdk.GarbageCollection",
-        summary.toString(),
-        describeEvent(event));
+    synchronized (this) {
+      if (!enabled) return;
+      lastGcEventAt = at;
+      gcEventsInWindow.addLast(at);
+      pruneGcWindowLocked(at);
+      appendEventAtLocked(
+          at,
+          "INFO",
+          event.getEventType() != null ? event.getEventType().getName() : "jdk.GarbageCollection",
+          summary.toString(),
+          describeEvent(event),
+          false);
+    }
+    fireStateChanged();
   }
 
   private void onCpuLoad(RecordedEvent event) {
     if (event == null) return;
-    Instant at = safeInstant(event);
-    Double jvmUser = safeDoubleField(event, "jvmUser");
-    Double jvmSystem = safeDoubleField(event, "jvmSystem");
-    Double machineTotal = safeDoubleField(event, "machineTotal");
+    synchronized (this) {
+      if (!enabled) return;
+      lastCpuSampleAt = safeInstant(event);
+      cpuJvmUserRatio = safeDoubleField(event, "jvmUser");
+      cpuJvmSystemRatio = safeDoubleField(event, "jvmSystem");
+      cpuMachineTotalRatio = safeDoubleField(event, "machineTotal");
+    }
+    fireStateChanged();
+  }
 
-    String summary =
-        String.format(
-            Locale.ROOT,
-            "CPU load sample: jvmUser=%s, jvmSystem=%s, machineTotal=%s.",
-            formatRatio(jvmUser),
-            formatRatio(jvmSystem),
-            formatRatio(machineTotal));
+  private synchronized void pruneGcWindowLocked(Instant now) {
+    Instant cutoff = now.minus(GC_WINDOW);
+    while (!gcEventsInWindow.isEmpty()) {
+      Instant head = gcEventsInWindow.peekFirst();
+      if (head == null || !head.isBefore(cutoff)) break;
+      gcEventsInWindow.removeFirst();
+    }
+  }
 
-    appendEventAt(
-        at,
-        "INFO",
-        event.getEventType() != null ? event.getEventType().getName() : "jdk.CPULoad",
-        summary,
-        describeEvent(event));
+  private void appendEventAtLocked(
+      Instant at, String level, String type, String summary, String details, boolean force) {
+    if (!force && tableLoggingPaused) return;
+    events.addLast(new RuntimeDiagnosticEvent(at, level, type, summary, details));
+    while (events.size() > MAX_EVENTS) {
+      events.removeFirst();
+    }
+  }
+
+  private void fireStateChanged() {
+    stateChanges.firePropertyChange(PROP_STATE, null, System.nanoTime());
   }
 
   private static String describeEvent(RecordedEvent event) {
@@ -286,16 +482,9 @@ public class JfrRuntimeEventsService {
     }
   }
 
-  private synchronized void appendEvent(String level, String type, String summary, String details) {
-    appendEventAt(Instant.now(), level, type, summary, details);
-  }
-
-  private synchronized void appendEventAt(
-      Instant at, String level, String type, String summary, String details) {
-    events.addLast(new RuntimeDiagnosticEvent(at, level, type, summary, details));
-    while (events.size() > MAX_EVENTS) {
-      events.removeFirst();
-    }
+  public static String formatRatio(Double ratio) {
+    if (ratio == null) return "n/a";
+    return String.format(Locale.ROOT, "%.1f%%", ratio * 100.0d);
   }
 
   private static String summarizeThrowable(Throwable t) {
@@ -315,13 +504,21 @@ public class JfrRuntimeEventsService {
     return sw.toString();
   }
 
-  private static String toMib(long bytes) {
-    double mib = bytes / (1024.0d * 1024.0d);
-    return String.format(Locale.ROOT, "%.1f MiB", mib);
-  }
-
-  private static String formatRatio(Double ratio) {
-    if (ratio == null) return "n/a";
-    return String.format(Locale.ROOT, "%.1f%%", ratio * 100.0d);
-  }
+  public record StatusSnapshot(
+      boolean enabled,
+      boolean tableLoggingPaused,
+      boolean streamActive,
+      Instant lastCpuSampleAt,
+      Double cpuJvmUserRatio,
+      Double cpuJvmSystemRatio,
+      Double cpuMachineTotalRatio,
+      Instant lastRuntimeSampleAt,
+      long runtimeUsedBytes,
+      long runtimeCommittedBytes,
+      long runtimeMaxBytes,
+      int runtimeHeapPercent,
+      int gcEventsInWindow,
+      double gcEventsPerMinute,
+      boolean gcAlert,
+      Instant lastGcEventAt) {}
 }

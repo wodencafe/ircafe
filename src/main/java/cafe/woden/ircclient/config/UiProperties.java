@@ -28,6 +28,11 @@ public record UiProperties(
     String chatThemePreset,
     String chatTimestampColor,
     String chatSystemColor,
+    String chatMessageColor,
+    String chatNoticeColor,
+    String chatActionColor,
+    String chatErrorColor,
+    String chatPresenceColor,
     String chatMentionBgColor,
     Integer chatMentionStrength,
     Boolean autoConnectOnStart,
@@ -510,6 +515,11 @@ public record UiProperties(
     if (chatThemePreset != null) chatThemePreset = chatThemePreset.trim();
     chatTimestampColor = normalizeHexOrNull(chatTimestampColor);
     chatSystemColor = normalizeHexOrNull(chatSystemColor);
+    chatMessageColor = normalizeHexOrNull(chatMessageColor);
+    chatNoticeColor = normalizeHexOrNull(chatNoticeColor);
+    chatActionColor = normalizeHexOrNull(chatActionColor);
+    chatErrorColor = normalizeHexOrNull(chatErrorColor);
+    chatPresenceColor = normalizeHexOrNull(chatPresenceColor);
     chatMentionBgColor = normalizeHexOrNull(chatMentionBgColor);
     if (chatMentionStrength == null) chatMentionStrength = 35;
     chatMentionStrength = Math.max(0, Math.min(100, chatMentionStrength));

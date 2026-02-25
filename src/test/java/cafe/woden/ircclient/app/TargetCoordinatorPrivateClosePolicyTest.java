@@ -7,6 +7,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
+import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
+import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.IgnoreListService;

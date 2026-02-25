@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.interceptors;
 
-import cafe.woden.ircclient.app.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.model.BuiltInSound;

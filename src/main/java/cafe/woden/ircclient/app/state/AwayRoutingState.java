@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.state;
 
-import cafe.woden.ircclient.app.TargetRef;
+import cafe.woden.ircclient.app.api.TargetRef;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;

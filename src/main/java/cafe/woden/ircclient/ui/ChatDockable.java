@@ -3,10 +3,10 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.PrivateMessageRequest;
 import cafe.woden.ircclient.app.SpringRuntimeEventsService;
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UserActionRequest;
+import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
@@ -18,6 +18,7 @@ import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
@@ -133,7 +134,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final LogViewerPanel logViewerPanel;
   private final InterceptorStore interceptorStore;
   private final InterceptorPanel interceptorPanel;
-  private final RuntimeEventsPanel appJfrPanel;
+  private final JfrDiagnosticsPanel appJfrPanel;
   private final RuntimeEventsPanel appSpringPanel;
   private final TerminalDockable terminalPanel;
 
@@ -186,14 +187,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.chatHistoryService = chatHistoryService;
     this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
     this.terminalPanel = java.util.Objects.requireNonNull(terminalDockable, "terminalDockable");
-    this.appJfrPanel =
-        new RuntimeEventsPanel(
-            "JFR Events",
-            "Runtime JFR stream + periodic JVM samples.",
-            () ->
-                jfrRuntimeEventsService != null
-                    ? jfrRuntimeEventsService.recentEvents(600)
-                    : List.of());
+    this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
     this.appSpringPanel =
         new RuntimeEventsPanel(
             "Spring Events",

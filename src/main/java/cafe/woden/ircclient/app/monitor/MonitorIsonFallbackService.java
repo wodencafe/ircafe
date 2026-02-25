@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.app.monitor;
 
-import cafe.woden.ircclient.app.TargetRef;
-import cafe.woden.ircclient.app.UiPort;
-import cafe.woden.ircclient.app.UiSettingsPort;
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.PircbotxIsonParsers;

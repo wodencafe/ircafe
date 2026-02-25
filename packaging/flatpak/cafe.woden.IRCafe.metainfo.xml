@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>cafe.woden.IRCafe</id>
+  <name>IRCafe</name>
+  <summary>Modern desktop IRC client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer_name>WodenCafe</developer_name>
+  <launchable type="desktop-id">cafe.woden.IRCafe.desktop</launchable>
+  <description>
+    <p>IRCafe is a Swing IRC client built with modern Java and Spring Boot.</p>
+  </description>
+  <url type="homepage">https://github.com/wodencafe/ircafe</url>
+</component>
