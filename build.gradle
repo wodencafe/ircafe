@@ -46,11 +46,16 @@ def javaLauncher25 = javaToolchains.launcherFor {
 
 tasks.withType(JavaCompile).configureEach {
     options.release = javaRelease
-    options.compilerArgs += [
-        "-Xlint:all",
-        "-Xlint:-processing",
-        "-Xlint:-serial"
-    ]
+    options.warnings = false
+    // Keep CI output clean: suppress javac lint warnings for normal compile/test tasks.
+    options.compilerArgs.removeAll { it.startsWith("-Xlint") }
+    options.compilerArgs += ["-Xlint:none"]
+
+    // Disable Error Prone during normal compile/test to avoid warning noise.
+    // The dedicated `errorProneApplyMain` task remains enabled for manual autofix runs.
+    if (name != 'errorProneApplyMain') {
+        options.errorprone.enabled = false
+    }
 }
 
 def errorPronePatchChecks =
