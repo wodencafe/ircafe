@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import org.pircbotx.PircBotX;
 import org.pircbotx.cap.CapHandler;
@@ -38,6 +39,7 @@ final class BatchedEnableCapHandler implements CapHandler {
   public boolean handleLS(PircBotX bot, ImmutableList<String> serverCaps) throws CAPException {
     pendingCapsLower.clear();
     if (desiredCaps.isEmpty()) return true;
+    if (isLsContinuationMarkerOnly(serverCaps)) return false;
 
     Set<String> offeredLower = new LinkedHashSet<>();
     if (serverCaps != null) {
@@ -111,6 +113,13 @@ final class BatchedEnableCapHandler implements CapHandler {
       normalized = normalized.substring(0, eq).trim();
     }
     return normalized.isEmpty() ? null : normalized;
+  }
+
+  private static boolean isLsContinuationMarkerOnly(ImmutableList<String> serverCaps) {
+    if (serverCaps == null || serverCaps.size() != 1) return false;
+    String token = Objects.toString(serverCaps.get(0), "").trim();
+    if (token.startsWith(":")) token = token.substring(1).trim();
+    return "*".equals(token);
   }
 
   @Override
