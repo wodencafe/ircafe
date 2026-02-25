@@ -58,7 +58,6 @@ final class MessageInputTypingSupport {
   private String lastEmittedTypingState = "done";
   private final LinkedHashMap<String, RemoteTypingEntry> remoteTypingByNick = new LinkedHashMap<>();
 
-  private long lastUserEditAtMs = 0L;
   private long lastActiveSentAtMs = 0L;
 
   // Track the last applied settings so we can react specifically to "toggle OFF".
@@ -125,7 +124,7 @@ final class MessageInputTypingSupport {
    */
   void onDraftTextSetProgrammatically() {
     typingPauseTimer.stop();
-    lastUserEditAtMs = 0L;
+
     lastActiveSentAtMs = 0L;
   }
 
@@ -137,7 +136,7 @@ final class MessageInputTypingSupport {
    */
   void flushTypingForBufferSwitch() {
     typingPauseTimer.stop();
-    lastUserEditAtMs = 0L;
+
     lastActiveSentAtMs = 0L;
 
     String text = input.getText();
@@ -151,7 +150,7 @@ final class MessageInputTypingSupport {
 
   void flushTypingDone() {
     typingPauseTimer.stop();
-    lastUserEditAtMs = 0L;
+
     lastActiveSentAtMs = 0L;
     emitTypingState("done");
   }
@@ -225,7 +224,7 @@ final class MessageInputTypingSupport {
     typingDotsIndicator.stopAnimation();
     typingDotsIndicator.setVisible(false);
     typingBanner.setVisible(false);
-    lastUserEditAtMs = 0L;
+
     lastActiveSentAtMs = 0L;
   }
 
@@ -237,7 +236,7 @@ final class MessageInputTypingSupport {
 
     if (text == null || text.isBlank()) {
       typingPauseTimer.stop();
-      lastUserEditAtMs = 0L;
+
       lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;
@@ -247,13 +246,11 @@ final class MessageInputTypingSupport {
     // (User request: do not send typing indicators when the first character is '/'.)
     if (text.startsWith("/")) {
       typingPauseTimer.stop();
-      lastUserEditAtMs = 0L;
+
       lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;
     }
-
-    lastUserEditAtMs = now;
 
     // Emit ACTIVE only from user edits, throttled. This prevents queued/periodic ACTIVE messages
     // from being sent after the user stops typing (before PAUSED fires).
@@ -273,14 +270,14 @@ final class MessageInputTypingSupport {
 
     String text = input.getText();
     if (text == null || text.isBlank()) {
-      lastUserEditAtMs = 0L;
+
       lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;
     }
 
     if (text.startsWith("/")) {
-      lastUserEditAtMs = 0L;
+
       lastActiveSentAtMs = 0L;
       emitTypingState("done");
       return;

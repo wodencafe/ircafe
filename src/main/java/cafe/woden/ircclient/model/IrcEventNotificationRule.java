@@ -145,7 +145,7 @@ public record IrcEventNotificationRule(
       channelPatterns = null;
     }
 
-    if (focusScope == null) focusScope = defaultFocusScopeForEvent(eventType);
+    if (focusScope == null) focusScope = defaultFocusScopeForEvent();
 
     if (soundId == null || soundId.isBlank())
       soundId = defaultBuiltInSoundForEvent(eventType).name();
@@ -228,7 +228,7 @@ public record IrcEventNotificationRule(
               ChannelScope.ALL,
               null,
               true,
-              defaultFocusScopeForEvent(t),
+              defaultFocusScopeForEvent(),
               true,
               true,
               false,
@@ -308,7 +308,7 @@ public record IrcEventNotificationRule(
     };
   }
 
-  private static FocusScope defaultFocusScopeForEvent(EventType eventType) {
+  private static FocusScope defaultFocusScopeForEvent() {
     return FocusScope.BACKGROUND_ONLY;
   }
 

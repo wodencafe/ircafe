@@ -63,17 +63,16 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final Ircv3MultilineAccumulator multilineAccumulator = new Ircv3MultilineAccumulator();
 
   private static final class ChatHistoryBatchBuffer {
-    final String batchId;
+
     final String target;
     final ArrayList<ChatHistoryEntry> entries = new ArrayList<>();
 
-    ChatHistoryBatchBuffer(String batchId, String target) {
-      this.batchId = batchId == null ? "" : batchId;
+    ChatHistoryBatchBuffer(String target) {
+
       this.target = target == null ? "" : target;
     }
   }
 
-  private static final int RPL_SASL_SUCCESS = 903;
   private static final int ERR_SASL_FAIL = 904;
   private static final int ERR_SASL_TOO_LONG = 905;
   private static final int ERR_SASL_ABORTED = 906;
@@ -476,7 +475,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     return t.contains("chathistory");
   }
 
-  private boolean handleBatchControlLine(String originalLineWithTags, String normalizedLine) {
+  private boolean handleBatchControlLine(String normalizedLine) {
     ParsedIrcLine pl = parseIrcLine(normalizedLine);
     if (pl == null || pl.command() == null) return false;
     if (!"BATCH".equalsIgnoreCase(pl.command())) return false;
@@ -499,7 +498,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           target = trailing;
         }
 
-        activeChatHistoryBatches.put(id, new ChatHistoryBatchBuffer(id, target));
+        activeChatHistoryBatches.put(id, new ChatHistoryBatchBuffer(target));
         log.debug(
             "[{}] CHATHISTORY BATCH start id={} target={} raw={}",
             serverId,
@@ -1603,7 +1602,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return;
     }
 
-    if (handleBatchControlLine(line, rawLine)) {
+    if (handleBatchControlLine(rawLine)) {
       return;
     }
 
@@ -2002,8 +2001,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     boolean redaction = conn.draftMessageRedactionCapAcked.get();
     boolean messageTags = conn.messageTagsCapAcked.get();
     boolean typingCap = conn.typingCapAcked.get();
+    boolean typingTagPolicyKnown = conn.typingClientTagPolicyKnown.get();
     boolean typingTagAllowed = conn.typingClientTagAllowed.get();
-    boolean typing = messageTags && (typingTagAllowed || typingCap);
+    boolean typingAllowedByPolicy = typingTagPolicyKnown && typingTagAllowed;
+    boolean typing = messageTags && (typingCap || typingAllowedByPolicy);
     boolean readMarker = conn.readMarkerCapAcked.get();
     boolean monitorCap = conn.monitorCapAcked.get();
     boolean extendedMonitorCap = conn.extendedMonitorCapAcked.get();
@@ -2015,7 +2016,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             + "multiline(final,max-lines)={} multiline(draft)={} multiline(draft,max-bytes)={} "
             + "multiline(draft,max-lines)={} "
             + "draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
-            + "message-tags={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
+            + "message-tags={} typing-policy-known={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
             + "monitor(isupport)={} monitor(cap)={} extended-monitor(cap)={} monitor(max-targets)={} "
             + "chathistory={} batch={} znc.in/playback={}",
         serverId,
@@ -2039,6 +2040,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         edit,
         redaction,
         messageTags,
+        typingTagPolicyKnown,
         typingTagAllowed,
         typing,
         typingCap,
@@ -2063,7 +2065,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String reason;
       if (!messageTags) {
         reason = "message-tags not negotiated";
-      } else if (!(typingTagAllowed || typingCap)) {
+      } else if (!typingCap && !typingTagPolicyKnown) {
+        reason = "typing capability not negotiated";
+      } else if (!typingCap && !typingTagAllowed) {
         reason = "server denies +typing via CLIENTTAGDENY";
       } else {
         reason = "unknown";
@@ -2377,6 +2381,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String clientTagDeny = PircbotxClientTagParsers.parseRpl005ClientTagDenyValue(rawLine);
       if (clientTagDeny != null) {
         boolean allowed = PircbotxClientTagParsers.isClientOnlyTagAllowed(clientTagDeny, "typing");
+        conn.typingClientTagPolicyKnown.set(true);
         boolean prev = conn.typingClientTagAllowed.getAndSet(allowed);
         if (prev != allowed) {
           log.info(
@@ -2902,7 +2907,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     String[] parts = s.split("\\s+");
     if (parts.length == 0) return null;
 
-    int codeIdx = (parts[0].startsWith(":")) ? 1 : 0;
+    int codeIdx = parts[0].startsWith(":") ? 1 : 0;
     if (parts.length <= codeIdx) return null;
 
     String codeStr = parts[codeIdx];

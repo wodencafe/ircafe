@@ -32,7 +32,7 @@ public record UiProperties(
     Integer chatMentionStrength,
     Boolean autoConnectOnStart,
     Timestamps timestamps,
-    @Deprecated Boolean chatMessageTimestampsEnabled,
+    Boolean chatMessageTimestampsEnabled,
     Integer chatHistoryInitialLoadLines,
     Integer chatHistoryPageSize,
     Integer commandHistoryMaxSize,
@@ -716,7 +716,7 @@ public record UiProperties(
       int rgb = Integer.parseInt(s, 16);
       int r = (rgb >> 16) & 0xFF;
       int g = (rgb >> 8) & 0xFF;
-      int b = (rgb) & 0xFF;
+      int b = rgb & 0xFF;
       return String.format("#%02X%02X%02X", r, g, b);
     } catch (Exception ignored) {
       return fb;
@@ -734,7 +734,7 @@ public record UiProperties(
       int rgb = Integer.parseInt(s, 16);
       int r = (rgb >> 16) & 0xFF;
       int g = (rgb >> 8) & 0xFF;
-      int b = (rgb) & 0xFF;
+      int b = rgb & 0xFF;
       return String.format("#%02X%02X%02X", r, g, b);
     } catch (Exception ignored) {
       return null;

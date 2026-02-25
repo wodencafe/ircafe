@@ -141,7 +141,11 @@ class ThemeAppearanceServiceTest {
           Font darkTreeBaseline = uiFont("Tree.font");
           service.applyCommonTweaks(
               new ThemeTweakSettings(
-                  ThemeTweakSettings.ThemeDensity.AUTO, 10, true, darkTreeBaseline.getFamily(), targetSize));
+                  ThemeTweakSettings.ThemeDensity.AUTO,
+                  10,
+                  true,
+                  darkTreeBaseline.getFamily(),
+                  targetSize));
           Font darkAfterApply = uiFont("Tree.font");
           assertEquals(targetSize, darkAfterApply.getSize());
 

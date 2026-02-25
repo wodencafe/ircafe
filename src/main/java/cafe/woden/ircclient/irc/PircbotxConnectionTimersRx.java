@@ -187,19 +187,20 @@ final class PircbotxConnectionTimersRx {
                 }
 
                 // Connect is idempotent per-server; it will no-op if already connected.
-                connectFn
-                    .apply(c.serverId)
-                    .subscribe(
-                        () -> {},
-                        err -> {
-                          emit.accept(
-                              new ServerIrcEvent(
-                                  c.serverId,
-                                  new IrcEvent.Error(
-                                      Instant.now(), "Reconnect attempt failed", err)));
-                          // Backoff again.
-                          scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
-                        });
+                var unused =
+                    connectFn
+                        .apply(c.serverId)
+                        .subscribe(
+                            () -> {},
+                            err -> {
+                              emit.accept(
+                                  new ServerIrcEvent(
+                                      c.serverId,
+                                      new IrcEvent.Error(
+                                          Instant.now(), "Reconnect attempt failed", err)));
+                              // Backoff again.
+                              scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
+                            });
               },
               delayMs,
               TimeUnit.MILLISECONDS);

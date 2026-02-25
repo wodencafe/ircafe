@@ -173,7 +173,6 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   private JList<ChannelOption> channelPickerList;
   private DefaultListModel<ChannelOption> channelPickerModel;
   private List<ChannelOption> channelPickerAllOptions = List.of();
-  private boolean channelPickerUpdatingModel = false;
 
   private volatile String serverId = "";
 
@@ -1069,12 +1068,12 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
     }
 
     if (channelPickerFilterField != null) {
-      channelPickerUpdatingModel = true;
+
       try {
         channelPickerFilterField.setText("");
         channelPickerFilterField.requestFocusInWindow();
       } finally {
-        channelPickerUpdatingModel = false;
+
       }
     }
     refreshChannelPickerList();
@@ -1321,7 +1320,6 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
             .toLowerCase(Locale.ROOT);
     String[] tokens = q.isEmpty() ? new String[0] : q.split("\\s+");
 
-    channelPickerUpdatingModel = true;
     try {
       channelPickerModel.clear();
       for (ChannelOption option : channelPickerAllOptions) {
@@ -1330,7 +1328,7 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
         channelPickerModel.addElement(option);
       }
     } finally {
-      channelPickerUpdatingModel = false;
+
     }
     if (channelPickerModel.getSize() > 0 && channelPickerList.getSelectedIndex() < 0) {
       channelPickerList.setSelectedIndex(0);

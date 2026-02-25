@@ -9,14 +9,12 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.ChatAutoLoadOlderScrollDecorator;
 import cafe.woden.ircclient.ui.util.ChatFindBarDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptContextMenuDecorator;
-import cafe.woden.ircclient.ui.util.ChatTranscriptMouseDecorator;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
 import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -65,12 +63,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   private final FollowTailScrollDecorator followTailScroll;
 
-  private final ChatTranscriptMouseDecorator transcriptMouse;
-
   private final ChatTranscriptContextMenuDecorator transcriptMenu;
-
-  private final Cursor textCursor = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
-  private final Cursor handCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
 
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
 
@@ -124,21 +117,6 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     decorators.add(ChatAutoLoadOlderScrollDecorator.decorate(scroll, chat));
 
     add(scroll, BorderLayout.CENTER);
-    this.transcriptMouse =
-        decorators.add(
-            ChatTranscriptMouseDecorator.decorate(
-                chat,
-                handCursor,
-                textCursor,
-                this::urlAt,
-                this::channelAt,
-                this::nickAt,
-                this::messageReferenceAt,
-                this::openUrl,
-                this::onChannelClicked,
-                this::onNickClicked,
-                this::onMessageReferenceClicked,
-                this::onTranscriptClicked));
   }
 
   @Override

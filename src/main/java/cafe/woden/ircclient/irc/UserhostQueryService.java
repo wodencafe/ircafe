@@ -39,10 +39,7 @@ public class UserhostQueryService {
   private static final int ABSOLUTE_MAX_NICKS_PER_CMD = 5;
 
   // Conservative defaults (can be overridden via preferences/config):
-  private static final Duration DEFAULT_MIN_CMD_INTERVAL = Duration.ofSeconds(7);
-  private static final int DEFAULT_MAX_CMDS_PER_MINUTE = 6;
-  private static final Duration DEFAULT_NICK_COOLDOWN = Duration.ofMinutes(30);
-  private static final int DEFAULT_MAX_NICKS_PER_CMD = 5;
+
   private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
@@ -275,15 +272,11 @@ public class UserhostQueryService {
 
     boolean enabled = s.userhostDiscoveryEnabled();
 
-    Duration minInterval = DEFAULT_MIN_CMD_INTERVAL;
-    int maxPerMinute = DEFAULT_MAX_CMDS_PER_MINUTE;
-    Duration cooldown = DEFAULT_NICK_COOLDOWN;
-    int maxNicks = DEFAULT_MAX_NICKS_PER_CMD;
-
-    minInterval = Duration.ofSeconds(Math.max(1, s.userhostMinIntervalSeconds()));
-    maxPerMinute = Math.max(1, s.userhostMaxCommandsPerMinute());
-    cooldown = Duration.ofMinutes(Math.max(1, s.userhostNickCooldownMinutes()));
-    maxNicks = Math.max(1, Math.min(ABSOLUTE_MAX_NICKS_PER_CMD, s.userhostMaxNicksPerCommand()));
+    Duration minInterval = Duration.ofSeconds(Math.max(1, s.userhostMinIntervalSeconds()));
+    int maxPerMinute = Math.max(1, s.userhostMaxCommandsPerMinute());
+    Duration cooldown = Duration.ofMinutes(Math.max(1, s.userhostNickCooldownMinutes()));
+    int maxNicks =
+        Math.max(1, Math.min(ABSOLUTE_MAX_NICKS_PER_CMD, s.userhostMaxNicksPerCommand()));
 
     return new UserhostConfig(enabled, minInterval, maxPerMinute, cooldown, maxNicks);
   }

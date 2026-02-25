@@ -112,15 +112,16 @@ public class ZncEphemeralNetworkImporter {
     if (!autoConnectQueued.add(sid)) return;
 
     try {
-      irc.connect(sid)
-          .subscribe(
-              () -> {},
-              err ->
-                  log.warn(
-                      "[znc] Auto-connect failed for '{}' ({}): {}",
-                      networkName,
-                      sid,
-                      String.valueOf(err)));
+      var unused =
+          irc.connect(sid)
+              .subscribe(
+                  () -> {},
+                  err ->
+                      log.warn(
+                          "[znc] Auto-connect failed for '{}' ({}): {}",
+                          networkName,
+                          sid,
+                          String.valueOf(err)));
       log.info(
           "[znc] Auto-connect enabled for '{}' on '{}' -> connecting {}",
           networkName,

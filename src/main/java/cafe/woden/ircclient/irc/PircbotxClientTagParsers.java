@@ -31,7 +31,7 @@ final class PircbotxClientTagParsers {
       if (sp > 0 && sp + 1 < s.length()) s = s.substring(sp + 1).trim();
     }
 
-    String[] toks = s.split("\s+");
+    String[] toks = s.split("\\s+");
     if (toks.length < 3) return null;
     if (!"005".equals(toks[0])) return null;
 

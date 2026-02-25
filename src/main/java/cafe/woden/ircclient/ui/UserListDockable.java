@@ -182,7 +182,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private final OutboundLineBus outboundBus;
 
   private final IgnoreListService ignoreListService;
-  private final IgnoreListDialog ignoreDialog;
+
   private final IgnoreStatusService ignoreStatusService;
   private final NickContextMenuFactory.NickContextMenu nickContextMenu;
   private final JScrollPane scroll;
@@ -212,7 +212,6 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     this.nickColorSettingsBus = nickColorSettingsBus;
 
     this.ignoreListService = ignoreListService;
-    this.ignoreDialog = ignoreDialog;
 
     this.ignoreStatusService = ignoreStatusService;
     this.activationBus = activationBus;
@@ -991,7 +990,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
   @Override
   public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-    return orientation == SwingConstants.VERTICAL ? 16 : 16;
+    return 16;
   }
 
   @Override

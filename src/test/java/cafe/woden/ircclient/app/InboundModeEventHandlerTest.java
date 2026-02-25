@@ -42,9 +42,8 @@ class InboundModeEventHandlerTest {
   @BeforeEach
   void setUp() {
     when(modeFormattingService.describeCurrentChannelModes(anyString())).thenReturn(SUMMARY);
-    when(
-            joinModeBurstService.shouldSuppressModesListedSummary(
-                anyString(), anyString(), anyBoolean()))
+    when(joinModeBurstService.shouldSuppressModesListedSummary(
+            anyString(), anyString(), anyBoolean()))
         .thenReturn(false);
   }
 

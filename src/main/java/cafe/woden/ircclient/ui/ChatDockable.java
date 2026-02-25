@@ -74,7 +74,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private final ChatTranscriptStore transcripts;
   private final ServerTreeDockable serverTree;
-  private final NotificationStore notificationStore;
+
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
@@ -172,7 +172,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     super(settingsBus);
     this.transcripts = transcripts;
     this.serverTree = serverTree;
-    this.notificationStore = notificationStore;
+
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
     this.irc = irc;
@@ -1280,19 +1280,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     typingUnavailableWarned.set(false);
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
-    irc.sendTyping(t.serverId(), t.target(), s)
-        .subscribe(
-            () -> inputPanel.onLocalTypingIndicatorSent(s),
-            err -> {
-              if (log.isDebugEnabled()) {
-                log.debug(
-                    "[{}] typing send failed (target={} state={}): {}",
-                    t.serverId(),
-                    t.target(),
-                    s,
-                    err.toString());
-              }
-            });
+    var unused =
+        irc.sendTyping(t.serverId(), t.target(), s)
+            .subscribe(
+                () -> inputPanel.onLocalTypingIndicatorSent(s),
+                err -> {
+                  if (log.isDebugEnabled()) {
+                    log.debug(
+                        "[{}] typing send failed (target={} state={}): {}",
+                        t.serverId(),
+                        t.target(),
+                        s,
+                        err.toString());
+                  }
+                });
   }
 
   private void refreshTypingSignalAvailabilityForActiveTarget() {
@@ -1563,8 +1564,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     lastReadMarkerSentAtByTarget.put(target, now);
 
     transcripts.updateReadMarker(target, now);
-    irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
-        .subscribe(() -> {}, err -> {});
+    var unused =
+        irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+            .subscribe(() -> {}, err -> {});
   }
 
   private static final class TopicPanel extends JPanel {

@@ -273,7 +273,7 @@ public final class UserInfoEnrichmentPlanner {
     ServerState st = stateByServer.get(sid);
     if (st == null) return Optional.empty();
 
-    Optional<PlannedCommand> w = pollWhoChannel(sid, st, now, cfg);
+    Optional<PlannedCommand> w = pollWhoChannel(sid, st, now);
     if (w.isPresent()) return w;
 
     Optional<PlannedCommand> u = pollUserhost(sid, st, now, cfg);
@@ -394,8 +394,7 @@ public final class UserInfoEnrichmentPlanner {
     }
   }
 
-  private Optional<PlannedCommand> pollWhoChannel(
-      String serverId, ServerState st, Instant now, Settings cfg) {
+  private Optional<PlannedCommand> pollWhoChannel(String serverId, ServerState st, Instant now) {
     synchronized (st) {
       ProbeState ps = st.whoChannel;
       cleanupWindow(ps, now);

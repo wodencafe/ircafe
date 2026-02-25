@@ -38,7 +38,7 @@ final class RottenTomatoesPreviewUtil {
   static URI canonicalize(URI uri) {
     if (uri == null) return null;
     try {
-      String scheme = uri.getScheme();
+
       String host = uri.getHost();
       String path = uri.getPath();
       if (host == null || path == null) return uri;

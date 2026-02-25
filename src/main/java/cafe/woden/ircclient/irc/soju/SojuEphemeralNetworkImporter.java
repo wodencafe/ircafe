@@ -118,15 +118,16 @@ public class SojuEphemeralNetworkImporter {
     if (!autoConnectQueued.add(sid)) return;
 
     try {
-      irc.connect(sid)
-          .subscribe(
-              () -> {},
-              err ->
-                  log.warn(
-                      "[soju] Auto-connect failed for '{}' ({}): {}",
-                      networkName,
-                      sid,
-                      String.valueOf(err)));
+      var unused =
+          irc.connect(sid)
+              .subscribe(
+                  () -> {},
+                  err ->
+                      log.warn(
+                          "[soju] Auto-connect failed for '{}' ({}): {}",
+                          networkName,
+                          sid,
+                          String.valueOf(err)));
       log.info(
           "[soju] Auto-connect enabled for '{}' on '{}' -> connecting {}",
           networkName,

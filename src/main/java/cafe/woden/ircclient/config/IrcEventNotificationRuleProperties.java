@@ -27,9 +27,9 @@ public record IrcEventNotificationRuleProperties(
     String scriptPath,
     String scriptArgs,
     String scriptWorkingDirectory,
-    @Deprecated SourceFilter sourceFilter,
-    @Deprecated String channelWhitelist,
-    @Deprecated String channelBlacklist) {
+    SourceFilter sourceFilter,
+    String channelWhitelist,
+    String channelBlacklist) {
 
   public enum EventType {
     KICKED,

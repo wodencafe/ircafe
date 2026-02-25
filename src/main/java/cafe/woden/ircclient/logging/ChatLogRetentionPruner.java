@@ -44,7 +44,6 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
   private final LogProperties props;
   private final Flyway flyway;
 
-  private final ScheduledExecutorService exec;
   private final ScheduledFuture<?> startupTask;
   private final ScheduledFuture<?> recurringTask;
 
@@ -58,7 +57,6 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
     this.flyway = Objects.requireNonNull(flyway, "flyway");
-    this.exec = Objects.requireNonNull(exec, "exec");
 
     // Run once shortly after startup, then periodically.
     this.startupTask = exec.schedule(this::pruneSafely, 10, TimeUnit.SECONDS);

@@ -194,7 +194,7 @@ public class TargetCoordinator {
       ui.setStatusBarCounts(ev.totalUsers(), ev.operatorCount());
 
       // If hostmask-based ignores exist, opportunistically resolve missing hostmasks.
-      maybeRequestMissingHostmasks(sid, ev.channel(), ev.nicks());
+      maybeRequestMissingHostmasks(sid, ev.nicks());
     }
   }
 
@@ -464,7 +464,7 @@ public class TargetCoordinator {
       ui.setUsersNicks(cached);
       ui.setStatusBarCounts(
           cached.size(), (int) cached.stream().filter(TargetCoordinator::isOperatorLike).count());
-      maybeRequestMissingHostmasks(target.serverId(), target.target(), cached);
+      maybeRequestMissingHostmasks(target.serverId(), cached);
       updateEnrichmentFromRoster(target.serverId(), target.target(), cached);
       if (cached.isEmpty() && connectionCoordinator.isConnected(target.serverId())) {
         disposables.add(
@@ -596,8 +596,7 @@ public class TargetCoordinator {
    * This is deliberately conservative and relies on {@link UserhostQueryService} for anti-flood
    * behavior.
    */
-  private void maybeRequestMissingHostmasks(
-      String serverId, String channel, List<IrcEvent.NickInfo> nicks) {
+  private void maybeRequestMissingHostmasks(String serverId, List<IrcEvent.NickInfo> nicks) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     if (!connectionCoordinator.isConnected(sid)) return;

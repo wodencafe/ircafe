@@ -20,7 +20,7 @@ plugins {
     id "com.github.ben-manes.versions" version "0.53.0"
 
     id "com.github.spotbugs" version "6.4.8"
-    //id "net.ltgt.errorprone" version "5.0.0"
+    id "net.ltgt.errorprone" version "5.0.0"
     id "de.thetaphi.forbiddenapis" version "3.10"
     id "com.github.jk1.dependency-license-report" version "3.1.1"
 }
@@ -52,6 +52,11 @@ tasks.withType(JavaCompile).configureEach {
         "-Xlint:-serial"
     ]
 }
+
+def errorPronePatchChecks =
+    (findProperty('errorPronePatchChecks')
+            ?: 'CheckReturnValue,ReturnValueIgnored,SelfAssignment,MisleadingEscapedSpace,DuplicateBranches,UnnecessaryParentheses,DeprecatedVariable,UnusedVariable')
+        .toString()
 
 tasks.withType(Test).configureEach {
     javaLauncher = javaLauncher25
@@ -98,14 +103,6 @@ spotless {
     }
 }
 
-tasks.named("spotlessJavaCheck") {
-    enabled = false
-}
-
-tasks.named("spotlessMiscCheck") {
-    enabled = false
-}
-
 checkstyle {
     toolVersion = (findProperty("checkstyleVersion") ?: "10.26.1").toString()
 }
@@ -130,6 +127,46 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
         html.required = true
         xml.required = false
     }
+}
+
+tasks.register('errorProneApplyMain', JavaCompile) {
+    group = 'formatting'
+    description = 'Applies Error Prone auto-fixes in-place for main Java sources.'
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(javaRelease)
+    }
+    source = sourceSets.main.java
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = layout.buildDirectory.dir('tmp/errorproneApplyMain')
+    options.annotationProcessorPath = configurations.annotationProcessor
+    options.generatedSourceOutputDirectory =
+        layout.buildDirectory.dir('generated/sources/annotationProcessor/java/errorProneApplyMain')
+    options.errorprone.enabled = true
+    options.errorprone.errorproneArgs.addAll([
+        "-XepPatchChecks:${errorPronePatchChecks}",
+        '-XepPatchLocation:IN_PLACE'
+    ])
+}
+
+tasks.register('errorProneApply') {
+    group = 'formatting'
+    description =
+        'Runs Error Prone in-place auto-fixes. Override checks with -PerrorPronePatchChecks=Check1,Check2.'
+    dependsOn('errorProneApplyMain')
+}
+
+tasks.named('spotlessApply') {
+    dependsOn('errorProneApply')
+}
+
+tasks.named('spotlessCheck') {
+    mustRunAfter('errorProneApply')
+}
+
+tasks.register('spotlessLint') {
+    group = 'formatting'
+    description = 'Runs Error Prone auto-fixes first, then Spotless lint checks.'
+    dependsOn('errorProneApply', 'spotlessCheck')
 }
 
 tasks.register("lint") {
@@ -186,7 +223,7 @@ dependencies {
     implementation platform("org.springframework.modulith:spring-modulith-bom:${springModulithVersion}")
     implementation 'org.springframework.modulith:spring-modulith-starter-core'
 
-    //errorprone 'com.google.errorprone:error_prone_core:2.46.0'
+    errorprone 'com.google.errorprone:error_prone_core:2.46.0'
     implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
     implementation 'com.googlecode.soundlibs:tritonus-share:0.3.7.4'

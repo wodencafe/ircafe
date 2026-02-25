@@ -75,6 +75,7 @@ public final class MultiSaslCapHandler implements CapHandler {
 
   @Override
   public boolean handleLS(PircBotX bot, ImmutableList<String> serverCaps) throws CAPException {
+    if (isLsContinuationMarkerOnly(serverCaps)) return false;
     saslOffered = false;
     offeredMechanismsUpper.clear();
     if (serverCaps != null) {
@@ -110,6 +111,13 @@ public final class MultiSaslCapHandler implements CapHandler {
           "[SASL] Requested capability sasl (offered mechanisms: {})", offeredMechanismsUpper);
     }
     return false;
+  }
+
+  private static boolean isLsContinuationMarkerOnly(ImmutableList<String> serverCaps) {
+    if (serverCaps == null || serverCaps.size() != 1) return false;
+    String token = Objects.toString(serverCaps.get(0), "").trim();
+    if (token.startsWith(":")) token = token.substring(1).trim();
+    return "*".equals(token);
   }
 
   @Override
@@ -427,11 +435,10 @@ public final class MultiSaslCapHandler implements CapHandler {
         }
       }
 
-      String prefix = null;
       if (line.startsWith(":")) {
         int sp = line.indexOf(' ');
         if (sp > 0) {
-          prefix = line.substring(1, sp);
+
           line = line.substring(sp + 1);
         }
       }

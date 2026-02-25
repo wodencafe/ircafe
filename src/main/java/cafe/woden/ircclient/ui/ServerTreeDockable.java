@@ -8,6 +8,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -251,6 +252,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private static final DateTimeFormatter SERVER_META_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
+  private static final DateTimeFormatter CAP_TRANSITION_TIME_FMT =
+      DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+  private static final int CAPABILITY_TRANSITION_LOG_LIMIT = 200;
 
   private final ServerCatalog serverCatalog;
   private final RuntimeConfigStore runtimeConfig;
@@ -1820,7 +1824,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   @Override
   public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-    return orientation == SwingConstants.VERTICAL ? 16 : 16;
+    return 16;
   }
 
   @Override
@@ -2039,16 +2043,24 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     CapabilityState next = null;
     if ("DEL".equals(sub)) {
       next = CapabilityState.REMOVED;
-    } else if ("NEW".equals(sub)) {
+    } else if ("NEW".equals(sub) || "LS".equals(sub)) {
       next = CapabilityState.AVAILABLE;
-    } else if ("ACK".equals(sub)) {
-      next = enabled ? CapabilityState.ENABLED : CapabilityState.DISABLED;
     } else {
       next = enabled ? CapabilityState.ENABLED : CapabilityState.DISABLED;
     }
 
     CapabilityState prev = meta.ircv3Caps.put(cap, next);
-    if (!Objects.equals(prev, next)) {
+    String effectiveSub = sub.isEmpty() ? "(unknown)" : sub;
+    String prevSub = meta.ircv3CapLastSubcommand.put(cap, effectiveSub);
+    boolean stateChanged = !Objects.equals(prev, next);
+    boolean subChanged = !Objects.equals(prevSub, effectiveSub);
+    if (stateChanged || subChanged) {
+      meta.ircv3CapTransitions.add(
+          new CapabilityTransition(Instant.now(), effectiveSub, cap, next));
+      int overflow = meta.ircv3CapTransitions.size() - CAPABILITY_TRANSITION_LOG_LIMIT;
+      if (overflow > 0) {
+        meta.ircv3CapTransitions.subList(0, overflow).clear();
+      }
       changed = true;
     }
 
@@ -2250,26 +2262,64 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private JPanel buildCapabilitiesInfoPanel(ServerRuntimeMetadata meta) {
     JPanel panel =
-        new JPanel(new MigLayout("insets 8, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+        new JPanel(
+            new MigLayout(
+                "insets 8, fill, wrap 1", "[grow,fill]", "[]6[]6[grow,fill]6[grow,fill]"));
     panel.add(buildCapabilityCountsRow(meta), "growx");
+    panel.add(new JLabel(capabilityStatusSummary(meta)), "growx");
 
     if (meta.ircv3Caps.isEmpty()) {
       panel.add(new JLabel("No IRCv3 capabilities observed yet."), "grow");
+      panel.add(buildCapabilityTransitionsPanel(meta), "grow");
       return panel;
     }
 
     TreeMap<String, CapabilityState> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     sorted.putAll(meta.ircv3Caps);
-    Object[][] rows = new Object[sorted.size()][2];
+    Object[][] rows = new Object[sorted.size()][4];
     int idx = 0;
     for (Map.Entry<String, CapabilityState> e : sorted.entrySet()) {
+      String capName = e.getKey();
       CapabilityState st = e.getValue();
-      rows[idx][0] = e.getKey();
+      rows[idx][0] = capName;
       rows[idx][1] = st == null ? "unknown" : st.label;
+      rows[idx][2] = isCapabilityRequested(capName) ? "yes" : "no";
+      rows[idx][3] = fallbackInfoValue(meta.ircv3CapLastSubcommand.get(capName));
       idx++;
     }
 
-    JTable table = buildReadOnlyTable(new String[] {"Capability", "State"}, rows);
+    JTable table =
+        buildReadOnlyTable(new String[] {"Capability", "State", "Requested", "Last CAP"}, rows);
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    panel.add(scroll, "grow");
+    panel.add(buildCapabilityTransitionsPanel(meta), "grow");
+    return panel;
+  }
+
+  private JComponent buildCapabilityTransitionsPanel(ServerRuntimeMetadata meta) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Recent CAP transitions"));
+    if (meta.ircv3CapTransitions.isEmpty()) {
+      panel.add(new JLabel("No CAP transitions observed yet."), "growx");
+      return panel;
+    }
+
+    int size = meta.ircv3CapTransitions.size();
+    int start = Math.max(0, size - 80);
+    Object[][] rows = new Object[size - start][4];
+    int out = 0;
+    for (int i = size - 1; i >= start; i--) {
+      CapabilityTransition t = meta.ircv3CapTransitions.get(i);
+      rows[out][0] = CAP_TRANSITION_TIME_FMT.format(t.at());
+      rows[out][1] = t.subcommand();
+      rows[out][2] = t.capability();
+      rows[out][3] = t.state().label;
+      out++;
+    }
+
+    JTable table = buildReadOnlyTable(new String[] {"Time", "CAP", "Capability", "State"}, rows);
     JScrollPane scroll = new JScrollPane(table);
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     panel.add(scroll, "grow");
@@ -2324,6 +2374,51 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     row.add(buildCountChip("Disabled", counts.getOrDefault(CapabilityState.DISABLED, 0)), "growx");
     row.add(buildCountChip("Removed", counts.getOrDefault(CapabilityState.REMOVED, 0)), "growx");
     return row;
+  }
+
+  private boolean isCapabilityRequested(String capability) {
+    String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    if (cap.isEmpty()) return false;
+    boolean requestable = false;
+    for (String candidate : PircbotxBotFactory.requestableCapabilities()) {
+      if (cap.equalsIgnoreCase(Objects.toString(candidate, "").trim())) {
+        requestable = true;
+        break;
+      }
+    }
+    if (!requestable) return false;
+    if (runtimeConfig == null) return true;
+    try {
+      return runtimeConfig.isIrcv3CapabilityEnabled(cap, true);
+    } catch (Exception ignored) {
+      return true;
+    }
+  }
+
+  private String capabilityStatusSummary(ServerRuntimeMetadata meta) {
+    if (meta == null || meta.ircv3Caps.isEmpty()) {
+      return "Requested but not enabled: (none)";
+    }
+
+    List<String> pending = new ArrayList<>();
+    TreeMap<String, CapabilityState> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    sorted.putAll(meta.ircv3Caps);
+    for (Map.Entry<String, CapabilityState> e : sorted.entrySet()) {
+      String cap = e.getKey();
+      CapabilityState state = e.getValue();
+      if (!isCapabilityRequested(cap)) continue;
+      if (CapabilityState.ENABLED.equals(state)) continue;
+      String label = state == null ? "unknown" : state.label;
+      pending.add(cap + " [" + label + "]");
+    }
+
+    if (pending.isEmpty()) return "Requested but not enabled: (none)";
+    int limit = Math.min(8, pending.size());
+    String joined = String.join(", ", pending.subList(0, limit));
+    if (pending.size() > limit) {
+      joined = joined + ", +" + (pending.size() - limit) + " more";
+    }
+    return "Requested but not enabled: " + joined;
   }
 
   private static JPanel buildCountChip(String label, int count) {
@@ -4172,6 +4267,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
   }
 
+  private record CapabilityTransition(
+      Instant at, String subcommand, String capability, CapabilityState state) {}
+
   private static final class ServerRuntimeMetadata {
     String connectedHost = "";
     int connectedPort = 0;
@@ -4184,6 +4282,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     String channelModes = "";
 
     final Map<String, CapabilityState> ircv3Caps = new LinkedHashMap<>();
+    final Map<String, String> ircv3CapLastSubcommand = new LinkedHashMap<>();
+    final List<CapabilityTransition> ircv3CapTransitions = new ArrayList<>();
     final Map<String, String> isupport = new LinkedHashMap<>();
   }
 

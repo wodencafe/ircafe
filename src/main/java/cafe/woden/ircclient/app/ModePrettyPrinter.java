@@ -42,7 +42,7 @@ final class ModePrettyPrinter {
 
     List<String> out = new ArrayList<>();
     for (ModeChange c : pm.changes) {
-      String s = prettyOne(a, channel, c);
+      String s = prettyOne(a, c);
       if (s != null && !s.isBlank()) out.add(s);
     }
     if (out.isEmpty()) {
@@ -277,7 +277,7 @@ final class ModePrettyPrinter {
     };
   }
 
-  private static String prettyOne(String actor, String channel, ModeChange c) {
+  private static String prettyOne(String actor, ModeChange c) {
     String who = actor;
     String arg = c.arg;
     char m = c.mode;
