@@ -7,15 +7,15 @@ import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UserActionRequest;
-import cafe.woden.ircclient.app.interceptors.InterceptorStore;
-import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import org.slf4j.Logger;
@@ -91,6 +92,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final IgnoreStatusService ignoreStatusService;
   private final MonitorListService monitorListService;
   private final UserListStore userListStore;
+  private final UserListDockable usersDock;
 
   private final FlowableProcessor<UserActionRequest> userActions =
       PublishProcessor.<UserActionRequest>create().toSerialized();
@@ -103,6 +105,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
   private final FlowableProcessor<TopicUpdate> topicUpdates =
       PublishProcessor.<TopicUpdate>create().toSerialized();
+  private final FlowableProcessor<String> channelListCommandRequests =
+      PublishProcessor.<String>create().toSerialized();
 
   private final Map<TargetRef, ViewState> stateByTarget = new HashMap<>();
   private final ViewState fallbackState = new ViewState();
@@ -111,6 +115,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final Map<TargetRef, String> draftByTarget = new HashMap<>();
   private final Map<TargetRef, Long> lastReadMarkerSentAtByTarget = new HashMap<>();
   private final Map<String, Map<String, Boolean>> privateMessageOnlineByServer = new HashMap<>();
+  private final Map<String, Map<String, ArrayList<BanListEntry>>> banListEntriesByServer =
+      new HashMap<>();
+  private final Map<String, Map<String, String>> banListSummaryByServer = new HashMap<>();
 
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
@@ -147,6 +154,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   /** Channel topic update for pinned docks and other secondary views. */
   public record TopicUpdate(TargetRef target, String topic) {}
 
+  private record BanListEntry(String mask, String setBy, Long setAtEpochSeconds) {}
+
   public ChatDockable(
       ChatTranscriptStore transcripts,
       ServerTreeDockable serverTree,
@@ -159,6 +168,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       IgnoreStatusService ignoreStatusService,
       MonitorListService monitorListService,
       UserListStore userListStore,
+      UserListDockable usersDock,
       NickContextMenuFactory nickContextMenuFactory,
       ServerProxyResolver proxyResolver,
       ChatHistoryService chatHistoryService,
@@ -182,7 +192,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.ignoreStatusService = ignoreStatusService;
     this.monitorListService =
         java.util.Objects.requireNonNull(monitorListService, "monitorListService");
-    this.userListStore = userListStore;
+    this.userListStore = java.util.Objects.requireNonNull(userListStore, "userListStore");
+    this.usersDock = java.util.Objects.requireNonNull(usersDock, "usersDock");
     this.proxyResolver = proxyResolver;
     this.chatHistoryService = chatHistoryService;
     this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
@@ -268,11 +279,132 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         });
     this.channelListPanel.setOnJoinChannel(
         channel -> {
-          String ch = Objects.toString(channel, "").trim();
-          TargetRef t = activeTarget;
-          if (t == null || ch.isEmpty()) return;
-          outboundBus.emit("/join " + ch);
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          serverTree.requestJoinChannel(new TargetRef(sid, ch));
+          refreshManagedChannelsCard(sid);
         });
+    this.channelListPanel.setOnRunListRequest(
+        () -> {
+          String sid = channelListServerIdForActions();
+          if (sid.isBlank()) return;
+          serverTree.selectTarget(TargetRef.channelList(sid));
+          channelListCommandRequests.onNext("/list");
+        });
+    this.channelListPanel.setOnRunAlisRequest(
+        command -> {
+          String sid = channelListServerIdForActions();
+          String cmd = Objects.toString(command, "").trim();
+          if (sid.isBlank() || cmd.isEmpty()) return;
+          serverTree.selectTarget(TargetRef.channelList(sid));
+          channelListCommandRequests.onNext(cmd);
+        });
+    this.channelListPanel.setOnAddChannelRequest(
+        channel -> {
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          TargetRef ref = new TargetRef(sid, ch);
+          serverTree.ensureNode(ref);
+          serverTree.setChannelAutoReattach(ref, true);
+          serverTree.requestJoinChannel(ref);
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnAttachChannelRequest(
+        channel -> {
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          serverTree.requestJoinChannel(new TargetRef(sid, ch));
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnDetachChannelRequest(
+        channel -> {
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          serverTree.requestDetachChannel(new TargetRef(sid, ch));
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnCloseChannelRequest(
+        channel -> {
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          serverTree.requestCloseChannel(new TargetRef(sid, ch));
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnAutoReattachChanged(
+        (channel, autoReattach) -> {
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          serverTree.setChannelAutoReattach(new TargetRef(sid, ch), autoReattach);
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnManagedSortModeChanged(
+        mode -> {
+          String sid = channelListServerIdForActions();
+          if (sid.isBlank()) return;
+          ServerTreeDockable.ChannelSortMode mapped =
+              mode == ChannelListPanel.ManagedSortMode.ALPHABETICAL
+                  ? ServerTreeDockable.ChannelSortMode.ALPHABETICAL
+                  : ServerTreeDockable.ChannelSortMode.CUSTOM;
+          serverTree.setChannelSortModeForServer(sid, mapped);
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnManagedCustomOrderChanged(
+        order -> {
+          String sid = channelListServerIdForActions();
+          if (sid.isBlank()) return;
+          serverTree.setChannelCustomOrderForServer(sid, order);
+          refreshManagedChannelsCard(sid);
+        });
+    this.channelListPanel.setOnManagedChannelSelected(
+        channel -> {
+          String sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          updateUsersDockForChannel(sid, ch);
+        });
+    this.channelListPanel.setOnChannelTopicRequest(
+        (serverId, channel) -> {
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isBlank()) sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return "";
+          return topicFor(new TargetRef(sid, ch));
+        });
+    this.channelListPanel.setOnChannelBanListSnapshotRequest(
+        (serverId, channel) -> channelBanListSnapshot(serverId, channel));
+    this.channelListPanel.setOnChannelBanListRefreshRequest(
+        (serverId, channel) -> {
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isBlank()) sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          serverTree.selectTarget(TargetRef.channelList(sid));
+          outboundBus.emit("/mode " + ch + " +b");
+        });
+    disposables.add(
+        channelListCommandRequests
+            .debounce(150, TimeUnit.MILLISECONDS)
+            .throttleFirst(5, TimeUnit.SECONDS)
+            .subscribe(
+                outboundBus::emit,
+                err -> log.debug("[ircafe] channel-list command flow failed", err)));
+    disposables.add(
+        serverTree
+            .managedChannelsChangedByServer()
+            .subscribe(
+                sid -> {
+                  String changed = Objects.toString(sid, "").trim();
+                  if (changed.isEmpty()) return;
+                  if (!changed.equalsIgnoreCase(channelListPanel.currentServerId())) return;
+                  refreshManagedChannelsCard(changed);
+                },
+                err -> log.debug("[ircafe] managed-channel refresh stream failed", err)));
     this.dccTransfersPanel =
         new DccTransfersPanel(
             java.util.Objects.requireNonNull(dccTransferStore, "dccTransferStore"));
@@ -561,10 +693,68 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private void showChannelListCard(String serverId) {
     try {
       channelListPanel.setServerId(serverId);
+      refreshManagedChannelsCard(serverId);
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_CHANNEL_LIST);
     } catch (Exception ignored) {
     }
+  }
+
+  private void refreshManagedChannelsCard(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || serverTree == null) {
+      channelListPanel.setManagedChannels(sid, List.of(), ChannelListPanel.ManagedSortMode.CUSTOM);
+      return;
+    }
+
+    List<ChannelListPanel.ManagedChannelRow> rows =
+        serverTree.managedChannelsForServer(sid).stream()
+            .map(
+                entry -> {
+                  int users = userListStore.get(sid, entry.channel()).size();
+                  String modes = modeSummaryForChannel();
+                  return new ChannelListPanel.ManagedChannelRow(
+                      entry.channel(),
+                      entry.detached(),
+                      entry.autoReattach(),
+                      users,
+                      entry.notifications(),
+                      modes);
+                })
+            .toList();
+    ChannelListPanel.ManagedSortMode sortMode =
+        serverTree.channelSortModeForServer(sid) == ServerTreeDockable.ChannelSortMode.ALPHABETICAL
+            ? ChannelListPanel.ManagedSortMode.ALPHABETICAL
+            : ChannelListPanel.ManagedSortMode.CUSTOM;
+    channelListPanel.setManagedChannels(sid, rows, sortMode);
+  }
+
+  private static String modeSummaryForChannel() {
+    return "(Unknown)";
+  }
+
+  private void updateUsersDockForChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = normalizeChannelName(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return;
+    TargetRef target = new TargetRef(sid, ch);
+    usersDock.setChannel(target);
+    usersDock.setNicks(userListStore.get(sid, ch));
+  }
+
+  private String channelListServerIdForActions() {
+    String sid = Objects.toString(channelListPanel.currentServerId(), "").trim();
+    if (!sid.isEmpty()) return sid;
+
+    TargetRef t = activeTarget;
+    if (t == null) return "";
+    return Objects.toString(t.serverId(), "").trim();
+  }
+
+  private static String normalizeChannelName(String channel) {
+    String c = Objects.toString(channel, "").trim();
+    if (c.isEmpty()) return "";
+    return (c.startsWith("#") || c.startsWith("&")) ? c : "";
   }
 
   private void showDccTransfersCard(String serverId) {
@@ -682,6 +872,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget();
     }
+    channelListPanel.refreshOpenChannelDetails(target.serverId(), target.target());
     topicUpdates.onNext(new TopicUpdate(target, normalized));
   }
 
@@ -692,6 +883,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       updateTopicPanelForActiveTarget();
     }
     if (target.isChannel() && removed != null && !removed.isBlank()) {
+      channelListPanel.refreshOpenChannelDetails(target.serverId(), target.target());
       topicUpdates.onNext(new TopicUpdate(target, ""));
     }
   }
@@ -714,8 +906,88 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     channelListPanel.appendEntry(serverId, channel, visibleUsers, topic);
   }
 
+  public void appendChannelListEntries(
+      String serverId, List<ChannelListPanel.ListEntryRow> entries) {
+    channelListPanel.appendEntries(serverId, entries);
+  }
+
   public void endChannelList(String serverId, String summary) {
     channelListPanel.endList(serverId, summary);
+  }
+
+  public void beginChannelBanList(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = normalizeChannelName(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    banListEntriesByServer.computeIfAbsent(sid, __ -> new HashMap<>()).put(ch, new ArrayList<>());
+    banListSummaryByServer.computeIfAbsent(sid, __ -> new HashMap<>()).remove(ch);
+    channelListPanel.refreshOpenChannelDetails(sid, ch);
+  }
+
+  public void appendChannelBanListEntry(
+      String serverId, String channel, String mask, String setBy, Long setAtEpochSeconds) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = normalizeChannelName(channel);
+    String m = Objects.toString(mask, "").trim();
+    if (sid.isEmpty() || ch.isEmpty() || m.isEmpty()) return;
+
+    Map<String, ArrayList<BanListEntry>> byChannel =
+        banListEntriesByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    ArrayList<BanListEntry> entries = byChannel.computeIfAbsent(ch, __ -> new ArrayList<>());
+    entries.add(
+        new BanListEntry(
+            m,
+            Objects.toString(setBy, "").trim(),
+            setAtEpochSeconds != null && setAtEpochSeconds.longValue() > 0L
+                ? setAtEpochSeconds
+                : null));
+    channelListPanel.refreshOpenChannelDetails(sid, ch);
+  }
+
+  public void endChannelBanList(String serverId, String channel, String summary) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = normalizeChannelName(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return;
+    String text = Objects.toString(summary, "").trim();
+    if (!text.isEmpty()) {
+      banListSummaryByServer.computeIfAbsent(sid, __ -> new HashMap<>()).put(ch, text);
+    }
+    channelListPanel.refreshOpenChannelDetails(sid, ch);
+  }
+
+  private List<String> channelBanListSnapshot(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = normalizeChannelName(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return List.of();
+
+    Map<String, ArrayList<BanListEntry>> byChannel = banListEntriesByServer.get(sid);
+    ArrayList<BanListEntry> entries = byChannel == null ? null : byChannel.get(ch);
+    if (entries == null || entries.isEmpty()) {
+      return List.of();
+    }
+
+    ArrayList<String> out = new ArrayList<>(entries.size() + 1);
+    for (BanListEntry entry : entries) {
+      if (entry == null) continue;
+      StringBuilder line = new StringBuilder(entry.mask());
+      String by = Objects.toString(entry.setBy(), "").trim();
+      if (!by.isEmpty()) line.append("  |  set by ").append(by);
+      if (entry.setAtEpochSeconds() != null && entry.setAtEpochSeconds().longValue() > 0L) {
+        try {
+          line.append("  |  ").append(Instant.ofEpochSecond(entry.setAtEpochSeconds().longValue()));
+        } catch (Exception ignored) {
+        }
+      }
+      out.add(line.toString());
+    }
+
+    if (out.isEmpty()) {
+      return List.of();
+    }
+    String summary = banListSummaryByServer.getOrDefault(sid, Map.of()).getOrDefault(ch, "").trim();
+    if (!summary.isEmpty()) out.add(summary);
+    return List.copyOf(out);
   }
 
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {

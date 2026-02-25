@@ -61,6 +61,9 @@ public sealed interface IrcEvent
         IrcEvent.ChannelListStarted,
         IrcEvent.ChannelListEntry,
         IrcEvent.ChannelListEnded,
+        IrcEvent.ChannelBanListStarted,
+        IrcEvent.ChannelBanListEntry,
+        IrcEvent.ChannelBanListEnded,
         IrcEvent.StandardReply,
         IrcEvent.Error,
         IrcEvent.CtcpRequestReceived {
@@ -225,6 +228,17 @@ public sealed interface IrcEvent
 
   /** End of an IRC channel list (/LIST) response stream. */
   record ChannelListEnded(Instant at, String summary) implements IrcEvent {}
+
+  /** Start of a channel ban-list response stream (RPL_BANLIST/367). */
+  record ChannelBanListStarted(Instant at, String channel) implements IrcEvent {}
+
+  /** One ban-list row (RPL_BANLIST/367). */
+  record ChannelBanListEntry(
+      Instant at, String channel, String mask, String setBy, Long setAtEpochSeconds)
+      implements IrcEvent {}
+
+  /** End of a channel ban-list response stream (RPL_ENDOFBANLIST/368). */
+  record ChannelBanListEnded(Instant at, String channel, String summary) implements IrcEvent {}
 
   enum StandardReplyKind {
     FAIL,

@@ -178,6 +178,38 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void beginChannelList(String serverId, String banner) {
+    delegate.beginChannelList(serverId, banner);
+  }
+
+  @Override
+  public void appendChannelListEntry(
+      String serverId, String channel, int visibleUsers, String topic) {
+    delegate.appendChannelListEntry(serverId, channel, visibleUsers, topic);
+  }
+
+  @Override
+  public void endChannelList(String serverId, String summary) {
+    delegate.endChannelList(serverId, summary);
+  }
+
+  @Override
+  public void beginChannelBanList(String serverId, String channel) {
+    delegate.beginChannelBanList(serverId, channel);
+  }
+
+  @Override
+  public void appendChannelBanListEntry(
+      String serverId, String channel, String mask, String setBy, Long setAtEpochSeconds) {
+    delegate.appendChannelBanListEntry(serverId, channel, mask, setBy, setAtEpochSeconds);
+  }
+
+  @Override
+  public void endChannelBanList(String serverId, String channel, String summary) {
+    delegate.endChannelBanList(serverId, channel, summary);
+  }
+
+  @Override
   public void setStatusBarChannel(String channel) {
     delegate.setStatusBarChannel(channel);
   }

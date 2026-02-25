@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.monitor;
 
-import cafe.woden.ircclient.app.monitor.MonitorListService;
+import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import java.awt.BorderLayout;

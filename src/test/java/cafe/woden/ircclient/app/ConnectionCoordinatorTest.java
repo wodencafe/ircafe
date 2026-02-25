@@ -180,7 +180,7 @@ class ConnectionCoordinatorTest {
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
     when(runtimeConfig.readPrivateMessageTargets("libera")).thenReturn(List.of("Alice", "Bob"));
-    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#ircafe"));
+    when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of("#ircafe"));
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
@@ -203,6 +203,37 @@ class ConnectionCoordinatorTest {
   }
 
   @Test
+  void connectedEventWithFallbackNickDoesNotPersistNickToConfig() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
+    when(serverCatalog.containsId("libera")).thenReturn(true);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.handleConnectivityEvent(
+        "libera",
+        new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "preferredNick1"),
+        null);
+
+    verify(ui).setChatCurrentNick("libera", "preferredNick1");
+    verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
+  }
+
+  @Test
   void constructorRestoresJoinedChannelsAsDetached() {
     IrcClientService irc = mock(IrcClientService.class);
     UiPort ui = mock(UiPort.class);
@@ -212,7 +243,7 @@ class ConnectionCoordinatorTest {
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
-    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
+    when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
 
     new ConnectionCoordinator(
         irc, ui, serverRegistry, serverCatalog, runtimeConfig, LOG_PROPS, trayNotificationService);

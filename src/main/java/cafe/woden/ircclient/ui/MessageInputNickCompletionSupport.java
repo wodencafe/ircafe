@@ -284,23 +284,13 @@ final class MessageInputNickCompletionSupport {
                     if (!appended) {
                       String afterText = input.getText();
                       int afterCaret = input.getCaretPosition();
-                      boolean completionOccurred =
-                          !(Objects.equals(afterText, beforeText) && afterCaret == beforeCaret);
-
-                      // If TAB only opened a multi-choice completion popup, the completion text is
-                      // inserted later.
-                      // Arm a one-shot suffix append so the chosen nick becomes "nick: " when it's
-                      // the first word.
                       pendingNickAddressSuffix = false;
-                      if (!completionOccurred
-                          && isEligibleForNickAddressSuffix(beforeText, beforeCaret)) {
-                        String prefix = firstWordPrefix(beforeText);
-                        if (hasNickPrefixMatch(prefix)) {
-                          pendingNickAddressSuffix = true;
-                          pendingNickAddressBeforeText = beforeText;
-                          pendingNickAddressBeforeCaret = beforeCaret;
-                          pendingNickAddressSetAtMs = System.currentTimeMillis();
-                        }
+                      if (shouldArmPendingNickAddressSuffix(
+                          beforeText, beforeCaret, afterText, afterCaret)) {
+                        pendingNickAddressSuffix = true;
+                        pendingNickAddressBeforeText = beforeText;
+                        pendingNickAddressBeforeCaret = beforeCaret;
+                        pendingNickAddressSetAtMs = System.currentTimeMillis();
                       }
                     } else {
                       pendingNickAddressSuffix = false;
@@ -538,6 +528,26 @@ final class MessageInputNickCompletionSupport {
       if (n.toLowerCase(Locale.ROOT).startsWith(pLower)) return true;
     }
     return false;
+  }
+
+  private boolean shouldArmPendingNickAddressSuffix(
+      String beforeText, int beforeCaret, String afterText, int afterCaret) {
+    // If TAB only opened/updated a multi-choice completion popup, the completion text may be
+    // inserted later (e.g., after selecting an item). Arm a one-shot suffix append so the chosen
+    // nick becomes "nick: " when it's the first word.
+    if (!isEligibleForNickAddressSuffix(beforeText, beforeCaret)) return false;
+
+    String beforePrefix = firstWordPrefix(beforeText);
+    if (!hasNickPrefixMatch(beforePrefix)) return false;
+
+    if (Objects.equals(afterText, beforeText) && afterCaret == beforeCaret) {
+      return true;
+    }
+
+    String afterPrefix = firstWordPrefix(afterText);
+    if (afterPrefix.isEmpty()) return false;
+    if (isKnownNick(afterPrefix)) return false;
+    return hasNickPrefixMatch(afterPrefix);
   }
 
   private static int firstNonWhitespace(String s) {

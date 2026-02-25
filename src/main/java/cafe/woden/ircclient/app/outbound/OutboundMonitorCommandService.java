@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.app.outbound;
 
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
-import cafe.woden.ircclient.app.monitor.MonitorListService;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
@@ -22,22 +22,22 @@ public class OutboundMonitorCommandService {
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
-  private final MonitorListService monitorListService;
-  private final MonitorIsonFallbackService monitorIsonFallbackService;
+  private final MonitorRosterPort monitorRosterPort;
+  private final MonitorFallbackPort monitorFallbackPort;
 
   public OutboundMonitorCommandService(
       IrcClientService irc,
       UiPort ui,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
-      MonitorListService monitorListService,
-      MonitorIsonFallbackService monitorIsonFallbackService) {
+      MonitorRosterPort monitorRosterPort,
+      MonitorFallbackPort monitorFallbackPort) {
     this.irc = irc;
     this.ui = ui;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
-    this.monitorListService = monitorListService;
-    this.monitorIsonFallbackService = monitorIsonFallbackService;
+    this.monitorRosterPort = monitorRosterPort;
+    this.monitorFallbackPort = monitorFallbackPort;
   }
 
   public void handleMonitor(CompositeDisposable disposables, String args) {
@@ -78,7 +78,7 @@ public class OutboundMonitorCommandService {
     switch (op) {
       case "list", "l" -> handleList(disposables, sid, monitorTarget, status);
       case "status", "s" -> {
-        if (monitorIsonFallbackService.isFallbackActive(sid)) {
+        if (monitorFallbackPort.isFallbackActive(sid)) {
           requestFallbackRefresh(sid, status, true);
         } else {
           sendMonitorRaw(disposables, sid, status, monitorTarget, "MONITOR S", true);
@@ -96,7 +96,7 @@ public class OutboundMonitorCommandService {
 
   private void handleList(
       CompositeDisposable disposables, String serverId, TargetRef monitorTarget, TargetRef status) {
-    List<String> local = monitorListService.listNicks(serverId);
+    List<String> local = monitorRosterPort.listNicks(serverId);
     if (local.isEmpty()) {
       ui.appendStatus(monitorTarget, "(monitor)", "Monitored nicks: (none)");
     } else {
@@ -105,7 +105,7 @@ public class OutboundMonitorCommandService {
           "(monitor)",
           "Monitored nicks (" + local.size() + "): " + String.join(", ", local));
     }
-    if (monitorIsonFallbackService.isFallbackActive(serverId)) {
+    if (monitorFallbackPort.isFallbackActive(serverId)) {
       requestFallbackRefresh(serverId, status, true);
       return;
     }
@@ -114,14 +114,14 @@ public class OutboundMonitorCommandService {
 
   private void handleClear(
       CompositeDisposable disposables, String serverId, TargetRef monitorTarget, TargetRef status) {
-    int removed = monitorListService.clearNicks(serverId);
+    int removed = monitorRosterPort.clearNicks(serverId);
     ui.appendStatus(
         monitorTarget,
         "(monitor)",
         removed <= 0
             ? "Cleared monitor list (already empty)."
             : ("Cleared monitor list (" + removed + " removed)."));
-    if (monitorIsonFallbackService.isFallbackActive(serverId)) {
+    if (monitorFallbackPort.isFallbackActive(serverId)) {
       requestFallbackRefresh(serverId, status, false);
       return;
     }
@@ -135,7 +135,7 @@ public class OutboundMonitorCommandService {
       TargetRef status,
       char sigil,
       String nickSpec) {
-    List<String> nicks = MonitorListService.tokenizeNickInput(nickSpec);
+    List<String> nicks = monitorRosterPort.parseNickInput(nickSpec);
     if (nicks.isEmpty()) {
       appendUsage(monitorTarget);
       return;
@@ -143,8 +143,8 @@ public class OutboundMonitorCommandService {
 
     int changed =
         sigil == '+'
-            ? monitorListService.addNicks(serverId, nicks)
-            : monitorListService.removeNicks(serverId, nicks);
+            ? monitorRosterPort.addNicks(serverId, nicks)
+            : monitorRosterPort.removeNicks(serverId, nicks);
     if (sigil == '+') {
       ui.appendStatus(
           monitorTarget,
@@ -173,7 +173,7 @@ public class OutboundMonitorCommandService {
 
     int chunkSize = irc.negotiatedMonitorLimit(serverId);
     if (chunkSize <= 0) chunkSize = DEFAULT_MONITOR_CHUNK;
-    if (monitorIsonFallbackService.isFallbackActive(serverId)) {
+    if (monitorFallbackPort.isFallbackActive(serverId)) {
       requestFallbackRefresh(serverId, status, false);
       return;
     }
@@ -225,7 +225,7 @@ public class OutboundMonitorCommandService {
       }
       return;
     }
-    monitorIsonFallbackService.requestImmediateRefresh(sid);
+    monitorFallbackPort.requestImmediateRefresh(sid);
   }
 
   private void appendUsage(TargetRef out) {

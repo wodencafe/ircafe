@@ -8,11 +8,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -60,6 +62,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final Consumer<String> zncOriginDisconnected;
 
   private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
+  private final Set<String> activeBanListChannels = new HashSet<>();
   private final Ircv3MultilineAccumulator multilineAccumulator = new Ircv3MultilineAccumulator();
 
   private static final class ChatHistoryBatchBuffer {
@@ -731,6 +734,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     PircBotX bot = event.getBot();
     conn.reconnectAttempts.set(0);
     conn.manualDisconnect.set(false);
+    activeBanListChannels.clear();
 
     bus.onNext(
         new ServerIrcEvent(
@@ -741,6 +745,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   @Override
   public void onDisconnect(DisconnectEvent event) {
+    activeBanListChannels.clear();
     String override = conn.disconnectReasonOverride.getAndSet(null);
     Exception ex = event.getDisconnectException();
     String reason =
@@ -1183,12 +1188,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   @Override
   public void onNotice(NoticeEvent event) {
     touchInbound();
+    String from = senderNickFromEvent(event);
     Optional<String> batchId = PircbotxIrcv3BatchTag.fromEvent(event);
     if (batchId.isPresent()) {
       ChatHistoryBatchBuffer buf = activeChatHistoryBatches.get(batchId.get());
       if (buf != null) {
         Instant at = inboundAt(event);
-        String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
         String notice = PircbotxUtil.safeStr(event::getNotice, "");
         String target = (buf.target == null || buf.target.isBlank()) ? "status" : buf.target;
         buf.entries.add(
@@ -1197,7 +1202,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
     }
     Instant at = inboundAt(event);
-    String from = (event.getUser() != null) ? event.getUser().getNick() : "server";
     String notice = event.getNotice();
     Map<String, String> ircv3Tags =
         withObservedHostmaskTag(new HashMap<>(ircv3TagsFromEvent(event)), event.getUser());
@@ -1223,6 +1227,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       messageId = ircv3MessageId(ircv3Tags);
     }
 
+    boolean recognizedAlisNotice = maybeEmitAlisChannelListEntry(at, from, notice);
+
     // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
     if (maybeCaptureZncListNetworks(from, notice)) {
       return;
@@ -1233,7 +1239,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
 
     // Capture and suppress replayed notices for the active playback target.
-    if (!"*playback".equalsIgnoreCase(from)) {
+    // ALIS list notices should still reach channel-list handling even when playback capture is
+    // active, so skip suppression for recognized ALIS payloads.
+    if (!recognizedAlisNotice && !"*playback".equalsIgnoreCase(from)) {
       String t = null;
       try {
         Channel ch = event.getChannel();
@@ -1559,6 +1567,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (line == null || line.isBlank()) line = String.valueOf(event);
     String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
     ParsedIrcLine parsedRawLine = parseIrcLine(rawLine);
+    if (parsedRawLine != null) {
+      Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
+      if (at == null) at = Instant.now();
+      String myNick = resolveBotNick(event != null ? event.getBot() : null);
+      emitChannelListEvent(at, parsedRawLine, myNick);
+      emitChannelBanListEvent(at, parsedRawLine);
+    }
     if (parsedRawLine != null
         && parsedRawLine.command() != null
         && PircbotxLineParseUtil.looksNumeric(parsedRawLine.command())
@@ -1666,6 +1681,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           // ZNC multi-network discovery: parse and suppress the *status ListNetworks table.
           if (maybeCaptureZncListNetworks(from, payload)) {
             return;
+          }
+
+          boolean recognizedAlisUnknownNotice = false;
+          if ("NOTICE".equals(cmd)) {
+            recognizedAlisUnknownNotice = maybeEmitAlisChannelListEntry(at, from, payload);
+            if (recognizedAlisUnknownNotice) {
+              return;
+            }
           }
 
           if (maybeCaptureZncPlayback(target, at, kind, from, payload)) {
@@ -2684,6 +2707,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
 
       emitChannelListEvent(at, pl, myNick);
+      emitChannelBanListEvent(at, pl);
 
       String message = renderServerResponseMessage(pl, myNick);
       if (message == null || message.isBlank()) {
@@ -2722,6 +2746,54 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (summary != null) {
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelListEnded(at, summary)));
     }
+  }
+
+  private boolean maybeEmitAlisChannelListEntry(Instant at, String fromNick, String noticeText) {
+    PircbotxListParsers.ListEntry entry =
+        PircbotxListParsers.parseAlisNoticeEntry(fromNick, noticeText);
+    if (entry != null) {
+      bus.onNext(
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.ChannelListEntry(
+                  at, entry.channel(), Math.max(0, entry.visibleUsers()), entry.topic())));
+      return true;
+    }
+
+    String summary = PircbotxListParsers.parseAlisNoticeEndSummary(fromNick, noticeText);
+    if (summary == null) return false;
+    bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelListEnded(at, summary)));
+    return true;
+  }
+
+  private void emitChannelBanListEvent(Instant at, ParsedIrcLine pl) {
+    if (pl == null) return;
+
+    PircbotxListParsers.BanListEntry entry =
+        PircbotxListParsers.parseBanListEntry(pl.command(), pl.params());
+    if (entry != null) {
+      String key = entry.channel().toLowerCase(Locale.ROOT);
+      if (activeBanListChannels.add(key)) {
+        bus.onNext(
+            new ServerIrcEvent(serverId, new IrcEvent.ChannelBanListStarted(at, entry.channel())));
+      }
+      bus.onNext(
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.ChannelBanListEntry(
+                  at, entry.channel(), entry.mask(), entry.setBy(), entry.setAtEpochSeconds())));
+      return;
+    }
+
+    String channel = PircbotxListParsers.parseBanListEndChannel(pl.command(), pl.params());
+    if (channel == null || channel.isBlank()) return;
+    String key = channel.toLowerCase(Locale.ROOT);
+    if (!activeBanListChannels.remove(key)) {
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ChannelBanListStarted(at, channel)));
+    }
+    String summary = PircbotxListParsers.parseBanListEndSummary(pl.command(), pl.trailing());
+    bus.onNext(
+        new ServerIrcEvent(serverId, new IrcEvent.ChannelBanListEnded(at, channel, summary)));
   }
 
   private String renderServerResponseMessage(ParsedIrcLine pl, String myNick) {
@@ -3250,14 +3322,31 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     return null;
   }
 
+  private static String senderNickFromEvent(Object event) {
+    String directUserNick = "";
+    Object user = reflectCall(event, "getUser");
+    if (user != null) {
+      directUserNick = Objects.toString(reflectCall(user, "getNick"), "").trim();
+    }
+    if (!directUserNick.isEmpty()) return directUserNick;
+
+    String rawNick = Objects.toString(nickFromRawLine(event), "").trim();
+    if (!rawNick.isEmpty()) return rawNick;
+
+    return "server";
+  }
+
   private static String nickFromRawLine(Object event) {
     if (event == null) return null;
-    Object raw = reflectCall(event, "getRawLine");
-    if (raw == null) raw = reflectCall(event, "getRaw");
-    if (raw == null) raw = reflectCall(event, "getLine");
-    if (raw == null) return null;
+    String raw = rawLineFromEvent(event);
+    if (raw == null || raw.isBlank()) return null;
+    ParsedIrcLine parsed = parseIrcLine(PircbotxLineParseUtil.normalizeIrcLineForParsing(raw));
+    if (parsed != null) {
+      String nick = nickFromPrefix(parsed.prefix());
+      if (nick != null && !nick.isBlank()) return nick;
+    }
 
-    String line = String.valueOf(raw).trim();
+    String line = raw.trim();
     if (!line.startsWith(":")) return null;
 
     int sp = line.indexOf(' ');

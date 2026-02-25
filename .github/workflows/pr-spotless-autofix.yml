@@ -1,11 +1,11 @@
-name: PR Spotless Autofix
+name: PR Lint Autofix
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
-  group: pr-spotless-${{ github.event.pull_request.number }}
+  group: pr-lint-autofix-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  spotless-autofix:
+  lint-autofix:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
@@ -38,11 +38,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Apply Spotless formatting
+      - name: Run lint
+        id: lint
+        continue-on-error: true
+        run: ./gradlew --no-daemon lint
+
+      - name: Apply Spotless formatting (when lint fails)
+        if: steps.lint.outcome == 'failure'
         run: ./gradlew --no-daemon spotlessApply
 
       - name: Detect formatting changes
         id: changes
+        if: steps.lint.outcome == 'failure'
         shell: bash
         run: |
           set -euo pipefail
@@ -53,19 +60,27 @@ jobs:
           fi
 
       - name: Commit and push formatting changes
-        if: steps.changes.outputs.changed == 'true'
+        if: steps.lint.outcome == 'failure' && steps.changes.outputs.changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "style: apply Spotless formatting"
+          git commit -m "style: apply lint autofix (Spotless)"
           git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
 
-  spotless-autofix-fork-pr:
+      - name: Fail when lint cannot be auto-fixed
+        if: steps.lint.outcome == 'failure' && steps.changes.outputs.changed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::error::Gradle lint failed, but Spotless produced no changes. Manual fixes are required."
+          exit 1
+
+  lint-autofix-fork-pr:
     if: github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Skip fork PR
-        run: echo "Skipping Spotless autofix for fork PRs because the workflow cannot push to fork branches."
+        run: echo "Skipping lint autofix for fork PRs because the workflow cannot push to fork branches."

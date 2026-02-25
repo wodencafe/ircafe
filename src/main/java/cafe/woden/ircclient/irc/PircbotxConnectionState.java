@@ -137,6 +137,8 @@ final class PircbotxConnectionState {
 
   final AtomicBoolean typingCapAcked = new AtomicBoolean(false);
   final AtomicBoolean messageTagsFallbackReqSent = new AtomicBoolean(false);
+  final AtomicBoolean batchFallbackReqSent = new AtomicBoolean(false);
+  final AtomicBoolean chatHistoryFallbackReqSent = new AtomicBoolean(false);
   final AtomicBoolean readMarkerCapAcked = new AtomicBoolean(false);
   final AtomicBoolean monitorCapAcked = new AtomicBoolean(false);
   final AtomicBoolean extendedMonitorCapAcked = new AtomicBoolean(false);
@@ -211,6 +213,8 @@ final class PircbotxConnectionState {
     typingClientTagPolicyKnown.set(false);
     typingCapAcked.set(false);
     messageTagsFallbackReqSent.set(false);
+    batchFallbackReqSent.set(false);
+    chatHistoryFallbackReqSent.set(false);
     readMarkerCapAcked.set(false);
     monitorCapAcked.set(false);
     extendedMonitorCapAcked.set(false);

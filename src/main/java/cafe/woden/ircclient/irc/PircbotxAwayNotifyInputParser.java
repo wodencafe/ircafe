@@ -97,6 +97,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           emitCapNakFromCapLine(sub, capList);
         }
         maybeRequestMessageTagsFallback(sub, capList);
+        maybeRequestHistoryCapabilityFallback(sub, capList);
       }
       return;
     }
@@ -552,6 +553,69 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     }
   }
 
+  private void maybeRequestHistoryCapabilityFallback(String sub, String capList) {
+    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
+    if (!"LS".equals(action) && !"NEW".equals(action)) return;
+
+    String caps = Objects.toString(capList, "").trim();
+    if (caps.startsWith(":")) caps = caps.substring(1).trim();
+    if (caps.isEmpty()) return;
+
+    boolean offeredBatch = false;
+    boolean offeredChatHistory = false;
+    boolean offeredDraftChatHistory = false;
+    for (String token : caps.split("\\s+")) {
+      String capName = canonicalCapName(token);
+      if ("batch".equalsIgnoreCase(capName)) {
+        offeredBatch = true;
+      } else if ("chathistory".equalsIgnoreCase(capName)) {
+        offeredChatHistory = true;
+      } else if ("draft/chathistory".equalsIgnoreCase(capName)) {
+        offeredDraftChatHistory = true;
+      }
+    }
+
+    java.util.ArrayList<String> req = new java.util.ArrayList<>(2);
+    boolean requestedBatch = false;
+    boolean requestedHistory = false;
+
+    if (offeredBatch
+        && !conn.batchCapAcked.get()
+        && conn.batchFallbackReqSent.compareAndSet(false, true)) {
+      req.add("batch");
+      requestedBatch = true;
+    }
+
+    String historyCapToRequest = "";
+    if (!conn.chatHistoryCapAcked.get()) {
+      if (offeredChatHistory) {
+        historyCapToRequest = "chathistory";
+      } else if (offeredDraftChatHistory) {
+        historyCapToRequest = "draft/chathistory";
+      }
+    }
+    if (!historyCapToRequest.isEmpty()
+        && conn.chatHistoryFallbackReqSent.compareAndSet(false, true)) {
+      req.add(historyCapToRequest);
+      requestedHistory = true;
+    }
+
+    if (req.isEmpty()) return;
+
+    try {
+      bot.sendCAP().request(req.toArray(new String[0]));
+      log.info("[{}] fallback CAP REQ sent for {}", serverId, String.join(", ", req));
+    } catch (Exception ex) {
+      if (requestedBatch) {
+        conn.batchFallbackReqSent.set(false);
+      }
+      if (requestedHistory) {
+        conn.chatHistoryFallbackReqSent.set(false);
+      }
+      log.debug("[{}] fallback CAP REQ for history capabilities failed", serverId, ex);
+    }
+  }
+
   private void emitCapNakFromCapLine(String sub, String capList) {
     String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
     if (!"NAK".equals(action)) return;
@@ -857,7 +921,15 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     String s = Objects.toString(rawToken, "").trim();
     if (s.isEmpty()) return null;
     if (s.startsWith(":")) s = s.substring(1).trim();
-    if (s.startsWith("-")) s = s.substring(1).trim();
+    while (!s.isEmpty()) {
+      char leading = s.charAt(0);
+      // CAP v3 tokens may be prefixed by '-', '~', or '=' modifiers.
+      if (leading == '-' || leading == '~' || leading == '=') {
+        s = s.substring(1).trim();
+        continue;
+      }
+      break;
+    }
     int eq = s.indexOf('=');
     if (eq >= 0) s = s.substring(0, eq).trim();
     return s.isEmpty() ? null : s;
@@ -867,7 +939,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     String s = Objects.toString(rawToken, "").trim();
     if (s.isEmpty()) return "";
     if (s.startsWith(":")) s = s.substring(1).trim();
-    if (s.startsWith("-")) s = s.substring(1).trim();
+    while (!s.isEmpty()) {
+      char leading = s.charAt(0);
+      if (leading == '-' || leading == '~' || leading == '=') {
+        s = s.substring(1).trim();
+        continue;
+      }
+      break;
+    }
     int eq = s.indexOf('=');
     if (eq < 0 || eq + 1 >= s.length()) return "";
     return s.substring(eq + 1).trim();

@@ -100,7 +100,13 @@ class ServerTreeNodeReorderPolicyTest {
 
   private static ServerTreeNodeReorderPolicy policyForServerLabel(String label) {
     return new ServerTreeNodeReorderPolicy(
-        node -> node != null && label.equals(node.getUserObject()));
+        node -> node != null && label.equals(node.getUserObject()),
+        node -> {
+          if (node == null) return false;
+          Object uo = node.getUserObject();
+          if (!(uo instanceof ServerTreeDockable.NodeData nd)) return false;
+          return nd.ref != null && nd.ref.isChannelList();
+        });
   }
 
   private static DefaultMutableTreeNode serverNode(String id) {

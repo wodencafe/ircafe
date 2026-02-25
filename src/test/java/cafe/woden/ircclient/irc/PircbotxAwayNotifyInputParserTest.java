@@ -100,6 +100,28 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capLsContinuationSendsFallbackReqForHistoryCapabilities() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircBotX bot = spy(dummyBot());
+    OutputCAP outputCap = mock(OutputCAP.class);
+    doReturn(outputCap).when(bot).sendCAP();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me LS * :batch chathistory",
+        List.of("me", "LS", "*", ":batch chathistory"),
+        ImmutableMap.of());
+
+    verify(outputCap, atLeastOnce()).request("batch", "chathistory");
+  }
+
+  @Test
   void capNakEmitsCapabilityChangedDisabledEvent() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
@@ -393,6 +415,26 @@ class PircbotxAwayNotifyInputParserTest {
                         && "ACK".equalsIgnoreCase(cap.subcommand())
                         && "chathistory".equalsIgnoreCase(cap.capability())
                         && cap.enabled()));
+  }
+
+  @Test
+  void capAckWithCapV3ModifiersStillUpdatesHistoryState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :~batch =chathistory",
+        List.of("me", "ACK", ":~batch =chathistory"),
+        ImmutableMap.of());
+
+    assertTrue(conn.batchCapAcked.get());
+    assertTrue(conn.chatHistoryCapAcked.get());
   }
 
   @Test

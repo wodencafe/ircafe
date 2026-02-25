@@ -2,8 +2,14 @@ package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.AppSchedulers;
 import cafe.woden.ircclient.app.InboundModeEventHandler;
+import cafe.woden.ircclient.app.api.InterceptorEventType;
+import cafe.woden.ircclient.app.api.InterceptorIngestPort;
+import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.NotificationRuleMatch;
+import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
@@ -13,12 +19,6 @@ import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
-import cafe.woden.ircclient.app.interceptors.InterceptorEventType;
-import cafe.woden.ircclient.app.interceptors.InterceptorStore;
-import cafe.woden.ircclient.app.monitor.MonitorIsonFallbackService;
-import cafe.woden.ircclient.app.notifications.IrcEventNotificationService;
-import cafe.woden.ircclient.app.notifications.NotificationRuleMatch;
-import cafe.woden.ircclient.app.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
 import cafe.woden.ircclient.app.state.AwayRoutingState;
@@ -102,11 +102,11 @@ public class IrcMediator implements MediatorControlPort {
   private final PendingEchoMessageState pendingEchoMessageState;
   private final PendingInviteState pendingInviteState;
   private final InboundModeEventHandler inboundModeEventHandler;
-  private final IrcEventNotificationService ircEventNotificationService;
-  private final InterceptorStore interceptorStore;
-  private final MonitorIsonFallbackService monitorIsonFallbackService;
+  private final IrcEventNotifierPort ircEventNotifierPort;
+  private final InterceptorIngestPort interceptorIngestPort;
+  private final MonitorFallbackPort monitorFallbackPort;
 
-  private final NotificationRuleMatcher notificationRuleMatcher;
+  private final NotificationRuleMatcherPort notificationRuleMatcherPort;
 
   private final java.util.concurrent.atomic.AtomicBoolean started =
       new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -145,7 +145,7 @@ public class IrcMediator implements MediatorControlPort {
       TargetCoordinator targetCoordinator,
       UiSettingsPort uiSettingsPort,
       TrayNotificationsPort trayNotificationService,
-      NotificationRuleMatcher notificationRuleMatcher,
+      NotificationRuleMatcherPort notificationRuleMatcherPort,
       UserInfoEnrichmentService userInfoEnrichmentService,
       UserListStore userListStore,
       WhoisRoutingState whoisRoutingState,
@@ -158,10 +158,10 @@ public class IrcMediator implements MediatorControlPort {
       PendingEchoMessageState pendingEchoMessageState,
       PendingInviteState pendingInviteState,
       InboundModeEventHandler inboundModeEventHandler,
-      IrcEventNotificationService ircEventNotificationService,
-      InterceptorStore interceptorStore,
+      IrcEventNotifierPort ircEventNotifierPort,
+      InterceptorIngestPort interceptorIngestPort,
       InboundIgnorePolicy inboundIgnorePolicy,
-      MonitorIsonFallbackService monitorIsonFallbackService) {
+      MonitorFallbackPort monitorFallbackPort) {
 
     this.irc = irc;
     this.ui = ui;
@@ -178,7 +178,7 @@ public class IrcMediator implements MediatorControlPort {
     this.targetCoordinator = targetCoordinator;
     this.uiSettingsPort = uiSettingsPort;
     this.trayNotificationService = trayNotificationService;
-    this.notificationRuleMatcher = notificationRuleMatcher;
+    this.notificationRuleMatcherPort = notificationRuleMatcherPort;
     this.userInfoEnrichmentService = userInfoEnrichmentService;
     this.userListStore = userListStore;
     this.whoisRoutingState = whoisRoutingState;
@@ -191,10 +191,10 @@ public class IrcMediator implements MediatorControlPort {
     this.pendingEchoMessageState = pendingEchoMessageState;
     this.pendingInviteState = pendingInviteState;
     this.inboundModeEventHandler = inboundModeEventHandler;
-    this.ircEventNotificationService = ircEventNotificationService;
-    this.interceptorStore = interceptorStore;
+    this.ircEventNotifierPort = ircEventNotifierPort;
+    this.interceptorIngestPort = interceptorIngestPort;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
-    this.monitorIsonFallbackService = monitorIsonFallbackService;
+    this.monitorFallbackPort = monitorFallbackPort;
   }
 
   public void start() {
@@ -891,8 +891,8 @@ public class IrcMediator implements MediatorControlPort {
                   title,
                   body);
           boolean pmRulesEnabled =
-              ircEventNotificationService != null
-                  && ircEventNotificationService.hasEnabledRuleFor(
+              ircEventNotifierPort != null
+                  && ircEventNotifierPort.hasEnabledRuleFor(
                       IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED);
           if (!customPmNotified && !pmRulesEnabled) {
             try {
@@ -978,8 +978,8 @@ public class IrcMediator implements MediatorControlPort {
                   title,
                   body);
           boolean pmRulesEnabled =
-              ircEventNotificationService != null
-                  && ircEventNotificationService.hasEnabledRuleFor(
+              ircEventNotifierPort != null
+                  && ircEventNotifierPort.hasEnabledRuleFor(
                       IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED);
           if (!customPmNotified && !pmRulesEnabled) {
             try {
@@ -1111,6 +1111,16 @@ public class IrcMediator implements MediatorControlPort {
       }
       case IrcEvent.ChannelListEnded ev -> {
         ui.endChannelList(sid, ev.summary());
+      }
+      case IrcEvent.ChannelBanListStarted ev -> {
+        ui.beginChannelBanList(sid, ev.channel());
+      }
+      case IrcEvent.ChannelBanListEntry ev -> {
+        ui.appendChannelBanListEntry(
+            sid, ev.channel(), ev.mask(), ev.setBy(), ev.setAtEpochSeconds());
+      }
+      case IrcEvent.ChannelBanListEnded ev -> {
+        ui.endChannelBanList(sid, ev.channel(), ev.summary());
       }
       case cafe.woden.ircclient.irc.IrcEvent.ServerResponseLine ev -> {
         handleServerResponseLine(sid, status, ev);
@@ -1309,8 +1319,8 @@ public class IrcMediator implements MediatorControlPort {
                       "Invite" + (channel.isBlank() ? "" : " to " + channel),
                       finalRendered);
               boolean inviteRulesEnabled =
-                  ircEventNotificationService != null
-                      && ircEventNotificationService.hasEnabledRuleFor(
+                  ircEventNotifierPort != null
+                      && ircEventNotifierPort.hasEnabledRuleFor(
                           IrcEventNotificationRule.EventType.INVITE_RECEIVED);
               if (!customInviteNotified && !inviteRulesEnabled) {
                 try {
@@ -1790,7 +1800,7 @@ public class IrcMediator implements MediatorControlPort {
 
     List<NotificationRuleMatch> matches;
     try {
-      matches = notificationRuleMatcher.matchAll(text);
+      matches = notificationRuleMatcherPort.matchAll(text);
     } catch (Exception ignored) {
       return null;
     }
@@ -1806,7 +1816,7 @@ public class IrcMediator implements MediatorControlPort {
       String sourceNick,
       String title,
       String body) {
-    if (eventType == null || ircEventNotificationService == null) return false;
+    if (eventType == null || ircEventNotifierPort == null) return false;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
 
@@ -1816,7 +1826,7 @@ public class IrcMediator implements MediatorControlPort {
     String activeSid = active != null ? active.serverId() : null;
     String activeTgt = active != null ? active.target() : null;
     try {
-      return ircEventNotificationService.notifyConfigured(
+      return ircEventNotifierPort.notifyConfigured(
           eventType, sid, channel, src, sourceIsSelf, title, body, activeSid, activeTgt);
     } catch (Exception ignored) {
       return false;
@@ -2160,12 +2170,12 @@ public class IrcMediator implements MediatorControlPort {
       String fromHostmask,
       String text,
       InterceptorEventType eventType) {
-    if (interceptorStore == null) return;
+    if (interceptorIngestPort == null) return;
     String sid = Objects.toString(serverId, "").trim();
     String from = Objects.toString(fromNick, "").trim();
     if (sid.isEmpty() || from.isEmpty()) return;
     if (isFromSelf(sid, from)) return;
-    interceptorStore.ingestEvent(
+    interceptorIngestPort.ingestEvent(
         sid,
         channel,
         from,
@@ -2407,7 +2417,7 @@ public class IrcMediator implements MediatorControlPort {
     updateServerMetadataFromServerResponseLine(sid, ev);
     boolean suppressStatusLine =
         (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
-    if (ev.code() == 303 && monitorIsonFallbackService.shouldSuppressIsonServerResponse(sid)) {
+    if (ev.code() == 303 && monitorFallbackPort.shouldSuppressIsonServerResponse(sid)) {
       suppressStatusLine = true;
     }
     if (ev.code() == 321) {

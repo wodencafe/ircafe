@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,6 +88,28 @@ class TargetCoordinatorChannelDetachPolicyTest {
     verify(ui).closeTarget(chan);
     verify(irc, never()).partChannel(eq("libera"), eq("#ircafe"), isNull());
     verify(irc, never()).partChannel("libera", "#ircafe");
+  }
+
+  @Test
+  void closeChannelDoesNotReopenAsDetachedOnSubsequentMembershipLoss() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(ui.isChannelDetached(chan)).thenReturn(false);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
+
+    coordinator.closeChannel(chan);
+    clearInvocations(ui);
+
+    coordinator.onChannelMembershipLost("libera", "#ircafe", true);
+
+    verify(ui, never()).setChannelDetached(chan, true);
+    verify(ui, never()).ensureTargetExists(chan);
   }
 
   @Test

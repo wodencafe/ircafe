@@ -5,11 +5,11 @@ import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
-import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
@@ -148,6 +148,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   public static final String PROP_INTERCEPTORS_NODES_VISIBLE = "interceptorsNodesVisible";
   public static final String PROP_APPLICATION_ROOT_VISIBLE = "applicationRootVisible";
 
+  public enum ChannelSortMode {
+    ALPHABETICAL,
+    CUSTOM
+  }
+
+  public record ManagedChannelEntry(
+      String channel, boolean detached, boolean autoReattach, int notifications) {}
+
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
 
@@ -177,6 +185,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final FlowableProcessor<TargetRef> closeChannelRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<String> managedChannelsChangedByServer =
+      PublishProcessor.<String>create().toSerialized();
 
   private final FlowableProcessor<TargetRef> clearLogRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
@@ -256,6 +267,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final Map<String, ServerNodes> servers = new HashMap<>();
   private final Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
   private final Map<TargetRef, Boolean> privateMessageOnlineByTarget = new HashMap<>();
+  private final Map<String, ChannelSortMode> channelSortModeByServer = new HashMap<>();
+  private final Map<String, ArrayList<String>> channelCustomOrderByServer = new HashMap<>();
+  private final Map<String, Map<String, Boolean>> channelAutoReattachByServer = new HashMap<>();
 
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
   private final Map<String, Boolean> serverDesiredOnline = new HashMap<>();
@@ -296,7 +310,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private PropertyChangeListener settingsListener;
   private PropertyChangeListener jfrStateListener;
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
-  private volatile boolean showChannelListNodes = false;
+  private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private volatile ServerBuiltInNodesVisibility defaultBuiltInNodesVisibility =
       ServerBuiltInNodesVisibility.defaults();
@@ -432,7 +446,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new TreeNodeActions<>(
             tree,
             model,
-            new ServerTreeNodeReorderPolicy(this::isServerNode),
+            new ServerTreeNodeReorderPolicy(this::isServerNode, this::isChannelListLeafNode),
             n -> {
               Object uo = n.getUserObject();
               if (uo instanceof NodeData nd) return nd.ref;
@@ -447,6 +461,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 return;
               }
               closeTargetRequests.onNext(ref);
+            },
+            movedNode -> {
+              if (movedNode == null) return;
+              Object uo = movedNode.getUserObject();
+              if (!(uo instanceof NodeData nd) || nd.ref == null || !nd.ref.isChannel()) return;
+              DefaultMutableTreeNode parent = (DefaultMutableTreeNode) movedNode.getParent();
+              if (!isChannelListLeafNode(parent)) return;
+              String sid = owningServerIdForNode(parent);
+              if (channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM)
+                  == ChannelSortMode.CUSTOM) {
+                persistCustomOrderFromTree(sid);
+              }
             });
     installTreeKeyBindings();
 
@@ -800,6 +826,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             TreePath moved = new TreePath(dragNode.getPath());
             tree.scrollPathToVisible(moved);
             nodeActions.refreshEnabledState();
+            if (isChannelListLeafNode(dragParent)) {
+              String sid = owningServerIdForNode(dragParent);
+              if (channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM)
+                  == ChannelSortMode.CUSTOM) {
+                persistCustomOrderFromTree(sid);
+              }
+            }
           }
         };
 
@@ -1461,6 +1494,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               detach.addActionListener(ev -> detachChannelRequests.onNext(nd.ref));
               menu.add(detach);
             }
+            JCheckBoxMenuItem autoReattach = new JCheckBoxMenuItem("Auto-reattach on startup");
+            autoReattach.setSelected(isChannelAutoReattach(nd.ref));
+            autoReattach.addActionListener(
+                ev -> setChannelAutoReattach(nd.ref, autoReattach.isSelected()));
+            menu.add(autoReattach);
             JMenuItem closeChannel = new JMenuItem("Close Channel \"" + nd.label + "\"");
             closeChannel.addActionListener(ev -> closeChannelRequests.onNext(nd.ref));
             menu.add(closeChannel);
@@ -1726,15 +1764,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!(uo instanceof NodeData nd)) return false;
     if (nd.ref == null || !nd.ref.isChannel()) return false;
     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
-    return parent != null && isServerNode(parent);
+    return parent != null && (isServerNode(parent) || isChannelListLeafNode(parent));
   }
 
-  private int minInsertIndex(DefaultMutableTreeNode serverNode) {
-    if (serverNode == null) return 0;
+  private int minInsertIndex(DefaultMutableTreeNode parentNode) {
+    if (parentNode == null) return 0;
+    if (isChannelListLeafNode(parentNode)) return 0;
+
     int min = 0;
-    int count = serverNode.getChildCount();
+    int count = parentNode.getChildCount();
     while (min < count) {
-      DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNode.getChildAt(min);
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) parentNode.getChildAt(min);
       Object uo = child.getUserObject();
       if (uo instanceof NodeData nd) {
         if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) {
@@ -1750,11 +1790,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return min;
   }
 
-  private int maxInsertIndex(DefaultMutableTreeNode serverNode) {
-    if (serverNode == null) return 0;
-    int idx = serverNode.getChildCount();
+  private int maxInsertIndex(DefaultMutableTreeNode parentNode) {
+    if (parentNode == null) return 0;
+    if (isChannelListLeafNode(parentNode)) return parentNode.getChildCount();
+
+    int idx = parentNode.getChildCount();
     while (idx > 0) {
-      DefaultMutableTreeNode tail = (DefaultMutableTreeNode) serverNode.getChildAt(idx - 1);
+      DefaultMutableTreeNode tail = (DefaultMutableTreeNode) parentNode.getChildAt(idx - 1);
       if (isReservedServerTailNode(tail)) {
         idx--;
         continue;
@@ -1854,6 +1896,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return label.equalsIgnoreCase("Private messages") || label.equalsIgnoreCase("Private Messages");
   }
 
+  private boolean isChannelListLeafNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd)) return false;
+    return nd.ref != null && nd.ref.isChannelList();
+  }
+
   private boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
     if (node == null) return false;
     Object uo = node.getUserObject();
@@ -1948,6 +1997,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return closeChannelRequests.onBackpressureLatest();
   }
 
+  public Flowable<String> managedChannelsChangedByServer() {
+    return managedChannelsChangedByServer.onBackpressureLatest();
+  }
+
   public Flowable<TargetRef> clearLogRequests() {
     return clearLogRequests.onBackpressureLatest();
   }
@@ -1997,6 +2050,110 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     ArrayList<String> out = new ArrayList<>(byKey.values());
     out.sort(String.CASE_INSENSITIVE_ORDER);
     return List.copyOf(out);
+  }
+
+  public List<ManagedChannelEntry> managedChannelsForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return List.of();
+    if (SwingUtilities.isEventDispatchThread()) {
+      return snapshotManagedChannelsForServer(sid);
+    }
+
+    AtomicReference<List<ManagedChannelEntry>> out = new AtomicReference<>(List.of());
+    try {
+      SwingUtilities.invokeAndWait(() -> out.set(snapshotManagedChannelsForServer(sid)));
+      return out.get();
+    } catch (Exception ex) {
+      log.debug("[ircafe] managed channel snapshot failed for server={}", sid, ex);
+      return List.of();
+    }
+  }
+
+  public ChannelSortMode channelSortModeForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return ChannelSortMode.CUSTOM;
+    if (SwingUtilities.isEventDispatchThread()) {
+      return channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM);
+    }
+
+    AtomicReference<ChannelSortMode> out = new AtomicReference<>(ChannelSortMode.CUSTOM);
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> out.set(channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM)));
+      return out.get();
+    } catch (Exception ex) {
+      log.debug("[ircafe] channel sort mode snapshot failed for server={}", sid, ex);
+      return ChannelSortMode.CUSTOM;
+    }
+  }
+
+  public void setChannelSortModeForServer(String serverId, ChannelSortMode mode) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ChannelSortMode next = mode == null ? ChannelSortMode.CUSTOM : mode;
+
+    Runnable apply =
+        () -> {
+          ChannelSortMode prev = channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM);
+          if (prev == next) return;
+          channelSortModeByServer.put(sid, next);
+          if (runtimeConfig != null) {
+            runtimeConfig.rememberServerTreeChannelSortMode(
+                sid,
+                next == ChannelSortMode.ALPHABETICAL
+                    ? RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL
+                    : RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM);
+          }
+          sortChannelsUnderChannelList(sid);
+          emitManagedChannelsChanged(sid);
+        };
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      apply.run();
+    } else {
+      SwingUtilities.invokeLater(apply);
+    }
+  }
+
+  public void setChannelCustomOrderForServer(String serverId, List<String> channels) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    List<String> requested = channels == null ? List.of() : List.copyOf(channels);
+
+    Runnable apply =
+        () -> {
+          ArrayList<String> normalized = normalizeCustomOrderList(requested);
+          channelCustomOrderByServer.put(sid, normalized);
+          if (runtimeConfig != null) {
+            runtimeConfig.rememberServerTreeChannelCustomOrder(sid, normalized);
+          }
+          if (channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM)
+              == ChannelSortMode.CUSTOM) {
+            sortChannelsUnderChannelList(sid);
+          }
+          emitManagedChannelsChanged(sid);
+        };
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      apply.run();
+    } else {
+      SwingUtilities.invokeLater(apply);
+    }
+  }
+
+  public void requestJoinChannel(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    joinChannelRequests.onNext(target);
+  }
+
+  public void requestDetachChannel(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    detachChannelRequests.onNext(target);
+  }
+
+  public void requestCloseChannel(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    closeChannelRequests.onNext(target);
   }
 
   public Action moveNodeUpAction() {
@@ -2653,7 +2810,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public boolean isChannelListNodesVisible() {
-    return showChannelListNodes;
+    return true;
   }
 
   public boolean isDccTransfersNodesVisible() {
@@ -2740,12 +2897,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setChannelListNodesVisible(boolean visible) {
+    // Channel List is always visible for each server.
+    if (!visible) return;
     boolean old = showChannelListNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showChannelListNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_CHANNEL_LIST_NODES_VISIBLE, old, next);
+    showChannelListNodes = true;
+    if (!old) {
+      syncUiLeafVisibility();
+      firePropertyChange(PROP_CHANNEL_LIST_NODES_VISIBLE, false, true);
+    }
   }
 
   public void setDccTransfersNodesVisible(boolean visible) {
@@ -3082,7 +3241,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ensureUiLeafVisible(sn, sn.statusRef, statusLeafLabelForServer(sid), vis.server());
       ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", vis.notifications());
       ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
-      ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, showChannelListNodes);
+      ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, true);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
       ensureMonitorGroupVisible(sn, vis.monitor());
       ensureInterceptorsGroupVisible(sn, vis.interceptors());
@@ -3096,8 +3255,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       } else if (selected.isNotifications() && !vis.notifications()) {
         selectBestFallbackForServer(sid);
       } else if (selected.isLogViewer() && !vis.logViewer()) {
-        selectBestFallbackForServer(sid);
-      } else if (selected.isChannelList() && !showChannelListNodes) {
         selectBestFallbackForServer(sid);
       } else if (selected.isDccTransfers() && !showDccTransfersNodes) {
         selectBestFallbackForServer(sid);
@@ -3136,6 +3293,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
     if (vis.logViewer() && leaves.containsKey(sn.logViewerRef)) {
       selectTarget(sn.logViewerRef);
+      return;
+    }
+    if (leaves.containsKey(sn.channelListRef)) {
+      selectTarget(sn.channelListRef);
       return;
     }
     if (vis.monitor() && sn.monitorNode != null && sn.monitorNode.getParent() == sn.serverNode) {
@@ -3301,9 +3462,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
       return;
     }
-    if (ref.isChannelList() && !showChannelListNodes) {
-      setChannelListNodesVisible(true);
-    }
     if (ref.isDccTransfers() && !showDccTransfersNodes) {
       setDccTransfersNodesVisible(true);
     }
@@ -3350,7 +3508,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     } else if (ref.isLogViewer()) {
       parent = sn.serverNode;
     } else if (ref.isChannel()) {
-      parent = sn.serverNode;
+      DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
+      if (channelListNode == null) {
+        DefaultMutableTreeNode channelListLeaf =
+            new DefaultMutableTreeNode(new NodeData(sn.channelListRef, CHANNEL_LIST_LABEL));
+        int channelListIdx = fixedLeafInsertIndexFor(sn, sn.channelListRef);
+        sn.serverNode.insert(channelListLeaf, channelListIdx);
+        leaves.put(sn.channelListRef, channelListLeaf);
+        model.nodesWereInserted(sn.serverNode, new int[] {channelListIdx});
+        channelListNode = channelListLeaf;
+      }
+      parent = channelListNode;
     } else {
       parent = sn.pmNode;
     }
@@ -3380,26 +3548,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
     }
     int idx;
-    if (ref.isInterceptor() && parent == sn.interceptorsNode) {
-      idx = parent.getChildCount();
-    } else if (ref.isChannel() && parent == sn.serverNode) {
-      int beforePm = sn.serverNode.getChildCount();
-      while (beforePm > 0) {
-        DefaultMutableTreeNode last =
-            (DefaultMutableTreeNode) sn.serverNode.getChildAt(beforePm - 1);
-        if (isReservedServerTailNode(last)) {
-          beforePm--;
-          continue;
-        }
-        break;
-      }
-      idx = Math.max(minInsertIndex(sn.serverNode), beforePm);
-    } else {
-      idx = parent.getChildCount();
-    }
+    idx = parent.getChildCount();
     parent.insert(leaf, idx);
 
     model.nodesWereInserted(parent, new int[] {idx});
+    if (ref.isChannel()) {
+      String sid = normalizeServerId(ref.serverId());
+      ensureChannelKnownInConfig(ref);
+      sortChannelsUnderChannelList(sid);
+      emitManagedChannelsChanged(sid);
+    }
     tree.expandPath(new TreePath(parent.getPath()));
   }
 
@@ -3450,6 +3608,21 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         runtimeConfig.forgetPrivateMessageTarget(ref.serverId(), ref.target());
       }
     }
+    if (ref.isChannel()) {
+      String sid = normalizeServerId(ref.serverId());
+      String key = foldChannelKey(ref.target());
+      if (!sid.isEmpty() && !key.isEmpty()) {
+        Map<String, Boolean> autoByChannel = channelAutoReattachByServer.get(sid);
+        if (autoByChannel != null) {
+          autoByChannel.remove(key);
+        }
+        ArrayList<String> customOrder = channelCustomOrderByServer.get(sid);
+        if (customOrder != null) {
+          customOrder.removeIf(c -> foldChannelKey(c).equals(key));
+        }
+        emitManagedChannelsChanged(sid);
+      }
+    }
 
     boolean removedAny = false;
     for (DefaultMutableTreeNode node : nodesToRemove) {
@@ -3479,7 +3652,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!(uo instanceof NodeData nd)) return;
     if (nd.detached == detached) return;
     nd.detached = detached;
+    if (detached) {
+      nd.clearTypingActivityNow();
+      typingActivityNodes.remove(node);
+      if (typingActivityNodes.isEmpty()) {
+        typingActivityTimer.stop();
+      }
+    }
     model.nodeChanged(node);
+    emitManagedChannelsChanged(ref.serverId());
   }
 
   public boolean isChannelDetached(TargetRef ref) {
@@ -3489,6 +3670,293 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     Object uo = node.getUserObject();
     if (!(uo instanceof NodeData nd)) return false;
     return nd.detached;
+  }
+
+  public boolean isChannelAutoReattach(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return true;
+    String sid = normalizeServerId(ref.serverId());
+    String key = foldChannelKey(ref.target());
+    if (sid.isEmpty() || key.isEmpty()) return true;
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      return channelAutoReattachByServer
+          .getOrDefault(sid, Map.of())
+          .getOrDefault(key, Boolean.TRUE);
+    }
+
+    AtomicReference<Boolean> out = new AtomicReference<>(Boolean.TRUE);
+    try {
+      SwingUtilities.invokeAndWait(
+          () ->
+              out.set(
+                  channelAutoReattachByServer
+                      .getOrDefault(sid, Map.of())
+                      .getOrDefault(key, Boolean.TRUE)));
+      return out.get();
+    } catch (Exception ex) {
+      return true;
+    }
+  }
+
+  public void setChannelAutoReattach(TargetRef ref, boolean autoReattach) {
+    if (ref == null || !ref.isChannel()) return;
+    String sid = normalizeServerId(ref.serverId());
+    String channel = Objects.toString(ref.target(), "").trim();
+    if (sid.isEmpty() || channel.isEmpty()) return;
+
+    Runnable apply =
+        () -> {
+          Map<String, Boolean> byChannel =
+              channelAutoReattachByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+          byChannel.put(foldChannelKey(channel), autoReattach);
+          if (runtimeConfig != null) {
+            runtimeConfig.rememberServerTreeChannelAutoReattach(sid, channel, autoReattach);
+          }
+          emitManagedChannelsChanged(sid);
+        };
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      apply.run();
+    } else {
+      SwingUtilities.invokeLater(apply);
+    }
+  }
+
+  private void emitManagedChannelsChanged(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    managedChannelsChangedByServer.onNext(sid);
+  }
+
+  private void ensureChannelKnownInConfig(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return;
+    String sid = normalizeServerId(ref.serverId());
+    String channel = Objects.toString(ref.target(), "").trim();
+    if (sid.isEmpty() || channel.isEmpty()) return;
+
+    Map<String, Boolean> autoByChannel =
+        channelAutoReattachByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    String key = foldChannelKey(channel);
+    boolean known = autoByChannel.containsKey(key);
+    if (!known) {
+      boolean autoReattach =
+          runtimeConfig == null
+              ? true
+              : runtimeConfig.readServerTreeChannelAutoReattach(sid, channel, true);
+      autoByChannel.put(key, autoReattach);
+      if (runtimeConfig != null) {
+        runtimeConfig.rememberServerTreeChannel(sid, channel);
+      }
+    }
+
+    ArrayList<String> customOrder =
+        channelCustomOrderByServer.computeIfAbsent(sid, __ -> new ArrayList<>());
+    if (!containsIgnoreCase(customOrder, channel)) {
+      customOrder.add(channel);
+      if (runtimeConfig != null) {
+        runtimeConfig.rememberServerTreeChannelCustomOrder(sid, customOrder);
+      }
+    }
+  }
+
+  private List<ManagedChannelEntry> snapshotManagedChannelsForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return List.of();
+    ServerNodes sn = servers.get(sid);
+    if (sn == null) return List.of();
+    DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
+    if (channelListNode == null) return List.of();
+
+    Map<String, Boolean> autoByChannel = channelAutoReattachByServer.getOrDefault(sid, Map.of());
+    ArrayList<ManagedChannelEntry> out = new ArrayList<>();
+
+    for (int i = 0; i < channelListNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
+      Object uo = child.getUserObject();
+      if (!(uo instanceof NodeData nd)) continue;
+      if (nd.ref == null || !nd.ref.isChannel()) continue;
+      String channel = Objects.toString(nd.ref.target(), "").trim();
+      if (channel.isEmpty()) continue;
+      boolean autoReattach = autoByChannel.getOrDefault(foldChannelKey(channel), Boolean.TRUE);
+      int notifications = Math.max(0, nd.unread) + Math.max(0, nd.highlightUnread);
+      out.add(new ManagedChannelEntry(channel, nd.detached, autoReattach, notifications));
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private ArrayList<String> normalizeCustomOrderList(List<String> channels) {
+    ArrayList<String> out = new ArrayList<>();
+    if (channels == null || channels.isEmpty()) return out;
+    for (String channel : channels) {
+      String c = Objects.toString(channel, "").trim();
+      if (!(c.startsWith("#") || c.startsWith("&"))) continue;
+      if (containsIgnoreCase(out, c)) continue;
+      out.add(c);
+    }
+    return out;
+  }
+
+  private void sortChannelsUnderChannelList(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null) return;
+    DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
+    if (channelListNode == null) return;
+
+    ArrayList<DefaultMutableTreeNode> channelNodes = new ArrayList<>();
+    for (int i = 0; i < channelListNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
+      Object uo = child.getUserObject();
+      if (!(uo instanceof NodeData nd) || nd.ref == null || !nd.ref.isChannel()) continue;
+      channelNodes.add(child);
+    }
+    if (channelNodes.size() <= 1) {
+      if (channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM)
+          == ChannelSortMode.CUSTOM) {
+        persistCustomOrderFromTree(sid);
+      }
+      return;
+    }
+
+    ChannelSortMode sortMode = channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM);
+
+    ArrayList<DefaultMutableTreeNode> sorted = new ArrayList<>(channelNodes);
+    if (sortMode == ChannelSortMode.ALPHABETICAL) {
+      sorted.sort(
+          (a, b) -> {
+            String ac = channelLabelForNode(a);
+            String bc = channelLabelForNode(b);
+            int cmp = ac.compareToIgnoreCase(bc);
+            if (cmp != 0) return cmp;
+            return ac.compareTo(bc);
+          });
+    } else {
+      ArrayList<String> customOrder =
+          channelCustomOrderByServer.getOrDefault(sid, new ArrayList<>());
+      Map<String, Integer> byKey = new HashMap<>();
+      for (int i = 0; i < customOrder.size(); i++) {
+        String c = Objects.toString(customOrder.get(i), "").trim();
+        if (c.isEmpty()) continue;
+        byKey.putIfAbsent(foldChannelKey(c), i);
+      }
+      sorted.sort(
+          (a, b) -> {
+            String ac = channelLabelForNode(a);
+            String bc = channelLabelForNode(b);
+            int ai = byKey.getOrDefault(foldChannelKey(ac), Integer.MAX_VALUE);
+            int bi = byKey.getOrDefault(foldChannelKey(bc), Integer.MAX_VALUE);
+            if (ai != bi) return Integer.compare(ai, bi);
+            int cmp = ac.compareToIgnoreCase(bc);
+            if (cmp != 0) return cmp;
+            return ac.compareTo(bc);
+          });
+    }
+
+    boolean changed = false;
+    for (int i = 0; i < channelNodes.size(); i++) {
+      if (channelNodes.get(i) != sorted.get(i)) {
+        changed = true;
+        break;
+      }
+    }
+
+    if (changed) {
+      Set<TreePath> expanded = snapshotExpandedTreePaths();
+      for (DefaultMutableTreeNode node : channelNodes) {
+        model.removeNodeFromParent(node);
+      }
+      for (int i = 0; i < sorted.size(); i++) {
+        model.insertNodeInto(sorted.get(i), channelListNode, i);
+      }
+      restoreExpandedTreePaths(expanded);
+    }
+
+    if (sortMode == ChannelSortMode.CUSTOM) {
+      persistCustomOrderFromTree(sid);
+    }
+  }
+
+  private String channelLabelForNode(DefaultMutableTreeNode node) {
+    if (node == null) return "";
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd) || nd.ref == null) return "";
+    return Objects.toString(nd.ref.target(), "").trim();
+  }
+
+  private void persistCustomOrderFromTree(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null) return;
+    DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
+    if (channelListNode == null) return;
+
+    ArrayList<String> customOrder = new ArrayList<>();
+    for (int i = 0; i < channelListNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
+      Object uo = child.getUserObject();
+      if (!(uo instanceof NodeData nd)) continue;
+      if (nd.ref == null || !nd.ref.isChannel()) continue;
+      String channel = Objects.toString(nd.ref.target(), "").trim();
+      if (channel.isEmpty()) continue;
+      if (containsIgnoreCase(customOrder, channel)) continue;
+      customOrder.add(channel);
+    }
+    channelCustomOrderByServer.put(sid, customOrder);
+    if (runtimeConfig != null) {
+      runtimeConfig.rememberServerTreeChannelCustomOrder(sid, customOrder);
+    }
+  }
+
+  private void loadChannelStateForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    ChannelSortMode sortMode = ChannelSortMode.CUSTOM;
+    ArrayList<String> customOrder = new ArrayList<>();
+    Map<String, Boolean> autoByChannel = new HashMap<>();
+
+    if (runtimeConfig != null) {
+      RuntimeConfigStore.ServerTreeChannelState state =
+          runtimeConfig.readServerTreeChannelState(sid);
+      if (state != null && state.sortMode() != null) {
+        sortMode =
+            state.sortMode() == RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL
+                ? ChannelSortMode.ALPHABETICAL
+                : ChannelSortMode.CUSTOM;
+      }
+      if (state != null && state.customOrder() != null) {
+        customOrder.addAll(normalizeCustomOrderList(state.customOrder()));
+      }
+      if (state != null && state.channels() != null) {
+        for (RuntimeConfigStore.ServerTreeChannelPreference pref : state.channels()) {
+          if (pref == null) continue;
+          String channel = Objects.toString(pref.channel(), "").trim();
+          if (channel.isEmpty()) continue;
+          autoByChannel.put(foldChannelKey(channel), pref.autoReattach());
+        }
+      }
+    }
+
+    channelSortModeByServer.put(sid, sortMode);
+    channelCustomOrderByServer.put(sid, customOrder);
+    channelAutoReattachByServer.put(sid, autoByChannel);
+  }
+
+  private static String foldChannelKey(String channel) {
+    return Objects.toString(channel, "").trim().toLowerCase(java.util.Locale.ROOT);
+  }
+
+  private static boolean containsIgnoreCase(List<String> values, String needle) {
+    if (values == null || values.isEmpty()) return false;
+    String n = Objects.toString(needle, "").trim();
+    if (n.isEmpty()) return false;
+    for (String value : values) {
+      if (value == null) continue;
+      if (value.equalsIgnoreCase(n)) return true;
+    }
+    return false;
   }
 
   private java.util.List<DefaultMutableTreeNode> findTreeNodesByTarget(TargetRef ref) {
@@ -3514,6 +3982,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!(node.getUserObject() instanceof NodeData nd)) return;
     nd.unread++;
     model.nodeChanged(node);
+    if (ref != null && ref.isChannel()) {
+      emitManagedChannelsChanged(ref.serverId());
+    }
   }
 
   public void markHighlight(TargetRef ref) {
@@ -3522,6 +3993,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!(node.getUserObject() instanceof NodeData nd)) return;
     nd.highlightUnread++;
     model.nodeChanged(node);
+    if (ref != null && ref.isChannel()) {
+      emitManagedChannelsChanged(ref.serverId());
+    }
   }
 
   public void clearUnread(TargetRef ref) {
@@ -3532,6 +4006,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     nd.unread = 0;
     nd.highlightUnread = 0;
     model.nodeChanged(node);
+    if (ref != null && ref.isChannel()) {
+      emitManagedChannelsChanged(ref.serverId());
+    }
   }
 
   public void markTypingActivity(TargetRef ref, String state) {
@@ -3539,6 +4016,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof NodeData nd)) return;
+
+    if (nd.detached) {
+      boolean changed = nd.clearTypingActivityNow();
+      typingActivityNodes.remove(node);
+      if (typingActivityNodes.isEmpty()) {
+        typingActivityTimer.stop();
+      }
+      if (changed) {
+        repaintTreeNode(node);
+      }
+      return;
+    }
 
     long now = System.currentTimeMillis();
     boolean changed = nd.applyTypingState(state, now, TYPING_ACTIVITY_HOLD_MS);
@@ -3724,7 +4213,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
     }
 
+    Set<TreePath> expandedBeforeReload = snapshotExpandedTreePaths();
     model.reload(root);
+    restoreExpandedTreePaths(expandedBeforeReload);
     SwingUtilities.invokeLater(
         () -> {
           TreePath sel = tree.getSelectionPath();
@@ -4053,6 +4544,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     serverLastError.remove(serverId);
     serverNextRetryAtEpochMs.remove(serverId);
     serverRuntimeMetadata.remove(serverId);
+    channelSortModeByServer.remove(serverId);
+    channelCustomOrderByServer.remove(serverId);
+    channelAutoReattachByServer.remove(serverId);
     clearPrivateMessageOnlineStates(serverId);
     leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
     typingActivityNodes.removeIf(
@@ -4090,6 +4584,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (id.isEmpty()) id = "(server)";
     if (servers.containsKey(id)) return servers.get(id);
     serverStates.putIfAbsent(id, ConnectionState.DISCONNECTED);
+    loadChannelStateForServer(id);
 
     DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(id);
     DefaultMutableTreeNode pmNode = new DefaultMutableTreeNode("Private messages");
@@ -4154,12 +4649,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     TargetRef channelListRef = TargetRef.channelList(id);
-    if (showChannelListNodes) {
-      DefaultMutableTreeNode channelListLeaf =
-          new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
-      serverNode.insert(channelListLeaf, nextUiLeafIndex++);
-      leaves.put(channelListRef, channelListLeaf);
-    }
+    DefaultMutableTreeNode channelListLeaf =
+        new DefaultMutableTreeNode(new NodeData(channelListRef, CHANNEL_LIST_LABEL));
+    serverNode.insert(channelListLeaf, nextUiLeafIndex++);
+    leaves.put(channelListRef, channelListLeaf);
 
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
@@ -4781,6 +5274,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     boolean hasTypingActivity() {
       return typingPulseUntilMs > 0L || typingDoneFadeStartMs > 0L;
+    }
+
+    boolean clearTypingActivityNow() {
+      long prevPulse = typingPulseUntilMs;
+      long prevFade = typingDoneFadeStartMs;
+      typingPulseUntilMs = 0L;
+      typingDoneFadeStartMs = 0L;
+      return prevPulse != typingPulseUntilMs || prevFade != typingDoneFadeStartMs;
     }
 
     boolean applyTypingState(String state, long now, int holdMs) {
