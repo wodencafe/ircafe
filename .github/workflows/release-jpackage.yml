@@ -221,7 +221,8 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak remotes --user
           flatpak --version
           flatpak-builder --version
 
@@ -230,6 +231,7 @@ jobs:
         run: |
           set -euo pipefail
           flatpak-builder \
+            --user \
             --force-clean \
             --repo=build/flatpak/repo \
             --default-branch=stable \
