@@ -16,15 +16,15 @@ import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
+import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
+import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
-import cafe.woden.ircclient.ui.chat.NickColorService;
-import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
-import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Field;
@@ -114,19 +114,17 @@ class PreferencesDialogFunctionalTest {
     IllegalArgumentException ex =
         assertThrows(
             IllegalArgumentException.class,
-            () ->
-                PreferencesDialog.normalizeOptionalHexForApply(
-                    "#12GG34", "User message color"));
+            () -> PreferencesDialog.normalizeOptionalHexForApply("#12GG34", "User message color"));
     assertEquals(
         "User message color must be a hex value like #RRGGBB (or blank for default).",
         ex.getMessage());
     assertNull(PreferencesDialog.normalizeOptionalHexForApply("   ", "User message color"));
     assertEquals(
-        "#AABBCC",
-        PreferencesDialog.normalizeOptionalHexForApply("#abc", "User message color"));
+        "#AABBCC", PreferencesDialog.normalizeOptionalHexForApply("#abc", "User message color"));
   }
 
-  private static AppearanceFixture buildAppearanceFixture(ChatThemeSettings chatTheme) throws Exception {
+  private static AppearanceFixture buildAppearanceFixture(ChatThemeSettings chatTheme)
+      throws Exception {
     PreferencesDialog dialog = newPreferencesDialog();
     UiSettings current = testUiSettings();
     List<AutoCloseable> closeables = new ArrayList<>();
@@ -220,7 +218,8 @@ class PreferencesDialogFunctionalTest {
         5);
   }
 
-  private static JTextField chatThemeHex(Object chatThemeControls, String fieldName) throws Exception {
+  private static JTextField chatThemeHex(Object chatThemeControls, String fieldName)
+      throws Exception {
     Object colorField = readField(chatThemeControls, fieldName);
     return (JTextField) readField(colorField, "hex");
   }

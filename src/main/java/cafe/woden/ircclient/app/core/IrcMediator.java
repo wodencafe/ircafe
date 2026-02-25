@@ -393,11 +393,7 @@ public class IrcMediator implements MediatorControlPort {
     ui.appendStatus(
         status,
         "(cap)",
-        "Requesting CAP "
-            + (enabled ? "enable" : "disable")
-            + " for "
-            + cap
-            + "...");
+        "Requesting CAP " + (enabled ? "enable" : "disable") + " for " + cap + "...");
     disposables.add(
         irc.setIrcv3CapabilityEnabled(sid, cap, enabled)
             .subscribe(() -> {}, err -> ui.appendError(status, "(cap)", String.valueOf(err))));

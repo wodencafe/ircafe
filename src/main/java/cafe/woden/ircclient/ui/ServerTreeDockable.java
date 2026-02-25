@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.JfrRuntimeEventsService;
 import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.app.api.ConnectionState;
+import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.interceptors.InterceptorStore;
 import cafe.woden.ircclient.config.LogProperties;
@@ -88,8 +88,8 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
-import javax.swing.event.TreeSelectionListener;
 import javax.swing.event.TableModelEvent;
+import javax.swing.event.TreeSelectionListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -2368,7 +2368,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     TreeMap<String, CapabilityState> sortedObserved = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     sortedObserved.putAll(meta.ircv3Caps);
-    java.util.TreeSet<String> allCapabilities = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    java.util.TreeSet<String> allCapabilities =
+        new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     allCapabilities.addAll(sortedObserved.keySet());
     for (String cap : PircbotxBotFactory.requestableCapabilities()) {
       String normalized = Objects.toString(cap, "").trim().toLowerCase(java.util.Locale.ROOT);

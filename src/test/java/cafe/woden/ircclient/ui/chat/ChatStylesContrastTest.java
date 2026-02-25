@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.chat;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
 import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;

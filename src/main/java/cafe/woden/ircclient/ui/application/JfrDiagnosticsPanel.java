@@ -105,8 +105,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
     title.setBorder(BorderFactory.createEmptyBorder(8, 10, 2, 10));
     title.setFont(title.getFont().deriveFont(Font.BOLD));
     JLabel subtitle =
-        new JLabel(
-            "Status gauges (CPU / heap / GC rate) + runtime JFR event table controls.");
+        new JLabel("Status gauges (CPU / heap / GC rate) + runtime JFR event table controls.");
     subtitle.setBorder(BorderFactory.createEmptyBorder(0, 10, 8, 10));
     JPanel header = new JPanel(new BorderLayout());
     header.add(title, BorderLayout.NORTH);
@@ -185,8 +184,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
             });
 
     JPanel controls =
-        new JPanel(
-            new MigLayout("insets 0, fillx, wrap 5", "[]4[]4[]4[]push[]", "[]"));
+        new JPanel(new MigLayout("insets 0, fillx, wrap 5", "[]4[]4[]4[]push[]", "[]"));
     controls.add(refreshButton);
     controls.add(detailsButton);
     controls.add(clearSelectedRowButton);
@@ -207,10 +205,12 @@ public final class JfrDiagnosticsPanel extends JPanel {
         "refresh",
         "Request an immediate runtime sample and refresh rows",
         "Refresh events");
-    configureEventActionButton(detailsButton, "eye", "Show details for the selected row", "Row details");
+    configureEventActionButton(
+        detailsButton, "eye", "Show details for the selected row", "Row details");
     configureEventActionButton(
         clearSelectedRowButton, "close", "Remove the selected event row", "Remove selected row");
-    configureEventActionButton(clearAllRowsButton, "trash", "Clear all event rows", "Clear all rows");
+    configureEventActionButton(
+        clearAllRowsButton, "trash", "Clear all event rows", "Clear all rows");
   }
 
   private void configureEventActionButton(
@@ -226,7 +226,8 @@ public final class JfrDiagnosticsPanel extends JPanel {
   }
 
   private JPanel buildCpuSummaryPanel() {
-    JPanel panel = new JPanel(new MigLayout("insets 6, fillx, wrap 2", "[right]8[grow,fill]", "[]4[]4[]4[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 6, fillx, wrap 2", "[right]8[grow,fill]", "[]4[]4[]4[]"));
     panel.setBorder(BorderFactory.createTitledBorder("CPU"));
     panel.setOpaque(false);
     addSummaryField(panel, "Machine", cpuMachineValue);
@@ -237,7 +238,8 @@ public final class JfrDiagnosticsPanel extends JPanel {
   }
 
   private JPanel buildHeapSummaryPanel() {
-    JPanel panel = new JPanel(new MigLayout("insets 6, fillx, wrap 2", "[right]8[grow,fill]", "[]4[]4[]4[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 6, fillx, wrap 2", "[right]8[grow,fill]", "[]4[]4[]4[]"));
     panel.setBorder(BorderFactory.createTitledBorder("Heap"));
     panel.setOpaque(false);
     addSummaryField(panel, "Used", heapUsedValue);
@@ -248,7 +250,8 @@ public final class JfrDiagnosticsPanel extends JPanel {
   }
 
   private JPanel buildGcSummaryPanel() {
-    JPanel panel = new JPanel(new MigLayout("insets 6, fillx, wrap 2", "[right]8[grow,fill]", "[]4[]4[]4[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 6, fillx, wrap 2", "[right]8[grow,fill]", "[]4[]4[]4[]"));
     panel.setBorder(BorderFactory.createTitledBorder("GC"));
     panel.setOpaque(false);
     addSummaryField(panel, "Events (2m)", gcCountValue);
@@ -302,10 +305,14 @@ public final class JfrDiagnosticsPanel extends JPanel {
 
   private void installTableInteractions() {
     JPopupMenu popup = new JPopupMenu();
-    popup.add(new javax.swing.JMenuItem("Details")).addActionListener(e -> showDetailsForSelectedRow());
-    popup.add(new javax.swing.JMenuItem("Remove Selected Row"))
+    popup
+        .add(new javax.swing.JMenuItem("Details"))
+        .addActionListener(e -> showDetailsForSelectedRow());
+    popup
+        .add(new javax.swing.JMenuItem("Remove Selected Row"))
         .addActionListener(e -> removeSelectedRow());
-    popup.add(new javax.swing.JMenuItem("Clear All Rows"))
+    popup
+        .add(new javax.swing.JMenuItem("Clear All Rows"))
         .addActionListener(
             e -> {
               if (service == null) return;
@@ -384,14 +391,16 @@ public final class JfrDiagnosticsPanel extends JPanel {
         s.cpuMachineTotalRatio() == null
             ? -1
             : Math.max(0, Math.min(100, (int) Math.round(s.cpuMachineTotalRatio() * 100.0d)));
-    cpuGauge.setGauge(cpuPercent < 0 ? "n/a" : cpuPercent + "%", cpuPercent, cpuPercent >= 90, false);
+    cpuGauge.setGauge(
+        cpuPercent < 0 ? "n/a" : cpuPercent + "%", cpuPercent, cpuPercent >= 90, false);
     cpuMachineValue.setText(JfrRuntimeEventsService.formatRatio(s.cpuMachineTotalRatio()));
     cpuJvmUserValue.setText(JfrRuntimeEventsService.formatRatio(s.cpuJvmUserRatio()));
     cpuJvmSystemValue.setText(JfrRuntimeEventsService.formatRatio(s.cpuJvmSystemRatio()));
     cpuSampleValue.setText(formatInstant(s.lastCpuSampleAt()));
 
     int heapPercent = s.runtimeHeapPercent();
-    heapGauge.setGauge(heapPercent < 0 ? "n/a" : heapPercent + "%", heapPercent, heapPercent >= 90, false);
+    heapGauge.setGauge(
+        heapPercent < 0 ? "n/a" : heapPercent + "%", heapPercent, heapPercent >= 90, false);
     heapUsedValue.setText(toGb(s.runtimeUsedBytes()));
     heapCommittedValue.setText(toGb(s.runtimeCommittedBytes()));
     heapMaxValue.setText(s.runtimeMaxBytes() > 0 ? toGb(s.runtimeMaxBytes()) : "n/a");
@@ -415,7 +424,8 @@ public final class JfrDiagnosticsPanel extends JPanel {
         pulse);
     gcCountValue.setText(Integer.toString(s.gcEventsInWindow()));
     gcRateValue.setText(
-        String.format(Locale.ROOT, "%.1f/min%s", s.gcEventsPerMinute(), s.gcAlert() ? " (alert)" : ""));
+        String.format(
+            Locale.ROOT, "%.1f/min%s", s.gcEventsPerMinute(), s.gcAlert() ? " (alert)" : ""));
     gcLastValue.setText(formatInstant(s.lastGcEventAt()));
   }
 
@@ -425,9 +435,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
     if (!rows.isEmpty()) {
       rows =
           rows.stream()
-              .filter(
-                  row ->
-                      !GC_EVENT_TYPE.equalsIgnoreCase(Objects.toString(row.type(), "")))
+              .filter(row -> !GC_EVENT_TYPE.equalsIgnoreCase(Objects.toString(row.type(), "")))
               .toList();
     }
     model.setRows(rows);
@@ -718,7 +726,9 @@ public final class JfrDiagnosticsPanel extends JPanel {
               ? bad
               : (valuePercent >= 0 && valuePercent >= 80)
                   ? warn
-                  : (valuePercent >= 0) ? ok : uiColor("Label.disabledForeground", new Color(140, 140, 140));
+                  : (valuePercent >= 0)
+                      ? ok
+                      : uiColor("Label.disabledForeground", new Color(140, 140, 140));
 
       g2.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
       g2.setColor(track);

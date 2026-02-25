@@ -125,7 +125,8 @@ class JfrDiagnosticsPanelTest {
     return type.cast(f.get(target));
   }
 
-  private static void onEdt(ThrowingRunnable r) throws InvocationTargetException, InterruptedException {
+  private static void onEdt(ThrowingRunnable r)
+      throws InvocationTargetException, InterruptedException {
     if (SwingUtilities.isEventDispatchThread()) {
       try {
         r.run();

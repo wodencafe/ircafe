@@ -54,7 +54,8 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     this.serverRegistry = serverRegistry;
     this.ircClientService = ircClientService;
     this.swingUiPort = swingUiPort;
-    this.onServerIrcEvent = IrcMediator.class.getDeclaredMethod("onServerIrcEvent", ServerIrcEvent.class);
+    this.onServerIrcEvent =
+        IrcMediator.class.getDeclaredMethod("onServerIrcEvent", ServerIrcEvent.class);
     this.onServerIrcEvent.setAccessible(true);
   }
 

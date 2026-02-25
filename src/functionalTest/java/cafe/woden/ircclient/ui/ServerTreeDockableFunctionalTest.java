@@ -198,7 +198,8 @@ class ServerTreeDockableFunctionalTest {
     if (SwingUtilities.isEventDispatchThread()) {
       return supplier.get();
     }
-    final java.util.concurrent.atomic.AtomicReference<T> out = new java.util.concurrent.atomic.AtomicReference<>();
+    final java.util.concurrent.atomic.AtomicReference<T> out =
+        new java.util.concurrent.atomic.AtomicReference<>();
     SwingUtilities.invokeAndWait(
         () -> {
           try {
@@ -219,7 +220,8 @@ class ServerTreeDockableFunctionalTest {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return null;
 
-    Method buildPopupMenu = ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
+    Method buildPopupMenu =
+        ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
     buildPopupMenu.setAccessible(true);
     return (JPopupMenu) buildPopupMenu.invoke(dockable, new TreePath(node.getPath()));
   }

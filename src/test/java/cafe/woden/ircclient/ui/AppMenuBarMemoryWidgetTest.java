@@ -142,7 +142,9 @@ class AppMenuBarMemoryWidgetTest {
   }
 
   private static void setMode(AppMenuBar menuBar, MemoryUsageDisplayMode mode) throws Exception {
-    Method m = AppMenuBar.class.getDeclaredMethod("setMemoryUsageDisplayModeFromUi", MemoryUsageDisplayMode.class);
+    Method m =
+        AppMenuBar.class.getDeclaredMethod(
+            "setMemoryUsageDisplayModeFromUi", MemoryUsageDisplayMode.class);
     m.setAccessible(true);
     m.invoke(menuBar, mode);
   }
@@ -159,7 +161,8 @@ class AppMenuBarMemoryWidgetTest {
     return field.get(menuBar);
   }
 
-  private static void onEdt(ThrowingRunnable r) throws InvocationTargetException, InterruptedException {
+  private static void onEdt(ThrowingRunnable r)
+      throws InvocationTargetException, InterruptedException {
     if (SwingUtilities.isEventDispatchThread()) {
       try {
         r.run();

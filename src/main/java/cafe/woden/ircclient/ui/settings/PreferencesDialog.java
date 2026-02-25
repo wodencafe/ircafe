@@ -473,10 +473,8 @@ public class PreferencesDialog {
           String sysHexV = parseOptionalHex.apply(chatTheme.system.hex, lastValidChatSystemHex);
           String menHexV = parseOptionalHex.apply(chatTheme.mention.hex, lastValidChatMentionHex);
           String msgHexV = parseOptionalHex.apply(chatTheme.message.hex, lastValidChatMessageHex);
-          String noticeHexV =
-              parseOptionalHex.apply(chatTheme.notice.hex, lastValidChatNoticeHex);
-          String actionHexV =
-              parseOptionalHex.apply(chatTheme.action.hex, lastValidChatActionHex);
+          String noticeHexV = parseOptionalHex.apply(chatTheme.notice.hex, lastValidChatNoticeHex);
+          String actionHexV = parseOptionalHex.apply(chatTheme.action.hex, lastValidChatActionHex);
           String errHexV = parseOptionalHex.apply(chatTheme.error.hex, lastValidChatErrorHex);
           String presenceHexV =
               parseOptionalHex.apply(chatTheme.presence.hex, lastValidChatPresenceHex);
@@ -1010,10 +1008,7 @@ public class PreferencesDialog {
                     chatTheme.presence.hex.getText(), "Presence message color");
           } catch (IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(
-                dialog,
-                ex.getMessage(),
-                "Invalid chat message color",
-                JOptionPane.ERROR_MESSAGE);
+                dialog, ex.getMessage(), "Invalid chat message color", JOptionPane.ERROR_MESSAGE);
             return;
           }
 
@@ -2634,7 +2629,16 @@ public class PreferencesDialog {
         "How strong the mention highlight is when using the preset highlight (0-100). Defaults to 35.");
 
     return new ChatThemeControls(
-        preset, timestamp, system, mention, message, notice, action, error, presence, mentionStrength);
+        preset,
+        timestamp,
+        system,
+        mention,
+        message,
+        notice,
+        action,
+        error,
+        presence,
+        mentionStrength);
   }
 
   private ColorField buildOptionalColorField(String initialHex, String pickerTitle) {

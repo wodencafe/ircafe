@@ -1,10 +1,10 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.springframework.stereotype.Component;
 

@@ -33,12 +33,12 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.FontMetrics;
 import java.awt.FlowLayout;
+import java.awt.FontMetrics;
 import java.awt.Frame;
+import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.GradientPaint;
 import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
@@ -48,8 +48,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.beans.PropertyChangeListener;
 import java.awt.geom.Arc2D;
+import java.beans.PropertyChangeListener;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -79,9 +79,9 @@ import javax.swing.PopupFactory;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
+import javax.swing.border.Border;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
-import javax.swing.border.Border;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
@@ -991,7 +991,10 @@ public class AppMenuBar extends JMenuBar {
     MemorySnapshot snapshot = readMemorySnapshot();
     Integer percentUsed =
         snapshot.maxBytes() > 0
-            ? Math.max(0, Math.min(100, (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes())))
+            ? Math.max(
+                0,
+                Math.min(
+                    100, (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes())))
             : null;
     double usageRatio =
         snapshot.maxBytes() > 0 ? snapshot.usedBytes() / (double) snapshot.maxBytes() : 0d;
@@ -1108,7 +1111,8 @@ public class AppMenuBar extends JMenuBar {
   }
 
   private void updateMemoryDialog(MemorySnapshot snapshot) {
-    if (memoryDialogGauge == null || memoryDialogDialGauge == null || memoryDialogDetails == null) return;
+    if (memoryDialogGauge == null || memoryDialogDialGauge == null || memoryDialogDetails == null)
+      return;
     if (snapshot.maxBytes() > 0) {
       int percent = (int) Math.round((snapshot.usedBytes() * 100.0d) / snapshot.maxBytes());
       percent = Math.max(0, Math.min(100, percent));
@@ -1971,7 +1975,8 @@ public class AppMenuBar extends JMenuBar {
       int pctY = (getHeight() / 2) + (pctMetrics.getAscent() / 3);
       g2.drawString(pctLabel, pctX, pctY);
 
-      String detailLabel = maxBytes > 0L ? toMib(usedBytes) + " / " + toMib(maxBytes) : toMib(usedBytes);
+      String detailLabel =
+          maxBytes > 0L ? toMib(usedBytes) + " / " + toMib(maxBytes) : toMib(usedBytes);
       g2.setFont(baseFont.deriveFont(java.awt.Font.PLAIN, Math.max(11f, size * 0.075f)));
       FontMetrics detailMetrics = g2.getFontMetrics();
       int detailX = (getWidth() - detailMetrics.stringWidth(detailLabel)) / 2;

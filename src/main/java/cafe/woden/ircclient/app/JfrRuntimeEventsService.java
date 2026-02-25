@@ -28,7 +28,8 @@ import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /**
- * Collects runtime JFR feed events for UI diagnostics, with runtime enable/disable + pause controls.
+ * Collects runtime JFR feed events for UI diagnostics, with runtime enable/disable + pause
+ * controls.
  */
 @Service
 @Lazy(false)
@@ -66,8 +67,7 @@ public class JfrRuntimeEventsService {
 
   public JfrRuntimeEventsService(RuntimeConfigStore runtimeConfigStore) {
     this.runtimeConfigStore = runtimeConfigStore;
-    this.enabled =
-        runtimeConfigStore == null || runtimeConfigStore.readApplicationJfrEnabled(true);
+    this.enabled = runtimeConfigStore == null || runtimeConfigStore.readApplicationJfrEnabled(true);
   }
 
   @PostConstruct
@@ -94,7 +94,7 @@ public class JfrRuntimeEventsService {
             "jdk.RecordingStream",
             "JFR diagnostics are disabled.",
             "Enable diagnostics from Application -> JFR to start runtime event capture.",
-          true);
+            true);
       }
     }
     captureRuntimeSample();
@@ -246,9 +246,7 @@ public class JfrRuntimeEventsService {
       long max = rt.maxMemory();
       if (max == Long.MAX_VALUE || max <= 0L) max = 0L;
       int heapPercent =
-          max > 0L
-              ? Math.max(0, Math.min(100, (int) Math.round((used * 100.0d) / max)))
-              : -1;
+          max > 0L ? Math.max(0, Math.min(100, (int) Math.round((used * 100.0d) / max))) : -1;
 
       synchronized (this) {
         if (!enabled) return;

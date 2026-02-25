@@ -18,9 +18,9 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.JComponent;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
-import javax.swing.JComponent;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -79,7 +79,8 @@ class ServerTreeDockableDetachedChannelTest {
             joinSub = dockable.joinChannelRequests().subscribe(joined::set);
 
             JMenuItem detachItem =
-                findMenuItem(Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
+                findMenuItem(
+                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
                     "Detach \"#ircafe\"");
             assertNotNull(detachItem);
             detachItem.doClick();
@@ -87,7 +88,8 @@ class ServerTreeDockableDetachedChannelTest {
 
             dockable.setChannelDetached(chan, true);
             JMenuItem joinItem =
-                findMenuItem(Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
+                findMenuItem(
+                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
                     "Join \"#ircafe\"");
             assertNotNull(joinItem);
             joinItem.doClick();

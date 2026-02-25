@@ -298,7 +298,8 @@ public interface IrcClientService {
         || cap.indexOf('\n') >= 0
         || cap.indexOf('\r') >= 0) {
       return Completable.error(
-          new IllegalArgumentException("capability contains unsupported characters: " + capability));
+          new IllegalArgumentException(
+              "capability contains unsupported characters: " + capability));
     }
     String token = enabled ? cap : ("-" + cap);
     return sendRaw(serverId, "CAP REQ :" + token);

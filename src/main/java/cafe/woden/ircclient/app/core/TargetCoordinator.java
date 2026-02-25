@@ -435,8 +435,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     disposables.add(
         irc.partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
   public void joinChannel(TargetRef target) {
@@ -522,8 +521,7 @@ public class TargetCoordinator implements ActiveTargetPort {
         disposables.add(
             irc.partChannel(sid, ch)
                 .subscribe(
-                    () -> {},
-                    err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+                    () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
       }
       if (Objects.equals(activeTarget, target)) {
         applyTargetContext(target);
@@ -593,7 +591,8 @@ public class TargetCoordinator implements ActiveTargetPort {
                   .subscribe(
                       () -> {},
                       err ->
-                          ui.appendError(safeStatusTarget(), "(names-error)", String.valueOf(err))));
+                          ui.appendError(
+                              safeStatusTarget(), "(names-error)", String.valueOf(err))));
         }
       }
     } else {

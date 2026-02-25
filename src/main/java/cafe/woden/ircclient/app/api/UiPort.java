@@ -75,7 +75,9 @@ public interface UiPort {
   /** Mark a channel target as detached/attached in the tree without removing it. */
   default void setChannelDetached(TargetRef target, boolean detached) {}
 
-  /** @return true if the channel target is currently marked detached in the tree. */
+  /**
+   * @return true if the channel target is currently marked detached in the tree.
+   */
   default boolean isChannelDetached(TargetRef target) {
     return false;
   }

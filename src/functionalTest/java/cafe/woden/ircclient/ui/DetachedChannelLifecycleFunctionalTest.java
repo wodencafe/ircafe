@@ -64,7 +64,11 @@ class DetachedChannelLifecycleFunctionalTest {
   @Test
   void detachFromContextMenuKeepsChannelVisibleAndDisablesInput() throws Exception {
     Fixture fixture = createFixture(List.of());
-    Disposable detachSub = fixture.serverTree.detachChannelRequests().subscribe(fixture.targetCoordinator::detachChannel);
+    Disposable detachSub =
+        fixture
+            .serverTree
+            .detachChannelRequests()
+            .subscribe(fixture.targetCoordinator::detachChannel);
     try {
       TargetRef channel = new TargetRef("libera", "#functional-detach");
 
@@ -75,7 +79,8 @@ class DetachedChannelLifecycleFunctionalTest {
       onEdt(
           () -> {
             JMenuItem detachItem =
-                findMenuItem(popupForTarget(fixture.serverTree, channel), "Detach \"#functional-detach\"");
+                findMenuItem(
+                    popupForTarget(fixture.serverTree, channel), "Detach \"#functional-detach\"");
             assertNotNull(detachItem);
             detachItem.doClick();
           });
@@ -83,7 +88,9 @@ class DetachedChannelLifecycleFunctionalTest {
 
       assertTrue(hasLeaf(fixture.serverTree, channel), "detached channel should remain in tree");
       assertTrue(fixture.serverTree.isChannelDetached(channel), "channel should be detached");
-      assertTrue(isRenderedItalic(fixture.serverTree, channel), "detached channel should render as detached");
+      assertTrue(
+          isRenderedItalic(fixture.serverTree, channel),
+          "detached channel should render as detached");
       assertFalse(Boolean.TRUE.equals(fixture.lastInputEnabledState()), "input should be disabled");
     } finally {
       detachSub.dispose();
@@ -94,7 +101,8 @@ class DetachedChannelLifecycleFunctionalTest {
   @Test
   void joinFromDetachedContextMenuReattachesAndEnablesInputAfterJoinAck() throws Exception {
     Fixture fixture = createFixture(List.of());
-    Disposable joinSub = fixture.serverTree.joinChannelRequests().subscribe(fixture.targetCoordinator::joinChannel);
+    Disposable joinSub =
+        fixture.serverTree.joinChannelRequests().subscribe(fixture.targetCoordinator::joinChannel);
     try {
       TargetRef channel = new TargetRef("libera", "#functional-join");
 
@@ -110,20 +118,25 @@ class DetachedChannelLifecycleFunctionalTest {
       onEdt(
           () -> {
             JMenuItem joinItem =
-                findMenuItem(popupForTarget(fixture.serverTree, channel), "Join \"#functional-join\"");
+                findMenuItem(
+                    popupForTarget(fixture.serverTree, channel), "Join \"#functional-join\"");
             assertNotNull(joinItem);
             joinItem.doClick();
           });
       flushEdt();
 
       verify(fixture.irc).joinChannel("libera", "#functional-join");
-      assertTrue(fixture.serverTree.isChannelDetached(channel), "channel stays detached until JOIN event");
+      assertTrue(
+          fixture.serverTree.isChannelDetached(channel), "channel stays detached until JOIN event");
 
       onEdt(() -> fixture.targetCoordinator.onJoinedChannel("libera", "#functional-join"));
       flushEdt();
 
-      assertFalse(fixture.serverTree.isChannelDetached(channel), "JOIN event should attach the channel");
-      assertFalse(isRenderedItalic(fixture.serverTree, channel), "attached channel should not render detached");
+      assertFalse(
+          fixture.serverTree.isChannelDetached(channel), "JOIN event should attach the channel");
+      assertFalse(
+          isRenderedItalic(fixture.serverTree, channel),
+          "attached channel should not render detached");
       onEdt(
           () ->
               assertNotNull(
@@ -154,7 +167,8 @@ class DetachedChannelLifecycleFunctionalTest {
       onEdt(
           () ->
               assertNotNull(
-                  findMenuItem(popupForTarget(fixture.serverTree, channel), "Join \"#functional-kick\"")));
+                  findMenuItem(
+                      popupForTarget(fixture.serverTree, channel), "Join \"#functional-kick\"")));
       assertFalse(
           Boolean.TRUE.equals(fixture.lastInputEnabledState()),
           "detached active channel should disable input");
@@ -170,13 +184,17 @@ class DetachedChannelLifecycleFunctionalTest {
       TargetRef channel = new TargetRef("libera", "#startup-restore");
 
       assertTrue(hasLeaf(fixture.serverTree, channel), "startup-restored channel should exist");
-      assertTrue(fixture.serverTree.isChannelDetached(channel), "startup-restored channel should start detached");
+      assertTrue(
+          fixture.serverTree.isChannelDetached(channel),
+          "startup-restored channel should start detached");
 
       fixture.markConnected();
       onEdt(() -> fixture.targetCoordinator.onTargetSelected(channel));
       flushEdt();
 
-      assertTrue(fixture.serverTree.isChannelDetached(channel), "channel should remain detached before JOIN");
+      assertTrue(
+          fixture.serverTree.isChannelDetached(channel),
+          "channel should remain detached before JOIN");
       assertFalse(
           Boolean.TRUE.equals(fixture.lastInputEnabledState()),
           "input should stay disabled while detached");
@@ -184,8 +202,11 @@ class DetachedChannelLifecycleFunctionalTest {
       onEdt(() -> fixture.targetCoordinator.onJoinedChannel("libera", "#startup-restore"));
       flushEdt();
 
-      assertFalse(fixture.serverTree.isChannelDetached(channel), "JOIN event should attach restored channel");
-      assertTrue(Boolean.TRUE.equals(fixture.lastInputEnabledState()), "input should enable after attach");
+      assertFalse(
+          fixture.serverTree.isChannelDetached(channel),
+          "JOIN event should attach restored channel");
+      assertTrue(
+          Boolean.TRUE.equals(fixture.lastInputEnabledState()), "input should enable after attach");
     } finally {
       fixture.shutdown();
     }
@@ -261,7 +282,8 @@ class DetachedChannelLifecycleFunctionalTest {
 
     TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
     ConnectionCoordinator connectionCoordinator =
-        new ConnectionCoordinator(irc, ui, serverRegistry, serverCatalog, runtimeConfig, logProps, tray);
+        new ConnectionCoordinator(
+            irc, ui, serverRegistry, serverCatalog, runtimeConfig, logProps, tray);
 
     CopyOnWriteArrayList<Boolean> inputEnabledStates = new CopyOnWriteArrayList<>();
     doAnswer(
@@ -289,7 +311,8 @@ class DetachedChannelLifecycleFunctionalTest {
             mock(ScheduledExecutorService.class));
 
     flushEdt();
-    return new Fixture(serverTree, irc, connectionCoordinator, targetCoordinator, inputEnabledStates);
+    return new Fixture(
+        serverTree, irc, connectionCoordinator, targetCoordinator, inputEnabledStates);
   }
 
   private static IrcProperties.Server server(String id) {
@@ -325,7 +348,8 @@ class DetachedChannelLifecycleFunctionalTest {
     return leaves.containsKey(ref);
   }
 
-  private static boolean isRenderedItalic(ServerTreeDockable dockable, TargetRef ref) throws Exception {
+  private static boolean isRenderedItalic(ServerTreeDockable dockable, TargetRef ref)
+      throws Exception {
     JTree tree = getTree(dockable);
     DefaultMutableTreeNode node = findLeafNode(dockable, ref);
     if (node == null) return false;
@@ -352,10 +376,12 @@ class DetachedChannelLifecycleFunctionalTest {
   }
 
   @SuppressWarnings("unchecked")
-  private static JPopupMenu popupForTarget(ServerTreeDockable dockable, TargetRef ref) throws Exception {
+  private static JPopupMenu popupForTarget(ServerTreeDockable dockable, TargetRef ref)
+      throws Exception {
     DefaultMutableTreeNode node = findLeafNode(dockable, ref);
     if (node == null) return null;
-    Method buildPopupMenu = ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
+    Method buildPopupMenu =
+        ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
     buildPopupMenu.setAccessible(true);
     return (JPopupMenu) buildPopupMenu.invoke(dockable, new TreePath(node.getPath()));
   }
@@ -389,7 +415,8 @@ class DetachedChannelLifecycleFunctionalTest {
         throw new RuntimeException(e);
       }
     }
-    final java.util.concurrent.atomic.AtomicReference<T> out = new java.util.concurrent.atomic.AtomicReference<>();
+    final java.util.concurrent.atomic.AtomicReference<T> out =
+        new java.util.concurrent.atomic.AtomicReference<>();
     SwingUtilities.invokeAndWait(
         () -> {
           try {
@@ -424,9 +451,7 @@ class DetachedChannelLifecycleFunctionalTest {
       CopyOnWriteArrayList<Boolean> inputEnabledStates) {
     void markConnected() {
       connectionCoordinator.handleConnectivityEvent(
-          "libera",
-          new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "tester"),
-          null);
+          "libera", new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "tester"), null);
     }
 
     Boolean lastInputEnabledState() {

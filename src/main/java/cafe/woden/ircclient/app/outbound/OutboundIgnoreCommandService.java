@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import java.util.List;
 import org.springframework.stereotype.Component;

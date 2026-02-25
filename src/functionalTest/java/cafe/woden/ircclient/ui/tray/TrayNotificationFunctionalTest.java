@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.tray;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -60,7 +59,8 @@ class TrayNotificationFunctionalTest {
     when(trayProvider.getObject()).thenReturn(trayService);
 
     @SuppressWarnings("unchecked")
-    ObjectProvider<cafe.woden.ircclient.ui.MainFrame> mainFrameProvider = mock(ObjectProvider.class);
+    ObjectProvider<cafe.woden.ircclient.ui.MainFrame> mainFrameProvider =
+        mock(ObjectProvider.class);
     when(mainFrameProvider.getIfAvailable()).thenReturn(null);
 
     @SuppressWarnings("unchecked")

@@ -34,13 +34,7 @@ class JfrDiagnosticsPanelFunctionalTest {
         .thenAnswer(
             invocation -> {
               snapshotCalls.incrementAndGet();
-              return snapshot(
-                  0.25d,
-                  0.10d,
-                  0.35d,
-                  1_000_000_000L,
-                  2_000_000_000L,
-                  4_000_000_000L);
+              return snapshot(0.25d, 0.10d, 0.35d, 1_000_000_000L, 2_000_000_000L, 4_000_000_000L);
             });
     when(service.recentEvents(800))
         .thenReturn(List.of(event("jdk.CPULoad", "cpu"), event("jdk.RecordingStream", "stream")));
@@ -95,8 +89,7 @@ class JfrDiagnosticsPanelFunctionalTest {
           () -> {
             assertEquals("50.0%", holder.cpuMachine.getText());
             assertTrue(
-                holder.heapUsed.getText().endsWith("GB"),
-                "heap values should be rendered in GB");
+                holder.heapUsed.getText().endsWith("GB"), "heap values should be rendered in GB");
           });
       verify(service, times(1)).requestImmediateRefresh();
     } finally {
