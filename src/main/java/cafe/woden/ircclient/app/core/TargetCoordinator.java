@@ -436,8 +436,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     disposables.add(
         irc.partChannel(sid, target.target(), null)
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
   public void detachChannel(TargetRef target) {
