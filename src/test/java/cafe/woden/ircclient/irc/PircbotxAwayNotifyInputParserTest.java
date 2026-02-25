@@ -3,7 +3,9 @@ package cafe.woden.ircclient.irc;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
 import org.pircbotx.UserHostmask;
+import org.pircbotx.output.OutputCAP;
 
 class PircbotxAwayNotifyInputParserTest {
 
@@ -43,6 +46,82 @@ class PircbotxAwayNotifyInputParserTest {
                         && "ACK".equalsIgnoreCase(cap.subcommand())
                         && "echo-message".equalsIgnoreCase(cap.capability())
                         && cap.enabled()));
+  }
+
+  @Test
+  void capLsEmitsCapabilityAvailabilityEvents() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me LS :message-tags typing",
+        List.of("me", "LS", ":message-tags typing"),
+        ImmutableMap.of());
+
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.Ircv3CapabilityChanged cap
+                        && "LS".equalsIgnoreCase(cap.subcommand())
+                        && "message-tags".equalsIgnoreCase(cap.capability())
+                        && !cap.enabled()));
+  }
+
+  @Test
+  void capLsSendsFallbackReqForMessageTagsWhenOfferedButNotEnabled() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircBotX bot = dummyBot();
+    OutputCAP outputCap = mock(OutputCAP.class);
+    when(bot.sendCAP()).thenReturn(outputCap);
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me LS :message-tags typing",
+        List.of("me", "LS", ":message-tags typing"),
+        ImmutableMap.of());
+
+    verify(outputCap, atLeastOnce()).request("message-tags");
+  }
+
+  @Test
+  void capNakEmitsCapabilityChangedDisabledEvent() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me NAK :message-tags",
+        List.of("me", "NAK", ":message-tags"),
+        ImmutableMap.of());
+
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.Ircv3CapabilityChanged cap
+                        && "NAK".equalsIgnoreCase(cap.subcommand())
+                        && "message-tags".equalsIgnoreCase(cap.capability())
+                        && !cap.enabled()));
   }
 
   @Test

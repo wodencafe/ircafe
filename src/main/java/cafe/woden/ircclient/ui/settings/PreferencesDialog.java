@@ -10764,7 +10764,6 @@ public class PreferencesDialog {
         table,
         add,
         remove,
-        rulesModel,
         rulesTable,
         addRule,
         editRule,

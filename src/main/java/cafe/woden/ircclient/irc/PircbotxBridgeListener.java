@@ -498,7 +498,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           target = trailing;
         }
 
-        activeChatHistoryBatches.put(id, new ChatHistoryBatchBuffer(id, target));
+        activeChatHistoryBatches.put(id, new ChatHistoryBatchBuffer(target));
         log.debug(
             "[{}] CHATHISTORY BATCH start id={} target={} raw={}",
             serverId,

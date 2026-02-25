@@ -1288,10 +1288,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(pos, " ", attrs);
-      Position p = doc.createPosition(pos);
       doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
       if (st != null) {
-        st.historyDivider = new HistoryDividerControl(p, comp);
+        st.historyDivider = new HistoryDividerControl(comp);
         st.pendingHistoryDividerLabel = null;
       }
     } catch (Exception ignored) {
@@ -1378,7 +1377,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(pos, " ", attrs);
       Position p = doc.createPosition(pos);
       doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
-      st.readMarker = new ReadMarkerControl(p, comp);
+      st.readMarker = new ReadMarkerControl(p);
     } catch (Exception ignored) {
       st.readMarker = null;
     }

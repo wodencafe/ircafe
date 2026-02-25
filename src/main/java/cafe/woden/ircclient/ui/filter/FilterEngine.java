@@ -342,7 +342,6 @@ public class FilterEngine implements PropertyChangeListener {
     return new CompiledRule(
         r.id(),
         r.name(),
-        r.nameKey(),
         r.enabled(),
         scopePattern,
         r.action() != null ? r.action() : FilterAction.HIDE,

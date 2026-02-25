@@ -48,6 +48,20 @@ class BatchedEnableCapHandlerTest {
   }
 
   @Test
+  void waitsForFinalLsWhenServerSendsContinuationMarker() throws Exception {
+    BatchedEnableCapHandler handler =
+        new BatchedEnableCapHandler(List.of("message-tags", "typing"));
+    PircBotX bot = mock(PircBotX.class);
+    OutputCAP outputCap = mock(OutputCAP.class);
+    when(bot.sendCAP()).thenReturn(outputCap);
+
+    boolean finished = handler.handleLS(bot, ImmutableList.of("*"));
+
+    assertFalse(finished);
+    verifyNoInteractions(outputCap);
+  }
+
+  @Test
   void normalizesAndDeduplicatesCapabilityTokens() throws Exception {
     BatchedEnableCapHandler handler =
         new BatchedEnableCapHandler(List.of(" away-notify ", "AWAY-NOTIFY", "batch"));
