@@ -72,6 +72,7 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -144,6 +145,7 @@ public class PreferencesDialog {
   private final ThemeAccentSettingsBus accentSettingsBus;
   private final ThemeTweakSettingsBus tweakSettingsBus;
   private final ChatThemeSettingsBus chatThemeSettingsBus;
+  private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final RuntimeConfigStore runtimeConfig;
   private final LogProperties logProps;
   private final NickColorSettingsBus nickColorSettingsBus;
@@ -172,6 +174,7 @@ public class PreferencesDialog {
       ThemeAccentSettingsBus accentSettingsBus,
       ThemeTweakSettingsBus tweakSettingsBus,
       ChatThemeSettingsBus chatThemeSettingsBus,
+      SpellcheckSettingsBus spellcheckSettingsBus,
       RuntimeConfigStore runtimeConfig,
       LogProperties logProps,
       NickColorSettingsBus nickColorSettingsBus,
@@ -196,6 +199,7 @@ public class PreferencesDialog {
     this.accentSettingsBus = accentSettingsBus;
     this.tweakSettingsBus = tweakSettingsBus;
     this.chatThemeSettingsBus = chatThemeSettingsBus;
+    this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
     this.nickColorSettingsBus = nickColorSettingsBus;
@@ -832,6 +836,9 @@ public class PreferencesDialog {
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
+    SpellcheckSettings initialSpellcheck =
+        spellcheckSettingsBus != null ? spellcheckSettingsBus.get() : SpellcheckSettings.defaults();
+    SpellcheckControls spellcheck = buildSpellcheckControls(initialSpellcheck);
     CtcpAutoReplyControls ctcpAutoReplies = buildCtcpAutoReplyControls();
     JCheckBox typingIndicatorsSendEnabled = buildTypingIndicatorsSendCheckbox(current);
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
@@ -881,7 +888,13 @@ public class PreferencesDialog {
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel =
-        buildChatPanel(presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing);
+        buildChatPanel(
+            presenceFolds,
+            ctcpRequestsInActiveTarget,
+            spellcheck,
+            nickColors,
+            timestamps,
+            outgoing);
     JPanel ctcpRepliesPanel = buildCtcpRepliesPanel(ctcpAutoReplies);
     JPanel ircv3Panel =
         buildIrcv3CapabilitiesPanel(
@@ -1144,6 +1157,12 @@ public class PreferencesDialog {
 
           boolean presenceFoldsV = presenceFolds.isSelected();
           boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
+          boolean spellcheckEnabledV = spellcheck.enabled.isSelected();
+          boolean spellcheckUnderlineEnabledV = spellcheck.underlineEnabled.isSelected();
+          boolean spellcheckSuggestOnTabEnabledV = spellcheck.suggestOnTabEnabled.isSelected();
+          String spellcheckLanguageTagV = spellcheckLanguageTagValue(spellcheck.languageTag);
+          List<String> spellcheckCustomDictionaryV =
+              parseSpellcheckCustomDictionary(spellcheck.customDictionary.getText());
           boolean ctcpAutoRepliesEnabledV = ctcpAutoReplies.enabled.isSelected();
           boolean ctcpAutoReplyVersionEnabledV = ctcpAutoReplies.version.isSelected();
           boolean ctcpAutoReplyPingEnabledV = ctcpAutoReplies.ping.isSelected();
@@ -1459,10 +1478,20 @@ public class PreferencesDialog {
                   memoryWarningPushyEnabledV,
                   memoryWarningSoundEnabledV,
                   notificationRulesV);
+          SpellcheckSettings nextSpellcheck =
+              new SpellcheckSettings(
+                  spellcheckEnabledV,
+                  spellcheckUnderlineEnabledV,
+                  spellcheckSuggestOnTabEnabledV,
+                  spellcheckLanguageTagV,
+                  spellcheckCustomDictionaryV);
 
           boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
           settingsBus.set(next);
+          if (spellcheckSettingsBus != null) {
+            spellcheckSettingsBus.set(nextSpellcheck);
+          }
 
           if (accentSettingsBus != null) {
             accentSettingsBus.set(nextAccent);
@@ -1562,6 +1591,11 @@ public class PreferencesDialog {
           runtimeConfig.rememberTypingIndicatorsReceiveEnabled(
               next.typingIndicatorsReceiveEnabled());
           runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
+          runtimeConfig.rememberSpellcheckEnabled(nextSpellcheck.enabled());
+          runtimeConfig.rememberSpellcheckUnderlineEnabled(nextSpellcheck.underlineEnabled());
+          runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(nextSpellcheck.suggestOnTabEnabled());
+          runtimeConfig.rememberSpellcheckLanguageTag(nextSpellcheck.languageTag());
+          runtimeConfig.rememberSpellcheckCustomDictionary(nextSpellcheck.customDictionary());
           persistIrcv3Capabilities(ircv3CapabilitiesV);
 
           if (nickColorSettingsBus != null) {
@@ -3711,6 +3745,102 @@ public class PreferencesDialog {
     return combo;
   }
 
+  private SpellcheckControls buildSpellcheckControls(SpellcheckSettings settings) {
+    SpellcheckSettings initial = settings != null ? settings : SpellcheckSettings.defaults();
+
+    JCheckBox enabled = new JCheckBox("Enable spell checking in the input bar");
+    enabled.setSelected(initial.enabled());
+    enabled.setToolTipText(
+        "When enabled, IRCafe checks words in your current draft and can provide corrections.");
+
+    JCheckBox underline = new JCheckBox("Highlight misspelled words while typing");
+    underline.setSelected(initial.underlineEnabled());
+    underline.setToolTipText(
+        "When enabled, misspelled words are highlighted directly in the input field.");
+
+    JCheckBox suggestOnTab = new JCheckBox("Include dictionary suggestions in Tab completion");
+    suggestOnTab.setSelected(initial.suggestOnTabEnabled());
+    suggestOnTab.setToolTipText(
+        "When enabled, Tab completion can suggest dictionary words and spelling corrections.");
+
+    SpellcheckLanguageOption[] languages =
+        new SpellcheckLanguageOption[] {
+          new SpellcheckLanguageOption("en-US", "English (US)"),
+          new SpellcheckLanguageOption("en-GB", "English (UK)")
+        };
+    JComboBox<SpellcheckLanguageOption> languageTag = new JComboBox<>(languages);
+    languageTag.setToolTipText("Choose the dictionary language used for spell checking.");
+    languageTag.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel c =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            if (value instanceof SpellcheckLanguageOption o) {
+              c.setText(o.label());
+            }
+            return c;
+          }
+        });
+    String initialLanguage = SpellcheckSettings.normalizeLanguageTag(initial.languageTag());
+    for (SpellcheckLanguageOption option : languages) {
+      if (option.id().equalsIgnoreCase(initialLanguage)) {
+        languageTag.setSelectedItem(option);
+        break;
+      }
+    }
+
+    JTextArea customDictionary = new JTextArea(4, 24);
+    customDictionary.setLineWrap(true);
+    customDictionary.setWrapStyleWord(true);
+    customDictionary.setText(String.join("\n", initial.customDictionary()));
+    customDictionary.setToolTipText(
+        "One word per line. Words in this list are treated as correct and not highlighted.");
+    JScrollPane customScroll =
+        new JScrollPane(
+            customDictionary,
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+    Runnable syncEnabled =
+        () -> {
+          boolean on = enabled.isSelected();
+          underline.setEnabled(on);
+          suggestOnTab.setEnabled(on);
+          languageTag.setEnabled(on);
+          customDictionary.setEnabled(on);
+        };
+    enabled.addActionListener(e -> syncEnabled.run());
+    syncEnabled.run();
+
+    JPanel panel =
+        new JPanel(
+            new MigLayout("insets 0, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]2[]2[]4[]2[]"));
+    panel.setOpaque(false);
+    panel.add(enabled, "growx, wmin 0, wrap");
+    panel.add(underline, "growx, wmin 0, gapleft 18, wrap");
+    panel.add(suggestOnTab, "growx, wmin 0, gapleft 18, wrap");
+
+    JPanel langRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]", "[]"));
+    langRow.setOpaque(false);
+    langRow.add(new JLabel("Dictionary language"));
+    langRow.add(languageTag, "growx, wmin 160");
+    panel.add(langRow, "growx, wmin 0, gapleft 18, wrap");
+
+    panel.add(new JLabel("Custom dictionary"), "growx, wmin 0, gapleft 18, wrap");
+    panel.add(customScroll, "growx, wmin 0, h 80:110:180, gapleft 18, wrap");
+    panel.add(
+        helpText(
+            "Add channel slang, nick-like words, or terms you use frequently so they are ignored."),
+        "growx, wmin 0, gapleft 18, wrap");
+
+    return new SpellcheckControls(
+        enabled, underline, suggestOnTab, languageTag, customDictionary, panel);
+  }
+
   private static void configureBuiltInSoundCombo(JComboBox<BuiltInSound> combo) {
     if (combo == null) return;
     combo.setRenderer(
@@ -3734,6 +3864,31 @@ public class PreferencesDialog {
       return UiSettings.normalizeTypingTreeIndicatorStyle(o.id());
     }
     return "dots";
+  }
+
+  private static String spellcheckLanguageTagValue(JComboBox<SpellcheckLanguageOption> combo) {
+    Object selected = combo != null ? combo.getSelectedItem() : null;
+    if (selected instanceof SpellcheckLanguageOption o) {
+      return SpellcheckSettings.normalizeLanguageTag(o.id());
+    }
+    return SpellcheckSettings.DEFAULT_LANGUAGE_TAG;
+  }
+
+  private static List<String> parseSpellcheckCustomDictionary(String raw) {
+    if (raw == null || raw.isBlank()) return List.of();
+    LinkedHashSet<String> out = new LinkedHashSet<>();
+    for (String line : raw.split("\\R")) {
+      String trimmed = line == null ? "" : line.trim();
+      if (trimmed.isEmpty()) continue;
+      String[] tokens = trimmed.split("\\s+");
+      for (String token : tokens) {
+        String t = token == null ? "" : token.trim();
+        if (t.isEmpty()) continue;
+        out.add(t);
+      }
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
   }
 
   private Ircv3CapabilitiesControls buildIrcv3CapabilitiesControls() {
@@ -5315,6 +5470,7 @@ public class PreferencesDialog {
   private JPanel buildChatPanel(
       JCheckBox presenceFolds,
       JCheckBox ctcpRequestsInActiveTarget,
+      SpellcheckControls spellcheck,
       NickColorControls nickColors,
       TimestampControls timestamps,
       OutgoingColorControls outgoing) {
@@ -5335,6 +5491,10 @@ public class PreferencesDialog {
 
     form.add(new JLabel("Timestamps"), "aligny top");
     form.add(timestamps.panel, "growx");
+
+    form.add(sectionTitle("Input"), "span 2, growx, wmin 0, wrap");
+    form.add(new JLabel("Spellcheck"), "aligny top");
+    form.add(spellcheck.panel, "growx");
 
     form.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Outgoing messages"), "aligny top");
@@ -8619,6 +8779,8 @@ public class PreferencesDialog {
 
   private record TypingTreeIndicatorStyleOption(String id, String label) {}
 
+  private record SpellcheckLanguageOption(String id, String label) {}
+
   private static final class IrcEventNotificationTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
     static final int COL_EVENT = 1;
@@ -9636,6 +9798,14 @@ public class PreferencesDialog {
 
   private record CtcpAutoReplyControls(
       JCheckBox enabled, JCheckBox version, JCheckBox ping, JCheckBox time) {}
+
+  private record SpellcheckControls(
+      JCheckBox enabled,
+      JCheckBox underlineEnabled,
+      JCheckBox suggestOnTabEnabled,
+      JComboBox<SpellcheckLanguageOption> languageTag,
+      JTextArea customDictionary,
+      JPanel panel) {}
 
   private record Ircv3CapabilitiesControls(Map<String, JCheckBox> checkboxes, JPanel panel) {
     Map<String, Boolean> snapshot() {

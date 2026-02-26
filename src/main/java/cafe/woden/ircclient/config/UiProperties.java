@@ -100,6 +100,21 @@ public record UiProperties(
      */
     String typingTreeIndicatorStyle,
 
+    /** Enable spell checking in the message input. */
+    Boolean spellcheckEnabled,
+
+    /** Enable misspelling underline/highlight rendering in the message input. */
+    Boolean spellcheckUnderlineEnabled,
+
+    /** Include dictionary suggestions in TAB completion popup. */
+    Boolean spellcheckSuggestOnTabEnabled,
+
+    /** BCP-47 language tag for spell checking (for example {@code en-US}). */
+    String spellcheckLanguageTag,
+
+    /** Custom per-user dictionary words that should not be marked misspelled. */
+    List<String> spellcheckCustomDictionary,
+
     /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same
      * server). If disabled, they are routed to their origin target (channel/PM) instead.
@@ -685,6 +700,28 @@ public record UiProperties(
     }
     typingTreeIndicatorStyle = normalizeTypingTreeIndicatorStyle(typingTreeIndicatorStyle);
 
+    // Spellcheck defaults.
+    if (spellcheckEnabled == null) {
+      spellcheckEnabled = true;
+    }
+    if (spellcheckUnderlineEnabled == null) {
+      spellcheckUnderlineEnabled = true;
+    }
+    if (spellcheckSuggestOnTabEnabled == null) {
+      spellcheckSuggestOnTabEnabled = true;
+    }
+    spellcheckLanguageTag = normalizeSpellcheckLanguageTag(spellcheckLanguageTag);
+    if (spellcheckCustomDictionary == null) {
+      spellcheckCustomDictionary = List.of();
+    } else {
+      spellcheckCustomDictionary =
+          spellcheckCustomDictionary.stream()
+              .map(v -> Objects.toString(v, "").trim())
+              .filter(v -> !v.isEmpty())
+              .distinct()
+              .toList();
+    }
+
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
       ctcpRequestsInActiveTargetEnabled = true;
@@ -760,5 +797,14 @@ public record UiProperties(
       case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
       default -> "dots";
     };
+  }
+
+  static String normalizeSpellcheckLanguageTag(String raw) {
+    String s = raw == null ? "" : raw.trim();
+    if (s.isEmpty()) return "en-US";
+    String folded = s.replace('_', '-');
+    if ("en-us".equalsIgnoreCase(folded)) return "en-US";
+    if ("en-gb".equalsIgnoreCase(folded)) return "en-GB";
+    return "en-US";
   }
 }

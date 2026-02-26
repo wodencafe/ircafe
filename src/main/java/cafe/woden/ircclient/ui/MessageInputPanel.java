@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.core.Flowable;
@@ -37,6 +39,7 @@ public class MessageInputPanel extends JPanel {
   private final TypingDotsIndicator typingDotsIndicator = new TypingDotsIndicator();
   private final TypingSignalIndicator typingSignalIndicator = new TypingSignalIndicator();
   private final MessageInputUndoSupport undoSupport;
+  private final MessageInputSpellcheckSupport spellcheckSupport;
   private final MessageInputNickCompletionSupport nickCompletionSupport;
   private final MessageInputHintPopupSupport hintPopupSupport;
   private final MessageInputContextMenuSupport contextMenuSupport;
@@ -48,18 +51,31 @@ public class MessageInputPanel extends JPanel {
   private volatile Consumer<String> onDraftChanged = t -> {};
   private final MessageInputTypingSupport typingSupport;
   private final UiSettingsBus settingsBus;
+  private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final MessageInputHistorySupport historySupport;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
+  private final PropertyChangeListener spellcheckSettingsListener = this::onSpellcheckChanged;
 
   public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
+    this(settingsBus, historyStore, null);
+  }
+
+  public MessageInputPanel(
+      UiSettingsBus settingsBus,
+      CommandHistoryStore historyStore,
+      SpellcheckSettingsBus spellcheckSettingsBus) {
     super(new BorderLayout(8, 0));
     this.settingsBus = settingsBus;
+    this.spellcheckSettingsBus = spellcheckSettingsBus;
 
     this.undoSupport = new MessageInputUndoSupport(input, () -> programmaticEdit);
+    SpellcheckSettings spellcheck =
+        spellcheckSettingsBus != null ? spellcheckSettingsBus.get() : SpellcheckSettings.defaults();
+    this.spellcheckSupport = new MessageInputSpellcheckSupport(input, spellcheck);
     this.nickCompletionSupport =
-        new MessageInputNickCompletionSupport(this, input, this.undoSupport);
+        new MessageInputNickCompletionSupport(this, input, this.undoSupport, spellcheckSupport);
     this.hintPopupSupport =
-        new MessageInputHintPopupSupport(this, input, nickCompletionSupport::firstNickStartingWith);
+        new MessageInputHintPopupSupport(this, input, nickCompletionSupport::firstCompletionHint);
 
     MessageInputUiHooks hooks =
         new MessageInputUiHooks() {
@@ -352,14 +368,20 @@ public class MessageInputPanel extends JPanel {
   public void addNotify() {
     super.addNotify();
     if (settingsBus != null) settingsBus.addListener(settingsListener);
+    if (spellcheckSettingsBus != null)
+      spellcheckSettingsBus.addListener(spellcheckSettingsListener);
     hintPopupSupport.updateHint();
     nickCompletionSupport.onAddNotify();
+    spellcheckSupport.onDraftChanged();
   }
 
   @Override
   public void removeNotify() {
     hintPopupSupport.hide();
     typingSupport.onRemoveNotify();
+    spellcheckSupport.onRemoveNotify();
+    if (spellcheckSettingsBus != null)
+      spellcheckSettingsBus.removeListener(spellcheckSettingsListener);
     if (settingsBus != null) settingsBus.removeListener(settingsListener);
     super.removeNotify();
   }
@@ -368,6 +390,15 @@ public class MessageInputPanel extends JPanel {
     if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
     if (evt.getNewValue() instanceof UiSettings s) {
       applySettings(s);
+    }
+  }
+
+  private void onSpellcheckChanged(PropertyChangeEvent evt) {
+    if (!SpellcheckSettingsBus.PROP_SPELLCHECK_SETTINGS.equals(evt.getPropertyName())) return;
+    if (evt.getNewValue() instanceof SpellcheckSettings s) {
+      spellcheckSupport.onSettingsApplied(s);
+      hintPopupSupport.updateHint();
+      nickCompletionSupport.markUiDirty();
     }
   }
 
@@ -393,6 +424,7 @@ public class MessageInputPanel extends JPanel {
   }
 
   public void setNickCompletions(List<String> nicks) {
+    spellcheckSupport.setNickWhitelist(nicks);
     nickCompletionSupport.setNickCompletions(nicks);
     hintPopupSupport.updateHint();
   }
@@ -400,6 +432,7 @@ public class MessageInputPanel extends JPanel {
   private void onDraftDocumentChanged() {
     hintPopupSupport.updateHint();
     nickCompletionSupport.markUiDirty();
+    spellcheckSupport.onDraftChanged();
     fireDraftChanged();
     historySupport.onUserEdit(programmaticEdit);
     if (!programmaticEdit) {
@@ -577,6 +610,7 @@ public class MessageInputPanel extends JPanel {
     }
     hintPopupSupport.updateHint();
     nickCompletionSupport.markUiDirty();
+    spellcheckSupport.onInputEnabledChanged(enabled);
   }
 
   public String getDraftText() {

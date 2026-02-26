@@ -33,6 +33,7 @@ import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
@@ -142,6 +143,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
     SpringRuntimeEventsService springRuntimeEventsService = new SpringRuntimeEventsService();
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
+    SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
 
     Holder holder = new Holder();
@@ -171,6 +173,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
                     jfrRuntimeEventsService,
                     springRuntimeEventsService,
                     settingsBus,
+                    spellcheckSettingsBus,
                     commandHistoryStore));
     ChatDockable chat = holder.chat;
 

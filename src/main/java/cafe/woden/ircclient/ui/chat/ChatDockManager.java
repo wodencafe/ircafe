@@ -10,6 +10,7 @@ import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.ui.ServerTreeDockable;
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.TargetActivationBus;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -35,6 +36,7 @@ public class ChatDockManager {
   private final ChatTranscriptStore transcripts;
   private final TargetActivationBus activationBus;
   private final UiSettingsBus settingsBus;
+  private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
   private final ActiveInputRouter activeInputRouter;
@@ -67,6 +69,7 @@ public class ChatDockManager {
       ChatTranscriptStore transcripts,
       TargetActivationBus activationBus,
       UiSettingsBus settingsBus,
+      SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
       ActiveInputRouter activeInputRouter,
@@ -77,6 +80,7 @@ public class ChatDockManager {
     this.transcripts = transcripts;
     this.activationBus = activationBus;
     this.settingsBus = settingsBus;
+    this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
     this.irc = irc;
     this.activeInputRouter = activeInputRouter;
@@ -237,6 +241,7 @@ public class ChatDockManager {
               target,
               transcripts,
               settingsBus,
+              spellcheckSettingsBus,
               chatHistoryService,
               commandHistoryStore,
               activationBus::activate,

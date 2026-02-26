@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.MessageInputPanel;
 import cafe.woden.ircclient.ui.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -77,6 +78,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       TargetRef target,
       ChatTranscriptStore transcripts,
       UiSettingsBus settingsBus,
+      SpellcheckSettingsBus spellcheckSettingsBus,
       ChatHistoryService chatHistoryService,
       CommandHistoryStore historyStore,
       Consumer<TargetRef> activate,
@@ -139,7 +141,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
         });
 
     // Input panel embedded in the pinned view.
-    this.inputPanel = new MessageInputPanel(settingsBus, historyStore);
+    this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.

@@ -28,6 +28,7 @@ import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -179,6 +180,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       JfrRuntimeEventsService jfrRuntimeEventsService,
       SpringRuntimeEventsService springRuntimeEventsService,
       UiSettingsBus settingsBus,
+      SpellcheckSettingsBus spellcheckSettingsBus,
       CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
     this.transcripts = transcripts;
@@ -459,7 +461,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     hideTopicPanel();
 
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
-    this.inputPanel = new MessageInputPanel(settingsBus, commandHistoryStore);
+    this.inputPanel =
+        new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
     add(inputPanel, BorderLayout.SOUTH);
     // Context menu: Clear (buffer only) + Reload recent history (clear + reload from DB/bouncer).
     setTranscriptContextMenuActions(

@@ -3110,6 +3110,74 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberSpellcheckEnabled(boolean enabled) {
+    rememberSpellcheckBoolean("spellcheckEnabled", enabled);
+  }
+
+  public synchronized void rememberSpellcheckUnderlineEnabled(boolean enabled) {
+    rememberSpellcheckBoolean("spellcheckUnderlineEnabled", enabled);
+  }
+
+  public synchronized void rememberSpellcheckSuggestOnTabEnabled(boolean enabled) {
+    rememberSpellcheckBoolean("spellcheckSuggestOnTabEnabled", enabled);
+  }
+
+  public synchronized void rememberSpellcheckLanguageTag(String languageTag) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = UiProperties.normalizeSpellcheckLanguageTag(languageTag);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("spellcheckLanguageTag", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist spellcheck language tag to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberSpellcheckCustomDictionary(List<String> words) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      List<String> cleaned = sanitizeStringList(words);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (cleaned.isEmpty()) {
+        ui.remove("spellcheckCustomDictionary");
+      } else {
+        ui.put("spellcheckCustomDictionary", cleaned);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist spellcheck custom dictionary to '{}'", file, e);
+    }
+  }
+
+  private synchronized void rememberSpellcheckBoolean(String key, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put(key, enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.{} setting to '{}'", key, file, e);
+    }
+  }
+
   /** Persisted IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
   public record Ircv3StsPolicySnapshot(
       long expiresAtEpochMs,

@@ -278,6 +278,7 @@ dependencies {
     implementation "com.github.weisj:darklaf-core:${darklafVersion}"
 
     implementation "com.fifesoft:autocomplete:3.3.3"
+    implementation "org.languagetool:language-en:6.7"
 
     implementation "org.sejda.imageio:webp-imageio:0.1.6"
     implementation "com.madgag:animated-gif-lib:1.4"
