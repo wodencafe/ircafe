@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
@@ -49,6 +49,7 @@ public class AssertjSwingDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(AssertjSwingDiagnosticsService.class);
   private static final long AUTO_CAPTURE_COOLDOWN_MS = 120_000L;
   private static final long JFR_CAPTURE_DURATION_MS = 8000L;
+  private static final int FREEZE_STACK_MAX_FRAMES = 20;
   private static final DateTimeFormatter CAPTURE_STAMP_FMT =
       DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneId.systemDefault());
 
@@ -248,9 +249,43 @@ public class AssertjSwingDiagnosticsService {
     freezeSinceAtMs.set(now);
     nextFreezeProgressAtMs.set(now + 10_000L);
     diagnostics.appendAssertjSwingError("EDT freeze detected (~" + lagMs + "ms).");
+    reportCurrentEdtStack(lagMs);
     triggerIssueActions("EDT freeze detected", "EDT lag reached ~" + lagMs + "ms.");
     scheduleAutoCapture(now, lagMs);
-    log.warn("[ircafe] EDT freeze detected (~{}ms)", lagMs);
+  }
+
+  private void reportCurrentEdtStack(long lagMs) {
+    try {
+      ThreadInfo edt = findEdtThreadInfo(currentThreadDumpSnapshot());
+      if (edt == null) {
+        diagnostics.appendAssertjSwingStatus(
+            "EDT stack snapshot unavailable (AWT-EventQueue thread not found).");
+        log.warn(
+            "[ircafe] EDT freeze detected (~{}ms); EDT stack unavailable (AWT-EventQueue thread not found)",
+            lagMs);
+        return;
+      }
+
+      StackTraceElement[] stack = edt.getStackTrace();
+      diagnostics.appendAssertjSwingError(
+          "EDT snapshot: "
+              + Objects.toString(edt.getThreadName(), "(unknown)")
+              + " state="
+              + Objects.toString(edt.getThreadState(), "(unknown)"));
+      appendStackToDiagnostics("(edt-freeze-stack)", stack, FREEZE_STACK_MAX_FRAMES);
+      log.warn(
+          "[ircafe] EDT freeze detected (~{}ms)\n{}",
+          lagMs,
+          formatStackTraceForLog(
+              edt.getThreadName(), edt.getThreadState(), stack, FREEZE_STACK_MAX_FRAMES));
+    } catch (Throwable t) {
+      diagnostics.appendAssertjSwingStatus(
+          "EDT stack snapshot unavailable (" + summarize(t) + ").");
+      log.warn(
+          "[ircafe] EDT freeze detected (~{}ms); failed to capture EDT stack: {}",
+          lagMs,
+          summarize(t));
+    }
   }
 
   private void scheduleAutoCapture(long detectedAtMs, long lagMs) {
@@ -339,6 +374,60 @@ public class AssertjSwingDiagnosticsService {
     }
   }
 
+  private static ThreadInfo[] currentThreadDumpSnapshot() {
+    ThreadMXBean mxBean = ManagementFactory.getThreadMXBean();
+    return mxBean.dumpAllThreads(false, false);
+  }
+
+  private static ThreadInfo findEdtThreadInfo(ThreadInfo[] infos) {
+    if (infos == null || infos.length == 0) return null;
+    for (ThreadInfo ti : infos) {
+      if (ti == null) continue;
+      String name = Objects.toString(ti.getThreadName(), "");
+      if (name.startsWith("AWT-EventQueue")) return ti;
+    }
+    return null;
+  }
+
+  private void appendStackToDiagnostics(String prefix, StackTraceElement[] stack, int maxFrames) {
+    String p = Objects.toString(prefix, "(stack)").trim();
+    if (p.isEmpty()) p = "(stack)";
+    if (stack == null || stack.length == 0) {
+      diagnostics.appendAssertjSwingStatus(p + " (no stack trace)");
+      return;
+    }
+
+    int limit = Math.min(stack.length, Math.max(1, maxFrames));
+    for (int i = 0; i < limit; i++) {
+      diagnostics.appendAssertjSwingStatus(p + " at " + stack[i]);
+    }
+    if (stack.length > limit) {
+      diagnostics.appendAssertjSwingStatus(p + " ... " + (stack.length - limit) + " more");
+    }
+  }
+
+  private static String formatStackTraceForLog(
+      String threadName, Thread.State state, StackTraceElement[] stack, int maxFrames) {
+    StringBuilder sb = new StringBuilder(2048);
+    sb.append(Objects.toString(threadName, "(unknown-thread)"))
+        .append(" state=")
+        .append(state != null ? state : "(unknown)");
+
+    if (stack == null || stack.length == 0) {
+      sb.append('\n').append("  (no stack trace)");
+      return sb.toString();
+    }
+
+    int limit = Math.min(stack.length, Math.max(1, maxFrames));
+    for (int i = 0; i < limit; i++) {
+      sb.append('\n').append("  at ").append(stack[i]);
+    }
+    if (stack.length > limit) {
+      sb.append('\n').append("  ... ").append(stack.length - limit).append(" more");
+    }
+    return sb.toString();
+  }
+
   private static String formatThreadDump(ThreadInfo[] infos) {
     StringBuilder sb = new StringBuilder(256 * 1024);
     sb.append("IRCafe EDT auto-capture thread dump").append('\n');
@@ -410,25 +499,18 @@ public class AssertjSwingDiagnosticsService {
   }
 
   private void appendEdtSnapshot(ThreadInfo[] infos) {
-    if (infos == null || infos.length == 0) return;
-    for (ThreadInfo ti : infos) {
-      if (ti == null) continue;
-      String name = Objects.toString(ti.getThreadName(), "");
-      if (!name.startsWith("AWT-EventQueue")) continue;
+    ThreadInfo edt = findEdtThreadInfo(infos);
+    if (edt == null) {
       diagnostics.appendAssertjSwingStatus(
-          "EDT snapshot: " + name + " state=" + ti.getThreadState());
-      StackTraceElement[] stack = ti.getStackTrace();
-      int max = Math.min(12, stack == null ? 0 : stack.length);
-      for (int i = 0; i < max; i++) {
-        diagnostics.appendAssertjSwingStatus("(edt-stack) " + stack[i]);
-      }
-      if (stack != null && stack.length > max) {
-        diagnostics.appendAssertjSwingStatus("(edt-stack) ... " + (stack.length - max) + " more");
-      }
+          "EDT snapshot unavailable (AWT-EventQueue thread not found).");
       return;
     }
     diagnostics.appendAssertjSwingStatus(
-        "EDT snapshot unavailable (AWT-EventQueue thread not found).");
+        "EDT snapshot: "
+            + Objects.toString(edt.getThreadName(), "(unknown)")
+            + " state="
+            + Objects.toString(edt.getThreadState(), "(unknown)"));
+    appendStackToDiagnostics("(edt-stack)", edt.getStackTrace(), 12);
   }
 
   private void captureJfrSnapshot(Path outPath, String captureId) {

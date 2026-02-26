@@ -882,12 +882,17 @@ public class FilterCommandParser {
         case "action" -> {
           actionSpecified = true;
           String a = val.trim().toLowerCase(Locale.ROOT);
-          if (a.isEmpty() || a.equals("hide")) {
-            action = FilterAction.HIDE;
-          } else {
-            throw new IllegalArgumentException(
-                "Unknown action: '" + val + "' (only 'hide' is supported)");
-          }
+          action =
+              switch (a) {
+                case "", "hide" -> FilterAction.HIDE;
+                case "dim", "deemphasize", "de-emphasize" -> FilterAction.DIM;
+                case "highlight", "hl", "emphasize", "emphasise" -> FilterAction.HIGHLIGHT;
+                default ->
+                    throw new IllegalArgumentException(
+                        "Unknown action: '"
+                            + val
+                            + "' (use one of: hide, dim, highlight)");
+              };
         }
         case "dir" -> {
           directionSpecified = true;

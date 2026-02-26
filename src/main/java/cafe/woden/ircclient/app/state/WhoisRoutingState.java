@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * correlation maps.
  */
 @Component
+@ApplicationLayer
 public class WhoisRoutingState {
 
   private final ConcurrentHashMap<WhoisKey, TargetRef> pendingWhoisTargets =

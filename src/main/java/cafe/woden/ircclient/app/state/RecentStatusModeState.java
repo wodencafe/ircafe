@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.state;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * this as a weak signal to suppress that echo when we don't yet have channel-flag state seeded.
  */
 @Component
+@ApplicationLayer
 public class RecentStatusModeState {
 
   private final ConcurrentHashMap<ModeKey, Long> lastStatusModeMs = new ConcurrentHashMap<>();

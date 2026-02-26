@@ -29,9 +29,9 @@ class LoggingUiPortDecoratorTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final LogProperties LOGGING_ON =
-      new LogProperties(true, true, true, true, true, 0, null);
+      new LogProperties(true, true, true, true, true, 0, 50_000, 250, null);
   private static final LogProperties LOGGING_PM_OFF =
-      new LogProperties(true, true, false, true, true, 0, null);
+      new LogProperties(true, true, false, true, true, 0, 50_000, 250, null);
 
   @Test
   void appendChatAtWithMetadataPersistsMessageIdentity() throws Exception {

@@ -6,10 +6,12 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Tracks explicit user-triggered CHATHISTORY requests so arriving batches can be rendered live. */
 @Component
+@ApplicationLayer
 public class ChatHistoryRequestRoutingState {
 
   public enum QueryMode {

@@ -65,6 +65,15 @@ def errorPronePatchChecks =
 
 tasks.withType(Test).configureEach {
     javaLauncher = javaLauncher25
+    systemProperty 'java.awt.headless', 'true'
+
+    // Long Swing-heavy test runs can accumulate heap/metaspace pressure in one JVM.
+    // Use a larger heap and periodic process recycling for stability.
+    maxHeapSize = (findProperty('testMaxHeap') ?: '1536m').toString()
+    long forkEveryValue = Long.parseLong((findProperty('testForkEvery') ?: '200').toString())
+    if (forkEveryValue > 0L) {
+        forkEvery = forkEveryValue
+    }
 }
 
 tasks.withType(JavaExec).configureEach {
@@ -264,6 +273,7 @@ dependencies {
 
     implementation 'io.reactivex.rxjava3:rxjava:3.1.12'
     implementation 'com.github.pircbotx:pircbotx:2.3.1'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
 
     implementation "io.github.andrewauclair:modern-docking-api:1.4.1"
     implementation "io.github.andrewauclair:modern-docking-single-app:1.4.1"
@@ -343,7 +353,6 @@ tasks.register('functionalTest', Test) {
     testClassesDirs = sourceSets.functionalTest.output.classesDirs
     classpath = sourceSets.functionalTest.runtimeClasspath
     useJUnitPlatform()
-    systemProperty 'java.awt.headless', 'true'
     filter {
         includeTestsMatching '*FunctionalTest'
     }
@@ -356,7 +365,6 @@ tasks.register('themeValidate', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform()
-    systemProperty 'java.awt.headless', 'true'
     filter {
         includeTestsMatching 'cafe.woden.ircclient.ui.settings.ThemeValidatorTest'
     }

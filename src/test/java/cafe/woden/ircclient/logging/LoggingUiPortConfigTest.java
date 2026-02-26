@@ -22,7 +22,8 @@ class LoggingUiPortConfigTest {
           .withBean(ChatLogWriter.class, () -> line -> {})
           .withBean(LogLineFactory.class, LogLineFactory::new)
           .withBean(
-              LogProperties.class, () -> new LogProperties(true, true, true, true, true, 0, null));
+              LogProperties.class,
+              () -> new LogProperties(true, true, true, true, true, 0, 50_000, 250, null));
 
   @Test
   void loggingUiPortBeanCreatedWhenLoggingEnabled() {

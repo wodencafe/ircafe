@@ -2,16 +2,25 @@ package cafe.woden.ircclient.app;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
+import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
+import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -25,9 +34,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.modulith.test.ApplicationModuleTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @ApplicationModuleTest(mode = ApplicationModuleTest.BootstrapMode.STANDALONE)
 class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleIntegrationTest {
+
+  @MockitoBean ChatHistoryIngestionPort chatHistoryIngestionPort;
+
+  @MockitoBean ChatHistoryIngestEventsPort chatHistoryIngestEventsPort;
+
+  @MockitoBean ChatHistoryBatchEventsPort chatHistoryBatchEventsPort;
+
+  @MockitoBean ZncPlaybackEventsPort zncPlaybackEventsPort;
+
+  @MockitoBean TargetChatHistoryPort targetChatHistoryPort;
+
+  @MockitoBean TargetLogMaintenancePort targetLogMaintenancePort;
+
+  @MockitoBean DccTransferStore dccTransferStore;
 
   private final IrcMediator mediator;
   private final TargetCoordinator targetCoordinator;
@@ -95,7 +119,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     runtimeConfig.forgetJoinedChannel(sid, channel);
     emitServerEvent(sid, new IrcEvent.KickedFromChannel(Instant.now(), channel, "chanop", "bye"));
 
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, true);
+    verify(swingUiPort, atLeastOnce()).setChannelDetached(eq(ref), eq(true), anyString());
     assertFalse(targetCoordinator.onJoinedChannel(sid, channel));
   }
 

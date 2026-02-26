@@ -20,6 +20,8 @@ public record LogProperties(
      * <p>Ignored when {@code keepForever=true}. If {@code <= 0}, treated as "no retention".
      */
     Integer retentionDays,
+    Integer writerQueueMax,
+    Integer writerBatchSize,
     Hsqldb hsqldb) {
 
   public record Hsqldb(String fileBaseName, Boolean nextToRuntimeConfig) {
@@ -41,6 +43,8 @@ public record LogProperties(
     if (savePrivateMessageList == null) savePrivateMessageList = Boolean.TRUE;
     if (keepForever == null) keepForever = Boolean.TRUE;
     if (retentionDays == null || retentionDays <= 0) retentionDays = 0;
+    if (writerQueueMax == null || writerQueueMax <= 0) writerQueueMax = 50_000;
+    if (writerBatchSize == null || writerBatchSize <= 0) writerBatchSize = 250;
     if (hsqldb == null) hsqldb = new Hsqldb("ircafe-chatlog", Boolean.TRUE);
   }
 }

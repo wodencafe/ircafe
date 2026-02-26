@@ -2235,6 +2235,286 @@ public class RuntimeConfigStore {
     return List.copyOf(out);
   }
 
+  public synchronized String readLaunchJvmJavaCommand(String defaultValue) {
+    String fallback = Objects.toString(defaultValue, "").trim();
+    if (fallback.isEmpty()) fallback = "java";
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object launchObj = ircafe.get("launch");
+      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
+
+      Object jvmObj = launch.get("jvm");
+      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
+
+      if (!jvm.containsKey("javaCommand")) return fallback;
+      String raw = Objects.toString(jvm.get("javaCommand"), "").trim();
+      return raw.isEmpty() ? fallback : raw;
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read launch.jvm.javaCommand from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized int readLaunchJvmXmsMiB(int defaultValue) {
+    int fallback = clampLaunchJvmHeapMiB(defaultValue);
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object launchObj = ircafe.get("launch");
+      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
+
+      Object jvmObj = launch.get("jvm");
+      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
+
+      if (!jvm.containsKey("xmsMiB")) return fallback;
+      return clampLaunchJvmHeapMiB(asInt(jvm.get("xmsMiB")).orElse(fallback));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read launch.jvm.xmsMiB from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized int readLaunchJvmXmxMiB(int defaultValue) {
+    int fallback = clampLaunchJvmHeapMiB(defaultValue);
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object launchObj = ircafe.get("launch");
+      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
+
+      Object jvmObj = launch.get("jvm");
+      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
+
+      if (!jvm.containsKey("xmxMiB")) return fallback;
+      return clampLaunchJvmHeapMiB(asInt(jvm.get("xmxMiB")).orElse(fallback));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read launch.jvm.xmxMiB from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized String readLaunchJvmGc(String defaultValue) {
+    String fallback = normalizeLaunchJvmGc(defaultValue);
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object launchObj = ircafe.get("launch");
+      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
+
+      Object jvmObj = launch.get("jvm");
+      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
+
+      if (!jvm.containsKey("gc")) return fallback;
+      return normalizeLaunchJvmGc(jvm.get("gc"));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read launch.jvm.gc from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized List<String> readLaunchJvmArgs(List<String> defaultValue) {
+    try {
+      if (file.toString().isBlank()) return sanitizeArgs(defaultValue);
+      if (!Files.exists(file)) return sanitizeArgs(defaultValue);
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
+
+      Object launchObj = ircafe.get("launch");
+      if (!(launchObj instanceof Map<?, ?> launch)) return sanitizeArgs(defaultValue);
+
+      Object jvmObj = launch.get("jvm");
+      if (!(jvmObj instanceof Map<?, ?> jvm)) return sanitizeArgs(defaultValue);
+
+      if (!jvm.containsKey("args")) return sanitizeArgs(defaultValue);
+      Object argsObj = jvm.get("args");
+      if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
+
+      List<String> out = new ArrayList<>();
+      for (Object entry : raw) {
+        String arg = Objects.toString(entry, "").trim();
+        if (!arg.isEmpty()) out.add(arg);
+      }
+      return List.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read launch.jvm.args from '{}'", file, e);
+      return sanitizeArgs(defaultValue);
+    }
+  }
+
+  public synchronized void rememberLaunchJvmJavaCommand(String javaCommand) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String cmd = Objects.toString(javaCommand, "").trim();
+      if (cmd.isEmpty() || cmd.equalsIgnoreCase("java")) cmd = "";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+
+      if (cmd.isEmpty()) {
+        jvm.remove("javaCommand");
+      } else {
+        jvm.put("javaCommand", cmd);
+      }
+
+      cleanupLaunchJvm(ircafe, launch, jvm);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist launch.jvm.javaCommand to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberLaunchJvmXmsMiB(int xmsMiB) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampLaunchJvmHeapMiB(xmsMiB);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+
+      if (v <= 0) {
+        jvm.remove("xmsMiB");
+      } else {
+        jvm.put("xmsMiB", v);
+      }
+
+      cleanupLaunchJvm(ircafe, launch, jvm);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist launch.jvm.xmsMiB to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberLaunchJvmXmxMiB(int xmxMiB) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = clampLaunchJvmHeapMiB(xmxMiB);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+
+      if (v <= 0) {
+        jvm.remove("xmxMiB");
+      } else {
+        jvm.put("xmxMiB", v);
+      }
+
+      cleanupLaunchJvm(ircafe, launch, jvm);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist launch.jvm.xmxMiB to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberLaunchJvmGc(String gc) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = normalizeLaunchJvmGc(gc);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+
+      if (normalized.isEmpty()) {
+        jvm.remove("gc");
+      } else {
+        jvm.put("gc", normalized);
+      }
+
+      cleanupLaunchJvm(ircafe, launch, jvm);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist launch.jvm.gc to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberLaunchJvmArgs(List<String> args) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      List<String> sanitized = sanitizeArgs(args);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+
+      if (sanitized.isEmpty()) {
+        jvm.remove("args");
+      } else {
+        jvm.put("args", sanitized);
+      }
+
+      cleanupLaunchJvm(ircafe, launch, jvm);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist launch.jvm.args to '{}'", file, e);
+    }
+  }
+
+  private static int clampLaunchJvmHeapMiB(int value) {
+    if (value < 0) return 0;
+    if (value > 262_144) return 262_144;
+    return value;
+  }
+
+  private static String normalizeLaunchJvmGc(Object raw) {
+    String v = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    return switch (v) {
+      case "", "default", "auto", "none" -> "";
+      case "g1", "g1gc", "useg1gc", "useg1" -> "g1";
+      case "z", "zgc", "usezgc", "usez" -> "zgc";
+      case "shenandoah", "shenandoahgc", "useshenandoahgc", "useshenandoah" -> "shenandoah";
+      case "parallel", "parallelgc", "useparallelgc", "useparallel" -> "parallel";
+      case "serial", "serialgc", "useserialgc", "useserial" -> "serial";
+      case "epsilon", "epsilongc", "useepsilongc", "useepsilon" -> "epsilon";
+      default -> "";
+    };
+  }
+
+  private static void cleanupLaunchJvm(
+      Map<String, Object> ircafe, Map<String, Object> launch, Map<String, Object> jvm) {
+    if (jvm.isEmpty()) {
+      launch.remove("jvm");
+    }
+    if (launch.isEmpty()) {
+      ircafe.remove("launch");
+    }
+  }
+
   public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("enabled", defaultValue);
   }
@@ -2883,6 +3163,43 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberChatLoggingWriterQueueMax(int writerQueueMax) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(100, Math.min(1_000_000, writerQueueMax));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("writerQueueMax", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging writerQueueMax setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatLoggingWriterBatchSize(int writerBatchSize) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(10_000, writerBatchSize));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("writerBatchSize", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat logging writerBatchSize setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberImageEmbedsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -3122,6 +3439,48 @@ public class RuntimeConfigStore {
     rememberSpellcheckBoolean("spellcheckSuggestOnTabEnabled", enabled);
   }
 
+  public synchronized void rememberSpellcheckCompletionPreset(String preset) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = UiProperties.normalizeSpellcheckCompletionPreset(preset);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("spellcheckCompletionPreset", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist spellcheck completion preset to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberSpellcheckCustomMinPrefixCompletionTokenLength(int value) {
+    rememberSpellcheckInteger(
+        "spellcheckCustomMinPrefixCompletionTokenLength", Math.max(2, Math.min(6, value)));
+  }
+
+  public synchronized void rememberSpellcheckCustomMaxPrefixCompletionExtraChars(int value) {
+    rememberSpellcheckInteger(
+        "spellcheckCustomMaxPrefixCompletionExtraChars", Math.max(4, Math.min(24, value)));
+  }
+
+  public synchronized void rememberSpellcheckCustomMaxPrefixLexiconCandidates(int value) {
+    rememberSpellcheckInteger(
+        "spellcheckCustomMaxPrefixLexiconCandidates", Math.max(16, Math.min(256, value)));
+  }
+
+  public synchronized void rememberSpellcheckCustomPrefixCompletionBonusScore(int value) {
+    rememberSpellcheckInteger(
+        "spellcheckCustomPrefixCompletionBonusScore", Math.max(0, Math.min(400, value)));
+  }
+
+  public synchronized void rememberSpellcheckCustomSourceOrderWeight(int value) {
+    rememberSpellcheckInteger("spellcheckCustomSourceOrderWeight", Math.max(0, Math.min(20, value)));
+  }
+
   public synchronized void rememberSpellcheckLanguageTag(String languageTag) {
     try {
       if (file.toString().isBlank()) return;
@@ -3171,6 +3530,22 @@ public class RuntimeConfigStore {
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
       ui.put(key, enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.{} setting to '{}'", key, file, e);
+    }
+  }
+
+  private synchronized void rememberSpellcheckInteger(String key, int value) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put(key, value);
 
       writeFile(doc);
     } catch (Exception e) {

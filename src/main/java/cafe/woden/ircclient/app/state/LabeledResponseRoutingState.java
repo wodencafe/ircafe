@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
  * to the originating chat buffer.
  */
 @Component
+@ApplicationLayer
 public class LabeledResponseRoutingState {
   private static final Duration STALE_RETENTION = Duration.ofMinutes(10);
 

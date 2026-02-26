@@ -5,9 +5,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@ApplicationLayer
 public class AwayRoutingState {
 
   // Away state tracking (per server) so bare `/away` can toggle between set/clear.

@@ -1,5 +1,8 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -18,14 +21,12 @@ import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.PayloadApplicationEvent;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /** Captures Spring framework/runtime events into a rolling in-memory feed for UI diagnostics. */
 @Service
 @Lazy(false)
 @ApplicationLayer
-@NamedInterface("diagnostics")
 public class SpringRuntimeEventsService implements ApplicationListener<ApplicationEvent> {
   private static final int MAX_EVENTS = 1200;
   private static final DateTimeFormatter TS_FMT =
@@ -34,6 +35,9 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
           .withZone(ZoneId.systemDefault());
 
   private final Deque<RuntimeDiagnosticEvent> events = new ArrayDeque<>();
+  private final FlowableProcessor<Long> changeSignals =
+      PublishProcessor.<Long>create().toSerialized();
+  private long changeSeq = 0L;
 
   @PostConstruct
   public void onStart() {
@@ -74,12 +78,26 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
     return List.copyOf(out);
   }
 
+  public synchronized void clearEvents() {
+    events.clear();
+    emitChangeSignalLocked();
+  }
+
+  public Flowable<Long> changeStream() {
+    return changeSignals.onBackpressureLatest();
+  }
+
   private synchronized void appendEvent(
       Instant at, String level, String type, String summary, String details) {
     events.addLast(new RuntimeDiagnosticEvent(at, level, type, summary, details));
     while (events.size() > MAX_EVENTS) {
       events.removeFirst();
     }
+    emitChangeSignalLocked();
+  }
+
+  private void emitChangeSignalLocked() {
+    changeSignals.onNext(++changeSeq);
   }
 
   private static String summarizeEvent(ApplicationEvent event) {

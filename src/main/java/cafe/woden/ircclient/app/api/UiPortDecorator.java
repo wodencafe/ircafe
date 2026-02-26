@@ -118,6 +118,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
+    delegate.setChannelDetached(target, detached, warningReason);
+  }
+
+  @Override
   public boolean isChannelDetached(TargetRef target) {
     return delegate.isChannelDetached(target);
   }

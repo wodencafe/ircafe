@@ -66,6 +66,7 @@ public final class FilterRuleEntryDialog {
 
     JTextField name = new JTextField(24);
     JTextField scope = new JTextField(24);
+    JComboBox<FilterAction> action = new JComboBox<>(FilterAction.values());
     JComboBox<FilterDirection> direction = new JComboBox<>(FilterDirection.values());
     JCheckBox enabled = new JCheckBox("Enabled");
 
@@ -101,6 +102,7 @@ public final class FilterRuleEntryDialog {
       name.setText(Objects.toString(seed.name(), ""));
       enabled.setSelected(seed.enabled());
       scope.setText(Objects.toString(seed.scopePattern(), "*"));
+      action.setSelectedItem(seed.action() != null ? seed.action() : FilterAction.HIDE);
       direction.setSelectedItem(seed.direction() != null ? seed.direction() : FilterDirection.ANY);
 
       EnumSet<LogKind> k = seed.kinds();
@@ -137,11 +139,10 @@ public final class FilterRuleEntryDialog {
           Objects.toString(suggestedScope, "*").trim().isEmpty()
               ? "*"
               : Objects.toString(suggestedScope, "*").trim());
+      action.setSelectedItem(FilterAction.HIDE);
       direction.setSelectedItem(FilterDirection.ANY);
     }
 
-    JLabel hint = new JLabel("Action: HIDE (MVP)");
-    hint.putClientProperty(FlatClientProperties.STYLE_CLASS, "small");
     JLabel error = new JLabel(" ");
     error.putClientProperty(FlatClientProperties.STYLE, "foreground: #C62828");
 
@@ -169,6 +170,13 @@ public final class FilterRuleEntryDialog {
     form.add(new JLabel("Scope"), g);
     g.gridx = 1;
     form.add(scope, g);
+
+    row++;
+    g.gridx = 0;
+    g.gridy = row;
+    form.add(new JLabel("Action"), g);
+    g.gridx = 1;
+    form.add(action, g);
 
     row++;
     g.gridx = 0;
@@ -225,7 +233,6 @@ public final class FilterRuleEntryDialog {
     flags.add(reI);
     flags.add(reM);
     flags.add(reS);
-    flags.add(hint);
     form.add(flags, g);
 
     row++;
@@ -299,6 +306,7 @@ public final class FilterRuleEntryDialog {
     regex.getDocument().addDocumentListener(dl);
 
     enabled.addActionListener(e -> validate.run());
+    action.addActionListener(e -> validate.run());
     direction.addActionListener(e -> validate.run());
     kindChat.addActionListener(e -> validate.run());
     kindAction.addActionListener(e -> validate.run());
@@ -351,7 +359,7 @@ public final class FilterRuleEntryDialog {
                   n,
                   enabled.isSelected(),
                   sc,
-                  FilterAction.HIDE,
+                  (FilterAction) action.getSelectedItem(),
                   (FilterDirection) direction.getSelectedItem(),
                   kindsSet,
                   from,

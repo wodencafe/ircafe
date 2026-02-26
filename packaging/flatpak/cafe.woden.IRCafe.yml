@@ -23,7 +23,7 @@ modules:
       - install -Dm644 ircafe_512.png /app/share/icons/hicolor/512x512/apps/cafe.woden.IRCafe.png
     sources:
       - type: dir
-        path: ../../build/dist/IRCafe
+        path: ../../build/dist
       - type: file
         path: ircafe.sh
       - type: file

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.NotificationStore;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
@@ -312,6 +312,11 @@ public class SwingUiPort implements UiPort {
   @Override
   public void setChannelDetached(TargetRef target, boolean detached) {
     onEdt(() -> serverTree.setChannelDetached(target, detached));
+  }
+
+  @Override
+  public void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
+    onEdt(() -> serverTree.setChannelDetached(target, detached, warningReason));
   }
 
   @Override

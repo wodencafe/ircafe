@@ -17,6 +17,7 @@ import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.Desktop;
 import java.awt.Frame;
 import java.net.URI;
@@ -36,7 +37,7 @@ import org.springframework.modulith.Modulithic;
 @SpringBootApplication
 @Modulithic(
     systemName = "IRCafe",
-    sharedModules = {"config", "logging", "model", "notify", "util"})
+    sharedModules = {"config", "model", "notify", "util"})
 @EnableConfigurationProperties({
   IrcProperties.class,
   UiProperties.class,
@@ -83,15 +84,13 @@ public class IrcSwingApp {
               frame.validate();
               frame.repaint();
 
-              trayService.installIfEnabled();
               installDesktopHandlers(frame, ui);
+              // Show the window before any optional native integrations that may block.
+              frame.setVisible(true);
 
-              // If we start minimized, don't show the window (tray icon becomes the entry point).
-              boolean startMinimized =
-                  trayService.isTrayActive()
-                      && trayService.isEnabled()
-                      && trayService.startMinimized();
-              frame.setVisible(!startMinimized);
+              boolean startMinimizedRequested =
+                  trayService.isEnabled() && trayService.startMinimized();
+              installTrayAsync(frame, trayService, startMinimizedRequested);
 
               MediatorControlPort mediator = mediatorProvider.getObject();
               if (settingsBus.get().autoConnectOnStart()) {
@@ -105,6 +104,33 @@ public class IrcSwingApp {
             }
           });
     };
+  }
+
+  private static void installTrayAsync(
+      MainFrame frame, TrayService trayService, boolean startMinimizedRequested) {
+    VirtualThreads.start(
+        "ircafe-tray-install",
+        () -> {
+          try {
+            trayService.installIfEnabled();
+          } catch (Throwable t) {
+            log.warn("[ircafe] tray install failed during startup", t);
+          }
+
+          if (!startMinimizedRequested) return;
+
+          SwingUtilities.invokeLater(
+              () -> {
+                // Honor start-minimized only when tray is truly active.
+                if (trayService.isEnabled() && trayService.isTrayActive()) {
+                  frame.setVisible(false);
+                } else {
+                  log.warn(
+                      "[ircafe] start-minimized requested but tray is unavailable; "
+                          + "keeping main window visible");
+                }
+              });
+        });
   }
 
   private static String determineStartupTheme(

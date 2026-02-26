@@ -152,7 +152,9 @@ public class LocalFilterCommandService implements LocalFilterCommandHandler {
     ui.appendStatus(out, "(filter)", "  /filter placeholder-preview <0..25>");
     ui.appendStatus(out, "(filter)", "");
     ui.appendStatus(
-        out, "(filter)", "Rule keys: scope, enabled, action, dir, kind, from, tags, text");
+        out,
+        "(filter)",
+        "Rule keys: scope, enabled, action(hide|dim|highlight), dir, kind, from, tags, text");
     ui.appendStatus(
         out,
         "(filter)",

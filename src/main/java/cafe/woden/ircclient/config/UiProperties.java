@@ -116,6 +116,29 @@ public record UiProperties(
     List<String> spellcheckCustomDictionary,
 
     /**
+     * Completion preset for dictionary-backed TAB suggestions.
+     *
+     * <p>Allowed values: {@code android-like}, {@code standard}, {@code conservative}, {@code
+     * aggressive}, {@code custom}.
+     */
+    String spellcheckCompletionPreset,
+
+    /** Custom minimum token length required before prefix completions are considered. */
+    Integer spellcheckCustomMinPrefixCompletionTokenLength,
+
+    /** Custom maximum number of extra characters allowed for a prefix completion candidate. */
+    Integer spellcheckCustomMaxPrefixCompletionExtraChars,
+
+    /** Custom cap for prefix lexicon candidates considered per lookup. */
+    Integer spellcheckCustomMaxPrefixLexiconCandidates,
+
+    /** Custom score bonus that boosts exact prefix completions. */
+    Integer spellcheckCustomPrefixCompletionBonusScore,
+
+    /** Custom source-order penalty weight for later suggestions in upstream lists. */
+    Integer spellcheckCustomSourceOrderWeight,
+
+    /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same
      * server). If disabled, they are routed to their origin target (channel/PM) instead.
      */
@@ -721,6 +744,31 @@ public record UiProperties(
               .distinct()
               .toList();
     }
+    spellcheckCompletionPreset = normalizeSpellcheckCompletionPreset(spellcheckCompletionPreset);
+    if (spellcheckCustomMinPrefixCompletionTokenLength == null) {
+      spellcheckCustomMinPrefixCompletionTokenLength = 2;
+    }
+    spellcheckCustomMinPrefixCompletionTokenLength =
+        Math.max(2, Math.min(6, spellcheckCustomMinPrefixCompletionTokenLength));
+    if (spellcheckCustomMaxPrefixCompletionExtraChars == null) {
+      spellcheckCustomMaxPrefixCompletionExtraChars = 14;
+    }
+    spellcheckCustomMaxPrefixCompletionExtraChars =
+        Math.max(4, Math.min(24, spellcheckCustomMaxPrefixCompletionExtraChars));
+    if (spellcheckCustomMaxPrefixLexiconCandidates == null) {
+      spellcheckCustomMaxPrefixLexiconCandidates = 96;
+    }
+    spellcheckCustomMaxPrefixLexiconCandidates =
+        Math.max(16, Math.min(256, spellcheckCustomMaxPrefixLexiconCandidates));
+    if (spellcheckCustomPrefixCompletionBonusScore == null) {
+      spellcheckCustomPrefixCompletionBonusScore = 220;
+    }
+    spellcheckCustomPrefixCompletionBonusScore =
+        Math.max(0, Math.min(400, spellcheckCustomPrefixCompletionBonusScore));
+    if (spellcheckCustomSourceOrderWeight == null) {
+      spellcheckCustomSourceOrderWeight = 6;
+    }
+    spellcheckCustomSourceOrderWeight = Math.max(0, Math.min(20, spellcheckCustomSourceOrderWeight));
 
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
@@ -806,5 +854,14 @@ public record UiProperties(
     if ("en-us".equalsIgnoreCase(folded)) return "en-US";
     if ("en-gb".equalsIgnoreCase(folded)) return "en-GB";
     return "en-US";
+  }
+
+  static String normalizeSpellcheckCompletionPreset(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "android-like";
+    return switch (s) {
+      case "android-like", "standard", "conservative", "aggressive", "custom" -> s;
+      default -> "android-like";
+    };
   }
 }

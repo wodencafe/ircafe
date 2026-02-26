@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.ui.notifications;
 
-import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.NotificationStore.HighlightEvent;
-import cafe.woden.ircclient.app.NotificationStore.IrcEventRuleEvent;
-import cafe.woden.ircclient.app.NotificationStore.RuleMatchEvent;
+import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.notifications.NotificationStore.HighlightEvent;
+import cafe.woden.ircclient.notifications.NotificationStore.IrcEventRuleEvent;
+import cafe.woden.ircclient.notifications.NotificationStore.RuleMatchEvent;
 import cafe.woden.ircclient.app.api.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.*;

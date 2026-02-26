@@ -19,12 +19,17 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(ChatLogService.class);
 
-  // Conservative defaults.
-  // TODO: Make these configurable by GUI and config.
-  private static final int MAX_QUEUE = 50_000;
-  private static final int BATCH_SIZE = 250;
+  // Conservative bounds for configurable values.
+  private static final int DEFAULT_MAX_QUEUE = 50_000;
+  private static final int DEFAULT_BATCH_SIZE = 250;
+  private static final int MIN_MAX_QUEUE = 100;
+  private static final int MAX_MAX_QUEUE = 1_000_000;
+  private static final int MIN_BATCH_SIZE = 1;
+  private static final int MAX_BATCH_SIZE = 10_000;
 
-  private final BlockingQueue<LogLine> queue = new LinkedBlockingQueue<>(MAX_QUEUE);
+  private final int maxQueue;
+  private final int batchSize;
+  private final BlockingQueue<LogLine> queue;
   private final Thread writerThread;
   private final ChatLogRepository repo;
   private final TransactionTemplate tx;
@@ -39,6 +44,21 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
     this.repo = Objects.requireNonNull(repo, "repo");
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
+    this.maxQueue =
+        clamp(
+            props.writerQueueMax(),
+            DEFAULT_MAX_QUEUE,
+            MIN_MAX_QUEUE,
+            MAX_MAX_QUEUE,
+            "ircafe.logging.writerQueueMax");
+    this.batchSize =
+        clamp(
+            props.writerBatchSize(),
+            DEFAULT_BATCH_SIZE,
+            MIN_BATCH_SIZE,
+            MAX_BATCH_SIZE,
+            "ircafe.logging.writerBatchSize");
+    this.queue = new LinkedBlockingQueue<>(maxQueue);
 
     this.writerThread = VirtualThreads.unstarted("ircafe-chatlog-writer", this::writerLoop);
     this.writerThread.start();
@@ -58,7 +78,7 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
       if (d == 1 || d % 1000 == 0) {
         log.warn(
             "[ircafe] Chat log queue full ({} max). Dropping lines. Dropped so far: {}",
-            MAX_QUEUE,
+            maxQueue,
             d);
       }
     }
@@ -99,14 +119,14 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   }
 
   private void flushOnceLocked(LogLine first) {
-    List<LogLine> batch = new ArrayList<>(BATCH_SIZE);
+    List<LogLine> batch = new ArrayList<>(batchSize);
     if (first != null) {
       batch.add(first);
     }
 
     while (true) {
-      if (batch.size() < BATCH_SIZE) {
-        queue.drainTo(batch, BATCH_SIZE - batch.size());
+      if (batch.size() < batchSize) {
+        queue.drainTo(batch, batchSize - batch.size());
       }
       if (batch.isEmpty()) {
         return;
@@ -118,7 +138,7 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
       if (queue.isEmpty()) {
         return;
       }
-      batch = new ArrayList<>(BATCH_SIZE);
+      batch = new ArrayList<>(batchSize);
     }
   }
 
@@ -146,5 +166,28 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
     } catch (Throwable t) {
       log.warn("[ircafe] Final chat log flush failed", t);
     }
+  }
+
+  private static int clamp(Integer raw, int fallback, int min, int max, String settingName) {
+    int v = raw == null ? fallback : raw;
+    if (v < min) {
+      log.warn(
+          "[ircafe] {}={} is below minimum {}; using {}",
+          settingName,
+          v,
+          min,
+          fallback);
+      return fallback;
+    }
+    if (v > max) {
+      log.warn(
+          "[ircafe] {}={} is above maximum {}; using {}",
+          settingName,
+          v,
+          max,
+          fallback);
+      return fallback;
+    }
+    return v;
   }
 }

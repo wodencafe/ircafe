@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.dcc;
 
-import cafe.woden.ircclient.app.DccTransferStore;
-import cafe.woden.ircclient.app.DccTransferStore.ActionHint;
-import cafe.woden.ircclient.app.DccTransferStore.Entry;
+import cafe.woden.ircclient.dcc.DccTransferStore;
+import cafe.woden.ircclient.dcc.DccTransferStore.ActionHint;
+import cafe.woden.ircclient.dcc.DccTransferStore.Entry;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;

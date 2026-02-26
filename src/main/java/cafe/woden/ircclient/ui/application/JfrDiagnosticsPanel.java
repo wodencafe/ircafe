@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.application;
 
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.RuntimeDiagnosticEvent;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
@@ -14,9 +14,9 @@ import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
-import java.awt.event.HierarchyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeListener;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -41,7 +41,6 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import javax.swing.table.AbstractTableModel;
 import net.miginfocom.swing.MigLayout;
 
@@ -69,7 +68,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
   private static final int COL_SUMMARY = 3;
 
   private final JfrRuntimeEventsService service;
-  private final Timer refreshTimer;
+  private final PropertyChangeListener stateListener = __ -> refreshOnEdt();
   private final RuntimeEventsTableModel model = new RuntimeEventsTableModel();
   private final JTable table = new JTable(model);
   private final JCheckBox enabledCheck = new JCheckBox("Enable JFR diagnostics");
@@ -96,6 +95,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
   private final CircularGauge gcGauge = new CircularGauge("GC Rate");
 
   private boolean syncingControls;
+  private boolean stateListenerRegistered;
 
   public JfrDiagnosticsPanel(JfrRuntimeEventsService service) {
     super(new BorderLayout(0, 8));
@@ -121,17 +121,25 @@ public final class JfrDiagnosticsPanel extends JPanel {
     installControlActions();
     installTableInteractions();
     applyServiceAvailability();
-
-    refreshTimer = new Timer(1000, e -> refreshNow());
-    refreshTimer.setRepeats(true);
-    refreshTimer.start();
-    addHierarchyListener(this::onHierarchyChanged);
+    startStateSubscription();
     refreshNow();
   }
 
   public void refreshNow() {
     syncStatus();
     syncRows();
+  }
+
+  @Override
+  public void addNotify() {
+    super.addNotify();
+    startStateSubscription();
+  }
+
+  @Override
+  public void removeNotify() {
+    stopStateSubscription();
+    super.removeNotify();
   }
 
   private JPanel buildStatusTab() {
@@ -487,15 +495,25 @@ public final class JfrDiagnosticsPanel extends JPanel {
     }
   }
 
-  private void onHierarchyChanged(HierarchyEvent event) {
-    if (event == null) return;
-    if ((event.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0L) return;
-    if (!isDisplayable()) {
-      refreshTimer.stop();
-      return;
-    }
-    if (!refreshTimer.isRunning()) {
-      refreshTimer.start();
+  private void startStateSubscription() {
+    if (service == null) return;
+    if (stateListenerRegistered) return;
+    service.addStateListener(stateListener);
+    stateListenerRegistered = true;
+  }
+
+  private void stopStateSubscription() {
+    if (service == null) return;
+    if (!stateListenerRegistered) return;
+    service.removeStateListener(stateListener);
+    stateListenerRegistered = false;
+  }
+
+  private void refreshOnEdt() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      refreshNow();
+    } else {
+      SwingUtilities.invokeLater(this::refreshNow);
     }
   }
 

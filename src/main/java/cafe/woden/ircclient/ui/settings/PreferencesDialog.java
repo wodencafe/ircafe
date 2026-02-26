@@ -816,6 +816,7 @@ public class PreferencesDialog {
     }
     fonts.fontSize.addChangeListener(e -> scheduleFontPreview.run());
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
+    LaunchJvmControls launchJvm = buildLaunchJvmControls();
     NotificationSoundSettings soundSettings =
         notificationSoundSettingsBus != null
             ? notificationSoundSettingsBus.get()
@@ -885,7 +886,7 @@ public class PreferencesDialog {
 
     JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
     JPanel memoryPanel = buildMemoryPanel(memoryUsageDisplayMode, memoryWarnings);
-    JPanel startupPanel = buildStartupPanel(autoConnectOnStart);
+    JPanel startupPanel = buildStartupPanel(autoConnectOnStart, launchJvm);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel =
         buildChatPanel(
@@ -1163,6 +1164,18 @@ public class PreferencesDialog {
           String spellcheckLanguageTagV = spellcheckLanguageTagValue(spellcheck.languageTag);
           List<String> spellcheckCustomDictionaryV =
               parseSpellcheckCustomDictionary(spellcheck.customDictionary.getText());
+          String spellcheckCompletionPresetV =
+              spellcheckCompletionPresetValue(spellcheck.completionPreset);
+          int spellcheckCustomMinPrefixCompletionTokenLengthV =
+              ((Number) spellcheck.customMinPrefixCompletionTokenLength.getValue()).intValue();
+          int spellcheckCustomMaxPrefixCompletionExtraCharsV =
+              ((Number) spellcheck.customMaxPrefixCompletionExtraChars.getValue()).intValue();
+          int spellcheckCustomMaxPrefixLexiconCandidatesV =
+              ((Number) spellcheck.customMaxPrefixLexiconCandidates.getValue()).intValue();
+          int spellcheckCustomPrefixCompletionBonusScoreV =
+              ((Number) spellcheck.customPrefixCompletionBonusScore.getValue()).intValue();
+          int spellcheckCustomSourceOrderWeightV =
+              ((Number) spellcheck.customSourceOrderWeight.getValue()).intValue();
           boolean ctcpAutoRepliesEnabledV = ctcpAutoReplies.enabled.isSelected();
           boolean ctcpAutoReplyVersionEnabledV = ctcpAutoReplies.version.isSelected();
           boolean ctcpAutoReplyPingEnabledV = ctcpAutoReplies.ping.isSelected();
@@ -1194,6 +1207,20 @@ public class PreferencesDialog {
           boolean memoryWarningToastEnabledV = memoryWarnings.toastEnabled.isSelected();
           boolean memoryWarningPushyEnabledV = memoryWarnings.pushyEnabled.isSelected();
           boolean memoryWarningSoundEnabledV = memoryWarnings.soundEnabled.isSelected();
+          String launchJavaCommandV =
+              Objects.toString(launchJvm.javaCommand.getText(), "").trim();
+          if (launchJavaCommandV.isBlank()) launchJavaCommandV = "java";
+          int launchXmsMiBV = ((Number) launchJvm.xmsMiB.getValue()).intValue();
+          int launchXmxMiBV = ((Number) launchJvm.xmxMiB.getValue()).intValue();
+          if (launchXmsMiBV < 0) launchXmsMiBV = 0;
+          if (launchXmxMiBV < 0) launchXmxMiBV = 0;
+          if (launchXmsMiBV > 262_144) launchXmsMiBV = 262_144;
+          if (launchXmxMiBV > 262_144) launchXmxMiBV = 262_144;
+          if (launchXmxMiBV > 0 && launchXmsMiBV > 0 && launchXmxMiBV < launchXmsMiBV) {
+            launchXmxMiBV = launchXmsMiBV;
+          }
+          String launchGcV = launchGcIdValue((LaunchGcOption) launchJvm.gc.getSelectedItem());
+          List<String> launchArgsV = parseMultiLineArgs(launchJvm.extraArgs.getText());
           IrcProperties.Proxy proxyCfg;
           try {
             boolean proxyEnabledV = proxy.enabled.isSelected();
@@ -1484,7 +1511,13 @@ public class PreferencesDialog {
                   spellcheckUnderlineEnabledV,
                   spellcheckSuggestOnTabEnabledV,
                   spellcheckLanguageTagV,
-                  spellcheckCustomDictionaryV);
+                  spellcheckCustomDictionaryV,
+                  spellcheckCompletionPresetV,
+                  spellcheckCustomMinPrefixCompletionTokenLengthV,
+                  spellcheckCustomMaxPrefixCompletionExtraCharsV,
+                  spellcheckCustomMaxPrefixLexiconCandidatesV,
+                  spellcheckCustomPrefixCompletionBonusScoreV,
+                  spellcheckCustomSourceOrderWeightV);
 
           boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
@@ -1537,6 +1570,11 @@ public class PreferencesDialog {
           runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
           runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
           runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
+          runtimeConfig.rememberLaunchJvmJavaCommand(launchJavaCommandV);
+          runtimeConfig.rememberLaunchJvmXmsMiB(launchXmsMiBV);
+          runtimeConfig.rememberLaunchJvmXmxMiB(launchXmxMiBV);
+          runtimeConfig.rememberLaunchJvmGc(launchGcV);
+          runtimeConfig.rememberLaunchJvmArgs(launchArgsV);
           runtimeConfig.rememberTrayEnabled(next.trayEnabled());
           runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
           runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
@@ -1596,6 +1634,17 @@ public class PreferencesDialog {
           runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(nextSpellcheck.suggestOnTabEnabled());
           runtimeConfig.rememberSpellcheckLanguageTag(nextSpellcheck.languageTag());
           runtimeConfig.rememberSpellcheckCustomDictionary(nextSpellcheck.customDictionary());
+          runtimeConfig.rememberSpellcheckCompletionPreset(nextSpellcheck.completionPreset());
+          runtimeConfig.rememberSpellcheckCustomMinPrefixCompletionTokenLength(
+              nextSpellcheck.customMinPrefixCompletionTokenLength());
+          runtimeConfig.rememberSpellcheckCustomMaxPrefixCompletionExtraChars(
+              nextSpellcheck.customMaxPrefixCompletionExtraChars());
+          runtimeConfig.rememberSpellcheckCustomMaxPrefixLexiconCandidates(
+              nextSpellcheck.customMaxPrefixLexiconCandidates());
+          runtimeConfig.rememberSpellcheckCustomPrefixCompletionBonusScore(
+              nextSpellcheck.customPrefixCompletionBonusScore());
+          runtimeConfig.rememberSpellcheckCustomSourceOrderWeight(
+              nextSpellcheck.customSourceOrderWeight());
           persistIrcv3Capabilities(ircv3CapabilitiesV);
 
           if (nickColorSettingsBus != null) {
@@ -1628,6 +1677,10 @@ public class PreferencesDialog {
           runtimeConfig.rememberChatLoggingKeepForever(logging.keepForever.isSelected());
           runtimeConfig.rememberChatLoggingRetentionDays(
               ((Number) logging.retentionDays.getValue()).intValue());
+          runtimeConfig.rememberChatLoggingWriterQueueMax(
+              ((Number) logging.writerQueueMax.getValue()).intValue());
+          runtimeConfig.rememberChatLoggingWriterBatchSize(
+              ((Number) logging.writerBatchSize.getValue()).intValue());
 
           runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
           runtimeConfig.rememberClientLineColor(next.clientLineColor());
@@ -3805,20 +3858,141 @@ public class PreferencesDialog {
             ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
             ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
+    SpellcheckPresetOption[] presets =
+        new SpellcheckPresetOption[] {
+          new SpellcheckPresetOption(
+              SpellcheckSettings.COMPLETION_PRESET_ANDROID_LIKE, "Android-like (default)"),
+          new SpellcheckPresetOption(SpellcheckSettings.COMPLETION_PRESET_STANDARD, "Standard"),
+          new SpellcheckPresetOption(
+              SpellcheckSettings.COMPLETION_PRESET_CONSERVATIVE, "Conservative"),
+          new SpellcheckPresetOption(SpellcheckSettings.COMPLETION_PRESET_AGGRESSIVE, "Aggressive"),
+          new SpellcheckPresetOption(SpellcheckSettings.COMPLETION_PRESET_CUSTOM, "Custom")
+        };
+    JComboBox<SpellcheckPresetOption> completionPreset = new JComboBox<>(presets);
+    completionPreset.setToolTipText("Controls how strongly TAB completion prefers word completions.");
+    completionPreset.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel c =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            if (value instanceof SpellcheckPresetOption o) {
+              c.setText(o.label());
+            }
+            return c;
+          }
+        });
+    String initialPreset = SpellcheckSettings.normalizeCompletionPreset(initial.completionPreset());
+    for (SpellcheckPresetOption option : presets) {
+      if (option.id().equalsIgnoreCase(initialPreset)) {
+        completionPreset.setSelectedItem(option);
+        break;
+      }
+    }
+
+    JSpinner customMinPrefixCompletionTokenLength =
+        new JSpinner(
+            new SpinnerNumberModel(
+                initial.customMinPrefixCompletionTokenLength(),
+                SpellcheckSettings.MIN_PREFIX_COMPLETION_TOKEN_LENGTH_MIN,
+                SpellcheckSettings.MIN_PREFIX_COMPLETION_TOKEN_LENGTH_MAX,
+                1));
+    customMinPrefixCompletionTokenLength.setToolTipText(
+        "Minimum typed letters before prefix completions are considered.");
+
+    JSpinner customMaxPrefixCompletionExtraChars =
+        new JSpinner(
+            new SpinnerNumberModel(
+                initial.customMaxPrefixCompletionExtraChars(),
+                SpellcheckSettings.MAX_PREFIX_COMPLETION_EXTRA_CHARS_MIN,
+                SpellcheckSettings.MAX_PREFIX_COMPLETION_EXTRA_CHARS_MAX,
+                1));
+    customMaxPrefixCompletionExtraChars.setToolTipText(
+        "Maximum additional letters allowed for a completion candidate.");
+
+    JSpinner customMaxPrefixLexiconCandidates =
+        new JSpinner(
+            new SpinnerNumberModel(
+                initial.customMaxPrefixLexiconCandidates(),
+                SpellcheckSettings.MAX_PREFIX_LEXICON_CANDIDATES_MIN,
+                SpellcheckSettings.MAX_PREFIX_LEXICON_CANDIDATES_MAX,
+                8));
+    customMaxPrefixLexiconCandidates.setToolTipText(
+        "Upper bound for dictionary candidates considered for prefix completion.");
+
+    JSpinner customPrefixCompletionBonusScore =
+        new JSpinner(
+            new SpinnerNumberModel(
+                initial.customPrefixCompletionBonusScore(),
+                SpellcheckSettings.PREFIX_COMPLETION_BONUS_SCORE_MIN,
+                SpellcheckSettings.PREFIX_COMPLETION_BONUS_SCORE_MAX,
+                10));
+    customPrefixCompletionBonusScore.setToolTipText(
+        "Higher values make exact prefix completions rank more aggressively.");
+
+    JSpinner customSourceOrderWeight =
+        new JSpinner(
+            new SpinnerNumberModel(
+                initial.customSourceOrderWeight(),
+                SpellcheckSettings.SOURCE_ORDER_WEIGHT_MIN,
+                SpellcheckSettings.SOURCE_ORDER_WEIGHT_MAX,
+                1));
+    customSourceOrderWeight.setToolTipText(
+        "Penalty for later suggestions from upstream spelling results.");
+
+    JPanel customKnobsPanel =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2, hidemode 3",
+                "[right]8[grow,fill]",
+                "[]2[]2[]2[]2[]"));
+    customKnobsPanel.setOpaque(false);
+    customKnobsPanel.add(new JLabel("Min prefix length"));
+    customKnobsPanel.add(customMinPrefixCompletionTokenLength, "w 120!");
+    customKnobsPanel.add(new JLabel("Max completion tail"));
+    customKnobsPanel.add(customMaxPrefixCompletionExtraChars, "w 120!");
+    customKnobsPanel.add(new JLabel("Lexicon candidate cap"));
+    customKnobsPanel.add(customMaxPrefixLexiconCandidates, "w 120!");
+    customKnobsPanel.add(new JLabel("Prefix bonus"));
+    customKnobsPanel.add(customPrefixCompletionBonusScore, "w 120!");
+    customKnobsPanel.add(new JLabel("Source-order weight"));
+    customKnobsPanel.add(customSourceOrderWeight, "w 120!");
+
     Runnable syncEnabled =
         () -> {
           boolean on = enabled.isSelected();
+          boolean suggestionsOn = on && suggestOnTab.isSelected();
+          boolean customSelected =
+              SpellcheckSettings.COMPLETION_PRESET_CUSTOM.equals(
+                  spellcheckCompletionPresetValue(completionPreset));
           underline.setEnabled(on);
           suggestOnTab.setEnabled(on);
           languageTag.setEnabled(on);
           customDictionary.setEnabled(on);
+          completionPreset.setEnabled(suggestionsOn);
+          customKnobsPanel.setVisible(customSelected);
+          customMinPrefixCompletionTokenLength.setEnabled(suggestionsOn && customSelected);
+          customMaxPrefixCompletionExtraChars.setEnabled(suggestionsOn && customSelected);
+          customMaxPrefixLexiconCandidates.setEnabled(suggestionsOn && customSelected);
+          customPrefixCompletionBonusScore.setEnabled(suggestionsOn && customSelected);
+          customSourceOrderWeight.setEnabled(suggestionsOn && customSelected);
+          customKnobsPanel.revalidate();
+          customKnobsPanel.repaint();
         };
     enabled.addActionListener(e -> syncEnabled.run());
+    suggestOnTab.addActionListener(e -> syncEnabled.run());
+    completionPreset.addActionListener(e -> syncEnabled.run());
     syncEnabled.run();
 
     JPanel panel =
         new JPanel(
-            new MigLayout("insets 0, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]2[]2[]4[]2[]"));
+            new MigLayout(
+                "insets 0, fillx, wrap 1, hidemode 3",
+                "[grow,fill]",
+                "[]2[]2[]4[]2[]2[]2[]2[]"));
     panel.setOpaque(false);
     panel.add(enabled, "growx, wmin 0, wrap");
     panel.add(underline, "growx, wmin 0, gapleft 18, wrap");
@@ -3830,6 +4004,17 @@ public class PreferencesDialog {
     langRow.add(languageTag, "growx, wmin 160");
     panel.add(langRow, "growx, wmin 0, gapleft 18, wrap");
 
+    JPanel presetRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]", "[]"));
+    presetRow.setOpaque(false);
+    presetRow.add(new JLabel("Completion preset"));
+    presetRow.add(completionPreset, "growx, wmin 180");
+    panel.add(presetRow, "growx, wmin 0, gapleft 18, wrap");
+    panel.add(
+        helpText(
+            "Presets tune TAB completion ranking. Select Custom to reveal manual tuning knobs."),
+        "growx, wmin 0, gapleft 18, wrap");
+    panel.add(customKnobsPanel, "growx, wmin 0, gapleft 36, wrap");
+
     panel.add(new JLabel("Custom dictionary"), "growx, wmin 0, gapleft 18, wrap");
     panel.add(customScroll, "growx, wmin 0, h 80:110:180, gapleft 18, wrap");
     panel.add(
@@ -3838,7 +4023,18 @@ public class PreferencesDialog {
         "growx, wmin 0, gapleft 18, wrap");
 
     return new SpellcheckControls(
-        enabled, underline, suggestOnTab, languageTag, customDictionary, panel);
+        enabled,
+        underline,
+        suggestOnTab,
+        languageTag,
+        customDictionary,
+        completionPreset,
+        customMinPrefixCompletionTokenLength,
+        customMaxPrefixCompletionExtraChars,
+        customMaxPrefixLexiconCandidates,
+        customPrefixCompletionBonusScore,
+        customSourceOrderWeight,
+        panel);
   }
 
   private static void configureBuiltInSoundCombo(JComboBox<BuiltInSound> combo) {
@@ -3872,6 +4068,15 @@ public class PreferencesDialog {
       return SpellcheckSettings.normalizeLanguageTag(o.id());
     }
     return SpellcheckSettings.DEFAULT_LANGUAGE_TAG;
+  }
+
+  private static String spellcheckCompletionPresetValue(
+      JComboBox<SpellcheckPresetOption> combo) {
+    Object selected = combo != null ? combo.getSelectedItem() : null;
+    if (selected instanceof SpellcheckPresetOption o) {
+      return SpellcheckSettings.normalizeCompletionPreset(o.id());
+    }
+    return SpellcheckSettings.DEFAULT_COMPLETION_PRESET;
   }
 
   private static List<String> parseSpellcheckCustomDictionary(String raw) {
@@ -4285,6 +4490,26 @@ public class PreferencesDialog {
             + "Only used when Keep forever is unchecked.\n\n"
             + "Note: applied on next restart.");
 
+    int writerQueueMaxCurrent =
+        (logProps != null && logProps.writerQueueMax() != null)
+            ? Math.max(100, Math.min(1_000_000, logProps.writerQueueMax()))
+            : 50_000;
+    JSpinner writerQueueMax = numberSpinner(writerQueueMaxCurrent, 100, 1_000_000, 500, closeables);
+    writerQueueMax.setToolTipText(
+        "Maximum buffered log lines before new lines are dropped.\n"
+            + "Higher values reduce drop risk during bursts but use more memory.\n\n"
+            + "Note: applied on next restart.");
+
+    int writerBatchSizeCurrent =
+        (logProps != null && logProps.writerBatchSize() != null)
+            ? Math.max(1, Math.min(10_000, logProps.writerBatchSize()))
+            : 250;
+    JSpinner writerBatchSize = numberSpinner(writerBatchSizeCurrent, 1, 10_000, 25, closeables);
+    writerBatchSize.setToolTipText(
+        "How many queued log lines are written per DB transaction.\n"
+            + "Larger batches improve write throughput, smaller batches reduce commit latency.\n\n"
+            + "Note: applied on next restart.");
+
     String dbBaseNameCurrent =
         (logProps != null && logProps.hsqldb() != null)
             ? logProps.hsqldb().fileBaseName()
@@ -4330,6 +4555,8 @@ public class PreferencesDialog {
           boolean en = loggingEnabled.isSelected();
           loggingSoftIgnore.setEnabled(en);
           loggingPrivateMessages.setEnabled(en);
+          writerQueueMax.setEnabled(en);
+          writerBatchSize.setEnabled(en);
           dbBaseName.setEnabled(true);
           dbNextToConfig.setEnabled(true);
           updateRetentionUi.run();
@@ -4356,6 +4583,8 @@ public class PreferencesDialog {
         managePmList,
         keepForever,
         retentionDays,
+        writerQueueMax,
+        writerBatchSize,
         dbBaseName,
         dbNextToConfig,
         loggingInfo);
@@ -5440,8 +5669,54 @@ public class PreferencesDialog {
     return form;
   }
 
-  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]6[]"));
+  private LaunchJvmControls buildLaunchJvmControls() {
+    JTextField javaCommand = new JTextField(runtimeConfig.readLaunchJvmJavaCommand("java"));
+    javaCommand.setToolTipText("Java launcher command used for the next app start.");
+
+    int xms = runtimeConfig.readLaunchJvmXmsMiB(0);
+    int xmx = runtimeConfig.readLaunchJvmXmxMiB(0);
+    JSpinner xmsMiB = new JSpinner(new SpinnerNumberModel(Math.max(0, xms), 0, 262_144, 128));
+    JSpinner xmxMiB = new JSpinner(new SpinnerNumberModel(Math.max(0, xmx), 0, 262_144, 128));
+
+    JComboBox<LaunchGcOption> gc = new JComboBox<>(launchGcOptions());
+    gc.setSelectedItem(launchGcOptionForId(runtimeConfig.readLaunchJvmGc("")));
+    gc.setToolTipText("Garbage collector preference for the next app start.");
+
+    JTextArea extraArgs = new JTextArea(5, 40);
+    extraArgs.setLineWrap(false);
+    extraArgs.setWrapStyleWord(false);
+    extraArgs.setText(String.join("\n", runtimeConfig.readLaunchJvmArgs(List.of())));
+    extraArgs.setToolTipText("Additional JVM arguments. One argument per line.");
+
+    return new LaunchJvmControls(javaCommand, xmsMiB, xmxMiB, gc, extraArgs);
+  }
+
+  private static LaunchGcOption[] launchGcOptions() {
+    return new LaunchGcOption[] {
+      new LaunchGcOption("", "Default (JVM chooses)"),
+      new LaunchGcOption("g1", "G1GC"),
+      new LaunchGcOption("zgc", "ZGC"),
+      new LaunchGcOption("shenandoah", "Shenandoah"),
+      new LaunchGcOption("parallel", "ParallelGC"),
+      new LaunchGcOption("serial", "SerialGC"),
+      new LaunchGcOption("epsilon", "EpsilonGC")
+    };
+  }
+
+  private static LaunchGcOption launchGcOptionForId(String id) {
+    String want = Objects.toString(id, "").trim().toLowerCase(Locale.ROOT);
+    for (LaunchGcOption option : launchGcOptions()) {
+      if (option.id().equalsIgnoreCase(want)) return option;
+    }
+    return launchGcOptions()[0];
+  }
+
+  private static String launchGcIdValue(LaunchGcOption option) {
+    return option != null ? option.id() : "";
+  }
+
+  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart, LaunchJvmControls launchJvm) {
+    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]10[]"));
     form.add(tabTitle("Startup"), "growx, wrap");
 
     form.add(sectionTitle("On launch"), "growx, wrap");
@@ -5450,6 +5725,33 @@ public class PreferencesDialog {
         helpText(
             "If enabled, IRCafe will connect to all configured servers automatically after the UI loads."),
         "growx, wrap");
+
+    JScrollPane extraArgsScroll = new JScrollPane(launchJvm.extraArgs);
+    extraArgsScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    extraArgsScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+    JPanel jvm =
+        captionPanel(
+            "JVM on next launch",
+            "insets 0, fillx, wrap 2",
+            "[right]10[grow,fill]",
+            "[]4[]4[]4[]4[]");
+    jvm.add(new JLabel("Java command"));
+    jvm.add(launchJvm.javaCommand, "growx, wmin 0, wrap");
+    jvm.add(new JLabel("Initial heap (MiB)"));
+    jvm.add(launchJvm.xmsMiB, "w 140!, wrap");
+    jvm.add(new JLabel("Max heap (MiB)"));
+    jvm.add(launchJvm.xmxMiB, "w 140!, wrap");
+    jvm.add(new JLabel("GC"));
+    jvm.add(launchJvm.gc, "growx, wmin 0, wrap");
+    jvm.add(new JLabel("Extra JVM args"), "aligny top");
+    jvm.add(extraArgsScroll, "growx, h 100!, wmin 0, wrap");
+    jvm.add(
+        helpText(
+            "These settings are stored in runtime config and applied on a future restart by launcher scripts.\n"
+                + "Use 0 for heap values to leave them unset."),
+        "span 2, growx, wmin 0, wrap");
+    form.add(jvm, "growx, wmin 0, wrap");
 
     return form;
   }
@@ -5967,6 +6269,10 @@ public class PreferencesDialog {
     panel.add(logging.keepForever, "span 2, alignx left, wrap");
     panel.add(new JLabel("Retention (days)"));
     panel.add(logging.retentionDays, "w 110!, wrap");
+    panel.add(new JLabel("Writer queue max"));
+    panel.add(logging.writerQueueMax, "w 130!, wrap");
+    panel.add(new JLabel("Writer batch size"));
+    panel.add(logging.writerBatchSize, "w 130!, wrap");
     panel.add(new JLabel("DB file base name"));
     panel.add(logging.dbBaseName, "w 260!");
     panel.add(new JLabel("DB location"));
@@ -8781,6 +9087,8 @@ public class PreferencesDialog {
 
   private record SpellcheckLanguageOption(String id, String label) {}
 
+  private record SpellcheckPresetOption(String id, String label) {}
+
   private static final class IrcEventNotificationTableModel extends AbstractTableModel {
     static final int COL_ENABLED = 0;
     static final int COL_EVENT = 1;
@@ -9789,6 +10097,20 @@ public class PreferencesDialog {
 
   private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {}
 
+  private record LaunchGcOption(String id, String label) {
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
+  private record LaunchJvmControls(
+      JTextField javaCommand,
+      JSpinner xmsMiB,
+      JSpinner xmxMiB,
+      JComboBox<LaunchGcOption> gc,
+      JTextArea extraArgs) {}
+
   private record MemoryWarningControls(
       JSpinner nearMaxPercent,
       JCheckBox tooltipEnabled,
@@ -9805,6 +10127,12 @@ public class PreferencesDialog {
       JCheckBox suggestOnTabEnabled,
       JComboBox<SpellcheckLanguageOption> languageTag,
       JTextArea customDictionary,
+      JComboBox<SpellcheckPresetOption> completionPreset,
+      JSpinner customMinPrefixCompletionTokenLength,
+      JSpinner customMaxPrefixCompletionExtraChars,
+      JSpinner customMaxPrefixLexiconCandidates,
+      JSpinner customPrefixCompletionBonusScore,
+      JSpinner customSourceOrderWeight,
       JPanel panel) {}
 
   private record Ircv3CapabilitiesControls(Map<String, JCheckBox> checkboxes, JPanel panel) {
@@ -9843,6 +10171,8 @@ public class PreferencesDialog {
       JButton managePrivateMessageList,
       JCheckBox keepForever,
       JSpinner retentionDays,
+      JSpinner writerQueueMax,
+      JSpinner writerBatchSize,
       JTextField dbBaseName,
       JCheckBox dbNextToConfig,
       JTextArea info) {}

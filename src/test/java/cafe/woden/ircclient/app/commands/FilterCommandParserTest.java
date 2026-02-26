@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.model.FilterAction;
 import org.junit.jupiter.api.Test;
 
 class FilterCommandParserTest {
@@ -35,5 +36,19 @@ class FilterCommandParserTest {
     assertEquals("irc_privmsg", add.patch().tagsExpr());
     assertTrue(add.patch().textSpecified());
     assertEquals("foo", add.patch().textRegex().pattern());
+  }
+
+  @Test
+  void parsesExtendedFilterActions() {
+    FilterCommand dimCmd = parser.parse("/filter add dimmer scope=*/#irc action=dim text=ping");
+    FilterCommand.Add dimAdd = assertInstanceOf(FilterCommand.Add.class, dimCmd);
+    assertTrue(dimAdd.patch().actionSpecified());
+    assertEquals(FilterAction.DIM, dimAdd.patch().action());
+
+    FilterCommand hlCmd =
+        parser.parse("/filter add attention scope=*/#irc action=highlight text=deploy");
+    FilterCommand.Add hlAdd = assertInstanceOf(FilterCommand.Add.class, hlCmd);
+    assertTrue(hlAdd.patch().actionSpecified());
+    assertEquals(FilterAction.HIGHLIGHT, hlAdd.patch().action());
   }
 }

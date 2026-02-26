@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PresenceKind;
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
@@ -38,6 +39,7 @@ import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Set;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Element;
@@ -386,13 +388,24 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String fromNick,
       String text,
       Set<String> tags) {
-    if (ref == null) return false;
-    if (filterEngine == null) return false;
+    FilterEngine.Match m = firstFilterMatch(ref, kind, dir, fromNick, text, tags);
+    return m != null && m.isHide();
+  }
+
+  private FilterEngine.Match firstFilterMatch(
+      TargetRef ref,
+      LogKind kind,
+      LogDirection dir,
+      String fromNick,
+      String text,
+      Set<String> tags) {
+    if (ref == null) return null;
+    if (filterEngine == null) return null;
     try {
-      return filterEngine.shouldHide(
+      return filterEngine.firstMatch(
           new FilterContext(ref, kind, dir, fromNick, text, tags != null ? tags : Set.of()));
     } catch (Exception ignored) {
-      return false;
+      return null;
     }
   }
 
@@ -403,14 +416,63 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String fromNick,
       String text,
       Set<String> tags) {
-    if (ref == null) return null;
-    if (filterEngine == null) return null;
+    FilterEngine.Match m = firstFilterMatch(ref, kind, dir, fromNick, text, tags);
+    return (m != null && m.isHide()) ? m : null;
+  }
+
+  private SimpleAttributeSet withFilterMatch(AttributeSet base, FilterEngine.Match match) {
+    SimpleAttributeSet out = new SimpleAttributeSet(base);
+    if (match == null || match.action() == null) return out;
+
+    if (match.ruleId() != null) {
+      out.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_ID, match.ruleId().toString());
+    }
+    String ruleName = Objects.toString(match.ruleName(), "").trim();
+    if (!ruleName.isEmpty()) {
+      out.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_NAME, ruleName);
+    }
+    out.addAttribute(
+        ChatStyles.ATTR_META_FILTER_ACTION, match.action().name().toLowerCase(Locale.ROOT));
+
+    applyFilterActionStyle(out, match.action());
+    return out;
+  }
+
+  private void applyFilterActionStyle(SimpleAttributeSet attrs, FilterAction action) {
+    if (attrs == null || action == null) return;
+
+    switch (action) {
+      case HIDE -> {
+        // HIDE actions are rendered via placeholders; no visible style override.
+      }
+      case DIM -> {
+        Color muted = UIManager.getColor("Label.disabledForeground");
+        if (muted == null) muted = UIManager.getColor("Component.disabledForeground");
+        if (muted != null) {
+          StyleConstants.setForeground(attrs, muted);
+        }
+        StyleConstants.setItalic(attrs, true);
+      }
+      case HIGHLIGHT -> {
+        AttributeSet mention = styles.mention();
+        Color mentionFg = StyleConstants.getForeground(mention);
+        Color mentionBg = StyleConstants.getBackground(mention);
+        if (mentionFg != null) {
+          StyleConstants.setForeground(attrs, mentionFg);
+        }
+        if (mentionBg != null) {
+          StyleConstants.setBackground(attrs, mentionBg);
+        }
+        StyleConstants.setBold(attrs, true);
+      }
+    }
+  }
+
+  private static FilterAction filterActionFromAttr(Object raw) {
+    String token = Objects.toString(raw, "").trim();
+    if (token.isEmpty()) return null;
     try {
-      FilterEngine.Match m =
-          filterEngine.firstMatch(
-              new FilterContext(ref, kind, dir, fromNick, text, tags != null ? tags : Set.of()));
-      if (m == null || !m.isHide()) return null;
-      return m;
+      return FilterAction.valueOf(token.toUpperCase(Locale.ROOT));
     } catch (Exception ignored) {
       return null;
     }
@@ -1604,14 +1666,14 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
             event);
 
     FilterEngine.Match m =
-        hideMatch(
+        firstFilterMatch(
             ref,
             LogKind.PRESENCE,
             LogDirection.SYSTEM,
             presenceFrom,
             event.displayText(),
             meta.tags());
-    if (m != null) {
+    if (m != null && m.isHide()) {
       onFilteredLineAppend(ref, event.displayText(), meta, m);
       return;
     }
@@ -1647,13 +1709,13 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       st.currentPresenceBlock = null;
       ensureAtLineStart(doc);
       try {
+        AttributeSet tsStyle = withFilterMatch(withLineMeta(styles.timestamp(), meta), m);
         if (!presenceTimestampPrefix.isBlank()) {
-          doc.insertString(
-              doc.getLength(), presenceTimestampPrefix, withLineMeta(styles.timestamp(), meta));
+          doc.insertString(doc.getLength(), presenceTimestampPrefix, tsStyle);
         }
-        AttributeSet base = withLineMeta(styles.presence(), meta);
+        AttributeSet base = withFilterMatch(withLineMeta(styles.presence(), meta), m);
         renderer.insertRichText(doc, ref, event.displayText(), base);
-        doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+        doc.insertString(doc.getLength(), "\n", tsStyle);
       } catch (Exception ignored2) {
       }
       return;
@@ -1669,14 +1731,14 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     int startOffset = doc.getLength();
 
     try {
+      AttributeSet tsStyle = withFilterMatch(withLineMeta(styles.timestamp(), meta), m);
       if (!presenceTimestampPrefix.isBlank()) {
-        doc.insertString(
-            doc.getLength(), presenceTimestampPrefix, withLineMeta(styles.timestamp(), meta));
+        doc.insertString(doc.getLength(), presenceTimestampPrefix, tsStyle);
       }
 
-      AttributeSet base = withLineMeta(styles.presence(), meta);
+      AttributeSet base = withFilterMatch(withLineMeta(styles.presence(), meta), m);
       renderer.insertRichText(doc, ref, event.displayText(), base);
-      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+      doc.insertString(doc.getLength(), "\n", tsStyle);
     } catch (Exception ignored) {
       return;
     }
@@ -1740,10 +1802,26 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
     ensureAtLineStart(doc);
 
+    FilterEngine.Match match = null;
+    if (meta != null) {
+      String filterFrom = Objects.toString(meta.fromNick(), "").isBlank() ? from : meta.fromNick();
+      match = firstFilterMatch(ref, meta.kind(), meta.direction(), filterFrom, text, meta.tags());
+      if (match != null && match.isHide()) {
+        onFilteredLineAppend(ref, previewChatLine(from, text), meta, match);
+        return;
+      }
+    }
+
     Long epochMs = (meta != null) ? meta.epochMs() : null;
-    AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
-    AttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
-    AttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+    SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+    SimpleAttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
+    SimpleAttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+
+    if (match != null) {
+      tsStyle = withFilterMatch(tsStyle, match);
+      fromStyle2 = withFilterMatch(fromStyle2, match);
+      msgStyle2 = withFilterMatch(msgStyle2, match);
+    }
 
     try {
       AttributeSet baseForId = msgStyle2;
@@ -1786,11 +1864,14 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (tailComponent != null) {
         SimpleAttributeSet a = new SimpleAttributeSet(tailAttrs != null ? tailAttrs : msgStyle2);
         a = withLineMeta(a, meta);
+        if (match != null) {
+          a = withFilterMatch(a, match);
+        }
         StyleConstants.setComponent(a, tailComponent);
         doc.insertString(doc.getLength(), " ", a);
       }
 
-      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+      doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
         return;
@@ -2090,8 +2171,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
     LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null);
-    FilterEngine.Match m = hideMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
-    if (m != null) {
+    FilterEngine.Match m = firstFilterMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
+    if (m != null && m.isHide()) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
       if (eff.historyPlaceholdersEnabled()) {
         return onFilteredLineInsertAt(ref, insertAt, previewActionLine(from, action), meta, m);
@@ -2123,7 +2204,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         timestampsIncludeChatMessages = false;
       }
 
-      AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+      SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+      if (m != null) {
+        tsStyle = withFilterMatch(tsStyle, m);
+      }
 
       if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
         String prefix = ts.prefixAt(tsEpochMs);
@@ -2141,6 +2225,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       SimpleAttributeSet ms = withLineMeta(msgStyle, meta);
       SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+      if (m != null) {
+        fs = withFilterMatch(fs, m);
+        ms = withFilterMatch(ms, m);
+      }
 
       doc.insertString(pos, "* ", ms);
       pos += 2;
@@ -2308,8 +2396,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     LineMeta meta = buildLineMeta(ref, LogKind.SPOILER, LogDirection.IN, from, tsEpochMs, null);
     FilterEngine.Match m =
-        hideMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
-    if (m != null) {
+        firstFilterMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
+    if (m != null && m.isHide()) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
       if (eff.historyPlaceholdersEnabled()) {
         return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, m);
@@ -2376,6 +2464,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
+    if (m != null) {
+      attrs = withFilterMatch(attrs, m);
+    }
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
@@ -2384,7 +2475,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
           () ->
               revealSpoilerInPlace(
                   refFinal, docFinal, spoilerPos, comp, tsPrefixFinal, fromFinal, msgFinal));
-      doc.insertString(offFinal + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      SimpleAttributeSet tsAttrs = withLineMeta(styles.timestamp(), meta);
+      if (m != null) {
+        tsAttrs = withFilterMatch(tsAttrs, m);
+      }
+      doc.insertString(offFinal + 1, "\n", tsAttrs);
       pos = offFinal + 2;
     } catch (Exception ignored) {
     }
@@ -2413,6 +2508,21 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     noteEpochMs(ref, (meta != null) ? meta.epochMs() : null);
     if (doc == null) return Math.max(0, insertAt);
 
+    FilterEngine.Match match = null;
+    if (meta != null) {
+      String filterFrom = Objects.toString(meta.fromNick(), "").isBlank() ? from : meta.fromNick();
+      match = firstFilterMatch(ref, meta.kind(), meta.direction(), filterFrom, text, meta.tags());
+      if (match != null && match.isHide()) {
+        FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
+        if (eff.historyPlaceholdersEnabled()) {
+          return onFilteredLineInsertAt(ref, insertAt, previewChatLine(from, text), meta, match);
+        }
+        // History placeholders disabled: silently drop filtered history lines.
+        endFilteredInsertRun(ref);
+        return Math.max(0, insertAt);
+      }
+    }
+
     // Visible history inserts should break any active filtered run created by prior hidden lines.
     endFilteredInsertRun(ref);
 
@@ -2422,9 +2532,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     final int insertionStart = pos;
 
     Long epochMs = (meta != null) ? meta.epochMs() : null;
-    AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
-    AttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
-    AttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+    SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+    SimpleAttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
+    SimpleAttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+
+    if (match != null) {
+      tsStyle = withFilterMatch(tsStyle, match);
+      fromStyle2 = withFilterMatch(fromStyle2, match);
+      msgStyle2 = withFilterMatch(msgStyle2, match);
+    }
 
     try {
       AttributeSet baseForId = msgStyle2;
@@ -3377,8 +3493,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         buildLineMeta(
             ref, LogKind.SPOILER, LogDirection.IN, from, System.currentTimeMillis(), null);
     FilterEngine.Match m =
-        hideMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
-    if (m != null) {
+        firstFilterMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
+    if (m != null && m.isHide()) {
       onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
       return;
     }
@@ -3436,6 +3552,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
+    if (m != null) {
+      attrs = withFilterMatch(attrs, m);
+    }
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
@@ -3445,7 +3564,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
               revealSpoilerInPlace(
                   refFinal, docFinal, spoilerPos, comp, tsPrefixFinal, fromFinal, msgFinal));
 
-      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+      SimpleAttributeSet tsAttrs = withLineMeta(styles.timestamp(), meta);
+      if (m != null) {
+        tsAttrs = withFilterMatch(tsAttrs, m);
+      }
+      doc.insertString(doc.getLength(), "\n", tsAttrs);
     } catch (Exception ignored) {
     }
   }
@@ -3456,8 +3579,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     noteEpochMs(ref, tsEpochMs);
     LineMeta meta = buildLineMeta(ref, LogKind.SPOILER, LogDirection.IN, from, tsEpochMs, null);
     FilterEngine.Match m =
-        hideMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
-    if (m != null) {
+        firstFilterMatch(ref, LogKind.SPOILER, LogDirection.IN, from, text, meta.tags());
+    if (m != null && m.isHide()) {
       onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
       return;
     }
@@ -3516,6 +3639,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     SimpleAttributeSet attrs = withLineMeta(styles.message(), meta);
+    if (m != null) {
+      attrs = withFilterMatch(attrs, m);
+    }
     StyleConstants.setComponent(attrs, comp);
     try {
       doc.insertString(offFinal, " ", attrs);
@@ -3527,7 +3653,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
               revealSpoilerInPlace(
                   refFinal, docFinal, spoilerPos, comp, tsPrefixFinal, fromFinal, msgFinal));
 
-      doc.insertString(doc.getLength(), "\n", withLineMeta(styles.timestamp(), meta));
+      SimpleAttributeSet tsAttrs = withLineMeta(styles.timestamp(), meta);
+      if (m != null) {
+        tsAttrs = withFilterMatch(tsAttrs, m);
+      }
+      doc.insertString(doc.getLength(), "\n", tsAttrs);
     } catch (Exception ignored) {
     }
   }
@@ -3750,8 +3880,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     LineMeta meta =
         buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null, messageId, ircv3Tags);
 
-    FilterEngine.Match m = hideMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
-    if (m != null) {
+    FilterEngine.Match m = firstFilterMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
+    if (m != null && m.isHide()) {
       onFilteredLineAppend(ref, previewActionLine(from, action), meta, m);
       return;
     }
@@ -3780,14 +3910,17 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         timestampsIncludeChatMessages = false;
       }
 
-      AttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+      SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
+      if (m != null) {
+        tsStyle = withFilterMatch(tsStyle, m);
+      }
 
       if (ts != null && ts.enabled() && timestampsIncludeChatMessages) {
         String prefix = ts.prefixAt(tsEpochMs);
         doc.insertString(doc.getLength(), prefix, tsStyle);
       }
 
-      AttributeSet msgStyle = withLineMeta(styles.actionMessage(), meta);
+      SimpleAttributeSet msgStyle = withLineMeta(styles.actionMessage(), meta);
       AttributeSet fromStyle = styles.actionFrom();
 
       if (from != null && !from.isBlank() && nickColors != null && nickColors.enabled()) {
@@ -3798,6 +3931,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
       applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
+      if (m != null) {
+        fs = withFilterMatch(fs, m);
+        ms = withFilterMatch(ms, m);
+      }
 
       doc.insertString(doc.getLength(), "* ", ms);
       if (from != null && !from.isBlank()) {
@@ -4525,6 +4662,23 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (pendingState != null) {
         fresh.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, pendingState);
       }
+      Object filterRuleId = old.getAttribute(ChatStyles.ATTR_META_FILTER_RULE_ID);
+      if (filterRuleId != null) {
+        fresh.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_ID, filterRuleId);
+      }
+      Object filterRuleName = old.getAttribute(ChatStyles.ATTR_META_FILTER_RULE_NAME);
+      if (filterRuleName != null) {
+        fresh.addAttribute(ChatStyles.ATTR_META_FILTER_RULE_NAME, filterRuleName);
+      }
+      Object filterActionRaw = old.getAttribute(ChatStyles.ATTR_META_FILTER_ACTION);
+      FilterAction filterAction = filterActionFromAttr(filterActionRaw);
+      if (filterAction != null) {
+        fresh.addAttribute(
+            ChatStyles.ATTR_META_FILTER_ACTION, filterAction.name().toLowerCase(Locale.ROOT));
+      } else if (filterActionRaw != null) {
+        fresh.addAttribute(
+            ChatStyles.ATTR_META_FILTER_ACTION, Objects.toString(filterActionRaw, "").trim());
+      }
       Color ruleBg = null;
       Object ruleBgObj = old.getAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG);
       if (ruleBgObj instanceof Color c) {
@@ -4599,6 +4753,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
       if (finalFg != null) StyleConstants.setForeground(fresh, finalFg);
       if (finalBg != null) StyleConstants.setBackground(fresh, finalBg);
+      if (filterAction != null && filterAction != FilterAction.HIDE) {
+        applyFilterActionStyle(fresh, filterAction);
+      }
       if (styleId != null) {
         fresh.addAttribute(ChatStyles.ATTR_STYLE, styleId);
       }

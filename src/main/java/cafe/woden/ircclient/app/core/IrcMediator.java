@@ -1400,11 +1400,13 @@ public class IrcMediator implements MediatorControlPort {
         String rendered = "You left " + ev.channel();
         String reason = Objects.toString(ev.reason(), "").trim();
         if (!reason.isEmpty()) rendered = rendered + " (" + reason + ")";
+        String detachedWarning =
+            reason.isEmpty() ? "Removed from channel by server." : reason;
 
         ensureTargetExists(st);
         ui.appendStatusAt(st, ev.at(), "(part)", rendered);
         inboundModeEventHandler.onLeftChannel(sid, ev.channel());
-        targetCoordinator.onChannelMembershipLost(sid, ev.channel(), true);
+        targetCoordinator.onChannelMembershipLost(sid, ev.channel(), true, detachedWarning);
       }
 
       case IrcEvent.UserKickedFromChannel ev -> {
@@ -1439,7 +1441,11 @@ public class IrcMediator implements MediatorControlPort {
         ui.appendErrorAt(st, ev.at(), "(kick)", rendered);
 
         inboundModeEventHandler.onLeftChannel(sid, ev.channel());
-        targetCoordinator.onChannelMembershipLost(sid, ev.channel(), true);
+        String by = Objects.toString(ev.by(), "").trim();
+        String reason = Objects.toString(ev.reason(), "").trim();
+        String detachedWarning = "Kicked" + (by.isEmpty() ? "" : (" by " + by));
+        if (!reason.isEmpty()) detachedWarning = detachedWarning + " (" + reason + ")";
+        targetCoordinator.onChannelMembershipLost(sid, ev.channel(), true, detachedWarning);
         notifyIrcEvent(
             IrcEventNotificationRule.EventType.YOU_KICKED,
             sid,

@@ -1,0 +1,7 @@
+# Supplemental prefix-completion words for conversational typing.
+# These are intentionally small and can be expanded over time.
+nope
+nordic
+norway
+nothing
+nostril

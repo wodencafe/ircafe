@@ -3,14 +3,14 @@ package cafe.woden.ircclient.architecture;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import cafe.woden.ircclient.app.ApplicationDiagnosticsService;
-import cafe.woden.ircclient.app.AssertjSwingDiagnosticsService;
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.JhiccupDiagnosticsService;
-import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.RuntimeDiagnosticEvent;
-import cafe.woden.ircclient.app.RuntimeJfrService;
-import cafe.woden.ircclient.app.SpringRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
+import cafe.woden.ircclient.diagnostics.AssertjSwingDiagnosticsService;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.JhiccupDiagnosticsService;
+import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
+import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
+import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
@@ -39,6 +39,7 @@ import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
@@ -57,6 +58,17 @@ import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.notifications.IrcEventNotificationService;
 import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
+import cafe.woden.ircclient.app.state.AwayRoutingState;
+import cafe.woden.ircclient.app.state.ChannelFlagModeState;
+import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
+import cafe.woden.ircclient.app.state.CtcpRoutingState;
+import cafe.woden.ircclient.app.state.JoinRoutingState;
+import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
+import cafe.woden.ircclient.app.state.ModeRoutingState;
+import cafe.woden.ircclient.app.state.PendingEchoMessageState;
+import cafe.woden.ircclient.app.state.PendingInviteState;
+import cafe.woden.ircclient.app.state.RecentStatusModeState;
+import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import java.lang.annotation.Annotation;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -82,6 +94,17 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(MediatorUiSubscriptionBinder.class, ApplicationLayer.class);
     assertAnnotated(MediatorHistoryIngestOrchestrator.class, ApplicationLayer.class);
     assertAnnotated(NotificationStore.class, ApplicationLayer.class);
+    assertAnnotated(WhoisRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(CtcpRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(ModeRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(AwayRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(ChatHistoryRequestRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(JoinRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(LabeledResponseRoutingState.class, ApplicationLayer.class);
+    assertAnnotated(PendingEchoMessageState.class, ApplicationLayer.class);
+    assertAnnotated(PendingInviteState.class, ApplicationLayer.class);
+    assertAnnotated(ChannelFlagModeState.class, ApplicationLayer.class);
+    assertAnnotated(RecentStatusModeState.class, ApplicationLayer.class);
     assertAnnotated(ApplicationDiagnosticsService.class, ApplicationLayer.class);
     assertAnnotated(AssertjSwingDiagnosticsService.class, ApplicationLayer.class);
     assertAnnotated(JhiccupDiagnosticsService.class, ApplicationLayer.class);
@@ -112,6 +135,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(IrcEventNotificationService.class, ApplicationLayer.class);
     assertAnnotated(NotificationRuleMatcher.class, ApplicationLayer.class);
     assertAnnotated(IrcEventNotificationRulesBus.class, ApplicationLayer.class);
+    assertAnnotated(DccTransferStore.class, ApplicationLayer.class);
 
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
@@ -170,6 +194,8 @@ class JmoleculesIncrementalAdoptionTest {
     assertComponentPackageAnnotated("cafe.woden.ircclient.monitor", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.interceptors", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.notifications", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.dcc", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.app.state", ApplicationLayer.class);
   }
 
   private static void assertComponentPackageAnnotated(

@@ -518,15 +518,21 @@ public class TargetCoordinator implements ActiveTargetPort {
    * <p>Used when the server already ended our membership (e.g. remote PART/KICK).
    */
   public void closeChannelLocally(String serverId, String channel) {
-    onChannelMembershipLost(serverId, channel, true);
+    onChannelMembershipLost(serverId, channel, true, "Channel closed.");
   }
 
   public void onChannelMembershipLost(String serverId, String channel, boolean suppressAutoRejoin) {
+    onChannelMembershipLost(serverId, channel, suppressAutoRejoin, null);
+  }
+
+  public void onChannelMembershipLost(
+      String serverId, String channel, boolean suppressAutoRejoin, String warningReason) {
     String sid = Objects.toString(serverId, "").trim();
     String ch = Objects.toString(channel, "").trim();
     if (sid.isEmpty() || ch.isEmpty()) return;
     TargetRef target = new TargetRef(sid, ch);
     if (!target.isChannel()) return;
+    boolean alreadyDetached = detachedChannelsByUserOrKick.contains(target);
 
     if (channelsClosedByUser.remove(target)) {
       detachedChannelsByUserOrKick.remove(target);
@@ -538,7 +544,16 @@ public class TargetCoordinator implements ActiveTargetPort {
     else detachedChannelsByUserOrKick.remove(target);
 
     ensureTargetExists(target);
-    ui.setChannelDetached(target, true);
+    String warning = "";
+    if (!alreadyDetached) {
+      warning = normalizeDetachedWarning(warningReason);
+      if (warning.isEmpty()) warning = "Detached by server.";
+    }
+    if (warning.isEmpty()) {
+      ui.setChannelDetached(target, true);
+    } else {
+      ui.setChannelDetached(target, true, warning);
+    }
     userListStore.clear(sid, ch);
 
     if (Objects.equals(activeTarget, target)) {
@@ -599,6 +614,8 @@ public class TargetCoordinator implements ActiveTargetPort {
       statusBarChannel = "Notifications";
     } else if (target.isChannelList()) {
       statusBarChannel = "Channel List";
+    } else if (target.isWeechatFilters()) {
+      statusBarChannel = "Filters";
     } else if (target.isDccTransfers()) {
       statusBarChannel = "DCC Transfers";
     } else if (target.isMonitorGroup()) {
@@ -899,6 +916,10 @@ public class TargetCoordinator implements ActiveTargetPort {
 
   private boolean isClosedPrivateTargetByUser(TargetRef target) {
     return isPrivateTarget(target) && closedPrivateTargetsByUser.contains(target);
+  }
+
+  private static String normalizeDetachedWarning(String warningReason) {
+    return Objects.toString(warningReason, "").trim();
   }
 
   private static boolean isPrivateTarget(TargetRef target) {

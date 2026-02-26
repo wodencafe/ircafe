@@ -99,6 +99,7 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..",
               "cafe.woden.ircclient.app.core..",
               "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.dcc..",
               "cafe.woden.ircclient.monitor..",
               "cafe.woden.ircclient.notifications..",
               "cafe.woden.ircclient.interceptors..")
@@ -117,6 +118,7 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..",
               "cafe.woden.ircclient.app.core..",
               "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.dcc..",
               "cafe.woden.ircclient.notifications..",
               "cafe.woden.ircclient.interceptors..")
           .because(
@@ -134,6 +136,7 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..",
               "cafe.woden.ircclient.app.core..",
               "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.dcc..",
               "cafe.woden.ircclient.monitor..",
               "cafe.woden.ircclient.notifications..")
           .because(
@@ -151,10 +154,49 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..",
               "cafe.woden.ircclient.app.core..",
               "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.dcc..",
               "cafe.woden.ircclient.monitor..",
               "cafe.woden.ircclient.interceptors..")
           .because(
               "notification module should integrate via app::api and remain decoupled from UI and app internals");
+
+  @ArchTest
+  static final ArchRule state_should_not_depend_on_ui_logging_or_app_internal_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app.state..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.dcc..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.notifications..",
+              "cafe.woden.ircclient.interceptors..")
+          .because(
+              "state module should remain a reusable correlation/state holder and integrate through app::api plus config");
+
+  @ArchTest
+  static final ArchRule dcc_should_not_depend_on_ui_or_app_internal_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.dcc..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.app..",
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.logging..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.notifications..",
+              "cafe.woden.ircclient.interceptors..",
+              "cafe.woden.ircclient.perform..")
+          .because(
+              "dcc transfer state should remain shared domain/application state and avoid app-internal or UI coupling");
 
   @ArchTest
   static final ArchRule diagnostics_should_not_depend_on_app_ui_or_logging_packages =
@@ -164,9 +206,15 @@ class ArchitectureGuardrailsTest {
           .should()
           .dependOnClassesThat()
           .resideInAnyPackage(
-              "cafe.woden.ircclient.app..",
+              "cafe.woden.ircclient.app",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.app.state..",
+              "cafe.woden.ircclient.app.util..",
+              "cafe.woden.ircclient.dcc..",
               "cafe.woden.ircclient.ui..",
               "cafe.woden.ircclient.logging..")
           .because(
-              "diagnostics support helpers should remain standalone and reusable without app/ui/logging coupling");
+              "diagnostics support should stay independent from app internals while integrating only via app::api plus config/model/util/notify seams");
 }

@@ -11,7 +11,9 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -21,6 +23,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
@@ -232,6 +235,36 @@ class ServerTreeDockableDetachedChannelTest {
   }
 
   @Test
+  void unreadAndHighlightCountsRenderAsBadgesWithoutMutatingLabelText() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+            dockable.markUnread(chan);
+            dockable.markHighlight(chan);
+
+            JTree tree = getTree(dockable);
+            DefaultMutableTreeNode node = findLeafNode(dockable, chan);
+            assertNotNull(node);
+
+            Component rendered =
+                tree.getCellRenderer()
+                    .getTreeCellRendererComponent(tree, node, false, false, true, 0, false);
+            assertTrue(rendered instanceof JLabel);
+            JLabel label = (JLabel) rendered;
+            assertEquals("#ircafe", label.getText());
+            assertFalse(label.getText().contains("("));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void channelRendererReservesLeftInsetForTypingIndicatorSlot() throws Exception {
     onEdt(
         () -> {
@@ -297,6 +330,63 @@ class ServerTreeDockableDetachedChannelTest {
             dockable.markTypingActivity(chan, "active");
             assertFalse(nd.hasTypingActivity());
             assertFalse(typingActivityNodes(dockable).contains(node));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void detachedWarningTooltipShowsReasonAndClickClearsWarningOnly() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+            dockable.setChannelDetached(chan, true, "Kicked by ChanServ (flood)");
+
+            JTree tree = getTree(dockable);
+            DefaultMutableTreeNode node = findLeafNode(dockable, chan);
+            assertNotNull(node);
+            TreePath path = new TreePath(node.getPath());
+            Rectangle warningBounds = detachedWarningBounds(dockable, path, node);
+            assertNotNull(warningBounds);
+
+            MouseEvent hover =
+                new MouseEvent(
+                    tree,
+                    MouseEvent.MOUSE_MOVED,
+                    System.currentTimeMillis(),
+                    0,
+                    warningBounds.x + Math.max(1, warningBounds.width / 2),
+                    warningBounds.y + Math.max(1, warningBounds.height / 2),
+                    0,
+                    false,
+                    MouseEvent.NOBUTTON);
+            String tip = invokeTooltip(dockable, hover);
+            assertNotNull(tip);
+            assertTrue(tip.contains("Kicked by ChanServ"));
+
+            MouseEvent click =
+                new MouseEvent(
+                    tree,
+                    MouseEvent.MOUSE_PRESSED,
+                    System.currentTimeMillis(),
+                    0,
+                    warningBounds.x + Math.max(1, warningBounds.width / 2),
+                    warningBounds.y + Math.max(1, warningBounds.height / 2),
+                    1,
+                    false,
+                    MouseEvent.BUTTON1);
+            boolean handled = invokeMaybeHandleDetachedWarningClick(dockable, click);
+            assertTrue(handled);
+            assertTrue(dockable.isChannelDetached(chan));
+
+            ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
+            assertFalse(nd.hasDetachedWarning());
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -492,6 +582,31 @@ class ServerTreeDockableDetachedChannelTest {
     Field field = ServerTreeDockable.class.getDeclaredField("typingActivityNodes");
     field.setAccessible(true);
     return (java.util.Set<DefaultMutableTreeNode>) field.get(dockable);
+  }
+
+  private static Rectangle detachedWarningBounds(
+      ServerTreeDockable dockable, TreePath path, DefaultMutableTreeNode node) throws Exception {
+    Method m =
+        ServerTreeDockable.class.getDeclaredMethod(
+            "detachedWarningIndicatorBounds", TreePath.class, DefaultMutableTreeNode.class);
+    m.setAccessible(true);
+    return (Rectangle) m.invoke(dockable, path, node);
+  }
+
+  private static String invokeTooltip(ServerTreeDockable dockable, MouseEvent event)
+      throws Exception {
+    Method m = ServerTreeDockable.class.getDeclaredMethod("toolTipForEvent", MouseEvent.class);
+    m.setAccessible(true);
+    return (String) m.invoke(dockable, event);
+  }
+
+  private static boolean invokeMaybeHandleDetachedWarningClick(
+      ServerTreeDockable dockable, MouseEvent event) throws Exception {
+    Method m =
+        ServerTreeDockable.class.getDeclaredMethod(
+            "maybeHandleDetachedWarningClick", MouseEvent.class);
+    m.setAccessible(true);
+    return (Boolean) m.invoke(dockable, event);
   }
 
   private static void onEdt(Runnable r) throws InvocationTargetException, InterruptedException {
