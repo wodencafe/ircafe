@@ -151,7 +151,7 @@ final class MessageInputHintPopupSupport {
     if (DEBUG_HINT_POPUP && !Objects.equals(hintPopupShownText, text)) {
       log.info("[HintPopupDebug] hint=" + text);
     }
-    hintPopupLabel.setToolTipText(isCompletionHint ? "Press Tab for nick completion" : null);
+    hintPopupLabel.setToolTipText(isCompletionHint ? "Press Tab for completion" : null);
     refreshHintPopup();
   }
 

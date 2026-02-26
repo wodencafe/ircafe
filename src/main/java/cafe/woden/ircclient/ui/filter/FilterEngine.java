@@ -55,6 +55,14 @@ public class FilterEngine implements PropertyChangeListener {
     public boolean isHide() {
       return action == FilterAction.HIDE;
     }
+
+    public boolean isDim() {
+      return action == FilterAction.DIM;
+    }
+
+    public boolean isHighlight() {
+      return action == FilterAction.HIGHLIGHT;
+    }
   }
 
   /** A resolved boolean value plus where it came from (null => global default). */
@@ -103,7 +111,6 @@ public class FilterEngine implements PropertyChangeListener {
       for (CompiledRule r : c.rules) {
         if (r == null) continue;
         if (!r.matches(ctx)) continue;
-        // v1.0 only supports HIDE.
         return r.action == FilterAction.HIDE;
       }
     } catch (Exception e) {

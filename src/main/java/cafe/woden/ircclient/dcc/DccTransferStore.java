@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.dcc;
 
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -9,10 +9,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** In-memory store of per-server DCC transfer/chat state for UI rendering. */
 @Component
+@ApplicationLayer
 public class DccTransferStore {
 
   public enum ActionHint {

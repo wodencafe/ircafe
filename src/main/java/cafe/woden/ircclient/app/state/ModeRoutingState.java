@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
  * logic into the app package.
  */
 @Component
+@ApplicationLayer
 public class ModeRoutingState {
 
   private final ConcurrentHashMap<ModeKey, TargetRef> pendingModeTargets =

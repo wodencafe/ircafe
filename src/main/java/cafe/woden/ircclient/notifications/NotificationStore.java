@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.notifications;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiSettingsPort;

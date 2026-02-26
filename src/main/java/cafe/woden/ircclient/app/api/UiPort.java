@@ -81,6 +81,14 @@ public interface UiPort {
   default void setChannelDetached(TargetRef target, boolean detached) {}
 
   /**
+   * Mark a channel target as detached/attached and optionally attach a warning reason shown in the
+   * tree UI.
+   */
+  default void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
+    setChannelDetached(target, detached);
+  }
+
+  /**
    * @return true if the channel target is currently marked detached in the tree.
    */
   default boolean isChannelDetached(TargetRef target) {

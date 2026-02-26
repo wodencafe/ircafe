@@ -239,6 +239,10 @@ ircafe:
     keepForever: true
     # Optional retention window. 0 means no retention (keep forever).
     retentionDays: 0
+    # Max queued lines waiting for DB writes before new lines are dropped.
+    writerQueueMax: 50000
+    # Number of queued lines written per DB transaction flush.
+    writerBatchSize: 250
 
     # Embedded HSQLDB settings.
     hsqldb:

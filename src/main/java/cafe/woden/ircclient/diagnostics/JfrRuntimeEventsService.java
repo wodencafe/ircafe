@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.util.VirtualThreads;
@@ -24,7 +24,6 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /**
@@ -34,7 +33,6 @@ import org.springframework.stereotype.Service;
 @Service
 @Lazy(false)
 @ApplicationLayer
-@NamedInterface("diagnostics")
 public class JfrRuntimeEventsService {
   private static final Logger log = LoggerFactory.getLogger(JfrRuntimeEventsService.class);
   public static final String PROP_STATE = "jfrRuntimeState";

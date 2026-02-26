@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;

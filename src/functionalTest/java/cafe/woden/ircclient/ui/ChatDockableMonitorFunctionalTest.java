@@ -6,13 +6,13 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.DccTransferStore;
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.dcc.DccTransferStore;
+import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -22,8 +22,10 @@ import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
@@ -118,10 +120,13 @@ class ChatDockableMonitorFunctionalTest {
     when(interceptorStore.changes()).thenReturn(Flowable.never());
     DccTransferStore dccTransferStore = new DccTransferStore();
     TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
+    ApplicationDiagnosticsService applicationDiagnosticsService =
+        mock(ApplicationDiagnosticsService.class);
     JfrRuntimeEventsService jfrRuntimeEventsService = new JfrRuntimeEventsService(runtimeConfig);
     SpringRuntimeEventsService springRuntimeEventsService = new SpringRuntimeEventsService();
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
+    SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
 
     Holder holder = new Holder();
@@ -148,9 +153,11 @@ class ChatDockableMonitorFunctionalTest {
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,
+                    applicationDiagnosticsService,
                     jfrRuntimeEventsService,
                     springRuntimeEventsService,
                     settingsBus,
+                    spellcheckSettingsBus,
                     commandHistoryStore));
 
     ChatDockable chat = holder.chat;

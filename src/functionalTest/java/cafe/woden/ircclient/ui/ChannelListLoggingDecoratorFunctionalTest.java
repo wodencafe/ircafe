@@ -6,10 +6,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.DccTransferStore;
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
@@ -18,6 +14,10 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.dcc.DccTransferStore;
+import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -29,10 +29,12 @@ import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
@@ -100,7 +102,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
         new RuntimeConfigStore(tempDir.resolve("ircafe.yml").toString(), props);
     ServerRegistry serverRegistry = new ServerRegistry(props, runtimeConfig);
     ServerCatalog serverCatalog = new ServerCatalog(serverRegistry, new EphemeralServerRegistry());
-    LogProperties logProps = new LogProperties(true, true, true, true, true, 0, null);
+    LogProperties logProps = new LogProperties(true, true, true, true, true, 0, null, null, null);
 
     NotificationStore notificationStore = new NotificationStore();
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
@@ -138,10 +140,13 @@ class ChannelListLoggingDecoratorFunctionalTest {
     ChatLogViewerService chatLogViewerService = mock(ChatLogViewerService.class);
     DccTransferStore dccTransferStore = new DccTransferStore();
     TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
+    ApplicationDiagnosticsService applicationDiagnosticsService =
+        mock(ApplicationDiagnosticsService.class);
     JfrRuntimeEventsService jfrRuntimeEventsService = new JfrRuntimeEventsService(runtimeConfig);
     SpringRuntimeEventsService springRuntimeEventsService = new SpringRuntimeEventsService();
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
+    SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
 
     Holder holder = new Holder();
@@ -168,9 +173,11 @@ class ChannelListLoggingDecoratorFunctionalTest {
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,
+                    applicationDiagnosticsService,
                     jfrRuntimeEventsService,
                     springRuntimeEventsService,
                     settingsBus,
+                    spellcheckSettingsBus,
                     commandHistoryStore));
     ChatDockable chat = holder.chat;
 

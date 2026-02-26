@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * can be surfaced in the correct UI buffer.
  */
 @Component
+@ApplicationLayer
 public class JoinRoutingState {
 
   private record Key(String serverId, String channelLower) {}

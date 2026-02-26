@@ -41,6 +41,16 @@ class TargetRefUiOnlyTest {
   }
 
   @Test
+  void weechatFiltersTargetIsUiOnly() {
+    TargetRef ref = TargetRef.weechatFilters("srv");
+    assertTrue(ref.isWeechatFilters());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(ref, new TargetRef("srv", TargetRef.WEECHAT_FILTERS_TARGET));
+  }
+
+  @Test
   void applicationTerminalTargetIsUiOnly() {
     TargetRef ref = TargetRef.applicationTerminal();
     assertTrue(ref.isApplicationTerminal());

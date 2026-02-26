@@ -1,7 +1,6 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Files;
@@ -16,14 +15,12 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.modulith.NamedInterface;
 import org.springframework.stereotype.Service;
 
 /** Starts a best-effort always-on JFR recording and exposes snapshot/status helpers for the UI. */
 @Service
 @Lazy(false)
 @ApplicationLayer
-@NamedInterface("diagnostics")
 public class RuntimeJfrService {
   private static final Logger log = LoggerFactory.getLogger(RuntimeJfrService.class);
   private static final long DEFAULT_MAX_SIZE_BYTES = 256L * 1024L * 1024L;

@@ -10,10 +10,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Tracks pending channel invitations and collapses short repeated bursts. */
 @Component
+@ApplicationLayer
 public class PendingInviteState {
 
   private static final Duration COLLAPSE_WINDOW = Duration.ofSeconds(15);

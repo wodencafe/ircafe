@@ -1,17 +1,27 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Routes non-IRC application diagnostics into dedicated application buffers. */
@@ -21,14 +31,23 @@ public class ApplicationDiagnosticsService {
   private static final Logger log = LoggerFactory.getLogger(ApplicationDiagnosticsService.class);
   private static final int MAX_STACK_LINES = 20;
   private static final int MAX_CAUSE_DEPTH = 4;
+  private static final int MAX_EVENTS_PER_BUFFER = 1200;
 
   private final UiPort ui;
   private final AtomicBoolean installed = new AtomicBoolean(false);
+  private final Deque<RuntimeDiagnosticEvent> assertjSwingEvents = new ArrayDeque<>();
+  private final Deque<RuntimeDiagnosticEvent> jhiccupEvents = new ArrayDeque<>();
+  private final FlowableProcessor<Long> assertjSwingChangeSignals =
+      PublishProcessor.<Long>create().toSerialized();
+  private final FlowableProcessor<Long> jhiccupChangeSignals =
+      PublishProcessor.<Long>create().toSerialized();
   private final Thread.UncaughtExceptionHandler uncaughtExceptionHandler =
       this::handleUncaughtException;
+  private long assertjSwingChangeSeq;
+  private long jhiccupChangeSeq;
   private volatile Thread.UncaughtExceptionHandler previousDefaultHandler;
 
-  public ApplicationDiagnosticsService(UiPort ui) {
+  public ApplicationDiagnosticsService(@Lazy UiPort ui) {
     this.ui = ui;
   }
 
@@ -68,6 +87,34 @@ public class ApplicationDiagnosticsService {
     String message = "Recovered from UI stall (" + ms + " ms).";
     appendDiagnostic(TargetRef.applicationAssertjSwing(), "(assertj-swing)", message, false);
     ui.enqueueStatusNotice(message, TargetRef.applicationAssertjSwing());
+  }
+
+  public synchronized List<RuntimeDiagnosticEvent> recentAssertjSwingEvents(int limit) {
+    return recentEvents(assertjSwingEvents, limit);
+  }
+
+  public synchronized List<RuntimeDiagnosticEvent> recentJhiccupEvents(int limit) {
+    return recentEvents(jhiccupEvents, limit);
+  }
+
+  public Flowable<Long> assertjSwingChangeStream() {
+    return assertjSwingChangeSignals.onBackpressureLatest();
+  }
+
+  public Flowable<Long> jhiccupChangeStream() {
+    return jhiccupChangeSignals.onBackpressureLatest();
+  }
+
+  public synchronized void clearAssertjSwingEvents() {
+    if (assertjSwingEvents.isEmpty()) return;
+    assertjSwingEvents.clear();
+    emitAssertjSwingChangeLocked();
+  }
+
+  public synchronized void clearJhiccupEvents() {
+    if (jhiccupEvents.isEmpty()) return;
+    jhiccupEvents.clear();
+    emitJhiccupChangeLocked();
   }
 
   private void handleUncaughtException(Thread thread, Throwable error) {
@@ -113,6 +160,7 @@ public class ApplicationDiagnosticsService {
     if (target == null) return;
     String text = Objects.toString(message, "").trim();
     if (text.isEmpty()) return;
+    appendRuntimeEvent(target, from, text, error);
     ui.ensureTargetExists(target);
     if (error) {
       ui.appendError(target, from, text);
@@ -164,6 +212,65 @@ public class ApplicationDiagnosticsService {
     if (emitted == 0) {
       ui.appendStatus(target, "(stack)", "(no stack trace)");
     }
+  }
+
+  private synchronized void appendRuntimeEvent(
+      TargetRef target, String from, String message, boolean error) {
+    if (target == null) return;
+    Deque<RuntimeDiagnosticEvent> buffer = null;
+    boolean assertjTarget = false;
+    boolean jhiccupTarget = false;
+    if (target.isApplicationAssertjSwing()) {
+      buffer = assertjSwingEvents;
+      assertjTarget = true;
+    } else if (target.isApplicationJhiccup()) {
+      buffer = jhiccupEvents;
+      jhiccupTarget = true;
+    }
+    if (buffer == null) return;
+
+    String level = error ? "ERROR" : "INFO";
+    String type = normalizeEventType(from);
+    RuntimeDiagnosticEvent event =
+        new RuntimeDiagnosticEvent(Instant.now(), level, type, message, "");
+    buffer.addLast(event);
+    while (buffer.size() > MAX_EVENTS_PER_BUFFER) {
+      buffer.removeFirst();
+    }
+    if (assertjTarget) {
+      emitAssertjSwingChangeLocked();
+    } else if (jhiccupTarget) {
+      emitJhiccupChangeLocked();
+    }
+  }
+
+  private void emitAssertjSwingChangeLocked() {
+    assertjSwingChangeSignals.onNext(++assertjSwingChangeSeq);
+  }
+
+  private void emitJhiccupChangeLocked() {
+    jhiccupChangeSignals.onNext(++jhiccupChangeSeq);
+  }
+
+  private static String normalizeEventType(String from) {
+    String raw = Objects.toString(from, "").trim();
+    if (raw.isEmpty()) return "diagnostic";
+    if (raw.startsWith("(") && raw.endsWith(")") && raw.length() > 2) {
+      raw = raw.substring(1, raw.length() - 1).trim();
+    }
+    return raw.isEmpty() ? "diagnostic" : raw;
+  }
+
+  private static List<RuntimeDiagnosticEvent> recentEvents(
+      Deque<RuntimeDiagnosticEvent> events, int limit) {
+    int max = Math.max(1, Math.min(2000, limit));
+    if (events == null || events.isEmpty()) return List.of();
+    ArrayList<RuntimeDiagnosticEvent> out = new ArrayList<>(Math.min(max, events.size()));
+    Iterator<RuntimeDiagnosticEvent> it = events.descendingIterator();
+    while (it.hasNext() && out.size() < max) {
+      out.add(it.next());
+    }
+    return List.copyOf(out);
   }
 
   private static String normalizeThreadName(Thread thread) {

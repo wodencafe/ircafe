@@ -8,11 +8,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Tracks outbound chat lines awaiting IRCv3 echo-message reconciliation. */
 @Component
+@ApplicationLayer
 @Lazy
 public class PendingEchoMessageState {
 

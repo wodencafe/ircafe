@@ -4,6 +4,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * (common after status-mode changes like +v/+o).
  */
 @Component
+@ApplicationLayer
 public class ChannelFlagModeState {
 
   private final ConcurrentHashMap<ModeKey, Set<Character>> channelFlags = new ConcurrentHashMap<>();

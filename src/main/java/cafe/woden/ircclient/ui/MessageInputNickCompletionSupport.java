@@ -8,13 +8,17 @@ import java.beans.PropertyChangeListener;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.Document;
+import javax.swing.text.JTextComponent;
 import org.fife.ui.autocomplete.AutoCompletion;
 import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
@@ -23,11 +27,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Handles message-input auto-completion (nicks + slash commands).
+ * Handles message-input auto-completion (nicks + slash commands + word suggestions).
  *
  * <p>Responsibilities: - Own AutoCompletion + its CompletionProvider - Efficient bulk rebuild of
- * completion items (avoid O(n^2) sorting) - IRC-style addressing suffix behavior for first-word
- * completion ("nick: ") - Best-effort refresh of AutoCompletion popup UI on theme/LAF changes
+ * completion items (avoid O(n^2) sorting) - Merge dynamic word suggestions for non-command text -
+ * IRC-style addressing suffix behavior for first-word completion ("nick: ") - Best-effort refresh
+ * of AutoCompletion popup UI on theme/LAF changes
  */
 final class MessageInputNickCompletionSupport {
 
@@ -35,6 +40,10 @@ final class MessageInputNickCompletionSupport {
       LoggerFactory.getLogger(MessageInputNickCompletionSupport.class);
 
   private static final int PENDING_NICK_SUFFIX_TIMEOUT_MS = 5000;
+  private static final int RELEVANCE_NICK = 300;
+  private static final int RELEVANCE_SLASH = 280;
+  private static final int RELEVANCE_WORD_PREFIX = 220;
+  private static final int MAX_WORD_SUGGESTIONS = 8;
   private static final List<SlashCommand> SLASH_COMMANDS =
       List.of(
           new SlashCommand("/join", "Join channel"),
@@ -109,14 +118,15 @@ final class MessageInputNickCompletionSupport {
   private final JComponent owner;
   private final JTextField input;
   private final MessageInputUndoSupport undoSupport;
+  private final MessageInputWordSuggestionProvider wordSuggestionProvider;
 
   /**
    * NOTE: DefaultCompletionProvider sorts its list on every addCompletion(), which becomes
    * catastrophically slow when we rebuild completions for large channels.
    */
-  private final FastCompletionProvider completionProvider = new FastCompletionProvider();
+  private final FastCompletionProvider completionProvider;
 
-  private final AutoCompletion autoCompletion = new AutoCompletion(completionProvider);
+  private final AutoCompletion autoCompletion;
   private final List<Completion> slashCommandCompletions;
 
   // AutoCompletion popups are lazily created and may cache UI defaults; mark dirty on theme
@@ -145,9 +155,20 @@ final class MessageInputNickCompletionSupport {
 
   MessageInputNickCompletionSupport(
       JComponent owner, JTextField input, MessageInputUndoSupport undoSupport) {
+    this(owner, input, undoSupport, null);
+  }
+
+  MessageInputNickCompletionSupport(
+      JComponent owner,
+      JTextField input,
+      MessageInputUndoSupport undoSupport,
+      MessageInputWordSuggestionProvider wordSuggestionProvider) {
     this.owner = owner;
     this.input = input;
     this.undoSupport = undoSupport;
+    this.wordSuggestionProvider = wordSuggestionProvider;
+    this.completionProvider = new FastCompletionProvider(this::dynamicWordCompletions);
+    this.autoCompletion = new AutoCompletion(completionProvider);
     this.slashCommandCompletions = buildSlashCommandCompletions();
     rebuildCompletionModel(List.of());
   }
@@ -200,6 +221,10 @@ final class MessageInputNickCompletionSupport {
     return null;
   }
 
+  String firstCompletionHint(String token) {
+    return firstNickStartingWith(token);
+  }
+
   void setNickCompletions(List<String> nicks) {
     List<String> cleaned = cleanNickList(nicks);
     nickSnapshot = cleaned;
@@ -212,7 +237,9 @@ final class MessageInputNickCompletionSupport {
         new ArrayList<>(slashCommandCompletions.size() + cleaned.size());
     completions.addAll(slashCommandCompletions);
     for (String nick : cleaned) {
-      completions.add(new BasicCompletion(completionProvider, nick, "IRC nick"));
+      BasicCompletion completion = new BasicCompletion(completionProvider, nick, "IRC nick");
+      completion.setRelevance(RELEVANCE_NICK);
+      completions.add(completion);
     }
     completionProvider.replaceCompletions(completions);
     markUiDirty();
@@ -221,7 +248,10 @@ final class MessageInputNickCompletionSupport {
   private List<Completion> buildSlashCommandCompletions() {
     ArrayList<Completion> completions = new ArrayList<>(SLASH_COMMANDS.size());
     for (SlashCommand cmd : SLASH_COMMANDS) {
-      completions.add(new BasicCompletion(completionProvider, cmd.command(), cmd.summary()));
+      BasicCompletion completion =
+          new BasicCompletion(completionProvider, cmd.command(), cmd.summary());
+      completion.setRelevance(RELEVANCE_SLASH);
+      completions.add(completion);
     }
     return List.copyOf(completions);
   }
@@ -247,6 +277,39 @@ final class MessageInputNickCompletionSupport {
     return Collections.unmodifiableList(deduped);
   }
 
+  private List<Completion> dynamicWordCompletions(JTextComponent component, String token) {
+    if (wordSuggestionProvider == null) return List.of();
+    if (component == null) return List.of();
+    String t = token == null ? "" : token.trim();
+    if (t.isEmpty()) return List.of();
+
+    String text = component.getText();
+    if (startsWithSlashCommand(text)) return List.of();
+    if (isKnownNick(t)) return List.of();
+
+    List<String> suggestions = wordSuggestionProvider.suggestWords(t, MAX_WORD_SUGGESTIONS);
+    if (suggestions == null || suggestions.isEmpty()) return List.of();
+
+    String tokenLower = t.toLowerCase(Locale.ROOT);
+    ArrayList<Completion> out = new ArrayList<>(suggestions.size());
+    for (int i = 0; i < suggestions.size(); i++) {
+      String suggestion = suggestions.get(i);
+      if (suggestion == null) continue;
+      String word = suggestion.trim();
+      if (word.isEmpty()) continue;
+      if (isKnownNick(word)) continue;
+
+      boolean prefix = word.toLowerCase(Locale.ROOT).startsWith(tokenLower);
+      BasicCompletion completion =
+          new BasicCompletion(
+              completionProvider, word, prefix ? "Word completion" : "Spelling correction");
+      // Keep all words below nick relevance while preserving provider likelihood order.
+      completion.setRelevance(Math.max(1, RELEVANCE_WORD_PREFIX - i));
+      out.add(completion);
+    }
+    return List.copyOf(out);
+  }
+
   private void installNickCompletionAddressingSuffix() {
     try {
       KeyStroke ks = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0);
@@ -266,7 +329,19 @@ final class MessageInputNickCompletionSupport {
             public void actionPerformed(ActionEvent e) {
               String beforeText = input.getText();
               int beforeCaret = input.getCaretPosition();
-              delegate.actionPerformed(e);
+              boolean forcePopupForNickHint =
+                  shouldForcePopupInsteadOfImmediateCompletion(beforeText, beforeCaret);
+              boolean prevSingleChoice = autoCompletion.getAutoCompleteSingleChoices();
+              if (forcePopupForNickHint) {
+                autoCompletion.setAutoCompleteSingleChoices(false);
+              }
+              try {
+                delegate.actionPerformed(e);
+              } finally {
+                if (forcePopupForNickHint) {
+                  autoCompletion.setAutoCompleteSingleChoices(prevSingleChoice);
+                }
+              }
 
               SwingUtilities.invokeLater(
                   () -> {
@@ -303,6 +378,17 @@ final class MessageInputNickCompletionSupport {
 
     } catch (Exception ignored) {
     }
+  }
+
+  private boolean shouldForcePopupInsteadOfImmediateCompletion(String beforeText, int beforeCaret) {
+    if (autoCompletion.isPopupVisible()) return false;
+    if (beforeText == null) beforeText = "";
+    if (startsWithSlashCommand(beforeText)) return false;
+    if (beforeCaret < 0 || beforeCaret > beforeText.length()) return false;
+
+    String token = completionProvider.getAlreadyEnteredText(input);
+    if (token == null || token.isBlank()) return false;
+    return firstCompletionHint(token) != null;
   }
 
   private void installPendingNickAddressSuffixListener() {
@@ -558,6 +644,16 @@ final class MessageInputNickCompletionSupport {
     return -1;
   }
 
+  private static boolean startsWithSlashCommand(String text) {
+    if (text == null || text.isEmpty()) return false;
+    for (int i = 0; i < text.length(); i++) {
+      char c = text.charAt(i);
+      if (Character.isWhitespace(c)) continue;
+      return c == '/';
+    }
+    return false;
+  }
+
   private static int wordEnd(String s, int start) {
     if (s == null || start < 0) return 0;
     int i = start;
@@ -654,7 +750,18 @@ final class MessageInputNickCompletionSupport {
    * shot and sort once.
    */
   private static final class FastCompletionProvider extends DefaultCompletionProvider {
+    private static final Comparator<Completion> RELEVANCE_SORT =
+        (a, b) -> {
+          int r = Integer.compare(b.getRelevance(), a.getRelevance());
+          return (r != 0) ? r : a.compareTo(b);
+        };
+
+    private final DynamicCompletionSource dynamicCompletionSource;
     private static final Field COMPLETIONS_FIELD = findCompletionsField();
+
+    FastCompletionProvider(DynamicCompletionSource dynamicCompletionSource) {
+      this.dynamicCompletionSource = dynamicCompletionSource;
+    }
 
     private static Field findCompletionsField() {
       // Prefer the historical field name first.
@@ -738,8 +845,46 @@ final class MessageInputNickCompletionSupport {
     }
 
     @Override
+    public List<Completion> getCompletions(JTextComponent comp) {
+      List<Completion> base = super.getCompletions(comp);
+      if (dynamicCompletionSource == null) return base;
+
+      String token = getAlreadyEnteredText(comp);
+      List<Completion> dynamic = dynamicCompletionSource.lookup(comp, token);
+      if (dynamic == null || dynamic.isEmpty()) return base;
+
+      ArrayList<Completion> merged = new ArrayList<>(base.size() + dynamic.size());
+      merged.addAll(base);
+
+      Set<String> seen = new HashSet<>();
+      for (Completion c : base) {
+        if (c == null) continue;
+        String key = c.getReplacementText();
+        if (key == null) continue;
+        seen.add(key.toLowerCase(Locale.ROOT));
+      }
+
+      for (Completion c : dynamic) {
+        if (c == null) continue;
+        String key = c.getReplacementText();
+        if (key == null || key.isBlank()) continue;
+        String lower = key.toLowerCase(Locale.ROOT);
+        if (!seen.add(lower)) continue;
+        merged.add(c);
+      }
+
+      merged.sort(RELEVANCE_SORT);
+      return merged;
+    }
+
+    @Override
     protected boolean isValidChar(char ch) {
       return super.isValidChar(ch) || ch == '/';
     }
+  }
+
+  @FunctionalInterface
+  private interface DynamicCompletionSource {
+    List<Completion> lookup(JTextComponent component, String token);
   }
 }

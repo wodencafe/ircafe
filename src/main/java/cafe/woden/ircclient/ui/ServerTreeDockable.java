@@ -1,7 +1,5 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
@@ -9,11 +7,13 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -35,8 +35,10 @@ import java.awt.Cursor;
 import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Window;
@@ -109,6 +111,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   // The target id remains "status" internally; this is just what the user sees in the tree.
   private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
+  private static final String WEECHAT_FILTERS_LABEL = "Filters";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
   private static final String LOG_VIEWER_LABEL = "Log Viewer";
   private static final String MONITOR_GROUP_LABEL = "Monitor";
@@ -140,6 +143,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final Color TYPING_ACTIVITY_GLOW_DOT = new Color(65, 210, 108);
   private static final Color TYPING_ACTIVITY_GLOW_HALO = new Color(120, 255, 150);
   private static final Color TYPING_ACTIVITY_INDICATOR_FALLBACK = new Color(90, 150, 235);
+  private static final Color DETACHED_WARNING_FILL = new Color(230, 164, 39);
+  private static final Color DETACHED_WARNING_STROKE = new Color(152, 94, 0);
+  private static final Color DETACHED_WARNING_TEXT = Color.WHITE;
+  private static final int TREE_BADGE_HORIZONTAL_PADDING = 5;
+  private static final int TREE_BADGE_MIN_WIDTH = 16;
+  private static final int TREE_BADGE_GAP = 4;
+  private static final int TREE_BADGE_ARC = 10;
+  private static final Color TREE_UNREAD_BADGE_BG = new Color(31, 111, 255);
+  private static final Color TREE_HIGHLIGHT_BADGE_BG = new Color(205, 54, 54);
+  private static final Color TREE_BADGE_FG = Color.WHITE;
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
   public static final String PROP_LOG_VIEWER_NODES_VISIBLE = "logViewerNodesVisible";
@@ -600,6 +613,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           @Override
           public void mousePressed(MouseEvent e) {
             if (maybeHandleHoveredServerActionClick(e)) return;
+            if (maybeHandleDetachedWarningClick(e)) return;
             maybeSelectRowFromLeftClick(e);
             updateHoveredServerAction(e);
           }
@@ -1204,6 +1218,62 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return true;
   }
 
+  private boolean maybeHandleDetachedWarningClick(MouseEvent event) {
+    if (event == null || event.isConsumed()) return false;
+    if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
+
+    TreePath path = treePathForRowHit(event.getX(), event.getY());
+    if (path == null) return false;
+    Object comp = path.getLastPathComponent();
+    if (!(comp instanceof DefaultMutableTreeNode node)) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd) || nd.ref == null || !nd.hasDetachedWarning()) return false;
+
+    Rectangle warningBounds = detachedWarningIndicatorBounds(path, node);
+    if (warningBounds == null || !warningBounds.contains(event.getPoint())) return false;
+
+    clearChannelDetachedWarning(nd.ref);
+    event.consume();
+    tree.repaint(warningBounds);
+    return true;
+  }
+
+  private Rectangle detachedWarningIndicatorBounds(TreePath path, DefaultMutableTreeNode node) {
+    if (path == null || node == null) return null;
+    Rectangle rowBounds = tree.getPathBounds(path);
+    if (rowBounds == null) return null;
+
+    TreePath selectedPath = tree.getSelectionPath();
+    boolean selected = Objects.equals(selectedPath, path);
+    boolean expanded = tree.isExpanded(path);
+    boolean leaf = node.isLeaf();
+    int row = tree.getRowForPath(path);
+    java.awt.Component rendered =
+        tree.getCellRenderer()
+            .getTreeCellRendererComponent(tree, node, selected, expanded, leaf, row, false);
+    if (!(rendered instanceof JComponent jc)) return null;
+
+    java.awt.Insets insets = jc.getInsets();
+    int leftInset = insets != null ? insets.left : 0;
+    int slotWidth = typingSlotWidthForStyle(typingIndicatorStyle);
+    int slotLeft = rowBounds.x + Math.max(0, leftInset - slotWidth - 1);
+    return new Rectangle(slotLeft, rowBounds.y, slotWidth, rowBounds.height);
+  }
+
+  private static int typingSlotWidthForStyle(TreeTypingIndicatorStyle style) {
+    return Math.max(TYPING_ACTIVITY_LEFT_SLOT_WIDTH, typingIndicatorWidthForStyle(style) + 2);
+  }
+
+  private static int typingIndicatorWidthForStyle(TreeTypingIndicatorStyle style) {
+    return switch (style) {
+      case KEYBOARD -> 10;
+      case GLOW_DOT -> 8;
+      case DOTS ->
+          TYPING_ACTIVITY_DOT_COUNT * TYPING_ACTIVITY_DOT_SIZE
+              + (TYPING_ACTIVITY_DOT_COUNT - 1) * TYPING_ACTIVITY_DOT_GAP;
+    };
+  }
+
   private boolean maybeSelectRowFromLeftClick(MouseEvent event) {
     if (event == null || event.isConsumed()) return false;
     if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
@@ -1707,6 +1777,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     next.unread = prev.unread;
     next.highlightUnread = prev.highlightUnread;
     next.detached = prev.detached;
+    next.detachedWarning = prev.detachedWarning;
     next.copyTypingFrom(prev);
     if (!Objects.equals(prev.label, nextLabel)) {
       node.setUserObject(next);
@@ -3242,6 +3313,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ensureUiLeafVisible(sn, sn.notificationsRef, "Notifications", vis.notifications());
       ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, true);
+      ensureUiLeafVisible(sn, sn.weechatFiltersRef, WEECHAT_FILTERS_LABEL, true);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
       ensureMonitorGroupVisible(sn, vis.monitor());
       ensureInterceptorsGroupVisible(sn, vis.interceptors());
@@ -3297,6 +3369,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
     if (leaves.containsKey(sn.channelListRef)) {
       selectTarget(sn.channelListRef);
+      return;
+    }
+    if (leaves.containsKey(sn.weechatFiltersRef)) {
+      selectTarget(sn.weechatFiltersRef);
       return;
     }
     if (vis.monitor() && sn.monitorNode != null && sn.monitorNode.getParent() == sn.serverNode) {
@@ -3422,6 +3498,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     boolean hasLogViewer = leaves.containsKey(sn.logViewerRef);
     boolean hasChannelList = leaves.containsKey(sn.channelListRef);
+    boolean hasWeechatFilters = leaves.containsKey(sn.weechatFiltersRef);
     boolean hasDccTransfers = leaves.containsKey(sn.dccTransfersRef);
 
     if (ref.equals(sn.logViewerRef)) {
@@ -3434,6 +3511,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     if (hasChannelList) idx++;
+    if (ref.equals(sn.weechatFiltersRef)) {
+      return idx;
+    }
+
+    if (hasWeechatFilters) idx++;
     if (ref.equals(sn.dccTransfersRef)) {
       return idx;
     }
@@ -3503,6 +3585,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       parent = sn.interceptorsNode != null ? sn.interceptorsNode : sn.serverNode;
     } else if (ref.isChannelList()) {
       parent = sn.serverNode;
+    } else if (ref.isWeechatFilters()) {
+      parent = sn.serverNode;
     } else if (ref.isDccTransfers()) {
       parent = sn.serverNode;
     } else if (ref.isLogViewer()) {
@@ -3536,6 +3620,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       leafLabel = LOG_VIEWER_LABEL;
     } else if (ref.isChannelList()) {
       leafLabel = CHANNEL_LIST_LABEL;
+    } else if (ref.isWeechatFilters()) {
+      leafLabel = WEECHAT_FILTERS_LABEL;
     } else if (ref.isDccTransfers()) {
       leafLabel = DCC_TRANSFERS_LABEL;
     }
@@ -3644,14 +3730,33 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setChannelDetached(TargetRef ref, boolean detached) {
+    setChannelDetached(ref, detached, null);
+  }
+
+  public void setChannelDetached(TargetRef ref, boolean detached, String warningReason) {
     if (ref == null || !ref.isChannel()) return;
     ensureNode(ref);
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     Object uo = node.getUserObject();
     if (!(uo instanceof NodeData nd)) return;
-    if (nd.detached == detached) return;
+    String normalizedReason = warningReason == null ? null : warningReason.trim();
+    String nextWarning;
+    if (!detached) {
+      nextWarning = "";
+    } else if (normalizedReason != null) {
+      nextWarning = normalizedReason;
+    } else if (!nd.detached) {
+      nextWarning = "";
+    } else {
+      nextWarning = Objects.toString(nd.detachedWarning, "");
+    }
+    boolean detachedChanged = nd.detached != detached;
+    boolean warningChanged = !Objects.equals(Objects.toString(nd.detachedWarning, ""), nextWarning);
+    if (!detachedChanged && !warningChanged) return;
+
     nd.detached = detached;
+    nd.detachedWarning = nextWarning;
     if (detached) {
       nd.clearTypingActivityNow();
       typingActivityNodes.remove(node);
@@ -3661,6 +3766,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
     model.nodeChanged(node);
     emitManagedChannelsChanged(ref.serverId());
+  }
+
+  public void clearChannelDetachedWarning(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return;
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof NodeData nd) || !nd.hasDetachedWarning()) return;
+    setChannelDetached(ref, true, "");
   }
 
   public boolean isChannelDetached(TargetRef ref) {
@@ -4359,6 +4473,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (leaves.containsKey(originNodes.notificationsRef)) count++;
     if (leaves.containsKey(originNodes.logViewerRef)) count++;
     if (leaves.containsKey(originNodes.channelListRef)) count++;
+    if (leaves.containsKey(originNodes.weechatFiltersRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
     if (originNodes.interceptorsNode != null
         && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
@@ -4403,6 +4518,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd && nd.ref != null) {
+      if (nd.ref.isChannel() && nd.hasDetachedWarning()) {
+        return "Detached: " + nd.detachedWarning + " (click warning icon to clear).";
+      }
       if (nd.ref.isApplicationUnhandledErrors()) {
         return "Uncaught JVM exceptions captured by IRCafe.";
       }
@@ -4431,6 +4549,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
       if (nd.ref.isInterceptor()) {
         return "Custom interceptor rules, actions, and captured matches. Scope can be this server or any server.";
+      }
+      if (nd.ref.isWeechatFilters()) {
+        return "WeeChat-style local filters for this server (rules, placeholders, and scope overrides).";
       }
     }
 
@@ -4654,6 +4775,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     serverNode.insert(channelListLeaf, nextUiLeafIndex++);
     leaves.put(channelListRef, channelListLeaf);
 
+    TargetRef weechatFiltersRef = TargetRef.weechatFilters(id);
+    DefaultMutableTreeNode weechatFiltersLeaf =
+        new DefaultMutableTreeNode(new NodeData(weechatFiltersRef, WEECHAT_FILTERS_LABEL));
+    serverNode.insert(weechatFiltersLeaf, nextUiLeafIndex++);
+    leaves.put(weechatFiltersRef, weechatFiltersLeaf);
+
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
       DefaultMutableTreeNode dccTransfersLeaf =
@@ -4712,6 +4839,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             notificationsRef,
             logViewerRef,
             channelListRef,
+            weechatFiltersRef,
             dccTransfersRef);
     servers.put(id, sn);
 
@@ -4779,6 +4907,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       nd.unread = old.unread;
       nd.highlightUnread = old.highlightUnread;
       nd.detached = old.detached;
+      nd.detachedWarning = old.detachedWarning;
       nd.copyTypingFrom(old);
       node.setUserObject(nd);
       model.nodeChanged(node);
@@ -4910,6 +5039,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     final TargetRef notificationsRef;
     final TargetRef logViewerRef;
     final TargetRef channelListRef;
+    final TargetRef weechatFiltersRef;
     final TargetRef dccTransfersRef;
 
     ServerNodes(
@@ -4921,6 +5051,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         TargetRef notificationsRef,
         TargetRef logViewerRef,
         TargetRef channelListRef,
+        TargetRef weechatFiltersRef,
         TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
@@ -4930,6 +5061,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       this.notificationsRef = notificationsRef;
       this.logViewerRef = logViewerRef;
       this.channelListRef = channelListRef;
+      this.weechatFiltersRef = weechatFiltersRef;
       this.dccTransfersRef = dccTransfersRef;
     }
   }
@@ -4970,6 +5102,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     private float typingIndicatorAlpha = 0f;
     private boolean typingIndicatorSlotVisible = false;
+    private boolean detachedWarningIndicatorVisible = false;
+    private int unreadBadgeCount = 0;
+    private int highlightBadgeCount = 0;
 
     private void setTreeIcon(String name) {
       Icon icon = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE);
@@ -4995,13 +5130,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       if (base == null) base = getFont();
       typingIndicatorAlpha = 0f;
       typingIndicatorSlotVisible = false;
+      detachedWarningIndicatorVisible = false;
+      unreadBadgeCount = 0;
+      highlightBadgeCount = 0;
 
       if (value instanceof DefaultMutableTreeNode node) {
         Object uo = node.getUserObject();
         if (uo instanceof NodeData nd) {
-          setText(nd.toString());
+          setText(nd.label);
           boolean detachedChannel = nd.ref != null && nd.ref.isChannel() && nd.detached;
           int style = nd.highlightUnread > 0 ? Font.BOLD : Font.PLAIN;
+          unreadBadgeCount = Math.max(0, nd.unread);
+          highlightBadgeCount = Math.max(0, nd.highlightUnread);
           if (detachedChannel) {
             style |= Font.ITALIC;
           }
@@ -5047,6 +5187,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             setTreeIcon(isInterceptorEnabled(nd.ref) ? "interceptor" : "pause");
           } else if (nd.ref != null && nd.ref.isChannelList()) {
             setTreeIcon("add");
+          } else if (nd.ref != null && nd.ref.isWeechatFilters()) {
+            setTreeIcon("settings");
           } else if (nd.ref != null && nd.ref.isDccTransfers()) {
             setTreeIcon("dock-right");
           } else if (nd.ref == null && isMonitorGroupNode(node)) {
@@ -5056,9 +5198,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           }
           if (supportsTypingActivity(nd.ref)) {
             typingIndicatorSlotVisible = true;
-            typingIndicatorAlpha =
-                nd.typingDotAlpha(
-                    System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
+            detachedWarningIndicatorVisible = nd.hasDetachedWarning();
+            if (!detachedWarningIndicatorVisible) {
+              typingIndicatorAlpha =
+                  nd.typingDotAlpha(
+                      System.currentTimeMillis(),
+                      TYPING_ACTIVITY_PULSE_MS,
+                      TYPING_ACTIVITY_FADE_MS);
+            }
           }
         } else if (uo instanceof String id && isServerNode(node)) {
           setText(serverNodeDisplayLabel(id));
@@ -5105,6 +5252,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     @Override
+    public Dimension getPreferredSize() {
+      Dimension base = super.getPreferredSize();
+      int extra = badgesPreferredWidth();
+      if (extra <= 0) return base;
+      return new Dimension(base.width + extra, base.height);
+    }
+
+    @Override
     public java.awt.Insets getInsets() {
       java.awt.Insets insets = super.getInsets();
       if (!typingIndicatorSlotVisible || insets == null) return insets;
@@ -5136,28 +5291,34 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     @Override
     protected void paintComponent(Graphics g) {
       super.paintComponent(g);
-      if (!typingIndicatorSlotVisible || typingIndicatorAlpha <= 0.01f) return;
 
       Graphics2D g2 = (Graphics2D) g.create();
       try {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        if (typingIndicatorSlotVisible
+            && (detachedWarningIndicatorVisible || typingIndicatorAlpha > 0.01f)) {
+          TreeTypingIndicatorStyle style = typingIndicatorStyle;
+          int width = indicatorWidth(style);
+          int height = indicatorHeight(style);
+          java.awt.Insets insets = getInsets();
+          int leftInset = insets != null ? insets.left : 0;
+          int slotWidth = typingIndicatorSlotWidth(style);
+          int slotLeft = Math.max(0, leftInset - slotWidth - 1);
+          int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
+          int y = Math.max(0, (getHeight() - height) / 2);
+          float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
 
-        TreeTypingIndicatorStyle style = typingIndicatorStyle;
-        int width = indicatorWidth(style);
-        int height = indicatorHeight(style);
-        java.awt.Insets insets = getInsets();
-        int leftInset = insets != null ? insets.left : 0;
-        int slotWidth = typingIndicatorSlotWidth(style);
-        int slotLeft = Math.max(0, leftInset - slotWidth - 1);
-        int x = slotLeft + Math.max(0, (slotWidth - width) / 2);
-        int y = Math.max(0, (getHeight() - height) / 2);
-        float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
-
-        switch (style) {
-          case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
-          case GLOW_DOT -> drawGlowDotIndicator(g2, x, y, width, height, alpha);
-          case DOTS -> drawDotsIndicator(g2, x, y, alpha);
+          if (detachedWarningIndicatorVisible) {
+            drawDetachedWarningIndicator(g2, slotLeft, 0, slotWidth, getHeight());
+          } else {
+            switch (style) {
+              case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
+              case GLOW_DOT -> drawGlowDotIndicator(g2, x, y, width, height, alpha);
+              case DOTS -> drawDotsIndicator(g2, x, y, alpha);
+            }
+          }
         }
+        paintUnreadBadges(g2);
       } finally {
         g2.dispose();
       }
@@ -5243,6 +5404,109 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       g2.fillOval(cx, cy, dot, dot);
     }
 
+    private void drawDetachedWarningIndicator(
+        Graphics2D g2, int slotLeft, int y, int slotWidth, int slotHeight) {
+      int icon = Math.max(8, Math.min(10, Math.min(slotWidth - 2, slotHeight - 4)));
+      int x = slotLeft + Math.max(0, (slotWidth - icon) / 2);
+      int ty = y + Math.max(1, (slotHeight - icon) / 2);
+
+      int topX = x + (icon / 2);
+      int topY = ty;
+      int leftX = x;
+      int leftY = ty + icon - 1;
+      int rightX = x + icon - 1;
+      int rightY = leftY;
+
+      Polygon triangle =
+          new Polygon(new int[] {topX, leftX, rightX}, new int[] {topY, leftY, rightY}, 3);
+      g2.setComposite(AlphaComposite.SrcOver);
+      g2.setColor(DETACHED_WARNING_FILL);
+      g2.fillPolygon(triangle);
+      g2.setColor(DETACHED_WARNING_STROKE);
+      g2.drawPolygon(triangle);
+
+      int cx = topX;
+      int exTop = ty + Math.max(2, icon / 4);
+      int exBottom = ty + Math.max(exTop + 1, icon - 4);
+      g2.setColor(DETACHED_WARNING_TEXT);
+      g2.drawLine(cx, exTop, cx, exBottom);
+      g2.fillOval(cx - 1, ty + icon - 3, 2, 2);
+    }
+
+    private int badgesPreferredWidth() {
+      if (unreadBadgeCount <= 0 && highlightBadgeCount <= 0) return 0;
+      FontMetrics fm = getFontMetrics(getFont());
+      if (fm == null) return 0;
+      int width = badgeClusterWidth(fm);
+      return width > 0 ? (width + TREE_BADGE_GAP) : 0;
+    }
+
+    private void paintUnreadBadges(Graphics2D g2) {
+      if (unreadBadgeCount <= 0 && highlightBadgeCount <= 0) return;
+      FontMetrics fm = g2.getFontMetrics(getFont());
+      if (fm == null) return;
+
+      int badgeHeight = Math.max(14, fm.getAscent() + 4);
+      int x = badgeStartX(fm);
+      int y = Math.max(0, (getHeight() - badgeHeight) / 2);
+
+      if (unreadBadgeCount > 0) {
+        String text = Integer.toString(unreadBadgeCount);
+        int w = badgeWidthForText(fm, text);
+        paintBadge(g2, x, y, w, badgeHeight, TREE_UNREAD_BADGE_BG, text);
+        x += w + TREE_BADGE_GAP;
+      }
+
+      if (highlightBadgeCount > 0) {
+        String text = Integer.toString(highlightBadgeCount);
+        int w = badgeWidthForText(fm, text);
+        paintBadge(g2, x, y, w, badgeHeight, TREE_HIGHLIGHT_BADGE_BG, text);
+      }
+    }
+
+    private int badgeStartX(FontMetrics fm) {
+      int x = 0;
+      java.awt.Insets insets = getInsets();
+      if (insets != null) x += insets.left;
+      Icon icon = getIcon();
+      if (icon != null) x += icon.getIconWidth() + Math.max(0, getIconTextGap());
+      String text = Objects.toString(getText(), "");
+      if (!text.isEmpty()) x += fm.stringWidth(text);
+      x += TREE_BADGE_GAP;
+      return x;
+    }
+
+    private int badgeClusterWidth(FontMetrics fm) {
+      int width = 0;
+      if (unreadBadgeCount > 0) {
+        width += badgeWidthForText(fm, Integer.toString(unreadBadgeCount));
+      }
+      if (highlightBadgeCount > 0) {
+        if (width > 0) width += TREE_BADGE_GAP;
+        width += badgeWidthForText(fm, Integer.toString(highlightBadgeCount));
+      }
+      return width;
+    }
+
+    private static int badgeWidthForText(FontMetrics fm, String text) {
+      int t = fm == null ? 0 : fm.stringWidth(Objects.toString(text, ""));
+      return Math.max(TREE_BADGE_MIN_WIDTH, t + (TREE_BADGE_HORIZONTAL_PADDING * 2));
+    }
+
+    private void paintBadge(
+        Graphics2D g2, int x, int y, int width, int height, Color bg, String text) {
+      if (g2 == null) return;
+      g2.setComposite(AlphaComposite.SrcOver);
+      g2.setColor(bg);
+      g2.fillRoundRect(x, y, width, height, TREE_BADGE_ARC, TREE_BADGE_ARC);
+
+      FontMetrics fm = g2.getFontMetrics(getFont());
+      int textX = x + Math.max(0, (width - fm.stringWidth(text)) / 2);
+      int textY = y + Math.max(0, ((height - fm.getHeight()) / 2) + fm.getAscent());
+      g2.setColor(TREE_BADGE_FG);
+      g2.drawString(text, textX, textY);
+    }
+
     private Color typingIndicatorColor() {
       Color c = UIManager.getColor("@accentColor");
       if (c == null) c = UIManager.getColor("Component.focusColor");
@@ -5258,6 +5522,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     int unread = 0;
     int highlightUnread = 0;
     boolean detached = false;
+    String detachedWarning = "";
     long typingPulseUntilMs = 0L;
     long typingDoneFadeStartMs = 0L;
 
@@ -5274,6 +5539,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     boolean hasTypingActivity() {
       return typingPulseUntilMs > 0L || typingDoneFadeStartMs > 0L;
+    }
+
+    boolean hasDetachedWarning() {
+      return detached && !Objects.toString(detachedWarning, "").trim().isEmpty();
     }
 
     boolean clearTypingActivityNow() {
@@ -5354,10 +5623,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     @Override
     public String toString() {
-      if (unread > 0 && highlightUnread > 0)
-        return label + " (" + unread + ", " + highlightUnread + "!)";
-      if (unread > 0) return label + " (" + unread + ")";
-      if (highlightUnread > 0) return label + " (" + highlightUnread + "!)";
       return label;
     }
   }

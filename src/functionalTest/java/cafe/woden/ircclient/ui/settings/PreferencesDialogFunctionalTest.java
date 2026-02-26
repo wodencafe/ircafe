@@ -168,6 +168,7 @@ class PreferencesDialogFunctionalTest {
         mock(ThemeAccentSettingsBus.class),
         mock(ThemeTweakSettingsBus.class),
         mock(ChatThemeSettingsBus.class),
+        mock(SpellcheckSettingsBus.class),
         mock(RuntimeConfigStore.class),
         mock(LogProperties.class),
         mock(NickColorSettingsBus.class),

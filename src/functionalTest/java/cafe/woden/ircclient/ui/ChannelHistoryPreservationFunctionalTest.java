@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
@@ -29,6 +28,7 @@ import cafe.woden.ircclient.logging.LogLineFactory;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.history.LoadOlderControlState;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatHistoryTranscriptPortAdapter;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
@@ -156,7 +156,7 @@ class ChannelHistoryPreservationFunctionalTest {
                 new ServerTreeDockable(
                     serverCatalog,
                     runtimeConfig,
-                    new LogProperties(true, true, true, true, true, 0, null),
+                    new LogProperties(true, true, true, true, true, 0, null, null, null),
                     null,
                     null,
                     new ConnectButton(),
@@ -214,7 +214,7 @@ class ChannelHistoryPreservationFunctionalTest {
     DbChatHistoryService historyService =
         new DbChatHistoryService(
             repo,
-            new LogProperties(true, true, true, true, true, 0, null),
+            new LogProperties(true, true, true, true, true, 0, null, null, null),
             new FixedHistoryTranscriptPort(transcripts, 100, 200),
             null,
             null,

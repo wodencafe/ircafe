@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app;
+package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;

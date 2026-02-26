@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.DccTransferStore;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
@@ -145,16 +145,95 @@ public class OutboundDccCommandService {
     return switch (verb) {
       case "CHAT" -> consumeInboundChatOffer(at, sid, nick, tokens, spoiler);
       case "SEND" -> consumeInboundSendOffer(at, sid, nick, tokens, spoiler);
-      case "RESUME", "ACCEPT" -> {
-        postInboundDccStatus(
-            at, sid, nick, "Received unsupported DCC " + verb + " request.", spoiler);
-        yield true;
-      }
+      case "RESUME" -> consumeInboundResumeControl(at, sid, nick, tokens, spoiler);
+      case "ACCEPT" -> consumeInboundAcceptControl(at, sid, nick, tokens, spoiler);
       default -> {
         postInboundDccStatus(at, sid, nick, "Received unsupported DCC command: " + verb, spoiler);
         yield true;
       }
     };
+  }
+
+  private boolean consumeInboundResumeControl(
+      Instant at, String sid, String fromNick, List<String> tokens, boolean spoiler) {
+    if (tokens.size() < 4) {
+      postInboundDccStatus(at, sid, fromNick, "Malformed DCC RESUME control message.", spoiler);
+      return true;
+    }
+
+    String fileName = sanitizeOfferFileName(tokens.get(1));
+    Integer port = parsePort(tokens.get(2));
+    Long offset = parseLong(tokens.get(3));
+    if (port == null || offset == null || offset < 0L) {
+      postInboundDccStatus(at, sid, fromNick, "Malformed DCC RESUME control message.", spoiler);
+      return true;
+    }
+
+    upsertTransfer(
+        sid,
+        fromNick,
+        transferEntryId(sid, fromNick, "control-resume"),
+        "Control",
+        "RESUME received",
+        fileName + " (port " + port + ", offset " + formatBytes(offset) + ")",
+        null,
+        DccTransferStore.ActionHint.NONE);
+    postInboundDccStatus(
+        at,
+        sid,
+        fromNick,
+        "DCC RESUME control from "
+            + fromNick
+            + " for "
+            + fileName
+            + " at byte "
+            + offset
+            + " (port "
+            + port
+            + ").",
+        spoiler);
+    return true;
+  }
+
+  private boolean consumeInboundAcceptControl(
+      Instant at, String sid, String fromNick, List<String> tokens, boolean spoiler) {
+    if (tokens.size() < 4) {
+      postInboundDccStatus(at, sid, fromNick, "Malformed DCC ACCEPT control message.", spoiler);
+      return true;
+    }
+
+    String fileName = sanitizeOfferFileName(tokens.get(1));
+    Integer port = parsePort(tokens.get(2));
+    Long offset = parseLong(tokens.get(3));
+    if (port == null || offset == null || offset < 0L) {
+      postInboundDccStatus(at, sid, fromNick, "Malformed DCC ACCEPT control message.", spoiler);
+      return true;
+    }
+
+    upsertTransfer(
+        sid,
+        fromNick,
+        transferEntryId(sid, fromNick, "control-accept"),
+        "Control",
+        "ACCEPT received",
+        fileName + " (port " + port + ", offset " + formatBytes(offset) + ")",
+        null,
+        DccTransferStore.ActionHint.NONE);
+    postInboundDccStatus(
+        at,
+        sid,
+        fromNick,
+        "DCC ACCEPT control from "
+            + fromNick
+            + " for "
+            + fileName
+            + " at byte "
+            + offset
+            + " (port "
+            + port
+            + ").",
+        spoiler);
+    return true;
   }
 
   private void offerChat(CompositeDisposable disposables, String sid, TargetRef out, String nick) {

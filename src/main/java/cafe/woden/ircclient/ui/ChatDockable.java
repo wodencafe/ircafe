@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.app.DccTransferStore;
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.NotificationStore;
-import cafe.woden.ircclient.app.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.dcc.DccTransferStore;
+import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -18,6 +18,7 @@ import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
@@ -28,6 +29,7 @@ import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
+import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -130,6 +132,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private static final String CARD_MONITOR = "monitor";
   private static final String CARD_LOG_VIEWER = "log-viewer";
   private static final String CARD_INTERCEPTOR = "interceptor";
+  private static final String CARD_APP_ASSERTJ = "app-assertj";
+  private static final String CARD_APP_JHICCUP = "app-jhiccup";
   private static final String CARD_APP_JFR = "app-jfr";
   private static final String CARD_APP_SPRING = "app-spring";
   private static final String CARD_TERMINAL = "terminal";
@@ -141,6 +145,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final LogViewerPanel logViewerPanel;
   private final InterceptorStore interceptorStore;
   private final InterceptorPanel interceptorPanel;
+  private final RuntimeEventsPanel appAssertjPanel;
+  private final RuntimeEventsPanel appJhiccupPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
   private final RuntimeEventsPanel appSpringPanel;
   private final TerminalDockable terminalPanel;
@@ -176,9 +182,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       InterceptorStore interceptorStore,
       DccTransferStore dccTransferStore,
       TerminalDockable terminalDockable,
+      @Lazy ApplicationDiagnosticsService applicationDiagnosticsService,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       SpringRuntimeEventsService springRuntimeEventsService,
       UiSettingsBus settingsBus,
+      SpellcheckSettingsBus spellcheckSettingsBus,
       CommandHistoryStore commandHistoryStore) {
     super(settingsBus);
     this.transcripts = transcripts;
@@ -198,6 +206,40 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.chatHistoryService = chatHistoryService;
     this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
     this.terminalPanel = java.util.Objects.requireNonNull(terminalDockable, "terminalDockable");
+    this.appAssertjPanel =
+        new RuntimeEventsPanel(
+            "AssertJ Swing",
+            "EDT watchdog, violation checks, and UI freeze diagnostics.",
+            () ->
+                applicationDiagnosticsService != null
+                    ? applicationDiagnosticsService.recentAssertjSwingEvents(1200)
+                    : List.of(),
+            () -> {
+              if (applicationDiagnosticsService != null) {
+                applicationDiagnosticsService.clearAssertjSwingEvents();
+              }
+            },
+            "assertj-swing",
+            applicationDiagnosticsService != null
+                ? applicationDiagnosticsService.assertjSwingChangeStream()
+                : null);
+    this.appJhiccupPanel =
+        new RuntimeEventsPanel(
+            "jHiccup",
+            "External jHiccup process lifecycle and latency diagnostics.",
+            () ->
+                applicationDiagnosticsService != null
+                    ? applicationDiagnosticsService.recentJhiccupEvents(1200)
+                    : List.of(),
+            () -> {
+              if (applicationDiagnosticsService != null) {
+                applicationDiagnosticsService.clearJhiccupEvents();
+              }
+            },
+            "jhiccup",
+            applicationDiagnosticsService != null
+                ? applicationDiagnosticsService.jhiccupChangeStream()
+                : null);
     this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
     this.appSpringPanel =
         new RuntimeEventsPanel(
@@ -206,7 +248,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             () ->
                 springRuntimeEventsService != null
                     ? springRuntimeEventsService.recentEvents(600)
-                    : List.of());
+                    : List.of(),
+            () -> {
+              if (springRuntimeEventsService != null) {
+                springRuntimeEventsService.clearEvents();
+              }
+            },
+            "spring-events",
+            springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
 
     this.nickContextMenu =
         nickContextMenuFactory.create(
@@ -451,6 +500,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(monitorPanel, CARD_MONITOR);
     centerCards.add(logViewerPanel, CARD_LOG_VIEWER);
     centerCards.add(interceptorPanel, CARD_INTERCEPTOR);
+    centerCards.add(appAssertjPanel, CARD_APP_ASSERTJ);
+    centerCards.add(appJhiccupPanel, CARD_APP_JHICCUP);
     centerCards.add(appJfrPanel, CARD_APP_JFR);
     centerCards.add(appSpringPanel, CARD_APP_SPRING);
     centerCards.add(terminalPanel, CARD_TERMINAL);
@@ -459,7 +510,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     hideTopicPanel();
 
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
-    this.inputPanel = new MessageInputPanel(settingsBus, commandHistoryStore);
+    this.inputPanel =
+        new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
     add(inputPanel, BorderLayout.SOUTH);
     // Context menu: Clear (buffer only) + Reload recent history (clear + reload from DB/bouncer).
     setTranscriptContextMenuActions(
@@ -609,6 +661,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (target.isMonitorGroup()) {
       showMonitorCard(target.serverId());
       // Monitor view does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isApplicationAssertjSwing()) {
+      showApplicationAssertjCard();
+      // Runtime diagnostics view does not accept input; clear any draft to avoid confusion.
+      inputPanel.setDraftText("");
+      updateTopicPanelForActiveTarget();
+      return;
+    }
+    if (target.isApplicationJhiccup()) {
+      showApplicationJhiccupCard();
+      // Runtime diagnostics view does not accept input; clear any draft to avoid confusion.
       inputPanel.setDraftText("");
       updateTopicPanelForActiveTarget();
       return;
@@ -799,6 +865,24 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       appJfrPanel.refreshNow();
       CardLayout cl = (CardLayout) centerCards.getLayout();
       cl.show(centerCards, CARD_APP_JFR);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationAssertjCard() {
+    try {
+      appAssertjPanel.refreshNow();
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_APP_ASSERTJ);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationJhiccupCard() {
+    try {
+      appJhiccupPanel.refreshNow();
+      CardLayout cl = (CardLayout) centerCards.getLayout();
+      cl.show(centerCards, CARD_APP_JHICCUP);
     } catch (Exception ignored) {
     }
   }
@@ -1654,6 +1738,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     if (t == null) return "Chat";
     if (t.isNotifications()) return "Notifications";
     if (t.isChannelList()) return "Channel List";
+    if (t.isWeechatFilters()) return "Filters";
     if (t.isDccTransfers()) return "DCC Transfers";
     if (t.isMonitorGroup()) return "Monitor";
     if (t.isInterceptorsGroup()) return "Interceptors";

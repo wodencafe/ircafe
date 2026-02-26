@@ -100,6 +100,44 @@ public record UiProperties(
      */
     String typingTreeIndicatorStyle,
 
+    /** Enable spell checking in the message input. */
+    Boolean spellcheckEnabled,
+
+    /** Enable misspelling underline/highlight rendering in the message input. */
+    Boolean spellcheckUnderlineEnabled,
+
+    /** Include dictionary suggestions in TAB completion popup. */
+    Boolean spellcheckSuggestOnTabEnabled,
+
+    /** BCP-47 language tag for spell checking (for example {@code en-US}). */
+    String spellcheckLanguageTag,
+
+    /** Custom per-user dictionary words that should not be marked misspelled. */
+    List<String> spellcheckCustomDictionary,
+
+    /**
+     * Completion preset for dictionary-backed TAB suggestions.
+     *
+     * <p>Allowed values: {@code android-like}, {@code standard}, {@code conservative}, {@code
+     * aggressive}, {@code custom}.
+     */
+    String spellcheckCompletionPreset,
+
+    /** Custom minimum token length required before prefix completions are considered. */
+    Integer spellcheckCustomMinPrefixCompletionTokenLength,
+
+    /** Custom maximum number of extra characters allowed for a prefix completion candidate. */
+    Integer spellcheckCustomMaxPrefixCompletionExtraChars,
+
+    /** Custom cap for prefix lexicon candidates considered per lookup. */
+    Integer spellcheckCustomMaxPrefixLexiconCandidates,
+
+    /** Custom score bonus that boosts exact prefix completions. */
+    Integer spellcheckCustomPrefixCompletionBonusScore,
+
+    /** Custom source-order penalty weight for later suggestions in upstream lists. */
+    Integer spellcheckCustomSourceOrderWeight,
+
     /**
      * If enabled, inbound CTCP requests are rendered into the currently active chat target (same
      * server). If disabled, they are routed to their origin target (channel/PM) instead.
@@ -685,6 +723,54 @@ public record UiProperties(
     }
     typingTreeIndicatorStyle = normalizeTypingTreeIndicatorStyle(typingTreeIndicatorStyle);
 
+    // Spellcheck defaults.
+    if (spellcheckEnabled == null) {
+      spellcheckEnabled = true;
+    }
+    if (spellcheckUnderlineEnabled == null) {
+      spellcheckUnderlineEnabled = true;
+    }
+    if (spellcheckSuggestOnTabEnabled == null) {
+      spellcheckSuggestOnTabEnabled = true;
+    }
+    spellcheckLanguageTag = normalizeSpellcheckLanguageTag(spellcheckLanguageTag);
+    if (spellcheckCustomDictionary == null) {
+      spellcheckCustomDictionary = List.of();
+    } else {
+      spellcheckCustomDictionary =
+          spellcheckCustomDictionary.stream()
+              .map(v -> Objects.toString(v, "").trim())
+              .filter(v -> !v.isEmpty())
+              .distinct()
+              .toList();
+    }
+    spellcheckCompletionPreset = normalizeSpellcheckCompletionPreset(spellcheckCompletionPreset);
+    if (spellcheckCustomMinPrefixCompletionTokenLength == null) {
+      spellcheckCustomMinPrefixCompletionTokenLength = 2;
+    }
+    spellcheckCustomMinPrefixCompletionTokenLength =
+        Math.max(2, Math.min(6, spellcheckCustomMinPrefixCompletionTokenLength));
+    if (spellcheckCustomMaxPrefixCompletionExtraChars == null) {
+      spellcheckCustomMaxPrefixCompletionExtraChars = 14;
+    }
+    spellcheckCustomMaxPrefixCompletionExtraChars =
+        Math.max(4, Math.min(24, spellcheckCustomMaxPrefixCompletionExtraChars));
+    if (spellcheckCustomMaxPrefixLexiconCandidates == null) {
+      spellcheckCustomMaxPrefixLexiconCandidates = 96;
+    }
+    spellcheckCustomMaxPrefixLexiconCandidates =
+        Math.max(16, Math.min(256, spellcheckCustomMaxPrefixLexiconCandidates));
+    if (spellcheckCustomPrefixCompletionBonusScore == null) {
+      spellcheckCustomPrefixCompletionBonusScore = 220;
+    }
+    spellcheckCustomPrefixCompletionBonusScore =
+        Math.max(0, Math.min(400, spellcheckCustomPrefixCompletionBonusScore));
+    if (spellcheckCustomSourceOrderWeight == null) {
+      spellcheckCustomSourceOrderWeight = 6;
+    }
+    spellcheckCustomSourceOrderWeight =
+        Math.max(0, Math.min(20, spellcheckCustomSourceOrderWeight));
+
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {
       ctcpRequestsInActiveTargetEnabled = true;
@@ -759,6 +845,24 @@ public record UiProperties(
       case "keyboard", "kbd" -> "keyboard";
       case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
       default -> "dots";
+    };
+  }
+
+  static String normalizeSpellcheckLanguageTag(String raw) {
+    String s = raw == null ? "" : raw.trim();
+    if (s.isEmpty()) return "en-US";
+    String folded = s.replace('_', '-');
+    if ("en-us".equalsIgnoreCase(folded)) return "en-US";
+    if ("en-gb".equalsIgnoreCase(folded)) return "en-GB";
+    return "en-US";
+  }
+
+  static String normalizeSpellcheckCompletionPreset(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "android-like";
+    return switch (s) {
+      case "android-like", "standard", "conservative", "aggressive", "custom" -> s;
+      default -> "android-like";
     };
   }
 }
