@@ -288,7 +288,10 @@ dependencies {
     implementation "com.github.weisj:darklaf-core:${darklafVersion}"
 
     implementation "com.fifesoft:autocomplete:3.3.3"
-    implementation "org.languagetool:language-en:6.7"
+    implementation("org.languagetool:language-en:6.7") {
+        exclude group: "com.sun.xml.bind", module: "jaxb-core"
+        exclude group: "com.sun.xml.bind", module: "jaxb-impl"
+    }
 
     implementation "org.sejda.imageio:webp-imageio:0.1.6"
     implementation "com.madgag:animated-gif-lib:1.4"
@@ -372,6 +375,7 @@ tasks.register('themeValidate', Test) {
 
 tasks.named('bootJar') {
     archiveFileName = "ircafe-${project.version}.jar"
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 tasks.named('jar') {
     archiveClassifier = "plain"
