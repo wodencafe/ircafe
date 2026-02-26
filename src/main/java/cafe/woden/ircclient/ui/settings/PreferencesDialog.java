@@ -6085,8 +6085,10 @@ public class PreferencesDialog {
       case "draft/typing" -> "Typing transport (draft)";
       case "typing" -> "Typing transport";
       case "read-marker" -> "Read markers";
+      case "draft/channel-context" -> "Channel context metadata";
       case "draft/reply" -> "Reply metadata";
       case "draft/react" -> "Reaction metadata";
+      case "draft/unreact" -> "Reaction removal metadata";
       case "draft/message-edit" -> "Message edits (draft)";
       case "message-edit" -> "Message edits (final)";
       case "draft/message-redaction" -> "Message redaction (draft)";
@@ -6131,7 +6133,9 @@ public class PreferencesDialog {
           "userhost-in-names" ->
           "core";
       case "draft/reply",
+          "draft/channel-context",
           "draft/react",
+          "draft/unreact",
           "draft/message-edit",
           "message-edit",
           "draft/message-redaction",
@@ -6181,8 +6185,10 @@ public class PreferencesDialog {
       case "draft/typing" -> 225;
       case "typing" -> 230;
       case "read-marker" -> 240;
+      case "draft/channel-context" -> 245;
       case "draft/reply" -> 250;
       case "draft/react" -> 260;
+      case "draft/unreact" -> 265;
       case "message-edit" -> 270;
       case "draft/message-edit" -> 280;
       case "message-redaction" -> 290;
@@ -6216,8 +6222,11 @@ public class PreferencesDialog {
       case "typing", "draft/typing" ->
           "Transport for typing indicators; required to send/receive typing events.";
       case "read-marker" -> "Enables read-position markers on servers that support them.";
+      case "draft/channel-context" ->
+          "Carries channel context for client-tagged metadata sent outside the channel buffer.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
       case "draft/react" -> "Carries reaction metadata where servers/clients support it.";
+      case "draft/unreact" -> "Carries metadata for removing previously applied reactions.";
       case "draft/message-edit", "message-edit" ->
           "Allows edit updates for previously sent messages.";
       case "draft/message-redaction", "message-redaction" ->

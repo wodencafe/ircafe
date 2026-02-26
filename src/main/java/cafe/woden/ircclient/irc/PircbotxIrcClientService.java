@@ -703,6 +703,18 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public boolean isDraftUnreactAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null
+          && c.botRef.get() != null
+          && (c.draftUnreactCapAcked.get() || c.draftReactCapAcked.get());
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
   public boolean isMultilineAvailable(String serverId) {
     try {
       PircbotxConnectionState c = conn(serverId);

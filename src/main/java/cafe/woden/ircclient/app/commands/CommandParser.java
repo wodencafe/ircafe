@@ -377,6 +377,9 @@ public class CommandParser {
     if (matchesCommand(line, "/react")) {
       return parseReactInput(argAfter(line, "/react"));
     }
+    if (matchesCommand(line, "/unreact")) {
+      return parseUnreactInput(argAfter(line, "/unreact"));
+    }
     if (matchesCommand(line, "/edit")) {
       return parseEditInput(argAfter(line, "/edit"));
     }
@@ -501,6 +504,16 @@ public class CommandParser {
     String msgId = r.substring(0, sp).trim();
     String reaction = r.substring(sp + 1).trim();
     return new ParsedInput.ReactMessage(msgId, reaction);
+  }
+
+  private static ParsedInput parseUnreactInput(String rest) {
+    String r = rest == null ? "" : rest.trim();
+    if (r.isEmpty()) return new ParsedInput.UnreactMessage("", "");
+    int sp = r.indexOf(' ');
+    if (sp <= 0) return new ParsedInput.UnreactMessage(r.trim(), "");
+    String msgId = r.substring(0, sp).trim();
+    String reaction = r.substring(sp + 1).trim();
+    return new ParsedInput.UnreactMessage(msgId, reaction);
   }
 
   private static ParsedInput parseEditInput(String rest) {

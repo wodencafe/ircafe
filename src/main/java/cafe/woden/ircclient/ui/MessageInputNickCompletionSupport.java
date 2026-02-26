@@ -108,6 +108,7 @@ final class MessageInputNickCompletionSupport {
           new SlashCommand("/commands", "Alias: /help"),
           new SlashCommand("/reply", "Reply to message-id"),
           new SlashCommand("/react", "React to message-id"),
+          new SlashCommand("/unreact", "Remove reaction from message-id"),
           new SlashCommand("/edit", "Edit message-id"),
           new SlashCommand("/redact", "Redact message-id"),
           new SlashCommand("/delete", "Alias: /redact"),

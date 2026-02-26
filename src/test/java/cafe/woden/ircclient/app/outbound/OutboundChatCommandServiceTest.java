@@ -588,6 +588,25 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void unreactCommandSendsTaggedTagmsgAndRemovesLocalReactionWhenEchoUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
+        .thenReturn(Completable.complete());
+
+    service.handleUnreactMessage(disposables, "abc123", ":+1:");
+
+    verify(irc).sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
+    verify(ui)
+        .removeMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
+  }
+
+  @Test
   void editCommandSendsTaggedPrivmsgAndAppliesLocalEditWhenEchoUnavailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);

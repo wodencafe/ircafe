@@ -925,6 +925,8 @@ public class OutboundChatCommandService {
     ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
     ui.appendStatus(
         out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
+    ui.appendStatus(
+        out, "(help)", "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
     appendEditHelp(out);
     appendRedactHelp(out);
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
@@ -1020,6 +1022,38 @@ public class OutboundChatCommandService {
     }
 
     sendReactionTag(disposables, at, msgId, token);
+  }
+
+  public void handleUnreactMessage(
+      CompositeDisposable disposables, String messageId, String reaction) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(unreact)", "Select a server first.");
+      return;
+    }
+
+    String msgId = normalizeIrcv3Token(messageId);
+    String token = normalizeReactionToken(reaction);
+    if (msgId.isEmpty() || token.isEmpty()) {
+      ui.appendStatus(at, "(unreact)", "Usage: /unreact <msgid> <reaction-token>");
+      return;
+    }
+
+    if (at.isStatus()) {
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"), "(unreact)", "Select a channel or PM first.");
+      return;
+    }
+
+    if (!irc.isDraftReplyAvailable(at.serverId()) || !irc.isDraftUnreactAvailable(at.serverId())) {
+      ui.appendStatus(
+          new TargetRef(at.serverId(), "status"),
+          "(unreact)",
+          "draft/unreact is not negotiated on this server.");
+      return;
+    }
+
+    sendUnreactionTag(disposables, at, msgId, token);
   }
 
   public void handleEditMessage(CompositeDisposable disposables, String messageId, String body) {
@@ -1523,6 +1557,48 @@ public class OutboundChatCommandService {
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(),
                         "(react-error)",
+                        String.valueOf(err))));
+  }
+
+  private void sendUnreactionTag(
+      CompositeDisposable disposables, TargetRef target, String replyToMessageId, String reaction) {
+    if (target == null) return;
+    String msgId = normalizeIrcv3Token(replyToMessageId);
+    String react = normalizeReactionToken(reaction);
+    if (msgId.isEmpty() || react.isEmpty()) return;
+
+    if (!connectionCoordinator.isConnected(target.serverId())) {
+      TargetRef status = new TargetRef(target.serverId(), "status");
+      ui.appendStatus(status, "(conn)", "Not connected");
+      if (!target.isStatus()) {
+        ui.appendStatus(target, "(conn)", "Not connected");
+      }
+      return;
+    }
+
+    String rawLine =
+        "@+draft/unreact="
+            + escapeIrcv3TagValue(react)
+            + ";+draft/reply="
+            + escapeIrcv3TagValue(msgId)
+            + " TAGMSG "
+            + target.target();
+    PreparedRawLine prepared = prepareCorrelatedRawLine(target, rawLine);
+
+    String me = irc.currentNick(target.serverId()).orElse("me");
+    Instant now = Instant.now();
+    if (shouldUseLocalEcho(target.serverId())) {
+      ui.removeMessageReaction(target, now, me, msgId, react);
+    }
+
+    disposables.add(
+        irc.sendRaw(target.serverId(), prepared.line())
+            .subscribe(
+                () -> {},
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(unreact-error)",
                         String.valueOf(err))));
   }
 

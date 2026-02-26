@@ -192,6 +192,12 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchUnreactRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.UnreactMessage("abc123", ":+1:"));
+    verify(chat).handleUnreactMessage(disposables, "abc123", ":+1:");
+  }
+
+  @Test
   void dispatchHelpRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Help("edit"));
     verify(chat).handleHelp("edit");

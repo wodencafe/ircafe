@@ -447,6 +447,10 @@ public interface UiPort {
   default void applyMessageReaction(
       TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {}
 
+  /** Remove inline reaction state for a target message identified by IRCv3 {@code msgid}. */
+  default void removeMessageReaction(
+      TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {}
+
   /**
    * Check whether the transcript line identified by IRCv3 {@code msgid} belongs to the local user.
    *

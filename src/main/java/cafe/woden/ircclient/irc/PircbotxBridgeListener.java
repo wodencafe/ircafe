@@ -2018,8 +2018,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     long multilineFinalMaxLines = conn.multilineMaxLines.get();
     long multilineDraftMaxBytes = conn.draftMultilineMaxBytes.get();
     long multilineDraftMaxLines = conn.draftMultilineMaxLines.get();
+    boolean channelContext = conn.draftChannelContextCapAcked.get();
     boolean reply = conn.draftReplyCapAcked.get();
     boolean react = conn.draftReactCapAcked.get();
+    boolean unreact = conn.draftUnreactCapAcked.get();
     boolean edit = conn.draftMessageEditCapAcked.get();
     boolean redaction = conn.draftMessageRedactionCapAcked.get();
     boolean messageTags = conn.messageTagsCapAcked.get();
@@ -2038,7 +2040,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             + "setname={} chghost={} sts={} multiline={} multiline(final)={} multiline(final,max-bytes)={} "
             + "multiline(final,max-lines)={} multiline(draft)={} multiline(draft,max-bytes)={} "
             + "multiline(draft,max-lines)={} "
-            + "draft/reply={} draft/react={} draft/message-edit={} draft/message-redaction={} "
+            + "draft/channel-context={} draft/reply={} draft/react={} draft/unreact={} draft/message-edit={} draft/message-redaction={} "
             + "message-tags={} typing-policy-known={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
             + "monitor(isupport)={} monitor(cap)={} extended-monitor(cap)={} monitor(max-targets)={} "
             + "chathistory={} batch={} znc.in/playback={}",
@@ -2058,8 +2060,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         multilineDraft,
         multilineDraftMaxBytes,
         multilineDraftMaxLines,
+        channelContext,
         reply,
         react,
+        unreact,
         edit,
         redaction,
         messageTags,

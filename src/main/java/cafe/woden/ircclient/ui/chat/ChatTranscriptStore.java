@@ -1501,6 +1501,16 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     applyMessageReactionInternal(ref, doc, st, targetMessageId, reaction, fromNick, tsEpochMs);
   }
 
+  public synchronized void removeMessageReaction(
+      TargetRef ref, String targetMessageId, String reaction, String fromNick, long tsEpochMs) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+    removeMessageReactionInternal(ref, doc, st, targetMessageId, reaction, fromNick, tsEpochMs);
+  }
+
   public synchronized boolean applyMessageEdit(
       TargetRef ref,
       String targetMessageId,
@@ -3056,6 +3066,41 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     insertReactionControlForMessage(ref, doc, st, targetMsgId, lineStart, state, tsEpochMs);
   }
 
+  private void removeMessageReactionInternal(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String targetMessageId,
+      String reaction,
+      String fromNick,
+      long tsEpochMs) {
+    if (ref == null || doc == null || st == null) return;
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    String reactionToken = Objects.toString(reaction, "").trim();
+    String nick = Objects.toString(fromNick, "").trim();
+    if (targetMsgId.isEmpty() || reactionToken.isEmpty() || nick.isEmpty()) return;
+
+    ReactionState state = st.reactionsByTargetMsgId.get(targetMsgId);
+    if (state == null) return;
+    state.forget(reactionToken, nick);
+    if (state.isEmpty()) {
+      clearReactionStateForMessage(ref, doc, st, targetMsgId);
+      return;
+    }
+
+    if (state.control != null && state.control.component != null) {
+      try {
+        state.control.component.setReactions(state.reactionsSnapshot());
+      } catch (Exception ignored) {
+      }
+      return;
+    }
+
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) return;
+    insertReactionControlForMessage(ref, doc, st, targetMsgId, lineStart, state, tsEpochMs);
+  }
+
   private void materializePendingReactionsForMessage(
       TargetRef ref, StyledDocument doc, TranscriptState st, String messageId, long tsEpochMs) {
     if (ref == null || doc == null || st == null) return;
@@ -4469,6 +4514,18 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String n = Objects.toString(nick, "").trim();
       if (token.isEmpty() || n.isEmpty()) return;
       nicksByReaction.computeIfAbsent(token, k -> new LinkedHashSet<>()).add(n);
+    }
+
+    void forget(String reaction, String nick) {
+      String token = Objects.toString(reaction, "").trim();
+      String n = Objects.toString(nick, "").trim();
+      if (token.isEmpty() || n.isEmpty()) return;
+      LinkedHashSet<String> nicks = nicksByReaction.get(token);
+      if (nicks == null) return;
+      nicks.remove(n);
+      if (nicks.isEmpty()) {
+        nicksByReaction.remove(token);
+      }
     }
 
     boolean isEmpty() {

@@ -179,6 +179,14 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true if IRCv3 {@code draft/unreact} (or compatible reaction metadata transport) is
+   *     negotiated on this connection.
+   */
+  default boolean isDraftUnreactAvailable(String serverId) {
+    return false;
+  }
+
+  /**
    * @return true if IRCv3 {@code multiline} (or {@code draft/multiline}) is negotiated.
    */
   default boolean isMultilineAvailable(String serverId) {

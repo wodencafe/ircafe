@@ -91,6 +91,24 @@ class ChatTranscriptStoreTest {
     assertEquals(2, lineCount(store.document(ref)));
   }
 
+  @Test
+  void removeMessageReactionRemovesRenderedReactionSummaryWhenLastReactionIsCleared() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "hello", false, 6_000L, "m-42", Map.of("msgid", "m-42"));
+    int baseLines = lineCount(store.document(ref));
+
+    store.applyMessageReaction(ref, "m-42", ":+1:", "bob", 6_050L);
+    int withReactionLines = lineCount(store.document(ref));
+
+    store.removeMessageReaction(ref, "m-42", ":+1:", "bob", 6_100L);
+    int afterRemovalLines = lineCount(store.document(ref));
+
+    assertTrue(withReactionLines > baseLines);
+    assertEquals(baseLines, afterRemovalLines);
+  }
+
   private static ChatTranscriptStore newStore() {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);

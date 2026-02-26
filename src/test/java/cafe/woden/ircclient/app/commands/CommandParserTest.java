@@ -308,6 +308,15 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesUnreactComposeCommand() {
+    ParsedInput in = parser.parse("/unreact abc123 :+1:");
+    assertTrue(in instanceof ParsedInput.UnreactMessage);
+    ParsedInput.UnreactMessage cmd = (ParsedInput.UnreactMessage) in;
+    assertEquals("abc123", cmd.messageId());
+    assertEquals(":+1:", cmd.reaction());
+  }
+
+  @Test
   void parsesHelpCommandAndCommandsAlias() {
     ParsedInput help = parser.parse("/help redact");
     assertTrue(help instanceof ParsedInput.Help);

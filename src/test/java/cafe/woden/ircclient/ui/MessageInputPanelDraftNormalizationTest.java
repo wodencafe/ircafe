@@ -35,6 +35,13 @@ class MessageInputPanelDraftNormalizationTest {
   }
 
   @Test
+  void clearsUnreactDraftWhenReactCapabilityIsDisabled() {
+    String before = "/quote @+draft/unreact=:+1:;+draft/reply=abc TAGMSG #ircafe";
+    String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, true, false);
+    assertEquals("", after);
+  }
+
+  @Test
   void leavesUnrelatedDraftUnchanged() {
     String before = "/me waves";
     String after = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, false);

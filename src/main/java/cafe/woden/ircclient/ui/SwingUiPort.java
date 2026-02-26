@@ -866,6 +866,13 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void removeMessageReaction(
+      TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.removeMessageReaction(target, targetMessageId, reaction, fromNick, ts));
+  }
+
+  @Override
   public boolean isOwnMessage(TargetRef target, String targetMessageId) {
     if (SwingUtilities.isEventDispatchThread()) {
       return transcripts.isOwnMessage(target, targetMessageId);

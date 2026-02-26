@@ -1771,6 +1771,17 @@ public class IrcMediator implements MediatorControlPort {
         ui.applyMessageReaction(dest, ev.at(), from, targetMsgId, reaction);
       }
 
+      case IrcEvent.MessageUnreactObserved ev -> {
+        if (!irc.isDraftUnreactAvailable(sid)) return;
+        TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
+        String from = Objects.toString(ev.from(), "").trim();
+        if (from.isEmpty()) return;
+        String reaction = Objects.toString(ev.reaction(), "").trim();
+        String targetMsgId = Objects.toString(ev.messageId(), "").trim();
+        if (reaction.isEmpty() || targetMsgId.isEmpty()) return;
+        ui.removeMessageReaction(dest, ev.at(), from, targetMsgId, reaction);
+      }
+
       case IrcEvent.MessageRedactionObserved ev -> {
         if (!irc.isMessageRedactionAvailable(sid)) return;
         TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
