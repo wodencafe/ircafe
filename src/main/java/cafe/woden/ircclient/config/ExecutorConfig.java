@@ -23,6 +23,7 @@ public class ExecutorConfig {
   public static final String REMOTE_CHAT_HISTORY_EXECUTOR = "remoteChatHistoryExecutor";
   public static final String CHAT_LOG_RETENTION_SCHEDULER = "chatLogRetentionScheduler";
   public static final String JOIN_MODE_BURST_SCHEDULER = "joinModeBurstScheduler";
+  public static final String MONITOR_ISON_FALLBACK_SCHEDULER = "monitorIsonFallbackScheduler";
   public static final String USERHOST_QUERY_SCHEDULER = "userhostQueryScheduler";
   public static final String USER_INFO_ENRICHMENT_SCHEDULER = "userInfoEnrichmentScheduler";
   public static final String PIRCBOTX_HEARTBEAT_SCHEDULER = "pircbotxHeartbeatScheduler";
@@ -70,6 +71,11 @@ public class ExecutorConfig {
   @Bean(name = JOIN_MODE_BURST_SCHEDULER, destroyMethod = "shutdown")
   public ScheduledExecutorService joinModeBurstScheduler() {
     return VirtualThreads.newSingleThreadScheduledExecutor("ircafe-joinmode-burst");
+  }
+
+  @Bean(name = MONITOR_ISON_FALLBACK_SCHEDULER, destroyMethod = "shutdown")
+  public ScheduledExecutorService monitorIsonFallbackScheduler() {
+    return VirtualThreads.newSingleThreadScheduledExecutor("ircafe-monitor-ison-fallback");
   }
 
   @Bean(name = USERHOST_QUERY_SCHEDULER, destroyMethod = "shutdown")

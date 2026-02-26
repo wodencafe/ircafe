@@ -129,6 +129,7 @@ public class UserInfoEnrichmentService {
     planner.clearServer(sid);
     whoxSupportedByServer.remove(sid);
     whoxSchemaCompatibleByServer.remove(sid);
+    lastActiveAtByNickLowerByServer.remove(sid);
   }
 
   /**

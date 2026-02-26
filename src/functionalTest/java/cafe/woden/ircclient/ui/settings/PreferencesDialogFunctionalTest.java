@@ -1,24 +1,31 @@
 package cafe.woden.ircclient.ui.settings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
+import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -35,10 +42,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import org.junit.jupiter.api.Test;
@@ -121,6 +130,106 @@ class PreferencesDialogFunctionalTest {
     assertNull(PreferencesDialog.normalizeOptionalHexForApply("   ", "User message color"));
     assertEquals(
         "#AABBCC", PreferencesDialog.normalizeOptionalHexForApply("#abc", "User message color"));
+  }
+
+  @Test
+  void filtersPanelExposesSubTabsAndHistoryRunCapToggle() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    List<AutoCloseable> closeables = new ArrayList<>();
+    FilterSettings filters =
+        new FilterSettings(true, true, true, 3, 250, 12, 10, false, List.of(), List.of());
+
+    Object controls = invoke(dialog, "buildFilterControls", filters, closeables);
+    JPanel panel = (JPanel) invoke(dialog, "buildFiltersPanel", controls);
+
+    assertNotNull(findTabbedPaneWithTab(panel, "General"));
+    assertNotNull(findTabbedPaneWithTab(panel, "Placeholders"));
+    assertNotNull(findTabbedPaneWithTab(panel, "History"));
+    assertNotNull(findTabbedPaneWithTab(panel, "Overrides"));
+    assertNotNull(findTabbedPaneWithTab(panel, "Rules"));
+
+    JCheckBox historyEnabled =
+        (JCheckBox) readField(controls, "historyPlaceholdersEnabledByDefault");
+    JSpinner historyMaxRuns = (JSpinner) readField(controls, "historyPlaceholderMaxRunsPerBatch");
+    assertFalse(historyMaxRuns.isEnabled());
+    historyEnabled.doClick();
+    assertTrue(historyMaxRuns.isEnabled());
+
+    closeAll(closeables);
+  }
+
+  @Test
+  void notificationsPanelIncludesRulesTestAndIrcEventsTabs() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    List<AutoCloseable> closeables = new ArrayList<>();
+
+    Object notifications =
+        invoke(dialog, "buildNotificationRulesControls", testUiSettings(), closeables);
+    Object ircEvents =
+        invoke(dialog, "buildIrcEventNotificationControls", IrcEventNotificationRule.defaults());
+
+    JPanel panel = (JPanel) invoke(dialog, "buildNotificationsPanel", notifications, ircEvents);
+    assertNotNull(findTabbedPaneWithTab(panel, "Rules"));
+    assertNotNull(findTabbedPaneWithTab(panel, "Test"));
+    assertNotNull(findTabbedPaneWithTab(panel, "IRC Events"));
+
+    closeAll(closeables);
+  }
+
+  @Test
+  void commandsPanelIncludesAliasImportAndUnknownFallbackToggle() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    Object controls =
+        invoke(
+            dialog,
+            "buildUserCommandAliasesControls",
+            List.of(new UserCommandAlias(true, "greet", "/msg %1 hello")),
+            true);
+    JPanel panel = (JPanel) invoke(dialog, "buildUserCommandsPanel", controls);
+
+    JButton importHexChat = (JButton) readField(controls, "importHexChat");
+    assertNotNull(importHexChat);
+    assertTrue(
+        String.valueOf(importHexChat.getToolTipText()).contains("Import aliases from HexChat"));
+    JCheckBox unknownFallback = (JCheckBox) readField(controls, "unknownCommandAsRaw");
+    assertTrue(unknownFallback.isSelected());
+  }
+
+  @Test
+  void trayPanelSoundsTabExposesCustomSoundPathControls() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    List<AutoCloseable> closeables = new ArrayList<>();
+
+    Object trayControls =
+        invoke(
+            dialog,
+            "buildTrayControls",
+            testUiSettings(),
+            new NotificationSoundSettings(true, "NOTIF_1", true, "sounds/custom.wav"),
+            new PushyProperties(false, null, null, null, null, null, null, null),
+            closeables);
+    JPanel trayPanel = (JPanel) invoke(dialog, "buildTrayNotificationsPanel", trayControls);
+    assertNotNull(findTabbedPaneWithTab(trayPanel, "Sounds"));
+
+    JCheckBox soundsEnabled = (JCheckBox) readField(trayControls, "notificationSoundsEnabled");
+    JCheckBox useCustom = (JCheckBox) readField(trayControls, "notificationSoundUseCustom");
+    JTextField customPath = (JTextField) readField(trayControls, "notificationSoundCustomPath");
+    JButton browse = (JButton) readField(trayControls, "browseCustomSound");
+    JButton clear = (JButton) readField(trayControls, "clearCustomSound");
+
+    assertEquals("sounds/custom.wav", customPath.getText());
+    assertTrue(browse.isEnabled());
+    soundsEnabled.doClick();
+    assertFalse(browse.isEnabled());
+    soundsEnabled.doClick();
+    if (!useCustom.isSelected()) {
+      useCustom.doClick();
+    }
+    assertTrue(browse.isEnabled());
+    clear.doClick();
+    assertEquals("", customPath.getText());
+
+    closeAll(closeables);
   }
 
   private static AppearanceFixture buildAppearanceFixture(ChatThemeSettings chatTheme)
@@ -251,8 +360,7 @@ class PreferencesDialogFunctionalTest {
       boolean match = true;
       for (int i = 0; i < params.length; i++) {
         Object arg = args[i];
-        if (arg == null) continue;
-        if (!params[i].isAssignableFrom(arg.getClass())) {
+        if (!isParameterCompatible(params[i], arg)) {
           match = false;
           break;
         }
@@ -260,6 +368,25 @@ class PreferencesDialogFunctionalTest {
       if (match) return m;
     }
     return null;
+  }
+
+  private static boolean isParameterCompatible(Class<?> parameterType, Object arg) {
+    if (arg == null) return true;
+    Class<?> argType = arg.getClass();
+    if (!parameterType.isPrimitive()) {
+      return parameterType.isAssignableFrom(argType);
+    }
+    return switch (parameterType.getName()) {
+      case "boolean" -> Boolean.class.isAssignableFrom(argType);
+      case "byte" -> Byte.class.isAssignableFrom(argType);
+      case "char" -> Character.class.isAssignableFrom(argType);
+      case "short" -> Short.class.isAssignableFrom(argType);
+      case "int" -> Integer.class.isAssignableFrom(argType);
+      case "long" -> Long.class.isAssignableFrom(argType);
+      case "float" -> Float.class.isAssignableFrom(argType);
+      case "double" -> Double.class.isAssignableFrom(argType);
+      default -> false;
+    };
   }
 
   private static Object readField(Object target, String field) throws Exception {
@@ -301,6 +428,17 @@ class PreferencesDialogFunctionalTest {
       if (found != null) return found;
     }
     return null;
+  }
+
+  private static void closeAll(List<AutoCloseable> closeables) {
+    if (closeables == null) return;
+    for (AutoCloseable closeable : closeables) {
+      if (closeable == null) continue;
+      try {
+        closeable.close();
+      } catch (Exception ignored) {
+      }
+    }
   }
 
   private record AppearanceFixture(JPanel appearancePanel, Object chatThemeControls) {}
