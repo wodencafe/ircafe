@@ -5,15 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 import cafe.woden.ircclient.IrcSwingApp;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
+import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.InterceptorIngestPort;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
+import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
+import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
@@ -30,8 +36,14 @@ import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
+import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
+import cafe.woden.ircclient.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.monitor.MonitorListService;
+import cafe.woden.ircclient.monitor.MonitorSyncService;
+import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.notifications.IrcEventNotificationService;
+import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
@@ -79,6 +91,8 @@ class SpringModulithIncrementalAdoptionTest {
 
     ApplicationModule monitorModule = moduleFor(modules, MonitorListService.class);
     assertThat(monitorModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, MonitorIsonFallbackService.class)).isEqualTo(monitorModule);
+    assertThat(moduleFor(modules, MonitorSyncService.class)).isEqualTo(monitorModule);
     assertThat(monitorModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.monitor");
 
     ApplicationModule interceptorsModule = moduleFor(modules, InterceptorStore.class);
@@ -89,12 +103,21 @@ class SpringModulithIncrementalAdoptionTest {
     ApplicationModule notificationsModule = moduleFor(modules, IrcEventNotificationService.class);
     assertThat(notificationsModule).isNotEqualTo(appModule);
     assertThat(moduleFor(modules, NotificationStore.class)).isEqualTo(notificationsModule);
+    assertThat(moduleFor(modules, NotificationRuleMatcher.class)).isEqualTo(notificationsModule);
+    assertThat(moduleFor(modules, IrcEventNotificationRulesBus.class))
+        .isEqualTo(notificationsModule);
     assertThat(notificationsModule.getBasePackage().getName())
         .isEqualTo("cafe.woden.ircclient.notifications");
 
     ApplicationModule dccModule = moduleFor(modules, DccTransferStore.class);
     assertThat(dccModule).isNotEqualTo(appModule);
     assertThat(dccModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.dcc");
+
+    ApplicationModule loggingModule =
+        moduleFor(modules, LoggingTargetLogMaintenancePortAdapter.class);
+    assertThat(loggingModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, LoggingAppHistoryPortsAdapter.class)).isEqualTo(loggingModule);
+    assertThat(loggingModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.logging");
 
     ApplicationModule uiModule = moduleFor(modules, RuntimeEventsPanel.class);
     assertThat(uiModule).isNotEqualTo(appModule);
@@ -119,6 +142,12 @@ class SpringModulithIncrementalAdoptionTest {
         UiPort.class,
         ActiveTargetPort.class,
         MediatorControlPort.class,
+        ChatHistoryIngestionPort.class,
+        ChatHistoryIngestEventsPort.class,
+        ChatHistoryBatchEventsPort.class,
+        TargetChatHistoryPort.class,
+        TargetLogMaintenancePort.class,
+        ZncPlaybackEventsPort.class,
         InterceptorIngestPort.class,
         IrcEventNotifierPort.class,
         NotificationRuleMatcherPort.class,
