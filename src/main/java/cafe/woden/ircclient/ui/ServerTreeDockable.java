@@ -146,10 +146,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final Color DETACHED_WARNING_FILL = new Color(230, 164, 39);
   private static final Color DETACHED_WARNING_STROKE = new Color(152, 94, 0);
   private static final Color DETACHED_WARNING_TEXT = Color.WHITE;
-  private static final int TREE_BADGE_HORIZONTAL_PADDING = 5;
-  private static final int TREE_BADGE_MIN_WIDTH = 16;
-  private static final int TREE_BADGE_GAP = 4;
-  private static final int TREE_BADGE_ARC = 10;
+  private static final int TREE_BADGE_HORIZONTAL_PADDING = 4;
+  private static final int TREE_BADGE_VERTICAL_PADDING = 1;
+  private static final int TREE_BADGE_MIN_WIDTH = 14;
+  private static final int TREE_BADGE_MIN_HEIGHT = 12;
+  private static final int TREE_BADGE_GAP = 3;
+  private static final int TREE_BADGE_ARC = 8;
   private static final Color TREE_UNREAD_BADGE_BG = new Color(31, 111, 255);
   private static final Color TREE_HIGHLIGHT_BADGE_BG = new Color(205, 54, 54);
   private static final Color TREE_BADGE_FG = Color.WHITE;
@@ -5446,7 +5448,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       FontMetrics fm = g2.getFontMetrics(getFont());
       if (fm == null) return;
 
-      int badgeHeight = Math.max(14, fm.getAscent() + 4);
+      int badgeHeight =
+          Math.max(TREE_BADGE_MIN_HEIGHT, fm.getAscent() + (TREE_BADGE_VERTICAL_PADDING * 2));
       int x = badgeStartX(fm);
       int y = Math.max(0, (getHeight() - badgeHeight) / 2);
 

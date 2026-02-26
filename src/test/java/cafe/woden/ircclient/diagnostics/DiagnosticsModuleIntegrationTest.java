@@ -3,10 +3,12 @@ package cafe.woden.ircclient.diagnostics;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
@@ -23,6 +25,7 @@ class DiagnosticsModuleIntegrationTest extends AbstractApplicationModuleIntegrat
   private final ApplicationDiagnosticsService diagnosticsService;
   private final RuntimeJfrService runtimeJfrService;
   private final JfrRuntimeEventsService jfrRuntimeEventsService;
+  private final JfrSnapshotSummarizer jfrSnapshotSummarizer;
   private final SpringRuntimeEventsService springRuntimeEventsService;
   private final UiPort swingUiPort;
 
@@ -31,12 +34,14 @@ class DiagnosticsModuleIntegrationTest extends AbstractApplicationModuleIntegrat
       ApplicationDiagnosticsService diagnosticsService,
       RuntimeJfrService runtimeJfrService,
       JfrRuntimeEventsService jfrRuntimeEventsService,
+      JfrSnapshotSummarizer jfrSnapshotSummarizer,
       SpringRuntimeEventsService springRuntimeEventsService,
       @Qualifier("swingUiPort") UiPort swingUiPort) {
     this.applicationContext = applicationContext;
     this.diagnosticsService = diagnosticsService;
     this.runtimeJfrService = runtimeJfrService;
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
+    this.jfrSnapshotSummarizer = jfrSnapshotSummarizer;
     this.springRuntimeEventsService = springRuntimeEventsService;
     this.swingUiPort = swingUiPort;
   }
@@ -81,5 +86,16 @@ class DiagnosticsModuleIntegrationTest extends AbstractApplicationModuleIntegrat
                 event ->
                     "ERROR".equals(event.level())
                         && event.summary().contains("IllegalStateException")));
+  }
+
+  @Test
+  void jfrSnapshotCaptureProducesReportForDiagnosticsPanel() {
+    when(jfrSnapshotSummarizer.summarize(any())).thenReturn("summary-ok");
+
+    RuntimeJfrService.SnapshotReport report = runtimeJfrService.captureSnapshot();
+
+    assertNotNull(report);
+    assertNotNull(report.summary());
+    assertTrue(!report.summary().isBlank());
   }
 }

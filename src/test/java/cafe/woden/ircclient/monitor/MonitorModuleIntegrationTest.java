@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.monitor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -101,5 +102,14 @@ class MonitorModuleIntegrationTest {
     assertEquals(1, monitorListService.removeNicks(serverId, List.of("ALICE")));
     assertEquals(List.of("bob"), monitorListService.listNicks(serverId));
     assertEquals(List.of("bob"), runtimeConfigStore.readMonitorNicks(serverId));
+  }
+
+  @Test
+  void monitorPortsExposeParsingAndFallbackDefaultsBeforeConnection() {
+    assertEquals(
+        List.of("alice", "bob", "carol"), monitorRosterPort.parseNickInput("alice,bob carol"));
+
+    assertFalse(monitorFallbackPort.isFallbackActive("libera"));
+    assertFalse(monitorFallbackPort.shouldSuppressIsonServerResponse("libera"));
   }
 }

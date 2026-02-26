@@ -3,6 +3,7 @@ package cafe.woden.ircclient.architecture;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
@@ -52,6 +53,7 @@ import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
+import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
@@ -112,6 +114,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(JfrRuntimeEventsService.class, ApplicationLayer.class);
     assertAnnotated(SpringRuntimeEventsService.class, ApplicationLayer.class);
     assertAnnotated(MediatorControlPort.class, ApplicationLayer.class);
+    assertAnnotated(ActiveTargetPort.class, ApplicationLayer.class);
     assertAnnotated(TrayNotificationsPort.class, ApplicationLayer.class);
     assertAnnotated(UiSettingsPort.class, ApplicationLayer.class);
     assertAnnotated(ChatHistoryIngestionPort.class, ApplicationLayer.class);
@@ -132,6 +135,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(MonitorListService.class, ApplicationLayer.class);
     assertAnnotated(MonitorIsonFallbackService.class, ApplicationLayer.class);
     assertAnnotated(MonitorSyncService.class, ApplicationLayer.class);
+    assertAnnotated(InterceptorStore.class, ApplicationLayer.class);
     assertAnnotated(IrcEventNotificationService.class, ApplicationLayer.class);
     assertAnnotated(NotificationRuleMatcher.class, ApplicationLayer.class);
     assertAnnotated(IrcEventNotificationRulesBus.class, ApplicationLayer.class);
@@ -143,6 +147,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(UiPort.class.isInterface(), "UiPort should remain an interface");
     assertTrue(
         MediatorControlPort.class.isInterface(), "MediatorControlPort should remain an interface");
+    assertTrue(ActiveTargetPort.class.isInterface(), "ActiveTargetPort should remain an interface");
     assertTrue(IrcClientService.class.isInterface(), "IrcClientService should remain an interface");
     assertTrue(
         TrayNotificationsPort.class.isInterface(),

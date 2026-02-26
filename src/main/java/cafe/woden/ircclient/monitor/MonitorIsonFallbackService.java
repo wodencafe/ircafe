@@ -4,11 +4,11 @@ import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.PircbotxIsonParsers;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -19,10 +19,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** ISON-based monitor fallback when IRC MONITOR is unavailable on a connected server. */
@@ -42,11 +46,17 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
   private final MonitorListService monitorListService;
   private final UiPort ui;
   private final UiSettingsPort uiSettingsPort;
+  private final ScheduledExecutorService pollScheduler;
+  private final Object scheduleLock = new Object();
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final ConcurrentHashMap<String, Boolean> connectedByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> readyByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Long> nextPollAtMsByServer = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduledPollByServer =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, PollTimeoutHandle> timeoutByServer =
+      new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, PollCycle> pollByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Map<String, Boolean>> knownOnlineByServer =
       new ConcurrentHashMap<>();
@@ -57,22 +67,24 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       IrcClientService irc,
       MonitorListService monitorListService,
       UiPort ui,
-      UiSettingsPort uiSettingsPort) {
+      UiSettingsPort uiSettingsPort,
+      @Qualifier(ExecutorConfig.MONITOR_ISON_FALLBACK_SCHEDULER)
+          ScheduledExecutorService pollScheduler) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.monitorListService = Objects.requireNonNull(monitorListService, "monitorListService");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.uiSettingsPort = Objects.requireNonNull(uiSettingsPort, "uiSettingsPort");
+    this.pollScheduler = Objects.requireNonNull(pollScheduler, "pollScheduler");
 
     disposables.add(irc.events().subscribe(this::onEvent, this::onEventError));
     disposables.add(
         monitorListService.changes().subscribe(this::onListChanged, this::onListChangeError));
-    disposables.add(
-        Flowable.interval(1, TimeUnit.SECONDS).subscribe(this::onTick, this::onTickError));
   }
 
   @jakarta.annotation.PreDestroy
   void shutdown() {
     disposables.dispose();
+    cancelAllSchedules();
     connectedByServer.clear();
     readyByServer.clear();
     nextPollAtMsByServer.clear();
@@ -102,8 +114,8 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
   public void requestImmediateRefresh(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
-    nextPollAtMsByServer.put(sid, 0L);
-    tryStartPoll(sid, true);
+    schedulePollAt(sid, System.currentTimeMillis());
+    maybeStartDuePoll(sid);
   }
 
   private void onEvent(ServerIrcEvent sev) {
@@ -130,14 +142,20 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       if (isFallbackEligible(sid)) {
         maybeShowFallbackNotice(sid);
         requestImmediateRefresh(sid);
+      } else {
+        onFallbackNotEligible(sid);
       }
       return;
     }
 
     // 005 can arrive in multiple lines; MONITOR capability availability can flip mid-connection.
-    if (code == 5 && isFallbackEligible(sid)) {
-      maybeShowFallbackNotice(sid);
-      requestImmediateRefresh(sid);
+    if (code == 5) {
+      if (isFallbackEligible(sid)) {
+        maybeShowFallbackNotice(sid);
+        requestImmediateRefresh(sid);
+      } else {
+        onFallbackNotEligible(sid);
+      }
       return;
     }
 
@@ -154,38 +172,32 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     requestImmediateRefresh(sid);
   }
 
-  private void onTick(Long tick) {
-    long now = System.currentTimeMillis();
-    for (String sid : connectedByServer.keySet()) {
-      if (sid == null || sid.isBlank()) continue;
-      if (!isFallbackEligible(sid)) {
-        // MONITOR is available (or server not ready): stop any in-flight fallback cycle.
-        pollByServer.remove(sid);
-        if (Boolean.TRUE.equals(connectedByServer.get(sid))
-            && Boolean.TRUE.equals(readyByServer.get(sid))) {
-          fallbackNoticeShownByServer.remove(sid);
-        }
-        continue;
-      }
+  private void maybeStartDuePoll(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
 
-      maybeShowFallbackNotice(sid);
-
-      PollCycle cycle = pollByServer.get(sid);
-      if (cycle != null) {
-        if (now - cycle.startedAtMs >= POLL_TIMEOUT_MS) {
-          finalizePoll(sid, cycle, Instant.now());
-        }
-        continue;
-      }
-
-      long dueAt = nextPollAtMsByServer.getOrDefault(sid, 0L);
-      if (now >= dueAt) {
-        tryStartPoll(sid, false);
-      }
+    if (!isFallbackEligible(sid)) {
+      onFallbackNotEligible(sid);
+      return;
     }
+
+    maybeShowFallbackNotice(sid);
+
+    if (pollByServer.containsKey(sid)) {
+      return;
+    }
+
+    long now = System.currentTimeMillis();
+    long dueAt = nextPollAtMsByServer.getOrDefault(sid, 0L);
+    if (now < dueAt) {
+      schedulePollAt(sid, dueAt);
+      return;
+    }
+
+    tryStartPoll(sid);
   }
 
-  private void tryStartPoll(String serverId, boolean immediate) {
+  private void tryStartPoll(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     if (!isFallbackEligible(sid)) return;
@@ -206,10 +218,12 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       return;
     }
 
-    PollCycle cycle = new PollCycle(expectedByLower, chunks.size(), System.currentTimeMillis());
+    PollCycle cycle = new PollCycle(expectedByLower, chunks.size());
     PollCycle prev = pollByServer.putIfAbsent(sid, cycle);
     if (prev != null) return;
+
     scheduleNextPoll(sid);
+    schedulePollTimeout(sid, cycle);
 
     for (List<String> chunk : chunks) {
       if (chunk == null || chunk.isEmpty()) {
@@ -225,11 +239,6 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
                     log.debug("[{}] ISON fallback send failed: {}", sid, String.valueOf(err));
                     onChunkCompleted(sid, cycle, Instant.now());
                   }));
-    }
-
-    if (immediate) {
-      // Keep deterministic cadence from "now + interval" even when manually refreshed.
-      scheduleNextPoll(sid);
     }
   }
 
@@ -272,6 +281,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     if (!pollByServer.remove(sid, cycle)) return;
+    cancelPollTimeout(sid, cycle);
 
     TargetRef monitorTarget = TargetRef.monitorGroup(sid);
     List<String> wentOnline = new ArrayList<>();
@@ -321,6 +331,8 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
           "(monitor)",
           "Offline: " + String.join(", ", wentOffline));
     }
+
+    maybeStartDuePoll(sid);
   }
 
   private void maybeShowFallbackNotice(String serverId) {
@@ -340,7 +352,101 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     long next = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(pollIntervalSeconds());
-    nextPollAtMsByServer.put(sid, next);
+    schedulePollAt(sid, next);
+  }
+
+  private void schedulePollAt(String serverId, long targetEpochMs) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    long now = System.currentTimeMillis();
+    long dueAt = Math.max(now, targetEpochMs);
+    long delayMs = Math.max(0L, dueAt - now);
+
+    synchronized (scheduleLock) {
+      if (pollScheduler.isShutdown()) return;
+
+      ScheduledFuture<?> existing = scheduledPollByServer.get(sid);
+      long existingDueAt = nextPollAtMsByServer.getOrDefault(sid, Long.MAX_VALUE);
+      if (existing != null && !existing.isDone() && dueAt >= existingDueAt) {
+        return;
+      }
+      if (existing != null) {
+        existing.cancel(false);
+      }
+
+      nextPollAtMsByServer.put(sid, dueAt);
+      try {
+        ScheduledFuture<?> scheduled =
+            pollScheduler.schedule(() -> runScheduledPoll(sid), delayMs, TimeUnit.MILLISECONDS);
+        scheduledPollByServer.put(sid, scheduled);
+      } catch (RejectedExecutionException ex) {
+        log.debug("[{}] monitor fallback poll schedule rejected", sid, ex);
+      }
+    }
+  }
+
+  private void runScheduledPoll(String serverId) {
+    maybeStartDuePoll(serverId);
+  }
+
+  private void schedulePollTimeout(String serverId, PollCycle cycle) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || cycle == null) return;
+
+    synchronized (scheduleLock) {
+      if (pollScheduler.isShutdown()) return;
+
+      PollTimeoutHandle existing = timeoutByServer.remove(sid);
+      if (existing != null) {
+        existing.future.cancel(false);
+      }
+
+      try {
+        ScheduledFuture<?> timeout =
+            pollScheduler.schedule(
+                () -> onPollTimeout(sid, cycle), POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        timeoutByServer.put(sid, new PollTimeoutHandle(cycle, timeout));
+      } catch (RejectedExecutionException ex) {
+        log.debug("[{}] monitor fallback timeout schedule rejected", sid, ex);
+      }
+    }
+  }
+
+  private void onPollTimeout(String serverId, PollCycle cycle) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || cycle == null) return;
+    cancelPollTimeout(sid, cycle);
+
+    PollCycle active = pollByServer.get(sid);
+    if (active != cycle) return;
+    finalizePoll(sid, cycle, Instant.now());
+  }
+
+  private void cancelPollTimeout(String serverId, PollCycle cycle) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    synchronized (scheduleLock) {
+      PollTimeoutHandle handle = timeoutByServer.get(sid);
+      if (handle == null) return;
+      if (cycle != null && handle.cycle != cycle) return;
+      if (timeoutByServer.remove(sid, handle)) {
+        handle.future.cancel(false);
+      }
+    }
+  }
+
+  private void onFallbackNotEligible(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    pollByServer.remove(sid);
+    cancelPollTimeout(sid, null);
+    cancelScheduledPoll(sid, false);
+    if (Boolean.TRUE.equals(connectedByServer.get(sid))
+        && Boolean.TRUE.equals(readyByServer.get(sid))) {
+      fallbackNoticeShownByServer.remove(sid);
+    }
   }
 
   private int pollIntervalSeconds() {
@@ -367,10 +473,43 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     if (sid.isEmpty()) return;
     connectedByServer.remove(sid);
     readyByServer.remove(sid);
-    nextPollAtMsByServer.remove(sid);
     pollByServer.remove(sid);
+    cancelPollTimeout(sid, null);
+    cancelScheduledPoll(sid, true);
     knownOnlineByServer.remove(sid);
     fallbackNoticeShownByServer.remove(sid);
+  }
+
+  private void cancelScheduledPoll(String serverId, boolean clearDueAt) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    synchronized (scheduleLock) {
+      ScheduledFuture<?> scheduled = scheduledPollByServer.remove(sid);
+      if (scheduled != null) {
+        scheduled.cancel(false);
+      }
+      if (clearDueAt) {
+        nextPollAtMsByServer.remove(sid);
+      }
+    }
+  }
+
+  private void cancelAllSchedules() {
+    synchronized (scheduleLock) {
+      for (ScheduledFuture<?> scheduled : scheduledPollByServer.values()) {
+        if (scheduled != null) {
+          scheduled.cancel(false);
+        }
+      }
+      scheduledPollByServer.clear();
+      for (PollTimeoutHandle handle : timeoutByServer.values()) {
+        if (handle != null) {
+          handle.future.cancel(false);
+        }
+      }
+      timeoutByServer.clear();
+    }
   }
 
   private LinkedHashMap<String, String> expectedNickMap(String serverId) {
@@ -415,23 +554,27 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     log.warn("MonitorIsonFallbackService monitor list stream failed", err);
   }
 
-  private void onTickError(Throwable err) {
-    log.warn("MonitorIsonFallbackService poll ticker failed", err);
-  }
-
   private static final class PollCycle {
     final Object lock = new Object();
     final LinkedHashMap<String, String> expectedByLower;
     final LinkedHashSet<String> onlineLower = new LinkedHashSet<>();
     final int expectedResponses;
     int receivedResponses;
-    final long startedAtMs;
 
-    PollCycle(Map<String, String> expectedByLower, int expectedResponses, long startedAtMs) {
+    PollCycle(Map<String, String> expectedByLower, int expectedResponses) {
       this.expectedByLower = new LinkedHashMap<>(expectedByLower);
       this.expectedResponses = Math.max(1, expectedResponses);
-      this.startedAtMs = startedAtMs;
       this.receivedResponses = 0;
+    }
+  }
+
+  private static final class PollTimeoutHandle {
+    final PollCycle cycle;
+    final ScheduledFuture<?> future;
+
+    PollTimeoutHandle(PollCycle cycle, ScheduledFuture<?> future) {
+      this.cycle = cycle;
+      this.future = future;
     }
   }
 }

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
@@ -164,5 +165,56 @@ class NotificationsModuleIntegrationTest {
     notificationStore.recordRuleMatch(channelTarget, "alice", "Rule A", "second");
 
     assertEquals(2, notificationStore.listAllRuleMatches(serverId).size());
+  }
+
+  @Test
+  void disabledRuleDoesNotMatchOrDispatchNotifications() {
+    String serverId = "libera";
+    String channel = "#ircafe";
+
+    notificationStore.clearServer(serverId);
+    clearInvocations(trayNotificationsPort, pushyNotificationService);
+
+    IrcEventNotificationRule disabledRule =
+        new IrcEventNotificationRule(
+            false,
+            IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
+            IrcEventNotificationRule.SourceMode.ANY,
+            null,
+            IrcEventNotificationRule.ChannelScope.ALL,
+            null,
+            true,
+            IrcEventNotificationRule.FocusScope.ANY,
+            true,
+            true,
+            false,
+            "NOTIF_1",
+            false,
+            null,
+            false,
+            null,
+            null,
+            null);
+    rulesBus.set(List.of(disabledRule));
+
+    assertTrue(
+        !ircEventNotifierPort.hasEnabledRuleFor(
+            IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED));
+
+    boolean matched =
+        ircEventNotifierPort.notifyConfigured(
+            IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
+            serverId,
+            channel,
+            "alice",
+            Boolean.FALSE,
+            "PM received",
+            "hello from alice",
+            "libera",
+            "#status");
+
+    assertTrue(!matched);
+    assertEquals(0, notificationStore.count(serverId));
+    verifyNoInteractions(trayNotificationsPort, pushyNotificationService);
   }
 }

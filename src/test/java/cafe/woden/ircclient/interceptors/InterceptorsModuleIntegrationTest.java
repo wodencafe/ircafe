@@ -118,6 +118,61 @@ class InterceptorsModuleIntegrationTest {
     assertEquals("#general", hits.getFirst().channel());
   }
 
+  @Test
+  void interceptorIngestPortFeedsMatchingPipeline() throws Exception {
+    String serverId = "libera";
+    interceptorStore.clearServer(serverId);
+
+    InterceptorDefinition created = interceptorStore.createInterceptor(serverId, "Port watcher");
+    InterceptorRule rule =
+        new InterceptorRule(
+            true,
+            "Port rule",
+            "notice",
+            InterceptorRuleMode.LIKE,
+            "alert",
+            InterceptorRuleMode.LIKE,
+            "",
+            InterceptorRuleMode.GLOB,
+            "");
+    InterceptorDefinition updated =
+        new InterceptorDefinition(
+            created.id(),
+            created.name(),
+            true,
+            serverId,
+            InterceptorRuleMode.ALL,
+            "",
+            InterceptorRuleMode.NONE,
+            "",
+            false,
+            false,
+            false,
+            "NOTIF_1",
+            false,
+            "",
+            false,
+            "",
+            "",
+            "",
+            List.of(rule));
+    assertTrue(interceptorStore.saveInterceptor(serverId, updated));
+
+    interceptorIngestPort.ingestEvent(
+        serverId,
+        "#alerts",
+        "carol",
+        "carol!ident@host.example",
+        "alert notice",
+        InterceptorEventType.NOTICE);
+
+    List<InterceptorHit> hits = waitForHits(serverId, created.id(), 1);
+    assertEquals(1, hits.size());
+    assertEquals("Port rule", hits.getFirst().reason());
+    assertEquals("notice", hits.getFirst().eventType());
+    assertEquals("#alerts", hits.getFirst().channel());
+  }
+
   private List<InterceptorHit> waitForHits(String serverId, String interceptorId, int atLeast)
       throws InterruptedException {
     for (int i = 0; i < 30; i++) {

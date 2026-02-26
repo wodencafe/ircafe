@@ -26,6 +26,7 @@ import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
+import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
@@ -44,6 +45,9 @@ import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.subjects.PublishSubject;
+import io.reactivex.rxjava3.subjects.Subject;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -79,6 +83,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -369,8 +375,6 @@ public class PreferencesDialog {
                 : null);
 
     // Debounced live preview to avoid spamming full UI refreshes while sliders are dragged.
-    final javax.swing.Timer lafPreviewTimer = new javax.swing.Timer(140, null);
-    lafPreviewTimer.setRepeats(false);
     final Runnable applyLafPreview =
         () -> {
           if (suppressLivePreview.get()) return;
@@ -434,15 +438,14 @@ public class PreferencesDialog {
           } catch (Exception ignored) {
           }
         };
-    lafPreviewTimer.addActionListener(e -> applyLafPreview.run());
+    final RxDebouncedEdtTrigger lafPreviewDebounce =
+        new RxDebouncedEdtTrigger(140, applyLafPreview);
     final Runnable scheduleLafPreview =
         () -> {
           if (suppressLivePreview.get()) return;
-          lafPreviewTimer.restart();
+          lafPreviewDebounce.trigger();
         };
 
-    final javax.swing.Timer chatPreviewTimer = new javax.swing.Timer(120, null);
-    chatPreviewTimer.setRepeats(false);
     final java.util.function.BiFunction<
             JTextField, java.util.concurrent.atomic.AtomicReference<String>, String>
         parseOptionalHex =
@@ -499,15 +502,14 @@ public class PreferencesDialog {
           chatThemeSettingsBus.set(nextChatTheme);
           themeManager.refreshChatStyles();
         };
-    chatPreviewTimer.addActionListener(e -> applyChatPreview.run());
+    final RxDebouncedEdtTrigger chatPreviewDebounce =
+        new RxDebouncedEdtTrigger(120, applyChatPreview);
     final Runnable scheduleChatPreview =
         () -> {
           if (suppressLivePreview.get()) return;
-          chatPreviewTimer.restart();
+          chatPreviewDebounce.trigger();
         };
 
-    final javax.swing.Timer fontPreviewTimer = new javax.swing.Timer(120, null);
-    fontPreviewTimer.setRepeats(false);
     final Runnable applyFontPreview =
         () -> {
           if (suppressLivePreview.get()) return;
@@ -522,18 +524,19 @@ public class PreferencesDialog {
 
           settingsBus.set(base.withChatFontFamily(fam).withChatFontSize(size));
         };
-    fontPreviewTimer.addActionListener(e -> applyFontPreview.run());
+    final RxDebouncedEdtTrigger fontPreviewDebounce =
+        new RxDebouncedEdtTrigger(120, applyFontPreview);
     final Runnable scheduleFontPreview =
         () -> {
           if (suppressLivePreview.get()) return;
-          fontPreviewTimer.restart();
+          fontPreviewDebounce.trigger();
         };
 
     closeables.add(
         () -> {
-          lafPreviewTimer.stop();
-          chatPreviewTimer.stop();
-          fontPreviewTimer.stop();
+          lafPreviewDebounce.close();
+          chatPreviewDebounce.close();
+          fontPreviewDebounce.close();
         });
 
     final Runnable restoreCommittedAppearance =
@@ -541,9 +544,9 @@ public class PreferencesDialog {
           if (themeManager == null) return;
           suppressLivePreview.set(true);
           try {
-            lafPreviewTimer.stop();
-            chatPreviewTimer.stop();
-            fontPreviewTimer.stop();
+            lafPreviewDebounce.cancelPending();
+            chatPreviewDebounce.cancelPending();
+            fontPreviewDebounce.cancelPending();
 
             UiSettings ui = committedUiSettings.get();
             if (ui != null) {
@@ -11718,6 +11721,54 @@ public class PreferencesDialog {
     panel.add(rules, "growx, wmin 0");
 
     return panel;
+  }
+
+  private static final class RxDebouncedEdtTrigger implements AutoCloseable {
+    private final AtomicLong sequence = new AtomicLong(0L);
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final Subject<Long> signals = PublishSubject.<Long>create().toSerialized();
+    private final Disposable subscription;
+
+    private RxDebouncedEdtTrigger(long debounceMs, Runnable action) {
+      Runnable safeAction = action == null ? () -> {} : action;
+      this.subscription =
+          signals
+              .debounce(Math.max(0L, debounceMs), TimeUnit.MILLISECONDS)
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(
+                  seq -> {
+                    if (closed.get()) return;
+                    if (seq.longValue() != sequence.get()) return;
+                    try {
+                      safeAction.run();
+                    } catch (Exception ignored) {
+                    }
+                  },
+                  err -> {});
+    }
+
+    void trigger() {
+      if (closed.get()) return;
+      signals.onNext(sequence.incrementAndGet());
+    }
+
+    void cancelPending() {
+      sequence.incrementAndGet();
+    }
+
+    @Override
+    public void close() {
+      if (!closed.compareAndSet(false, true)) return;
+      sequence.incrementAndGet();
+      try {
+        subscription.dispose();
+      } catch (Exception ignored) {
+      }
+      try {
+        signals.onComplete();
+      } catch (Exception ignored) {
+      }
+    }
   }
 
   private void applyFilterSettingsFromUi(FilterControls c) {

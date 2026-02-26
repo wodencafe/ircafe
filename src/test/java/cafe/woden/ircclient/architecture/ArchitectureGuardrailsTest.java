@@ -57,6 +57,17 @@ class ArchitectureGuardrailsTest {
               "application code should depend on app::api notification ports, not notification module internals");
 
   @ArchTest
+  static final ArchRule app_should_not_depend_on_diagnostics_module_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.diagnostics..")
+          .because(
+              "application code should not couple directly to diagnostics internals and should use app-level seams");
+
+  @ArchTest
   static final ArchRule logging_should_not_depend_on_ui_package_directly =
       noClasses()
           .that()
@@ -65,6 +76,28 @@ class ArchitectureGuardrailsTest {
           .dependOnClassesThat()
           .resideInAPackage("cafe.woden.ircclient.ui..")
           .because("logging should stay UI-agnostic and communicate through app/logging ports");
+
+  @ArchTest
+  static final ArchRule logging_should_not_depend_on_app_internal_or_feature_modules =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.logging..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.app.state..",
+              "cafe.woden.ircclient.app.util..",
+              "cafe.woden.ircclient.dcc..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.notifications..",
+              "cafe.woden.ircclient.interceptors..",
+              "cafe.woden.ircclient.perform..",
+              "cafe.woden.ircclient.diagnostics..")
+          .because(
+              "logging module should expose adapters through app::api and avoid coupling to app internals or peer feature modules");
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_pircbotx_service_directly =
@@ -213,6 +246,10 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.app.state..",
               "cafe.woden.ircclient.app.util..",
               "cafe.woden.ircclient.dcc..",
+              "cafe.woden.ircclient.monitor..",
+              "cafe.woden.ircclient.notifications..",
+              "cafe.woden.ircclient.interceptors..",
+              "cafe.woden.ircclient.perform..",
               "cafe.woden.ircclient.ui..",
               "cafe.woden.ircclient.logging..")
           .because(

@@ -19,6 +19,8 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -31,6 +33,8 @@ class MonitorIsonFallbackServiceTest {
   private final UiSettingsPort uiSettingsPort = Mockito.mock(UiSettingsPort.class);
   private final PublishProcessor<ServerIrcEvent> events = PublishProcessor.create();
   private final PublishProcessor<MonitorListService.Change> changes = PublishProcessor.create();
+  private final ScheduledExecutorService pollScheduler =
+      Executors.newSingleThreadScheduledExecutor();
 
   private final MonitorIsonFallbackService service;
 
@@ -41,12 +45,14 @@ class MonitorIsonFallbackServiceTest {
     when(irc.isMonitorAvailable("libera")).thenReturn(false);
     when(irc.sendRaw(eq("libera"), startsWith("ISON "))).thenReturn(Completable.complete());
     when(monitorListService.listNicks("libera")).thenReturn(List.of("alice", "bob"));
-    service = new MonitorIsonFallbackService(irc, monitorListService, ui, uiSettingsPort);
+    service =
+        new MonitorIsonFallbackService(irc, monitorListService, ui, uiSettingsPort, pollScheduler);
   }
 
   @AfterEach
   void tearDown() {
     service.shutdown();
+    pollScheduler.shutdownNow();
   }
 
   @Test

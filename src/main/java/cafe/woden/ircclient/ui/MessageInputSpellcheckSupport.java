@@ -3,6 +3,11 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import io.reactivex.rxjava3.subjects.PublishSubject;
+import io.reactivex.rxjava3.subjects.Subject;
 import java.awt.Color;
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -24,10 +29,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import javax.swing.text.DefaultHighlighter;
 import javax.swing.text.Highlighter;
 import org.languagetool.JLanguageTool;
@@ -69,6 +74,8 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
             t.setDaemon(true);
             return t;
           });
+  private static final io.reactivex.rxjava3.core.Scheduler SPELLCHECK_SCHEDULER =
+      Schedulers.from(SPELLCHECK_EXECUTOR);
 
   private static final ThreadLocal<Map<String, JLanguageTool>> CHECKERS_BY_THREAD =
       ThreadLocal.withInitial(HashMap::new);
@@ -81,7 +88,8 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       SpellcheckSettings.defaults().completionProfile();
 
   private final JTextField input;
-  private final Timer debounceTimer;
+  private final Subject<SpellcheckRequest> spellcheckRequests;
+  private final Disposable spellcheckSubscription;
   private final AtomicLong spellcheckRequestSeq = new AtomicLong();
   private final List<Object> misspellingHighlightTags = new ArrayList<>();
   private final Highlighter.HighlightPainter misspellingPainter =
@@ -96,8 +104,6 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
 
   MessageInputSpellcheckSupport(JTextField input, SpellcheckSettings initialSettings) {
     this.input = Objects.requireNonNull(input, "input");
-    this.debounceTimer = new Timer(SPELLCHECK_DEBOUNCE_MS, e -> runSpellcheckAsync());
-    this.debounceTimer.setRepeats(false);
     this.settings = initialSettings != null ? initialSettings : SpellcheckSettings.defaults();
     applyCustomDictionarySnapshot(this.settings.customDictionary());
     this.suggestionCache =
@@ -111,6 +117,15 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
 
     // Warm up dictionaries once to avoid first-use jank on the EDT.
     SPELLCHECK_EXECUTOR.execute(() -> checkerForCurrentThreadOrNull(this.settings.languageTag()));
+    this.spellcheckRequests = PublishSubject.<SpellcheckRequest>create().toSerialized();
+    this.spellcheckSubscription =
+        spellcheckRequests
+            .debounce(SPELLCHECK_DEBOUNCE_MS, TimeUnit.MILLISECONDS)
+            .switchMapSingle(this::evaluateSpellcheckRequest)
+            .observeOn(SwingEdt.scheduler())
+            .subscribe(
+                this::applySpellcheckOutcome,
+                err -> log.debug("[MessageInputSpellcheckSupport] spellcheck stream failed", err));
   }
 
   void onSettingsApplied(SpellcheckSettings next) {
@@ -119,6 +134,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     applyCustomDictionarySnapshot(normalized.customDictionary());
     suggestionCache.synchronous().invalidateAll();
     if (!normalized.enabled() || !normalized.underlineEnabled()) {
+      spellcheckRequestSeq.incrementAndGet();
       clearMisspellingHighlights();
       return;
     }
@@ -130,13 +146,16 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       clearMisspellingHighlights();
       return;
     }
-    recordWordsFromInputForRanking(input.getText());
-    debounceTimer.restart();
+    String text = input.getText();
+    recordWordsFromInputForRanking(text);
+    long requestId = spellcheckRequestSeq.incrementAndGet();
+    if (spellcheckSubscription.isDisposed()) return;
+    spellcheckRequests.onNext(new SpellcheckRequest(requestId, text, settings, knownNicksByLower));
   }
 
   void onInputEnabledChanged(boolean enabled) {
     if (!enabled) {
-      debounceTimer.stop();
+      spellcheckRequestSeq.incrementAndGet();
       clearMisspellingHighlights();
       return;
     }
@@ -159,7 +178,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   }
 
   void onRemoveNotify() {
-    debounceTimer.stop();
+    spellcheckRequestSeq.incrementAndGet();
     clearMisspellingHighlights();
   }
 
@@ -413,29 +432,39 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     return List.copyOf(out);
   }
 
-  private void runSpellcheckAsync() {
-    SpellcheckSettings snapshot = settings;
-    String text = input.getText();
+  private Single<SpellcheckOutcome> evaluateSpellcheckRequest(SpellcheckRequest request) {
+    return Single.fromCallable(() -> evaluateSpellcheckRequestBlocking(request))
+        .subscribeOn(SPELLCHECK_SCHEDULER);
+  }
+
+  private SpellcheckOutcome evaluateSpellcheckRequestBlocking(SpellcheckRequest request) {
+    if (request == null) {
+      return SpellcheckOutcome.clear(0L, "");
+    }
+    SpellcheckSettings snapshot = request.settings();
+    String text = request.text();
     if (snapshot == null
         || !snapshot.enabled()
         || !snapshot.underlineEnabled()
         || text == null
         || text.isBlank()
         || startsWithSlashCommand(text)) {
+      return SpellcheckOutcome.clear(request.requestId(), text);
+    }
+    List<MisspellingRange> ranges =
+        findMisspellings(
+            text, request.nickSnapshot(), snapshot.languageTag(), snapshot.completionProfile());
+    return SpellcheckOutcome.apply(request.requestId(), text, ranges);
+  }
+
+  private void applySpellcheckOutcome(SpellcheckOutcome outcome) {
+    if (outcome == null) return;
+    if (outcome.requestId() != spellcheckRequestSeq.get()) return;
+    if (outcome.clearOnly()) {
       clearMisspellingHighlights();
       return;
     }
-    long req = spellcheckRequestSeq.incrementAndGet();
-    Map<String, String> nickSnapshot = knownNicksByLower;
-    String languageTag = snapshot.languageTag();
-    SpellcheckSettings.CompletionProfile completionProfile = snapshot.completionProfile();
-
-    SPELLCHECK_EXECUTOR.execute(
-        () -> {
-          List<MisspellingRange> ranges =
-              findMisspellings(text, nickSnapshot, languageTag, completionProfile);
-          SwingUtilities.invokeLater(() -> applyMisspellingHighlights(req, text, ranges));
-        });
+    applyMisspellingHighlights(outcome.requestId(), outcome.checkedText(), outcome.ranges());
   }
 
   private List<MisspellingRange> findMisspellings(
@@ -1109,4 +1138,30 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       String tokenLower,
       String languageTag,
       SpellcheckSettings.CompletionProfile completionProfile) {}
+
+  private record SpellcheckRequest(
+      long requestId, String text, SpellcheckSettings settings, Map<String, String> nickSnapshot) {
+    SpellcheckRequest {
+      text = text == null ? "" : text;
+      settings = settings == null ? SpellcheckSettings.defaults() : settings;
+      nickSnapshot = nickSnapshot == null ? Map.of() : Map.copyOf(nickSnapshot);
+    }
+  }
+
+  private record SpellcheckOutcome(
+      long requestId, String checkedText, List<MisspellingRange> ranges, boolean clearOnly) {
+    private static SpellcheckOutcome clear(long requestId, String checkedText) {
+      return new SpellcheckOutcome(requestId, checkedText, List.of(), true);
+    }
+
+    private static SpellcheckOutcome apply(
+        long requestId, String checkedText, List<MisspellingRange> ranges) {
+      return new SpellcheckOutcome(requestId, checkedText, ranges, false);
+    }
+
+    SpellcheckOutcome {
+      checkedText = checkedText == null ? "" : checkedText;
+      ranges = ranges == null ? List.of() : List.copyOf(ranges);
+    }
+  }
 }
