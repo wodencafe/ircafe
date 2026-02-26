@@ -58,6 +58,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   private static final int TRANSPOSE_BONUS_SCORE = 52;
   private static final int PREFIX_COMPLETION_DISTANCE_WEIGHT = 24;
   private static final int PREFIX_COMPLETION_LENGTH_DELTA_WEIGHT = 9;
+  private static final long CHECKER_FAILURE_LOG_INTERVAL_MS = 60_000L;
   private static final String EN_PREFIX_COMPLETIONS_RESOURCE =
       "/cafe/woden/ircclient/ui/spellcheck/en-prefix-completions.txt";
 
@@ -75,6 +76,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       new ConcurrentHashMap<>();
   private static final ConcurrentHashMap<String, List<String>> PREFIX_LEXICON_BY_LANG =
       new ConcurrentHashMap<>();
+  private static final AtomicLong LAST_CHECKER_FAILURE_LOG_MS = new AtomicLong(0L);
   private static final SpellcheckSettings.CompletionProfile DEFAULT_COMPLETION_PROFILE =
       SpellcheckSettings.defaults().completionProfile();
 
@@ -109,13 +111,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
 
     // Warm up dictionaries once to avoid first-use jank on the EDT.
     SPELLCHECK_EXECUTOR.execute(
-        () -> {
-          try {
-            checkerForCurrentThread(this.settings.languageTag());
-          } catch (Exception ex) {
-            log.debug("[MessageInputSpellcheckSupport] warmup failed", ex);
-          }
-        });
+        () -> checkerForCurrentThreadOrNull(this.settings.languageTag()));
   }
 
   void onSettingsApplied(SpellcheckSettings next) {
@@ -226,10 +222,17 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     String languageTag = key.languageTag();
     SpellcheckSettings.CompletionProfile profile = key.completionProfile();
     try {
-      List<RuleMatch> matches = checkerForCurrentThread(languageTag).check(token);
+      List<RuleMatch> matches = List.of();
+      JLanguageTool checker = checkerForCurrentThreadOrNull(languageTag);
+      if (checker != null) {
+        List<RuleMatch> checked = checker.check(token);
+        if (checked != null) {
+          matches = checked;
+        }
+      }
       String tokenLower = token.toLowerCase(Locale.ROOT);
       LinkedHashSet<String> raw = new LinkedHashSet<>();
-      if (matches != null && !matches.isEmpty()) {
+      if (!matches.isEmpty()) {
         for (RuleMatch match : matches) {
           if (!isSpellingRule(match)) continue;
           List<String> suggestions = match.getSuggestedReplacements();
@@ -289,7 +292,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
         ordered.add(suggestion.word());
       }
       return List.copyOf(ordered);
-    } catch (Exception ex) {
+    } catch (Throwable ex) {
       log.debug("[MessageInputSpellcheckSupport] suggestion lookup failed for '{}'", token, ex);
       return List.of();
     }
@@ -340,7 +343,9 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       String text, Map<String, String> nickSnapshot, String languageTag) {
     if (text == null || text.isBlank()) return List.of();
     try {
-      List<RuleMatch> matches = checkerForCurrentThread(languageTag).check(text);
+      JLanguageTool checker = checkerForCurrentThreadOrNull(languageTag);
+      if (checker == null) return List.of();
+      List<RuleMatch> matches = checker.check(text);
       if (matches == null || matches.isEmpty()) return List.of();
 
       ArrayList<MisspellingRange> out = new ArrayList<>();
@@ -363,7 +368,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       }
       if (out.isEmpty()) return List.of();
       return List.copyOf(out);
-    } catch (Exception ex) {
+    } catch (Throwable ex) {
       log.debug("[MessageInputSpellcheckSupport] spellcheck failed", ex);
       return List.of();
     }
@@ -886,25 +891,40 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     return byLang.computeIfAbsent(normalized, MessageInputSpellcheckSupport::createChecker);
   }
 
-  private static JLanguageTool createChecker(String languageTag) {
+  private static JLanguageTool checkerForCurrentThreadOrNull(String languageTag) {
     String normalized = SpellcheckSettings.normalizeLanguageTag(languageTag);
     String shortCode = "en-GB".equalsIgnoreCase(normalized) ? "en-GB" : "en-US";
     try {
-      Language lang = Languages.getLanguageForShortCode(shortCode);
-      if (lang == null) {
-        lang = Languages.getLanguageForShortCode("en-US");
-      }
-      if (lang == null) {
-        throw new IllegalStateException("LanguageTool language unavailable for " + shortCode);
-      }
-      return new JLanguageTool(lang);
+      return checkerForCurrentThread(normalized);
     } catch (Throwable t) {
-      log.warn(
-          "[MessageInputSpellcheckSupport] Failed to initialize LanguageTool checker for '{}'",
-          shortCode,
-          t);
-      throw t;
+      maybeLogCheckerFailure(shortCode, t);
+      return null;
     }
+  }
+
+  private static void maybeLogCheckerFailure(String shortCode, Throwable t) {
+    long now = System.currentTimeMillis();
+    long last = LAST_CHECKER_FAILURE_LOG_MS.get();
+    if (last > 0 && (now - last) < CHECKER_FAILURE_LOG_INTERVAL_MS) return;
+    if (!LAST_CHECKER_FAILURE_LOG_MS.compareAndSet(last, now)) return;
+    log.warn(
+        "[MessageInputSpellcheckSupport] LanguageTool unavailable for '{}'; "
+            + "spell underlines/corrections are temporarily disabled",
+        shortCode,
+        t);
+  }
+
+  private static JLanguageTool createChecker(String languageTag) {
+    String normalized = SpellcheckSettings.normalizeLanguageTag(languageTag);
+    String shortCode = "en-GB".equalsIgnoreCase(normalized) ? "en-GB" : "en-US";
+    Language lang = Languages.getLanguageForShortCode(shortCode);
+    if (lang == null) {
+      lang = Languages.getLanguageForShortCode("en-US");
+    }
+    if (lang == null) {
+      throw new IllegalStateException("LanguageTool language unavailable for " + shortCode);
+    }
+    return new JLanguageTool(lang);
   }
 
   private record MisspellingRange(int start, int end) {}
