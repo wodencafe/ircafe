@@ -43,7 +43,6 @@ final class MessageInputNickCompletionSupport {
   private static final int RELEVANCE_NICK = 300;
   private static final int RELEVANCE_SLASH = 280;
   private static final int RELEVANCE_WORD_PREFIX = 220;
-  private static final int RELEVANCE_WORD_FUZZY = 200;
   private static final int MAX_WORD_SUGGESTIONS = 8;
   private static final List<SlashCommand> SLASH_COMMANDS =
       List.of(
@@ -223,12 +222,7 @@ final class MessageInputNickCompletionSupport {
   }
 
   String firstCompletionHint(String token) {
-    String nick = firstNickStartingWith(token);
-    if (nick != null) return nick;
-    if (wordSuggestionProvider == null) return null;
-    List<String> words = wordSuggestionProvider.suggestWords(token, 1);
-    if (words == null || words.isEmpty()) return null;
-    return words.getFirst();
+    return firstNickStartingWith(token);
   }
 
   void setNickCompletions(List<String> nicks) {
@@ -298,7 +292,8 @@ final class MessageInputNickCompletionSupport {
 
     String tokenLower = t.toLowerCase(Locale.ROOT);
     ArrayList<Completion> out = new ArrayList<>(suggestions.size());
-    for (String suggestion : suggestions) {
+    for (int i = 0; i < suggestions.size(); i++) {
+      String suggestion = suggestions.get(i);
       if (suggestion == null) continue;
       String word = suggestion.trim();
       if (word.isEmpty()) continue;
@@ -308,7 +303,8 @@ final class MessageInputNickCompletionSupport {
       BasicCompletion completion =
           new BasicCompletion(
               completionProvider, word, prefix ? "Word completion" : "Spelling correction");
-      completion.setRelevance(prefix ? RELEVANCE_WORD_PREFIX : RELEVANCE_WORD_FUZZY);
+      // Keep all words below nick relevance while preserving provider likelihood order.
+      completion.setRelevance(Math.max(1, RELEVANCE_WORD_PREFIX - i));
       out.add(completion);
     }
     return List.copyOf(out);
@@ -333,7 +329,19 @@ final class MessageInputNickCompletionSupport {
             public void actionPerformed(ActionEvent e) {
               String beforeText = input.getText();
               int beforeCaret = input.getCaretPosition();
-              delegate.actionPerformed(e);
+              boolean forcePopupForNickHint =
+                  shouldForcePopupInsteadOfImmediateCompletion(beforeText, beforeCaret);
+              boolean prevSingleChoice = autoCompletion.getAutoCompleteSingleChoices();
+              if (forcePopupForNickHint) {
+                autoCompletion.setAutoCompleteSingleChoices(false);
+              }
+              try {
+                delegate.actionPerformed(e);
+              } finally {
+                if (forcePopupForNickHint) {
+                  autoCompletion.setAutoCompleteSingleChoices(prevSingleChoice);
+                }
+              }
 
               SwingUtilities.invokeLater(
                   () -> {
@@ -370,6 +378,17 @@ final class MessageInputNickCompletionSupport {
 
     } catch (Exception ignored) {
     }
+  }
+
+  private boolean shouldForcePopupInsteadOfImmediateCompletion(String beforeText, int beforeCaret) {
+    if (autoCompletion.isPopupVisible()) return false;
+    if (beforeText == null) beforeText = "";
+    if (startsWithSlashCommand(beforeText)) return false;
+    if (beforeCaret < 0 || beforeCaret > beforeText.length()) return false;
+
+    String token = completionProvider.getAlreadyEnteredText(input);
+    if (token == null || token.isBlank()) return false;
+    return firstCompletionHint(token) != null;
   }
 
   private void installPendingNickAddressSuffixListener() {

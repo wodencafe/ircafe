@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
@@ -45,11 +46,11 @@ class MessageInputNickCompletionSupportTest {
   }
 
   @Test
-  void completionHintFallsBackToWordSuggestionWhenNoNickMatches() {
+  void completionHintDoesNotFallbackToWordSuggestionWhenNoNickMatches() {
     MessageInputNickCompletionSupport support =
         newSupport(List.of("alice"), (token, maxSuggestions) -> List.of("hello"));
 
-    assertEquals("hello", support.firstCompletionHint("helo"));
+    assertNull(support.firstCompletionHint("helo"));
   }
 
   @Test
@@ -69,6 +70,28 @@ class MessageInputNickCompletionSupportTest {
   }
 
   @Test
+  void completionPopupRanksNicksAboveWordsAndKeepsWordLikelihoodOrder() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(), input, undoSupport, (token, maxSuggestions) -> List.of("almost", "almond"));
+    support.setNickCompletions(List.of("alice", "alina"));
+
+    input.setText("al");
+    input.setCaretPosition(2);
+
+    List<String> replacements = replacementTextsForCurrentToken(support, input);
+    assertTrue(replacements.contains("alice"));
+    assertTrue(replacements.contains("alina"));
+    assertTrue(replacements.contains("almost"));
+    assertTrue(replacements.contains("almond"));
+    assertTrue(replacements.indexOf("alice") < replacements.indexOf("almost"));
+    assertTrue(replacements.indexOf("alina") < replacements.indexOf("almost"));
+    assertTrue(replacements.indexOf("almost") < replacements.indexOf("almond"));
+  }
+
+  @Test
   void suppressesWordSuggestionsWhenInputIsSlashCommand() throws Exception {
     JTextField input = new JTextField();
     MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
@@ -81,6 +104,36 @@ class MessageInputNickCompletionSupportTest {
 
     List<String> replacements = replacementTextsForCurrentToken(support, input);
     assertFalse(replacements.contains("help"));
+  }
+
+  @Test
+  void tabGuardForcesPopupWhenNickHintIsVisible() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(), input, undoSupport, (token, maxSuggestions) -> List.of("almost"));
+    support.setNickCompletions(List.of("alice"));
+
+    input.setText("ali");
+    input.setCaretPosition(3);
+
+    assertTrue(shouldForcePopupInsteadOfImmediateCompletion(support, "ali", 3));
+  }
+
+  @Test
+  void tabGuardDoesNotForcePopupWhenOnlyWordSuggestionsExist() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(), input, undoSupport, (token, maxSuggestions) -> List.of("hello"));
+    support.setNickCompletions(List.of("alice"));
+
+    input.setText("helo");
+    input.setCaretPosition(4);
+
+    assertFalse(shouldForcePopupInsteadOfImmediateCompletion(support, "helo", 4));
   }
 
   private static MessageInputNickCompletionSupport newSupport(List<String> nicks) {
@@ -118,5 +171,15 @@ class MessageInputNickCompletionSupportTest {
             "shouldArmPendingNickAddressSuffix", String.class, int.class, String.class, int.class);
     method.setAccessible(true);
     return (boolean) method.invoke(support, beforeText, beforeCaret, afterText, afterCaret);
+  }
+
+  private static boolean shouldForcePopupInsteadOfImmediateCompletion(
+      MessageInputNickCompletionSupport support, String beforeText, int beforeCaret)
+      throws Exception {
+    Method method =
+        MessageInputNickCompletionSupport.class.getDeclaredMethod(
+            "shouldForcePopupInsteadOfImmediateCompletion", String.class, int.class);
+    method.setAccessible(true);
+    return (boolean) method.invoke(support, beforeText, beforeCaret);
   }
 }
