@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ignore;
 
+import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -36,6 +37,34 @@ public class InboundIgnorePolicy {
    * @param isCtcp whether this is a CTCP request/reply (hard ignore can optionally exclude CTCP)
    */
   public Decision decide(String serverId, String fromNick, String hostmask, boolean isCtcp) {
+    return decide(serverId, fromNick, hostmask, isCtcp, List.of());
+  }
+
+  /**
+   * Decide how a message from a sender should be handled in a specific inbound level context.
+   *
+   * <p>Level values follow irssi naming (for example: MSGS, PUBLIC, NOTICES, CTCPS, ACTIONS).
+   */
+  public Decision decide(
+      String serverId,
+      String fromNick,
+      String hostmask,
+      boolean isCtcp,
+      List<String> inboundLevels) {
+    return decide(serverId, fromNick, hostmask, isCtcp, inboundLevels, "");
+  }
+
+  /**
+   * Decide how a message from a sender should be handled in a specific inbound level and channel
+   * context.
+   */
+  public Decision decide(
+      String serverId,
+      String fromNick,
+      String hostmask,
+      boolean isCtcp,
+      List<String> inboundLevels,
+      String inboundChannel) {
     if (ignoreListService == null) return Decision.ALLOW;
 
     String sid = Objects.toString(serverId, "").trim();
@@ -48,7 +77,7 @@ public class InboundIgnorePolicy {
     IgnoreStatusService.Status st =
         (ignoreStatusService == null)
             ? new IgnoreStatusService.Status(false, false, false, "")
-            : ignoreStatusService.status(sid, nick, hostmask);
+            : ignoreStatusService.status(sid, nick, hostmask, inboundLevels, inboundChannel);
 
     if (st.hard()) {
       if (!isCtcp || ignoreListService.hardIgnoreIncludesCtcp()) {

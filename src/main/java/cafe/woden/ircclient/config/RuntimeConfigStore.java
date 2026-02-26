@@ -35,6 +35,30 @@ import org.yaml.snakeyaml.Yaml;
 public class RuntimeConfigStore {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
+  private static final java.util.Set<String> KNOWN_IGNORE_LEVELS =
+      java.util.Set.of(
+          "ALL",
+          "MSGS",
+          "PUBLIC",
+          "NOTICES",
+          "CTCPS",
+          "ACTIONS",
+          "JOINS",
+          "PARTS",
+          "QUITS",
+          "NICKS",
+          "TOPICS",
+          "WALLOPS",
+          "INVITES",
+          "MODES",
+          "DCC",
+          "DCCMSGS",
+          "CLIENTCRAP",
+          "CLIENTNOTICE",
+          "CLIENTERRORS",
+          "HILIGHT",
+          "NOHILIGHT",
+          "CRAP");
 
   public record ServerTreeBuiltInNodesVisibility(
       boolean server,
@@ -4683,6 +4707,145 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberIgnoreMaskLevels(
+      String serverId, String mask, List<String> levels) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> normalized = normalizeIgnoreLevels(levels);
+      boolean isDefaultAll =
+          normalized.size() == 1 && "ALL".equalsIgnoreCase(normalized.getFirst());
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskLevels") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      if (isDefaultAll) {
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      } else {
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        byMask.put(m, new java.util.ArrayList<>(normalized));
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskLevels");
+      } else {
+        server.put("maskLevels", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask levels to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskChannels(
+      String serverId, String mask, List<String> channels) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> normalized = normalizeIgnoreChannels(channels);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskChannels") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      if (normalized.isEmpty()) {
+        // Empty means no channel restriction; omit per-mask override from persisted YAML.
+      } else {
+        byMask.put(m, new java.util.ArrayList<>(normalized));
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskChannels");
+      } else {
+        server.put("maskChannels", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask channels to '{}'", file, e);
+    }
+  }
+
+  private static List<String> normalizeIgnoreLevels(List<String> levels) {
+    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+    if (levels != null) {
+      for (String raw : levels) {
+        String v = normalizeIgnoreLevel(raw);
+        if (!v.isEmpty()) out.add(v);
+      }
+    }
+    if (out.isEmpty()) out.add("ALL");
+    return List.copyOf(out);
+  }
+
+  private static String normalizeIgnoreLevel(String raw) {
+    String v = Objects.toString(raw, "").trim().toUpperCase(Locale.ROOT);
+    if (v.isEmpty()) return "";
+    while (v.startsWith("+") || v.startsWith("-")) {
+      v = v.substring(1).trim();
+    }
+    if (v.isEmpty()) return "";
+    if ("*".equals(v)) v = "ALL";
+    return KNOWN_IGNORE_LEVELS.contains(v) ? v : "";
+  }
+
+  private static List<String> normalizeIgnoreChannels(List<String> channels) {
+    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+    if (channels != null) {
+      for (String raw : channels) {
+        String v = normalizeIgnoreChannel(raw);
+        if (!v.isEmpty()) out.add(v);
+      }
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
+  }
+
+  private static String normalizeIgnoreChannel(String raw) {
+    String v = Objects.toString(raw, "").trim();
+    if (v.isEmpty()) return "";
+    return (v.startsWith("#") || v.startsWith("&")) ? v : "";
+  }
+
   public synchronized void forgetIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -4712,6 +4875,27 @@ public class RuntimeConfigStore {
       if (masks.isEmpty()) {
         server.remove("masks");
       }
+
+      Object levelsObj = server.get("maskLevels");
+      if (levelsObj instanceof Map<?, ?> levelsMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) levelsMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskLevels");
+        }
+      }
+
+      Object channelsObj = server.get("maskChannels");
+      if (channelsObj instanceof Map<?, ?> channelsMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) channelsMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskChannels");
+        }
+      }
+
       if (server.isEmpty()) {
         servers.remove(sid);
       }

@@ -417,12 +417,15 @@ public class IrcMediator implements MediatorControlPort {
     return new ParsedCtcp(cmd, arg);
   }
 
-  private InboundIgnorePolicy.Decision decideInbound(String sid, String from, boolean isCtcp) {
+  private InboundIgnorePolicy.Decision decideInbound(
+      String sid, String from, boolean isCtcp, String inboundChannel, String... levels) {
     if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
     String f = Objects.toString(from, "").trim();
     if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
     if ("server".equalsIgnoreCase(f)) return InboundIgnorePolicy.Decision.ALLOW;
-    return inboundIgnorePolicy.decide(sid, f, null, isCtcp);
+    String ch = Objects.toString(inboundChannel, "").trim();
+    List<String> levelList = (levels == null || levels.length == 0) ? List.of() : List.of(levels);
+    return inboundIgnorePolicy.decide(sid, f, null, isCtcp, levelList, ch);
   }
 
   private void handleNoticeOrSpoiler(
@@ -607,7 +610,8 @@ public class IrcMediator implements MediatorControlPort {
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), false);
+        InboundIgnorePolicy.Decision decision =
+            decideInbound(sid, ev.from(), false, ev.channel(), "MSGS", "PUBLIC");
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (tryResolvePendingEchoChannelMessage(sid, chan, active, ev)) {
@@ -681,7 +685,8 @@ public class IrcMediator implements MediatorControlPort {
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
+        InboundIgnorePolicy.Decision decision =
+            decideInbound(sid, ev.from(), true, ev.channel(), "ACTIONS", "CTCPS");
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
@@ -811,7 +816,8 @@ public class IrcMediator implements MediatorControlPort {
 
         ParsedCtcp ctcp = parseCtcp(ev.text());
         if (!fromSelf && ctcp != null && "DCC".equals(ctcp.commandUpper())) {
-          InboundIgnorePolicy.Decision dccDecision = decideInbound(sid, ev.from(), true);
+          InboundIgnorePolicy.Decision dccDecision =
+              decideInbound(sid, ev.from(), true, "", "DCC", "CTCPS");
           if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
           boolean dccHandled =
@@ -825,7 +831,9 @@ public class IrcMediator implements MediatorControlPort {
         }
 
         InboundIgnorePolicy.Decision decision =
-            fromSelf ? InboundIgnorePolicy.Decision.ALLOW : decideInbound(sid, ev.from(), false);
+            fromSelf
+                ? InboundIgnorePolicy.Decision.ALLOW
+                : decideInbound(sid, ev.from(), false, "", "MSGS");
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (tryResolvePendingEchoPrivateMessage(sid, pm, ev, allowAutoOpen)) {
@@ -921,7 +929,9 @@ public class IrcMediator implements MediatorControlPort {
         }
 
         InboundIgnorePolicy.Decision decision =
-            fromSelf ? InboundIgnorePolicy.Decision.ALLOW : decideInbound(sid, ev.from(), true);
+            fromSelf
+                ? InboundIgnorePolicy.Decision.ALLOW
+                : decideInbound(sid, ev.from(), true, "", "ACTIONS", "CTCPS");
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
@@ -993,7 +1003,18 @@ public class IrcMediator implements MediatorControlPort {
         boolean fromSelf = isFromSelf(sid, ev.from());
         markPrivateMessagePeerOnline(sid, ev.from());
         boolean isCtcp = parseCtcp(ev.text()) != null;
-        InboundIgnorePolicy.Decision d = decideInbound(sid, ev.from(), isCtcp);
+        String noticeChannel = "";
+        String rawNoticeTargetForIgnore = Objects.toString(ev.target(), "").trim();
+        if (!rawNoticeTargetForIgnore.isEmpty()) {
+          TargetRef targetRef = new TargetRef(sid, rawNoticeTargetForIgnore);
+          if (targetRef.isChannel()) {
+            noticeChannel = targetRef.target();
+          }
+        }
+        InboundIgnorePolicy.Decision d =
+            isCtcp
+                ? decideInbound(sid, ev.from(), true, noticeChannel, "NOTICES", "CTCPS")
+                : decideInbound(sid, ev.from(), false, noticeChannel, "NOTICES");
         boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
         boolean suppress = d == InboundIgnorePolicy.Decision.HARD_DROP;
 
@@ -1025,17 +1046,17 @@ public class IrcMediator implements MediatorControlPort {
             ev.messageId(),
             ev.ircv3Tags());
 
-        String noticeChannel = "status";
+        String noticeChannelForInterceptor = "status";
         String rawNoticeTarget = Objects.toString(ev.target(), "").trim();
         if (!rawNoticeTarget.isEmpty()) {
           TargetRef targetRef = new TargetRef(sid, rawNoticeTarget);
           if (targetRef.isChannel()) {
-            noticeChannel = targetRef.target();
+            noticeChannelForInterceptor = targetRef.target();
           }
         }
         recordInterceptorEvent(
             sid,
-            noticeChannel,
+            noticeChannelForInterceptor,
             ev.from(),
             learnedHostmaskForNick(sid, ev.from()),
             ev.text(),
@@ -1137,7 +1158,8 @@ public class IrcMediator implements MediatorControlPort {
       }
       case IrcEvent.CtcpRequestReceived ev -> {
         markPrivateMessagePeerOnline(sid, ev.from());
-        InboundIgnorePolicy.Decision decision = decideInbound(sid, ev.from(), true);
+        InboundIgnorePolicy.Decision decision =
+            decideInbound(sid, ev.from(), true, ev.channel(), "CTCPS");
         if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
 
         TargetRef dest;

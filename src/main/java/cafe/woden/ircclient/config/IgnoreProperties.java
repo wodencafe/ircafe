@@ -21,14 +21,26 @@ public record IgnoreProperties(
    *
    * <p>{@code masks} are traditional (hard) ignore masks.
    *
+   * <p>{@code maskLevels} optionally maps a hard-ignore mask to explicit irssi-style levels. When
+   * omitted for a mask, that mask behaves as {@code ALL}.
+   *
+   * <p>{@code maskChannels} optionally maps a hard-ignore mask to a list of channel patterns. When
+   * omitted for a mask, the ignore applies in all contexts (channel + private).
+   *
    * <p>{@code softMasks} are soft-ignore masks. Soft-ignored users have inbound messages rendered
    * as spoilers rather than fully dropped.
    *
    * <p>CTCP handling for soft-ignored users is configurable via {@code softIgnoreIncludesCtcp}.
    */
-  public record ServerIgnore(List<String> masks, List<String> softMasks) {
+  public record ServerIgnore(
+      List<String> masks,
+      Map<String, List<String>> maskLevels,
+      Map<String, List<String>> maskChannels,
+      List<String> softMasks) {
     public ServerIgnore {
       if (masks == null) masks = List.of();
+      if (maskLevels == null) maskLevels = Map.of();
+      if (maskChannels == null) maskChannels = Map.of();
       if (softMasks == null) softMasks = List.of();
     }
   }

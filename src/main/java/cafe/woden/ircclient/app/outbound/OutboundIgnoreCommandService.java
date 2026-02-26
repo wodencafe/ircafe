@@ -3,8 +3,12 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.ignore.IgnoreLevels;
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 /**
@@ -29,49 +33,103 @@ public class OutboundIgnoreCommandService {
   }
 
   public void handleIgnore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
+    TargetRef active = targetCoordinator.getActiveTarget();
+    IrssiIgnoreSpec spec = parseIrssiIgnoreSpec(maskOrNick);
+    String sid = resolveServerIdForIgnore(active, spec.network());
+    if (sid.isEmpty()) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(ignore)", "Select a server first.");
       return;
     }
 
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(at, "(ignore)", "Usage: /ignore <maskOrNick>");
+    if (spec.listRequested() && !spec.except()) {
+      handleIgnoreListForServer(sid, "(ignore)");
+      appendCompatibilityNotes(new TargetRef(sid, "status"), spec);
       return;
     }
 
-    boolean added = ignoreListService.addMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
-    if (added) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(ignore)", "Ignoring: " + stored);
-    } else {
+    if (spec.mask().isEmpty()) {
       ui.appendStatus(
-          new TargetRef(at.serverId(), "status"), "(ignore)", "Already ignored: " + stored);
+          new TargetRef(sid, "status"),
+          "(ignore)",
+          "Usage: /ignore [-options] [levels] <maskOrNick>");
+      return;
     }
+
+    if (spec.except()) {
+      handleUnignoreForServer(sid, spec.mask(), true);
+      appendCompatibilityNotes(new TargetRef(sid, "status"), spec);
+      return;
+    }
+
+    IgnoreListService.AddMaskResult addResult =
+        ignoreListService.addMaskWithLevels(sid, spec.mask(), spec.levels(), spec.channels());
+    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(spec.mask());
+    if (addResult == IgnoreListService.AddMaskResult.ADDED) {
+      ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Ignoring: " + stored);
+    } else if (addResult == IgnoreListService.AddMaskResult.UPDATED) {
+      ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Updated ignore: " + stored);
+    } else {
+      ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Already ignored: " + stored);
+    }
+    appendCompatibilityNotes(new TargetRef(sid, "status"), spec);
   }
 
   public void handleUnignore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
+    TargetRef active = targetCoordinator.getActiveTarget();
+    IrssiIgnoreSpec spec = parseIrssiIgnoreSpec(maskOrNick);
+    String sid = resolveServerIdForIgnore(active, spec.network());
+    if (sid.isEmpty()) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(unignore)", "Select a server first.");
       return;
     }
 
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(at, "(unignore)", "Usage: /unignore <maskOrNick>");
+    if (spec.mask().isEmpty()) {
+      ui.appendStatus(
+          new TargetRef(sid, "status"), "(unignore)", "Usage: /unignore <maskOrNick|index>");
       return;
     }
 
-    boolean removed = ignoreListService.removeMask(at.serverId(), arg);
+    String arg = spec.mask();
+    if (isPositiveInteger(arg)) {
+      int idx = Integer.parseInt(arg);
+      List<String> masks = ignoreListService.listMasks(sid);
+      if (idx < 1 || idx > masks.size()) {
+        ui.appendStatus(
+            new TargetRef(sid, "status"),
+            "(unignore)",
+            "Ignore index out of range: " + idx + " (1.." + masks.size() + ")");
+        return;
+      }
+      String byIndex = masks.get(idx - 1);
+      handleUnignoreForServer(sid, byIndex, false);
+      appendCompatibilityNotes(new TargetRef(sid, "status"), spec);
+      return;
+    }
+
+    handleUnignoreForServer(sid, arg, false);
+    appendCompatibilityNotes(new TargetRef(sid, "status"), spec);
+  }
+
+  private void handleUnignoreForServer(
+      String serverId, String maskOrNick, boolean exceptCompatibility) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    String arg = Objects.toString(maskOrNick, "").trim();
+    if (arg.isEmpty()) return;
+
+    boolean removed = ignoreListService.removeMask(sid, arg);
     String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
     if (removed) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"), "(unignore)", "Removed ignore: " + stored);
+      ui.appendStatus(new TargetRef(sid, "status"), "(unignore)", "Removed ignore: " + stored);
     } else {
+      ui.appendStatus(new TargetRef(sid, "status"), "(unignore)", "Not in ignore list: " + stored);
+    }
+
+    if (exceptCompatibility) {
       ui.appendStatus(
-          new TargetRef(at.serverId(), "status"), "(unignore)", "Not in ignore list: " + stored);
+          new TargetRef(sid, "status"),
+          "(ignore)",
+          "Applied irssi-style -except as /unignore (IRCafe compatibility mode).");
     }
   }
 
@@ -82,16 +140,33 @@ public class OutboundIgnoreCommandService {
       return;
     }
 
-    List<String> masks = ignoreListService.listMasks(at.serverId());
-    TargetRef status = new TargetRef(at.serverId(), "status");
+    handleIgnoreListForServer(at.serverId(), "(ignore)");
+  }
+
+  private void handleIgnoreListForServer(String serverId, String tag) {
+    String sid = Objects.toString(serverId, "").trim();
+    TargetRef status = new TargetRef(sid, "status");
+    List<String> masks = ignoreListService.listMasks(sid);
     if (masks.isEmpty()) {
-      ui.appendStatus(status, "(ignore)", "Ignore list is empty.");
+      ui.appendStatus(status, tag, "Ignore list is empty.");
       return;
     }
 
-    ui.appendStatus(status, "(ignore)", "Ignore masks (" + masks.size() + "): ");
-    for (String m : masks) {
-      ui.appendStatus(status, "(ignore)", "  - " + m);
+    ui.appendStatus(status, tag, "Ignore masks (" + masks.size() + "): ");
+    for (int i = 0; i < masks.size(); i++) {
+      String m = masks.get(i);
+      List<String> levels =
+          IgnoreLevels.normalizeConfigured(ignoreListService.levelsForHardMask(sid, m));
+      List<String> channels = ignoreListService.channelsForHardMask(sid, m);
+      List<String> metadata = new ArrayList<>();
+      if (!(levels.size() == 1 && "ALL".equalsIgnoreCase(levels.getFirst()))) {
+        metadata.add("levels=" + String.join(",", levels));
+      }
+      if (channels != null && !channels.isEmpty()) {
+        metadata.add("channels=" + String.join(",", channels));
+      }
+      String suffix = metadata.isEmpty() ? "" : (" [" + String.join("; ", metadata) + "]");
+      ui.appendStatus(status, tag, "  " + (i + 1) + ") " + m + suffix);
     }
   }
 
@@ -171,4 +246,241 @@ public class OutboundIgnoreCommandService {
       ui.appendStatus(status, "(soft-ignore)", "  - " + m);
     }
   }
+
+  private static String resolveServerIdForIgnore(TargetRef active, String network) {
+    String net = Objects.toString(network, "").trim();
+    if (!net.isEmpty()) return net;
+    return active == null ? "" : Objects.toString(active.serverId(), "").trim();
+  }
+
+  private static boolean isPositiveInteger(String s) {
+    String v = Objects.toString(s, "").trim();
+    if (v.isEmpty()) return false;
+    for (int i = 0; i < v.length(); i++) {
+      if (!Character.isDigit(v.charAt(i))) return false;
+    }
+    try {
+      return Integer.parseInt(v) > 0;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private void appendCompatibilityNotes(TargetRef out, IrssiIgnoreSpec spec) {
+    if (spec == null || out == null) return;
+
+    if (spec.pattern() || spec.regexp() || spec.full()) {
+      ui.appendStatus(
+          out,
+          "(ignore)",
+          "Compatibility: -pattern/-regexp/-full are parsed, but matching still uses IRCafe hostmask globs.");
+    }
+    if (spec.replies()) {
+      ui.appendStatus(
+          out,
+          "(ignore)",
+          "Compatibility: -replies parsed, but reply-level behavior is not yet modeled separately.");
+    }
+    if (!spec.time().isEmpty()) {
+      ui.appendStatus(
+          out, "(ignore)", "Compatibility: -time parsed, but timed expiry is not implemented yet.");
+    }
+    if (!spec.reason().isEmpty()) {
+      ui.appendStatus(
+          out,
+          "(ignore)",
+          "Compatibility: trailing reason text parsed but not persisted: \""
+              + spec.reason()
+              + "\"");
+    }
+  }
+
+  private static IrssiIgnoreSpec parseIrssiIgnoreSpec(String raw) {
+    List<String> tokens = tokenize(raw);
+    if (tokens.isEmpty()) {
+      return new IrssiIgnoreSpec(
+          "", List.of(), "", false, false, false, false, false, List.of(), "", true, "");
+    }
+
+    String network = "";
+    String channelsRaw = "";
+    String time = "";
+    boolean except = false;
+    boolean replies = false;
+    boolean pattern = false;
+    boolean regexp = false;
+    boolean full = false;
+    List<String> positional = new ArrayList<>();
+
+    for (int i = 0; i < tokens.size(); i++) {
+      String t = tokens.get(i);
+      String low = t.toLowerCase(Locale.ROOT);
+      switch (low) {
+        case "-network" -> {
+          if (i + 1 < tokens.size()) network = tokens.get(++i);
+        }
+        case "-channels" -> {
+          if (i + 1 < tokens.size()) channelsRaw = tokens.get(++i);
+        }
+        case "-time" -> {
+          if (i + 1 < tokens.size()) time = tokens.get(++i);
+        }
+        case "-except" -> except = true;
+        case "-replies" -> replies = true;
+        case "-pattern" -> pattern = true;
+        case "-regexp" -> regexp = true;
+        case "-full" -> full = true;
+        default -> positional.add(t);
+      }
+    }
+
+    List<String> channels = parseIrssiChannelsToken(channelsRaw);
+
+    if (positional.isEmpty()) {
+      return new IrssiIgnoreSpec(
+          network, channels, time, except, replies, pattern, regexp, full, List.of(), "", true, "");
+    }
+
+    List<String> levels = new ArrayList<>();
+    int idx = 0;
+    while (idx < positional.size()) {
+      List<String> parsed = parseIrssiLevelsToken(positional.get(idx));
+      if (parsed.isEmpty()) break;
+      levels.addAll(parsed);
+      idx++;
+    }
+
+    String mask;
+    String reason;
+    if (!levels.isEmpty() && idx < positional.size()) {
+      mask = positional.get(idx);
+      reason = String.join(" ", positional.subList(idx + 1, positional.size())).trim();
+    } else {
+      mask = positional.getFirst();
+      reason = String.join(" ", positional.subList(1, positional.size())).trim();
+      levels = List.of();
+    }
+
+    return new IrssiIgnoreSpec(
+        network,
+        channels,
+        time,
+        except,
+        replies,
+        pattern,
+        regexp,
+        full,
+        List.copyOf(levels),
+        mask,
+        false,
+        reason);
+  }
+
+  private static List<String> parseIrssiLevelsToken(String token) {
+    String t = Objects.toString(token, "").trim();
+    if (t.isEmpty()) return List.of();
+    List<String> out = new ArrayList<>();
+    String[] parts = t.split(",");
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) return List.of();
+      while (p.startsWith("+") || p.startsWith("-")) {
+        p = p.substring(1).trim();
+      }
+      if (p.isEmpty()) return List.of();
+      String up = p.toUpperCase(Locale.ROOT);
+      if ("*".equals(up)) up = "ALL";
+      if (!IgnoreLevels.KNOWN.contains(up)) return List.of();
+      out.add(up);
+    }
+    return out;
+  }
+
+  private static List<String> tokenize(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    if (s.isEmpty()) return List.of();
+    List<String> out = new ArrayList<>();
+    StringBuilder cur = new StringBuilder();
+    boolean inSingle = false;
+    boolean inDouble = false;
+    boolean escaping = false;
+
+    for (int i = 0; i < s.length(); i++) {
+      char c = s.charAt(i);
+      if (escaping) {
+        cur.append(c);
+        escaping = false;
+        continue;
+      }
+      if ((inSingle || inDouble) && c == '\\') {
+        escaping = true;
+        continue;
+      }
+      if (inSingle) {
+        if (c == '\'') {
+          inSingle = false;
+        } else {
+          cur.append(c);
+        }
+        continue;
+      }
+      if (inDouble) {
+        if (c == '"') {
+          inDouble = false;
+        } else {
+          cur.append(c);
+        }
+        continue;
+      }
+      if (c == '\'') {
+        inSingle = true;
+        continue;
+      }
+      if (c == '"') {
+        inDouble = true;
+        continue;
+      }
+      if (Character.isWhitespace(c)) {
+        if (cur.length() > 0) {
+          out.add(cur.toString());
+          cur.setLength(0);
+        }
+        continue;
+      }
+      cur.append(c);
+    }
+    if (cur.length() > 0) out.add(cur.toString());
+    return out;
+  }
+
+  private static List<String> parseIrssiChannelsToken(String token) {
+    String t = Objects.toString(token, "").trim();
+    if (t.isEmpty()) return List.of();
+    List<String> out = new ArrayList<>();
+    String[] parts = t.split(",");
+    for (String part : parts) {
+      String p = Objects.toString(part, "").trim();
+      if (p.isEmpty()) continue;
+      if (!(p.startsWith("#") || p.startsWith("&"))) continue;
+      if (out.stream().noneMatch(existing -> existing.equalsIgnoreCase(p))) {
+        out.add(p);
+      }
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
+  }
+
+  private record IrssiIgnoreSpec(
+      String network,
+      List<String> channels,
+      String time,
+      boolean except,
+      boolean replies,
+      boolean pattern,
+      boolean regexp,
+      boolean full,
+      List<String> levels,
+      String mask,
+      boolean listRequested,
+      String reason) {}
 }
