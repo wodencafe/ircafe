@@ -28,7 +28,90 @@ plugins {
 
 group = 'cafe.woden'
 
-version = (findProperty("version") ?: "0.0.1-SNAPSHOT").toString()
+String runGitCommand(List<String> args) {
+    if (args == null || args.isEmpty()) return null
+    if (!file(".git").exists()) return null
+    try {
+        List<String> cmd = ["git"] + args
+        Process process = new ProcessBuilder(cmd)
+            .directory(rootDir)
+            .redirectErrorStream(true)
+            .start()
+        String output = process.inputStream.getText("UTF-8")
+        int exitCode = process.waitFor()
+        if (exitCode != 0) return null
+        String text = (output == null) ? "" : output.trim()
+        return text.isEmpty() ? null : text
+    } catch (Exception ignored) {
+        return null
+    }
+}
+
+String sanitizeVersionLabel(String raw, String fallback) {
+    String text = (raw == null) ? "" : raw.trim()
+    if (text.isEmpty()) return fallback
+    text = text.replaceAll(/[^0-9A-Za-z._-]+/, "-")
+    text = text.replaceAll(/^-+/, "")
+    text = text.replaceAll(/-+$/, "")
+    return text.isEmpty() ? fallback : text
+}
+
+String nextSnapshotBaseFromLatestTag() {
+    String tags = runGitCommand(["tag", "--sort=-v:refname"])
+    if (tags == null || tags.isBlank()) return "0.0.1"
+    String latest = tags.readLines().find { line ->
+        String tag = (line == null) ? "" : line.trim()
+        tag ==~ /^v?\d+\.\d+\.\d+$/
+    }
+    if (latest == null || latest.isBlank()) return "0.0.1"
+    def matcher = (latest =~ /^v?(\d+)\.(\d+)\.(\d+)$/)
+    if (!matcher.matches()) return "0.0.1"
+    int major = Integer.parseInt(matcher.group(1))
+    int minor = Integer.parseInt(matcher.group(2))
+    int patch = Integer.parseInt(matcher.group(3)) + 1
+    return "${major}.${minor}.${patch}"
+}
+
+String deriveLocalSnapshotVersion() {
+    String base = nextSnapshotBaseFromLatestTag()
+    String describe =
+        runGitCommand(["describe", "--tags", "--long", "--dirty", "--abbrev=8", "--match", "v[0-9]*.[0-9]*.[0-9]*"])
+    if (describe == null || describe.isBlank()) {
+        describe =
+            runGitCommand(["describe", "--tags", "--long", "--dirty", "--abbrev=8", "--match", "[0-9]*.[0-9]*.[0-9]*"])
+    }
+    def describeMatcher = (describe == null) ? null : (describe =~ /^v?\d+\.\d+\.\d+-(\d+)-g([0-9a-fA-F]+)(-dirty)?$/)
+
+    String distance = "0"
+    if (describeMatcher != null && describeMatcher.matches()) {
+        distance = sanitizeVersionLabel(describeMatcher.group(1), "0")
+    } else {
+        distance = sanitizeVersionLabel(runGitCommand(["rev-list", "--count", "HEAD"]), "0")
+    }
+
+    String branch = sanitizeVersionLabel(runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"]), "local")
+    if ("HEAD".equalsIgnoreCase(branch)) {
+        branch = sanitizeVersionLabel(System.getenv("GITHUB_REF_NAME"), "detached")
+    }
+
+    String hash =
+        (describeMatcher != null && describeMatcher.matches())
+            ? sanitizeVersionLabel(describeMatcher.group(2), "nogit")
+            : sanitizeVersionLabel(runGitCommand(["rev-parse", "--short=8", "HEAD"]), "nogit")
+    String dirtyFlag =
+        (describeMatcher != null && describeMatcher.matches())
+            ? (describeMatcher.group(3) != null ? ".dirty" : "")
+            : (runGitCommand(["status", "--porcelain"]) ? ".dirty" : "")
+
+    return "${base}-SNAPSHOT+${branch}.${distance}.g${hash}${dirtyFlag}"
+}
+
+String explicitVersion = providers.gradleProperty("version").orNull
+if (explicitVersion != null && !explicitVersion.isBlank()) {
+    version = explicitVersion.trim()
+} else {
+    version = deriveLocalSnapshotVersion()
+}
 
 description = 'IRC Client in modern Java, utilizing PircBotX, Spring Boot, and RXJava.'
 

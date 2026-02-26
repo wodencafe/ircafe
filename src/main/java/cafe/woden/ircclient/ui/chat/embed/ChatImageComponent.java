@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
@@ -16,6 +17,7 @@ import java.awt.datatransfer.StringSelection;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -29,6 +31,9 @@ final class ChatImageComponent extends JPanel {
   private static final int FALLBACK_MAX_W = 360;
   // Subtract some breathing room so we don't force horizontal scrolling.
   private static final int WIDTH_MARGIN_PX = 32;
+  private static final int COLLAPSE_ICON_SIZE = 12;
+  private static final Icon COLLAPSED_ICON = SvgIcons.action("play", COLLAPSE_ICON_SIZE);
+  private static final Icon EXPANDED_ICON = SvgIcons.action("arrow-down", COLLAPSE_ICON_SIZE);
 
   private final String url;
   private final String serverId;
@@ -216,7 +221,8 @@ final class ChatImageComponent extends JPanel {
 
   private void applyCollapsedState() {
     if (collapseBtn != null) {
-      collapseBtn.setText(collapsed ? "▸" : "▾");
+      collapseBtn.setText("");
+      collapseBtn.setIcon(collapsed ? COLLAPSED_ICON : EXPANDED_ICON);
       collapseBtn.setToolTipText(collapsed ? "Expand image" : "Collapse image");
     }
 

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -16,6 +17,7 @@ import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -65,6 +67,9 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private static final Insets CARD_PAD_EXPANDED = new Insets(8, 10, 8, 10);
   private static final Insets CARD_PAD_COLLAPSED = new Insets(4, 10, 4, 10);
+  private static final int COLLAPSE_ICON_SIZE = 12;
+  private static final Icon COLLAPSED_ICON = SvgIcons.action("play", COLLAPSE_ICON_SIZE);
+  private static final Icon EXPANDED_ICON = SvgIcons.action("arrow-down", COLLAPSE_ICON_SIZE);
 
   private final String url;
   private final String serverId;
@@ -238,14 +243,14 @@ final class ChatLinkPreviewComponent extends JPanel {
     if (siteName == null || siteName.isBlank()) {
       siteName = hostFromUrl(targetUrl);
     }
-    site = new JLabel(siteName);
+    site = new JLabel(sanitizeDisplayText(siteName));
     site.setOpaque(false);
 
     String titleText = safe(p.title());
     if (titleText == null || titleText.isBlank()) {
       titleText = targetUrl;
     }
-    title = textArea(titleText, true);
+    title = textArea(sanitizeDisplayText(titleText), true);
 
     headerText.add(site);
     if (!title.getText().isBlank()) {
@@ -632,7 +637,8 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private void applyCollapsedState() {
     if (collapseBtn != null) {
-      collapseBtn.setText(collapsed ? "▸" : "▾");
+      collapseBtn.setText("");
+      collapseBtn.setIcon(collapsed ? COLLAPSED_ICON : EXPANDED_ICON);
       collapseBtn.setToolTipText(collapsed ? "Expand preview" : "Collapse preview");
     }
     if (body != null) {
@@ -1105,8 +1111,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   private record ImgurDescParts(String submitter, String date, String caption) {}
 
   private static JLabel keyValueLabel(String key, String value) {
-    String k = key == null ? "" : key;
-    String v = value == null ? "" : value;
+    String k = sanitizeDisplayText(key == null ? "" : key);
+    String v = sanitizeDisplayText(value == null ? "" : value);
     k = k.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     v = v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     JLabel l = new JLabel("<html><b>" + k + ":</b> " + v + "</html>");
@@ -1116,7 +1122,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   }
 
   private static JTextArea textArea(String text, boolean bold) {
-    JTextArea ta = new JTextArea(text == null ? "" : text);
+    JTextArea ta = new JTextArea(sanitizeDisplayText(text == null ? "" : text));
     ta.setOpaque(false);
     ta.setEditable(false);
     ta.setFocusable(false);
@@ -1176,6 +1182,30 @@ final class ChatLinkPreviewComponent extends JPanel {
       thumbHost.setMinimumSize(d);
       thumbHost.setMaximumSize(d);
     }
+  }
+
+  private static String sanitizeDisplayText(String value) {
+    if (value == null || value.isEmpty()) return value;
+    StringBuilder out = new StringBuilder(value.length());
+    value
+        .codePoints()
+        .forEach(
+            cp -> {
+              if (cp == '\n' || cp == '\t') {
+                out.appendCodePoint(cp);
+                return;
+              }
+              if (Character.isISOControl(cp)) return;
+              int type = Character.getType(cp);
+              if (type == Character.PRIVATE_USE || type == Character.UNASSIGNED) return;
+              if (isVariationSelector(cp)) return;
+              out.appendCodePoint(cp);
+            });
+    return out.toString();
+  }
+
+  private static boolean isVariationSelector(int cp) {
+    return (cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0xE0100 && cp <= 0xE01EF);
   }
 
   private void installImageOpenBehavior(String imageUrl) {

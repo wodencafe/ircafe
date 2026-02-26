@@ -186,6 +186,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private final IgnoreStatusService ignoreStatusService;
   private final NickContextMenuFactory.NickContextMenu nickContextMenu;
   private final JScrollPane scroll;
+  private final DccActionCoordinator dccActionCoordinator;
 
   private record IgnoreMark(boolean ignore, boolean softIgnore) {}
 
@@ -216,6 +217,17 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     this.ignoreStatusService = ignoreStatusService;
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
+    this.dccActionCoordinator =
+        new DccActionCoordinator(
+            this,
+            (ctx, cmd) -> {
+              if (this.activationBus != null) {
+                this.activationBus.activate(ctx);
+              }
+              if (this.outboundBus != null) {
+                this.outboundBus.emit(cmd);
+              }
+            });
     this.nickContextMenu =
         (nickContextMenuFactory == null)
             ? null
@@ -908,57 +920,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
   private void requestDccAction(
       TargetRef ctx, String nick, NickContextMenuFactory.DccAction action) {
-    if (ctx == null) return;
-    if (action == null) return;
-
-    String n = Objects.toString(nick, "").trim();
-    if (n.isEmpty()) return;
-
-    switch (action) {
-      case CHAT -> emitDccCommand(ctx, "/dcc chat " + n);
-      case ACCEPT_CHAT -> emitDccCommand(ctx, "/dcc accept " + n);
-      case GET_FILE -> emitDccCommand(ctx, "/dcc get " + n);
-      case CLOSE_CHAT -> emitDccCommand(ctx, "/dcc close " + n);
-      case SEND_FILE -> promptAndSendDccFile(ctx, n);
-    }
-  }
-
-  private void promptAndSendDccFile(TargetRef ctx, String nick) {
-    JFileChooser chooser = new JFileChooser();
-    chooser.setDialogTitle("Send File to " + nick);
-    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-
-    int result = chooser.showOpenDialog(SwingUtilities.getWindowAncestor(this));
-    if (result != JFileChooser.APPROVE_OPTION) return;
-
-    java.io.File selected = chooser.getSelectedFile();
-    if (selected == null) return;
-
-    String path = Objects.toString(selected.getAbsolutePath(), "").trim();
-    if (path.isEmpty()) return;
-    if (path.indexOf('\r') >= 0 || path.indexOf('\n') >= 0) {
-      JOptionPane.showMessageDialog(
-          SwingUtilities.getWindowAncestor(this),
-          "Refusing file path containing newlines.",
-          "DCC Send",
-          JOptionPane.WARNING_MESSAGE);
-      return;
-    }
-
-    emitDccCommand(ctx, "/dcc send " + nick + " " + path);
-  }
-
-  private void emitDccCommand(TargetRef ctx, String line) {
-    String sid = Objects.toString(ctx == null ? "" : ctx.serverId(), "").trim();
-    String cmd = Objects.toString(line, "").trim();
-    if (sid.isEmpty() || cmd.isEmpty()) return;
-
-    if (activationBus != null) {
-      activationBus.activate(ctx);
-    }
-    if (outboundBus != null) {
-      outboundBus.emit(cmd);
-    }
+    dccActionCoordinator.requestAction(ctx, nick, action);
   }
 
   @Override
