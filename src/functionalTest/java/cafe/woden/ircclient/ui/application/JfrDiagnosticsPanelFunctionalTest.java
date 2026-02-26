@@ -8,8 +8,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.JfrRuntimeEventsService;
-import cafe.woden.ircclient.app.RuntimeDiagnosticEvent;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,7 +23,6 @@ import javax.swing.JButton;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import org.junit.jupiter.api.Test;
 
 class JfrDiagnosticsPanelFunctionalTest {
@@ -29,6 +30,14 @@ class JfrDiagnosticsPanelFunctionalTest {
   @Test
   void timerRefreshKeepsSelectedRowStable() throws Exception {
     JfrRuntimeEventsService service = mock(JfrRuntimeEventsService.class);
+    AtomicReference<PropertyChangeListener> stateListenerRef = new AtomicReference<>();
+    doAnswer(
+            invocation -> {
+              stateListenerRef.set(invocation.getArgument(0, PropertyChangeListener.class));
+              return null;
+            })
+        .when(service)
+        .addStateListener(org.mockito.ArgumentMatchers.any(PropertyChangeListener.class));
     AtomicInteger snapshotCalls = new AtomicInteger();
     when(service.statusSnapshot())
         .thenAnswer(
@@ -40,20 +49,21 @@ class JfrDiagnosticsPanelFunctionalTest {
         .thenReturn(List.of(event("jdk.CPULoad", "cpu"), event("jdk.RecordingStream", "stream")));
 
     Holder holder = new Holder();
-    try {
-      onEdt(
-          () -> {
-            holder.panel = new JfrDiagnosticsPanel(service);
-            holder.table = field(holder.panel, "table", JTable.class);
-            holder.table.setRowSelectionInterval(1, 1);
-            holder.initialSnapshotCalls = snapshotCalls.get();
-          });
+    onEdt(
+        () -> {
+          holder.panel = new JfrDiagnosticsPanel(service);
+          holder.table = field(holder.panel, "table", JTable.class);
+          holder.table.setRowSelectionInterval(1, 1);
+          holder.initialSnapshotCalls = snapshotCalls.get();
+        });
 
-      waitFor(() -> snapshotCalls.get() > holder.initialSnapshotCalls, Duration.ofSeconds(3));
-      onEdt(() -> assertEquals(1, holder.table.getSelectedRow()));
-    } finally {
-      onEdt(() -> stopRefreshTimer(holder.panel));
-    }
+    PropertyChangeListener listener = stateListenerRef.get();
+    assertTrue(listener != null, "panel should subscribe to JFR runtime state updates");
+    listener.propertyChange(
+        new PropertyChangeEvent(service, JfrRuntimeEventsService.PROP_STATE, null, null));
+
+    waitFor(() -> snapshotCalls.get() > holder.initialSnapshotCalls, Duration.ofSeconds(3));
+    onEdt(() -> assertEquals(1, holder.table.getSelectedRow()));
   }
 
   @Test
@@ -74,27 +84,22 @@ class JfrDiagnosticsPanelFunctionalTest {
         .requestImmediateRefresh();
 
     Holder holder = new Holder();
-    try {
-      onEdt(
-          () -> {
-            holder.panel = new JfrDiagnosticsPanel(service);
-            stopRefreshTimer(holder.panel);
-            holder.refreshButton = field(holder.panel, "refreshButton", JButton.class);
-            holder.cpuMachine = field(holder.panel, "cpuMachineValue", JTextField.class);
-            holder.heapUsed = field(holder.panel, "heapUsedValue", JTextField.class);
-          });
+    onEdt(
+        () -> {
+          holder.panel = new JfrDiagnosticsPanel(service);
+          holder.refreshButton = field(holder.panel, "refreshButton", JButton.class);
+          holder.cpuMachine = field(holder.panel, "cpuMachineValue", JTextField.class);
+          holder.heapUsed = field(holder.panel, "heapUsedValue", JTextField.class);
+        });
 
-      onEdt(() -> holder.refreshButton.doClick());
-      onEdt(
-          () -> {
-            assertEquals("50.0%", holder.cpuMachine.getText());
-            assertTrue(
-                holder.heapUsed.getText().endsWith("GB"), "heap values should be rendered in GB");
-          });
-      verify(service, times(1)).requestImmediateRefresh();
-    } finally {
-      onEdt(() -> stopRefreshTimer(holder.panel));
-    }
+    onEdt(() -> holder.refreshButton.doClick());
+    onEdt(
+        () -> {
+          assertEquals("50.0%", holder.cpuMachine.getText());
+          assertTrue(
+              holder.heapUsed.getText().endsWith("GB"), "heap values should be rendered in GB");
+        });
+    verify(service, times(1)).requestImmediateRefresh();
   }
 
   private static JfrRuntimeEventsService.StatusSnapshot snapshot(
@@ -127,12 +132,6 @@ class JfrDiagnosticsPanelFunctionalTest {
   private static RuntimeDiagnosticEvent event(String type, String summary) {
     return new RuntimeDiagnosticEvent(
         Instant.parse("2026-02-25T12:00:00Z"), "INFO", type, summary, "");
-  }
-
-  private static void stopRefreshTimer(JfrDiagnosticsPanel panel) throws Exception {
-    if (panel == null) return;
-    Timer timer = field(panel, "refreshTimer", Timer.class);
-    timer.stop();
   }
 
   private static <T> T field(Object target, String name, Class<T> type) throws Exception {

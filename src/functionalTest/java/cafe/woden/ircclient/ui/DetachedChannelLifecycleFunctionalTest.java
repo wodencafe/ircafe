@@ -11,7 +11,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.NotificationStore;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TargetRef;
@@ -30,6 +29,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
@@ -222,7 +222,8 @@ class DetachedChannelLifecycleFunctionalTest {
 
     ServerRegistry serverRegistry = new ServerRegistry(props, runtimeConfig);
     ServerCatalog serverCatalog = new ServerCatalog(serverRegistry, new EphemeralServerRegistry());
-    LogProperties logProps = new LogProperties(null, null, null, null, null, null, null);
+    LogProperties logProps =
+        new LogProperties(null, null, null, null, null, null, null, null, null);
 
     ServerTreeDockable serverTree =
         onEdtCall(
