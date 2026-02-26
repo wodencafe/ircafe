@@ -100,7 +100,8 @@ class AssertjSwingDiagnosticsServiceTest {
 
     verify(diagnostics).appendAssertjSwingError("EDT freeze detected (~2503ms).");
     verify(diagnostics, atLeastOnce())
-        .appendAssertjSwingStatus(argThat(msg -> msg != null && msg.startsWith("(edt-freeze-stack)")));
+        .appendAssertjSwingStatus(
+            argThat(msg -> msg != null && msg.startsWith("(edt-freeze-stack)")));
   }
 
   @Test
@@ -109,12 +110,16 @@ class AssertjSwingDiagnosticsServiceTest {
         new StackTraceElement[] {
           new StackTraceElement("cafe.woden.ircclient.ui.MainFrame", "show", "MainFrame.java", 42),
           new StackTraceElement(
-              "cafe.woden.ircclient.ui.ServerTreeDockable", "refresh", "ServerTreeDockable.java", 99),
+              "cafe.woden.ircclient.ui.ServerTreeDockable",
+              "refresh",
+              "ServerTreeDockable.java",
+              99),
           new StackTraceElement(
               "cafe.woden.ircclient.app.core.IrcMediator", "tick", "IrcMediator.java", 1234)
         };
 
-    String formatted = invokeFormatStackTraceForLog("AWT-EventQueue-0", Thread.State.BLOCKED, stack, 2);
+    String formatted =
+        invokeFormatStackTraceForLog("AWT-EventQueue-0", Thread.State.BLOCKED, stack, 2);
 
     assertTrue(formatted.contains("AWT-EventQueue-0 state=BLOCKED"));
     assertTrue(formatted.contains("at cafe.woden.ircclient.ui.MainFrame.show(MainFrame.java:42)"));

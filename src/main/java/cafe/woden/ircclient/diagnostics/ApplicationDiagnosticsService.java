@@ -231,7 +231,8 @@ public class ApplicationDiagnosticsService {
 
     String level = error ? "ERROR" : "INFO";
     String type = normalizeEventType(from);
-    RuntimeDiagnosticEvent event = new RuntimeDiagnosticEvent(Instant.now(), level, type, message, "");
+    RuntimeDiagnosticEvent event =
+        new RuntimeDiagnosticEvent(Instant.now(), level, type, message, "");
     buffer.addLast(event);
     while (buffer.size() > MAX_EVENTS_PER_BUFFER) {
       buffer.removeFirst();

@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.notifications;
 
-import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;

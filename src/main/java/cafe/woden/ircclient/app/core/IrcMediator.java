@@ -1400,8 +1400,7 @@ public class IrcMediator implements MediatorControlPort {
         String rendered = "You left " + ev.channel();
         String reason = Objects.toString(ev.reason(), "").trim();
         if (!reason.isEmpty()) rendered = rendered + " (" + reason + ")";
-        String detachedWarning =
-            reason.isEmpty() ? "Removed from channel by server." : reason;
+        String detachedWarning = reason.isEmpty() ? "Removed from channel by server." : reason;
 
         ensureTargetExists(st);
         ui.appendStatusAt(st, ev.at(), "(part)", rendered);

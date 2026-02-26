@@ -108,7 +108,8 @@ class JfrDiagnosticsPanelTest {
           assertEquals(1, table.getRowCount());
 
           rows.add(second);
-          listener.propertyChange(new PropertyChangeEvent(this, JfrRuntimeEventsService.PROP_STATE, null, 1L));
+          listener.propertyChange(
+              new PropertyChangeEvent(this, JfrRuntimeEventsService.PROP_STATE, null, 1L));
           assertEquals(2, table.getRowCount());
         });
 

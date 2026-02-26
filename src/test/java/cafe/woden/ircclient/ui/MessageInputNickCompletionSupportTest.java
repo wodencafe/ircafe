@@ -75,7 +75,10 @@ class MessageInputNickCompletionSupportTest {
     MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
     MessageInputNickCompletionSupport support =
         new MessageInputNickCompletionSupport(
-            new JPanel(), input, undoSupport, (token, maxSuggestions) -> List.of("almost", "almond"));
+            new JPanel(),
+            input,
+            undoSupport,
+            (token, maxSuggestions) -> List.of("almost", "almond"));
     support.setNickCompletions(List.of("alice", "alina"));
 
     input.setText("al");

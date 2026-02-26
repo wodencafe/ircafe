@@ -889,9 +889,7 @@ public class FilterCommandParser {
                 case "highlight", "hl", "emphasize", "emphasise" -> FilterAction.HIGHLIGHT;
                 default ->
                     throw new IllegalArgumentException(
-                        "Unknown action: '"
-                            + val
-                            + "' (use one of: hide, dim, highlight)");
+                        "Unknown action: '" + val + "' (use one of: hide, dim, highlight)");
               };
         }
         case "dir" -> {

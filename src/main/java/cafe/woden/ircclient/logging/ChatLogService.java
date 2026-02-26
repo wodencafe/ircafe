@@ -171,21 +171,11 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   private static int clamp(Integer raw, int fallback, int min, int max, String settingName) {
     int v = raw == null ? fallback : raw;
     if (v < min) {
-      log.warn(
-          "[ircafe] {}={} is below minimum {}; using {}",
-          settingName,
-          v,
-          min,
-          fallback);
+      log.warn("[ircafe] {}={} is below minimum {}; using {}", settingName, v, min, fallback);
       return fallback;
     }
     if (v > max) {
-      log.warn(
-          "[ircafe] {}={} is above maximum {}; using {}",
-          settingName,
-          v,
-          max,
-          fallback);
+      log.warn("[ircafe] {}={} is above maximum {}; using {}", settingName, v, max, fallback);
       return fallback;
     }
     return v;

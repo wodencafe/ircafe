@@ -1,7 +1,5 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
-import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
@@ -9,11 +7,13 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -5295,7 +5295,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       Graphics2D g2 = (Graphics2D) g.create();
       try {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        if (typingIndicatorSlotVisible && (detachedWarningIndicatorVisible || typingIndicatorAlpha > 0.01f)) {
+        if (typingIndicatorSlotVisible
+            && (detachedWarningIndicatorVisible || typingIndicatorAlpha > 0.01f)) {
           TreeTypingIndicatorStyle style = typingIndicatorStyle;
           int width = indicatorWidth(style);
           int height = indicatorHeight(style);

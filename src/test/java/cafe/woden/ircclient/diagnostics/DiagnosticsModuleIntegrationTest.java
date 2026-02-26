@@ -63,15 +63,17 @@ class DiagnosticsModuleIntegrationTest extends AbstractApplicationModuleIntegrat
     diagnosticsService.appendAssertjSwingError("freeze detected");
 
     verify(swingUiPort, atLeastOnce()).ensureTargetExists(assertjTarget);
-    verify(swingUiPort).appendStatus(eq(assertjTarget), eq("(assertj-swing)"), eq("watchdog ready"));
+    verify(swingUiPort)
+        .appendStatus(eq(assertjTarget), eq("(assertj-swing)"), eq("watchdog ready"));
     verify(swingUiPort)
         .appendError(eq(assertjTarget), eq("(assertj-swing)"), eq("freeze detected"));
   }
 
   @Test
   void publishedSpringEventsAppearInRuntimeEventFeed() {
-    applicationContext.publishEvent(new org.springframework.context.PayloadApplicationEvent<>(
-        this, new IllegalStateException("module-event-boom")));
+    applicationContext.publishEvent(
+        new org.springframework.context.PayloadApplicationEvent<>(
+            this, new IllegalStateException("module-event-boom")));
 
     assertTrue(
         springRuntimeEventsService.recentEvents(30).stream()

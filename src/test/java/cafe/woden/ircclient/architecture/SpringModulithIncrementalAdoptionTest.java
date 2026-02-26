@@ -23,8 +23,8 @@ import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.AssertjSwingDiagnosticsService;
-import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.diagnostics.JhiccupDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
@@ -61,10 +61,12 @@ class SpringModulithIncrementalAdoptionTest {
 
     ApplicationModule diagnosticsSupportModule = moduleFor(modules, RuntimeJfrService.class);
     assertThat(diagnosticsSupportModule).isNotEqualTo(appModule);
-    assertThat(moduleFor(modules, JfrRuntimeEventsService.class)).isEqualTo(diagnosticsSupportModule);
+    assertThat(moduleFor(modules, JfrRuntimeEventsService.class))
+        .isEqualTo(diagnosticsSupportModule);
     assertThat(moduleFor(modules, SpringRuntimeEventsService.class))
         .isEqualTo(diagnosticsSupportModule);
-    assertThat(moduleFor(modules, RuntimeDiagnosticEvent.class)).isEqualTo(diagnosticsSupportModule);
+    assertThat(moduleFor(modules, RuntimeDiagnosticEvent.class))
+        .isEqualTo(diagnosticsSupportModule);
     assertThat(moduleFor(modules, ApplicationDiagnosticsService.class))
         .isEqualTo(diagnosticsSupportModule);
     assertThat(moduleFor(modules, AssertjSwingDiagnosticsService.class))
@@ -127,7 +129,8 @@ class SpringModulithIncrementalAdoptionTest {
     assertNamedInterfaceContains(
         appModule, "commands", UserCommandAliasesBus.class, FilterCommand.class);
     assertNamedInterfaceContains(appModule, "outbound", LocalFilterCommandHandler.class);
-    assertNamedInterfaceContains(appModule, "state", ModeRoutingState.class, PendingInviteState.class);
+    assertNamedInterfaceContains(
+        appModule, "state", ModeRoutingState.class, PendingInviteState.class);
   }
 
   private static void assertNamedInterfaceContains(

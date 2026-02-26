@@ -1207,8 +1207,7 @@ public class PreferencesDialog {
           boolean memoryWarningToastEnabledV = memoryWarnings.toastEnabled.isSelected();
           boolean memoryWarningPushyEnabledV = memoryWarnings.pushyEnabled.isSelected();
           boolean memoryWarningSoundEnabledV = memoryWarnings.soundEnabled.isSelected();
-          String launchJavaCommandV =
-              Objects.toString(launchJvm.javaCommand.getText(), "").trim();
+          String launchJavaCommandV = Objects.toString(launchJvm.javaCommand.getText(), "").trim();
           if (launchJavaCommandV.isBlank()) launchJavaCommandV = "java";
           int launchXmsMiBV = ((Number) launchJvm.xmsMiB.getValue()).intValue();
           int launchXmxMiBV = ((Number) launchJvm.xmxMiB.getValue()).intValue();
@@ -3869,7 +3868,8 @@ public class PreferencesDialog {
           new SpellcheckPresetOption(SpellcheckSettings.COMPLETION_PRESET_CUSTOM, "Custom")
         };
     JComboBox<SpellcheckPresetOption> completionPreset = new JComboBox<>(presets);
-    completionPreset.setToolTipText("Controls how strongly TAB completion prefers word completions.");
+    completionPreset.setToolTipText(
+        "Controls how strongly TAB completion prefers word completions.");
     completionPreset.setRenderer(
         new DefaultListCellRenderer() {
           @Override
@@ -3946,9 +3946,7 @@ public class PreferencesDialog {
     JPanel customKnobsPanel =
         new JPanel(
             new MigLayout(
-                "insets 0, fillx, wrap 2, hidemode 3",
-                "[right]8[grow,fill]",
-                "[]2[]2[]2[]2[]"));
+                "insets 0, fillx, wrap 2, hidemode 3", "[right]8[grow,fill]", "[]2[]2[]2[]2[]"));
     customKnobsPanel.setOpaque(false);
     customKnobsPanel.add(new JLabel("Min prefix length"));
     customKnobsPanel.add(customMinPrefixCompletionTokenLength, "w 120!");
@@ -3990,9 +3988,7 @@ public class PreferencesDialog {
     JPanel panel =
         new JPanel(
             new MigLayout(
-                "insets 0, fillx, wrap 1, hidemode 3",
-                "[grow,fill]",
-                "[]2[]2[]4[]2[]2[]2[]2[]"));
+                "insets 0, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]2[]2[]4[]2[]2[]2[]2[]"));
     panel.setOpaque(false);
     panel.add(enabled, "growx, wmin 0, wrap");
     panel.add(underline, "growx, wmin 0, gapleft 18, wrap");
@@ -4070,8 +4066,7 @@ public class PreferencesDialog {
     return SpellcheckSettings.DEFAULT_LANGUAGE_TAG;
   }
 
-  private static String spellcheckCompletionPresetValue(
-      JComboBox<SpellcheckPresetOption> combo) {
+  private static String spellcheckCompletionPresetValue(JComboBox<SpellcheckPresetOption> combo) {
     Object selected = combo != null ? combo.getSelectedItem() : null;
     if (selected instanceof SpellcheckPresetOption o) {
       return SpellcheckSettings.normalizeCompletionPreset(o.id());
@@ -5716,7 +5711,8 @@ public class PreferencesDialog {
   }
 
   private JPanel buildStartupPanel(JCheckBox autoConnectOnStart, LaunchJvmControls launchJvm) {
-    JPanel form = new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]10[]"));
+    JPanel form =
+        new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]10[]"));
     form.add(tabTitle("Startup"), "growx, wrap");
 
     form.add(sectionTitle("On launch"), "growx, wrap");
@@ -5728,7 +5724,8 @@ public class PreferencesDialog {
 
     JScrollPane extraArgsScroll = new JScrollPane(launchJvm.extraArgs);
     extraArgsScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    extraArgsScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+    extraArgsScroll.setHorizontalScrollBarPolicy(
+        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
     JPanel jvm =
         captionPanel(
@@ -5777,32 +5774,61 @@ public class PreferencesDialog {
       TimestampControls timestamps,
       OutgoingColorControls outgoing) {
     JPanel form =
-        new JPanel(
-            new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[grow,fill]"));
+    form.add(tabTitle("Chat"), "growx, wmin 0, wrap");
 
-    form.add(tabTitle("Chat"), "span 2, growx, wmin 0, wrap");
-    form.add(sectionTitle("Display"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Presence events"), "aligny top");
-    form.add(presenceFolds, "alignx left");
-
-    form.add(new JLabel("CTCP requests"), "aligny top");
-    form.add(ctcpRequestsInActiveTarget, "alignx left");
-
-    form.add(new JLabel("Nick colors"), "aligny top");
-    form.add(nickColors.panel, "growx");
-
-    form.add(new JLabel("Timestamps"), "aligny top");
-    form.add(timestamps.panel, "growx");
-
-    form.add(sectionTitle("Input"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Spellcheck"), "aligny top");
-    form.add(spellcheck.panel, "growx");
-
-    form.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Outgoing messages"), "aligny top");
-    form.add(outgoing.panel, "growx");
-
+    JTabbedPane chatTabs = new JTabbedPane();
+    chatTabs.addTab(
+        "General",
+        padSubTab(
+            buildChatGeneralSubTab(
+                presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing)));
+    chatTabs.addTab("Spellcheck", padSubTab(buildChatSpellcheckSubTab(spellcheck)));
+    form.add(chatTabs, "grow, push, wmin 0");
     return form;
+  }
+
+  private JPanel buildChatGeneralSubTab(
+      JCheckBox presenceFolds,
+      JCheckBox ctcpRequestsInActiveTarget,
+      NickColorControls nickColors,
+      TimestampControls timestamps,
+      OutgoingColorControls outgoing) {
+    JPanel panel =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]10[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Display"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Presence events"), "aligny top");
+    panel.add(presenceFolds, "alignx left");
+
+    panel.add(new JLabel("CTCP requests"), "aligny top");
+    panel.add(ctcpRequestsInActiveTarget, "alignx left");
+
+    panel.add(new JLabel("Nick colors"), "aligny top");
+    panel.add(nickColors.panel, "growx, wmin 0");
+
+    panel.add(new JLabel("Timestamps"), "aligny top");
+    panel.add(timestamps.panel, "growx, wmin 0");
+
+    panel.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Outgoing messages"), "aligny top");
+    panel.add(outgoing.panel, "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildChatSpellcheckSubTab(SpellcheckControls spellcheck) {
+    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]"));
+    panel.setOpaque(false);
+    panel.add(sectionTitle("Input"), "growx, wmin 0, wrap");
+    panel.add(spellcheck.panel, "growx, wmin 0, wrap");
+    panel.add(
+        helpText("Spellcheck settings are scoped to the message input bar."),
+        "growx, wmin 0, wrap");
+    return panel;
   }
 
   private CtcpAutoReplyControls buildCtcpAutoReplyControls() {

@@ -1,13 +1,12 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.dcc.DccTransferStore;
-import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
-import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
-import cafe.woden.ircclient.notifications.NotificationStore;
-import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.dcc.DccTransferStore;
+import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
+import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -19,6 +18,7 @@ import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;

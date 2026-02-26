@@ -3195,8 +3195,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist chat logging writerBatchSize setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist chat logging writerBatchSize setting to '{}'", file, e);
     }
   }
 
@@ -3478,7 +3477,8 @@ public class RuntimeConfigStore {
   }
 
   public synchronized void rememberSpellcheckCustomSourceOrderWeight(int value) {
-    rememberSpellcheckInteger("spellcheckCustomSourceOrderWeight", Math.max(0, Math.min(20, value)));
+    rememberSpellcheckInteger(
+        "spellcheckCustomSourceOrderWeight", Math.max(0, Math.min(20, value)));
   }
 
   public synchronized void rememberSpellcheckLanguageTag(String languageTag) {

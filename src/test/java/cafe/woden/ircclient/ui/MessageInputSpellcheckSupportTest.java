@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import org.languagetool.Languages;
 import org.junit.jupiter.api.Test;
+import org.languagetool.Languages;
 
 class MessageInputSpellcheckSupportTest {
 
@@ -156,8 +156,55 @@ class MessageInputSpellcheckSupportTest {
     assertTrue(candidates.contains("norway"));
   }
 
+  @Test
+  void misspelledWordLookupReturnsHighlightedWordAtCaret() throws Exception {
+    JTextField input = new JTextField("teh cat");
+    MessageInputSpellcheckSupport support =
+        new MessageInputSpellcheckSupport(input, SpellcheckSettings.defaults());
+
+    Object range = newMisspellingRange(0, 3, "teh", List.of("the"));
+    invokeApplyMisspellingHighlights(support, 0L, "teh cat", List.of(range));
+
+    input.setCaretPosition(1);
+    var misspelled = support.misspelledWordAtCaret();
+    assertTrue(misspelled.isPresent());
+    assertEquals("teh", misspelled.get().token());
+    assertEquals(List.of("the"), misspelled.get().suggestions());
+
+    input.setCaretPosition(5);
+    assertTrue(support.misspelledWordAtCaret().isEmpty());
+  }
+
+  @Test
+  void misspelledWordLookupSkipsStaleSnapshotWhenInputChanges() throws Exception {
+    JTextField input = new JTextField("teh cat");
+    MessageInputSpellcheckSupport support =
+        new MessageInputSpellcheckSupport(input, SpellcheckSettings.defaults());
+
+    Object range = newMisspellingRange(0, 3, "teh", List.of("the"));
+    invokeApplyMisspellingHighlights(support, 0L, "teh cat", List.of(range));
+
+    input.setText("the cat");
+    input.setCaretPosition(1);
+    assertTrue(support.misspelledWordAtCaret().isEmpty());
+  }
+
+  @Test
+  void replaceMisspelledWordReplacesRangeWithSelectedSuggestion() {
+    JTextField input = new JTextField("teh cat");
+    MessageInputSpellcheckSupport support =
+        new MessageInputSpellcheckSupport(input, SpellcheckSettings.defaults());
+
+    MessageInputSpellcheckSupport.MisspelledWord misspelledWord =
+        new MessageInputSpellcheckSupport.MisspelledWord(0, 3, "teh", List.of("the"));
+
+    assertTrue(support.replaceMisspelledWord(misspelledWord, "the"));
+    assertEquals("the cat", input.getText());
+  }
+
   private static void invokeCreateChecker(String languageTag) throws Exception {
-    var method = MessageInputSpellcheckSupport.class.getDeclaredMethod("createChecker", String.class);
+    var method =
+        MessageInputSpellcheckSupport.class.getDeclaredMethod("createChecker", String.class);
     method.setAccessible(true);
     method.invoke(null, languageTag);
   }
@@ -202,6 +249,25 @@ class MessageInputSpellcheckSupportTest {
             "prefixCandidatesFromLexicon", String.class, String.class);
     method.setAccessible(true);
     return (List<String>) method.invoke(null, token, languageTag);
+  }
+
+  private static Object newMisspellingRange(
+      int start, int end, String token, List<String> suggestions) throws Exception {
+    Class<?> rangeClass =
+        Class.forName("cafe.woden.ircclient.ui.MessageInputSpellcheckSupport$MisspellingRange");
+    var ctor = rangeClass.getDeclaredConstructor(int.class, int.class, String.class, List.class);
+    ctor.setAccessible(true);
+    return ctor.newInstance(start, end, token, suggestions);
+  }
+
+  private static void invokeApplyMisspellingHighlights(
+      MessageInputSpellcheckSupport support, long requestId, String checkedText, List<?> ranges)
+      throws Exception {
+    var method =
+        MessageInputSpellcheckSupport.class.getDeclaredMethod(
+            "applyMisspellingHighlights", long.class, String.class, List.class);
+    method.setAccessible(true);
+    method.invoke(support, requestId, checkedText, ranges);
   }
 
   @SuppressWarnings("unchecked")

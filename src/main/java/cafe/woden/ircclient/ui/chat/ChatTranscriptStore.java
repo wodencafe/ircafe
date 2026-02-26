@@ -1814,8 +1814,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     Long epochMs = (meta != null) ? meta.epochMs() : null;
     SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
-    SimpleAttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
-    SimpleAttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+    SimpleAttributeSet fromStyle2 =
+        withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
+    SimpleAttributeSet msgStyle2 =
+        withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
 
     if (match != null) {
       tsStyle = withFilterMatch(tsStyle, match);
@@ -2533,8 +2535,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     Long epochMs = (meta != null) ? meta.epochMs() : null;
     SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
-    SimpleAttributeSet fromStyle2 = withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
-    SimpleAttributeSet msgStyle2 = withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
+    SimpleAttributeSet fromStyle2 =
+        withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
+    SimpleAttributeSet msgStyle2 =
+        withLineMeta(msgStyle != null ? msgStyle : styles.message(), meta);
 
     if (match != null) {
       tsStyle = withFilterMatch(tsStyle, match);

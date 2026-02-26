@@ -80,7 +80,8 @@ class NotificationsModuleIntegrationTest {
     assertNotNull(rulesBus);
     assertNotNull(notificationStore);
     assertEquals(IrcEventNotificationService.class, AopUtils.getTargetClass(ircEventNotifierPort));
-    assertEquals(NotificationRuleMatcher.class, AopUtils.getTargetClass(notificationRuleMatcherPort));
+    assertEquals(
+        NotificationRuleMatcher.class, AopUtils.getTargetClass(notificationRuleMatcherPort));
   }
 
   @Test

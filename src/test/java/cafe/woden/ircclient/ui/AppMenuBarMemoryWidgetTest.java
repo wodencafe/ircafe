@@ -7,8 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
+import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;

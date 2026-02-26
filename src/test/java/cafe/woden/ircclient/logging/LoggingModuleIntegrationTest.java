@@ -111,7 +111,8 @@ class LoggingModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
     assertEquals(
         LoggingTargetLogMaintenancePortAdapter.class,
         AopUtils.getTargetClass(targetLogMaintenancePort));
-    assertEquals(LoggingAppHistoryPortsAdapter.class, AopUtils.getTargetClass(targetChatHistoryPort));
+    assertEquals(
+        LoggingAppHistoryPortsAdapter.class, AopUtils.getTargetClass(targetChatHistoryPort));
     assertSame(targetChatHistoryPort, chatHistoryIngestionPort);
     assertSame(targetChatHistoryPort, chatHistoryIngestEventsPort);
     assertSame(targetChatHistoryPort, chatHistoryBatchEventsPort);

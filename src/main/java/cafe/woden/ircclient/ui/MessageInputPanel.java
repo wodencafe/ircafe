@@ -130,7 +130,7 @@ public class MessageInputPanel extends JPanel {
             input, historyStore, nickCompletionSupport.getAutoCompletion(), undoSupport, hooks);
 
     this.contextMenuSupport =
-        new MessageInputContextMenuSupport(input, undoSupport, historySupport);
+        new MessageInputContextMenuSupport(input, undoSupport, historySupport, spellcheckSupport);
 
     this.composeSupport = new MessageInputComposeSupport(this, this, input, send, hooks);
 

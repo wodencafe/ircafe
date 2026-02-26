@@ -87,6 +87,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   private final Highlighter.HighlightPainter misspellingPainter =
       new DefaultHighlighter.DefaultHighlightPainter(new Color(255, 110, 110, 72));
   private final AsyncLoadingCache<SuggestionCacheKey, List<String>> suggestionCache;
+  private volatile MisspellingSnapshot misspellingSnapshot = MisspellingSnapshot.empty();
 
   private volatile SpellcheckSettings settings;
   private volatile Map<String, String> knownNicksByLower = Map.of();
@@ -106,12 +107,10 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
             .executor(SPELLCHECK_EXECUTOR)
             .buildAsync(
                 (key, executor) ->
-                    CompletableFuture.supplyAsync(
-                        () -> computeSuggestions(key), executor));
+                    CompletableFuture.supplyAsync(() -> computeSuggestions(key), executor));
 
     // Warm up dictionaries once to avoid first-use jank on the EDT.
-    SPELLCHECK_EXECUTOR.execute(
-        () -> checkerForCurrentThreadOrNull(this.settings.languageTag()));
+    SPELLCHECK_EXECUTOR.execute(() -> checkerForCurrentThreadOrNull(this.settings.languageTag()));
   }
 
   void onSettingsApplied(SpellcheckSettings next) {
@@ -164,6 +163,70 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     clearMisspellingHighlights();
   }
 
+  Optional<MisspelledWord> misspelledWordAtCaret() {
+    return misspelledWordAt(input.getCaretPosition());
+  }
+
+  Optional<MisspelledWord> misspelledWordAt(int caretPosition) {
+    String currentText = input.getText();
+    if (currentText == null || currentText.isEmpty()) return Optional.empty();
+
+    MisspellingSnapshot snapshot = misspellingSnapshot;
+    if (snapshot.ranges().isEmpty()) return Optional.empty();
+    if (!Objects.equals(snapshot.text(), currentText)) return Optional.empty();
+
+    int caret = clamp(caretPosition, 0, currentText.length());
+    for (MisspellingRange range : snapshot.ranges()) {
+      if (!isCaretInsideMisspelling(caret, range.start(), range.end())) continue;
+      return Optional.of(
+          new MisspelledWord(range.start(), range.end(), range.token(), range.suggestions()));
+    }
+    return Optional.empty();
+  }
+
+  List<String> suggestionsForMisspelledWord(MisspelledWord misspelledWord, int maxSuggestions) {
+    if (misspelledWord == null || maxSuggestions <= 0) return List.of();
+
+    LinkedHashSet<String> merged =
+        new LinkedHashSet<>(filterAndLimit(misspelledWord.suggestions(), maxSuggestions));
+    if (merged.size() >= maxSuggestions) return List.copyOf(merged);
+
+    List<String> fallback = suggestWordsBlocking(misspelledWord.token(), maxSuggestions);
+    for (String suggestion : fallback) {
+      if (merged.size() >= maxSuggestions) break;
+      merged.add(suggestion);
+    }
+    return merged.isEmpty() ? List.of() : List.copyOf(merged);
+  }
+
+  boolean replaceMisspelledWord(MisspelledWord misspelledWord, String replacement) {
+    if (misspelledWord == null) return false;
+
+    String normalizedReplacement = normalizeToken(replacement);
+    if (normalizedReplacement.isBlank()) return false;
+
+    String currentText = input.getText();
+    if (currentText == null) return false;
+
+    int start = misspelledWord.start();
+    int end = misspelledWord.end();
+    if (start < 0 || end <= start || end > currentText.length()) return false;
+
+    String currentToken = currentText.substring(start, end);
+    if (!normalizeToken(currentToken).equalsIgnoreCase(normalizeToken(misspelledWord.token()))) {
+      return false;
+    }
+
+    try {
+      input.getDocument().remove(start, end - start);
+      input.getDocument().insertString(start, normalizedReplacement, null);
+      input.setCaretPosition(start + normalizedReplacement.length());
+      return true;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   @Override
   public List<String> suggestWords(String token, int maxSuggestions) {
     SpellcheckSettings snapshot = settings;
@@ -192,7 +255,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     if (completed.isPresent()) return filterAndLimit(completed.get(), maxSuggestions);
 
     if (SwingUtilities.isEventDispatchThread()) {
-      suggestionCache.get(key);
+      var unused = suggestionCache.get(key);
       return List.of();
     }
 
@@ -214,6 +277,40 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     } catch (RuntimeException ex) {
       suggestionCache.synchronous().invalidate(key);
       return Optional.of(List.of());
+    }
+  }
+
+  private List<String> suggestWordsBlocking(String token, int maxSuggestions) {
+    SpellcheckSettings snapshot = settings;
+    if (snapshot == null || !snapshot.enabled() || !snapshot.suggestOnTabEnabled())
+      return List.of();
+
+    String raw = token == null ? "" : token.trim();
+    if (raw.isEmpty()) return List.of();
+    if (raw.startsWith("#") || raw.startsWith("&") || raw.startsWith("@")) return List.of();
+    if (raw.startsWith("/") || raw.contains("://")) return List.of();
+
+    String candidate = normalizeToken(raw);
+    if (candidate.isEmpty() || maxSuggestions <= 0) return List.of();
+    if (isKnownNick(candidate)) return List.of();
+    if (isCustomDictionaryWord(candidate)) return List.of();
+    if (!isWordCandidate(candidate)) return List.of();
+    if (candidate.length() < 2) return List.of();
+
+    SuggestionCacheKey key =
+        new SuggestionCacheKey(
+            candidate.toLowerCase(Locale.ROOT),
+            SpellcheckSettings.normalizeLanguageTag(snapshot.languageTag()),
+            snapshot.completionProfile());
+    try {
+      return filterAndLimit(suggestionCache.get(key).join(), maxSuggestions);
+    } catch (RuntimeException ex) {
+      suggestionCache.synchronous().invalidate(key);
+      log.debug(
+          "[MessageInputSpellcheckSupport] blocking suggestion lookup failed for '{}'",
+          candidate,
+          ex);
+      return List.of();
     }
   }
 
@@ -331,16 +428,21 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     long req = spellcheckRequestSeq.incrementAndGet();
     Map<String, String> nickSnapshot = knownNicksByLower;
     String languageTag = snapshot.languageTag();
+    SpellcheckSettings.CompletionProfile completionProfile = snapshot.completionProfile();
 
     SPELLCHECK_EXECUTOR.execute(
         () -> {
-          List<MisspellingRange> ranges = findMisspellings(text, nickSnapshot, languageTag);
+          List<MisspellingRange> ranges =
+              findMisspellings(text, nickSnapshot, languageTag, completionProfile);
           SwingUtilities.invokeLater(() -> applyMisspellingHighlights(req, text, ranges));
         });
   }
 
   private List<MisspellingRange> findMisspellings(
-      String text, Map<String, String> nickSnapshot, String languageTag) {
+      String text,
+      Map<String, String> nickSnapshot,
+      String languageTag,
+      SpellcheckSettings.CompletionProfile completionProfile) {
     if (text == null || text.isBlank()) return List.of();
     try {
       JLanguageTool checker = checkerForCurrentThreadOrNull(languageTag);
@@ -364,7 +466,13 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
         if (token.isBlank()) continue;
         if (shouldIgnoreMisspellingToken(text, start, token, nickSnapshot)) continue;
 
-        out.add(new MisspellingRange(start, end));
+        out.add(
+            new MisspellingRange(
+                start,
+                end,
+                token,
+                collectMisspellingSuggestions(
+                    token, languageTag, completionProfile, match.getSuggestedReplacements())));
       }
       if (out.isEmpty()) return List.of();
       return List.copyOf(out);
@@ -382,14 +490,17 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     clearMisspellingHighlights();
     if (ranges == null || ranges.isEmpty()) return;
 
+    ArrayList<MisspellingRange> appliedRanges = new ArrayList<>(ranges.size());
     Highlighter highlighter = input.getHighlighter();
     for (MisspellingRange r : ranges) {
       try {
         Object tag = highlighter.addHighlight(r.start(), r.end(), misspellingPainter);
         misspellingHighlightTags.add(tag);
+        appliedRanges.add(r);
       } catch (Exception ignored) {
       }
     }
+    misspellingSnapshot = new MisspellingSnapshot(checkedText, List.copyOf(appliedRanges));
   }
 
   private void clearMisspellingHighlights() {
@@ -401,6 +512,45 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
       }
     }
     misspellingHighlightTags.clear();
+    misspellingSnapshot = MisspellingSnapshot.empty();
+  }
+
+  private List<String> collectMisspellingSuggestions(
+      String token,
+      String languageTag,
+      SpellcheckSettings.CompletionProfile completionProfile,
+      List<String> ruleSuggestions) {
+    if (token == null || token.isBlank()) return List.of();
+    String tokenLower = token.toLowerCase(Locale.ROOT);
+
+    LinkedHashSet<String> out = new LinkedHashSet<>();
+    if (ruleSuggestions != null && !ruleSuggestions.isEmpty()) {
+      for (String suggestion : ruleSuggestions) {
+        String cleaned = normalizeToken(suggestion);
+        if (cleaned.isEmpty()) continue;
+        if (cleaned.equalsIgnoreCase(token)) continue;
+        if (!isWordCandidate(cleaned)) continue;
+        if (isKnownNick(cleaned)) continue;
+        if (isCustomDictionaryWord(cleaned)) continue;
+        out.add(cleaned);
+        if (out.size() >= MAX_SUGGESTION_POOL) break;
+      }
+    }
+
+    if (out.size() < MAX_TOTAL_SUGGESTION_POOL) {
+      for (String completion :
+          prefixCandidatesFromLexicon(tokenLower, languageTag, completionProfile)) {
+        if (completion.equalsIgnoreCase(token)) continue;
+        if (isKnownNick(completion)) continue;
+        if (isCustomDictionaryWord(completion)) continue;
+        out.add(completion);
+        if (out.size() >= MAX_TOTAL_SUGGESTION_POOL) break;
+      }
+    }
+
+    if (out.isEmpty()) return List.of();
+    ArrayList<String> ordered = new ArrayList<>(out);
+    return filterAndLimit(ordered, MAX_TOTAL_SUGGESTION_POOL);
   }
 
   private boolean shouldIgnoreMisspellingToken(
@@ -543,7 +693,8 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     return i;
   }
 
-  private static boolean isPlausibleSuggestion(String tokenLower, String candidateLower, int distance) {
+  private static boolean isPlausibleSuggestion(
+      String tokenLower, String candidateLower, int distance) {
     return isPlausibleSuggestion(tokenLower, candidateLower, distance, DEFAULT_COMPLETION_PROFILE);
   }
 
@@ -571,15 +722,12 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   }
 
   private int suggestionScore(
-      String tokenLower,
-      String candidateLower,
-      int distance,
-      int localFrequency,
-      int sourceRank) {
+      String tokenLower, String candidateLower, int distance, int localFrequency, int sourceRank) {
     SpellcheckSettings snapshot = settings;
     SpellcheckSettings.CompletionProfile profile =
         snapshot != null ? snapshot.completionProfile() : DEFAULT_COMPLETION_PROFILE;
-    return suggestionScore(tokenLower, candidateLower, distance, localFrequency, sourceRank, profile);
+    return suggestionScore(
+        tokenLower, candidateLower, distance, localFrequency, sourceRank, profile);
   }
 
   private int suggestionScore(
@@ -636,9 +784,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   }
 
   private static List<String> prefixCandidatesFromLexicon(
-      String tokenLower,
-      String languageTag,
-      SpellcheckSettings.CompletionProfile profile) {
+      String tokenLower, String languageTag, SpellcheckSettings.CompletionProfile profile) {
     SpellcheckSettings.CompletionProfile effective =
         profile != null ? profile : DEFAULT_COMPLETION_PROFILE;
     if (tokenLower == null || tokenLower.length() < effective.minPrefixCompletionTokenLength()) {
@@ -647,7 +793,8 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     String normalizedLanguageTag = SpellcheckSettings.normalizeLanguageTag(languageTag);
     List<String> priorityWords =
         PREFIX_PRIORITY_BY_LANG.computeIfAbsent(
-            normalizedLanguageTag, MessageInputSpellcheckSupport::loadPriorityPrefixWordsForLanguage);
+            normalizedLanguageTag,
+            MessageInputSpellcheckSupport::loadPriorityPrefixWordsForLanguage);
     List<String> lexicon =
         PREFIX_LEXICON_BY_LANG.computeIfAbsent(
             normalizedLanguageTag, MessageInputSpellcheckSupport::loadPrefixLexiconForLanguage);
@@ -678,7 +825,8 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   }
 
   private static List<String> loadPriorityPrefixWordsForLanguage(String normalizedLanguageTag) {
-    if (normalizedLanguageTag == null || !normalizedLanguageTag.toLowerCase(Locale.ROOT).startsWith("en")) {
+    if (normalizedLanguageTag == null
+        || !normalizedLanguageTag.toLowerCase(Locale.ROOT).startsWith("en")) {
       return List.of();
     }
     LinkedHashSet<String> out = new LinkedHashSet<>();
@@ -688,7 +836,8 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   }
 
   private static List<String> loadPrefixLexiconForLanguage(String normalizedLanguageTag) {
-    if (normalizedLanguageTag == null || !normalizedLanguageTag.toLowerCase(Locale.ROOT).startsWith("en")) {
+    if (normalizedLanguageTag == null
+        || !normalizedLanguageTag.toLowerCase(Locale.ROOT).startsWith("en")) {
       return List.of();
     }
 
@@ -847,10 +996,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
         int deletion = dp[i - 1][j] + 1;
         int substitution = dp[i - 1][j - 1] + cost;
         int value = Math.min(Math.min(insertion, deletion), substitution);
-        if (i > 1
-            && j > 1
-            && ca == b.charAt(j - 2)
-            && a.charAt(i - 2) == b.charAt(j - 1)) {
+        if (i > 1 && j > 1 && ca == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
           value = Math.min(value, dp[i - 2][j - 2] + 1);
         }
         dp[i][j] = value;
@@ -865,6 +1011,10 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
 
   private static int clamp(int v, int min, int max) {
     return Math.max(min, Math.min(max, v));
+  }
+
+  private static boolean isCaretInsideMisspelling(int caret, int start, int end) {
+    return caret >= start && caret <= end;
   }
 
   private static boolean isSpellingRule(RuleMatch match) {
@@ -927,11 +1077,36 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     return new JLanguageTool(lang);
   }
 
-  private record MisspellingRange(int start, int end) {}
+  static record MisspelledWord(int start, int end, String token, List<String> suggestions) {
+    MisspelledWord {
+      token = token == null ? "" : token;
+      suggestions = suggestions == null ? List.of() : List.copyOf(suggestions);
+    }
+  }
+
+  private record MisspellingRange(int start, int end, String token, List<String> suggestions) {
+    MisspellingRange {
+      token = token == null ? "" : token;
+      suggestions = suggestions == null ? List.of() : List.copyOf(suggestions);
+    }
+  }
+
+  private record MisspellingSnapshot(String text, List<MisspellingRange> ranges) {
+    private static MisspellingSnapshot empty() {
+      return new MisspellingSnapshot("", List.of());
+    }
+
+    MisspellingSnapshot {
+      text = text == null ? "" : text;
+      ranges = ranges == null ? List.of() : List.copyOf(ranges);
+    }
+  }
 
   private record ScoredSuggestion(
       String word, int distance, int frequency, int score, int sourceRank) {}
 
   private record SuggestionCacheKey(
-      String tokenLower, String languageTag, SpellcheckSettings.CompletionProfile completionProfile) {}
+      String tokenLower,
+      String languageTag,
+      SpellcheckSettings.CompletionProfile completionProfile) {}
 }

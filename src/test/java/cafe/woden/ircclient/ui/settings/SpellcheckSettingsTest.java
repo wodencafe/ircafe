@@ -12,8 +12,7 @@ class SpellcheckSettingsTest {
     SpellcheckSettings settings = SpellcheckSettings.defaults();
     SpellcheckSettings.CompletionProfile profile = settings.completionProfile();
 
-    assertEquals(
-        SpellcheckSettings.COMPLETION_PRESET_ANDROID_LIKE, settings.completionPreset());
+    assertEquals(SpellcheckSettings.COMPLETION_PRESET_ANDROID_LIKE, settings.completionPreset());
     assertEquals(
         SpellcheckSettings.DEFAULT_CUSTOM_MIN_PREFIX_COMPLETION_TOKEN_LENGTH,
         profile.minPrefixCompletionTokenLength());

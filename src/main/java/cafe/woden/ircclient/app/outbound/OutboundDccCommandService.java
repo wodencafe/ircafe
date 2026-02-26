@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;

@@ -9,7 +9,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javax.swing.*;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
@@ -28,16 +30,19 @@ public final class MessageInputContextMenuSupport {
   private final JTextField input;
   private final MessageInputUndoSupport undoSupport;
   private final MessageInputHistorySupport historySupport;
+  private final MessageInputSpellcheckSupport spellcheckSupport;
 
   private boolean installed;
 
   public MessageInputContextMenuSupport(
       JTextField input,
       MessageInputUndoSupport undoSupport,
-      MessageInputHistorySupport historySupport) {
+      MessageInputHistorySupport historySupport,
+      MessageInputSpellcheckSupport spellcheckSupport) {
     this.input = Objects.requireNonNull(input, "input");
     this.undoSupport = Objects.requireNonNull(undoSupport, "undoSupport");
     this.historySupport = Objects.requireNonNull(historySupport, "historySupport");
+    this.spellcheckSupport = Objects.requireNonNull(spellcheckSupport, "spellcheckSupport");
   }
 
   public void install() {
@@ -113,6 +118,14 @@ public final class MessageInputContextMenuSupport {
           input.selectAll();
         });
 
+    final JMenuItem checkSpellingItem = new JMenuItem("Check spelling");
+    final JSeparator checkSpellingBeforeSeparator = new JPopupMenu.Separator();
+    final JSeparator checkSpellingAfterSeparator = new JPopupMenu.Separator();
+    checkSpellingItem.addActionListener(e -> showCheckSpellingDialogAtCaret());
+    checkSpellingItem.setVisible(false);
+    checkSpellingBeforeSeparator.setVisible(false);
+    checkSpellingAfterSeparator.setVisible(false);
+
     final Action historyPrevAction =
         new AbstractAction("Previous Command") {
           @Override
@@ -168,6 +181,9 @@ public final class MessageInputContextMenuSupport {
     menu.add(clearItem);
     menu.addSeparator();
     menu.add(selectAllItem);
+    menu.add(checkSpellingBeforeSeparator);
+    menu.add(checkSpellingItem);
+    menu.add(checkSpellingAfterSeparator);
     menu.addSeparator();
     menu.add(historyMenu);
 
@@ -191,6 +207,14 @@ public final class MessageInputContextMenuSupport {
           deleteItem.setEnabled(editable && (hasSelection || caret < len));
           clearItem.setEnabled(editable && len > 0);
           selectAllItem.setEnabled(enabled && len > 0 && !(start == 0 && end == len));
+
+          Optional<MessageInputSpellcheckSupport.MisspelledWord> misspelledWordAtCaret =
+              editable ? spellcheckSupport.misspelledWordAtCaret() : Optional.empty();
+          boolean showCheckSpelling = misspelledWordAtCaret.isPresent();
+          checkSpellingBeforeSeparator.setVisible(showCheckSpelling);
+          checkSpellingItem.setVisible(showCheckSpelling);
+          checkSpellingItem.setEnabled(showCheckSpelling);
+          checkSpellingAfterSeparator.setVisible(showCheckSpelling);
 
           // History navigation
           MessageInputHistorySupport.MenuState hs = historySupport.menuState(editable);
@@ -255,5 +279,66 @@ public final class MessageInputContextMenuSupport {
     } catch (Exception ignored) {
       return false;
     }
+  }
+
+  private void showCheckSpellingDialogAtCaret() {
+    if (!input.isEditable() || !input.isEnabled()) return;
+
+    Optional<MessageInputSpellcheckSupport.MisspelledWord> maybeMisspelled =
+        spellcheckSupport.misspelledWordAtCaret();
+    if (maybeMisspelled.isEmpty()) return;
+    MessageInputSpellcheckSupport.MisspelledWord misspelled = maybeMisspelled.get();
+
+    List<String> suggestions = spellcheckSupport.suggestionsForMisspelledWord(misspelled, 12);
+    Optional<String> selectedSuggestion =
+        showSuggestionSelectionDialog(misspelled.token(), suggestions);
+    if (selectedSuggestion.isEmpty()) return;
+
+    spellcheckSupport.replaceMisspelledWord(misspelled, selectedSuggestion.get());
+  }
+
+  private Optional<String> showSuggestionSelectionDialog(String token, List<String> suggestions) {
+    DefaultListModel<String> model = new DefaultListModel<>();
+    if (suggestions != null) {
+      for (String suggestion : suggestions) {
+        if (suggestion == null || suggestion.isBlank()) continue;
+        model.addElement(suggestion);
+      }
+    }
+
+    JList<String> suggestionList = new JList<>(model);
+    suggestionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    suggestionList.setVisibleRowCount(Math.min(8, Math.max(4, model.getSize())));
+    if (!model.isEmpty()) {
+      suggestionList.setSelectedIndex(0);
+    }
+
+    JScrollPane scrollPane = new JScrollPane(suggestionList);
+    int rowCount = suggestionList.getVisibleRowCount();
+    scrollPane.setPreferredSize(new Dimension(280, Math.max(96, rowCount * 22)));
+
+    JPanel content = new JPanel(new BorderLayout(0, 8));
+    content.add(new JLabel("Suggestions for \"" + token + "\""), BorderLayout.NORTH);
+    content.add(scrollPane, BorderLayout.CENTER);
+    if (model.isEmpty()) {
+      content.add(new JLabel("No suggestions available."), BorderLayout.SOUTH);
+    }
+
+    Object[] options = {"Select", "Cancel"};
+    int option =
+        JOptionPane.showOptionDialog(
+            SwingUtilities.getWindowAncestor(input),
+            content,
+            "Check spelling",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            options,
+            options[0]);
+    if (option != JOptionPane.OK_OPTION) return Optional.empty();
+
+    String selectedValue = suggestionList.getSelectedValue();
+    if (selectedValue == null || selectedValue.isBlank()) return Optional.empty();
+    return Optional.of(selectedValue);
   }
 }

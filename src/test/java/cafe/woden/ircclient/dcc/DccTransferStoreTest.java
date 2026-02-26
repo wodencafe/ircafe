@@ -86,7 +86,8 @@ class DccTransferStoreTest {
     List<DccTransferStore.Entry> entries = store.listAll("libera");
     assertEquals(50, entries.size());
 
-    Set<String> ids = entries.stream().map(DccTransferStore.Entry::entryId).collect(Collectors.toSet());
+    Set<String> ids =
+        entries.stream().map(DccTransferStore.Entry::entryId).collect(Collectors.toSet());
     for (int i = 0; i < 5; i++) {
       assertTrue(!ids.contains("id-" + i), "oldest entries should be trimmed first");
     }

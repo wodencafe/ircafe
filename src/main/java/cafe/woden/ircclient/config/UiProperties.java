@@ -768,7 +768,8 @@ public record UiProperties(
     if (spellcheckCustomSourceOrderWeight == null) {
       spellcheckCustomSourceOrderWeight = 6;
     }
-    spellcheckCustomSourceOrderWeight = Math.max(0, Math.min(20, spellcheckCustomSourceOrderWeight));
+    spellcheckCustomSourceOrderWeight =
+        Math.max(0, Math.min(20, spellcheckCustomSourceOrderWeight));
 
     // CTCP request routing default: show in the currently active target.
     if (ctcpRequestsInActiveTargetEnabled == null) {

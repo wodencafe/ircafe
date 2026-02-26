@@ -30,7 +30,8 @@ class RuntimeConfigStoreLaunchJvmSettingsTest {
     assertEquals(768, store.readLaunchJvmXmsMiB(0));
     assertEquals(4096, store.readLaunchJvmXmxMiB(0));
     assertEquals("zgc", store.readLaunchJvmGc(""));
-    assertEquals(List.of("-XX:+AlwaysPreTouch", "-Dsample=true"), store.readLaunchJvmArgs(List.of()));
+    assertEquals(
+        List.of("-XX:+AlwaysPreTouch", "-Dsample=true"), store.readLaunchJvmArgs(List.of()));
 
     String yaml = Files.readString(cfg);
     assertTrue(yaml.contains("launch"));

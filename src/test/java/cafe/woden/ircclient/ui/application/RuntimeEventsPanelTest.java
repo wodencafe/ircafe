@@ -30,7 +30,8 @@ class RuntimeEventsPanelTest {
     onEdt(
         () -> {
           RuntimeEventsPanel panel =
-              new RuntimeEventsPanel("Spring Events", "events", rowsRef::get, null, "spring-events");
+              new RuntimeEventsPanel(
+                  "Spring Events", "events", rowsRef::get, null, "spring-events");
           stopRefreshTimer(panel);
           JTable table = field(panel, "table", JTable.class);
           table.setRowSelectionInterval(1, 1);
@@ -104,7 +105,8 @@ class RuntimeEventsPanelTest {
   }
 
   private static RuntimeDiagnosticEvent event(String level, String summary) {
-    return new RuntimeDiagnosticEvent(Instant.parse("2026-02-26T12:00:00Z"), level, "Event", summary, "");
+    return new RuntimeDiagnosticEvent(
+        Instant.parse("2026-02-26T12:00:00Z"), level, "Event", summary, "");
   }
 
   private static void stopRefreshTimer(RuntimeEventsPanel panel) throws Exception {

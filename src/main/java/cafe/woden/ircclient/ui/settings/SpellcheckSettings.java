@@ -130,8 +130,7 @@ public record SpellcheckSettings(
   }
 
   public static int normalizeCustomMaxPrefixCompletionExtraChars(int raw) {
-    return clamp(
-        raw, MAX_PREFIX_COMPLETION_EXTRA_CHARS_MIN, MAX_PREFIX_COMPLETION_EXTRA_CHARS_MAX);
+    return clamp(raw, MAX_PREFIX_COMPLETION_EXTRA_CHARS_MIN, MAX_PREFIX_COMPLETION_EXTRA_CHARS_MAX);
   }
 
   public static int normalizeCustomMaxPrefixLexiconCandidates(int raw) {

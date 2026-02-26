@@ -145,8 +145,7 @@ public final class RuntimeEventsPanel extends JPanel {
     configureActionButton(clearButton, "trash", "Clear all rows", "Clear all rows");
     configureActionButton(exportButton, "copy", "Export rows as CSV", "Export rows as CSV");
 
-    JPanel controls =
-        new JPanel(new MigLayout("insets 6 8 8 8, fillx", "[]4[]4[]4[]push[]", "[]"));
+    JPanel controls = new JPanel(new MigLayout("insets 6 8 8 8, fillx", "[]4[]4[]4[]push[]", "[]"));
     controls.setOpaque(false);
     refreshButton.addActionListener(e -> refreshNow());
     detailsButton.addActionListener(e -> showDetailsForSelectedRow());
