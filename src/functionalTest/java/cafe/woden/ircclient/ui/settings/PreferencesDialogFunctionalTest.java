@@ -251,6 +251,32 @@ class PreferencesDialogFunctionalTest {
   }
 
   @Test
+  void ircv3PanelIncludesUnreadBadgeSizeControl() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    UiSettings current = testUiSettings();
+
+    JCheckBox send = (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendCheckbox", current);
+    JCheckBox receive = (JCheckBox) invoke(dialog, "buildTypingIndicatorsReceiveCheckbox", current);
+    @SuppressWarnings("unchecked")
+    JComboBox<Object> style =
+        (JComboBox<Object>) invoke(dialog, "buildTypingTreeIndicatorStyleCombo", current);
+    JSpinner badgeScale = new JSpinner(new javax.swing.SpinnerNumberModel(100, 50, 150, 5));
+    Object capabilities = invoke(dialog, "buildIrcv3CapabilitiesControls");
+
+    JPanel panel =
+        (JPanel)
+            invoke(
+                dialog,
+                "buildIrcv3CapabilitiesPanel",
+                send,
+                receive,
+                style,
+                badgeScale,
+                capabilities);
+    assertNotNull(findLabel(panel, "Unread badge size"));
+  }
+
+  @Test
   void notificationRuleCloseablesDoNotShutdownSharedExecutors() throws Exception {
     ExecutorService pushyExec = mock(ExecutorService.class);
     ExecutorService rulesExec = mock(ExecutorService.class);

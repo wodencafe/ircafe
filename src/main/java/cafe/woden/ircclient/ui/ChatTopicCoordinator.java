@@ -148,12 +148,14 @@ final class ChatTopicCoordinator {
     if (activeTarget == null || !activeTarget.isChannel()) {
       topicPanel.setTopic("", "");
       topicPanel.setNotificationState(false, 0);
+      topicPanel.setNotificationTooltip("No recent channel notifications.");
       hideTopicPanel();
       return;
     }
 
     NotificationSummary summary = summarizeChannelNotifications(activeTarget);
     topicPanel.setNotificationState(true, summary.totalCount());
+    topicPanel.setNotificationTooltip(buildNotificationTooltip(summary));
 
     String topic = Objects.toString(topicByTarget.getOrDefault(activeTarget, ""), "").trim();
     topicPanel.setTopic(activeTarget.target(), topic);
@@ -222,7 +224,7 @@ final class ChatTopicCoordinator {
         e -> targetSelector.accept(TargetRef.notifications(target.serverId())));
     menu.add(openNotifications);
 
-    JMenuItem clearChannel = new JMenuItem("Clear this channel");
+    JMenuItem clearChannel = new JMenuItem("Clear");
     clearChannel.setEnabled(summary.totalCount() > 0);
     clearChannel.addActionListener(
         e -> {
@@ -316,6 +318,32 @@ final class ChatTopicCoordinator {
     return line;
   }
 
+  private static String buildNotificationTooltip(NotificationSummary summary) {
+    if (summary == null || summary.totalCount() <= 0) {
+      return "No recent channel notifications.";
+    }
+    StringBuilder html = new StringBuilder(512);
+    html.append("<html><b>Recent channel notifications (")
+        .append(summary.totalCount())
+        .append(")</b>");
+    for (NotificationEntry entry : summary.previews()) {
+      String line = escapeHtml(formatPreviewLine(entry));
+      if (line.isBlank()) continue;
+      html.append("<br>").append(line);
+    }
+    if (summary.totalCount() > summary.previews().size()) {
+      html.append("<br>…");
+    }
+    html.append("</html>");
+    return html.toString();
+  }
+
+  private static String escapeHtml(String raw) {
+    String s = Objects.toString(raw, "");
+    if (s.isEmpty()) return "";
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
   private record NotificationEntry(Instant at, String title, String detail) {}
 
   private record NotificationSummary(int totalCount, List<NotificationEntry> previews) {
@@ -352,9 +380,8 @@ final class ChatTopicCoordinator {
       notificationsButton.setOpaque(false);
       notificationsButton.setFocusable(false);
       notificationsButton.setFocusPainted(false);
-      notificationsButton.setMargin(new java.awt.Insets(1, 8, 1, 8));
-      notificationsButton.setHorizontalTextPosition(javax.swing.SwingConstants.RIGHT);
-      notificationsButton.setIconTextGap(4);
+      notificationsButton.setMargin(new java.awt.Insets(1, 4, 1, 4));
+      notificationsButton.setPreferredSize(new Dimension(26, 20));
       notificationsButton.setToolTipText("No recent channel notifications.");
       notificationsButton.addActionListener(
           e -> {
@@ -396,8 +423,7 @@ final class ChatTopicCoordinator {
       }
       if (count > 0) {
         notificationsButton.setIcon(SvgIcons.action("lightbulb", 14));
-        notificationsButton.setText(Integer.toString(count));
-        notificationsButton.setToolTipText("Show recent channel notifications (" + count + ").");
+        notificationsButton.setText("");
         notificationsButton.setOpaque(true);
         notificationsButton.setContentAreaFilled(true);
         notificationsButton.setBorderPainted(true);
@@ -405,12 +431,16 @@ final class ChatTopicCoordinator {
       } else {
         notificationsButton.setIcon(SvgIcons.quiet("lightbulb", 14));
         notificationsButton.setText("");
-        notificationsButton.setToolTipText("No recent channel notifications.");
         notificationsButton.setOpaque(false);
         notificationsButton.setContentAreaFilled(false);
         notificationsButton.setBorderPainted(false);
         notificationsButton.setBackground(null);
       }
+    }
+
+    void setNotificationTooltip(String tooltip) {
+      notificationsButton.setToolTipText(
+          Objects.toString(tooltip, "No recent channel notifications."));
     }
 
     JButton notificationsButton() {

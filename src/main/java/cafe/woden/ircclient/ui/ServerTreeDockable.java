@@ -153,6 +153,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final int TREE_BADGE_MIN_HEIGHT = 12;
   private static final int TREE_BADGE_GAP = 3;
   private static final int TREE_BADGE_ARC = 8;
+  private static final int TREE_BADGE_SCALE_PERCENT_DEFAULT = 100;
   private static final Color TREE_UNREAD_BADGE_BG = new Color(31, 111, 255);
   private static final Color TREE_HIGHLIGHT_BADGE_BG = new Color(205, 54, 54);
   private static final Color TREE_BADGE_FG = Color.WHITE;
@@ -326,6 +327,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private PropertyChangeListener settingsListener;
   private PropertyChangeListener jfrStateListener;
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
+  private volatile int unreadBadgeScalePercent = TREE_BADGE_SCALE_PERCENT_DEFAULT;
   private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private volatile ServerBuiltInNodesVisibility defaultBuiltInNodesVisibility =
@@ -389,6 +391,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverDialogs = serverDialogs;
     loadPersistedBuiltInNodesVisibility();
     syncTypingIndicatorStyleFromSettings();
+    syncUnreadBadgeScaleFromRuntimeConfig();
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -555,6 +558,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           evt -> {
             if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
             syncTypingIndicatorStyleFromSettings();
+            syncUnreadBadgeScaleFromRuntimeConfig();
             SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange);
           };
       this.settingsBus.addListener(settingsListener);
@@ -5004,6 +5008,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.typingIndicatorStyle = TreeTypingIndicatorStyle.from(configured);
   }
 
+  private void syncUnreadBadgeScaleFromRuntimeConfig() {
+    int next = TREE_BADGE_SCALE_PERCENT_DEFAULT;
+    try {
+      if (runtimeConfig != null) {
+        next = runtimeConfig.readServerTreeUnreadBadgeScalePercent(TREE_BADGE_SCALE_PERCENT_DEFAULT);
+      }
+    } catch (Exception ignored) {
+      next = TREE_BADGE_SCALE_PERCENT_DEFAULT;
+    }
+    if (next < 50) next = 50;
+    if (next > 150) next = 150;
+    unreadBadgeScalePercent = next;
+  }
+
   private enum TreeTypingIndicatorStyle {
     DOTS,
     KEYBOARD,
@@ -5469,33 +5487,34 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     private int badgesPreferredWidth() {
       if (unreadBadgeCount <= 0 && highlightBadgeCount <= 0) return 0;
-      FontMetrics fm = getFontMetrics(getFont());
+      FontMetrics fm = getFontMetrics(badgeFont());
       if (fm == null) return 0;
       int width = badgeClusterWidth(fm);
-      return width > 0 ? (width + TREE_BADGE_GAP) : 0;
+      return width > 0 ? (width + scaledBadgeGap()) : 0;
     }
 
     private void paintUnreadBadges(Graphics2D g2) {
       if (unreadBadgeCount <= 0 && highlightBadgeCount <= 0) return;
-      FontMetrics fm = g2.getFontMetrics(getFont());
+      Font badgeFont = badgeFont();
+      FontMetrics fm = g2.getFontMetrics(badgeFont);
       if (fm == null) return;
 
       int badgeHeight =
-          Math.max(TREE_BADGE_MIN_HEIGHT, fm.getAscent() + (TREE_BADGE_VERTICAL_PADDING * 2));
+          Math.max(scaledBadgeMinHeight(), fm.getAscent() + (scaledBadgeVerticalPadding() * 2));
       int x = badgeStartX(fm);
       int y = Math.max(0, (getHeight() - badgeHeight) / 2);
 
       if (unreadBadgeCount > 0) {
         String text = Integer.toString(unreadBadgeCount);
         int w = badgeWidthForText(fm, text);
-        paintBadge(g2, x, y, w, badgeHeight, TREE_UNREAD_BADGE_BG, text);
-        x += w + TREE_BADGE_GAP;
+        paintBadge(g2, x, y, w, badgeHeight, TREE_UNREAD_BADGE_BG, text, fm, badgeFont);
+        x += w + scaledBadgeGap();
       }
 
       if (highlightBadgeCount > 0) {
         String text = Integer.toString(highlightBadgeCount);
         int w = badgeWidthForText(fm, text);
-        paintBadge(g2, x, y, w, badgeHeight, TREE_HIGHLIGHT_BADGE_BG, text);
+        paintBadge(g2, x, y, w, badgeHeight, TREE_HIGHLIGHT_BADGE_BG, text, fm, badgeFont);
       }
     }
 
@@ -5507,7 +5526,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       if (icon != null) x += icon.getIconWidth() + Math.max(0, getIconTextGap());
       String text = Objects.toString(getText(), "");
       if (!text.isEmpty()) x += fm.stringWidth(text);
-      x += TREE_BADGE_GAP;
+      x += scaledBadgeGap();
       return x;
     }
 
@@ -5517,29 +5536,76 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         width += badgeWidthForText(fm, Integer.toString(unreadBadgeCount));
       }
       if (highlightBadgeCount > 0) {
-        if (width > 0) width += TREE_BADGE_GAP;
+        if (width > 0) width += scaledBadgeGap();
         width += badgeWidthForText(fm, Integer.toString(highlightBadgeCount));
       }
       return width;
     }
 
-    private static int badgeWidthForText(FontMetrics fm, String text) {
+    private int badgeWidthForText(FontMetrics fm, String text) {
       int t = fm == null ? 0 : fm.stringWidth(Objects.toString(text, ""));
-      return Math.max(TREE_BADGE_MIN_WIDTH, t + (TREE_BADGE_HORIZONTAL_PADDING * 2));
+      return Math.max(scaledBadgeMinWidth(), t + (scaledBadgeHorizontalPadding() * 2));
     }
 
     private void paintBadge(
-        Graphics2D g2, int x, int y, int width, int height, Color bg, String text) {
+        Graphics2D g2,
+        int x,
+        int y,
+        int width,
+        int height,
+        Color bg,
+        String text,
+        FontMetrics fm,
+        Font badgeFont) {
       if (g2 == null) return;
       g2.setComposite(AlphaComposite.SrcOver);
       g2.setColor(bg);
-      g2.fillRoundRect(x, y, width, height, TREE_BADGE_ARC, TREE_BADGE_ARC);
-
-      FontMetrics fm = g2.getFontMetrics(getFont());
+      int arc = scaledBadgeArc();
+      g2.fillRoundRect(x, y, width, height, arc, arc);
+      g2.setFont(badgeFont);
       int textX = x + Math.max(0, (width - fm.stringWidth(text)) / 2);
       int textY = y + Math.max(0, ((height - fm.getHeight()) / 2) + fm.getAscent());
       g2.setColor(TREE_BADGE_FG);
       g2.drawString(text, textX, textY);
+    }
+
+    private Font badgeFont() {
+      Font base = getFont();
+      if (base == null) base = UIManager.getFont("Tree.font");
+      if (base == null) base = UIManager.getFont("defaultFont");
+      if (base == null) return new Font("SansSerif", Font.PLAIN, 12);
+      float scaledSize =
+          Math.max(8f, base.getSize2D() * (Math.max(50, Math.min(150, unreadBadgeScalePercent)) / 100f));
+      return base.deriveFont(scaledSize);
+    }
+
+    private int scaledBadgeHorizontalPadding() {
+      return scaleBadgeMetric(TREE_BADGE_HORIZONTAL_PADDING, 1);
+    }
+
+    private int scaledBadgeVerticalPadding() {
+      return scaleBadgeMetric(TREE_BADGE_VERTICAL_PADDING, 1);
+    }
+
+    private int scaledBadgeMinWidth() {
+      return scaleBadgeMetric(TREE_BADGE_MIN_WIDTH, 10);
+    }
+
+    private int scaledBadgeMinHeight() {
+      return scaleBadgeMetric(TREE_BADGE_MIN_HEIGHT, 8);
+    }
+
+    private int scaledBadgeGap() {
+      return scaleBadgeMetric(TREE_BADGE_GAP, 1);
+    }
+
+    private int scaledBadgeArc() {
+      return scaleBadgeMetric(TREE_BADGE_ARC, 4);
+    }
+
+    private int scaleBadgeMetric(int base, int minimum) {
+      float factor = Math.max(50, Math.min(150, unreadBadgeScalePercent)) / 100f;
+      return Math.max(minimum, Math.round(base * factor));
     }
 
     private Color typingIndicatorColor() {

@@ -112,6 +112,9 @@ public class RuntimeConfigStore {
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
+  private int mutationBatchDepth = 0;
+  private Map<String, Object> mutationBatchDoc = null;
+  private boolean mutationBatchDirty = false;
 
   /**
    * True if the runtime config file existed before this process started creating/initializing it.
@@ -254,6 +257,60 @@ public class RuntimeConfigStore {
 
   public Path runtimeConfigPath() {
     return file;
+  }
+
+  /**
+   * Run a series of mutations with a single final disk write.
+   *
+   * <p>Callers should keep the action focused on {@code remember*} methods so EDT stalls are
+   * minimized.
+   */
+  public synchronized void runMutationBatch(Runnable action) {
+    if (action == null) return;
+    beginMutationBatchLocked();
+    try {
+      action.run();
+    } finally {
+      endMutationBatchLocked();
+    }
+  }
+
+  public synchronized void beginMutationBatch() {
+    beginMutationBatchLocked();
+  }
+
+  public synchronized void endMutationBatch() {
+    endMutationBatchLocked();
+  }
+
+  private void beginMutationBatchLocked() {
+    if (mutationBatchDepth == 0) {
+      try {
+        mutationBatchDoc =
+            (file.toString().isBlank() || !Files.exists(file)) ? new LinkedHashMap<>() : loadFile();
+      } catch (Exception e) {
+        mutationBatchDoc = new LinkedHashMap<>();
+        log.warn("[ircafe] Could not start mutation batch for '{}'", file, e);
+      }
+      mutationBatchDirty = false;
+    }
+    mutationBatchDepth++;
+  }
+
+  private void endMutationBatchLocked() {
+    if (mutationBatchDepth <= 0) return;
+    mutationBatchDepth--;
+    if (mutationBatchDepth > 0) return;
+    try {
+      if (mutationBatchDirty && mutationBatchDoc != null) {
+        writeFileNow(mutationBatchDoc);
+      }
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not flush mutation batch to '{}'", file, e);
+    } finally {
+      mutationBatchDoc = null;
+      mutationBatchDirty = false;
+    }
   }
 
   public synchronized void ensureFileExistsWithServers() {
@@ -578,35 +635,34 @@ public class RuntimeConfigStore {
           break;
         }
       }
-      if (serverMap == null) return;
+      if (serverMap != null) {
+        List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
+        List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
 
-      List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
-      List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
-
-      ArrayList<String> nextAutoJoin = new ArrayList<>();
-      for (ServerTreeChannelPreference pref : byKey.values()) {
-        if (pref == null || !pref.autoReattach()) continue;
-        String channel = normalizeChannelName(pref.channel());
-        if (channel.isEmpty()) continue;
-        if (containsIgnoreCase(nextAutoJoin, channel)) continue;
-        nextAutoJoin.add(channel);
+        ArrayList<String> nextAutoJoin = new ArrayList<>();
+        for (ServerTreeChannelPreference pref : byKey.values()) {
+          if (pref == null || !pref.autoReattach()) continue;
+          String channel = normalizeChannelName(pref.channel());
+          if (channel.isEmpty()) continue;
+          if (containsIgnoreCase(nextAutoJoin, channel)) continue;
+          nextAutoJoin.add(channel);
+        }
+        for (String nick : previousPmTargets) {
+          String n = Objects.toString(nick, "").trim();
+          if (n.isEmpty()) continue;
+          String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
+          if (encoded.isEmpty()) continue;
+          if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded)))
+            continue;
+          nextAutoJoin.add(encoded);
+        }
+        if (nextAutoJoin.isEmpty()) {
+          serverMap.remove("autoJoin");
+        } else {
+          serverMap.put("autoJoin", nextAutoJoin);
+        }
+        irc.put("servers", servers);
       }
-      for (String nick : previousPmTargets) {
-        String n = Objects.toString(nick, "").trim();
-        if (n.isEmpty()) continue;
-        String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
-        if (encoded.isEmpty()) continue;
-        if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded)))
-          continue;
-        nextAutoJoin.add(encoded);
-      }
-      if (nextAutoJoin.isEmpty()) {
-        serverMap.remove("autoJoin");
-      } else {
-        serverMap.put("autoJoin", nextAutoJoin);
-      }
-
-      irc.put("servers", servers);
 
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
@@ -3450,6 +3506,52 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized int readServerTreeUnreadBadgeScalePercent(int defaultValue) {
+    int fallback = clampServerTreeUnreadBadgeScalePercent(defaultValue);
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
+
+      Object raw = ui.get("serverTreeUnreadBadgeScalePercent");
+      if (raw == null) return fallback;
+      return asInt(raw).map(this::clampServerTreeUnreadBadgeScalePercent).orElse(fallback);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.serverTreeUnreadBadgeScalePercent from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized void rememberServerTreeUnreadBadgeScalePercent(int percent) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int normalized = clampServerTreeUnreadBadgeScalePercent(percent);
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      ui.put("serverTreeUnreadBadgeScalePercent", normalized);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist ui.serverTreeUnreadBadgeScalePercent to '{}'", file, e);
+    }
+  }
+
+  private int clampServerTreeUnreadBadgeScalePercent(int percent) {
+    int v = percent;
+    if (v <= 0) v = 100;
+    if (v < 50) v = 50;
+    if (v > 150) v = 150;
+    return v;
+  }
+
   public synchronized void rememberSpellcheckEnabled(boolean enabled) {
     rememberSpellcheckBoolean("spellcheckEnabled", enabled);
   }
@@ -5606,6 +5708,9 @@ public class RuntimeConfigStore {
 
   @SuppressWarnings("unchecked")
   private Map<String, Object> loadFile() throws IOException {
+    if (mutationBatchDepth > 0 && mutationBatchDoc != null) {
+      return mutationBatchDoc;
+    }
     try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
       Object o = yaml.load(r);
       if (o instanceof Map<?, ?> m) {
@@ -5616,6 +5721,15 @@ public class RuntimeConfigStore {
   }
 
   private void writeFile(Map<String, Object> doc) throws IOException {
+    if (mutationBatchDepth > 0) {
+      mutationBatchDoc = (doc == null) ? new LinkedHashMap<>() : doc;
+      mutationBatchDirty = true;
+      return;
+    }
+    writeFileNow(doc);
+  }
+
+  private void writeFileNow(Map<String, Object> doc) throws IOException {
     Path parent = file.getParent();
     if (parent != null && !Files.exists(parent)) {
       Files.createDirectories(parent);

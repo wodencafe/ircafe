@@ -864,6 +864,7 @@ public class PreferencesDialog {
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
         buildTypingTreeIndicatorStyleCombo(current);
+    JSpinner serverTreeUnreadBadgeScalePercent = buildServerTreeUnreadBadgeScalePercentSpinner();
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
 
@@ -921,6 +922,7 @@ public class PreferencesDialog {
             typingIndicatorsSendEnabled,
             typingIndicatorsReceiveEnabled,
             typingTreeIndicatorStyle,
+            serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
@@ -1203,6 +1205,10 @@ public class PreferencesDialog {
           boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
               typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+          int serverTreeUnreadBadgeScalePercentV =
+              ((Number) serverTreeUnreadBadgeScalePercent.getValue()).intValue();
+          if (serverTreeUnreadBadgeScalePercentV < 50) serverTreeUnreadBadgeScalePercentV = 50;
+          if (serverTreeUnreadBadgeScalePercentV > 150) serverTreeUnreadBadgeScalePercentV = 150;
           Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
 
           boolean nickColoringEnabledV = nickColors.enabled.isSelected();
@@ -1565,6 +1571,8 @@ public class PreferencesDialog {
 
           boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
+          runtimeConfig.rememberServerTreeUnreadBadgeScalePercent(
+              serverTreeUnreadBadgeScalePercentV);
           settingsBus.set(next);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
@@ -1573,8 +1581,10 @@ public class PreferencesDialog {
           if (accentSettingsBus != null) {
             accentSettingsBus.set(nextAccent);
           }
-          runtimeConfig.rememberAccentColor(nextAccent.accentColor());
-          runtimeConfig.rememberAccentStrength(nextAccent.strength());
+          runtimeConfig.beginMutationBatch();
+          try {
+            runtimeConfig.rememberAccentColor(nextAccent.accentColor());
+            runtimeConfig.rememberAccentStrength(nextAccent.strength());
 
           if (tweakSettingsBus != null) {
             tweakSettingsBus.set(nextTweaks);
@@ -1823,8 +1833,11 @@ public class PreferencesDialog {
             ircClientService.rescheduleActiveHeartbeats();
           }
           boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
-          runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
-          NetTlsContext.configure(trustAllTlsV);
+            runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
+            NetTlsContext.configure(trustAllTlsV);
+          } finally {
+            runtimeConfig.endMutationBatch();
+          }
 
           if (themeManager != null) {
             if (themeChanged || accentChanged || tweaksChanged) {
@@ -3855,6 +3868,15 @@ public class PreferencesDialog {
       }
     }
     return combo;
+  }
+
+  private JSpinner buildServerTreeUnreadBadgeScalePercentSpinner() {
+    int current = runtimeConfig.readServerTreeUnreadBadgeScalePercent(100);
+    SpinnerNumberModel model = new SpinnerNumberModel(current, 50, 150, 5);
+    JSpinner spinner = new JSpinner(model);
+    spinner.setToolTipText(
+        "Scale for unread/highlight count badges in the server tree. Lower values make badges and numbers smaller.");
+    return spinner;
   }
 
   private SpellcheckControls buildSpellcheckControls(SpellcheckSettings settings) {
@@ -6067,6 +6089,7 @@ public class PreferencesDialog {
       JCheckBox typingIndicatorsSendEnabled,
       JCheckBox typingIndicatorsReceiveEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
+      JSpinner serverTreeUnreadBadgeScalePercent,
       Ircv3CapabilitiesControls ircv3Capabilities) {
     JPanel form =
         new JPanel(
@@ -6107,10 +6130,17 @@ public class PreferencesDialog {
     treeStyleRow.add(new JLabel("Server tree marker style"));
     treeStyleRow.add(typingTreeIndicatorStyle, "growx, wmin 180");
     typingRow.add(treeStyleRow, "growx, wmin 0");
+    JPanel badgeScaleRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[]6[]", "[]"));
+    badgeScaleRow.setOpaque(false);
+    badgeScaleRow.add(new JLabel("Unread badge size"));
+    badgeScaleRow.add(serverTreeUnreadBadgeScalePercent, "w 90!");
+    badgeScaleRow.add(new JLabel("%"));
+    typingRow.add(badgeScaleRow, "growx, wmin 0");
     JTextArea typingImpact = subtleInfoText();
     typingImpact.setText(
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
-            + "Server tree marker style controls the channel typing activity indicator.");
+            + "Server tree marker style controls the channel typing activity indicator.\n"
+            + "Unread badge size scales channel unread/highlight count badges in the server tree.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
     JPanel typingTab =
         new JPanel(new MigLayout("insets 6, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
