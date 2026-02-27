@@ -139,6 +139,20 @@ class AppModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest 
   }
 
   @Test
+  void selectingIgnoresTargetUpdatesUiOnlyStatusContext() {
+    String sid = serverRegistry.serverIds().stream().findFirst().orElse("default");
+    TargetRef ignores = TargetRef.ignores(sid);
+
+    targetCoordinator.onTargetSelected(ignores);
+
+    assertEquals(ignores, activeTargetPort.getActiveTarget());
+    assertEquals(sid, activeTargetPort.safeStatusTarget().serverId());
+    verify(swingUiPort).setStatusBarChannel("Ignores");
+    verify(swingUiPort).setChatActiveTarget(ignores);
+    verify(swingUiPort).setUsersChannel(ignores);
+  }
+
+  @Test
   void connectionCoordinatorBeanIsSharedAcrossMediatorAndAppContext() {
     assertEquals(1, applicationContext.getBeansOfType(ConnectionCoordinator.class).size());
     assertNotNull(connectionCoordinator);

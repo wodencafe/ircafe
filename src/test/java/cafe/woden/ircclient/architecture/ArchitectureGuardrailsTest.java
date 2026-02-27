@@ -235,6 +235,22 @@ class ArchitectureGuardrailsTest {
               "state module should remain a reusable correlation/state holder and integrate through app::api plus config");
 
   @ArchTest
+  static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.ignore..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.app.state..",
+              "cafe.woden.ircclient.irc..")
+          .because(
+              "ignore UI components should stay presentation-focused and avoid coupling to app internals or IRC transport details");
+
+  @ArchTest
   static final ArchRule dcc_should_not_depend_on_ui_or_app_internal_packages =
       noClasses()
           .that()

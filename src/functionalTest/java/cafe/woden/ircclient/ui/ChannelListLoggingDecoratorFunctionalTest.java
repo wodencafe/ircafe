@@ -34,6 +34,7 @@ import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
@@ -131,6 +132,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
+    IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
     MonitorListService monitorListService = new MonitorListService(runtimeConfig);
     UserListStore userListStore = mock(UserListStore.class);
     when(userListStore.get(anyString(), anyString())).thenReturn(List.of());
@@ -163,6 +165,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
                     activeInputRouter,
                     ignoreListService,
                     ignoreStatusService,
+                    ignoreListDialog,
                     monitorListService,
                     userListStore,
                     mock(UserListDockable.class),

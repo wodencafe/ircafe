@@ -1,18 +1,18 @@
 package cafe.woden.ircclient.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
-import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.dcc.DccTransferStore;
-import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
-import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
-import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -25,7 +25,6 @@ import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
-import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
@@ -34,58 +33,37 @@ import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.file.Path;
 import java.util.List;
-import javax.swing.JLabel;
-import javax.swing.JTable;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.JButton;
 import javax.swing.SwingUtilities;
+import javax.swing.text.DefaultStyledDocument;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-class ChatDockableMonitorFunctionalTest {
-
-  @TempDir Path tempDir;
+class ChatDockableIgnoresFunctionalTest {
 
   @Test
-  void monitorPanelReflectsRosterUpdatesAndOnlineState() throws Exception {
+  void ignoresTargetUsesUiOnlyCardAndLaunchesIgnoreDialog() throws Exception {
     Fixture fixture = createFixture();
     try {
-      fixture.monitorListService.addNicks("libera", List.of("alice", "bob"));
-      onEdt(() -> fixture.chat.setActiveTarget(TargetRef.monitorGroup("libera")));
+      TargetRef channelTarget = new TargetRef("libera", "#ircafe");
+      when(fixture.transcripts.document(channelTarget)).thenReturn(new DefaultStyledDocument());
+      when(fixture.transcripts.readMarkerJumpOffset(channelTarget)).thenReturn(-1);
+
+      onEdt(() -> fixture.chat.setActiveTarget(TargetRef.ignores("libera")));
       flushEdt();
 
-      onEdt(
-          () -> {
-            assertEquals("Monitor", fixture.chat.getTabText());
-            assertEquals("Monitor - libera", fixture.monitorTitle.getText());
-            assertEquals(2, fixture.monitorTable.getRowCount());
-            assertEquals("Unknown", statusForNick(fixture.monitorTable, "alice"));
-            assertEquals("Unknown", statusForNick(fixture.monitorTable, "bob"));
-          });
+      assertEquals("Ignores", onEdtCall(fixture.chat::getTabText));
+      assertFalse(onEdtCall(() -> fixture.inputPanel.isVisible()));
 
-      Thread updater =
-          new Thread(
-              () -> fixture.monitorListService.addNicks("libera", List.of("carol")),
-              "monitor-list-updater");
-      updater.start();
-      updater.join();
+      JButton openButton = onEdtCall(() -> findButtonByText(fixture.chat, "Open Ignore Lists..."));
+      assertNotNull(openButton);
+      onEdt(openButton::doClick);
+      verify(fixture.ignoreListDialog).open(any(), eq("libera"));
+
+      onEdt(() -> fixture.chat.setActiveTarget(channelTarget));
       flushEdt();
-
-      onEdt(
-          () -> {
-            assertEquals(3, fixture.monitorTable.getRowCount());
-            assertEquals("Unknown", statusForNick(fixture.monitorTable, "carol"));
-          });
-
-      onEdt(() -> fixture.chat.setPrivateMessageOnlineState("libera", "alice", true));
-      flushEdt();
-
-      onEdt(
-          () -> {
-            assertEquals("Online", statusForNick(fixture.monitorTable, "alice"));
-            assertEquals("Unknown", statusForNick(fixture.monitorTable, "bob"));
-            assertEquals("Unknown", statusForNick(fixture.monitorTable, "carol"));
-          });
+      assertTrue(onEdtCall(() -> fixture.inputPanel.isVisible()));
     } finally {
       onEdt(fixture.chat::shutdown);
       flushEdt();
@@ -93,17 +71,14 @@ class ChatDockableMonitorFunctionalTest {
   }
 
   private Fixture createFixture() throws Exception {
-    RuntimeConfigStore runtimeConfig =
-        new RuntimeConfigStore(
-            tempDir.resolve("ircafe.yml").toString(),
-            new IrcProperties(null, List.of(server("libera"))));
-    MonitorListService monitorListService = new MonitorListService(runtimeConfig);
-
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
     when(serverTree.managedChannelsChangedByServer()).thenReturn(Flowable.never());
     when(serverTree.openChannelsForServer(anyString())).thenReturn(List.of());
     when(serverTree.managedChannelsForServer(anyString())).thenReturn(List.of());
+    when(serverTree.channelSortModeForServer(anyString()))
+        .thenReturn(ServerTreeDockable.ChannelSortMode.CUSTOM);
+
     NotificationStore notificationStore = new NotificationStore();
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
@@ -112,7 +87,11 @@ class ChatDockableMonitorFunctionalTest {
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
     IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
+    MonitorListService monitorListService = mock(MonitorListService.class);
+    when(monitorListService.changes()).thenReturn(Flowable.never());
+    when(monitorListService.listNicks(anyString())).thenReturn(List.of());
     UserListStore userListStore = mock(UserListStore.class);
+    when(userListStore.get(anyString(), anyString())).thenReturn(List.of());
     UserListDockable usersDock = mock(UserListDockable.class);
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
     ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
@@ -122,19 +101,15 @@ class ChatDockableMonitorFunctionalTest {
     when(interceptorStore.changes()).thenReturn(Flowable.never());
     DccTransferStore dccTransferStore = new DccTransferStore();
     TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
-    ApplicationDiagnosticsService applicationDiagnosticsService =
-        mock(ApplicationDiagnosticsService.class);
-    JfrRuntimeEventsService jfrRuntimeEventsService = new JfrRuntimeEventsService(runtimeConfig);
-    SpringRuntimeEventsService springRuntimeEventsService = new SpringRuntimeEventsService();
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
 
-    Holder holder = new Holder();
+    AtomicReference<ChatDockable> holder = new AtomicReference<>();
     onEdt(
         () ->
-            holder.chat =
+            holder.set(
                 new ChatDockable(
                     transcripts,
                     serverTree,
@@ -156,34 +131,30 @@ class ChatDockableMonitorFunctionalTest {
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,
-                    applicationDiagnosticsService,
-                    jfrRuntimeEventsService,
-                    springRuntimeEventsService,
+                    null,
+                    null,
+                    null,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore));
+                    commandHistoryStore)));
 
-    ChatDockable chat = holder.chat;
-    MonitorPanel monitorPanel = findFirst(chat, MonitorPanel.class);
-    assertNotNull(monitorPanel);
-    JLabel title = findByName(monitorPanel, JLabel.class, "monitor.title");
-    JTable table = findByName(monitorPanel, JTable.class, "monitor.table");
-    assertNotNull(title);
-    assertNotNull(table);
-    return new Fixture(chat, monitorListService, title, table);
+    ChatDockable chat = holder.get();
+    MessageInputPanel inputPanel = onEdtCall(() -> findFirst(chat, MessageInputPanel.class));
+    assertNotNull(inputPanel);
+    return new Fixture(chat, transcripts, ignoreListDialog, inputPanel);
   }
 
-  private static String statusForNick(JTable table, String nick) {
-    String needle = (nick == null) ? "" : nick.trim();
-    if (needle.isEmpty()) return "";
-    int rows = table.getRowCount();
-    for (int row = 0; row < rows; row++) {
-      Object nickCell = table.getValueAt(row, 1);
-      if (needle.equalsIgnoreCase(String.valueOf(nickCell))) {
-        return String.valueOf(table.getValueAt(row, 0));
-      }
+  private static JButton findButtonByText(Component root, String text) {
+    if (root == null || text == null) return null;
+    if (root instanceof JButton button && text.equals(button.getText())) {
+      return button;
     }
-    return "";
+    if (!(root instanceof Container container)) return null;
+    for (Component child : container.getComponents()) {
+      JButton found = findButtonByText(child, text);
+      if (found != null) return found;
+    }
+    return null;
   }
 
   private static <T extends Component> T findFirst(Component root, Class<T> type) {
@@ -195,35 +166,6 @@ class ChatDockableMonitorFunctionalTest {
       if (found != null) return found;
     }
     return null;
-  }
-
-  private static <T extends Component> T findByName(Component root, Class<T> type, String name) {
-    if (root == null || type == null || name == null) return null;
-    if (type.isInstance(root) && name.equals(root.getName())) {
-      return type.cast(root);
-    }
-    if (!(root instanceof Container container)) return null;
-    for (Component child : container.getComponents()) {
-      T found = findByName(child, type, name);
-      if (found != null) return found;
-    }
-    return null;
-  }
-
-  private static IrcProperties.Server server(String id) {
-    return new IrcProperties.Server(
-        id,
-        "irc.example.net",
-        6697,
-        true,
-        "",
-        "ircafe",
-        "ircafe",
-        "IRCafe User",
-        null,
-        List.of(),
-        List.of(),
-        null);
   }
 
   private static void onEdt(ThrowingRunnable runnable)
@@ -246,6 +188,27 @@ class ChatDockableMonitorFunctionalTest {
         });
   }
 
+  private static <T> T onEdtCall(ThrowingSupplier<T> supplier)
+      throws InvocationTargetException, InterruptedException {
+    if (SwingUtilities.isEventDispatchThread()) {
+      try {
+        return supplier.get();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    AtomicReference<T> out = new AtomicReference<>();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          try {
+            out.set(supplier.get());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+    return out.get();
+  }
+
   private static void flushEdt() throws InvocationTargetException, InterruptedException {
     if (SwingUtilities.isEventDispatchThread()) return;
     SwingUtilities.invokeAndWait(() -> {});
@@ -256,13 +219,14 @@ class ChatDockableMonitorFunctionalTest {
     void run() throws Exception;
   }
 
-  private static final class Holder {
-    private ChatDockable chat;
+  @FunctionalInterface
+  private interface ThrowingSupplier<T> {
+    T get() throws Exception;
   }
 
   private record Fixture(
       ChatDockable chat,
-      MonitorListService monitorListService,
-      JLabel monitorTitle,
-      JTable monitorTable) {}
+      ChatTranscriptStore transcripts,
+      IgnoreListDialog ignoreListDialog,
+      MessageInputPanel inputPanel) {}
 }
