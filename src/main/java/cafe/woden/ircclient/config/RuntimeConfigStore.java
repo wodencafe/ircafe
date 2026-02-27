@@ -4805,6 +4805,158 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberIgnoreMaskExpiresAt(
+      String serverId, String mask, Long expiresAtEpochMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      long expiresAt = (expiresAtEpochMs == null) ? 0L : expiresAtEpochMs;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskExpiresAt") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      if (expiresAt > 0L) {
+        byMask.put(m, expiresAt);
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskExpiresAt");
+      } else {
+        server.put("maskExpiresAt", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask expiry to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskPattern(
+      String serverId, String mask, String pattern, String modeToken) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      String normalizedPattern = Objects.toString(pattern, "").trim();
+      String normalizedMode = normalizeIgnorePatternMode(modeToken);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> patternsByMask =
+          (server.get("maskPatterns") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      @SuppressWarnings("unchecked")
+      Map<String, Object> modesByMask =
+          (server.get("maskPatternModes") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      patternsByMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      modesByMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+
+      if (!normalizedPattern.isEmpty()) {
+        patternsByMask.put(m, normalizedPattern);
+        if (!"glob".equals(normalizedMode)) {
+          modesByMask.put(m, normalizedMode);
+        }
+      }
+
+      if (patternsByMask.isEmpty()) {
+        server.remove("maskPatterns");
+      } else {
+        server.put("maskPatterns", patternsByMask);
+      }
+      if (modesByMask.isEmpty()) {
+        server.remove("maskPatternModes");
+      } else {
+        server.put("maskPatternModes", modesByMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask pattern to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskReplies(
+      String serverId, String mask, boolean repliesEnabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskReplies") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      if (repliesEnabled) {
+        byMask.put(m, Boolean.TRUE);
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskReplies");
+      } else {
+        server.put("maskReplies", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask replies flag to '{}'", file, e);
+    }
+  }
+
   private static List<String> normalizeIgnoreLevels(List<String> levels) {
     java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
     if (levels != null) {
@@ -4844,6 +4996,15 @@ public class RuntimeConfigStore {
     String v = Objects.toString(raw, "").trim();
     if (v.isEmpty()) return "";
     return (v.startsWith("#") || v.startsWith("&")) ? v : "";
+  }
+
+  private static String normalizeIgnorePatternMode(String raw) {
+    String v = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    return switch (v) {
+      case "regexp", "regex" -> "regexp";
+      case "full" -> "full";
+      default -> "glob";
+    };
   }
 
   public synchronized void forgetIgnoreMask(String serverId, String mask) {
@@ -4893,6 +5054,46 @@ public class RuntimeConfigStore {
         byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
         if (byMask.isEmpty()) {
           server.remove("maskChannels");
+        }
+      }
+
+      Object expiresObj = server.get("maskExpiresAt");
+      if (expiresObj instanceof Map<?, ?> expiresMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) expiresMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskExpiresAt");
+        }
+      }
+
+      Object patternsObj = server.get("maskPatterns");
+      if (patternsObj instanceof Map<?, ?> patternsMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) patternsMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskPatterns");
+        }
+      }
+
+      Object patternModesObj = server.get("maskPatternModes");
+      if (patternModesObj instanceof Map<?, ?> modesMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) modesMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskPatternModes");
+        }
+      }
+
+      Object repliesObj = server.get("maskReplies");
+      if (repliesObj instanceof Map<?, ?> repliesMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) repliesMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskReplies");
         }
       }
 

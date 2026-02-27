@@ -42,6 +42,38 @@ public class IgnoreListService {
   private final ConcurrentHashMap<String, ConcurrentHashMap<String, List<String>>>
       hardMaskChannelsByServer = new ConcurrentHashMap<>();
 
+  /**
+   * Optional per-mask absolute expiry metadata for hard ignores.
+   *
+   * <p>Key shape: serverId -> lowercased mask -> expiry epoch millis UTC (>0).
+   */
+  private final ConcurrentHashMap<String, ConcurrentHashMap<String, Long>> hardMaskExpiryByServer =
+      new ConcurrentHashMap<>();
+
+  /**
+   * Optional per-mask message text pattern metadata for hard ignores.
+   *
+   * <p>Key shape: serverId -> lowercased mask -> non-blank pattern.
+   */
+  private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>>
+      hardMaskPatternByServer = new ConcurrentHashMap<>();
+
+  /**
+   * Optional per-mask text pattern mode metadata for hard ignores.
+   *
+   * <p>Only meaningful when a pattern exists for the same mask key.
+   */
+  private final ConcurrentHashMap<String, ConcurrentHashMap<String, IgnoreTextPatternMode>>
+      hardMaskPatternModeByServer = new ConcurrentHashMap<>();
+
+  /**
+   * Optional per-mask replies flag metadata for hard ignores.
+   *
+   * <p>When true, messages that reply to an ignored nick can also be ignored.
+   */
+  private final ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>
+      hardMaskRepliesByServer = new ConcurrentHashMap<>();
+
   private final ConcurrentHashMap<String, List<String>> softMasksByServer =
       new ConcurrentHashMap<>();
 
@@ -103,6 +135,11 @@ public class IgnoreListService {
           masksByServer.put(sid, Collections.synchronizedList(hard));
           ConcurrentHashMap<String, List<String>> byMaskLevels = hardMaskLevelsForServer(sid);
           ConcurrentHashMap<String, List<String>> byMaskChannels = hardMaskChannelsForServer(sid);
+          ConcurrentHashMap<String, Long> byMaskExpiry = hardMaskExpiryForServer(sid);
+          ConcurrentHashMap<String, String> byMaskPattern = hardMaskPatternForServer(sid);
+          ConcurrentHashMap<String, IgnoreTextPatternMode> byMaskPatternMode =
+              hardMaskPatternModeForServer(sid);
+          ConcurrentHashMap<String, Boolean> byMaskReplies = hardMaskRepliesForServer(sid);
           for (String mask : hard) {
             List<String> levels =
                 IgnoreLevels.normalizeConfigured(
@@ -113,6 +150,28 @@ public class IgnoreListService {
                 normalizeChannels(lookupConfiguredList(si.maskChannels(), mask).orElse(List.of()));
             if (!channels.isEmpty()) {
               byMaskChannels.put(maskKey(mask), channels);
+            }
+
+            long expiresAt = lookupConfiguredLong(si.maskExpiresAt(), mask).orElse(0L);
+            if (expiresAt > 0L) {
+              byMaskExpiry.put(maskKey(mask), expiresAt);
+            }
+
+            String textPattern =
+                normalizePattern(lookupConfiguredString(si.maskPatterns(), mask).orElse(""));
+            if (!textPattern.isEmpty()) {
+              IgnoreTextPatternMode mode =
+                  normalizePatternMode(
+                      IgnoreTextPatternMode.fromToken(
+                          lookupConfiguredString(si.maskPatternModes(), mask).orElse("glob")));
+              String key = maskKey(mask);
+              byMaskPattern.put(key, textPattern);
+              byMaskPatternMode.put(key, mode);
+            }
+
+            boolean replies = lookupConfiguredBoolean(si.maskReplies(), mask).orElse(Boolean.FALSE);
+            if (replies) {
+              byMaskReplies.put(maskKey(mask), Boolean.TRUE);
             }
           }
         }
@@ -150,6 +209,46 @@ public class IgnoreListService {
     return java.util.Optional.empty();
   }
 
+  private static java.util.Optional<Long> lookupConfiguredLong(
+      Map<String, Long> valuesByMask, String mask) {
+    if (valuesByMask == null || valuesByMask.isEmpty()) return java.util.Optional.empty();
+    String m = Objects.toString(mask, "");
+    for (Map.Entry<String, Long> ent : valuesByMask.entrySet()) {
+      if (Objects.toString(ent.getKey(), "").equalsIgnoreCase(m)) {
+        Long value = ent.getValue();
+        if (value != null && value > 0L) {
+          return java.util.Optional.of(value);
+        }
+        return java.util.Optional.empty();
+      }
+    }
+    return java.util.Optional.empty();
+  }
+
+  private static java.util.Optional<String> lookupConfiguredString(
+      Map<String, String> valuesByMask, String mask) {
+    if (valuesByMask == null || valuesByMask.isEmpty()) return java.util.Optional.empty();
+    String m = Objects.toString(mask, "");
+    for (Map.Entry<String, String> ent : valuesByMask.entrySet()) {
+      if (Objects.toString(ent.getKey(), "").equalsIgnoreCase(m)) {
+        return java.util.Optional.ofNullable(ent.getValue());
+      }
+    }
+    return java.util.Optional.empty();
+  }
+
+  private static java.util.Optional<Boolean> lookupConfiguredBoolean(
+      Map<String, Boolean> valuesByMask, String mask) {
+    if (valuesByMask == null || valuesByMask.isEmpty()) return java.util.Optional.empty();
+    String m = Objects.toString(mask, "");
+    for (Map.Entry<String, Boolean> ent : valuesByMask.entrySet()) {
+      if (Objects.toString(ent.getKey(), "").equalsIgnoreCase(m)) {
+        return java.util.Optional.ofNullable(ent.getValue());
+      }
+    }
+    return java.util.Optional.empty();
+  }
+
   public List<String> listMasks(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
@@ -176,11 +275,60 @@ public class IgnoreListService {
 
   public AddMaskResult addMaskWithLevels(
       String serverId, String rawMaskOrNick, List<String> levels) {
-    return addMaskWithLevels(serverId, rawMaskOrNick, levels, List.of());
+    return addMaskWithLevels(serverId, rawMaskOrNick, levels, List.of(), null);
   }
 
   public AddMaskResult addMaskWithLevels(
       String serverId, String rawMaskOrNick, List<String> levels, List<String> channels) {
+    return addMaskWithLevels(
+        serverId, rawMaskOrNick, levels, channels, null, "", IgnoreTextPatternMode.GLOB, false);
+  }
+
+  public AddMaskResult addMaskWithLevels(
+      String serverId,
+      String rawMaskOrNick,
+      List<String> levels,
+      List<String> channels,
+      Long expiresAtEpochMs) {
+    return addMaskWithLevels(
+        serverId,
+        rawMaskOrNick,
+        levels,
+        channels,
+        expiresAtEpochMs,
+        "",
+        IgnoreTextPatternMode.GLOB,
+        false);
+  }
+
+  public AddMaskResult addMaskWithLevels(
+      String serverId,
+      String rawMaskOrNick,
+      List<String> levels,
+      List<String> channels,
+      Long expiresAtEpochMs,
+      String textPattern,
+      IgnoreTextPatternMode textPatternMode) {
+    return addMaskWithLevels(
+        serverId,
+        rawMaskOrNick,
+        levels,
+        channels,
+        expiresAtEpochMs,
+        textPattern,
+        textPatternMode,
+        false);
+  }
+
+  public AddMaskResult addMaskWithLevels(
+      String serverId,
+      String rawMaskOrNick,
+      List<String> levels,
+      List<String> channels,
+      Long expiresAtEpochMs,
+      String textPattern,
+      IgnoreTextPatternMode textPatternMode,
+      boolean repliesEnabled) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return AddMaskResult.UNCHANGED;
 
@@ -189,6 +337,10 @@ public class IgnoreListService {
 
     List<String> normalizedLevels = IgnoreLevels.normalizeConfigured(levels);
     List<String> normalizedChannels = normalizeChannels(channels);
+    long normalizedExpiry = normalizeExpiryEpochMs(expiresAtEpochMs);
+    String normalizedPattern = normalizePattern(textPattern);
+    IgnoreTextPatternMode normalizedPatternMode = normalizePatternMode(textPatternMode);
+    boolean normalizedReplies = normalizeReplies(repliesEnabled);
     String key = maskKey(mask);
 
     boolean added = false;
@@ -222,7 +374,46 @@ public class IgnoreListService {
     List<String> prevNormalizedChannels = normalizeChannels(prevChannels);
     boolean channelsChanged = !Objects.equals(prevNormalizedChannels, normalizedChannels);
 
-    if (!added && !levelsChanged && !channelsChanged) {
+    ConcurrentHashMap<String, Long> byMaskExpiry = hardMaskExpiryForServer(sid);
+    Long prevExpiry =
+        (normalizedExpiry <= 0L)
+            ? byMaskExpiry.remove(key)
+            : byMaskExpiry.put(key, normalizedExpiry);
+    long prevNormalizedExpiry = normalizeExpiryEpochMs(prevExpiry);
+    boolean expiryChanged = prevNormalizedExpiry != normalizedExpiry;
+
+    ConcurrentHashMap<String, String> byMaskPattern = hardMaskPatternForServer(sid);
+    String prevPattern =
+        normalizedPattern.isEmpty()
+            ? byMaskPattern.remove(key)
+            : byMaskPattern.put(key, normalizedPattern);
+    String prevNormalizedPattern = normalizePattern(prevPattern);
+    boolean patternChanged = !Objects.equals(prevNormalizedPattern, normalizedPattern);
+
+    ConcurrentHashMap<String, IgnoreTextPatternMode> byMaskPatternMode =
+        hardMaskPatternModeForServer(sid);
+    IgnoreTextPatternMode prevPatternMode;
+    if (normalizedPattern.isEmpty()) {
+      prevPatternMode = byMaskPatternMode.remove(key);
+    } else {
+      prevPatternMode = byMaskPatternMode.put(key, normalizedPatternMode);
+    }
+    IgnoreTextPatternMode prevNormalizedMode = normalizePatternMode(prevPatternMode);
+    boolean patternModeChanged = prevNormalizedMode != normalizedPatternMode;
+
+    ConcurrentHashMap<String, Boolean> byMaskReplies = hardMaskRepliesForServer(sid);
+    Boolean prevReplies =
+        normalizedReplies ? byMaskReplies.put(key, Boolean.TRUE) : byMaskReplies.remove(key);
+    boolean prevNormalizedReplies = normalizeReplies(prevReplies);
+    boolean repliesChanged = prevNormalizedReplies != normalizedReplies;
+
+    if (!added
+        && !levelsChanged
+        && !channelsChanged
+        && !expiryChanged
+        && !patternChanged
+        && !patternModeChanged
+        && !repliesChanged) {
       return AddMaskResult.UNCHANGED;
     }
 
@@ -231,6 +422,10 @@ public class IgnoreListService {
     }
     runtimeConfig.rememberIgnoreMaskLevels(sid, storedMask, normalizedLevels);
     runtimeConfig.rememberIgnoreMaskChannels(sid, storedMask, normalizedChannels);
+    runtimeConfig.rememberIgnoreMaskExpiresAt(sid, storedMask, normalizedExpiry);
+    runtimeConfig.rememberIgnoreMaskPattern(
+        sid, storedMask, normalizedPattern, normalizedPatternMode.token());
+    runtimeConfig.rememberIgnoreMaskReplies(sid, storedMask, normalizedReplies);
     changes.onNext(new Change(sid, ListKind.IGNORE));
     return added ? AddMaskResult.ADDED : AddMaskResult.UPDATED;
   }
@@ -282,6 +477,31 @@ public class IgnoreListService {
       ConcurrentHashMap<String, List<String>> byMaskChannels = hardMaskChannelsByServer.get(sid);
       if (byMaskChannels != null) {
         byMaskChannels
+            .entrySet()
+            .removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(maskKey(mask)));
+      }
+      ConcurrentHashMap<String, Long> byMaskExpiry = hardMaskExpiryByServer.get(sid);
+      if (byMaskExpiry != null) {
+        byMaskExpiry
+            .entrySet()
+            .removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(maskKey(mask)));
+      }
+      ConcurrentHashMap<String, String> byMaskPattern = hardMaskPatternByServer.get(sid);
+      if (byMaskPattern != null) {
+        byMaskPattern
+            .entrySet()
+            .removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(maskKey(mask)));
+      }
+      ConcurrentHashMap<String, IgnoreTextPatternMode> byMaskPatternMode =
+          hardMaskPatternModeByServer.get(sid);
+      if (byMaskPatternMode != null) {
+        byMaskPatternMode
+            .entrySet()
+            .removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(maskKey(mask)));
+      }
+      ConcurrentHashMap<String, Boolean> byMaskReplies = hardMaskRepliesByServer.get(sid);
+      if (byMaskReplies != null) {
+        byMaskReplies
             .entrySet()
             .removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(maskKey(mask)));
       }
@@ -431,6 +651,122 @@ public class IgnoreListService {
     return Map.copyOf(byMask);
   }
 
+  /** Returns configured hard-ignore expiry epoch millis for a specific mask, or {@code 0}. */
+  public long expiresAtEpochMsForHardMask(String serverId, String mask) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return 0L;
+    String key = maskKey(mask);
+    if (key.isEmpty()) return 0L;
+    ConcurrentHashMap<String, Long> byMask = hardMaskExpiryByServer.get(sid);
+    if (byMask == null) return 0L;
+    return normalizeExpiryEpochMs(byMask.get(key));
+  }
+
+  /** Snapshot of hard-ignore absolute expiries by lowercased mask key. */
+  public Map<String, Long> hardMaskExpiries(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return Map.of();
+    ConcurrentHashMap<String, Long> byMask = hardMaskExpiryByServer.get(sid);
+    if (byMask == null || byMask.isEmpty()) return Map.of();
+    return Map.copyOf(byMask);
+  }
+
+  /** Returns configured hard-ignore message pattern for a specific mask, or empty. */
+  public String patternForHardMask(String serverId, String mask) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return "";
+    String key = maskKey(mask);
+    if (key.isEmpty()) return "";
+    ConcurrentHashMap<String, String> byMask = hardMaskPatternByServer.get(sid);
+    if (byMask == null) return "";
+    return normalizePattern(byMask.get(key));
+  }
+
+  /** Returns configured hard-ignore text pattern mode for a specific mask; defaults to glob. */
+  public IgnoreTextPatternMode patternModeForHardMask(String serverId, String mask) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return IgnoreTextPatternMode.GLOB;
+    String key = maskKey(mask);
+    if (key.isEmpty()) return IgnoreTextPatternMode.GLOB;
+    ConcurrentHashMap<String, IgnoreTextPatternMode> byMask = hardMaskPatternModeByServer.get(sid);
+    if (byMask == null) return IgnoreTextPatternMode.GLOB;
+    return normalizePatternMode(byMask.get(key));
+  }
+
+  /** Snapshot of hard-ignore message patterns by lowercased mask key. */
+  public Map<String, String> hardMaskPatterns(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return Map.of();
+    ConcurrentHashMap<String, String> byMask = hardMaskPatternByServer.get(sid);
+    if (byMask == null || byMask.isEmpty()) return Map.of();
+    return Map.copyOf(byMask);
+  }
+
+  /** Snapshot of hard-ignore text pattern modes by lowercased mask key. */
+  public Map<String, IgnoreTextPatternMode> hardMaskPatternModes(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return Map.of();
+    ConcurrentHashMap<String, IgnoreTextPatternMode> byMask = hardMaskPatternModeByServer.get(sid);
+    if (byMask == null || byMask.isEmpty()) return Map.of();
+    return Map.copyOf(byMask);
+  }
+
+  /** Returns whether a hard-ignore mask should also ignore replies. */
+  public boolean repliesForHardMask(String serverId, String mask) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    String key = maskKey(mask);
+    if (key.isEmpty()) return false;
+    ConcurrentHashMap<String, Boolean> byMask = hardMaskRepliesByServer.get(sid);
+    if (byMask == null) return false;
+    return normalizeReplies(byMask.get(key));
+  }
+
+  /** Snapshot of hard-ignore replies flags by lowercased mask key. */
+  public Map<String, Boolean> hardMaskReplies(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return Map.of();
+    ConcurrentHashMap<String, Boolean> byMask = hardMaskRepliesByServer.get(sid);
+    if (byMask == null || byMask.isEmpty()) return Map.of();
+    return Map.copyOf(byMask);
+  }
+
+  /**
+   * Removes expired hard ignore masks for a server and persists the cleanup.
+   *
+   * @return number of removed masks
+   */
+  public int pruneExpiredHardMasks(String serverId, long nowEpochMs) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return 0;
+
+    ConcurrentHashMap<String, Long> expiryByMask = hardMaskExpiryByServer.get(sid);
+    if (expiryByMask == null || expiryByMask.isEmpty()) return 0;
+
+    List<String> masks = masksByServer.get(sid);
+    if (masks == null || masks.isEmpty()) return 0;
+
+    List<String> toRemove = new ArrayList<>();
+    synchronized (masks) {
+      for (String mask : masks) {
+        String key = maskKey(mask);
+        long expiresAt = normalizeExpiryEpochMs(expiryByMask.get(key));
+        if (expiresAt > 0L && expiresAt <= nowEpochMs) {
+          toRemove.add(mask);
+        }
+      }
+    }
+    if (toRemove.isEmpty()) return 0;
+
+    int removed = 0;
+    for (String mask : toRemove) {
+      if (removeMask(sid, mask)) {
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   private ConcurrentHashMap<String, List<String>> hardMaskLevelsForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     return hardMaskLevelsByServer.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
@@ -439,6 +775,27 @@ public class IgnoreListService {
   private ConcurrentHashMap<String, List<String>> hardMaskChannelsForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     return hardMaskChannelsByServer.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+  }
+
+  private ConcurrentHashMap<String, Long> hardMaskExpiryForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return hardMaskExpiryByServer.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+  }
+
+  private ConcurrentHashMap<String, String> hardMaskPatternForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return hardMaskPatternByServer.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+  }
+
+  private ConcurrentHashMap<String, IgnoreTextPatternMode> hardMaskPatternModeForServer(
+      String serverId) {
+    String sid = normalizeServerId(serverId);
+    return hardMaskPatternModeByServer.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+  }
+
+  private ConcurrentHashMap<String, Boolean> hardMaskRepliesForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return hardMaskRepliesByServer.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
   }
 
   private static String maskKey(String mask) {
@@ -457,5 +814,26 @@ public class IgnoreListService {
     }
     if (out.isEmpty()) return List.of();
     return List.copyOf(out);
+  }
+
+  private static long normalizeExpiryEpochMs(Long raw) {
+    if (raw == null || raw <= 0L) return 0L;
+    return raw;
+  }
+
+  private static String normalizePattern(String raw) {
+    return Objects.toString(raw, "").trim();
+  }
+
+  private static IgnoreTextPatternMode normalizePatternMode(IgnoreTextPatternMode raw) {
+    return (raw == null) ? IgnoreTextPatternMode.GLOB : raw;
+  }
+
+  private static boolean normalizeReplies(Boolean raw) {
+    return Boolean.TRUE.equals(raw);
+  }
+
+  private static boolean normalizeReplies(boolean raw) {
+    return raw;
   }
 }

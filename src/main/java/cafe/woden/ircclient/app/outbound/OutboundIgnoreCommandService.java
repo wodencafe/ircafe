@@ -5,10 +5,16 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.ignore.IgnoreLevels;
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.IgnoreTextPatternMode;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.OptionalLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,6 +26,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class OutboundIgnoreCommandService {
+
+  private static final Pattern DURATION_PART = Pattern.compile("(\\d+)([a-z]*)");
 
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
@@ -61,8 +69,37 @@ public class OutboundIgnoreCommandService {
       return;
     }
 
+    Long expiresAtEpochMs = parseExpiryEpochMs(spec.time(), System.currentTimeMillis());
+    if (!spec.time().isBlank() && expiresAtEpochMs == null) {
+      ui.appendStatus(
+          new TargetRef(sid, "status"),
+          "(ignore)",
+          "Invalid -time value: \"" + spec.time() + "\" (use values like 10min, 2h, 1d, 1w).");
+      return;
+    }
+
+    IgnoreTextPatternMode patternMode =
+        spec.patternText().isBlank() ? IgnoreTextPatternMode.GLOB : spec.patternMode();
+    if (!spec.patternText().isBlank() && patternMode == IgnoreTextPatternMode.REGEXP) {
+      if (!isValidRegexPattern(spec.patternText())) {
+        ui.appendStatus(
+            new TargetRef(sid, "status"),
+            "(ignore)",
+            "Invalid -pattern regexp: \"" + spec.patternText() + "\"");
+        return;
+      }
+    }
+
     IgnoreListService.AddMaskResult addResult =
-        ignoreListService.addMaskWithLevels(sid, spec.mask(), spec.levels(), spec.channels());
+        ignoreListService.addMaskWithLevels(
+            sid,
+            spec.mask(),
+            spec.levels(),
+            spec.channels(),
+            expiresAtEpochMs,
+            spec.patternText(),
+            patternMode,
+            spec.replies());
     String stored = IgnoreListService.normalizeMaskOrNickToHostmask(spec.mask());
     if (addResult == IgnoreListService.AddMaskResult.ADDED) {
       ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Ignoring: " + stored);
@@ -145,6 +182,7 @@ public class OutboundIgnoreCommandService {
 
   private void handleIgnoreListForServer(String serverId, String tag) {
     String sid = Objects.toString(serverId, "").trim();
+    ignoreListService.pruneExpiredHardMasks(sid, System.currentTimeMillis());
     TargetRef status = new TargetRef(sid, "status");
     List<String> masks = ignoreListService.listMasks(sid);
     if (masks.isEmpty()) {
@@ -158,12 +196,25 @@ public class OutboundIgnoreCommandService {
       List<String> levels =
           IgnoreLevels.normalizeConfigured(ignoreListService.levelsForHardMask(sid, m));
       List<String> channels = ignoreListService.channelsForHardMask(sid, m);
+      long expiresAtEpochMs = ignoreListService.expiresAtEpochMsForHardMask(sid, m);
+      String pattern = Objects.toString(ignoreListService.patternForHardMask(sid, m), "").trim();
+      IgnoreTextPatternMode patternMode = ignoreListService.patternModeForHardMask(sid, m);
+      boolean replies = ignoreListService.repliesForHardMask(sid, m);
       List<String> metadata = new ArrayList<>();
       if (!(levels.size() == 1 && "ALL".equalsIgnoreCase(levels.getFirst()))) {
         metadata.add("levels=" + String.join(",", levels));
       }
       if (channels != null && !channels.isEmpty()) {
         metadata.add("channels=" + String.join(",", channels));
+      }
+      if (expiresAtEpochMs > 0L) {
+        metadata.add("expires=" + formatExpiry(expiresAtEpochMs));
+      }
+      if (!pattern.isEmpty()) {
+        metadata.add("pattern=" + renderPattern(pattern, patternMode));
+      }
+      if (replies) {
+        metadata.add("replies");
       }
       String suffix = metadata.isEmpty() ? "" : (" [" + String.join("; ", metadata) + "]");
       ui.appendStatus(status, tag, "  " + (i + 1) + ") " + m + suffix);
@@ -269,21 +320,11 @@ public class OutboundIgnoreCommandService {
   private void appendCompatibilityNotes(TargetRef out, IrssiIgnoreSpec spec) {
     if (spec == null || out == null) return;
 
-    if (spec.pattern() || spec.regexp() || spec.full()) {
+    if (spec.patternMode() != IgnoreTextPatternMode.GLOB && spec.patternText().isBlank()) {
       ui.appendStatus(
           out,
           "(ignore)",
-          "Compatibility: -pattern/-regexp/-full are parsed, but matching still uses IRCafe hostmask globs.");
-    }
-    if (spec.replies()) {
-      ui.appendStatus(
-          out,
-          "(ignore)",
-          "Compatibility: -replies parsed, but reply-level behavior is not yet modeled separately.");
-    }
-    if (!spec.time().isEmpty()) {
-      ui.appendStatus(
-          out, "(ignore)", "Compatibility: -time parsed, but timed expiry is not implemented yet.");
+          "Compatibility: -regexp/-full provided without -pattern; modifier ignored.");
     }
     if (!spec.reason().isEmpty()) {
       ui.appendStatus(
@@ -299,17 +340,16 @@ public class OutboundIgnoreCommandService {
     List<String> tokens = tokenize(raw);
     if (tokens.isEmpty()) {
       return new IrssiIgnoreSpec(
-          "", List.of(), "", false, false, false, false, false, List.of(), "", true, "");
+          "", List.of(), "", false, false, "", IgnoreTextPatternMode.GLOB, List.of(), "", true, "");
     }
 
     String network = "";
     String channelsRaw = "";
     String time = "";
+    String patternText = "";
+    IgnoreTextPatternMode patternMode = IgnoreTextPatternMode.GLOB;
     boolean except = false;
     boolean replies = false;
-    boolean pattern = false;
-    boolean regexp = false;
-    boolean full = false;
     List<String> positional = new ArrayList<>();
 
     for (int i = 0; i < tokens.size(); i++) {
@@ -325,20 +365,33 @@ public class OutboundIgnoreCommandService {
         case "-time" -> {
           if (i + 1 < tokens.size()) time = tokens.get(++i);
         }
+        case "-pattern" -> {
+          if (i + 1 < tokens.size()) patternText = tokens.get(++i);
+        }
+        case "-regexp" -> patternMode = IgnoreTextPatternMode.REGEXP;
+        case "-full" -> patternMode = IgnoreTextPatternMode.FULL;
         case "-except" -> except = true;
         case "-replies" -> replies = true;
-        case "-pattern" -> pattern = true;
-        case "-regexp" -> regexp = true;
-        case "-full" -> full = true;
         default -> positional.add(t);
       }
     }
 
     List<String> channels = parseIrssiChannelsToken(channelsRaw);
+    patternText = Objects.toString(patternText, "").trim();
 
     if (positional.isEmpty()) {
       return new IrssiIgnoreSpec(
-          network, channels, time, except, replies, pattern, regexp, full, List.of(), "", true, "");
+          network,
+          channels,
+          time,
+          except,
+          replies,
+          patternText,
+          patternMode,
+          List.of(),
+          "",
+          true,
+          "");
     }
 
     List<String> levels = new ArrayList<>();
@@ -367,9 +420,8 @@ public class OutboundIgnoreCommandService {
         time,
         except,
         replies,
-        pattern,
-        regexp,
-        full,
+        patternText,
+        patternMode,
         List.copyOf(levels),
         mask,
         false,
@@ -470,15 +522,117 @@ public class OutboundIgnoreCommandService {
     return List.copyOf(out);
   }
 
+  private static Long parseExpiryEpochMs(String raw, long nowEpochMs) {
+    String value = Objects.toString(raw, "").trim();
+    if (value.isEmpty()) return null;
+    OptionalLong durationMs = parseIrssiDurationMs(value);
+    if (durationMs.isEmpty()) return null;
+    long ms = durationMs.getAsLong();
+    if (ms <= 0L) return null;
+    try {
+      return Math.addExact(nowEpochMs, ms);
+    } catch (ArithmeticException ex) {
+      return Long.MAX_VALUE;
+    }
+  }
+
+  private static OptionalLong parseIrssiDurationMs(String raw) {
+    String s = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return OptionalLong.empty();
+    s = s.replace("_", "").replace(" ", "");
+    if (s.isEmpty()) return OptionalLong.empty();
+
+    long total = 0L;
+    int idx = 0;
+    while (idx < s.length()) {
+      Matcher m = DURATION_PART.matcher(s);
+      m.region(idx, s.length());
+      if (!m.lookingAt()) return OptionalLong.empty();
+
+      long amount;
+      try {
+        amount = Long.parseLong(m.group(1));
+      } catch (Exception ex) {
+        return OptionalLong.empty();
+      }
+      String unit = Objects.toString(m.group(2), "");
+      long factor = unitToMillis(unit);
+      if (factor <= 0L) return OptionalLong.empty();
+
+      try {
+        total = Math.addExact(total, Math.multiplyExact(amount, factor));
+      } catch (ArithmeticException ex) {
+        return OptionalLong.of(Long.MAX_VALUE);
+      }
+      idx = m.end();
+    }
+    return (total <= 0L) ? OptionalLong.empty() : OptionalLong.of(total);
+  }
+
+  private static long unitToMillis(String rawUnit) {
+    String unit = Objects.toString(rawUnit, "").trim().toLowerCase(Locale.ROOT);
+    if (unit.isEmpty()) return 1_000L;
+    return switch (unit) {
+      case "ms", "msec", "msecs", "millisecond", "milliseconds" -> 1L;
+      case "s", "sec", "secs", "second", "seconds" -> 1_000L;
+      case "m", "min", "mins", "minute", "minutes" -> 60_000L;
+      case "h", "hr", "hrs", "hour", "hours" -> 3_600_000L;
+      case "d", "day", "days" -> 86_400_000L;
+      case "w", "wk", "wks", "week", "weeks" -> 604_800_000L;
+      default -> -1L;
+    };
+  }
+
+  private static String formatExpiry(long expiresAtEpochMs) {
+    long now = System.currentTimeMillis();
+    long remaining = Math.max(0L, expiresAtEpochMs - now);
+    String iso = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(expiresAtEpochMs));
+    return iso + " (" + formatRemaining(remaining) + ")";
+  }
+
+  private static String formatRemaining(long remainingMs) {
+    if (remainingMs <= 0L) return "expired";
+    long totalSeconds = remainingMs / 1_000L;
+    long days = totalSeconds / 86_400L;
+    long hours = (totalSeconds % 86_400L) / 3_600L;
+    long mins = (totalSeconds % 3_600L) / 60L;
+    long secs = totalSeconds % 60L;
+    StringBuilder sb = new StringBuilder("in ");
+    if (days > 0) sb.append(days).append("d");
+    if (hours > 0) sb.append(hours).append("h");
+    if (mins > 0) sb.append(mins).append("m");
+    if (secs > 0 || sb.length() == 3) sb.append(secs).append("s");
+    return sb.toString();
+  }
+
+  private static boolean isValidRegexPattern(String pattern) {
+    try {
+      Pattern.compile(pattern);
+      return true;
+    } catch (Exception ex) {
+      return false;
+    }
+  }
+
+  private static String renderPattern(String pattern, IgnoreTextPatternMode mode) {
+    String p = Objects.toString(pattern, "").trim();
+    if (p.isEmpty()) return "";
+    IgnoreTextPatternMode m = (mode == null) ? IgnoreTextPatternMode.GLOB : mode;
+    return switch (m) {
+      case REGEXP -> "/" + p + "/ (regexp)";
+      case FULL -> p + " (full)";
+      case GLOB -> p;
+    };
+  }
+
   private record IrssiIgnoreSpec(
       String network,
       List<String> channels,
       String time,
       boolean except,
       boolean replies,
-      boolean pattern,
-      boolean regexp,
-      boolean full,
+      String patternText,
+      IgnoreTextPatternMode patternMode,
       List<String> levels,
       String mask,
       boolean listRequested,

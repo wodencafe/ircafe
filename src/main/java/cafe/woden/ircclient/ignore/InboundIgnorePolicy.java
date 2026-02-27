@@ -51,7 +51,7 @@ public class InboundIgnorePolicy {
       String hostmask,
       boolean isCtcp,
       List<String> inboundLevels) {
-    return decide(serverId, fromNick, hostmask, isCtcp, inboundLevels, "");
+    return decide(serverId, fromNick, hostmask, isCtcp, inboundLevels, "", "");
   }
 
   /**
@@ -65,6 +65,21 @@ public class InboundIgnorePolicy {
       boolean isCtcp,
       List<String> inboundLevels,
       String inboundChannel) {
+    return decide(serverId, fromNick, hostmask, isCtcp, inboundLevels, inboundChannel, "");
+  }
+
+  /**
+   * Decide how a message from a sender should be handled in a specific inbound level/channel/text
+   * context.
+   */
+  public Decision decide(
+      String serverId,
+      String fromNick,
+      String hostmask,
+      boolean isCtcp,
+      List<String> inboundLevels,
+      String inboundChannel,
+      String inboundText) {
     if (ignoreListService == null) return Decision.ALLOW;
 
     String sid = Objects.toString(serverId, "").trim();
@@ -77,7 +92,8 @@ public class InboundIgnorePolicy {
     IgnoreStatusService.Status st =
         (ignoreStatusService == null)
             ? new IgnoreStatusService.Status(false, false, false, "")
-            : ignoreStatusService.status(sid, nick, hostmask, inboundLevels, inboundChannel);
+            : ignoreStatusService.status(
+                sid, nick, hostmask, inboundLevels, inboundChannel, inboundText);
 
     if (st.hard()) {
       if (!isCtcp || ignoreListService.hardIgnoreIncludesCtcp()) {
