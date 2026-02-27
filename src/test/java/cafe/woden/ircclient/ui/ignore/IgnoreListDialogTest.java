@@ -36,4 +36,61 @@ class IgnoreListDialogTest {
         "*!*@bad.host [levels=MSGS,NOTICES; channels=#ircafe,#ops; expires=2026-03-01T12:34:56Z; pattern=/afk|brb/ (regexp); replies]",
         display);
   }
+
+  @Test
+  void parseLevelsInputAcceptsKnownTokensAndAliases() {
+    IgnoreListDialog.ParseResult<List<String>> parsed =
+        IgnoreListDialog.parseLevelsInput("msgs,+notices,*");
+
+    assertEquals(List.of("MSGS", "NOTICES", "ALL"), parsed.value());
+    assertEquals(null, parsed.error());
+  }
+
+  @Test
+  void parseLevelsInputRejectsUnknownToken() {
+    IgnoreListDialog.ParseResult<List<String>> parsed = IgnoreListDialog.parseLevelsInput("msggs");
+
+    assertEquals(null, parsed.value());
+    assertEquals("Unknown ignore level: \"msggs\"", parsed.error());
+  }
+
+  @Test
+  void parseChannelsInputParsesAndDeduplicates() {
+    IgnoreListDialog.ParseResult<List<String>> parsed =
+        IgnoreListDialog.parseChannelsInput("#ircafe, #ops #IRCAFE");
+
+    assertEquals(List.of("#ircafe", "#ops"), parsed.value());
+    assertEquals(null, parsed.error());
+  }
+
+  @Test
+  void parseChannelsInputRejectsInvalidChannelPrefix() {
+    IgnoreListDialog.ParseResult<List<String>> parsed =
+        IgnoreListDialog.parseChannelsInput("ircafe");
+
+    assertEquals(null, parsed.value());
+    assertEquals("Channel patterns must start with # or &: \"ircafe\"", parsed.error());
+  }
+
+  @Test
+  void parseExpiryInputAcceptsIsoAndEpoch() {
+    IgnoreListDialog.ParseResult<Long> iso =
+        IgnoreListDialog.parseExpiryInputEpochMs("2026-03-01T12:34:56Z");
+    IgnoreListDialog.ParseResult<Long> epoch =
+        IgnoreListDialog.parseExpiryInputEpochMs("1772368496000");
+
+    assertEquals(Long.valueOf(Instant.parse("2026-03-01T12:34:56Z").toEpochMilli()), iso.value());
+    assertEquals(null, iso.error());
+    assertEquals(Long.valueOf(1_772_368_496_000L), epoch.value());
+    assertEquals(null, epoch.error());
+  }
+
+  @Test
+  void parseExpiryInputRejectsInvalidValue() {
+    IgnoreListDialog.ParseResult<Long> parsed =
+        IgnoreListDialog.parseExpiryInputEpochMs("tomorrow");
+
+    assertEquals(null, parsed.value());
+    assertEquals("Invalid expiry format. Use ISO-8601 instant or epoch millis.", parsed.error());
+  }
 }

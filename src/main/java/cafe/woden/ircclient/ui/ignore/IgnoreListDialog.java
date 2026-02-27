@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.ignore;
 
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreAddMaskResult;
 import cafe.woden.ircclient.ignore.api.IgnoreLevels;
 import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -15,12 +16,17 @@ import java.awt.event.KeyEvent;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -29,6 +35,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -172,16 +179,21 @@ public class IgnoreListDialog {
     scroll.setPreferredSize(new Dimension(540, 300));
 
     JButton add = new JButton("Add...");
+    JButton edit = new JButton("Edit rule...");
     JButton remove = new JButton("Remove");
     JButton copy = new JButton("Copy");
 
     add.setIcon(SvgIcons.action("plus", 16));
     add.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+    edit.setIcon(SvgIcons.action("edit", 16));
+    edit.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
     remove.setIcon(SvgIcons.action("trash", 16));
     remove.setDisabledIcon(SvgIcons.actionDisabled("trash", 16));
     copy.setIcon(SvgIcons.action("copy", 16));
     copy.setDisabledIcon(SvgIcons.actionDisabled("copy", 16));
 
+    boolean allowEdit = kind == Kind.IGNORE;
+    edit.setEnabled(false);
     remove.setEnabled(false);
     copy.setEnabled(false);
 
@@ -189,6 +201,9 @@ public class IgnoreListDialog {
         e -> {
           if (e.getValueIsAdjusting()) return;
           boolean hasSel = list.getSelectedIndices().length > 0;
+          if (allowEdit) {
+            edit.setEnabled(list.getSelectedIndices().length == 1);
+          }
           remove.setEnabled(hasSel);
           copy.setEnabled(list.getSelectedIndices().length == 1);
         });
@@ -223,6 +238,17 @@ public class IgnoreListDialog {
           }
 
           refresh(model, serverId, kind);
+        });
+
+    edit.addActionListener(
+        e -> {
+          if (!allowEdit) return;
+          MaskRow row = list.getSelectedValue();
+          if (row == null || row.mask().isBlank()) return;
+          boolean changed = editHardIgnoreRule(serverId, row.mask());
+          if (changed) {
+            refresh(model, serverId, kind);
+          }
         });
 
     remove.addActionListener(
@@ -265,6 +291,9 @@ public class IgnoreListDialog {
 
     JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT));
     left.add(add);
+    if (allowEdit) {
+      left.add(edit);
+    }
     left.add(remove);
     left.add(copy);
 
@@ -309,6 +338,217 @@ public class IgnoreListDialog {
 
   private void refreshSoft(DefaultListModel<MaskRow> model, String serverId) {
     refresh(model, serverId, Kind.SOFT_IGNORE);
+  }
+
+  private boolean editHardIgnoreRule(String serverId, String mask) {
+    String sid = Objects.toString(serverId, "").trim();
+    String m = Objects.toString(mask, "").trim();
+    if (sid.isEmpty() || m.isEmpty() || ignores == null) return false;
+
+    JTextField levelsField =
+        new JTextField(renderLevelsForEditor(ignores.levelsForHardMask(sid, m)));
+    JTextField channelsField =
+        new JTextField(String.join(",", ignores.channelsForHardMask(sid, m)));
+    JTextField expiresField =
+        new JTextField(renderExpiryForEditor(ignores.expiresAtEpochMsForHardMask(sid, m)));
+    JTextField patternField =
+        new JTextField(Objects.toString(ignores.patternForHardMask(sid, m), ""));
+    JComboBox<IgnoreTextPatternMode> patternModeBox =
+        new JComboBox<>(IgnoreTextPatternMode.values());
+    patternModeBox.setSelectedItem(ignores.patternModeForHardMask(sid, m));
+    JCheckBox repliesBox = new JCheckBox("Ignore reply-targeted channel messages");
+    repliesBox.setSelected(ignores.repliesForHardMask(sid, m));
+
+    JPanel form = new JPanel();
+    form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
+    form.add(fieldRow("Mask", new JLabel(m)));
+    form.add(fieldRow("Levels", levelsField));
+    form.add(fieldRow("Channels", channelsField));
+    form.add(fieldRow("Expires at", expiresField));
+    form.add(fieldRow("Pattern", patternField));
+    form.add(fieldRow("Pattern mode", patternModeBox));
+    form.add(fieldRow("", repliesBox));
+
+    String message =
+        "<html>Edit hard-ignore metadata.<br>"
+            + "Levels: comma/space separated (blank means ALL).<br>"
+            + "Channels: comma/space separated #channel patterns.<br>"
+            + "Expires at: ISO-8601 instant (e.g. 2026-03-01T12:34:56Z) or epoch millis.</html>";
+
+    while (true) {
+      int result =
+          JOptionPane.showConfirmDialog(
+              dialog,
+              new Object[] {message, form},
+              "Edit Ignore Rule",
+              JOptionPane.OK_CANCEL_OPTION,
+              JOptionPane.PLAIN_MESSAGE);
+      if (result != JOptionPane.OK_OPTION) return false;
+
+      ParseResult<List<String>> levels = parseLevelsInput(levelsField.getText());
+      if (levels.error() != null) {
+        showValidationError(levels.error());
+        continue;
+      }
+
+      ParseResult<List<String>> channels = parseChannelsInput(channelsField.getText());
+      if (channels.error() != null) {
+        showValidationError(channels.error());
+        continue;
+      }
+
+      ParseResult<Long> expiry = parseExpiryInputEpochMs(expiresField.getText());
+      if (expiry.error() != null) {
+        showValidationError(expiry.error());
+        continue;
+      }
+
+      String pattern = Objects.toString(patternField.getText(), "").trim();
+      IgnoreTextPatternMode patternMode =
+          (IgnoreTextPatternMode)
+              Objects.requireNonNullElse(
+                  patternModeBox.getSelectedItem(), IgnoreTextPatternMode.GLOB);
+      if (!pattern.isEmpty() && patternMode == IgnoreTextPatternMode.REGEXP) {
+        if (!isValidRegexPattern(pattern)) {
+          showValidationError("Pattern mode is regexp, but pattern is invalid.");
+          continue;
+        }
+      }
+
+      IgnoreAddMaskResult addResult =
+          ignores.addMaskWithLevels(
+              sid,
+              m,
+              levels.value(),
+              channels.value(),
+              expiry.value(),
+              pattern,
+              patternMode,
+              repliesBox.isSelected());
+      if (addResult == IgnoreAddMaskResult.UNCHANGED) {
+        JOptionPane.showMessageDialog(
+            dialog,
+            "No changes detected for this ignore rule.",
+            "Edit Ignore Rule",
+            JOptionPane.INFORMATION_MESSAGE);
+        return false;
+      }
+      return true;
+    }
+  }
+
+  private static JPanel fieldRow(String label, java.awt.Component input) {
+    JPanel row = new JPanel(new BorderLayout(8, 0));
+    if (!Objects.toString(label, "").isBlank()) {
+      JLabel lbl = new JLabel(label + ":");
+      lbl.setPreferredSize(new Dimension(110, lbl.getPreferredSize().height));
+      row.add(lbl, BorderLayout.WEST);
+    } else {
+      JLabel spacer = new JLabel();
+      spacer.setPreferredSize(new Dimension(110, 1));
+      row.add(spacer, BorderLayout.WEST);
+    }
+    row.add(input, BorderLayout.CENTER);
+    row.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+    return row;
+  }
+
+  private void showValidationError(String text) {
+    JOptionPane.showMessageDialog(dialog, text, "Invalid Ignore Rule", JOptionPane.WARNING_MESSAGE);
+  }
+
+  static ParseResult<List<String>> parseLevelsInput(String raw) {
+    String input = Objects.toString(raw, "").trim();
+    if (input.isEmpty()) return ParseResult.ok(List.of("ALL"));
+
+    LinkedHashSet<String> out = new LinkedHashSet<>();
+    for (String token : input.split("[,\\s]+")) {
+      String normalized = normalizeLevelToken(token);
+      if (normalized.isEmpty()) {
+        return ParseResult.error("Unknown ignore level: \"" + token + "\"");
+      }
+      out.add(normalized);
+    }
+    if (out.isEmpty()) return ParseResult.ok(List.of("ALL"));
+    return ParseResult.ok(List.copyOf(out));
+  }
+
+  static ParseResult<List<String>> parseChannelsInput(String raw) {
+    String input = Objects.toString(raw, "").trim();
+    if (input.isEmpty()) return ParseResult.ok(List.of());
+
+    ArrayList<String> out = new ArrayList<>();
+    for (String token : input.split("[,\\s]+")) {
+      String channel = Objects.toString(token, "").trim();
+      if (channel.isEmpty()) continue;
+      if (!(channel.startsWith("#") || channel.startsWith("&"))) {
+        return ParseResult.error("Channel patterns must start with # or &: \"" + channel + "\"");
+      }
+      if (out.stream().noneMatch(existing -> existing.equalsIgnoreCase(channel))) {
+        out.add(channel);
+      }
+    }
+    return ParseResult.ok(List.copyOf(out));
+  }
+
+  static ParseResult<Long> parseExpiryInputEpochMs(String raw) {
+    String input = Objects.toString(raw, "").trim();
+    if (input.isEmpty()) return ParseResult.ok(null);
+
+    if (input.chars().allMatch(Character::isDigit)) {
+      try {
+        long epochMs = Long.parseLong(input);
+        if (epochMs <= 0L) {
+          return ParseResult.error("Expiry must be a positive epoch-millis value.");
+        }
+        return ParseResult.ok(epochMs);
+      } catch (Exception ex) {
+        return ParseResult.error("Invalid epoch-millis expiry value.");
+      }
+    }
+
+    try {
+      long epochMs = Instant.parse(input).toEpochMilli();
+      if (epochMs <= 0L) {
+        return ParseResult.error("Expiry must be after the Unix epoch.");
+      }
+      return ParseResult.ok(epochMs);
+    } catch (Exception ex) {
+      return ParseResult.error("Invalid expiry format. Use ISO-8601 instant or epoch millis.");
+    }
+  }
+
+  private static String normalizeLevelToken(String raw) {
+    String token = Objects.toString(raw, "").trim().toUpperCase(Locale.ROOT);
+    if (token.isEmpty()) return "";
+    while (token.startsWith("+") || token.startsWith("-")) {
+      token = token.substring(1).trim();
+    }
+    if (token.isEmpty()) return "";
+    if ("*".equals(token)) token = "ALL";
+    return IgnoreLevels.KNOWN.contains(token) ? token : "";
+  }
+
+  private static boolean isValidRegexPattern(String pattern) {
+    try {
+      Pattern.compile(pattern);
+      return true;
+    } catch (Exception ex) {
+      return false;
+    }
+  }
+
+  private static String renderLevelsForEditor(List<String> levels) {
+    List<String> normalized = IgnoreLevels.normalizeConfigured(levels);
+    if (normalized.size() == 1 && "ALL".equalsIgnoreCase(normalized.getFirst())) {
+      return "";
+    }
+    return String.join(",", normalized);
+  }
+
+  private static String renderExpiryForEditor(long expiresAtEpochMs) {
+    if (expiresAtEpochMs <= 0L) return "";
+    return DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(expiresAtEpochMs));
   }
 
   static String formatHardMaskDisplay(
@@ -375,6 +615,16 @@ public class IgnoreListDialog {
     @Override
     public String toString() {
       return display;
+    }
+  }
+
+  record ParseResult<T>(T value, String error) {
+    static <T> ParseResult<T> ok(T value) {
+      return new ParseResult<>(value, null);
+    }
+
+    static <T> ParseResult<T> error(String error) {
+      return new ParseResult<>(null, Objects.toString(error, "Invalid value."));
     }
   }
 }
