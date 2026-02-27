@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.util;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.subjects.PublishSubject;
 import io.reactivex.rxjava3.subjects.Subject;
+import java.awt.Point;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
 import java.awt.event.MouseWheelEvent;
@@ -74,7 +75,8 @@ public final class TreeWheelSelectionDecorator implements AutoCloseable {
     if (closed) return;
     if (!tree.isShowing() || !tree.isEnabled()) return;
     if (!e.isAltDown()) {
-      // Keep default behavior: let the scrollpane handle wheel scrolling.
+      // Tree wheel listeners prevent Swing from bubbling to parent scroll panes; forward manually.
+      dispatchToScrollPane(e);
       wheelDeltaAccumulator = 0.0d;
       lastWheelEventNanos = 0L;
       return;
@@ -119,6 +121,32 @@ public final class TreeWheelSelectionDecorator implements AutoCloseable {
     }
 
     e.consume();
+  }
+
+  private void dispatchToScrollPane(MouseWheelEvent e) {
+    if (e == null || scroll == null || e.isConsumed()) return;
+    try {
+      Point p = SwingUtilities.convertPoint(tree, e.getPoint(), scroll);
+      MouseWheelEvent forwarded =
+          new MouseWheelEvent(
+              scroll,
+              e.getID(),
+              e.getWhen(),
+              e.getModifiersEx(),
+              p.x,
+              p.y,
+              e.getXOnScreen(),
+              e.getYOnScreen(),
+              e.getClickCount(),
+              e.isPopupTrigger(),
+              e.getScrollType(),
+              e.getScrollAmount(),
+              e.getWheelRotation(),
+              e.getPreciseWheelRotation());
+      scroll.dispatchEvent(forwarded);
+      e.consume();
+    } catch (Exception ignored) {
+    }
   }
 
   private void moveSelectionBy(int deltaRows) {

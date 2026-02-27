@@ -92,6 +92,8 @@ public interface ChatHistoryTranscriptPort {
 
   int chatHistoryLoadOlderChunkEdtBudgetMs();
 
+  boolean chatHistoryLockViewportDuringLoadOlder();
+
   int chatHistoryRemoteRequestTimeoutSeconds();
 
   int chatHistoryRemoteZncPlaybackTimeoutSeconds();

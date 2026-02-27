@@ -377,7 +377,7 @@ class ChannelHistoryPreservationFunctionalTest {
 
     private FixedHistoryTranscriptPort(
         ChatTranscriptStore transcripts, int initialLoadLines, int pageSize) {
-      this.delegate = new ChatHistoryTranscriptPortAdapter(transcripts, null);
+      this.delegate = new ChatHistoryTranscriptPortAdapter(transcripts, null, null);
       this.initialLoadLines = initialLoadLines;
       this.pageSize = pageSize;
     }
@@ -558,6 +558,11 @@ class ChannelHistoryPreservationFunctionalTest {
     @Override
     public int chatHistoryLoadOlderChunkEdtBudgetMs() {
       return 6;
+    }
+
+    @Override
+    public boolean chatHistoryLockViewportDuringLoadOlder() {
+      return true;
     }
 
     @Override

@@ -1705,6 +1705,11 @@ public class IrcMediator implements MediatorControlPort {
 
       case IrcEvent.UserSetNameObserved ev -> {
         targetCoordinator.onUserSetNameObserved(sid, ev);
+        if (ev.source() != IrcEvent.UserSetNameObserved.Source.SETNAME) {
+          // extended-join carries real-name metadata and can appear frequently on reconnect;
+          // keep roster updates but avoid flooding transcripts with "(setname)" status lines.
+          return;
+        }
 
         String nick = Objects.toString(ev.nick(), "").trim();
         List<TargetRef> sharedChannels = targetCoordinator.sharedChannelTargetsForNick(sid, nick);

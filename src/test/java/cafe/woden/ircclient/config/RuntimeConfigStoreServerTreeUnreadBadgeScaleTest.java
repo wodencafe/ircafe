@@ -51,4 +51,19 @@ class RuntimeConfigStoreServerTreeUnreadBadgeScaleTest {
     assertTrue(yaml.contains("typingIndicatorsEnabled: false"));
     assertTrue(yaml.contains("serverTreeUnreadBadgeScalePercent: 70"));
   }
+
+  @Test
+  void chatHistoryViewportLockRoundTrips() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+
+    assertTrue(store.readChatHistoryLockViewportDuringLoadOlder(true));
+
+    store.rememberChatHistoryLockViewportDuringLoadOlder(false);
+    assertTrue(!store.readChatHistoryLockViewportDuringLoadOlder(true));
+
+    String yaml = Files.readString(cfg);
+    assertTrue(yaml.contains("chatHistoryLockViewportDuringLoadOlder: false"));
+  }
 }

@@ -24,7 +24,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
@@ -71,8 +70,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private final Set<TargetRef> loading = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
   private final ExecutorService exec;
-  private final AtomicLong loadOlderRequestSeq = new AtomicLong(0);
-  private final AtomicLong loadOlderInsertSeq = new AtomicLong(0);
 
   public DbChatHistoryService(
       ChatLogRepository repo,
@@ -165,30 +162,16 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     // Guard: one in-flight load per target.
     if (!loading.add(target)) {
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] request-rejected reason=in-flight target={} limit={} cursorTs={} cursorId={}",
-          target,
-          limit,
-          cursor.tsEpochMs(),
-          cursor.id());
       SwingUtilities.invokeLater(
           () -> callback.accept(new LoadOlderResult(List.of(), cursor, true)));
       return;
     }
 
-    final long requestId = loadOlderRequestSeq.incrementAndGet();
     final String serverId = target.serverId();
     final String tgt = target.target();
     final long beforeTs = cursor.tsEpochMs();
     final long beforeId = cursor.id();
     final int limitFinal = limit;
-    log.info(
-        "[TEMP-LOAD-OLDER][DB] request-start id={} target={} limit={} cursorTs={} cursorId={}",
-        requestId,
-        target,
-        limitFinal,
-        beforeTs,
-        beforeId);
 
     exec.execute(
         () -> {
@@ -210,10 +193,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
             if (rows.isEmpty()) {
               noMoreOlder.put(target, Boolean.TRUE);
-              log.info(
-                  "[TEMP-LOAD-OLDER][DB] request-empty id={} target={} hasMore=false",
-                  requestId,
-                  target);
               SwingUtilities.invokeLater(
                   () -> callback.accept(new LoadOlderResult(List.of(), cursor, false)));
               return;
@@ -266,15 +245,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
             final boolean hasMoreFinal = hasMore;
             final LogCursor newCursorFinal = newCursor;
             final List<LogLine> linesFinal = List.copyOf(lines);
-            log.info(
-                "[TEMP-LOAD-OLDER][DB] request-result id={} target={} rawRows={} filteredLines={} hasMore={} nextCursorTs={} nextCursorId={}",
-                requestId,
-                target,
-                rows.size(),
-                linesFinal.size(),
-                hasMoreFinal,
-                newCursorFinal.tsEpochMs(),
-                newCursorFinal.id());
             SwingUtilities.invokeLater(
                 () ->
                     callback.accept(new LoadOlderResult(linesFinal, newCursorFinal, hasMoreFinal)));
@@ -632,7 +602,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private void installLoadOlderHandler(TargetRef target) {
     if (target == null) return;
 
-    // Capture a reference to the embedded control so we can anchor scroll position during prepend.
+    // Capture a reference to the embedded control so we can optionally anchor scroll position
+    // during prepend.
     final Component control = transcripts.ensureLoadOlderMessagesControl(target);
 
     // Ensure READY state when installed.
@@ -647,8 +618,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
           // Flip to LOADING immediately.
           transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.LOADING);
 
-          // Preserve the viewport anchor while we prepend lines above the current view.
-          final ScrollAnchor anchor = ScrollAnchor.capture(control);
+          // When locked: keep a fixed anchor for the whole load.
+          // When unlocked: adapt each chunk to the user's current scroll position.
+          final boolean lockViewportDuringLoad = configuredLockViewportDuringLoadOlder();
+          final ScrollAnchor fixedAnchor =
+              lockViewportDuringLoad ? ScrollAnchor.capture(control) : null;
 
           int pageSize = DEFAULT_PAGE_SIZE;
           try {
@@ -657,12 +631,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
             pageSize = DEFAULT_PAGE_SIZE;
           }
           final int limit = Math.max(1, pageSize);
-          final long insertId = loadOlderInsertSeq.incrementAndGet();
-          log.info(
-              "[TEMP-LOAD-OLDER][DB] insert-start id={} target={} limit={}",
-              insertId,
-              target,
-              limit);
 
           loadOlder(
               target,
@@ -682,26 +650,18 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   int chunkSize = configuredLoadOlderChunkSize();
                   int chunkDelayMs = configuredLoadOlderChunkDelayMs();
                   int chunkEdtBudgetMs = configuredLoadOlderChunkEdtBudgetMs();
-                  log.info(
-                      "[TEMP-LOAD-OLDER][DB] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={}",
-                      insertId,
-                      target,
-                      lines.size(),
-                      hasMore,
-                      chunkSize,
-                      chunkDelayMs,
-                      chunkEdtBudgetMs);
                   prependOlderLinesInChunks(
                       target,
                       lines,
-                      0,
+                      lines.size() - 1,
                       insertAt,
                       hasMore,
-                      anchor,
+                      control,
+                      fixedAnchor,
+                      lockViewportDuringLoad,
                       chunkSize,
                       chunkDelayMs,
                       chunkEdtBudgetMs,
-                      insertId,
                       1);
                 } catch (Exception e) {
                   // Fail open: allow retry.
@@ -710,8 +670,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
                     transcripts.endHistoryInsertBatch(target);
                   } catch (Exception ignored) {
                   }
-                  if (anchor != null) {
-                    SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+                  if (lockViewportDuringLoad && fixedAnchor != null) {
+                    SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
                   }
                 }
               });
@@ -723,14 +683,15 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private void prependOlderLinesInChunks(
       TargetRef target,
       List<LogLine> lines,
-      int startIndex,
+      int nextIndexInclusive,
       int insertAt,
       boolean hasMore,
-      ScrollAnchor anchor,
+      Component anchorControl,
+      ScrollAnchor fixedAnchor,
+      boolean lockViewportDuringLoad,
       int chunkSize,
       int chunkDelayMs,
       int chunkEdtBudgetMs,
-      long insertId,
       int chunkNumber) {
     if (!SwingUtilities.isEventDispatchThread()) {
       SwingUtilities.invokeLater(
@@ -738,14 +699,15 @@ public final class DbChatHistoryService implements ChatHistoryService {
               prependOlderLinesInChunks(
                   target,
                   lines,
-                  startIndex,
+                  nextIndexInclusive,
                   insertAt,
                   hasMore,
-                  anchor,
+                  anchorControl,
+                  fixedAnchor,
+                  lockViewportDuringLoad,
                   chunkSize,
                   chunkDelayMs,
                   chunkEdtBudgetMs,
-                  insertId,
                   chunkNumber));
       return;
     }
@@ -757,35 +719,33 @@ public final class DbChatHistoryService implements ChatHistoryService {
       int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
       long chunkStartNs = System.nanoTime();
       long deadlineNs = System.nanoTime() + budgetNs;
-      int pos = insertAt;
-      int nextIndex = startIndex;
+      int safeInsertAt = Math.max(0, insertAt);
+      int nextIndex = nextIndexInclusive;
       int insertedThisChunk = 0;
-      while (nextIndex < lines.size() && insertedThisChunk < maxLines) {
-        pos = insertLineFromHistoryAt(target, pos, lines.get(nextIndex));
-        nextIndex++;
+      // Insert newest-to-oldest at a fixed prepend offset so users see lines nearest the current
+      // transcript first, while final transcript order stays chronological.
+      while (nextIndex >= 0 && insertedThisChunk < maxLines) {
+        int nextInsertAt = insertLineFromHistoryAt(target, safeInsertAt, lines.get(nextIndex));
+        if (nextInsertAt < safeInsertAt) {
+          // Transcript line-cap trimming can shift the fixed prepend point downward.
+          safeInsertAt = nextInsertAt;
+        }
+        nextIndex--;
         insertedThisChunk++;
         if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
       }
       long elapsedNs = Math.max(0L, System.nanoTime() - chunkStartNs);
       int nextDelayMs = effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] insert-chunk id={} target={} chunk={} insertedChunk={} insertedTotal={} totalLines={} elapsedMs={} nextDelayMs={}",
-          insertId,
-          target,
-          chunkNumber,
-          insertedThisChunk,
-          nextIndex,
-          lines.size(),
-          TimeUnit.NANOSECONDS.toMillis(elapsedNs),
-          nextDelayMs);
 
-      if (anchor != null) {
-        anchor.restoreDuringInsertIfNeeded();
+      ScrollAnchor effectiveAnchor =
+          lockViewportDuringLoad ? fixedAnchor : ScrollAnchor.capture(anchorControl);
+      if (effectiveAnchor != null) {
+        effectiveAnchor.restoreDuringInsertIfNeeded();
       }
 
-      if (nextIndex < lines.size()) {
+      if (nextIndex >= 0) {
         final int nextIndexFinal = nextIndex;
-        final int nextPos = pos;
+        final int nextInsertAt = safeInsertAt;
         scheduleNextChunk(
             nextDelayMs,
             () ->
@@ -793,13 +753,14 @@ public final class DbChatHistoryService implements ChatHistoryService {
                     target,
                     lines,
                     nextIndexFinal,
-                    nextPos,
+                    nextInsertAt,
                     hasMore,
-                    anchor,
+                    anchorControl,
+                    fixedAnchor,
+                    lockViewportDuringLoad,
                     chunkSize,
                     chunkDelayMs,
                     chunkEdtBudgetMs,
-                    insertId,
                     chunkNumber + 1));
         return;
       }
@@ -807,30 +768,18 @@ public final class DbChatHistoryService implements ChatHistoryService {
       finished = true;
       transcripts.setLoadOlderMessagesControlState(
           target, hasMore ? LoadOlderControlState.READY : LoadOlderControlState.EXHAUSTED);
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] insert-finish id={} target={} insertedTotal={} totalLines={} hasMore={}",
-          insertId,
-          target,
-          nextIndex,
-          lines.size(),
-          hasMore);
     } catch (Exception e) {
       finished = true;
       transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] insert-error id={} target={} message={}",
-          insertId,
-          target,
-          e.toString());
     } finally {
       if (!finished) return;
       try {
         transcripts.endHistoryInsertBatch(target);
       } catch (Exception ignored) {
       }
-      if (anchor != null) {
+      if (lockViewportDuringLoad && fixedAnchor != null) {
         // Run once more after document/layout settles from the final chunk.
-        SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+        SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
       }
     }
   }
@@ -858,6 +807,14 @@ public final class DbChatHistoryService implements ChatHistoryService {
     long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
     if (elapsedMs >= safeDelayMs) return 0;
     return (int) (safeDelayMs - elapsedMs);
+  }
+
+  private boolean configuredLockViewportDuringLoadOlder() {
+    try {
+      return transcripts.chatHistoryLockViewportDuringLoadOlder();
+    } catch (Exception ignored) {
+      return true;
+    }
   }
 
   private static final class ScrollAnchor {

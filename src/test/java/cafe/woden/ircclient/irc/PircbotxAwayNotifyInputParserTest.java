@@ -539,7 +539,8 @@ class PircbotxAwayNotifyInputParserTest {
                 e ->
                     e instanceof IrcEvent.UserSetNameObserved sn
                         && "alice".equals(sn.nick())
-                        && "Alice Liddell".equals(sn.realName())));
+                        && "Alice Liddell".equals(sn.realName())
+                        && sn.source() == IrcEvent.UserSetNameObserved.Source.SETNAME));
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -593,7 +594,8 @@ class PircbotxAwayNotifyInputParserTest {
                 e ->
                     e instanceof IrcEvent.UserSetNameObserved sn
                         && "alice".equals(sn.nick())
-                        && "Alice Liddell".equals(sn.realName())));
+                        && "Alice Liddell".equals(sn.realName())
+                        && sn.source() == IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN));
   }
 
   @Test

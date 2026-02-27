@@ -183,7 +183,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if ("SETNAME".equalsIgnoreCase(command)) {
       String realName = firstParam(parsedLine);
       sink.accept(
-          new ServerIrcEvent(serverId, new IrcEvent.UserSetNameObserved(now, nick, realName)));
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.UserSetNameObserved(
+                  now, nick, realName, IrcEvent.UserSetNameObserved.Source.SETNAME)));
       return;
     }
 
@@ -346,7 +349,10 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             serverId, new IrcEvent.UserAccountStateObserved(now, nick, st, account)));
     if (realName != null) {
       sink.accept(
-          new ServerIrcEvent(serverId, new IrcEvent.UserSetNameObserved(now, nick, realName)));
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.UserSetNameObserved(
+                  now, nick, realName, IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN)));
     }
   }
 
