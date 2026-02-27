@@ -632,7 +632,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private void installLoadOlderHandler(TargetRef target) {
     if (target == null) return;
 
-    // Capture a reference to the embedded control so we can anchor scroll position during prepend.
+    // Capture a reference to the embedded control so we can optionally anchor scroll position
+    // during prepend.
     final Component control = transcripts.ensureLoadOlderMessagesControl(target);
 
     // Ensure READY state when installed.
@@ -647,8 +648,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
           // Flip to LOADING immediately.
           transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.LOADING);
 
-          // Preserve the viewport anchor while we prepend lines above the current view.
-          final ScrollAnchor anchor = ScrollAnchor.capture(control);
+          // When locked: keep a fixed anchor for the whole load.
+          // When unlocked: adapt each chunk to the user's current scroll position.
+          final boolean lockViewportDuringLoad = configuredLockViewportDuringLoadOlder();
+          final ScrollAnchor fixedAnchor =
+              lockViewportDuringLoad ? ScrollAnchor.capture(control) : null;
 
           int pageSize = DEFAULT_PAGE_SIZE;
           try {
@@ -683,21 +687,24 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   int chunkDelayMs = configuredLoadOlderChunkDelayMs();
                   int chunkEdtBudgetMs = configuredLoadOlderChunkEdtBudgetMs();
                   log.info(
-                      "[TEMP-LOAD-OLDER][DB] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={}",
+                      "[TEMP-LOAD-OLDER][DB] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={} lockViewport={}",
                       insertId,
                       target,
                       lines.size(),
                       hasMore,
                       chunkSize,
                       chunkDelayMs,
-                      chunkEdtBudgetMs);
+                      chunkEdtBudgetMs,
+                      lockViewportDuringLoad ? "fixed" : "adaptive");
                   prependOlderLinesInChunks(
                       target,
                       lines,
                       lines.size() - 1,
                       insertAt,
                       hasMore,
-                      anchor,
+                      control,
+                      fixedAnchor,
+                      lockViewportDuringLoad,
                       chunkSize,
                       chunkDelayMs,
                       chunkEdtBudgetMs,
@@ -710,8 +717,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
                     transcripts.endHistoryInsertBatch(target);
                   } catch (Exception ignored) {
                   }
-                  if (anchor != null) {
-                    SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+                  if (lockViewportDuringLoad && fixedAnchor != null) {
+                    SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
                   }
                 }
               });
@@ -726,7 +733,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
       int nextIndexInclusive,
       int insertAt,
       boolean hasMore,
-      ScrollAnchor anchor,
+      Component anchorControl,
+      ScrollAnchor fixedAnchor,
+      boolean lockViewportDuringLoad,
       int chunkSize,
       int chunkDelayMs,
       int chunkEdtBudgetMs,
@@ -741,7 +750,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   nextIndexInclusive,
                   insertAt,
                   hasMore,
-                  anchor,
+                  anchorControl,
+                  fixedAnchor,
+                  lockViewportDuringLoad,
                   chunkSize,
                   chunkDelayMs,
                   chunkEdtBudgetMs,
@@ -786,8 +797,10 @@ public final class DbChatHistoryService implements ChatHistoryService {
           TimeUnit.NANOSECONDS.toMillis(elapsedNs),
           nextDelayMs);
 
-      if (anchor != null) {
-        anchor.restoreDuringInsertIfNeeded();
+      ScrollAnchor effectiveAnchor =
+          lockViewportDuringLoad ? fixedAnchor : ScrollAnchor.capture(anchorControl);
+      if (effectiveAnchor != null) {
+        effectiveAnchor.restoreDuringInsertIfNeeded();
       }
 
       if (nextIndex >= 0) {
@@ -802,7 +815,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
                     nextIndexFinal,
                     nextInsertAt,
                     hasMore,
-                    anchor,
+                    anchorControl,
+                    fixedAnchor,
+                    lockViewportDuringLoad,
                     chunkSize,
                     chunkDelayMs,
                     chunkEdtBudgetMs,
@@ -835,9 +850,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
         transcripts.endHistoryInsertBatch(target);
       } catch (Exception ignored) {
       }
-      if (anchor != null) {
+      if (lockViewportDuringLoad && fixedAnchor != null) {
         // Run once more after document/layout settles from the final chunk.
-        SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+        SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
       }
     }
   }
@@ -865,6 +880,14 @@ public final class DbChatHistoryService implements ChatHistoryService {
     long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
     if (elapsedMs >= safeDelayMs) return 0;
     return (int) (safeDelayMs - elapsedMs);
+  }
+
+  private boolean configuredLockViewportDuringLoadOlder() {
+    try {
+      return transcripts.chatHistoryLockViewportDuringLoadOlder();
+    } catch (Exception ignored) {
+      return true;
+    }
   }
 
   private static final class ScrollAnchor {

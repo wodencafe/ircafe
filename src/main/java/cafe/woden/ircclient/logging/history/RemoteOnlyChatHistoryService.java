@@ -394,7 +394,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
           if (!canLoadOlder(target)) return false;
 
           transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.LOADING);
-          final ScrollAnchor anchor = ScrollAnchor.capture(control);
+          final boolean lockViewportDuringLoad = configuredLockViewportDuringLoadOlder();
+          final ScrollAnchor fixedAnchor =
+              lockViewportDuringLoad ? ScrollAnchor.capture(control) : null;
 
           int pageSize = DEFAULT_PAGE_SIZE;
           try {
@@ -429,14 +431,15 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                   int chunkDelayMs = configuredLoadOlderChunkDelayMs();
                   int chunkEdtBudgetMs = configuredLoadOlderChunkEdtBudgetMs();
                   log.info(
-                      "[TEMP-LOAD-OLDER][REMOTE] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={}",
+                      "[TEMP-LOAD-OLDER][REMOTE] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={} lockViewport={}",
                       insertId,
                       target,
                       lines.size(),
                       hasMore,
                       chunkSize,
                       chunkDelayMs,
-                      chunkEdtBudgetMs);
+                      chunkEdtBudgetMs,
+                      lockViewportDuringLoad ? "fixed" : "adaptive");
                   prependOlderLinesInChunks(
                       target,
                       lines,
@@ -445,7 +448,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                       0,
                       insertAt,
                       hasMore,
-                      anchor,
+                      control,
+                      fixedAnchor,
+                      lockViewportDuringLoad,
                       chunkSize,
                       chunkDelayMs,
                       chunkEdtBudgetMs,
@@ -458,8 +463,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                     transcripts.endHistoryInsertBatch(target);
                   } catch (Exception ignored) {
                   }
-                  if (anchor != null) {
-                    SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+                  if (lockViewportDuringLoad && fixedAnchor != null) {
+                    SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
                   }
                 }
               });
@@ -476,7 +481,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       int insertedSoFar,
       int dividerInsertAt,
       boolean hasMore,
-      ScrollAnchor anchor,
+      java.awt.Component anchorControl,
+      ScrollAnchor fixedAnchor,
+      boolean lockViewportDuringLoad,
       int chunkSize,
       int chunkDelayMs,
       int chunkEdtBudgetMs,
@@ -493,7 +500,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                   insertedSoFar,
                   dividerInsertAt,
                   hasMore,
-                  anchor,
+                  anchorControl,
+                  fixedAnchor,
+                  lockViewportDuringLoad,
                   chunkSize,
                   chunkDelayMs,
                   chunkEdtBudgetMs,
@@ -542,8 +551,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
           TimeUnit.NANOSECONDS.toMillis(elapsedNs),
           nextDelayMs);
 
-      if (anchor != null) {
-        anchor.restoreDuringInsertIfNeeded();
+      ScrollAnchor effectiveAnchor =
+          lockViewportDuringLoad ? fixedAnchor : ScrollAnchor.capture(anchorControl);
+      if (effectiveAnchor != null) {
+        effectiveAnchor.restoreDuringInsertIfNeeded();
       }
 
       if (nextIndex >= 0) {
@@ -562,7 +573,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                     nextInserted,
                     nextDividerPos,
                     hasMore,
-                    anchor,
+                    anchorControl,
+                    fixedAnchor,
+                    lockViewportDuringLoad,
                     chunkSize,
                     chunkDelayMs,
                     chunkEdtBudgetMs,
@@ -601,8 +614,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         transcripts.endHistoryInsertBatch(target);
       } catch (Exception ignored) {
       }
-      if (anchor != null) {
-        SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+      if (lockViewportDuringLoad && fixedAnchor != null) {
+        SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
       }
     }
   }
@@ -703,6 +716,14 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
     if (elapsedMs >= safeDelayMs) return 0;
     return (int) (safeDelayMs - elapsedMs);
+  }
+
+  private boolean configuredLockViewportDuringLoadOlder() {
+    try {
+      return transcripts.chatHistoryLockViewportDuringLoadOlder();
+    } catch (Exception ignored) {
+      return true;
+    }
   }
 
   private long seedCursorEpochMs(TargetRef target) {

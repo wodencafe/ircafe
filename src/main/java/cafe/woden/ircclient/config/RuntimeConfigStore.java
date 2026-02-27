@@ -4423,6 +4423,45 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized boolean readChatHistoryLockViewportDuringLoadOlder(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+      Object raw = ui.get("chatHistoryLockViewportDuringLoadOlder");
+      if (raw == null) return defaultValue;
+      return asBoolean(raw).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not read ui.chatHistoryLockViewportDuringLoadOlder from '{}'",
+          file,
+          e);
+      return defaultValue;
+    }
+  }
+
+  public synchronized void rememberChatHistoryLockViewportDuringLoadOlder(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLockViewportDuringLoadOlder", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history viewport-lock setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberChatHistoryRemoteRequestTimeoutSeconds(int seconds) {
     try {
       if (file.toString().isBlank()) return;

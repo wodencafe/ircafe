@@ -1227,6 +1227,8 @@ public class PreferencesDialog {
           int historyLoadOlderChunkEdtBudgetMsV =
               ((Number) history.loadOlderChunkEdtBudgetMs.getValue()).intValue();
           boolean historyDeferRichTextDuringBatchV = history.deferRichTextDuringBatch.isSelected();
+          boolean historyLockViewportDuringLoadOlderV =
+              history.lockViewportDuringLoadOlder.isSelected();
           int historyRemoteRequestTimeoutSecondsV =
               ((Number) history.remoteRequestTimeoutSeconds.getValue()).intValue();
           int historyRemoteZncPlaybackTimeoutSecondsV =
@@ -1727,6 +1729,8 @@ public class PreferencesDialog {
                 next.chatHistoryLoadOlderChunkEdtBudgetMs());
             runtimeConfig.rememberChatHistoryDeferRichTextDuringBatch(
                 next.chatHistoryDeferRichTextDuringBatch());
+            runtimeConfig.rememberChatHistoryLockViewportDuringLoadOlder(
+                historyLockViewportDuringLoadOlderV);
             runtimeConfig.rememberChatHistoryRemoteRequestTimeoutSeconds(
                 next.chatHistoryRemoteRequestTimeoutSeconds());
             runtimeConfig.rememberChatHistoryRemoteZncPlaybackTimeoutSeconds(
@@ -4510,6 +4514,14 @@ public class PreferencesDialog {
         "When enabled, history loads skip expensive URL/mention rich parsing while inserting.\n"
             + "This improves smoothness, but history text appears with simpler styling.");
 
+    JCheckBox historyLockViewportDuringLoadOlder =
+        new JCheckBox("Lock viewport during load older");
+    historyLockViewportDuringLoadOlder.setSelected(
+        runtimeConfig == null || runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true));
+    historyLockViewportDuringLoadOlder.setToolTipText(
+        "When enabled, IRCafe keeps your initial top visible message anchored for the full load.\n"
+            + "When disabled, IRCafe uses adaptive chunk anchoring so you can keep scrolling during load.");
+
     JSpinner historyRemoteRequestTimeoutSeconds =
         numberSpinner(current.chatHistoryRemoteRequestTimeoutSeconds(), 1, 120, 1, closeables);
     historyRemoteRequestTimeoutSeconds.setToolTipText(
@@ -4572,6 +4584,8 @@ public class PreferencesDialog {
     historyPanel.add(historyLoadOlderChunkEdtBudgetMs, "w 110!");
     historyPanel.add(new JLabel("History batch rendering:"));
     historyPanel.add(historyDeferRichTextDuringBatch, "growx");
+    historyPanel.add(new JLabel("Load older scrolling:"));
+    historyPanel.add(historyLockViewportDuringLoadOlder, "growx");
     historyPanel.add(new JLabel("Remote request timeout (sec):"));
     historyPanel.add(historyRemoteRequestTimeoutSeconds, "w 110!");
     historyPanel.add(new JLabel("ZNC playback timeout (sec):"));
@@ -4591,6 +4605,7 @@ public class PreferencesDialog {
         historyLoadOlderChunkDelayMs,
         historyLoadOlderChunkEdtBudgetMs,
         historyDeferRichTextDuringBatch,
+        historyLockViewportDuringLoadOlder,
         historyRemoteRequestTimeoutSeconds,
         historyRemoteZncPlaybackTimeoutSeconds,
         historyRemoteZncPlaybackWindowMinutes,
@@ -10381,6 +10396,7 @@ public class PreferencesDialog {
       JSpinner loadOlderChunkDelayMs,
       JSpinner loadOlderChunkEdtBudgetMs,
       JCheckBox deferRichTextDuringBatch,
+      JCheckBox lockViewportDuringLoadOlder,
       JSpinner remoteRequestTimeoutSeconds,
       JSpinner remoteZncPlaybackTimeoutSeconds,
       JSpinner remoteZncPlaybackWindowMinutes,

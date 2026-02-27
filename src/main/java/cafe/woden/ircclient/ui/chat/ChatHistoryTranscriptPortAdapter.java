@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.LoadOlderControlState;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
@@ -18,11 +19,15 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
 
   private final ChatTranscriptStore transcripts;
   private final UiSettingsBus settingsBus;
+  private final RuntimeConfigStore runtimeConfig;
 
   public ChatHistoryTranscriptPortAdapter(
-      ChatTranscriptStore transcripts, UiSettingsBus settingsBus) {
+      ChatTranscriptStore transcripts,
+      UiSettingsBus settingsBus,
+      RuntimeConfigStore runtimeConfig) {
     this.transcripts = transcripts;
     this.settingsBus = settingsBus;
+    this.runtimeConfig = runtimeConfig;
   }
 
   @Override
@@ -205,6 +210,12 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
   public int chatHistoryLoadOlderChunkEdtBudgetMs() {
     UiSettings s = settingsBus != null ? settingsBus.get() : null;
     return s != null ? s.chatHistoryLoadOlderChunkEdtBudgetMs() : 0;
+  }
+
+  @Override
+  public boolean chatHistoryLockViewportDuringLoadOlder() {
+    if (runtimeConfig == null) return true;
+    return runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true);
   }
 
   @Override
